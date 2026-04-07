@@ -8,8 +8,11 @@ import {
   IsDateString,
   Min,
   Max,
+  IsArray,
+  IsUUID,
 } from 'class-validator';
 import { TaskPriority } from '../entities/task.entity';
+import { TaskEventType } from '../../scheduling/event-type.enum';
 
 export class CreateTaskDto {
   @ApiProperty({ example: 'Complete project report', description: 'Task name' })
@@ -18,7 +21,6 @@ export class CreateTaskDto {
 
   @ApiProperty({
     example: 'Write a detailed report about project progress',
-    description: 'Task description',
     required: false,
   })
   @IsString()
@@ -27,7 +29,7 @@ export class CreateTaskDto {
 
   @ApiProperty({
     example: '123e4567-e89b-12d3-a456-426614174000',
-    description: 'Phase ID',
+    description: 'Primary phase ID (legacy); optional if phaseIds set',
     required: false,
   })
   @IsString()
@@ -35,57 +37,77 @@ export class CreateTaskDto {
   phaseId?: string;
 
   @ApiProperty({
+    description: 'Phase IDs whose windows are eligible for scheduling (union)',
+    required: false,
+    type: [String],
+  })
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @IsOptional()
+  phaseIds?: string[];
+
+  @ApiProperty({
+    enum: TaskEventType,
+    default: TaskEventType.ADMIN,
+    required: false,
+  })
+  @IsEnum(TaskEventType)
+  @IsOptional()
+  eventType?: TaskEventType;
+
+  @ApiProperty({
     example: 60,
-    description: 'Estimated time in minutes to complete the task',
+    description: 'Estimated duration in minutes (defaults by event type if omitted)',
+    required: false,
   })
   @IsInt()
   @Min(1)
-  @Max(1440) // Max 24 hours
-  estimatedTimeInMinutes: number;
+  @Max(1440)
+  @IsOptional()
+  estimatedTimeInMinutes?: number;
 
-  @ApiProperty({
-    example: false,
-    description: 'Whether the task is recurring',
-    default: false,
-  })
+  @ApiProperty({ required: false, default: false })
   @IsBoolean()
   @IsOptional()
   isRecurring?: boolean;
 
-  @ApiProperty({
-    example: 'DAILY',
-    description: 'Recurrence pattern for recurring tasks',
-    required: false,
-  })
+  @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
   recurrencePattern?: string;
 
-  @ApiProperty({
-    example: true,
-    description: 'Whether the task can be split into smaller blocks',
-    default: true,
-  })
+  @ApiProperty({ default: true, required: false })
   @IsBoolean()
   @IsOptional()
   allowSplit?: boolean;
 
   @ApiProperty({
     enum: TaskPriority,
-    example: TaskPriority.MEDIUM,
-    description: 'Task priority',
     default: TaskPriority.MEDIUM,
+    required: false,
   })
   @IsEnum(TaskPriority)
   @IsOptional()
   priority?: TaskPriority;
 
+  @ApiProperty({ required: false })
+  @IsDateString()
+  @IsOptional()
+  deadline?: string;
+
   @ApiProperty({
-    example: '2023-12-31T23:59:59Z',
-    description: 'Task deadline',
+    description: 'Required for FIXED type: block start (ISO 8601)',
     required: false,
   })
   @IsDateString()
   @IsOptional()
-  deadline?: string;
+  scheduledStartTime?: string;
+
+  @ApiProperty({
+    description: 'Required for FIXED type: block end (ISO 8601)',
+    required: false,
+  })
+  @IsDateString()
+  @IsOptional()
+  scheduledEndTime?: string;
 }

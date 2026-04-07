@@ -3,12 +3,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserSettings } from './entities/user-settings.entity';
 import { UpdateUserSettingsDto } from './dto/update-user-settings.dto';
+import { PhasesService } from '../phases/phases.service';
 
 @Injectable()
 export class UserSettingsService {
   constructor(
     @InjectRepository(UserSettings)
     private userSettingsRepository: Repository<UserSettings>,
+    private readonly phasesService: PhasesService,
   ) {}
 
   async getSettings(userId: string): Promise<UserSettings> {
@@ -36,10 +38,20 @@ export class UserSettingsService {
         userSettings.preferredLunchTime = defaults.preferredLunchTime;
       if (userSettings.weekendWorkEnabled === undefined)
         userSettings.weekendWorkEnabled = defaults.weekendWorkEnabled;
+      if (userSettings.allowSplitScheduling === undefined)
+        userSettings.allowSplitScheduling = defaults.allowSplitScheduling;
+      if (userSettings.minSplitMinutes === undefined)
+        userSettings.minSplitMinutes = defaults.minSplitMinutes;
 
       // Save updated settings if any defaults were applied
       await this.userSettingsRepository.save(userSettings);
     }
+
+    await this.phasesService.ensureDefaultPhasesForUser(
+      userId,
+      userSettings.wakeTime,
+      userSettings.sleepTime,
+    );
 
     return userSettings;
   }
@@ -66,19 +78,23 @@ export class UserSettingsService {
       defaultLunchDuration: 60,
       preferredLunchTime: '12:00',
       weekendWorkEnabled: false,
+      allowSplitScheduling: true,
+      minSplitMinutes: 30,
     };
   }
 
   private async createDefaultSettings(userId: string): Promise<UserSettings> {
     const defaultSettings = this.userSettingsRepository.create({
       userId,
-      wakeTime: '07:00', // Більш ранній час пробудження
-      sleepTime: '22:00', // Більш ранній час сну
+      wakeTime: '07:00',
+      sleepTime: '22:00',
       defaultWorkBlockDuration: 25,
       defaultBreakDuration: 5,
       defaultLunchDuration: 60,
       preferredLunchTime: '12:00',
       weekendWorkEnabled: false,
+      allowSplitScheduling: true,
+      minSplitMinutes: 30,
     });
 
     return this.userSettingsRepository.save(defaultSettings);

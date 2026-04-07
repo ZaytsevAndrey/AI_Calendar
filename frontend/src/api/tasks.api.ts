@@ -1,10 +1,22 @@
 import apiCall from 'modules/common/utils/apiCall';
 
+export type TaskEventType =
+  | 'fixed'
+  | 'daily_routine'
+  | 'quick_win'
+  | 'deep_work'
+  | 'errand'
+  | 'admin'
+  | 'focus_block'
+  | 'learning';
+
 export interface TaskDTO {
   id: string;
   name: string;
   description?: string;
   phaseId?: string;
+  eventType?: TaskEventType;
+  phases?: { id: string; name: string; color?: string }[];
   estimatedTimeInMinutes: number;
   isRecurring: boolean;
   recurrencePattern?: string;
@@ -27,7 +39,11 @@ export interface CreateTaskDTO {
   name: string;
   description?: string;
   phaseId?: string;
-  estimatedTimeInMinutes: number;
+  phaseIds?: string[];
+  eventType?: TaskEventType;
+  estimatedTimeInMinutes?: number;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
   isRecurring?: boolean;
   recurrencePattern?: string;
   allowSplit?: boolean;
@@ -37,6 +53,7 @@ export interface CreateTaskDTO {
 
 export interface UpdateTaskDTO extends Partial<CreateTaskDTO> {
   status?: 'todo' | 'in_progress' | 'completed' | 'canceled';
+  phaseIds?: string[];
 }
 
 export const TasksApi = {

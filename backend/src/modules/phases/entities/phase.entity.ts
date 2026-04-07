@@ -12,8 +12,8 @@ export class Phase {
   @Column()
   color: string;
 
-  @Column({ nullable: true })
-  description?: string;
+  @Column({ type: 'text', nullable: true })
+  description: string | null;
 
   @Column()
   startTime: string;
@@ -21,8 +21,8 @@ export class Phase {
   @Column()
   endTime: string;
 
-  @Column({ nullable: true })
-  parentPhaseId?: string;
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  parentPhaseId: string | null;
 
   @OneToMany(() => Phase, (phase) => phase.parentPhase)
   subphases?: Phase[];
@@ -32,10 +32,14 @@ export class Phase {
   parentPhase?: Phase;
 
   @Column({ type: 'json', nullable: true })
-  weekDays: number[];
+  weekDays: number[] | null;
 
   @Column({ default: 'time_phase' })
   type: string; // 'time_phase' | 'sleep_time'
+
+  /** Owner; phases are per-user. */
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  userId: string | null;
 
   @OneToMany(() => Task, (task) => task.phase)
   tasks: Task[];

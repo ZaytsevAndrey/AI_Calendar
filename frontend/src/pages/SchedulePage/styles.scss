@@ -64,7 +64,101 @@
             cursor: not-allowed;
           }
         }
+
+        &.undo-button {
+          background-color: #1976d2;
+          color: white;
+
+          &:hover:not(:disabled) {
+            background-color: #1565c0;
+          }
+
+          &:disabled {
+            background-color: #bdbdbd;
+            color: #f5f5f5;
+            cursor: not-allowed;
+          }
+        }
       }
+    }
+  }
+
+  .replan-panel {
+    margin-bottom: 20px;
+    padding: 16px 20px;
+    background: #fafafa;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
+
+    &__title {
+      margin: 0 0 12px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    &__errors {
+      margin: 0 0 12px;
+      padding-left: 1.2rem;
+      color: #c62828;
+    }
+
+    &__warnings {
+      margin: 0 0 12px;
+      padding-left: 1.2rem;
+      color: #f57f17;
+    }
+
+    &__diff {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    &__diff-row {
+      padding: 12px 0;
+      border-top: 1px solid #eee;
+
+      &:first-of-type {
+        border-top: none;
+        padding-top: 0;
+      }
+    }
+
+    &__diff-name {
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #222;
+    }
+
+    &__diff-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+
+      @media (max-width: 700px) {
+        grid-template-columns: 1fr;
+      }
+
+      ul {
+        margin: 4px 0 0;
+        padding-left: 1.1rem;
+        color: #555;
+      }
+    }
+
+    &__label {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #888;
+      margin-bottom: 4px;
+    }
+
+    &__empty {
+      color: #aaa;
     }
   }
 

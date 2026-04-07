@@ -96,4 +96,24 @@ export class UpdateUserSettingsDto {
   @IsBoolean()
   @IsOptional()
   googleCalendarLinked?: boolean;
+
+  @ApiProperty({
+    example: true,
+    description: 'Allow splitting tasks when auto-scheduling',
+    required: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  allowSplitScheduling?: boolean;
+
+  @ApiProperty({
+    example: 30,
+    description: 'Minimum chunk length when splitting (minutes)',
+    required: false,
+  })
+  @IsInt()
+  @Min(5)
+  @Max(240)
+  @IsOptional()
+  minSplitMinutes?: number;
 }

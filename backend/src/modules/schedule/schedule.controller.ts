@@ -18,6 +18,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ScheduleService } from './schedule.service';
+import { ScheduleJobService } from './schedule-job.service';
 import {
   CreateScheduleDto,
   UpdateScheduleDto,
@@ -31,7 +32,10 @@ import { ScheduledTask } from './schedule.entity';
 @UseGuards(JwtAuthGuard)
 @Controller('schedule')
 export class ScheduleController {
-  constructor(private readonly scheduleService: ScheduleService) {}
+  constructor(
+    private readonly scheduleService: ScheduleService,
+    private readonly scheduleJobService: ScheduleJobService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Створити новий запланований елемент' })
@@ -101,17 +105,22 @@ export class ScheduleController {
   }
 
   @Post('generate')
-  @ApiOperation({ summary: 'Автоматично згенерувати розклад' })
-  @ApiResponse({
-    status: 201,
-    description: 'Розклад згенеровано',
-    type: [ScheduledTask],
+  @ApiOperation({
+    summary:
+      'Enqueue intelligent replan (async). Poll GET /schedule-jobs/:jobId for diff.',
   })
+  @ApiResponse({ status: 201, description: 'Job enqueued' })
   async generateSchedule(
     @Request() req,
-    @Body() generateDto: GenerateScheduleDto,
-  ): Promise<ScheduledTask[]> {
-    return this.scheduleService.generateSchedule(req.user.userId, generateDto);
+    @Body() _generateDto: GenerateScheduleDto,
+  ): Promise<{ jobId: string; status: string; message: string }> {
+    const job = await this.scheduleJobService.enqueueReplan(req.user.userId);
+    return {
+      jobId: job.id,
+      status: job.status,
+      message:
+        'Poll GET /schedule-jobs/:id until status is done, then refresh /schedule.',
+    };
   }
 
   @Delete()

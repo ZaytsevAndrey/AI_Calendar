@@ -3,10 +3,13 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  ManyToMany,
   JoinColumn,
+  JoinTable,
 } from 'typeorm';
 import { User } from '../../users/user.entity';
 import { Phase } from '../../event-phases/entities/phase.entity';
+import { TaskEventType } from '../../scheduling/event-type.enum';
 
 export enum TaskPriority {
   LOW = 'low',
@@ -40,12 +43,29 @@ export class Task {
   @JoinColumn({ name: 'userId' })
   user: User;
 
-  @Column({ nullable: true })
-  phaseId: string;
+  /** @deprecated Prefer `phases`; kept for backward compatibility (first phase). */
+  @Column({ nullable: true, type: 'varchar' })
+  phaseId: string | null;
 
   @ManyToOne(() => Phase, (phase) => phase.tasks)
   @JoinColumn({ name: 'phaseId' })
   phase: Phase;
+
+  /** Phases whose time windows are eligible for auto-scheduling (union). */
+  @ManyToMany(() => Phase)
+  @JoinTable({
+    name: 'task_phases',
+    joinColumn: { name: 'taskId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'phaseId', referencedColumnName: 'id' },
+  })
+  phases: Phase[];
+
+  @Column({
+    type: 'varchar',
+    length: 32,
+    default: TaskEventType.ADMIN,
+  })
+  eventType: TaskEventType;
 
   @Column({ type: 'int' })
   estimatedTimeInMinutes: number;
@@ -53,8 +73,8 @@ export class Task {
   @Column({ default: false })
   isRecurring: boolean;
 
-  @Column({ nullable: true })
-  recurrencePattern: string;
+  @Column({ type: 'varchar', nullable: true })
+  recurrencePattern: string | null;
 
   @Column({ default: true })
   allowSplit: boolean;
@@ -66,8 +86,8 @@ export class Task {
   })
   priority: TaskPriority;
 
-  @Column({ nullable: true })
-  deadline: Date;
+  @Column({ type: 'datetime', nullable: true })
+  deadline: Date | null;
 
   @Column({
     type: 'varchar',
@@ -76,15 +96,25 @@ export class Task {
   })
   status: TaskStatus;
 
-  @Column({ nullable: true })
-  scheduledStartTime: Date;
+  @Column({ type: 'datetime', nullable: true })
+  scheduledStartTime: Date | null;
 
-  @Column({ nullable: true })
-  scheduledEndTime: Date;
+  @Column({ type: 'datetime', nullable: true })
+  scheduledEndTime: Date | null;
 
-  @Column({ default: () => 'CURRENT_TIMESTAMP' })
+  @Column({ type: 'varchar', nullable: true })
+  googleEventId: string | null;
+
+  @Column({ default: false })
+  isFixedExternal: boolean;
+
+  @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   createdAt: Date;
 
-  @Column({ default: () => 'CURRENT_TIMESTAMP', onUpdate: 'CURRENT_TIMESTAMP' })
+  @Column({
+    type: 'datetime',
+    default: () => 'CURRENT_TIMESTAMP',
+    onUpdate: 'CURRENT_TIMESTAMP',
+  })
   updatedAt: Date;
 }

@@ -249,6 +249,34 @@
       margin-top: 5px;
       display: block;
     }
+
+    .form-hint {
+      font-size: 13px;
+      color: #666;
+      margin: 6px 0 0;
+      line-height: 1.4;
+    }
+
+    .form-label-static {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    .phase-checkboxes {
+      margin-top: 8px;
+    }
+
+    .phase-checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+
+      input[type='checkbox'] {
+        width: auto;
+      }
+    }
     
     &.checkbox {
       .checkbox-container {

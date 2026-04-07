@@ -530,6 +530,70 @@ export class GoogleCalendarService {
     return response.data;
   }
 
+  /**
+   * Partial update of event start/end only (used e.g. after schedule undo).
+   * Preserves summary, attendees, etc. Requires Google connection.
+   */
+  async patchEventDateTime(
+    userId: string,
+    eventId: string,
+    start: Date,
+    end: Date,
+  ): Promise<void> {
+    const existing = await this.getEvent(userId, eventId);
+    const tz =
+      (existing.start as { timeZone?: string } | undefined)?.timeZone ||
+      (existing.end as { timeZone?: string } | undefined)?.timeZone ||
+      'UTC';
+
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: {
+        googleAccessToken: true,
+        googleRefreshToken: true,
+        googleTokenExpiry: true,
+      },
+    });
+
+    if (!user?.googleAccessToken) {
+      throw new Error('Google Calendar not connected');
+    }
+
+    if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
+      if (user.googleRefreshToken) {
+        this.oauth2Client.setCredentials({
+          refresh_token: user.googleRefreshToken,
+        });
+        const { credentials } = await this.oauth2Client.refreshAccessToken();
+        await this.userRepo.update(userId, {
+          googleAccessToken: credentials.access_token,
+          googleTokenExpiry: new Date(credentials.expiry_date),
+        });
+        user.googleAccessToken = credentials.access_token;
+      } else {
+        throw new Error('Google Calendar token expired');
+      }
+    }
+
+    this.oauth2Client.setCredentials({
+      access_token: user.googleAccessToken,
+    });
+
+    const calendar = google.calendar({
+      version: 'v3',
+      auth: this.oauth2Client,
+    });
+
+    await calendar.events.patch({
+      calendarId: 'primary',
+      eventId,
+      requestBody: {
+        start: { dateTime: start.toISOString(), timeZone: tz },
+        end: { dateTime: end.toISOString(), timeZone: tz },
+      },
+    });
+  }
+
   async deleteEvent(userId: string, eventId: string) {
     const user = await this.userRepo.findOne({
       where: { id: userId },

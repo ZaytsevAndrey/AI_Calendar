@@ -43,6 +43,14 @@ export class UserSettings {
   @Column({ default: false })
   googleCalendarLinked: boolean;
 
+  /** When true (default), types that allow split may be split using `minSplitMinutes`. */
+  @Column({ default: true })
+  allowSplitScheduling: boolean;
+
+  /** Minimum chunk length when splitting (minutes). */
+  @Column({ type: 'int', default: 30 })
+  minSplitMinutes: number;
+
   @Column({ default: () => 'CURRENT_TIMESTAMP' })
   createdAt: Date;
 
