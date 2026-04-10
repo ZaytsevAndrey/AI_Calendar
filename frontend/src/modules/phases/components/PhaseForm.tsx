@@ -48,7 +48,7 @@ const PhaseForm = ({ initialData, onSubmit, isSubmitting }: PhaseFormProps) => {
 
   const watchedValues = watch();
   
-  // Використовуємо кастомний хук для валідації
+  // Custom validation hook
   const { sleepError } = usePhaseValidation({
     startTime: watchedValues.startTime,
     endTime: watchedValues.endTime,
@@ -56,7 +56,7 @@ const PhaseForm = ({ initialData, onSubmit, isSubmitting }: PhaseFormProps) => {
     userSettings,
   });
 
-  // Синхронізуємо вибрані дні з формою
+  // Sync selected days with the form
   React.useEffect(() => {
     setValue('weekDays', selectedDays);
   }, [selectedDays, setValue]);
@@ -94,7 +94,7 @@ const PhaseForm = ({ initialData, onSubmit, isSubmitting }: PhaseFormProps) => {
         setValue={setValue}
       />
 
-      {/* Показуємо помилки */}
+      {/* Field errors */}
       {sleepError && (
         <div className="form-group">
           <span className="error-message validation-error">

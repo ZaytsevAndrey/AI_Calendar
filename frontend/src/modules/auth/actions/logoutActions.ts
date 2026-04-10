@@ -15,7 +15,7 @@ export const logout = (redirect = false) => async (dispatch: any) => {
         removeLocalStorageItem('access_token');
         removeLocalStorageItem('refresh_token');
 
-        showSuccessToast('Ви успішно вийшли з системи');
+        showSuccessToast('You have been logged out');
         dispatch({ type: LOGOUT });
 
         if (redirect) {
@@ -24,12 +24,12 @@ export const logout = (redirect = false) => async (dispatch: any) => {
     }
 };
 
-// Додатковий клієнтський логаут без запиту на бекенд
+// Client-only logout without a backend request
 export const clientLogout = (redirect = false) => (dispatch: any) => {
     console.log('clientLogout called with redirect:', redirect);
     removeLocalStorageItem('access_token');
     removeLocalStorageItem('refresh_token');
-    showSuccessToast('Ви успішно вийшли з системи');
+    showSuccessToast('You have been logged out');
     dispatch({ type: LOGOUT });
     if (redirect) {
         console.log('Redirecting to login page');

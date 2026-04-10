@@ -18,10 +18,10 @@ export const registerUser = (data: RegisterFormData) => async (dispatch: any) =>
             },
         });
 
-        showSuccessToast('Реєстрація успішна! Тепер ви можете увійти в систему.');
+        showSuccessToast('Registration successful. You can log in now.');
         dispatch({ type: REGISTER_ASYNC.success });
     } catch (error: any) {
-        let errorMessage = 'Помилка при реєстрації. Спробуйте ще раз.';
+        let errorMessage = 'Registration failed. Please try again.';
         
         if (error?.response?.data) {
             const errorData = error.response.data;
@@ -32,7 +32,7 @@ export const registerUser = (data: RegisterFormData) => async (dispatch: any) =>
             } else if (errorData.message) {
                 errorMessage = errorData.message;
             } else if (errorData.fields) {
-                // Формуємо повідомлення з помилок полів
+                // Build message from field errors
                 const fieldErrors = Object.values(errorData.fields);
                 if (fieldErrors.length > 0) {
                     errorMessage = fieldErrors.join('. ');

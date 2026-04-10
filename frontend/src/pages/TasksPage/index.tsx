@@ -90,7 +90,7 @@ const TasksPage: React.FC = () => {
     setFilterStatus(e.target.value);
   };
 
-  // Фільтрація по статусу
+  // Filter by status
   const filteredTasks = filterStatus ? sortedTasks.filter(task => task.status === filterStatus) : sortedTasks;
 
   return (

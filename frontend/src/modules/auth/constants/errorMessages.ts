@@ -12,14 +12,14 @@ import {
 } from './errorCodes';
 
 export const errorMessages = {
-    [WRONG_PASSWORD_ERROR]: 'Неправильний пароль. Будь ласка, спробуйте ще раз.',
-    [USER_NOT_FOUND_ERROR]: 'Користувача не знайдено. Перевірте введені дані.',
-    [INVALID_TOKEN_ERROR]: 'Невалідний токен. Будь ласка, увійдіть знову.',
-    [USER_ALREADY_EXISTS_ERROR]: 'Користувач з таким email вже існує.',
-    [INVALID_EMAIL_FORMAT_ERROR]: 'Невалідний формат email. Перевірте введені дані.',
-    [INVALID_JWT]: 'Невалідний токен доступу. Будь ласка, увійдіть знову.',
-    [EMPTY_JWT]: 'Токен доступу відсутній. Будь ласка, увійдіть знову.',
-    [INVALID_SESSION]: 'Сесія недійсна. Будь ласка, увійдіть знову.',
-    [INVALID_REFRESH_TOKEN]: 'Токен оновлення недійсний. Будь ласка, увійдіть знову.',
-    [INVALID_CREDENTIALS]: 'Неправильний логін або пароль. Будь ласка, перевірте дані.',
+    [WRONG_PASSWORD_ERROR]: 'Incorrect password. Please try again.',
+    [USER_NOT_FOUND_ERROR]: 'User not found. Check your input.',
+    [INVALID_TOKEN_ERROR]: 'Invalid token. Please log in again.',
+    [USER_ALREADY_EXISTS_ERROR]: 'A user with this email already exists.',
+    [INVALID_EMAIL_FORMAT_ERROR]: 'Invalid email format. Check your input.',
+    [INVALID_JWT]: 'Invalid access token. Please log in again.',
+    [EMPTY_JWT]: 'Access token is missing. Please log in again.',
+    [INVALID_SESSION]: 'Session is invalid. Please log in again.',
+    [INVALID_REFRESH_TOKEN]: 'Refresh token is invalid. Please log in again.',
+    [INVALID_CREDENTIALS]: 'Incorrect email or password. Please check your credentials.',
 }; 

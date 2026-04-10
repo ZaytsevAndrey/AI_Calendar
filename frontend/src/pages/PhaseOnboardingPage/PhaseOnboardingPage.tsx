@@ -1,4 +1,4 @@
 /**
- * Старий шлях/назва. Логіка фаз — у PhaseSetupPage (`/setup/phases`, прапорець hasPhases).
+ * Legacy path/name. Phase logic lives in PhaseSetupPage (`/setup/phases`, hasPhases flag).
  */
 export { default } from '../PhaseSetupPage/PhaseSetupPage';

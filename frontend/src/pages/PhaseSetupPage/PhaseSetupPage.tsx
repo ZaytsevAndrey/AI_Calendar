@@ -43,7 +43,7 @@ const PhaseSetupPage: React.FC = () => {
 
   const errors =
     selectedDays.length === 0
-      ? { weekDays: { message: 'Оберіть хоча б один день' } as { message: string } }
+      ? { weekDays: { message: 'Select at least one day' } as { message: string } }
       : {};
 
   const runBootstrap = async (weekDays: number[] | undefined) => {
@@ -59,21 +59,21 @@ const PhaseSetupPage: React.FC = () => {
         'data' in err &&
         (err as { data?: { message?: string } }).data?.message;
       showErrorToast(
-        typeof msg === 'string' ? msg : 'Не вдалося створити фази.',
+        typeof msg === 'string' ? msg : 'Could not create phases.',
       );
     }
   };
 
   const handleSave = async () => {
     if (selectedDays.length === 0) {
-      showErrorToast('Оберіть дні тижня');
+      showErrorToast('Select at least one day of the week');
       return;
     }
     try {
       await updateSettings({ wakeTime, sleepTime }).unwrap();
       await runBootstrap(selectedDays);
     } catch {
-      showErrorToast('Не вдалося зберегти налаштування.');
+      showErrorToast('Could not save settings.');
     }
   };
 
@@ -87,16 +87,16 @@ const PhaseSetupPage: React.FC = () => {
     <Box sx={{ maxWidth: 560, mx: 'auto', mt: { xs: 2, sm: 4 }, px: 2, pb: 4 }}>
       <Paper elevation={2} sx={{ p: 3 }}>
         <Typography variant="h5" gutterBottom>
-          Налаштуйте основні фази
+          Set up your core phases
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          Вкажіть час підйому та сну. Будуть створені фази «Сон» і «Фокус» за
-          цими межами. Оберіть дні тижня (наприклад лише будні).
+          Set your wake and sleep times. Sleep and Focus phases will be created within
+          these bounds. Pick weekdays (e.g. weekdays only).
         </Typography>
 
         <Stack spacing={2}>
           <TextField
-            label="Прокинувся"
+            label="Wake"
             type="time"
             value={wakeTime}
             onChange={(e) => setWakeTime(e.target.value)}
@@ -104,7 +104,7 @@ const PhaseSetupPage: React.FC = () => {
             fullWidth
           />
           <TextField
-            label="Сон"
+            label="Sleep"
             type="time"
             value={sleepTime}
             onChange={(e) => setSleepTime(e.target.value)}
@@ -125,10 +125,10 @@ const PhaseSetupPage: React.FC = () => {
             disabled={busy || selectedDays.length === 0}
             onClick={handleSave}
           >
-            Зберегти й створити фази
+            Save and create phases
           </Button>
           <Button variant="outlined" fullWidth disabled={busy} onClick={handleSkip}>
-            Типові фази (поточний час у налаштуваннях)
+            Default phases (current times from settings)
           </Button>
         </Stack>
       </Paper>

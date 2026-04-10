@@ -1,6 +1,6 @@
 import { toast, ToastOptions } from 'react-toastify';
 
-// Стандартні опції для різних типів тостів
+// Default options per toast type
 const defaultOptions: ToastOptions = {
   position: 'top-right',
   autoClose: 3000,
@@ -10,7 +10,7 @@ const defaultOptions: ToastOptions = {
   draggable: true,
 };
 
-// Функції для показу тостів різних типів
+// Helpers to show toasts by type
 export const showSuccessToast = (message: string, options?: ToastOptions) => {
   toast.success(message, { ...defaultOptions, ...options });
 };

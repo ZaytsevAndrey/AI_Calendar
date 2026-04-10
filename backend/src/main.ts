@@ -10,10 +10,10 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
   const adapter = new FastifyAdapter();
-  // Реєструємо CORS до створення Nest-додатку
+  // Register CORS before creating the Nest app
   await adapter.getInstance().register(fastifyCors, {
     origin: (origin, cb) => {
-      // Дозволяємо всі локальні origin для розробки
+      // Allow local origins in development
       if (!origin || origin.startsWith('http://localhost')) {
         cb(null, true);
       } else {
@@ -26,11 +26,11 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule, adapter as any);
 
-  // Глобальний exception filter
+  // Global exception filters
   app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalFilters(new JwtExceptionFilter());
 
-  // Налаштування Swagger
+  // Swagger
   const config = new DocumentBuilder()
     .setTitle('Calendar Assistant API')
     .setDescription('API documentation for Calendar Assistant')

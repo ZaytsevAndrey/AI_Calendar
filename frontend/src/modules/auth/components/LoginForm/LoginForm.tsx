@@ -12,7 +12,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
                                              }) => {
     return (
         <form className={ styles.loginForm } onSubmit={ onSubmit }>
-            <h2 className={ styles.title }>Логін</h2>
+            <h2 className={ styles.title }>Log in</h2>
 
             <div className={ styles.inputGroup }>
                 <label htmlFor="email">Email</label>
@@ -21,7 +21,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
             </div>
 
             <div className={ styles.inputGroup }>
-                <label htmlFor="password">Пароль</label>
+                <label htmlFor="password">Password</label>
                 <input id="password" type="password" { ...register('password') } />
                 { errors.password && <span className={ styles.error }>{ errors.password.message }</span> }
             </div>
@@ -31,15 +31,15 @@ const LoginForm: React.FC<LoginFormProps> = ({
                 className={ styles.submitButton }
                 disabled={ requestStatus === 'pending' }
             >
-                { requestStatus === 'pending' ? 'Вхід...' : 'Увійти' }
+                { requestStatus === 'pending' ? 'Signing in...' : 'Log in' }
             </button>
 
             <div className={ styles.redirect }>
-                Немає акаунту? <Link to="/register">Зареєструватись</Link>
+                No account? <Link to="/register">Sign up</Link>
             </div>
 
             <div className={ styles.redirect }>
-                Забули пароль? <Link to="/forgot-password">Відновити</Link>
+                Forgot password? <Link to="/forgot-password">Reset</Link>
             </div>
         </form>
     );

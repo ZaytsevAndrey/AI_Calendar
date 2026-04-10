@@ -7,7 +7,7 @@ import {
 } from '../../../api/eventsApi';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 
-// Підключення до календаря (dummy, якщо потрібно - реалізувати окремо через RTK Query)
+// Calendar connection (stub; wire via RTK Query if needed)
 // export const useCalendarConnection = ...
 
 export const useCalendarEvents = (params: any) => {
@@ -18,12 +18,12 @@ export const useCalendarEvent = (eventId: string, calendarId: string = 'primary'
   return useGetEventQuery({ eventId, calendarId });
 };
 
-// Для створення, оновлення, видалення подій
+// Create, update, delete events
 export const useCreateEvent = useCreateEventMutation;
 export const useUpdateEvent = useUpdateEventMutation;
 export const useDeleteEvent = useDeleteEventMutation;
 
-// Для дня, тижня, місяця - просто прокидати відповідні params у useGetEventsQuery
+// For day/week/month views, pass the right params into useGetEventsQuery
 export const useEventsForDay = (date: Date, calendarId: string = 'primary') => {
   const startOfDay = new Date(date);
   startOfDay.setHours(0, 0, 0, 0);
@@ -57,7 +57,7 @@ export const useEventsForMonth = (year: number, month: number, calendarId: strin
   });
 };
 
-// Утиліти залишити без змін
+// Keep utilities unchanged
 export const formatEventTime = (event: GoogleCalendarEvent): string => {
   if (event.start.dateTime) {
     const startDate = new Date(event.start.dateTime);

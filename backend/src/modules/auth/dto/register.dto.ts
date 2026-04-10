@@ -7,14 +7,14 @@ export class RegisterDto {
 
   @ApiProperty({
     example: 'user@example.com',
-    description: 'Email користувача',
+    description: 'User email',
   })
   @IsEmail({}, { message: 'INVALID_EMAIL' })
   email: string;
 
   @ApiProperty({
     example: 'password123',
-    description: 'Пароль користувача (мінімум 6 символів)',
+    description: 'Password (min 6 characters)',
   })
   @IsNotEmpty({ message: 'WEAK_PASSWORD' })
   @MinLength(6, { message: 'WEAK_PASSWORD' })
@@ -22,7 +22,7 @@ export class RegisterDto {
 
   @ApiProperty({
     example: 'password123',
-    description: 'Підтвердження паролю',
+    description: 'Password confirmation',
   })
   @IsNotEmpty({ message: 'PASSWORDS_DO_NOT_MATCH' })
   @MinLength(6, { message: 'PASSWORDS_DO_NOT_MATCH' })

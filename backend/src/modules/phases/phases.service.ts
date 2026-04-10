@@ -19,14 +19,14 @@ export class PhasesService {
     private userSettingsRepository: Repository<UserSettings>,
   ) {}
 
-  /** Нормалізація днів тижня для збереження; порожній масив → усі дні (`null`). */
+  /** Normalize weekdays for persistence; empty array means all days (`null`). */
   private normalizeWeekDays(weekDays?: number[] | null): number[] | null {
     if (!weekDays?.length) return null;
     return [...new Set(weekDays)].sort((a, b) => a - b);
   }
 
   /**
-   * Внутрішньо: створює Sleep + Focus, якщо фаз ще немає. Викликається з `setupDefaultPhases`.
+   * Internal: creates Sleep + Focus when no phases exist yet. Called from `setupDefaultPhases`.
    */
   async ensureDefaultPhasesForUser(
     userId: string,

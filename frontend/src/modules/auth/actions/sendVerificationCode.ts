@@ -21,10 +21,10 @@ export const sendVerificationCode = (data: EmailVerificationFormData) => async (
             },
         });
 
-        showSuccessToast('Код верифікації відправлено на вашу електронну пошту');
+        showSuccessToast('Verification code sent to your email');
         dispatch({ type: SEND_VERIFICATION_CODE.success });
     } catch (error: any) {
-        let errorMessage = 'Помилка при відправці коду верифікації. Спробуйте ще раз.';
+        let errorMessage = 'Failed to send verification code. Please try again.';
         
         if (error?.response?.data) {
             const errorData = error.response.data;

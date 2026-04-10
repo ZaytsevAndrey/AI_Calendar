@@ -46,7 +46,7 @@ export class GoogleCalendarService {
       access_type: 'offline',
       scope: scopes,
       prompt: 'consent',
-      state: userId, // Передаємо userId через state
+      state: userId, // Pass userId via OAuth state
     });
 
     this.logger.log(`Generated auth URL for user ${userId}: ${authUrl}`);
@@ -116,7 +116,7 @@ export class GoogleCalendarService {
       return { connected: false };
     }
 
-    // Перевіряємо чи токен не прострочений
+    // Check token expiry
     if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
       if (user.googleRefreshToken) {
         try {
@@ -170,14 +170,14 @@ export class GoogleCalendarService {
         throw new Error('User not found');
       }
 
-      // Очищаємо токени
+      // Clear tokens
       await this.userRepo.update(userId, {
         googleAccessToken: null,
         googleRefreshToken: null,
         googleTokenExpiry: null,
       });
 
-      // Оновлюємо статус підключення
+      // Update connection status
       await this.userSettingsRepo.update(
         { userId: user.id },
         { googleCalendarLinked: false },
@@ -223,7 +223,7 @@ export class GoogleCalendarService {
       throw new Error('Google Calendar not connected');
     }
 
-    // Оновлюємо токен якщо потрібно
+    // Refresh token when needed
     if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
       if (user.googleRefreshToken) {
         this.oauth2Client.setCredentials({
@@ -300,7 +300,7 @@ export class GoogleCalendarService {
       throw new Error('Google Calendar not connected');
     }
 
-    // Оновлюємо токен якщо потрібно
+    // Refresh token when needed
     if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
       if (user.googleRefreshToken) {
         this.oauth2Client.setCredentials({
@@ -335,7 +335,7 @@ export class GoogleCalendarService {
       this.logger.log(
         `Successfully fetched event ${eventId} for user ${userId}`,
       );
-      // Додати phaseId до відповіді, якщо є звʼязок
+      // Include phaseId in the response when linked
       const eventData = response.data;
       if (eventId && userId) {
         const eventPhase = await this.eventPhasesService.findByEvent(String(eventId), String(userId));
@@ -368,7 +368,7 @@ export class GoogleCalendarService {
       throw new Error('Google Calendar not connected');
     }
 
-    // Оновлюємо токен якщо потрібно
+    // Refresh token when needed
     if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
       if (user.googleRefreshToken) {
         this.oauth2Client.setCredentials({
@@ -426,7 +426,7 @@ export class GoogleCalendarService {
       throw new Error('Google Calendar not connected');
     }
 
-    // Оновлюємо токен якщо потрібно
+    // Refresh token when needed
     if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
       if (user.googleRefreshToken) {
         this.oauth2Client.setCredentials({
@@ -456,7 +456,7 @@ export class GoogleCalendarService {
       requestBody: event,
     });
 
-    // Якщо у event є phaseId, створити звʼязок у event_phases
+    // If event carries phaseId, persist link in event_phases
     if (event.phaseId) {
       if (typeof response.data.id === 'string' && event.phaseId && userId) {
         await this.eventPhasesService.create(response.data.id, String(event.phaseId), String(userId));
@@ -480,7 +480,7 @@ export class GoogleCalendarService {
       throw new Error('Google Calendar not connected');
     }
 
-    // Оновлюємо токен якщо потрібно
+    // Refresh token when needed
     if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
       if (user.googleRefreshToken) {
         this.oauth2Client.setCredentials({
@@ -511,7 +511,7 @@ export class GoogleCalendarService {
       requestBody: event,
     });
 
-    // Оновити або створити звʼязок у event_phases
+    // Upsert link in event_phases
     if (event.phaseId) {
       const existing = await this.eventPhasesService.findByEvent(eventId, String(userId));
       if (existing) {
@@ -520,7 +520,7 @@ export class GoogleCalendarService {
         await this.eventPhasesService.create(eventId, String(event.phaseId), String(userId));
       }
     } else {
-      // Якщо phaseId не передано — видалити звʼязок
+      // No phaseId — remove link
       const existing = await this.eventPhasesService.findByEvent(eventId, String(userId));
       if (existing) {
         await this.eventPhasesService.remove(existing.id);
@@ -608,7 +608,7 @@ export class GoogleCalendarService {
       throw new Error('Google Calendar not connected');
     }
 
-    // Оновлюємо токен якщо потрібно
+    // Refresh token when needed
     if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
       if (user.googleRefreshToken) {
         this.oauth2Client.setCredentials({

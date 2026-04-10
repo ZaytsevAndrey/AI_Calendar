@@ -25,19 +25,19 @@ const ResetPasswordForm: React.FC<Props> = ({
 
     return (
         <form className={ styles.form } onSubmit={ onSubmit }>
-            <h2 className={ styles.title }>Скидання паролю</h2>
+            <h2 className={ styles.title }>Reset password</h2>
 
             <div className={ styles.inputGroup }>
-                <label htmlFor="newPassword">Новий пароль</label>
-                <input id="newPassword" type="password" { ...register('newPassword', { required: "Це поле обов'язкове" }) } />
+                <label htmlFor="newPassword">New password</label>
+                <input id="newPassword" type="password" { ...register('newPassword', { required: 'This field is required' }) } />
                 { errors.newPassword && <span className={ styles.error }>{ errors.newPassword.message }</span> }
             </div>
 
             <div className={ styles.inputGroup }>
-                <label htmlFor="confirmPassword">Повторіть пароль</label>
+                <label htmlFor="confirmPassword">Confirm password</label>
                 <input id="confirmPassword" type="password" { ...register('confirmPassword', {
-                    required: "Це поле обов'язкове",
-                    validate: value => value === newPassword || "Паролі не співпадають"
+                    required: 'This field is required',
+                    validate: value => value === newPassword || 'Passwords do not match'
                 }) } />
                 { errors.confirmPassword && <span className={ styles.error }>{ errors.confirmPassword.message }</span> }
             </div>
@@ -49,7 +49,7 @@ const ResetPasswordForm: React.FC<Props> = ({
                 className={ styles.submitButton }
                 disabled={ requestStatus === 'pending' }
             >
-                { requestStatus === 'pending' ? 'Оновлення...' : 'Оновити пароль' }
+                { requestStatus === 'pending' ? 'Updating...' : 'Update password' }
             </button>
         </form>
     );

@@ -38,10 +38,10 @@ export class ScheduleController {
   ) {}
 
   @Post()
-  @ApiOperation({ summary: 'Створити новий запланований елемент' })
+  @ApiOperation({ summary: 'Create a new scheduled item' })
   @ApiResponse({
     status: 201,
-    description: 'Успішно створено',
+    description: 'Created successfully',
     type: ScheduledTask,
   })
   async create(
@@ -52,10 +52,10 @@ export class ScheduleController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Отримати всі заплановані елементи' })
+  @ApiOperation({ summary: 'List all scheduled items' })
   @ApiResponse({
     status: 200,
-    description: 'Список всіх запланованих завдань',
+    description: 'All scheduled tasks',
     type: [ScheduledTask],
   })
   async findAll(
@@ -66,13 +66,13 @@ export class ScheduleController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Отримати один запланований елемент' })
+  @ApiOperation({ summary: 'Get one scheduled item' })
   @ApiResponse({
     status: 200,
-    description: 'Запланований елемент',
+    description: 'Scheduled item',
     type: ScheduledTask,
   })
-  @ApiResponse({ status: 404, description: 'Не знайдено' })
+  @ApiResponse({ status: 404, description: 'Not found' })
   async findOne(
     @Request() req,
     @Param('id') id: string,
@@ -81,13 +81,13 @@ export class ScheduleController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Оновити запланований елемент' })
+  @ApiOperation({ summary: 'Update a scheduled item' })
   @ApiResponse({
     status: 200,
-    description: 'Оновлений елемент',
+    description: 'Updated item',
     type: ScheduledTask,
   })
-  @ApiResponse({ status: 404, description: 'Не знайдено' })
+  @ApiResponse({ status: 404, description: 'Not found' })
   async update(
     @Request() req,
     @Param('id') id: string,
@@ -97,9 +97,9 @@ export class ScheduleController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Видалити запланований елемент' })
-  @ApiResponse({ status: 200, description: 'Успішно видалено' })
-  @ApiResponse({ status: 404, description: 'Не знайдено' })
+  @ApiOperation({ summary: 'Delete a scheduled item' })
+  @ApiResponse({ status: 200, description: 'Deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Not found' })
   async remove(@Request() req, @Param('id') id: string): Promise<void> {
     return this.scheduleService.remove(id, req.user.userId);
   }
@@ -124,8 +124,8 @@ export class ScheduleController {
   }
 
   @Delete()
-  @ApiOperation({ summary: 'Очистити розклад за вказаний період' })
-  @ApiResponse({ status: 200, description: 'Розклад очищено' })
+  @ApiOperation({ summary: 'Clear schedule for the given period' })
+  @ApiResponse({ status: 200, description: 'Schedule cleared' })
   async clearSchedule(
     @Request() req,
     @Body() clearDto: GenerateScheduleDto,

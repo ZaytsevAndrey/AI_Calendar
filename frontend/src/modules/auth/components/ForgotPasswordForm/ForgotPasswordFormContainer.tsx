@@ -15,7 +15,7 @@ import requestsStatuses from 'modules/common/constants/requestsStatuses';
 import ForgotPasswordForm from './ForgotPasswordForm';
 
 const schema = z.object({
-    email: z.string().email('Невірний формат email'),
+    email: z.string().email('Invalid email format'),
 });
 
 export type ForgotPasswordFormData = z.infer<typeof schema>;

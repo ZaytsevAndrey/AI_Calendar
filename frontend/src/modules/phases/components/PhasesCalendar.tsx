@@ -14,13 +14,13 @@ const MIN_DURATION_MIN = 15;
 const HANDLE_PX = 8;
 
 const COLUMNS: { dow: number; label: string }[] = [
-  { dow: 1, label: 'Пн' },
-  { dow: 2, label: 'Вт' },
-  { dow: 3, label: 'Ср' },
-  { dow: 4, label: 'Чт' },
-  { dow: 5, label: 'Пт' },
-  { dow: 6, label: 'Сб' },
-  { dow: 0, label: 'Нд' },
+  { dow: 1, label: 'Mon' },
+  { dow: 2, label: 'Tue' },
+  { dow: 3, label: 'Wed' },
+  { dow: 4, label: 'Thu' },
+  { dow: 5, label: 'Fri' },
+  { dow: 6, label: 'Sat' },
+  { dow: 0, label: 'Sun' },
 ];
 
 interface PhasesCalendarProps {
@@ -240,10 +240,10 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
   return (
     <Paper sx={{ p: 2, mt: 2, overflow: 'auto' }}>
       <Typography variant="h6" gutterBottom>
-        Тижневий шаблон фаз
+        Weekly phase template
       </Typography>
       <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
-        Тягніть блок або верхній/нижній край. Крок {SNAP_MIN} хв. Клік по середині — редагування.
+        Drag a block or its top/bottom edge. Step: {SNAP_MIN} min. Click the center to edit.
       </Typography>
 
       <Box
@@ -423,7 +423,7 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
       {displayPhases.length > 0 && (
         <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
           <Typography variant="subtitle2" sx={{ width: '100%' }}>
-            Легенда
+            Legend
           </Typography>
           {[...displayPhases]
             .sort(

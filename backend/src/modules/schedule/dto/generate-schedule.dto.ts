@@ -3,7 +3,7 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class GenerateScheduleDto {
   @ApiProperty({
-    description: 'Дата початку періоду для генерації розкладу',
+    description: 'Schedule generation period start',
     example: '2025-05-01',
   })
   @IsNotEmpty()
@@ -11,7 +11,7 @@ export class GenerateScheduleDto {
   startDate: string;
 
   @ApiProperty({
-    description: 'Дата закінчення періоду для генерації розкладу',
+    description: 'Schedule generation period end',
     example: '2025-05-31',
   })
   @IsNotEmpty()

@@ -18,7 +18,7 @@ export const eventsApi = createApi({
         if (params?.timeMin) searchParams.append('timeMin', params.timeMin);
         if (params?.timeMax) searchParams.append('timeMax', params.timeMax);
         if (params?.calendarId) searchParams.append('calendarId', params.calendarId);
-        // додати інші параметри, якщо треба
+        // add other params if needed
         return { url: `/google-calendar/events?${searchParams.toString()}`, method: 'GET' };
       },
       providesTags: (result) =>

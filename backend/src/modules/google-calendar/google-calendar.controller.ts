@@ -67,7 +67,7 @@ export class GoogleCalendarController {
       const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/settings?googleCalendar=error&error=${error}`;
       this.logger.log(`Redirecting to error page: ${redirectUrl}`);
 
-      // Додаємо всі необхідні заголовки для правильного редіректу
+      // Set redirect headers (CORS, cache)
       res.status(302);
       res.header('Location', redirectUrl);
       res.header(
@@ -87,7 +87,7 @@ export class GoogleCalendarController {
       const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/settings?googleCalendar=error&error=no_code`;
       this.logger.log(`Redirecting to error page: ${redirectUrl}`);
 
-      // Додаємо всі необхідні заголовки для правильного редіректу
+      // Set redirect headers (CORS, cache)
       res.status(302);
       res.header('Location', redirectUrl);
       res.header(
@@ -104,7 +104,7 @@ export class GoogleCalendarController {
 
     try {
       this.logger.log('Processing Google OAuth callback');
-      // Використовуємо state для отримання userId
+      // OAuth state carries userId
       const userId = state;
       this.logger.log(`Using userId from state: ${userId}`);
       await this.googleCalendarService.saveToken(code, userId);
@@ -113,7 +113,7 @@ export class GoogleCalendarController {
       const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/settings?googleCalendar=success`;
       this.logger.log(`Redirecting to: ${redirectUrl}`);
 
-      // Додаємо всі необхідні заголовки для правильного редіректу
+      // Set redirect headers (CORS, cache)
       res.status(302);
       res.header('Location', redirectUrl);
       res.header(
@@ -133,7 +133,7 @@ export class GoogleCalendarController {
       const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/settings?googleCalendar=error&error=${error.message}`;
       this.logger.log(`Redirecting to error page: ${redirectUrl}`);
 
-      // Додаємо всі необхідні заголовки для правильного редіректу
+      // Set redirect headers (CORS, cache)
       res.status(302);
       res.header('Location', redirectUrl);
       res.header(
@@ -252,7 +252,7 @@ export class GoogleCalendarController {
   @Post('events')
   @UseGuards(JwtAuthGuard)
   async createEvent(@Req() req, @Body() event: any) {
-    // event.phaseId може бути у body
+    // event.phaseId may be present on the body
     return this.googleCalendarService.createEvent(req.user.userId, event);
   }
 
@@ -263,7 +263,7 @@ export class GoogleCalendarController {
     @Param('eventId') eventId: string,
     @Body() event: any,
   ) {
-    // event.phaseId може бути у body
+    // event.phaseId may be present on the body
     return this.googleCalendarService.updateEvent(
       req.user.userId,
       eventId,

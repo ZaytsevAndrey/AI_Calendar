@@ -36,7 +36,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
         },
     });
 
-    // Функція для конвертації string в Date
+    // Parse string to Date
     const stringToDate = (timeString: string): Date => {
         const [hours, minutes] = timeString.split(':').map(Number);
         const date = new Date();
@@ -44,13 +44,13 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
         return date;
     };
 
-    // Функція для конвертації Date в string (24-годинний формат для збереження)
+    // Format Date to string (24h) for persistence
     const dateToString = (date: Date | null): string => {
         if (!date) return '';
         return date.toTimeString().slice(0, 5);
     };
 
-    // Автозбереження при зміні часу
+    // Auto-save when times change
     const sleepTime = watch('sleepTime');
     const wakeTime = watch('wakeTime');
 
@@ -84,7 +84,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
         checkCalendarConnection();
     }, [setValue]);
 
-    // Перевіряємо URL параметри після повернення з Google OAuth
+    // Read URL params after Google OAuth redirect
     useEffect(() => {
         const googleCalendarStatus = searchParams.get('googleCalendar');
         const error = searchParams.get('error');
@@ -93,11 +93,11 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             toast.success('Google Calendar connected successfully!');
             setIsCalendarConnected(true);
             setValue('googleCalendarLinked', true);
-            // Очищаємо URL параметри
+            // Strip URL query params
             navigate('/settings', { replace: true });
         } else if (googleCalendarStatus === 'error') {
             toast.error(`Failed to connect Google Calendar: ${error || 'Unknown error'}`);
-            // Очищаємо URL параметри
+            // Strip URL query params
             navigate('/settings', { replace: true });
         }
     }, [searchParams, setValue, navigate]);
@@ -112,7 +112,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             
             toast.info('Redirecting to Google...');
             
-            // Невелика затримка для показу повідомлення
+            // Short delay so the message is visible
             setTimeout(() => {
                 window.location.replace(urlData.url);
             }, 500);
@@ -143,9 +143,9 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
         }
     };
 
-    // Автозбереження при зміні часу
+    // Auto-save when times change
     const autoSaveTimeSettings = useCallback(async (sleepTime: string | null | undefined, wakeTime: string | null | undefined) => {
-        // Перевіряємо, що значення часу валідні
+        // Ensure time values are valid
         if (!sleepTime || !wakeTime || sleepTime === '' || wakeTime === '' || 
             typeof sleepTime !== 'string' || typeof wakeTime !== 'string') {
             console.log('Skipping auto-save - invalid time values:', { sleepTime, wakeTime });
@@ -162,7 +162,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             });
             toast.success('Time settings saved automatically');
         } catch (error: any) {
-            // Якщо помилка 401, не показуємо toast - користувач буде перенаправлений на логін
+            // On 401, skip toast — user will be redirected to login
             if (error?.response?.status === 401) {
                 console.log('User not authorized, skipping auto-save');
                 return;
@@ -172,18 +172,18 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
         }
     }, [isCalendarConnected]);
 
-    // Зберігаємо початкові значення
+    // Snapshot initial values
     useEffect(() => {
         if (sleepTime && wakeTime && !initialValues) {
             setInitialValues({ sleepTime, wakeTime });
         }
     }, [sleepTime, wakeTime, initialValues]);
 
-    // Автозбереження при зміні часу
+    // Auto-save when times change
     useEffect(() => {
         console.log('Time values changed:', { sleepTime, wakeTime, initialValues });
         
-        // Перевіряємо, чи значення змінилися від початкових
+        // Only save if values differ from initial
         const hasChanged = initialValues && 
             (sleepTime !== initialValues.sleepTime || wakeTime !== initialValues.wakeTime);
         
@@ -193,7 +193,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             hasChanged) {
             const timeoutId = setTimeout(() => {
                 autoSaveTimeSettings(sleepTime, wakeTime);
-            }, 1000); // Затримка 1 секунда після зміни
+            }, 1000); // Debounce 1s after change
 
             return () => clearTimeout(timeoutId);
         }

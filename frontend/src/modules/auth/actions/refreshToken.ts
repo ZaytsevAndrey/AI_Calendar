@@ -27,7 +27,7 @@ export const refreshToken = () => async (dispatch: Dispatch) => {
             payload: { access_token, refresh_token },
         });
     } catch (error: any) {
-        let errorMessage = 'Помилка при оновленні токена.';
+        let errorMessage = 'Failed to refresh token.';
         if (error && error.response && error.response.data) {
             if (error.response.data.message) {
                 errorMessage = error.response.data.message;

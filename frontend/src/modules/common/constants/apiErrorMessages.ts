@@ -15,27 +15,27 @@ import {
 } from './apiErrorCodes';
 
 export const apiErrorMessages: Record<string, string> = {
-    [INVALID_JWT]: 'Недійсний токен',
-    [EMPTY_JWT]: 'Відсутній токен',
-    [INVALID_SESSION]: 'Сесія недійсна',
-    [INVALID_REFRESH_TOKEN]: 'Токен оновлення недійсний',
+    [INVALID_JWT]: 'Invalid token',
+    [EMPTY_JWT]: 'Token is missing',
+    [INVALID_SESSION]: 'Session is invalid',
+    [INVALID_REFRESH_TOKEN]: 'Refresh token is invalid',
 
-    [INVALID_EMAIL]: 'Невірний формат email',
-    [EMPTY_EMAIL]: 'Email не може бути порожнім',
-    [UNKNOWN_EMAIL]: 'Користувач із цим email не знайдений',
+    [INVALID_EMAIL]: 'Invalid email format',
+    [EMPTY_EMAIL]: 'Email cannot be empty',
+    [UNKNOWN_EMAIL]: 'No user found with this email',
 
-    [PASSWORD_TOO_SHORT]: 'Пароль занадто короткий',
-    [PASSWORDS_DO_NOT_MATCH]: 'Паролі не співпадають',
-    [PASSWORD_WAS_PREVIOUSLY_USED]: 'Цей пароль вже використовувався раніше',
+    [PASSWORD_TOO_SHORT]: 'Password is too short',
+    [PASSWORDS_DO_NOT_MATCH]: 'Passwords do not match',
+    [PASSWORD_WAS_PREVIOUSLY_USED]: 'This password was used before',
 
-    [INVALID_VERIFICATION_CODE]: 'Код підтвердження недійсний',
-    [VERIFICATION_CODE_EXPIRED]: 'Термін дії коду підтвердження вичерпано',
+    [INVALID_VERIFICATION_CODE]: 'Verification code is invalid',
+    [VERIFICATION_CODE_EXPIRED]: 'Verification code has expired',
 
-    [EMAIL_ALREADY_TAKEN]: 'Цей email вже зареєстрований',
+    [EMAIL_ALREADY_TAKEN]: 'This email is already registered',
 };
 
 export function getApiErrorMessage(code: string): string {
-    return apiErrorMessages[code] || 'Сталася невідома помилка';
+    return apiErrorMessages[code] || 'An unknown error occurred';
 }
 
 export default apiErrorMessages;

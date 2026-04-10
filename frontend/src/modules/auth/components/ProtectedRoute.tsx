@@ -17,8 +17,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Якщо налаштування не перевірені, дозволяємо рендерити children
-  // useSettingsCheck сам зробить запит і редірект якщо потрібно
+  // If settings gate is unchecked, still render children;
+  // useSettingsCheck will fetch and redirect when needed
   return <>{children}</>;
 };
 

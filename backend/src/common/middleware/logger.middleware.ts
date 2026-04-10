@@ -16,7 +16,7 @@ export class LoggerMiddleware implements NestMiddleware {
     const oldSend = res.send;
     res.send = function (data) {
       const ms = Date.now() - start;
-      // Лог відповіді
+      // Log response
       Logger.log(
         `RESPONSE: ${method} ${originalUrl} ${res.statusCode} - ${ms}ms | response: ${data}`,
         'HTTP',

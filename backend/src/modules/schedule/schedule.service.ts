@@ -25,7 +25,7 @@ export class ScheduleService {
     userId: string,
     createScheduleDto: CreateScheduleDto,
   ): Promise<ScheduledTask> {
-    // Перевірка, чи існує завдання
+    // Ensure the task exists
     const task = await this.tasksService.findOne(
       createScheduleDto.taskId,
       userId,
@@ -36,7 +36,7 @@ export class ScheduleService {
       );
     }
 
-    // Перевірка чи не перекривається з іншими запланованими завданнями
+    // Reject overlap with other scheduled slots for this task
     const overlappingTasks = await this.scheduledTaskRepository.find({
       where: [
         {
@@ -77,7 +77,7 @@ export class ScheduleService {
   ): Promise<ScheduledTask[]> {
     const where: FindOptionsWhere<ScheduledTask> = {};
 
-    // Фільтрування за датами
+    // Filter by date range
     if (query.startDate && query.endDate) {
       where.scheduledStartTime = Between(
         new Date(query.startDate),
@@ -85,7 +85,7 @@ export class ScheduleService {
       );
     }
 
-    // Додавання зв'язків
+    // Load relations
     const relations = ['task', 'task.phase'];
 
     let scheduledTasks = await this.scheduledTaskRepository.find({
@@ -93,14 +93,14 @@ export class ScheduleService {
       relations,
     });
 
-    // Фільтрування за фазою (якщо потрібно)
+    // Optional filter by phase
     if (query.phaseId) {
       scheduledTasks = scheduledTasks.filter(
         (task) => task.task?.phaseId === query.phaseId,
       );
     }
 
-    // Фільтрування по користувачу (за task.userId)
+    // Restrict to this user (task.userId)
     scheduledTasks = scheduledTasks.filter(
       (scheduledTask) => scheduledTask.task?.userId === userId,
     );
@@ -128,7 +128,7 @@ export class ScheduleService {
   ): Promise<ScheduledTask> {
     const scheduledTask = await this.findOne(id, userId);
 
-    // Оновлення даних
+    // Apply updates
     Object.assign(scheduledTask, {
       ...updateScheduleDto,
       scheduledStartTime: updateScheduleDto.scheduledStartTime
@@ -152,10 +152,10 @@ export class ScheduleService {
     startDate: string,
     endDate: string,
   ): Promise<void> {
-    // Отримуємо всі завдання в цьому періоді для цього користувача
+    // All scheduled items in range for this user
     const scheduledTasks = await this.findAll(userId, { startDate, endDate });
 
-    // Видаляємо знайдені завдання
+    // Remove them
     if (scheduledTasks.length > 0) {
       await this.scheduledTaskRepository.remove(scheduledTasks);
     }

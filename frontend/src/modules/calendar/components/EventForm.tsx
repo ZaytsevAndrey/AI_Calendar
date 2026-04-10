@@ -22,7 +22,7 @@ import { useGetUserSettingsQuery } from '../../../api/userSettingsApi';
 import EmojiPicker from 'emoji-picker-react';
 import { useState } from 'react';
 
-// Google Calendar стандартні кольори (colorId)
+// Google Calendar default colors (colorId)
 const GOOGLE_COLORS = [
   { id: '1', color: '#7986cb' },
   { id: '2', color: '#33b679' },
@@ -69,7 +69,7 @@ const EventForm: React.FC<EventFormProps> = ({
 }) => {
     const { data: timePhases = [] } = useTimePhases();
     const { data: sleepTimePhases = [] } = useSleepTimePhases();
-    // Замість useQuery використати useGetUserSettingsQuery з RTK Query slice userSettingsApi
+    // Prefer useGetUserSettingsQuery from userSettingsApi (RTK Query) over useQuery
     const { data: userSettings } = useGetUserSettingsQuery();
     
     const [formData, setFormData] = React.useState<{
@@ -203,7 +203,7 @@ const EventForm: React.FC<EventFormProps> = ({
         }
     }, [event, open]);
 
-    // Якщо isRecurring стало true, очищати deadline
+    // Clear deadline when isRecurring becomes true
     React.useEffect(() => {
         if (isRecurring) setDeadline('');
     }, [isRecurring]);
@@ -213,10 +213,10 @@ const EventForm: React.FC<EventFormProps> = ({
         setPhaseError(null);
         // Check if start or end time is in sleep time
         if (isSleepTime(formData.startTime) || isSleepTime(formData.endTime)) {
-            alert('Не можна створювати події в час сну!');
+            alert('Events cannot be created during sleep time.');
             return;
         }
-        // Якщо є фази, phaseId обов'язковий
+        // When phases exist, phaseId is required
         if (timePhases.length > 0 && !formData.selectedPhaseId) {
             setPhaseError('Please select a phase');
             return;
@@ -270,7 +270,7 @@ const EventForm: React.FC<EventFormProps> = ({
         });
     };
 
-    // Відсортовані фази для селекту
+    // Phases sorted for the select
     const sortedTimePhases = [...timePhases].sort((a: any, b: any) => {
       const toMinutes = (t: string) => {
         const [h, m] = t.split(':').map(Number);

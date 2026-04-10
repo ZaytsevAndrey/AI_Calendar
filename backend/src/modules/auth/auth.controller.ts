@@ -68,7 +68,7 @@ export class AuthController {
 
     if (password !== confirmPassword) {
       throw new ApiError('PASSWORDS_DO_NOT_MATCH', {
-        confirmPassword: 'Паролі не співпадають',
+        confirmPassword: 'Passwords do not match',
       });
     }
 

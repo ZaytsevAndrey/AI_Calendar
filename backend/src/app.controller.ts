@@ -16,7 +16,7 @@ export class AppController {
 
   @Get('.well-known/appspecific/com.chrome.devtools.json')
   handleChromeDevTools(@Res() res: Response) {
-    // Повертаємо порожній JSON для Chrome DevTools
+    // Empty JSON for Chrome DevTools
     res.status(200).json({});
   }
 }

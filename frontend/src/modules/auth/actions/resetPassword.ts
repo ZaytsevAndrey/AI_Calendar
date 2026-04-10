@@ -22,10 +22,10 @@ export const resetPassword = (data: { token: string; newPassword: string }) => a
             },
         });
 
-        showSuccessToast('Пароль успішно змінено! Тепер ви можете увійти з новим паролем.');
+        showSuccessToast('Password updated. You can log in with your new password.');
         dispatch({ type: RESET_PASSWORD.success });
     } catch (error: any) {
-        let errorMessage = 'Помилка при зміні пароля. Спробуйте ще раз.';
+        let errorMessage = 'Failed to change password. Please try again.';
         
         if (error?.response?.data) {
             const errorData = error.response.data;

@@ -20,10 +20,10 @@ export const forgotPassword = (data: ForgotPasswordFormData) => async (dispatch:
             },
         });
 
-        showSuccessToast('Інструкції для відновлення пароля надіслано на вашу електронну пошту');
+        showSuccessToast('Password reset instructions have been sent to your email');
         dispatch({ type: FORGOT_PASSWORD.success });
     } catch (error: any) {
-        let errorMessage = 'Помилка при відправці інструкцій. Спробуйте ще раз.';
+        let errorMessage = 'Failed to send instructions. Please try again.';
         
         if (error?.response?.data) {
             const errorData = error.response.data;

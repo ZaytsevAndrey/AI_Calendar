@@ -50,7 +50,7 @@ const PhasesPage: React.FC = () => {
       try {
         await updatePhase({ id: phaseId, phase: { startTime, endTime } }).unwrap();
       } catch {
-        showErrorToast('Не вдалося оновити час фази.');
+        showErrorToast('Could not update phase time.');
         throw new Error('phase-update-failed');
       }
     },
@@ -83,7 +83,7 @@ const PhasesPage: React.FC = () => {
         </DialogActions>
       </Dialog>
       
-      {/* Додаємо календар фаз */}
+      {/* Phase calendar */}
       <PhasesCalendar
         phases={phases}
         onEditPhase={handleEdit}

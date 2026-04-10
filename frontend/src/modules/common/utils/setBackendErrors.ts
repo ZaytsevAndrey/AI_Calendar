@@ -6,7 +6,7 @@ export default function setBackendErrors<TFieldValues extends FieldValues>(
     setError: UseFormSetError<TFieldValues>
 ) {
     Object.entries(backendErrors).forEach(([field, code]) => {
-        const message = apiErrorMessages[code] || 'Помилка';
+        const message = apiErrorMessages[code] || 'Error';
         setError(field as Path<TFieldValues>, {
             type: 'manual',
             message,

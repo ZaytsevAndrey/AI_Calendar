@@ -31,14 +31,14 @@ export class AuthService {
 
     if (password !== confirmPassword) {
       throw new ApiError('PASSWORDS_DO_NOT_MATCH', {
-        confirmPassword: 'Паролі не співпадають',
+        confirmPassword: 'Passwords do not match',
       });
     }
 
     const existing = await this.usersRepo.findOneBy({ email });
     if (existing) {
       throw new ApiError('EMAIL_ALREADY_EXISTS', {
-        email: 'Цей email вже використовується',
+        email: 'This email is already in use',
       });
     }
 
@@ -67,7 +67,7 @@ export class AuthService {
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
       throw new ApiError('INVALID_CREDENTIALS', {
-        username: 'Неправильний логін або пароль',
+        username: 'Incorrect email or password',
       });
     }
 
@@ -83,7 +83,7 @@ export class AuthService {
 
     if (!user) {
       throw new ApiError('INVALID_REFRESH_TOKEN', {
-        refreshToken: 'Недійсний токен оновлення',
+        refreshToken: 'Invalid refresh token',
       });
     }
 
@@ -101,7 +101,7 @@ export class AuthService {
     if (!user) {
       this.logger.error(`Invalid reset token: ${token}`);
       throw new ApiError('INVALID_RESET_TOKEN', {
-        token: 'Недійсний токен скидання',
+        token: 'Invalid reset token',
       });
     }
 
@@ -137,7 +137,7 @@ export class AuthService {
     if (!user) {
       this.logger.error(`Email not found: ${email}`);
       throw new ApiError('EMAIL_NOT_FOUND', {
-        email: 'Електронна пошта не знайдена',
+        email: 'Email not found',
       });
     }
 
@@ -157,7 +157,7 @@ export class AuthService {
     if (!user) {
       this.logger.error(`Email not found for password reset: ${email}`);
       throw new ApiError('EMAIL_NOT_FOUND', {
-        email: 'Електронна пошта не знайдена',
+        email: 'Email not found',
       });
     }
 
@@ -277,7 +277,7 @@ export class AuthService {
 
     if (existingUser) {
       throw new ApiError('USER_ALREADY_EXISTS', {
-        email: 'Користувач з таким email вже існує',
+        email: 'A user with this email already exists',
       });
     }
 

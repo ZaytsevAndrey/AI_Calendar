@@ -19,7 +19,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit, requestStatus }) 
 
     return (
         <form className={ styles.registerForm } onSubmit={ handleSubmit(onSubmit) }>
-            <h2 className={ styles.title }>Реєстрація</h2>
+            <h2 className={ styles.title }>Sign up</h2>
 
             <div className={ styles.inputGroup }>
                 <label htmlFor="email">Email</label>
@@ -28,13 +28,13 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit, requestStatus }) 
             </div>
 
             <div className={ styles.inputGroup }>
-                <label htmlFor="password">Пароль</label>
+                <label htmlFor="password">Password</label>
                 <input id="password" type="password" { ...register('password') } />
                 {errors.password && <span className={ styles.error }>{ errors.password.message }</span>}
             </div>
 
             <div className={ styles.inputGroup }>
-                <label htmlFor="confirmPassword">Повторіть пароль</label>
+                <label htmlFor="confirmPassword">Confirm password</label>
                 <input id="confirmPassword" type="password" { ...register('confirmPassword') } />
                 {errors.confirmPassword && <span className={ styles.error }>{ errors.confirmPassword.message }</span>}
             </div>
@@ -44,11 +44,11 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit, requestStatus }) 
                 className={ styles.submitButton }
                 disabled={ requestStatus === 'pending' }
             >
-                { requestStatus === 'pending' ? 'Реєстрація...' : 'Зареєструватись' }
+                { requestStatus === 'pending' ? 'Signing up...' : 'Sign up' }
             </button>
 
             <div className={ styles.redirect }>
-                Вже є акаунт? <Link to="/login">Увійти</Link>
+                Already have an account? <Link to="/login">Log in</Link>
             </div>
         </form>
     );

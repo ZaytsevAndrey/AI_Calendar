@@ -3,7 +3,7 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class ScheduleQueryDto {
   @ApiProperty({
-    description: 'Дата початку періоду',
+    description: 'Period start date',
     example: '2025-05-01',
     required: false,
   })
@@ -12,7 +12,7 @@ export class ScheduleQueryDto {
   startDate?: string;
 
   @ApiProperty({
-    description: 'Дата закінчення періоду',
+    description: 'Period end date',
     example: '2025-05-31',
     required: false,
   })
@@ -21,7 +21,7 @@ export class ScheduleQueryDto {
   endDate?: string;
 
   @ApiProperty({
-    description: 'ID фази для фільтрації',
+    description: 'Phase ID to filter by',
     example: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
     required: false,
   })

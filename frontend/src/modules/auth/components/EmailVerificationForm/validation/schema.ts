@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 const schema = z.object({
-    email: z.string().email('Некоректний email'),
+    email: z.string().email('Invalid email'),
 });
 
 export default schema;

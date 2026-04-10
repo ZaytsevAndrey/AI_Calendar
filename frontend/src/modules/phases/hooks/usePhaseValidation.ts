@@ -18,7 +18,7 @@ const isFirstTimeBigger = (time1: string, time2: string): boolean => {
   return totalMinutes1 > totalMinutes2;
 };
 
-/** Перевірка лише меж активного дня (wake–sleep). Перетини між фазами дозволені. */
+/** Validates only the active-day bounds (wake–sleep). Overlaps between phases are allowed. */
 export const usePhaseValidation = ({
   startTime,
   endTime,

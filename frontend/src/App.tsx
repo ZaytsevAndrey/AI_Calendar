@@ -14,7 +14,7 @@ const App: React.FC = () => {
                 component="main" 
                 sx={{ 
                     flexGrow: 1,
-                    pt: isAuthenticated ? '64px' : 0, // 64px - висота Header
+                    pt: isAuthenticated ? '64px' : 0, // 64px — header height
                     overflow: 'auto',
                     height: '100%'
                 }}

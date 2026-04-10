@@ -18,7 +18,7 @@ const ForgotPasswordForm: React.FC<Props> = ({
 }) => {
     return (
         <form className={ styles.form } onSubmit={ onSubmit }>
-            <h2 className={ styles.title }>Забули пароль?</h2>
+            <h2 className={ styles.title }>Forgot password?</h2>
 
             <div className={ styles.inputGroup }>
                 <label htmlFor="email">Email</label>
@@ -31,7 +31,7 @@ const ForgotPasswordForm: React.FC<Props> = ({
                 className={ styles.submitButton }
                 disabled={ requestStatus === 'pending' }
             >
-                { requestStatus === 'pending' ? 'Відправка...' : 'Надіслати код' }
+                { requestStatus === 'pending' ? 'Sending...' : 'Send code' }
             </button>
         </form>
     );

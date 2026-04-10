@@ -21,7 +21,7 @@ interface CalendarGridProps {
 
 const CalendarGrid: React.FC<CalendarGridProps> = ({ view, date, events, onEditEvent, onDeleteEvent }) => {
     const { data: timePhases = [] } = useTimePhasesForDate(date);
-    // Замість useQuery використати useGetUserSettingsQuery з RTK Query slice userSettingsApi
+    // Prefer useGetUserSettingsQuery from userSettingsApi (RTK Query) over useQuery
     const { data: userSettings } = useGetUserSettingsQuery();
     
     const getDaysInView = () => {

@@ -32,7 +32,7 @@ export const loginUser = (formData: { email: string; password: string }) => {
                 payload: { access_token, refresh_token },
             });
         } catch (error: any) {
-            let errorMessage = 'Невдалий вхід. Перевірте дані та спробуйте знову.';
+            let errorMessage = 'Sign-in failed. Check your credentials and try again.';
             
             // Log the full error for debugging
             console.error('Login error:', error);
@@ -64,7 +64,7 @@ export const loginUser = (formData: { email: string; password: string }) => {
                 }
             }
             
-            // Показуємо помилку як тост
+            // Surface error as toast
             showErrorToast(errorMessage);
             
             dispatch({
