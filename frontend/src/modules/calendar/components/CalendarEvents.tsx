@@ -1,15 +1,7 @@
 import React from 'react';
-import { 
-    Box, 
-    Typography, 
-    CircularProgress, 
-    Alert,
-    Paper,
-    Chip,
-    Button
-} from '@mui/material';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 import { formatEventTime, getEventColor, isEventToday } from '../hooks/useCalendar';
+import { Spinner } from '../../../ui/Spinner';
 
 interface CalendarEventsProps {
     events: GoogleCalendarEvent[];
@@ -20,132 +12,117 @@ interface CalendarEventsProps {
     onDeleteEvent?: (eventId: string, eventName: string) => void;
 }
 
-const CalendarEvents: React.FC<CalendarEventsProps> = ({ 
-    events, 
-    isLoading, 
-    error, 
-    title = "Events",
+const CalendarEvents: React.FC<CalendarEventsProps> = ({
+    events,
+    isLoading,
+    error,
+    title = 'Events',
     onEditEvent,
-    onDeleteEvent
+    onDeleteEvent,
 }) => {
     if (isLoading) {
         return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                <CircularProgress />
-            </Box>
+            <div className="flex justify-center py-8">
+                <Spinner className="h-8 w-8" />
+            </div>
         );
     }
 
     if (error) {
         return (
-            <Alert severity="error" sx={{ mb: 2 }}>
+            <div
+                className="mb-4 rounded border border-ide-error bg-ide-error/10 px-4 py-3 text-sm text-ide-error"
+                role="alert"
+            >
                 Failed to load events: {error.message}
-            </Alert>
+            </div>
         );
     }
 
     if (!events || events.length === 0) {
         return (
-            <Box sx={{ textAlign: 'center', py: 4 }}>
-                <Typography variant="body1" color="text.secondary">
-                    No events found for this period
-                </Typography>
-            </Box>
+            <div className="py-8 text-center text-ide-muted">No events found for this period</div>
         );
     }
 
     return (
-        <Box>
-            <Typography variant="h6" gutterBottom>
+        <div>
+            <h2 className="mb-4 text-lg font-semibold text-ide-text">
                 {title} ({events.length})
-            </Typography>
-            
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            </h2>
+
+            <div className="flex flex-col gap-4">
                 {events.map((event) => (
-                    <Paper 
-                        key={event.id} 
-                        sx={{ 
-                            p: 2, 
-                            borderLeft: `4px solid ${getEventColor(event)}`,
-                            '&:hover': {
-                                boxShadow: 2,
-                                transform: 'translateY(-1px)',
-                                transition: 'all 0.2s ease'
-                            }
-                        }}
+                    <div
+                        key={event.id}
+                        className="rounded-lg border border-ide-border bg-ide-panel p-4 shadow-ide transition hover:-translate-y-px hover:shadow-ide-md"
+                        style={{ borderLeftWidth: 4, borderLeftColor: getEventColor(event) }}
                     >
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                            <Typography variant="h6" component="h3" sx={{ fontWeight: 600 }}>
+                        <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                            <h3 className="text-lg font-semibold text-ide-text">
                                 {event.summary || 'Untitled Event'}
-                            </Typography>
-                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                                {isEventToday(event) && (
-                                    <Chip 
-                                        label="Today" 
-                                        size="small" 
-                                        color="primary" 
-                                        variant="outlined"
-                                    />
-                                )}
-                                {onEditEvent && (
-                                    <Button 
-                                        size="small" 
+                            </h3>
+                            <div className="flex flex-wrap items-center gap-2">
+                                {isEventToday(event) ? (
+                                    <span className="rounded border border-ide-link px-2 py-0.5 text-xs text-ide-link">
+                                        Today
+                                    </span>
+                                ) : null}
+                                {onEditEvent ? (
+                                    <button
+                                        type="button"
                                         onClick={() => onEditEvent(event.id)}
-                                        sx={{ minWidth: 'auto', px: 1 }}
+                                        className="rounded px-2 py-1 text-sm text-ide-link hover:bg-ide-surface"
                                     >
                                         ✏️ Edit
-                                    </Button>
-                                )}
-                                {onDeleteEvent && (
-                                    <Button 
-                                        size="small" 
-                                        color="error"
-                                        onClick={() => onDeleteEvent(event.id, event.summary || 'Untitled Event')}
-                                        sx={{ minWidth: 'auto', px: 1 }}
+                                    </button>
+                                ) : null}
+                                {onDeleteEvent ? (
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            onDeleteEvent(event.id, event.summary || 'Untitled Event')
+                                        }
+                                        className="rounded px-2 py-1 text-sm text-ide-error hover:bg-ide-error/10"
                                     >
                                         🗑️ Delete
-                                    </Button>
-                                )}
-                            </Box>
-                        </Box>
-                        
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                            {formatEventTime(event)}
-                        </Typography>
-                        
-                        {event.description && (
-                            <Typography variant="body2" sx={{ mb: 1 }}>
-                                {event.description}
-                            </Typography>
-                        )}
-                        
-                        {event.location && (
-                            <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                    </button>
+                                ) : null}
+                            </div>
+                        </div>
+
+                        <p className="mb-2 text-sm text-ide-muted">{formatEventTime(event)}</p>
+
+                        {event.description ? (
+                            <p className="mb-2 text-sm text-ide-text">{event.description}</p>
+                        ) : null}
+
+                        {event.location ? (
+                            <p className="flex items-center gap-1 text-sm text-ide-muted">
                                 📍 {event.location}
-                            </Typography>
-                        )}
-                        
-                        {event.attendees && event.attendees.length > 0 && (
-                            <Box sx={{ mt: 1 }}>
-                                <Typography variant="caption" color="text.secondary">
-                                    Attendees: {event.attendees.length}
-                                </Typography>
-                            </Box>
-                        )}
-                        
-                        {event.status && event.status !== 'confirmed' && (
-                            <Chip 
-                                label={event.status} 
-                                size="small" 
-                                color={event.status === 'cancelled' ? 'error' : 'warning'}
-                                sx={{ mt: 1 }}
-                            />
-                        )}
-                    </Paper>
+                            </p>
+                        ) : null}
+
+                        {event.attendees && event.attendees.length > 0 ? (
+                            <p className="mt-2 text-xs text-ide-muted">
+                                Attendees: {event.attendees.length}
+                            </p>
+                        ) : null}
+
+                        {event.status && event.status !== 'confirmed' ? (
+                            <span
+                                className={`mt-2 inline-block rounded px-2 py-0.5 text-xs text-white ${
+                                    event.status === 'cancelled' ? 'bg-ide-error' : 'bg-ide-warn text-ide-bg'
+                                }`}
+                            >
+                                {event.status}
+                            </span>
+                        ) : null}
+                    </div>
                 ))}
-            </Box>
-        </Box>
+            </div>
+        </div>
     );
 };
 
-export default CalendarEvents; 
+export default CalendarEvents;

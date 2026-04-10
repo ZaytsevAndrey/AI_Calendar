@@ -9,7 +9,6 @@ import { PhasesApi } from 'api/phases.api';
 import { TasksApi } from 'api/tasks.api';
 import TaskForm from 'modules/tasks/components/TaskForm';
 import TaskItem from 'modules/tasks/components/TaskItem';
-import './styles.scss';
 import CalendarComponent from 'modules/schedule/components/Calendar';
 import { showErrorToast, showSuccessToast, showWarningToast } from 'utils/toast';
 
@@ -195,31 +194,38 @@ const SchedulePage: React.FC = () => {
   };
 
   return (
-    <div className="schedule-page">
-      <header className="page-header">
-        <h1>Schedule</h1>
-        <div className="date-range">
-          {format(currentRange.startDate, 'MMM d, yyyy')} - {format(currentRange.endDate, 'MMM d, yyyy')}
+    <div className="page-shell">
+      <header className="page-head">
+        <div className="min-w-0">
+          <h1 className="page-title">Schedule</h1>
+          <p className="page-lead mt-2">
+            {format(currentRange.startDate, 'MMM d, yyyy')} — {format(currentRange.endDate, 'MMM d, yyyy')}
+          </p>
         </div>
-        <div className="header-actions">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
           <button
+            type="button"
             onClick={handleGenerateSchedule}
             disabled={isGenerating}
-            className="generate-button"
+            className="ui-btn-primary w-full sm:w-auto"
           >
-            {isGenerating ? 'Generating...' : 'Generate Schedule'}
+            {isGenerating ? 'Generating…' : 'Generate schedule'}
           </button>
           <button
             type="button"
             onClick={handleUndoLastReplan}
             disabled={isUndoing || !lastReplan?.canUndo}
-            className="undo-button"
+            className="ui-btn-secondary w-full sm:w-auto"
             title={lastReplan?.canUndo ? 'Restore schedule before last replan' : 'No undo available'}
           >
             {isUndoing ? 'Undoing…' : 'Undo last replan'}
           </button>
-          <button onClick={handleClearSchedule} className="clear-button">
-            Clear Schedule
+          <button
+            type="button"
+            onClick={handleClearSchedule}
+            className="ui-btn-danger w-full sm:w-auto"
+          >
+            Clear schedule
           </button>
         </div>
       </header>
@@ -286,8 +292,8 @@ const SchedulePage: React.FC = () => {
           </section>
         )}
 
-      <div className="schedule-container">
-        <div className="calendar-view">
+      <div className="schedule-layout">
+        <div className="schedule-calendar-wrap min-h-0">
           <CalendarComponent
             tasks={scheduledTasks}
             phases={phases}
@@ -296,14 +302,21 @@ const SchedulePage: React.FC = () => {
             onEventDrop={handleEventDrop}
           />
         </div>
-        
-        {selectedTask && (
-          <div className="task-details-panel">
-            <div className="panel-header">
-              <h2>Task Details</h2>
-              <button className="close-button" onClick={handleCloseDetails}>×</button>
+
+        {selectedTask ? (
+          <aside className="schedule-side-panel max-h-[min(70vh,560px)] overflow-y-auto lg:max-h-none">
+            <div className="mb-4 flex items-start justify-between gap-3 border-b border-ide-border pb-3">
+              <h2 className="text-lg font-semibold text-ide-text">Task details</h2>
+              <button
+                type="button"
+                className="ui-btn-ghost -mr-2 min-h-10 min-w-10 shrink-0 rounded-lg px-0 text-xl leading-none"
+                onClick={handleCloseDetails}
+                aria-label="Close details"
+              >
+                ×
+              </button>
             </div>
-            
+
             {isEditing ? (
               <TaskForm
                 initialData={selectedTask}
@@ -319,24 +332,41 @@ const SchedulePage: React.FC = () => {
                   onDelete={handleDeleteTask}
                   onStatusChange={handleStatusChange}
                 />
-                
-                <div className="scheduled-times">
-                  <h3>Scheduled Time</h3>
-                  <p>
-                    <strong>Start:</strong> {format(new Date(selectedTask.scheduledStartTime), 'MMM d, yyyy h:mm a')}
-                  </p>
-                  <p>
-                    <strong>End:</strong> {format(new Date(selectedTask.scheduledEndTime), 'MMM d, yyyy h:mm a')}
-                  </p>
-                  <p>
-                    <strong>Duration:</strong> {Math.round((new Date(selectedTask.scheduledEndTime).getTime() - 
-                      new Date(selectedTask.scheduledStartTime).getTime()) / (1000 * 60))} minutes
-                  </p>
+
+                <div className="mt-4 rounded-lg border border-ide-border bg-ide-surface/50 p-4 text-sm text-ide-text">
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-ide-muted">
+                    Scheduled time
+                  </h3>
+                  <dl className="space-y-2">
+                    <div>
+                      <dt className="text-ide-muted">Start</dt>
+                      <dd className="font-medium">
+                        {format(new Date(selectedTask.scheduledStartTime), 'MMM d, yyyy h:mm a')}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-ide-muted">End</dt>
+                      <dd className="font-medium">
+                        {format(new Date(selectedTask.scheduledEndTime), 'MMM d, yyyy h:mm a')}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-ide-muted">Duration</dt>
+                      <dd className="font-medium">
+                        {Math.round(
+                          (new Date(selectedTask.scheduledEndTime).getTime() -
+                            new Date(selectedTask.scheduledStartTime).getTime()) /
+                            (1000 * 60)
+                        )}{' '}
+                        min
+                      </dd>
+                    </div>
+                  </dl>
                 </div>
               </>
             )}
-          </div>
-        )}
+          </aside>
+        ) : null}
       </div>
     </div>
   );

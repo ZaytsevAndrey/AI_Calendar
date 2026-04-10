@@ -128,13 +128,13 @@ const CalendarComponent: React.FC<CalendarProps> = ({
   const BigCalendarAny = BigCalendar as any;
 
   return (
-    <div className="calendar-container">
+    <div className="calendar-container h-[min(55vh,520px)] w-full min-h-[280px] sm:min-h-[360px] sm:h-[min(58vh,600px)] lg:h-[min(62vh,720px)]">
       <BigCalendarAny
         localizer={localizer}
         events={events}
         startAccessor="start"
         endAccessor="end"
-        style={{ height: 700 }}
+        style={{ height: '100%' }}
         onSelectEvent={handleSelectEvent}
         onView={handleViewChange}
         onNavigate={handleNavigate}

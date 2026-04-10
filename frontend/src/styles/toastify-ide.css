@@ -1,0 +1,8 @@
+/* Loaded after react-toastify — Darcula toast surfaces */
+:root {
+    --toastify-color-light: #3c3f41;
+    --toastify-text-color-light: #a9b7c6;
+    --toastify-toast-background: #3c3f41;
+    --toastify-spinner-color: #a9b7c6;
+    --toastify-spinner-color-empty-area: #515151;
+}

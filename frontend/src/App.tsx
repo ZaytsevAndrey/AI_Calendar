@@ -1,5 +1,4 @@
 import React from 'react';
-import { Box } from '@mui/material';
 import { useAuth } from './modules/auth/hooks/useAuth';
 import Header from './modules/common/components/Header';
 import AppRoutes from './AppRoutes';
@@ -8,20 +7,14 @@ const App: React.FC = () => {
     const { isAuthenticated } = useAuth();
 
     return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+        <div className="flex h-[100dvh] flex-col overflow-hidden bg-ide-bg">
             {isAuthenticated && <Header />}
-            <Box 
-                component="main" 
-                sx={{ 
-                    flexGrow: 1,
-                    pt: isAuthenticated ? '64px' : 0, // 64px — header height
-                    overflow: 'auto',
-                    height: '100%'
-                }}
+            <main
+                className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-ide-bg ${isAuthenticated ? 'pt-[5.75rem] sm:pt-16' : ''}`}
             >
                 <AppRoutes />
-            </Box>
-        </Box>
+            </main>
+        </div>
     );
 };
 

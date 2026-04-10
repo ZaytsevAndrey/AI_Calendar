@@ -6,8 +6,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { RegisterFormProps, RegisterFormData } from './types';
 import { registerSchema } from './validation/schema';
 
-import styles from './RegisterForm.module.scss';
-
 const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit, requestStatus }) => {
     const {
         register,
@@ -18,36 +16,58 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit, requestStatus }) 
     });
 
     return (
-        <form className={ styles.registerForm } onSubmit={ handleSubmit(onSubmit) }>
-            <h2 className={ styles.title }>Sign up</h2>
+        <form className="auth-form-card" onSubmit={handleSubmit(onSubmit)}>
+            <h2 className="auth-form-title">Sign up</h2>
 
-            <div className={ styles.inputGroup }>
-                <label htmlFor="email">Email</label>
-                <input id="email" type="email" { ...register('email') } />
-                {errors.email && <span className={ styles.error }>{ errors.email.message }</span>}
+            <div className="auth-form-field">
+                <label htmlFor="email" className="auth-form-label">
+                    Email
+                </label>
+                <input id="email" type="email" className="auth-form-input" {...register('email')} />
+                {errors.email && (
+                    <span className="auth-form-error">{errors.email.message}</span>
+                )}
             </div>
 
-            <div className={ styles.inputGroup }>
-                <label htmlFor="password">Password</label>
-                <input id="password" type="password" { ...register('password') } />
-                {errors.password && <span className={ styles.error }>{ errors.password.message }</span>}
+            <div className="auth-form-field">
+                <label htmlFor="password" className="auth-form-label">
+                    Password
+                </label>
+                <input
+                    id="password"
+                    type="password"
+                    className="auth-form-input"
+                    {...register('password')}
+                />
+                {errors.password && (
+                    <span className="auth-form-error">{errors.password.message}</span>
+                )}
             </div>
 
-            <div className={ styles.inputGroup }>
-                <label htmlFor="confirmPassword">Confirm password</label>
-                <input id="confirmPassword" type="password" { ...register('confirmPassword') } />
-                {errors.confirmPassword && <span className={ styles.error }>{ errors.confirmPassword.message }</span>}
+            <div className="auth-form-field">
+                <label htmlFor="confirmPassword" className="auth-form-label">
+                    Confirm password
+                </label>
+                <input
+                    id="confirmPassword"
+                    type="password"
+                    className="auth-form-input"
+                    {...register('confirmPassword')}
+                />
+                {errors.confirmPassword && (
+                    <span className="auth-form-error">{errors.confirmPassword.message}</span>
+                )}
             </div>
 
             <button
                 type="submit"
-                className={ styles.submitButton }
-                disabled={ requestStatus === 'pending' }
+                className="auth-form-submit"
+                disabled={requestStatus === 'pending'}
             >
-                { requestStatus === 'pending' ? 'Signing up...' : 'Sign up' }
+                {requestStatus === 'pending' ? 'Signing up...' : 'Sign up'}
             </button>
 
-            <div className={ styles.redirect }>
+            <div className="auth-form-footer">
                 Already have an account? <Link to="/login">Log in</Link>
             </div>
         </form>

@@ -1,11 +1,4 @@
 import React from 'react';
-import { 
-    Box, 
-    Typography, 
-    Paper,
-    Tooltip,
-    Button
-} from '@mui/material';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 import { formatEventTime, getEventColor } from '../hooks/useCalendar';
 import { useTimePhasesForDate, getPhaseByTime } from '../../phases/hooks/usePhases';
@@ -19,14 +12,26 @@ interface CalendarGridProps {
     onDeleteEvent?: (eventId: string, eventName: string) => void;
 }
 
-const CalendarGrid: React.FC<CalendarGridProps> = ({ view, date, events, onEditEvent, onDeleteEvent }) => {
+function tooltipText(event: GoogleCalendarEvent): string {
+    const parts = [event.summary || 'Event', formatEventTime(event)];
+    if (event.description) parts.push(event.description);
+    if (event.location) parts.push(`Location: ${event.location}`);
+    return parts.join('\n');
+}
+
+const CalendarGrid: React.FC<CalendarGridProps> = ({
+    view,
+    date,
+    events,
+    onEditEvent,
+    onDeleteEvent,
+}) => {
     const { data: timePhases = [] } = useTimePhasesForDate(date);
-    // Prefer useGetUserSettingsQuery from userSettingsApi (RTK Query) over useQuery
     const { data: userSettings } = useGetUserSettingsQuery();
-    
+
     const getDaysInView = () => {
-        const days = [];
-        
+        const days: Date[] = [];
+
         switch (view) {
             case 'day': {
                 const day = new Date(date);
@@ -35,11 +40,10 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ view, date, events, onEditE
             }
             case 'week': {
                 const startOfWeek = new Date(date);
-                // Monday = 1, Sunday = 0, so we need to adjust
                 const dayOfWeek = date.getDay();
-                const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Sunday becomes 6 days back
+                const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
                 startOfWeek.setDate(date.getDate() - daysToSubtract);
-                
+
                 for (let i = 0; i < 7; i++) {
                     const day = new Date(startOfWeek);
                     day.setDate(startOfWeek.getDate() + i);
@@ -50,19 +54,17 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ view, date, events, onEditE
             case 'month': {
                 const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
                 const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-                
-                // Get start of week for the first day of month (Monday)
+
                 const startOfWeek = new Date(startOfMonth);
                 const firstDayOfWeek = startOfMonth.getDay();
-                const daysToSubtract = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1; // Sunday becomes 6 days back
+                const daysToSubtract = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
                 startOfWeek.setDate(startOfMonth.getDate() - daysToSubtract);
-                
-                // Get end of week for the last day of month (Sunday)
+
                 const endOfWeek = new Date(endOfMonth);
                 const lastDayOfWeek = endOfMonth.getDay();
-                const daysToAdd = lastDayOfWeek === 0 ? 0 : 7 - lastDayOfWeek; // Sunday = 0, so no days to add
+                const daysToAdd = lastDayOfWeek === 0 ? 0 : 7 - lastDayOfWeek;
                 endOfWeek.setDate(endOfMonth.getDate() + daysToAdd);
-                
+
                 const current = new Date(startOfWeek);
                 while (current <= endOfWeek) {
                     days.push(new Date(current));
@@ -71,87 +73,68 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ view, date, events, onEditE
                 break;
             }
         }
-        
+
         return days;
     };
 
     const getEventsForDay = (day: Date) => {
-        return events.filter(event => {
-            const eventDate = event.start.dateTime 
+        return events.filter((event) => {
+            const eventDate = event.start.dateTime
                 ? new Date(event.start.dateTime)
                 : new Date(event.start.date!);
-            
+
             return eventDate.toDateString() === day.toDateString();
         });
     };
 
-    const isToday = (day: Date) => {
-        return day.toDateString() === new Date().toDateString();
-    };
+    const isToday = (day: Date) => day.toDateString() === new Date().toDateString();
 
-    const isCurrentMonth = (day: Date) => {
-        return day.getMonth() === date.getMonth();
-    };
+    const isCurrentMonth = (day: Date) => day.getMonth() === date.getMonth();
 
-    // Get phase for a specific time
     const getPhaseForTime = (time: string) => {
-        // Only use non-sleep phases for display
         const displayPhases = timePhases.filter((phase: any) => phase.type !== 'sleep_time');
         return getPhaseByTime(displayPhases, time);
     };
 
-    // Check if time is in sleep time
     const isSleepTime = (time: string) => {
         if (!userSettings?.sleepTime || !userSettings?.wakeTime) {
-            // Fallback to default sleep time if settings not loaded
             const timeMinutes = timeToMinutes(time);
-            const defaultSleepStart = 23 * 60; // 23:00
-            const defaultSleepEnd = 6 * 60;    // 06:00
-            
+            const defaultSleepStart = 23 * 60;
+            const defaultSleepEnd = 6 * 60;
+
             if (defaultSleepStart > defaultSleepEnd) {
                 return timeMinutes >= defaultSleepStart || timeMinutes <= defaultSleepEnd;
-            } else {
-                return timeMinutes >= defaultSleepStart && timeMinutes <= defaultSleepEnd;
             }
+            return timeMinutes >= defaultSleepStart && timeMinutes <= defaultSleepEnd;
         }
-        
+
         const timeMinutes = timeToMinutes(time);
         const sleepStart = timeToMinutes(userSettings.sleepTime);
         const sleepEnd = timeToMinutes(userSettings.wakeTime);
-        
+
         if (sleepStart > sleepEnd) {
-            // Sleep time spans midnight (e.g., 23:00 to 06:00)
             return timeMinutes >= sleepStart || timeMinutes <= sleepEnd;
-        } else {
-            return timeMinutes >= sleepStart && timeMinutes <= sleepEnd;
         }
+        return timeMinutes >= sleepStart && timeMinutes <= sleepEnd;
     };
 
-    // Get non-sleep phases for display
     const getDisplayPhases = () => {
         return timePhases
             .filter((phase: any) => phase.type !== 'sleep_time')
             .sort((a: any, b: any) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
     };
 
-    // Create time slots for day view (excluding sleep time)
     const createTimeSlots = () => {
-        const slots = [];
+        const slots: { time: string; phase: any }[] = [];
         for (let hour = 0; hour < 24; hour++) {
             const time = `${hour.toString().padStart(2, '0')}:00`;
-            
-            // Skip sleep time slots completely
-            if (isSleepTime(time)) {
-                continue;
-            }
-            
+            if (isSleepTime(time)) continue;
             const phase = getPhaseForTime(time);
             slots.push({ time, phase });
         }
         return slots;
     };
 
-    // Utility function to convert time string to minutes
     const timeToMinutes = (time: string): number => {
         const [hours, minutes] = time.split(':').map(Number);
         return hours * 60 + minutes;
@@ -162,195 +145,129 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ view, date, events, onEditE
     if (view === 'day') {
         const dayEvents = getEventsForDay(days[0]);
         const timeSlots = createTimeSlots();
-        
+
         return (
-            <Paper sx={{ p: 2, minHeight: '600px' }}>
-                <Typography variant="h6" gutterBottom>
-                    {days[0].toLocaleDateString('en-US', { 
-                        weekday: 'long', 
-                        year: 'numeric', 
-                        month: 'long', 
-                        day: 'numeric' 
+            <div className="min-h-[600px] rounded-lg border border-ide-border bg-ide-panel p-4">
+                <h2 className="mb-4 text-lg font-semibold text-ide-text">
+                    {days[0].toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
                     })}
-                </Typography>
-                
-                {/* Phases Legend */}
+                </h2>
+
                 {getDisplayPhases().length > 0 && (
-                    <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    <div className="mb-4 flex flex-wrap gap-2">
                         {getDisplayPhases().map((phase: any) => (
-                            <Box 
+                            <div
                                 key={phase.id}
-                                sx={{ 
-                                    display: 'flex', 
-                                    alignItems: 'center', 
-                                    gap: 0.5,
-                                    p: 0.5,
-                                    borderRadius: 1,
-                                    backgroundColor: `${phase.color}10`,
-                                    border: `1px solid ${phase.color}30`
+                                className="flex items-center gap-1 rounded p-1"
+                                style={{
+                                    backgroundColor: `${phase.color}18`,
+                                    border: `1px solid ${phase.color}55`,
                                 }}
                             >
-                                <Box 
-                                    sx={{ 
-                                        width: 12, 
-                                        height: 12, 
-                                        borderRadius: '50%', 
-                                        backgroundColor: phase.color,
-                                        border: '1px solid #ccc'
-                                    }} 
+                                <span
+                                    className="h-3 w-3 shrink-0 rounded-full border border-ide-border"
+                                    style={{ backgroundColor: phase.color }}
                                 />
-                                <Typography variant="caption" color="text.secondary">
+                                <span className="text-xs text-ide-muted">
                                     {phase.name} ({phase.startTime}-{phase.endTime})
-                                </Typography>
-                            </Box>
+                                </span>
+                            </div>
                         ))}
-                    </Box>
+                    </div>
                 )}
-                
-                <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+
+                <div className="flex flex-col">
                     {timeSlots.map((slot, index) => {
-                        const eventsInSlot = dayEvents.filter(event => {
+                        const eventsInSlot = dayEvents.filter((event) => {
                             if (!event.start.dateTime) return false;
                             const eventHour = new Date(event.start.dateTime).getHours();
-                            const eventTime = new Date(event.start.dateTime).toLocaleTimeString('en-US', { 
-                                hour12: false, 
-                                hour: '2-digit', 
-                                minute: '2-digit' 
+                            const eventTime = new Date(event.start.dateTime).toLocaleTimeString('en-US', {
+                                hour12: false,
+                                hour: '2-digit',
+                                minute: '2-digit',
                             });
-                            
-                            // Skip events that are in sleep time
-                            if (isSleepTime(eventTime)) {
-                                return false;
-                            }
-                            
-                            return eventHour === parseInt(slot.time.split(':')[0]);
+                            if (isSleepTime(eventTime)) return false;
+                            return eventHour === parseInt(slot.time.split(':')[0], 10);
                         });
-                        
+
                         return (
-                            <Box
+                            <div
                                 key={index}
-                                sx={{
-                                    display: 'flex',
-                                    minHeight: '40px',
-                                    borderBottom: '1px solid #e0e0e0',
-                                    position: 'relative',
-                                    backgroundColor: slot.phase 
-                                        ? `${slot.phase.color}10` // 10% opacity
-                                        : 'transparent',
-                                    '&:hover': {
-                                        backgroundColor: slot.phase 
-                                            ? `${slot.phase.color}20` // 20% opacity on hover
-                                            : 'rgba(0,0,0,0.05)'
-                                    }
+                                className="relative flex min-h-[40px] border-b border-ide-border transition-colors hover:bg-white/[0.03]"
+                                style={{
+                                    backgroundColor: slot.phase ? `${slot.phase.color}14` : undefined,
                                 }}
                             >
-                                {/* Time label */}
-                                <Box sx={{ 
-                                    width: '60px', 
-                                    p: 1, 
-                                    borderRight: '1px solid #e0e0e0',
-                                    backgroundColor: 'grey.50',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center'
-                                }}>
-                                    <Typography variant="caption" color="text.secondary">
-                                        {slot.time}
-                                    </Typography>
-                                </Box>
-                                
-                                {/* Phase label */}
-                                <Box sx={{ 
-                                    width: '120px', 
-                                    p: 1, 
-                                    borderRight: '1px solid #e0e0e0',
-                                    backgroundColor: 'grey.50',
-                                    display: 'flex',
-                                    alignItems: 'center'
-                                }}>
+                                <div className="flex w-[60px] shrink-0 items-center justify-center border-r border-ide-border bg-ide-surface p-2">
+                                    <span className="text-xs text-ide-muted">{slot.time}</span>
+                                </div>
+                                <div className="flex w-[120px] shrink-0 items-center border-r border-ide-border bg-ide-surface p-2">
                                     {slot.phase && (
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                            <Box 
-                                                sx={{ 
-                                                    width: 8, 
-                                                    height: 8, 
-                                                    borderRadius: '50%', 
-                                                    backgroundColor: slot.phase.color,
-                                                    border: '1px solid #ccc'
-                                                }} 
+                                        <div className="flex items-center gap-1">
+                                            <span
+                                                className="h-2 w-2 shrink-0 rounded-full border border-ide-border"
+                                                style={{ backgroundColor: slot.phase.color }}
                                             />
-                                            <Typography variant="caption" color="text.secondary">
-                                                {slot.phase.name}
-                                            </Typography>
-                                        </Box>
+                                            <span className="text-xs text-ide-muted">{slot.phase.name}</span>
+                                        </div>
                                     )}
-                                </Box>
-                                
-                                {/* Events area */}
-                                <Box sx={{ 
-                                    flex: 1, 
-                                    p: 1, 
-                                    display: 'flex', 
-                                    flexDirection: 'column', 
-                                    gap: 0.5 
-                                }}>
+                                </div>
+                                <div className="flex flex-1 flex-col gap-1 p-2">
                                     {eventsInSlot.map((event) => (
-                                        <Tooltip key={event.id} title={
-                                            <Box>
-                                                <Typography variant="subtitle2">{event.summary || 'Event'}</Typography>
-                                                {event.description && <Typography variant="body2">{event.description}</Typography>}
-                                                <Typography variant="caption">{formatEventTime(event)}</Typography>
-                                                {event.location && <Typography variant="caption">Location: {event.location}</Typography>}
-                                            </Box>
-                                        } arrow>
-                                            <Box
-                                                key={event.id}
-                                                sx={{
-                                                    p: 0.5,
-                                                    backgroundColor: getEventColor(event),
-                                                    color: 'white',
-                                                    borderRadius: 0.5,
-                                                    fontSize: '0.7rem',
-                                                    overflow: 'hidden',
-                                                    textOverflow: 'ellipsis',
-                                                    whiteSpace: 'nowrap',
-                                                    border: '1px solid rgba(255,255,255,0.3)',
-                                                    position: 'relative',
-                                                    cursor: 'pointer',
-                                                    '&:hover .event-actions': { display: 'flex' }
-                                                }}
-                                                title={undefined}
-                                                onClick={() => onEditEvent && onEditEvent(event.id)}
-                                            >
-                                                {event.summary || 'Event'}
-                                                <Box className="event-actions" sx={{
-                                                    display: 'none',
-                                                    position: 'absolute',
-                                                    top: 2,
-                                                    right: 2,
-                                                    gap: 0.5,
-                                                    zIndex: 2
-                                                }}>
-                                                    <Button size="small" color="inherit" sx={{ minWidth: 0, p: 0.5 }} onClick={e => { e.stopPropagation(); onEditEvent && onEditEvent(event.id); }}>✏️</Button>
-                                                    <Button size="small" color="error" sx={{ minWidth: 0, p: 0.5 }} onClick={e => { e.stopPropagation(); onDeleteEvent && onDeleteEvent(event.id, event.summary || 'Event'); }}>🗑️</Button>
-                                                </Box>
-                                            </Box>
-                                        </Tooltip>
+                                        <div
+                                            key={event.id}
+                                            title={tooltipText(event)}
+                                            role="button"
+                                            tabIndex={0}
+                                            className="group relative cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded border border-white/30 px-1 py-0.5 text-[0.7rem] text-white"
+                                            style={{ backgroundColor: getEventColor(event) }}
+                                            onClick={() => onEditEvent?.(event.id)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') onEditEvent?.(event.id);
+                                            }}
+                                        >
+                                            {event.summary || 'Event'}
+                                            <div className="event-actions absolute right-0.5 top-0.5 hidden gap-0.5 group-hover:flex">
+                                                <button
+                                                    type="button"
+                                                    className="min-w-0 rounded p-0.5 text-xs text-white hover:bg-black/20"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onEditEvent?.(event.id);
+                                                    }}
+                                                >
+                                                    ✏️
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="min-w-0 rounded p-0.5 text-xs text-white hover:bg-black/20"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onDeleteEvent?.(event.id, event.summary || 'Event');
+                                                    }}
+                                                >
+                                                    🗑️
+                                                </button>
+                                            </div>
+                                        </div>
                                     ))}
-                                </Box>
-                            </Box>
+                                </div>
+                            </div>
                         );
                     })}
-                </Box>
-            </Paper>
+                </div>
+            </div>
         );
     }
 
-    // Create weeks array for proper grid layout
-    const createWeeks = (days: Date[]) => {
-        const weeks = [];
-        for (let i = 0; i < days.length; i += 7) {
-            weeks.push(days.slice(i, i + 7));
+    const createWeeks = (d: Date[]) => {
+        const weeks: Date[][] = [];
+        for (let i = 0; i < d.length; i += 7) {
+            weeks.push(d.slice(i, i + 7));
         }
         return weeks;
     };
@@ -358,212 +275,153 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ view, date, events, onEditE
     const weeks = createWeeks(days);
 
     return (
-        <Box sx={{ width: '100%' }}>
-            {/* Phases Legend for week/month view */}
+        <div className="w-full">
             {getDisplayPhases().length > 0 && (
-                <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                <div className="mb-4 flex flex-wrap gap-2">
                     {getDisplayPhases().map((phase: any) => (
-                            <Box 
-                                key={phase.id}
-                                sx={{ 
-                                    display: 'flex', 
-                                    alignItems: 'center', 
-                                    gap: 0.5,
-                                    p: 0.5,
-                                    borderRadius: 1,
-                                    backgroundColor: `${phase.color}10`,
-                                    border: `1px solid ${phase.color}30`
-                                }}
-                            >
-                                <Box 
-                                    sx={{ 
-                                        width: 12, 
-                                        height: 12, 
-                                        borderRadius: '50%', 
-                                        backgroundColor: phase.color,
-                                        border: '1px solid #ccc'
-                                    }} 
-                                />
-                                <Typography variant="caption" color="text.secondary">
-                                    {phase.name} ({phase.startTime}-{phase.endTime})
-                                </Typography>
-                            </Box>
-                        ))}
-                </Box>
-            )}
-            
-            {/* Header with day names */}
-            <Box sx={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(7, 1fr)', 
-                mb: 1,
-                borderBottom: '1px solid #e0e0e0'
-            }}>
-                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((dayName) => (
-                    <Box key={dayName}>
-                        <Typography 
-                            variant="subtitle2" 
-                            sx={{ 
-                                p: 1, 
-                                textAlign: 'center', 
-                                fontWeight: 'bold',
-                                backgroundColor: 'grey.100',
-                                borderRight: '1px solid #e0e0e0'
+                        <div
+                            key={phase.id}
+                            className="flex items-center gap-1 rounded p-1"
+                            style={{
+                                backgroundColor: `${phase.color}18`,
+                                border: `1px solid ${phase.color}55`,
                             }}
                         >
-                            {dayName}
-                        </Typography>
-                    </Box>
-                ))}
-            </Box>
+                            <span
+                                className="h-3 w-3 shrink-0 rounded-full border border-ide-border"
+                                style={{ backgroundColor: phase.color }}
+                            />
+                            <span className="text-xs text-ide-muted">
+                                {phase.name} ({phase.startTime}-{phase.endTime})
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            )}
 
-            {/* Calendar grid */}
-            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+            <div className="mb-1 grid grid-cols-7 border-b border-ide-border">
+                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((dayName) => (
+                    <div key={dayName} className="border-r border-ide-border bg-ide-surface last:border-r-0">
+                        <div className="p-2 text-center text-xs font-bold text-ide-text">{dayName}</div>
+                    </div>
+                ))}
+            </div>
+
+            <div className="flex flex-col">
                 {weeks.map((week, weekIndex) => (
-                    <Box 
-                        key={weekIndex} 
-                        sx={{ 
-                            display: 'grid', 
-                            gridTemplateColumns: 'repeat(7, 1fr)',
-                            borderBottom: '1px solid #e0e0e0'
-                        }}
+                    <div
+                        key={weekIndex}
+                        className="grid grid-cols-7 border-b border-ide-border last:border-b-0"
                     >
                         {week.map((day, dayIndex) => {
                             const dayEvents = getEventsForDay(day);
                             const isCurrentDay = isToday(day);
                             const isInCurrentMonth = isCurrentMonth(day);
-                            
+
                             return (
-                                <Box
+                                <div
                                     key={dayIndex}
-                                    sx={{
-                                        p: 1,
-                                        minHeight: view === 'month' ? '120px' : '100px',
-                                        backgroundColor: isCurrentDay ? 'primary.light' : 'background.paper',
-                                        border: isCurrentDay ? '2px solid' : '1px solid',
-                                        borderColor: isCurrentDay ? 'primary.main' : '#e0e0e0',
-                                        borderRight: '1px solid #e0e0e0',
-                                        opacity: view === 'month' && !isInCurrentMonth ? 0.5 : 1,
-                                        position: 'relative',
-                                        '&:last-child': {
-                                            borderRight: 'none'
-                                        }
-                                    }}
+                                    className={`relative min-h-[100px] border-r border-ide-border p-2 last:border-r-0 ${
+                                        view === 'month' && !isInCurrentMonth ? 'opacity-50' : ''
+                                    } ${
+                                        isCurrentDay
+                                            ? 'bg-ide-selection/30 ring-1 ring-inset ring-ide-link'
+                                            : 'bg-ide-panel'
+                                    }`}
+                                    style={{ minHeight: view === 'month' ? '120px' : '100px' }}
                                 >
-                                    <Typography 
-                                        variant="caption" 
-                                        sx={{ 
-                                            fontWeight: isCurrentDay ? 'bold' : 'normal',
-                                            color: isCurrentDay ? 'primary.contrastText' : 'text.primary'
-                                        }}
+                                    <span
+                                        className={`text-xs ${
+                                            isCurrentDay ? 'font-bold text-ide-link' : 'text-ide-text'
+                                        }`}
                                     >
                                         {day.getDate()}
-                                    </Typography>
-                                    
-                                    {/* Events for this day */}
-                                    <Box sx={{ mt: 0.5 }}>
+                                    </span>
+
+                                    <div className="mt-1">
                                         {dayEvents
-                                            .filter(event => {
+                                            .filter((event) => {
                                                 if (!event.start?.dateTime) return true;
-                                                const eventTime = new Date(event.start.dateTime).toLocaleTimeString('en-US', { 
-                                                    hour12: false, 
-                                                    hour: '2-digit', 
-                                                    minute: '2-digit' 
+                                                const eventTime = new Date(
+                                                    event.start.dateTime
+                                                ).toLocaleTimeString('en-US', {
+                                                    hour12: false,
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
                                                 });
-                                                // Skip events in sleep time
                                                 return !isSleepTime(eventTime);
                                             })
                                             .slice(0, view === 'month' ? 2 : 3)
                                             .map((event) => {
-                                                // Get phase for this event
                                                 let eventPhase = null;
                                                 if (event.start?.dateTime) {
-                                                    const eventTime = new Date(event.start.dateTime).toLocaleTimeString('en-US', { 
-                                                        hour12: false, 
-                                                        hour: '2-digit', 
-                                                        minute: '2-digit' 
+                                                    const eventTime = new Date(
+                                                        event.start.dateTime
+                                                    ).toLocaleTimeString('en-US', {
+                                                        hour12: false,
+                                                        hour: '2-digit',
+                                                        minute: '2-digit',
                                                     });
                                                     eventPhase = getPhaseForTime(eventTime);
                                                 }
-                                            
-                                            return (
-                                                <Tooltip key={event.id} title={
-                                                    <Box>
-                                                        <Typography variant="subtitle2">{event.summary || 'Event'}</Typography>
-                                                        {event.description && <Typography variant="body2">{event.description}</Typography>}
-                                                        <Typography variant="caption">{formatEventTime(event)}</Typography>
-                                                        {event.location && <Typography variant="caption">Location: {event.location}</Typography>}
-                                                    </Box>
-                                                } arrow>
-                                                    <Box
+
+                                                return (
+                                                    <div
                                                         key={event.id}
-                                                        sx={{
-                                                            p: 0.5,
-                                                            mb: 0.5,
+                                                        title={tooltipText(event)}
+                                                        role="button"
+                                                        tabIndex={0}
+                                                        className="relative mb-1 cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded px-1 py-0.5 text-[0.7rem] text-white"
+                                                        style={{
                                                             backgroundColor: getEventColor(event),
-                                                            color: 'white',
-                                                            borderRadius: 0.5,
-                                                            fontSize: '0.7rem',
-                                                            overflow: 'hidden',
-                                                            textOverflow: 'ellipsis',
-                                                            whiteSpace: 'nowrap',
-                                                            border: eventPhase 
-                                                                ? `2px solid ${eventPhase.color}` 
+                                                            border: eventPhase
+                                                                ? `2px solid ${eventPhase.color}`
                                                                 : '1px solid rgba(255,255,255,0.3)',
-                                                            position: 'relative'
                                                         }}
-                                                        title={undefined}
-                                                        onClick={() => onEditEvent && onEditEvent(event.id)}
+                                                        onClick={() => onEditEvent?.(event.id)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter' || e.key === ' ')
+                                                                onEditEvent?.(event.id);
+                                                        }}
                                                     >
                                                         {event.summary || 'Event'}
                                                         {eventPhase && (
-                                                            <Box 
-                                                                sx={{ 
-                                                                    position: 'absolute',
-                                                                    top: -2,
-                                                                    right: -2,
-                                                                    width: 8,
-                                                                    height: 8,
-                                                                    borderRadius: '50%',
-                                                                    backgroundColor: eventPhase.color,
-                                                                    border: '1px solid white'
-                                                                }}
+                                                            <span
+                                                                className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-white"
+                                                                style={{ backgroundColor: eventPhase.color }}
                                                             />
                                                         )}
-                                                    </Box>
-                                                </Tooltip>
-                                            );
-                                        })}
+                                                    </div>
+                                                );
+                                            })}
                                         {(() => {
-                                            const filteredEvents = dayEvents.filter(event => {
+                                            const filtered = dayEvents.filter((event) => {
                                                 if (!event.start?.dateTime) return true;
-                                                const eventTime = new Date(event.start.dateTime).toLocaleTimeString('en-US', { 
-                                                    hour12: false, 
-                                                    hour: '2-digit', 
-                                                    minute: '2-digit' 
+                                                const eventTime = new Date(
+                                                    event.start.dateTime
+                                                ).toLocaleTimeString('en-US', {
+                                                    hour12: false,
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
                                                 });
                                                 return !isSleepTime(eventTime);
                                             });
                                             const maxEvents = view === 'month' ? 2 : 3;
-                                            return filteredEvents.length > maxEvents ? (
-                                                <Typography 
-                                                    variant="caption" 
-                                                    color="text.secondary"
-                                                    sx={{ fontSize: '0.6rem' }}
-                                                >
-                                                    +{filteredEvents.length - maxEvents} more
-                                                </Typography>
+                                            return filtered.length > maxEvents ? (
+                                                <div className="text-[0.6rem] text-ide-muted">
+                                                    +{filtered.length - maxEvents} more
+                                                </div>
                                             ) : null;
                                         })()}
-                                    </Box>
-                                </Box>
+                                    </div>
+                                </div>
                             );
                         })}
-                    </Box>
+                    </div>
                 ))}
-            </Box>
-        </Box>
+            </div>
+        </div>
     );
 };
 
-export default CalendarGrid; 
+export default CalendarGrid;

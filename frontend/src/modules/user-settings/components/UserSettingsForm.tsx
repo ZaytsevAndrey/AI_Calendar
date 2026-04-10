@@ -4,10 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { UserSettingsApi, UserSettingsDTO } from '../../../api/user-settings.api';
 import { googleCalendarAPI } from '../../../api/google-calendar.api';
-import { Button, Box, Typography, CircularProgress, Card, CardContent } from '@mui/material';
-import { TimePicker } from '@mui/x-date-pickers/TimePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { Spinner } from '../../../ui/Spinner';
 
 interface UserSettingsFormProps {
     initialData: UserSettingsDTO;
@@ -19,6 +16,8 @@ interface UserSettingsFormData {
     googleCalendarLinked: boolean;
 }
 
+const fieldClass = 'ui-input max-w-xs';
+
 const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
@@ -26,44 +25,33 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
     const [isDisconnecting, setIsDisconnecting] = useState(false);
     const [isCalendarConnected, setIsCalendarConnected] = useState(false);
     const [isCheckingConnection, setIsCheckingConnection] = useState(true);
-    const [initialValues, setInitialValues] = useState<{sleepTime: string, wakeTime: string} | null>(null);
+    const [initialValues, setInitialValues] = useState<{ sleepTime: string; wakeTime: string } | null>(
+        null
+    );
 
     const { control, setValue, watch } = useForm<UserSettingsFormData>({
         defaultValues: {
-            sleepTime: initialData?.sleepTime && initialData.sleepTime !== '' ? initialData.sleepTime : '22:00',
-            wakeTime: initialData?.wakeTime && initialData.wakeTime !== '' ? initialData.wakeTime : '07:00',
+            sleepTime:
+                initialData?.sleepTime && initialData.sleepTime !== '' ? initialData.sleepTime : '22:00',
+            wakeTime:
+                initialData?.wakeTime && initialData.wakeTime !== '' ? initialData.wakeTime : '07:00',
             googleCalendarLinked: initialData?.googleCalendarLinked || false,
         },
     });
 
-    // Parse string to Date
-    const stringToDate = (timeString: string): Date => {
-        const [hours, minutes] = timeString.split(':').map(Number);
-        const date = new Date();
-        date.setHours(hours, minutes, 0, 0);
-        return date;
-    };
-
-    // Format Date to string (24h) for persistence
-    const dateToString = (date: Date | null): string => {
-        if (!date) return '';
-        return date.toTimeString().slice(0, 5);
-    };
-
-    // Auto-save when times change
     const sleepTime = watch('sleepTime');
     const wakeTime = watch('wakeTime');
 
     const sleepTimeController = useController({
-        name: "sleepTime",
+        name: 'sleepTime',
         control,
-        rules: { required: 'Sleep time is required' }
+        rules: { required: 'Sleep time is required' },
     });
 
     const wakeTimeController = useController({
-        name: "wakeTime",
+        name: 'wakeTime',
         control,
-        rules: { required: 'Wake time is required' }
+        rules: { required: 'Wake time is required' },
     });
 
     useEffect(() => {
@@ -84,20 +72,17 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
         checkCalendarConnection();
     }, [setValue]);
 
-    // Read URL params after Google OAuth redirect
     useEffect(() => {
         const googleCalendarStatus = searchParams.get('googleCalendar');
         const error = searchParams.get('error');
-        
+
         if (googleCalendarStatus === 'success') {
             toast.success('Google Calendar connected successfully!');
             setIsCalendarConnected(true);
             setValue('googleCalendarLinked', true);
-            // Strip URL query params
             navigate('/settings', { replace: true });
         } else if (googleCalendarStatus === 'error') {
             toast.error(`Failed to connect Google Calendar: ${error || 'Unknown error'}`);
-            // Strip URL query params
             navigate('/settings', { replace: true });
         }
     }, [searchParams, setValue, navigate]);
@@ -106,17 +91,15 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
         try {
             setIsConnecting(true);
             toast.info('Getting Google Calendar authorization URL...');
-            
+
             const { data } = await googleCalendarAPI.getAuthUrl();
             const urlData = data as { url: string };
-            
+
             toast.info('Redirecting to Google...');
-            
-            // Short delay so the message is visible
+
             setTimeout(() => {
                 window.location.replace(urlData.url);
             }, 500);
-            
         } catch (error) {
             toast.error('Failed to get Google Calendar authorization URL');
             console.error('Error getting auth URL:', error);
@@ -128,13 +111,12 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
         try {
             setIsDisconnecting(true);
             toast.info('Disconnecting Google Calendar...');
-            
+
             await googleCalendarAPI.disconnectCalendar();
-            
+
             toast.success('Google Calendar disconnected successfully!');
             setIsCalendarConnected(false);
             setValue('googleCalendarLinked', false);
-            
         } catch (error) {
             toast.error('Failed to disconnect Google Calendar');
             console.error('Error disconnecting Google Calendar:', error);
@@ -143,205 +125,152 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
         }
     };
 
-    // Auto-save when times change
-    const autoSaveTimeSettings = useCallback(async (sleepTime: string | null | undefined, wakeTime: string | null | undefined) => {
-        // Ensure time values are valid
-        if (!sleepTime || !wakeTime || sleepTime === '' || wakeTime === '' || 
-            typeof sleepTime !== 'string' || typeof wakeTime !== 'string') {
-            console.log('Skipping auto-save - invalid time values:', { sleepTime, wakeTime });
-            return;
-        }
-
-        console.log('Auto-saving time settings:', { sleepTime, wakeTime });
-
-        try {
-            await UserSettingsApi.updateUserSettings({
-                sleepTime: sleepTime,
-                wakeTime: wakeTime,
-                googleCalendarLinked: isCalendarConnected,
-            });
-            toast.success('Time settings saved automatically');
-        } catch (error: any) {
-            // On 401, skip toast — user will be redirected to login
-            if (error?.response?.status === 401) {
-                console.log('User not authorized, skipping auto-save');
+    const autoSaveTimeSettings = useCallback(
+        async (st: string | null | undefined, wt: string | null | undefined) => {
+            if (!st || !wt || st === '' || wt === '' || typeof st !== 'string' || typeof wt !== 'string') {
                 return;
             }
-            toast.error('Failed to save time settings');
-            console.error('Error auto-saving time settings:', error);
-        }
-    }, [isCalendarConnected]);
 
-    // Snapshot initial values
+            try {
+                await UserSettingsApi.updateUserSettings({
+                    sleepTime: st,
+                    wakeTime: wt,
+                    googleCalendarLinked: isCalendarConnected,
+                });
+                toast.success('Time settings saved automatically');
+            } catch (error: any) {
+                if (error?.response?.status === 401) {
+                    return;
+                }
+                toast.error('Failed to save time settings');
+                console.error('Error auto-saving time settings:', error);
+            }
+        },
+        [isCalendarConnected]
+    );
+
     useEffect(() => {
         if (sleepTime && wakeTime && !initialValues) {
             setInitialValues({ sleepTime, wakeTime });
         }
     }, [sleepTime, wakeTime, initialValues]);
 
-    // Auto-save when times change
     useEffect(() => {
-        console.log('Time values changed:', { sleepTime, wakeTime, initialValues });
-        
-        // Only save if values differ from initial
-        const hasChanged = initialValues && 
+        const hasChanged =
+            initialValues &&
             (sleepTime !== initialValues.sleepTime || wakeTime !== initialValues.wakeTime);
-        
-        if (sleepTime && wakeTime && 
-            sleepTime !== '' && wakeTime !== '' && 
-            typeof sleepTime === 'string' && typeof wakeTime === 'string' &&
-            hasChanged) {
+
+        if (
+            sleepTime &&
+            wakeTime &&
+            sleepTime !== '' &&
+            wakeTime !== '' &&
+            typeof sleepTime === 'string' &&
+            typeof wakeTime === 'string' &&
+            hasChanged
+        ) {
             const timeoutId = setTimeout(() => {
                 autoSaveTimeSettings(sleepTime, wakeTime);
-            }, 1000); // Debounce 1s after change
+            }, 1000);
 
             return () => clearTimeout(timeoutId);
         }
     }, [sleepTime, wakeTime, autoSaveTimeSettings, initialValues]);
 
-
-
-
-
     return (
-        <Box sx={{ maxWidth: 600, mx: 'auto', mt: 4, p: 2 }}>
-            <Typography variant="h4" gutterBottom sx={{ fontWeight: 300, mb: 4, textAlign: 'center' }}>
-                Settings
-            </Typography>
+        <div className="space-y-10">
+            <section>
+                <h2 className="mb-4 text-lg font-semibold text-ide-text">Sleep schedule</h2>
+                <p className="ui-hint mb-6">Changes save automatically after you stop editing.</p>
+                <div className="flex flex-col gap-6 sm:flex-row sm:flex-wrap">
+                    <div className="flex flex-col gap-1">
+                        <label htmlFor="wake-time" className="ui-label">
+                            Wake time
+                        </label>
+                        <input
+                            id="wake-time"
+                            type="time"
+                            className={fieldClass}
+                            value={wakeTimeController.field.value || ''}
+                            onChange={(e) => wakeTimeController.field.onChange(e.target.value)}
+                            onBlur={wakeTimeController.field.onBlur}
+                            name={wakeTimeController.field.name}
+                            ref={wakeTimeController.field.ref}
+                        />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <label htmlFor="sleep-time" className="ui-label">
+                            Sleep time
+                        </label>
+                        <input
+                            id="sleep-time"
+                            type="time"
+                            className={fieldClass}
+                            value={sleepTimeController.field.value || ''}
+                            onChange={(e) => sleepTimeController.field.onChange(e.target.value)}
+                            onBlur={sleepTimeController.field.onBlur}
+                            name={sleepTimeController.field.name}
+                            ref={sleepTimeController.field.ref}
+                        />
+                    </div>
+                </div>
+            </section>
 
-            <Card sx={{ mb: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-                <CardContent sx={{ p: 3 }}>
-                    <Typography variant="h6" gutterBottom sx={{ fontWeight: 500, mb: 3 }}>
-                        Sleep Schedule
-                    </Typography>
-                    
-                    <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                            <Typography variant="body2" color="text.secondary">
-                                Wake Time
-                            </Typography>
-                            <LocalizationProvider dateAdapter={AdapterDateFns}>
-                                <TimePicker
-                                    value={wakeTimeController.field.value ? stringToDate(wakeTimeController.field.value) : null}
-                                    onChange={(newValue) => {
-                                        const timeString = dateToString(newValue);
-                                        wakeTimeController.field.onChange(timeString);
-                                    }}
-                                    format="hh:mm a"
-                                    slotProps={{
-                                        textField: {
-                                            size: "medium",
-                                            sx: { minWidth: 250 }
-                                        }
-                                    }}
-                                />
-                            </LocalizationProvider>
-                        </Box>
+            <section className="border-t border-ide-border pt-10">
+                <h2 className="mb-4 text-lg font-semibold text-ide-text">Google Calendar</h2>
 
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                            <Typography variant="body2" color="text.secondary">
-                                Sleep Time
-                            </Typography>
-                            <LocalizationProvider dateAdapter={AdapterDateFns}>
-                                <TimePicker
-                                    value={sleepTimeController.field.value ? stringToDate(sleepTimeController.field.value) : null}
-                                    onChange={(newValue) => {
-                                        const timeString = dateToString(newValue);
-                                        sleepTimeController.field.onChange(timeString);
-                                    }}
-                                    format="hh:mm a"
-                                    slotProps={{
-                                        textField: {
-                                            size: "medium",
-                                            sx: { minWidth: 250 }
-                                        }
-                                    }}
-                                />
-                            </LocalizationProvider>
-                        </Box>
-                    </Box>
-                </CardContent>
-            </Card>
-
-            <Card sx={{ boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-                <CardContent sx={{ p: 3 }}>
-                    <Typography variant="h6" gutterBottom sx={{ fontWeight: 500, mb: 3 }}>
-                        Google Calendar Integration
-                    </Typography>
-                    
-                    {isCheckingConnection ? (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <CircularProgress size={20} />
-                            <Typography variant="body2" color="text.secondary">
-                                Checking connection status...
-                            </Typography>
-                        </Box>
-                    ) : isCalendarConnected ? (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                                <Box sx={{ 
-                                    width: 12, 
-                                    height: 12, 
-                                    borderRadius: '50%', 
-                                    bgcolor: 'success.main',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center'
-                                }}>
-                                    <Typography variant="caption" color="white" sx={{ fontSize: '0.7rem' }}>✓</Typography>
-                                </Box>
-                                <Typography variant="body1" color="success.main" sx={{ fontWeight: 500 }}>
-                                    Connected to Google Calendar
-                                </Typography>
-                            </Box>
-                            <Button
-                                variant="outlined"
-                                color="error"
-                                onClick={handleGoogleCalendarDisconnect}
-                                disabled={isDisconnecting}
-                                startIcon={isDisconnecting ? <CircularProgress size={16} /> : null}
-                                sx={{
-                                    alignSelf: 'flex-start',
-                                    minWidth: 200,
-                                    transition: 'all 0.2s ease',
-                                    '&:hover': {
-                                        transform: isDisconnecting ? 'none' : 'translateY(-1px)',
-                                        boxShadow: isDisconnecting ? 'none' : '0 2px 4px rgba(0,0,0,0.1)',
-                                    }
-                                }}
-                            >
-                                {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
-                            </Button>
-                        </Box>
-                    ) : (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                                Connect your Google Calendar to sync events and manage your schedule
-                            </Typography>
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                onClick={handleGoogleCalendarConnect}
-                                disabled={isConnecting}
-                                startIcon={isConnecting ? <CircularProgress size={16} /> : null}
-                                sx={{
-                                    alignSelf: 'flex-start',
-                                    minWidth: 200,
-                                    transition: 'all 0.2s ease',
-                                    '&:hover': {
-                                        transform: isConnecting ? 'none' : 'translateY(-1px)',
-                                        boxShadow: isConnecting ? 'none' : '0 2px 4px rgba(0,0,0,0.1)',
-                                    }
-                                }}
-                            >
-                                {isConnecting ? 'Connecting...' : 'Connect Google Calendar'}
-                            </Button>
-                        </Box>
-                    )}
-                </CardContent>
-            </Card>
-        </Box>
+                {isCheckingConnection ? (
+                    <div className="flex items-center gap-3">
+                        <Spinner className="h-5 w-5" />
+                        <span className="text-sm text-ide-muted">Checking connection status...</span>
+                    </div>
+                ) : isCalendarConnected ? (
+                    <div className="flex flex-col gap-4">
+                        <div className="mb-2 flex items-center gap-3">
+                            <span className="flex h-3 w-3 items-center justify-center rounded-full bg-ide-dim text-[0.65rem] text-ide-bg">
+                                ✓
+                            </span>
+                            <span className="font-medium text-ide-dim">Connected to Google Calendar</span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleGoogleCalendarDisconnect}
+                            disabled={isDisconnecting}
+                            className="ui-btn-secondary border-ide-error text-ide-error hover:bg-ide-error/10 sm:w-auto"
+                        >
+                            {isDisconnecting ? (
+                                <span className="inline-flex items-center gap-2">
+                                    <Spinner className="h-4 w-4" /> Disconnecting...
+                                </span>
+                            ) : (
+                                'Disconnect'
+                            )}
+                        </button>
+                    </div>
+                ) : (
+                    <div className="flex flex-col gap-4">
+                        <p className="mb-1 text-sm text-ide-muted">
+                            Connect your Google Calendar to sync events and manage your schedule
+                        </p>
+                        <button
+                            type="button"
+                            onClick={handleGoogleCalendarConnect}
+                            disabled={isConnecting}
+                            className="ui-btn-primary w-full sm:w-auto sm:min-w-[200px]"
+                        >
+                            {isConnecting ? (
+                                <span className="inline-flex items-center gap-2">
+                                    <Spinner className="h-4 w-4 border-t-white" /> Connecting...
+                                </span>
+                            ) : (
+                                'Connect Google Calendar'
+                            )}
+                        </button>
+                    </div>
+                )}
+            </section>
+        </div>
     );
 };
 
-export default UserSettingsForm; 
+export default UserSettingsForm;

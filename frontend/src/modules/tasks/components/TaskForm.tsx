@@ -4,7 +4,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { CreateTaskDTO, TaskDTO, UpdateTaskDTO, TaskEventType } from '../../../api/tasks.api';
 import { PhaseDTO } from '../../../api/phases.api';
-import '../../../pages/TasksPage/styles.scss';
 
 const priorityOptions = [
   { value: 'low', label: 'Low' },

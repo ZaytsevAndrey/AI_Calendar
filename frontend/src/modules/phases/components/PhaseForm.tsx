@@ -4,7 +4,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { PhaseDTO, CreatePhaseDTO, UpdatePhaseDTO } from 'api/phases.api';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
-import 'modules/phases/components/PhaseForm.scss';
 import { usePhaseValidation } from '../hooks/usePhaseValidation';
 import { TimeRangeField } from './TimeRangeField';
 import { WeekDaysSelector } from './WeekDaysSelector';
@@ -70,7 +69,7 @@ const PhaseForm = ({ initialData, onSubmit, isSubmitting }: PhaseFormProps) => {
   };
 
   return (
-    <form onSubmit={handleSubmit(submitHandler)} className="phase-form form-container">
+    <form onSubmit={handleSubmit(submitHandler)} className="phase-form space-y-1">
       <div className="form-group">
         <label htmlFor="name">Phase Name*</label>
         <input {...register('name')} id="name" className={errors.name ? 'error' : ''} />

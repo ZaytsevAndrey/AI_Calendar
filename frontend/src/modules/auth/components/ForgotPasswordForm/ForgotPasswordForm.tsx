@@ -1,7 +1,6 @@
 import React from 'react';
 import { UseFormRegister, FieldErrors } from 'react-hook-form';
 import { ForgotPasswordFormData } from './types';
-import styles from './ForgotPasswordForm.module.scss';
 
 interface Props {
     onSubmit: React.FormEventHandler<HTMLFormElement>;
@@ -17,21 +16,25 @@ const ForgotPasswordForm: React.FC<Props> = ({
     requestStatus,
 }) => {
     return (
-        <form className={ styles.form } onSubmit={ onSubmit }>
-            <h2 className={ styles.title }>Forgot password?</h2>
+        <form className="auth-form-card-narrow" onSubmit={onSubmit}>
+            <h2 className="auth-form-title">Forgot password?</h2>
 
-            <div className={ styles.inputGroup }>
-                <label htmlFor="email">Email</label>
-                <input id="email" type="email" { ...register('email') } />
-                { errors.email && <span className={ styles.error }>{ errors.email.message }</span> }
+            <div className="auth-form-field">
+                <label htmlFor="email" className="auth-form-label">
+                    Email
+                </label>
+                <input id="email" type="email" className="auth-form-input" {...register('email')} />
+                {errors.email && (
+                    <span className="auth-form-error">{errors.email.message}</span>
+                )}
             </div>
 
             <button
                 type="submit"
-                className={ styles.submitButton }
-                disabled={ requestStatus === 'pending' }
+                className="auth-form-submit"
+                disabled={requestStatus === 'pending'}
             >
-                { requestStatus === 'pending' ? 'Sending...' : 'Send code' }
+                {requestStatus === 'pending' ? 'Sending...' : 'Send code'}
             </button>
         </form>
     );

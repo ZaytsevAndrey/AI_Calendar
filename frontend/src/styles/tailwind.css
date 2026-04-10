@@ -1,0 +1,562 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Design system: IDE-dark, mobile-first.
+  Комбінуйте класи: ui-btn + ui-btn-primary, page-shell, тощо.
+*/
+
+@layer base {
+    /* Темний фон на всьому ланцюжку: сторонні стилі (напр. Rsuite) інколи перефарбовують лише body */
+    html {
+        @apply h-full min-h-[100dvh] bg-ide-bg;
+    }
+
+    body {
+        @apply m-0 min-h-[100dvh] overflow-hidden bg-ide-bg font-sans text-ide-text antialiased;
+    }
+
+    #root {
+        @apply flex min-h-[100dvh] w-full flex-col bg-ide-bg;
+    }
+
+    a {
+        @apply text-ide-link no-underline;
+    }
+
+    a:hover {
+        @apply underline;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+        @apply transition-colors duration-150;
+    }
+}
+
+@layer components {
+    /* ——— Макет сторінки ——— */
+    .page-shell {
+        @apply mx-auto w-full max-w-7xl px-4 py-6 sm:px-5 sm:py-8 lg:px-8;
+    }
+
+    .page-head {
+        @apply mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-start sm:justify-between;
+    }
+
+    .page-title {
+        @apply text-2xl font-semibold tracking-tight text-ide-text sm:text-3xl;
+    }
+
+    .page-lead {
+        @apply mt-1 max-w-2xl text-sm text-ide-muted sm:text-base;
+    }
+
+    /* ——— Кнопки (мін. 44px для touch) ——— */
+    .ui-btn {
+        @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition;
+        @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link;
+        @apply disabled:pointer-events-none disabled:opacity-50;
+    }
+
+    .ui-btn-primary {
+        @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition;
+        @apply bg-ide-accentBlue text-white hover:brightness-110 active:brightness-95;
+        @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link;
+        @apply disabled:pointer-events-none disabled:opacity-50;
+    }
+
+    .ui-btn-secondary {
+        @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-ide-border bg-ide-surface px-4 py-2.5 text-sm font-medium text-ide-text transition hover:bg-ide-elevated;
+        @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link;
+        @apply disabled:pointer-events-none disabled:opacity-50;
+    }
+
+    .ui-btn-danger {
+        @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-ide-error px-4 py-2.5 text-sm font-medium text-white transition hover:brightness-110;
+        @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-error;
+        @apply disabled:pointer-events-none disabled:opacity-50;
+    }
+
+    .ui-btn-ghost {
+        @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-ide-text transition hover:bg-white/5;
+        @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link;
+        @apply disabled:pointer-events-none disabled:opacity-50;
+    }
+
+    /* ——— Поля форм ——— */
+    .ui-label {
+        @apply mb-1.5 block text-sm font-medium text-ide-text;
+    }
+
+    .ui-input,
+    .ui-select,
+    .ui-textarea {
+        @apply w-full rounded-lg border border-ide-border bg-ide-input px-3 py-2.5 text-sm text-ide-text placeholder:text-ide-muted;
+        @apply focus:border-ide-link focus:outline-none focus:ring-1 focus:ring-ide-link;
+    }
+
+    .ui-textarea {
+        @apply min-h-[5rem] resize-y;
+    }
+
+    .ui-input-error,
+    .ui-select.ui-input-error,
+    .ui-textarea.ui-input-error {
+        @apply border-ide-error focus:border-ide-error focus:ring-ide-error;
+    }
+
+    .ui-field {
+        @apply mb-4 last:mb-0;
+    }
+
+    .ui-error {
+        @apply mt-1 block text-sm text-ide-error;
+    }
+
+    .ui-hint {
+        @apply mt-1 text-xs leading-relaxed text-ide-muted;
+    }
+
+    /* Форми задач / фаз (спільні імена класів у TSX) */
+    .task-form .form-group,
+    .phase-form .form-group {
+        @apply ui-field;
+    }
+
+    .task-form .form-group label,
+    .phase-form .form-group label {
+        @apply ui-label;
+    }
+
+    .task-form .form-group input:not([type='checkbox']):not([type='color']),
+    .task-form .form-group textarea,
+    .task-form .form-group select,
+    .phase-form .form-group input:not([type='checkbox']):not([type='color']),
+    .phase-form .form-group textarea,
+    .phase-form .form-group select {
+        @apply ui-input;
+    }
+
+    .task-form .form-group textarea,
+    .phase-form .form-group textarea {
+        @apply ui-textarea;
+    }
+
+    .task-form .form-group input.error,
+    .task-form .form-group textarea.error,
+    .task-form .form-group select.error,
+    .phase-form .form-group input.error,
+    .phase-form .form-group textarea.error {
+        @apply ui-input-error;
+    }
+
+    .task-form .error-message,
+    .phase-form .error-message {
+        @apply ui-error;
+    }
+
+    .phase-form .error-message.validation-error {
+        @apply font-semibold;
+    }
+
+    .task-form .form-hint,
+    .phase-form .form-hint {
+        @apply ui-hint;
+    }
+
+    .task-form .form-label-static {
+        @apply ui-label;
+    }
+
+    .task-form .form-row {
+        @apply flex flex-col gap-4 sm:flex-row;
+    }
+
+    .task-form .form-row .form-group {
+        @apply flex-1;
+    }
+
+    .task-form .phase-checkboxes {
+        @apply mt-2 space-y-2;
+    }
+
+    .task-form .phase-checkbox-row {
+        @apply flex cursor-pointer items-center gap-3 rounded-lg border border-ide-border bg-ide-surface/50 px-3 py-2;
+    }
+
+    .task-form .phase-checkbox-row input {
+        @apply h-4 w-4 shrink-0 rounded border-ide-border text-ide-link;
+    }
+
+    .task-form .form-group.checkbox .checkbox-container {
+        @apply flex items-center gap-3;
+    }
+
+    .task-form .form-group.checkbox .checkbox-container input {
+        @apply h-4 w-4 rounded border-ide-border;
+    }
+
+    .task-form .color-input-container {
+        @apply flex flex-col gap-3 sm:flex-row sm:items-center;
+    }
+
+    .task-form .color-input-container .color-text {
+        @apply flex-1;
+    }
+
+    .task-form .form-actions,
+    .phase-form .form-actions {
+        @apply mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end;
+    }
+
+    .primary-button {
+        @apply inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-ide-accentBlue px-4 py-2.5 text-sm font-medium text-white transition hover:brightness-110;
+        @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link;
+        @apply disabled:pointer-events-none disabled:opacity-50 sm:w-auto;
+    }
+
+    .phase-form .form-actions .primary-button {
+        @apply w-full sm:w-full;
+    }
+
+    /* Дні тижня (PhaseForm + PhaseSetup) */
+    .phase-form .weekdays-toggle,
+    .weekdays-toggle {
+        @apply flex flex-wrap gap-2;
+    }
+
+    .phase-form .weekday-btn,
+    .weekday-btn {
+        @apply min-h-[44px] min-w-[48px] rounded-lg border border-ide-link bg-transparent px-3 py-2 text-sm font-medium text-ide-link transition hover:bg-ide-link/10;
+    }
+
+    .phase-form .weekday-btn.active,
+    .weekday-btn.active {
+        @apply border-ide-link bg-ide-selection text-ide-text;
+    }
+
+    /* form-group поза .phase-form (WeekDaysSelector на setup) */
+    .form-group {
+        @apply ui-field;
+    }
+
+    .form-group > label {
+        @apply ui-label;
+    }
+
+    .form-group .error-message,
+    span.error-message {
+        @apply ui-error;
+    }
+
+    .phase-form .color-input-container input[type='color'] {
+        @apply h-11 w-full max-w-[4.5rem] cursor-pointer rounded-lg border border-ide-border bg-transparent p-1 sm:h-10;
+    }
+
+    /* Картки задач */
+    .task-item {
+        @apply rounded-xl border border-ide-border bg-ide-panel p-4 shadow-ide transition hover:shadow-ide-md sm:p-5;
+    }
+
+    .task-item .task-header {
+        @apply mb-3 flex flex-wrap items-center gap-3;
+    }
+
+    .task-item .task-priority {
+        @apply h-3 w-3 shrink-0 rounded-full;
+    }
+
+    .task-item .task-name {
+        @apply min-w-0 flex-1 text-lg font-semibold text-ide-text;
+    }
+
+    .task-item .task-phase,
+    .task-item .task-category {
+        @apply shrink-0 rounded-md bg-ide-surface px-2 py-1 text-xs text-ide-text;
+    }
+
+    .task-item .task-description {
+        @apply mb-3 text-sm leading-relaxed text-ide-muted;
+    }
+
+    .task-item .task-details {
+        @apply mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3;
+    }
+
+    .task-item .task-detail {
+        @apply flex flex-col gap-0.5 text-sm;
+    }
+
+    .task-item .detail-label {
+        @apply text-xs font-medium uppercase tracking-wide text-ide-muted;
+    }
+
+    .task-item .detail-value {
+        @apply text-ide-text;
+    }
+
+    .task-item .detail-value.overdue {
+        @apply font-medium text-ide-error;
+    }
+
+    .task-item .status-selector {
+        @apply ui-select mt-1 max-w-full border-l-4 bg-ide-input pl-2 sm:max-w-[200px];
+    }
+
+    .task-item .status-selector.todo {
+        @apply border-ide-keyword;
+    }
+
+    .task-item .status-selector.in_progress {
+        @apply border-ide-link;
+    }
+
+    .task-item .status-selector.completed {
+        @apply border-ide-dim;
+    }
+
+    .task-item .status-selector.canceled {
+        @apply border-ide-muted;
+    }
+
+    .task-item .task-actions {
+        @apply flex flex-col gap-2 border-t border-ide-border pt-4 sm:flex-row sm:justify-end sm:gap-3;
+    }
+
+    .task-item .edit-button {
+        @apply ui-btn-secondary flex-1 sm:flex-none;
+    }
+
+    .task-item .delete-button {
+        @apply ui-btn-danger flex-1 sm:flex-none;
+    }
+
+    /* Списки задач — горизонтальний скрол на мобільному */
+    .task-list-header {
+        @apply mb-3 flex gap-2 overflow-x-auto rounded-lg border border-ide-border bg-ide-surface/80 p-2 [-webkit-overflow-scrolling:touch] sm:grid sm:grid-cols-4 sm:overflow-visible;
+    }
+
+    .task-list .list-header-item {
+        @apply shrink-0 rounded-md px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ide-muted hover:bg-ide-elevated sm:shrink;
+    }
+
+    .loading,
+    .empty-list {
+        @apply rounded-xl border border-dashed border-ide-border bg-ide-surface/30 px-6 py-12 text-center text-sm text-ide-muted;
+    }
+
+    /* Auth */
+    .auth-form-card {
+        @apply mx-auto my-6 flex w-full max-w-md flex-col rounded-xl border border-ide-border bg-ide-panel p-5 shadow-ide-md sm:my-10 sm:max-w-lg sm:p-8;
+    }
+
+    .auth-form-card-narrow {
+        @apply mx-auto my-6 flex w-full max-w-md flex-col rounded-xl border border-ide-border bg-ide-panel p-5 shadow-ide-md sm:my-10 sm:p-8;
+    }
+
+    .auth-form-title {
+        @apply mb-6 text-center text-xl font-semibold text-ide-text sm:text-2xl;
+    }
+
+    .auth-form-field {
+        @apply mb-4 w-full;
+    }
+
+    .auth-form-label {
+        @apply ui-label;
+    }
+
+    .auth-form-input {
+        @apply ui-input;
+    }
+
+    .auth-form-error {
+        @apply ui-error;
+    }
+
+    .auth-form-submit {
+        @apply ui-btn-primary mt-2 w-full;
+    }
+
+    .auth-form-footer {
+        @apply pt-4 text-center text-sm text-ide-muted;
+    }
+
+    /* Сторінка задач: фільтр */
+    .filter-bar {
+        @apply mb-6 flex flex-col gap-3 sm:flex-row sm:items-end;
+    }
+
+    .form-container {
+        @apply mb-8 rounded-xl border border-ide-border bg-ide-surface/40 p-4 shadow-ide sm:p-6;
+    }
+
+    .form-container h2 {
+        @apply mb-4 text-lg font-semibold text-ide-text;
+    }
+
+    /* Phases: сітка карток */
+    .phase-grid {
+        @apply grid gap-4 sm:grid-cols-2 xl:grid-cols-3;
+    }
+
+    .phase-card {
+        @apply flex flex-col rounded-xl border border-ide-border bg-ide-panel p-4 shadow-ide transition hover:shadow-ide-md sm:p-5;
+    }
+
+    .phase-card .category-header {
+        @apply mb-2 flex items-start justify-between gap-2;
+    }
+
+    .phase-card .category-name {
+        @apply text-lg font-semibold;
+    }
+
+    .phase-card .category-description {
+        @apply mb-3 flex-1 text-sm text-ide-muted;
+    }
+
+    .phase-card .time-block-info {
+        @apply mb-3 rounded-lg border border-ide-border bg-ide-surface px-3 py-2 text-sm text-ide-text;
+    }
+
+    .phase-card .category-actions {
+        @apply mt-auto flex flex-wrap gap-2 border-t border-ide-border pt-4;
+    }
+
+    .phase-card .edit-button {
+        @apply ui-btn-secondary flex-1 sm:flex-none;
+    }
+
+    .phase-card .delete-button {
+        @apply ui-btn-danger flex-1 sm:flex-none;
+    }
+
+    /* Schedule */
+    .schedule-layout {
+        @apply flex flex-col gap-6 lg:flex-row lg:items-start;
+    }
+
+    .schedule-calendar-wrap {
+        @apply min-w-0 flex-1 rounded-xl border border-ide-border bg-ide-panel p-3 shadow-ide sm:p-4;
+    }
+
+    .schedule-side-panel {
+        @apply w-full shrink-0 rounded-xl border border-ide-border bg-ide-panel p-4 shadow-ide lg:w-[min(100%,380px)] xl:w-96;
+    }
+
+    .replan-panel {
+        @apply mb-6 rounded-xl border border-ide-border bg-ide-surface/50 p-4 text-sm sm:p-5;
+    }
+
+    .replan-panel__title {
+        @apply mb-3 text-base font-semibold text-ide-text;
+    }
+
+    .replan-panel__errors {
+        @apply mb-3 list-inside list-disc text-ide-error;
+    }
+
+    .replan-panel__warnings {
+        @apply mb-3 list-inside list-disc text-ide-warn;
+    }
+
+    .replan-panel__diff {
+        @apply list-none space-y-4 p-0;
+    }
+
+    .replan-panel__diff-row {
+        @apply border-t border-ide-border pt-4 first:border-0 first:pt-0;
+    }
+
+    .replan-panel__diff-name {
+        @apply mb-2 font-semibold text-ide-text;
+    }
+
+    .replan-panel__diff-cols {
+        @apply grid gap-4 md:grid-cols-2;
+    }
+
+    .replan-panel__label {
+        @apply mb-1 block text-[0.65rem] font-semibold uppercase tracking-wider text-ide-muted;
+    }
+
+    .replan-panel__empty {
+        @apply text-ide-muted;
+    }
+
+    /* Settings */
+    .settings-card {
+        @apply rounded-xl border border-ide-border bg-ide-panel p-5 shadow-ide sm:p-6;
+    }
+
+    /* Rsuite popups */
+    .rs-picker-daterange-menu,
+    .rs-picker-popup,
+    .rs-picker-menu {
+        z-index: 2001 !important;
+    }
+}
+
+/* react-big-calendar — глобально (plain CSS для сумісності з rbc) */
+.rbc-calendar {
+    color: #a9b7c6;
+}
+
+.rbc-header,
+.rbc-time-header-content,
+.rbc-day-bg,
+.rbc-month-row,
+.rbc-time-content,
+.rbc-time-slot,
+.rbc-timeslot-group {
+    border-color: #515151 !important;
+}
+
+.rbc-today {
+    background-color: rgba(33, 66, 131, 0.25) !important;
+}
+
+.rbc-off-range {
+    color: #808080;
+}
+
+.rbc-toolbar button {
+    border-radius: 0.5rem;
+    border: 1px solid #515151;
+    background-color: #45494a;
+    color: #a9b7c6;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+@media (min-width: 640px) {
+    .rbc-toolbar button {
+        padding: 0.25rem 0.75rem;
+    }
+}
+
+.rbc-toolbar button.rbc-active {
+    border-color: #589df6;
+    background-color: #214283;
+    color: #a9b7c6;
+}
+
+.rbc-event {
+    border-radius: 0.25rem !important;
+    border: 1px solid #515151 !important;
+}
+
+.rbc-time-slot {
+    min-height: 28px;
+}
+
+@media (min-width: 640px) {
+    .rbc-time-slot {
+        min-height: 32px;
+    }
+}

@@ -1,5 +1,4 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Box, Paper, Typography } from '@mui/material';
 import { PhaseDTO } from 'api/phases.api';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import {
@@ -238,133 +237,74 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
   };
 
   return (
-    <Paper sx={{ p: 2, mt: 2, overflow: 'auto' }}>
-      <Typography variant="h6" gutterBottom>
-        Weekly phase template
-      </Typography>
-      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+    <div className="mt-2 overflow-auto rounded-lg border border-ide-border bg-ide-panel p-4 shadow-ide">
+      <h2 className="mb-1 text-lg font-semibold text-ide-text">Weekly phase template</h2>
+      <p className="mb-4 block text-xs text-ide-muted">
         Drag a block or its top/bottom edge. Step: {SNAP_MIN} min. Click the center to edit.
-      </Typography>
+      </p>
 
-      <Box
-        sx={{
-          display: 'grid',
+      <div
+        className="grid min-w-[520px] gap-0 rounded border border-ide-border"
+        style={{
           gridTemplateColumns: `56px repeat(${COLUMNS.length}, minmax(72px, 1fr))`,
-          gap: 0,
-          minWidth: 520,
-          border: '1px solid',
-          borderColor: 'divider',
-          borderRadius: 1,
         }}
       >
-        <Box
-          sx={{
-            borderBottom: '1px solid',
-            borderColor: 'divider',
-            bgcolor: 'action.hover',
-            p: 0.5,
-          }}
-        />
+        <div className="border-b border-ide-border bg-ide-surface/80 p-1" />
         {COLUMNS.map(({ dow, label }) => (
-          <Box
+          <div
             key={dow}
-            sx={{
-              borderBottom: '1px solid',
-              borderLeft: '1px solid',
-              borderColor: 'divider',
-              bgcolor: 'action.hover',
-              p: 0.5,
-              textAlign: 'center',
-            }}
+            className="border-b border-l border-ide-border bg-ide-surface/80 p-1 text-center"
           >
-            <Typography variant="caption" fontWeight={600}>
-              {label}
-            </Typography>
-          </Box>
+            <span className="text-xs font-semibold text-ide-text">{label}</span>
+          </div>
         ))}
 
-        <Box
-          sx={{
-            position: 'relative',
-            borderRight: '1px solid',
-            borderColor: 'divider',
-            height: gridHeightPx,
-            bgcolor: 'grey.50',
-          }}
+        <div
+          className="relative border-r border-ide-border bg-ide-surface"
+          style={{ height: gridHeightPx }}
         >
           {hourLabels.map(({ minutes, label }) => {
             const top = ((minutes - dayStartMin) / daySpanMin) * gridHeightPx;
             return (
-              <Typography
+              <span
                 key={label}
-                variant="caption"
-                sx={{
-                  position: 'absolute',
-                  top: `${top}px`,
-                  left: 4,
-                  right: 2,
-                  fontSize: '0.65rem',
-                  color: 'text.secondary',
-                  lineHeight: 1,
-                }}
+                className="absolute left-1 right-0.5 text-[0.65rem] leading-none text-ide-muted"
+                style={{ top: `${top}px` }}
               >
                 {label}
-              </Typography>
+              </span>
             );
           })}
-        </Box>
+        </div>
 
         {COLUMNS.map(({ dow: dayOfWeek }, dayIndex) => {
-          const colPhases = displayPhases.filter((p) =>
-            phaseAppliesOnDay(p, dayOfWeek),
-          );
+          const colPhases = displayPhases.filter((p) => phaseAppliesOnDay(p, dayOfWeek));
           return (
-            <Box
+            <div
               key={dayOfWeek}
               id={`phase-col-${dayOfWeek}`}
-              sx={{
-                position: 'relative',
-                height: gridHeightPx,
-                borderLeft: '1px solid',
-                borderRight:
-                  dayIndex < COLUMNS.length - 1 ? '1px solid' : undefined,
-                borderColor: 'divider',
-                bgcolor: 'grey.50',
-              }}
+              className={`relative border-ide-border bg-ide-surface ${
+                dayIndex < COLUMNS.length - 1 ? 'border-l border-r' : 'border-l'
+              }`}
+              style={{ height: gridHeightPx }}
             >
               {colPhases.map((phase) => {
                 const pos = blockMetrics(phase, dayOfWeek);
                 if (!pos) return null;
                 return (
-                  <Box
+                  <div
                     key={`${dayOfWeek}-${phase.id}`}
-                    sx={{
-                      position: 'absolute',
-                      left: 2,
-                      right: 2,
-                      top: pos.top,
-                      height: pos.height,
-                      borderRadius: 1,
-                      border: '1px solid rgba(0,0,0,0.12)',
-                      overflow: 'hidden',
-                      zIndex: 1,
-                      touchAction: 'none',
-                      display: 'flex',
-                      flexDirection: 'column',
-                    }}
+                    className="absolute left-0.5 right-0.5 z-[1] flex flex-col overflow-hidden rounded border border-black/20"
+                    style={{ top: pos.top, height: pos.height, touchAction: 'none' }}
                   >
                     {onPhaseTimeChange ? (
-                      <Box
+                      <div
                         onPointerDown={(e) => startResizeStart(e, phase, dayOfWeek)}
-                        sx={{
-                          height: HANDLE_PX,
-                          cursor: 'ns-resize',
-                          bgcolor: 'rgba(0,0,0,0.15)',
-                          flexShrink: 0,
-                        }}
+                        className="shrink-0 cursor-ns-resize bg-black/15"
+                        style={{ height: HANDLE_PX }}
                       />
                     ) : null}
-                    <Box
+                    <div
                       onPointerDown={(e) => startMove(e, phase, dayOfWeek)}
                       onClick={(e) => {
                         if (skipClickAfterDragRef.current) {
@@ -375,82 +315,51 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
                         }
                         onEditPhase?.(phase);
                       }}
-                      sx={{
-                        flex: 1,
-                        minHeight: 0,
+                      className="flex min-h-0 flex-1 items-center justify-center opacity-85"
+                      style={{
                         backgroundColor: phase.color,
-                        opacity: 0.85,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
                         cursor: onPhaseTimeChange ? 'grab' : 'pointer',
                       }}
                     >
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          fontSize: '0.65rem',
-                          color: 'common.white',
-                          fontWeight: 700,
-                          textAlign: 'center',
-                          px: 0.25,
-                          textShadow: '0 1px 2px rgba(0,0,0,0.45)',
-                          lineHeight: 1.15,
-                          pointerEvents: 'none',
-                        }}
+                      <span
+                        className="pointer-events-none px-0.5 text-center text-[0.65rem] font-bold leading-snug text-white"
+                        style={{ textShadow: '0 1px 2px rgba(0,0,0,0.45)' }}
                       >
                         {phase.name}
-                      </Typography>
-                    </Box>
+                      </span>
+                    </div>
                     {onPhaseTimeChange ? (
-                      <Box
+                      <div
                         onPointerDown={(e) => startResizeEnd(e, phase, dayOfWeek)}
-                        sx={{
-                          height: HANDLE_PX,
-                          cursor: 'ns-resize',
-                          bgcolor: 'rgba(0,0,0,0.15)',
-                        }}
+                        className="cursor-ns-resize bg-black/15"
+                        style={{ height: HANDLE_PX }}
                       />
                     ) : null}
-                  </Box>
+                  </div>
                 );
               })}
-            </Box>
+            </div>
           );
         })}
-      </Box>
+      </div>
 
       {displayPhases.length > 0 && (
-        <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          <Typography variant="subtitle2" sx={{ width: '100%' }}>
-            Legend
-          </Typography>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <span className="w-full text-sm font-semibold text-ide-text">Legend</span>
           {[...displayPhases]
-            .sort(
-              (a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime),
-            )
+            .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime))
             .map((phase) => (
-              <Box
+              <div
                 key={phase.id}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 0.5,
-                  px: 1,
-                  py: 0.25,
-                  borderRadius: 1,
-                  bgcolor: phase.color,
-                  color: 'common.white',
-                }}
+                className="flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold text-white"
+                style={{ backgroundColor: phase.color }}
               >
-                <Typography variant="caption" fontWeight={600}>
-                  {phase.name} ({phase.startTime}–{phase.endTime})
-                </Typography>
-              </Box>
+                {phase.name} ({phase.startTime}–{phase.endTime})
+              </div>
             ))}
-        </Box>
+        </div>
       )}
-    </Paper>
+    </div>
   );
 };
 

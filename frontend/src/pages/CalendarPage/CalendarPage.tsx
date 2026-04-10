@@ -1,47 +1,46 @@
 import React, { useState } from 'react';
-import { 
-    Box, 
-    Container, 
-    Typography, 
-    ToggleButtonGroup, 
-    ToggleButton,
-    CircularProgress,
-    Alert,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    Button
-} from '@mui/material';
 import {
-  useEventsForDay,
-  useEventsForWeek,
-  useEventsForMonth,
-  useUpdateEvent,
-  useDeleteEvent,
+    useEventsForDay,
+    useEventsForWeek,
+    useEventsForMonth,
+    useUpdateEvent,
+    useDeleteEvent,
 } from 'modules/calendar/hooks/useCalendar';
 import EventForm from 'modules/calendar/components/EventForm';
 import { GoogleCalendarEvent } from 'api/google-calendar.api';
 import CalendarEvents from 'modules/calendar/components/CalendarEvents';
 import CalendarGrid from 'modules/calendar/components/CalendarGrid';
 import { EventType } from 'modules/calendar/types';
+import { Modal } from '../../ui/Modal';
+import { Spinner } from '../../ui/Spinner';
 
 type CalendarView = 'day' | 'week' | 'month';
+
+const toggleBtn = (active: boolean) =>
+    `min-h-[44px] rounded-md px-4 py-2 text-sm font-medium transition ${
+        active ? 'bg-ide-selection text-ide-text' : 'text-ide-muted hover:bg-ide-surface'
+    }`;
 
 const CalendarPage: React.FC = () => {
     const [currentView, setCurrentView] = useState<CalendarView>('week');
     const [currentDate, setCurrentDate] = useState(new Date());
-    const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{ open: boolean; eventId: string | null; eventName: string }>({
+    const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
+        open: boolean;
+        eventId: string | null;
+        eventName: string;
+    }>({
         open: false,
         eventId: null,
-        eventName: ''
+        eventName: '',
     });
-    const [eventFormDialog, setEventFormDialog] = useState<{ open: boolean; event: GoogleCalendarEvent | null }>({
+    const [eventFormDialog, setEventFormDialog] = useState<{
+        open: boolean;
+        event: GoogleCalendarEvent | null;
+    }>({
         open: false,
-        event: null
+        event: null,
     });
 
-    // Get events for the current view
     const dayEventsQuery = useEventsForDay(currentDate);
     const weekEventsQuery = useEventsForWeek(currentDate);
     const monthEventsQuery = useEventsForMonth(
@@ -49,56 +48,41 @@ const CalendarPage: React.FC = () => {
         currentDate.getMonth() + 1
     );
 
-    // Select the appropriate query based on current view
     const queryMap = {
         day: dayEventsQuery,
         week: weekEventsQuery,
         month: monthEventsQuery,
     };
-    
+
     const getEventsQuery = queryMap[currentView];
     const [updateEventTrigger, updateEventState] = useUpdateEvent();
     const [deleteEventTrigger, deleteEventState] = useDeleteEvent();
 
-    const handleViewChange = (
-        event: React.MouseEvent<HTMLElement>,
-        newView: CalendarView | null,
-    ) => {
-        if (newView !== null) {
-            setCurrentView(newView);
-        }
-    };
-
     const formatDate = (date: Date, view: CalendarView): string => {
         switch (view) {
-            case 'day': {
-                return date.toLocaleDateString('en-US', { 
-                    weekday: 'long', 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
+            case 'day':
+                return date.toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
                 });
-            }
             case 'week': {
                 const startOfWeek = new Date(date);
-                // Monday = 1, Sunday = 0, so we need to adjust
                 const dayOfWeek = date.getDay();
-                const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Sunday becomes 6 days back
+                const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
                 startOfWeek.setDate(date.getDate() - daysToSubtract);
-                
                 const endOfWeek = new Date(startOfWeek);
                 endOfWeek.setDate(startOfWeek.getDate() + 6);
                 return `${startOfWeek.toLocaleDateString()} - ${endOfWeek.toLocaleDateString()}`;
             }
-            case 'month': {
-                return date.toLocaleDateString('en-US', { 
-                    year: 'numeric', 
-                    month: 'long' 
+            case 'month':
+                return date.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
                 });
-            }
-            default: {
+            default:
                 return date.toLocaleDateString();
-            }
         }
     };
 
@@ -106,7 +90,7 @@ const CalendarPage: React.FC = () => {
         setDeleteConfirmDialog({
             open: true,
             eventId,
-            eventName
+            eventName,
         });
     };
 
@@ -115,8 +99,8 @@ const CalendarPage: React.FC = () => {
             try {
                 await deleteEventTrigger({ eventId: deleteConfirmDialog.eventId });
                 setDeleteConfirmDialog({ open: false, eventId: null, eventName: '' });
-            } catch (error) {
-                console.error('Failed to delete event:', error);
+            } catch (err) {
+                console.error('Failed to delete event:', err);
             }
         }
     };
@@ -135,14 +119,14 @@ const CalendarPage: React.FC = () => {
     const handleEventFormSubmit = async (data: any) => {
         try {
             if (eventFormDialog.event) {
-                await updateEventTrigger({ 
-                    eventId: eventFormDialog.event.id, 
-                    eventData: data 
+                await updateEventTrigger({
+                    eventId: eventFormDialog.event.id,
+                    eventData: data,
                 });
             }
             setEventFormDialog({ open: false, event: null });
-        } catch (error) {
-            console.error('Failed to update event:', error);
+        } catch (err) {
+            console.error('Failed to update event:', err);
         }
     };
 
@@ -152,80 +136,89 @@ const CalendarPage: React.FC = () => {
 
     if (getEventsQuery.isLoading) {
         return (
-            <Container maxWidth="lg" sx={{ py: 4 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-                    <CircularProgress />
-                </Box>
-            </Container>
+            <div className="page-shell">
+                <div className="flex justify-center py-20">
+                    <Spinner className="h-10 w-10" />
+                </div>
+            </div>
         );
     }
 
     if (getEventsQuery.isError) {
         return (
-            <Container maxWidth="lg" sx={{ py: 4 }}>
-                <Alert severity="error" sx={{ mb: 3 }}>
+            <div className="page-shell">
+                <div
+                    className="rounded-lg border border-ide-error bg-ide-error/10 px-4 py-3 text-sm text-ide-error"
+                    role="alert"
+                >
                     Failed to load calendar events. Please check your Google Calendar connection.
-                </Alert>
-            </Container>
+                </div>
+            </div>
         );
     }
 
     return (
-        <Container maxWidth="lg" sx={{ py: 2 }}>
-            {/* Header */}
-            <Box sx={{ mb: 4 }}>
-                <Typography variant="h4" component="h1" gutterBottom>
-                    Calendar
-                </Typography>
+        <div className="page-shell">
+            <header className="mb-6 space-y-4 sm:mb-8">
+                <h1 className="page-title">Calendar</h1>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+                    <div className="inline-flex w-full max-w-md rounded-lg border border-ide-border bg-ide-surface p-1 sm:w-auto">
+                        {(['day', 'week', 'month'] as const).map((v) => (
+                            <button
+                                key={v}
+                                type="button"
+                                onClick={() => setCurrentView(v)}
+                                className={`flex-1 sm:flex-none ${toggleBtn(currentView === v)}`}
+                                aria-pressed={currentView === v}
+                            >
+                                {v.charAt(0).toUpperCase() + v.slice(1)}
+                            </button>
+                        ))}
+                    </div>
 
-                {/* View Controls */}
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                    <ToggleButtonGroup
-                        value={currentView}
-                        exclusive
-                        onChange={handleViewChange}
-                        aria-label="calendar view"
-                    >
-                        <ToggleButton value="day" aria-label="day view">
-                            Day
-                        </ToggleButton>
-                        <ToggleButton value="week" aria-label="week view">
-                            Week
-                        </ToggleButton>
-                        <ToggleButton value="month" aria-label="month view">
-                            Month
-                        </ToggleButton>
-                    </ToggleButtonGroup>
-
-                    <Typography variant="h6" component="h2">
+                    <h2 className="text-center text-lg font-medium text-ide-text lg:order-none lg:flex-1 lg:text-left">
                         {formatDate(currentDate, currentView)}
-                    </Typography>
-                    {currentView === 'day' && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Button size="small" onClick={() => setCurrentDate(prev => {
-                                const d = new Date(prev);
-                                d.setDate(d.getDate() - 1);
-                                return d;
-                            })}>
-                                ←
-                            </Button>
-                            <Button size="small" onClick={() => setCurrentDate(new Date())}>
-                                Today
-                            </Button>
-                            <Button size="small" onClick={() => setCurrentDate(prev => {
-                                const d = new Date(prev);
-                                d.setDate(d.getDate() + 1);
-                                return d;
-                            })}>
-                                →
-                            </Button>
-                        </Box>
-                    )}
-                </Box>
-            </Box>
+                    </h2>
 
-            {/* Calendar Grid */}
-            <Box sx={{ mb: 3 }}>
+                    {currentView === 'day' ? (
+                        <div className="flex items-center justify-center gap-1 sm:justify-end lg:shrink-0">
+                            <button
+                                type="button"
+                                className="ui-btn-ghost min-h-[44px] min-w-[44px] px-0"
+                                onClick={() =>
+                                    setCurrentDate((prev) => {
+                                        const d = new Date(prev);
+                                        d.setDate(d.getDate() - 1);
+                                        return d;
+                                    })
+                                }
+                                aria-label="Previous day"
+                            >
+                                ←
+                            </button>
+                            <button type="button" className="ui-btn-secondary px-4" onClick={() => setCurrentDate(new Date())}>
+                                Today
+                            </button>
+                            <button
+                                type="button"
+                                className="ui-btn-ghost min-h-[44px] min-w-[44px] px-0"
+                                onClick={() =>
+                                    setCurrentDate((prev) => {
+                                        const d = new Date(prev);
+                                        d.setDate(d.getDate() + 1);
+                                        return d;
+                                    })
+                                }
+                                aria-label="Next day"
+                            >
+                                →
+                            </button>
+                        </div>
+                    ) : null}
+                </div>
+            </header>
+
+            <div className="mb-6 min-w-0 overflow-x-auto">
                 <CalendarGrid
                     view={currentView}
                     date={currentDate}
@@ -233,9 +226,8 @@ const CalendarPage: React.FC = () => {
                     onEditEvent={handleEditEvent}
                     onDeleteEvent={handleDeleteEvent}
                 />
-            </Box>
+            </div>
 
-            {/* Events List */}
             <CalendarEvents
                 events={getEventsQuery.data?.events || []}
                 isLoading={getEventsQuery.isLoading}
@@ -245,43 +237,54 @@ const CalendarPage: React.FC = () => {
                 onDeleteEvent={handleDeleteEvent}
             />
 
-            {/* Event Form Dialog */}
             <EventForm
                 open={eventFormDialog.open}
                 onClose={closeEventForm}
                 onSubmit={handleEventFormSubmit}
                 event={eventFormDialog.event}
                 isSubmitting={updateEventState.isLoading}
-                error={updateEventState.error instanceof Error ? updateEventState.error.message : undefined}
+                error={
+                    updateEventState.error instanceof Error
+                        ? updateEventState.error.message
+                        : undefined
+                }
             />
 
-            {/* Delete Confirmation Dialog */}
-            <Dialog open={deleteConfirmDialog.open} onClose={cancelDeleteEvent} maxWidth="sm" fullWidth>
-                <DialogTitle>Delete Event</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body1" gutterBottom>
-                        Are you sure you want to delete the event &quot;{deleteConfirmDialog.eventName}&quot;?
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        This action cannot be undone. The event will be permanently removed from your Google Calendar.
-                    </Typography>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={cancelDeleteEvent} disabled={deleteEventState.isLoading}>
-                        Cancel
-                    </Button>
-                    <Button 
-                        variant="contained" 
-                        color="error" 
-                        onClick={confirmDeleteEvent}
-                        disabled={deleteEventState.isLoading}
-                    >
-                        {deleteEventState.isLoading ? 'Deleting...' : 'Delete'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
-        </Container>
+            <Modal
+                open={deleteConfirmDialog.open}
+                onClose={cancelDeleteEvent}
+                title="Delete Event"
+                footer={
+                    <>
+                        <button
+                            type="button"
+                            onClick={cancelDeleteEvent}
+                            disabled={deleteEventState.isLoading}
+                            className="ui-btn-secondary w-full sm:w-auto"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={confirmDeleteEvent}
+                            disabled={deleteEventState.isLoading}
+                            className="ui-btn-danger w-full sm:w-auto"
+                        >
+                            {deleteEventState.isLoading ? 'Deleting...' : 'Delete'}
+                        </button>
+                    </>
+                }
+            >
+                <p className="mb-3 text-ide-text">
+                    Are you sure you want to delete the event &quot;{deleteConfirmDialog.eventName}&quot;?
+                </p>
+                <p className="text-sm text-ide-muted">
+                    This action cannot be undone. The event will be permanently removed from your Google
+                    Calendar.
+                </p>
+            </Modal>
+        </div>
     );
 };
 
-export default CalendarPage; 
+export default CalendarPage;

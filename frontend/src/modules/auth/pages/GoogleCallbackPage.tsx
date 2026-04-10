@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Box, CircularProgress, Typography } from '@mui/material';
 import { googleCalendarAPI } from '../../../api/google-calendar.api';
 import { toast } from 'react-toastify';
+import { Spinner } from '../../../ui/Spinner';
 
 const GoogleCallbackPage: React.FC = () => {
     const [searchParams] = useSearchParams();
@@ -32,20 +32,11 @@ const GoogleCallbackPage: React.FC = () => {
     }, [code, navigate]);
 
     return (
-        <Box
-            sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                minHeight: '100vh',
-                gap: 2,
-            }}
-        >
-            <CircularProgress />
-            <Typography variant="h6">Connecting Google Calendar...</Typography>
-        </Box>
+        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-ide-bg text-ide-text">
+            <Spinner className="h-10 w-10" />
+            <p className="text-lg font-medium text-ide-text">Connecting Google Calendar...</p>
+        </div>
     );
 };
 
-export default GoogleCallbackPage; 
+export default GoogleCallbackPage;

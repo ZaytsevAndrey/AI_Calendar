@@ -35,40 +35,8 @@ export default async () => ({
                 exclude: /node_modules/,
             },
             {
-                test: /\.module\.scss$/,
-                use: [
-                    'style-loader',
-                    {
-                        loader: 'css-loader',
-                        options: { modules: true },
-                    },
-                    {
-                        loader: 'sass-loader',
-                        options: {
-                            implementation: (await import('sass')).default,
-                            sassOptions: {},
-                        },
-                    },
-                ],
-            },
-            {
-                test: /\.scss$/,
-                exclude: /\.module\.scss$/,
-                use: [
-                    'style-loader',
-                    'css-loader',
-                    {
-                        loader: 'sass-loader',
-                        options: {
-                            implementation: (await import('sass')).default,
-                            sassOptions: {},
-                        },
-                    },
-                ],
-            },
-            {
                 test: /\.css$/,
-                use: ['style-loader', 'css-loader'],
+                use: ['style-loader', 'css-loader', 'postcss-loader'],
             },
         ],
     },
