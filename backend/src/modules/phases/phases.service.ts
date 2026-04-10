@@ -19,17 +19,25 @@ export class PhasesService {
     private userSettingsRepository: Repository<UserSettings>,
   ) {}
 
+  /** Нормалізація днів тижня для збереження; порожній масив → усі дні (`null`). */
+  private normalizeWeekDays(weekDays?: number[] | null): number[] | null {
+    if (!weekDays?.length) return null;
+    return [...new Set(weekDays)].sort((a, b) => a - b);
+  }
+
   /**
-   * Creates default sleep + focus (wake→sleep) phases from user settings when the user has none.
-   * Sleep window uses overnight span (sleepTime → wakeTime), same convention as the scheduler.
+   * Внутрішньо: створює Sleep + Focus, якщо фаз ще немає. Викликається з `setupDefaultPhases`.
    */
   async ensureDefaultPhasesForUser(
     userId: string,
     wakeTime: string,
     sleepTime: string,
+    weekDays?: number[] | null,
   ): Promise<void> {
     const n = await this.phasesRepository.count({ where: { userId } });
     if (n > 0) return;
+
+    const wd = this.normalizeWeekDays(weekDays);
 
     const sleep = this.phasesRepository.create({
       userId,
@@ -39,6 +47,7 @@ export class PhasesService {
       startTime: sleepTime,
       endTime: wakeTime,
       type: 'sleep_time',
+      weekDays: wd,
     });
     const focus = this.phasesRepository.create({
       userId,
@@ -48,87 +57,56 @@ export class PhasesService {
       startTime: wakeTime,
       endTime: sleepTime,
       type: 'time_phase',
+      weekDays: wd,
     });
     await this.phasesRepository.save([sleep, focus]);
   }
 
-  private checkPhaseOverlap(
+  /** Creates Sleep + Focus from user settings when the user has no phases (first-time setup). */
+  async setupDefaultPhases(
     userId: string,
-    startTime: string,
-    endTime: string,
-    weekDays: number[],
-    excludeId?: string,
-  ): Promise<Phase | null> {
-    const timeToMinutes = (time: string) => {
-      const [hours, minutes] = time.split(':').map(Number);
-      return hours * 60 + minutes;
-    };
-    const startMinutes = timeToMinutes(startTime);
-    const endMinutes = timeToMinutes(endTime);
-    return this.phasesRepository
-      .createQueryBuilder('phase')
-      .where('phase.userId = :userId', { userId })
-      .andWhere(excludeId ? 'phase.id != :excludeId' : '1=1', excludeId ? { excludeId } : {})
-      .getMany()
-      .then((phases) => {
-        for (const phase of phases) {
-          const hasCommonDays = weekDays.some(
-            (day) =>
-              !phase.weekDays ||
-              phase.weekDays.length === 0 ||
-              phase.weekDays.includes(day),
-          );
-          if (hasCommonDays) {
-            const catStartMinutes = timeToMinutes(phase.startTime);
-            const catEndMinutes = timeToMinutes(phase.endTime);
-            if (
-              (startMinutes >= catStartMinutes &&
-                startMinutes < catEndMinutes) ||
-              (endMinutes > catStartMinutes && endMinutes <= catEndMinutes) ||
-              (startMinutes <= catStartMinutes && endMinutes >= catEndMinutes)
-            ) {
-              return phase;
-            }
-          }
-        }
-        return null;
-      });
+    weekDays?: number[] | null,
+  ): Promise<Phase[]> {
+    const n = await this.phasesRepository.count({ where: { userId } });
+    if (n > 0) {
+      throw new BadRequestException('Phases already exist for this user');
+    }
+    const settings = await this.userSettingsRepository.findOne({
+      where: { userId },
+    });
+    if (!settings) {
+      throw new BadRequestException('User settings not found');
+    }
+    await this.ensureDefaultPhasesForUser(
+      userId,
+      settings.wakeTime,
+      settings.sleepTime,
+      weekDays ?? null,
+    );
+    return this.phasesRepository.find({
+      where: { userId },
+      order: { name: 'ASC' },
+      relations: ['subphases', 'tasks'],
+    });
+  }
+
+  countForUser(userId: string): Promise<number> {
+    return this.phasesRepository.count({ where: { userId } });
   }
 
   async create(
     userId: string,
     createPhaseDto: CreatePhaseDto,
   ): Promise<Phase> {
-    const overlappingPhase = await this.checkPhaseOverlap(
-      userId,
-      createPhaseDto.startTime,
-      createPhaseDto.endTime,
-      createPhaseDto.weekDays || [],
-    );
-    if (overlappingPhase) {
-      throw new BadRequestException(
-        `Phase overlaps with "${overlappingPhase.name}" (${overlappingPhase.startTime}-${overlappingPhase.endTime})`,
-      );
-    }
     const phase = this.phasesRepository.create({
       ...createPhaseDto,
       userId,
+      weekDays: this.normalizeWeekDays(createPhaseDto.weekDays ?? null),
     });
     return this.phasesRepository.save(phase);
   }
 
   async findAll(userId: string): Promise<Phase[]> {
-    const n = await this.phasesRepository.count({ where: { userId } });
-    if (n === 0) {
-      const settings = await this.userSettingsRepository.findOne({
-        where: { userId },
-      });
-      await this.ensureDefaultPhasesForUser(
-        userId,
-        settings?.wakeTime ?? '07:00',
-        settings?.sleepTime ?? '22:00',
-      );
-    }
     return this.phasesRepository.find({
       where: { userId },
       order: { name: 'ASC' },
@@ -153,19 +131,13 @@ export class PhasesService {
     updatePhaseDto: UpdatePhaseDto,
   ): Promise<Phase> {
     const phase = await this.findOne(id, userId);
-    const overlappingPhase = await this.checkPhaseOverlap(
-      userId,
-      updatePhaseDto.startTime || phase.startTime,
-      updatePhaseDto.endTime || phase.endTime,
-      updatePhaseDto.weekDays || phase.weekDays || [],
-      id,
-    );
-    if (overlappingPhase) {
-      throw new BadRequestException(
-        `Phase overlaps with "${overlappingPhase.name}" (${overlappingPhase.startTime}-${overlappingPhase.endTime})`,
-      );
-    }
     const updatedPhase = this.phasesRepository.merge(phase, updatePhaseDto);
+    if (
+      updatePhaseDto.weekDays !== undefined &&
+      (!updatePhaseDto.weekDays || updatePhaseDto.weekDays.length === 0)
+    ) {
+      updatedPhase.weekDays = null;
+    }
     return this.phasesRepository.save(updatedPhase);
   }
 

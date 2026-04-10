@@ -17,6 +17,12 @@ export const useSettingsCheck = () => {
         dispatch(setSettingsChecked(true));
         if (!result.requiredFilled && location.pathname !== '/settings') {
           navigate('/settings');
+        } else if (
+          result.requiredFilled &&
+          !result.hasPhases &&
+          location.pathname !== '/setup/phases'
+        ) {
+          navigate('/setup/phases');
         }
       }
     };

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UserSettingsController } from './user-settings.controller';
 import { UserSettingsService } from './user-settings.service';
+import { PhasesService } from '../phases/phases.service';
 
 describe('UserSettingsController', () => {
   let controller: UserSettingsController;
@@ -14,6 +15,12 @@ describe('UserSettingsController', () => {
           useValue: {
             getSettings: jest.fn(),
             updateSettings: jest.fn(),
+          },
+        },
+        {
+          provide: PhasesService,
+          useValue: {
+            countForUser: jest.fn().mockResolvedValue(0),
           },
         },
       ],

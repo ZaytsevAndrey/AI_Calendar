@@ -25,10 +25,9 @@ interface PhaseFormProps {
   initialData?: PhaseDTO;
   onSubmit: (data: CreatePhaseDTO | UpdatePhaseDTO) => void;
   isSubmitting: boolean;
-  phases?: PhaseDTO[];
 }
 
-const PhaseForm = ({ initialData, onSubmit, isSubmitting, phases = [] }: PhaseFormProps) => {
+const PhaseForm = ({ initialData, onSubmit, isSubmitting }: PhaseFormProps) => {
   const { data: userSettings } = useGetUserSettingsQuery();
   const [selectedDays, setSelectedDays] = useState<number[]>(initialData?.weekDays || [1,2,3,4,5]);
   
@@ -50,13 +49,11 @@ const PhaseForm = ({ initialData, onSubmit, isSubmitting, phases = [] }: PhaseFo
   const watchedValues = watch();
   
   // Використовуємо кастомний хук для валідації
-  const { overlapError, sleepError } = usePhaseValidation({
+  const { sleepError } = usePhaseValidation({
     startTime: watchedValues.startTime,
     endTime: watchedValues.endTime,
     selectedDays,
-    phases,
-    currentPhaseId: initialData?.id,
-    userSettings
+    userSettings,
   });
 
   // Синхронізуємо вибрані дні з формою
@@ -67,10 +64,6 @@ const PhaseForm = ({ initialData, onSubmit, isSubmitting, phases = [] }: PhaseFo
   const submitHandler = (data: PhaseFormData) => {
     if (sleepError) {
       alert(sleepError);
-      return;
-    }
-    if (overlapError) {
-      alert(overlapError);
       return;
     }
     onSubmit({ ...data, weekDays: selectedDays });
@@ -109,14 +102,6 @@ const PhaseForm = ({ initialData, onSubmit, isSubmitting, phases = [] }: PhaseFo
           </span>
         </div>
       )}
-      {overlapError && (
-        <div className="form-group">
-          <span className="error-message validation-error">
-            ⚠️ {overlapError}
-          </span>
-        </div>
-      )}
-
       <WeekDaysSelector 
         selectedDays={selectedDays}
         setSelectedDays={setSelectedDays}
@@ -126,7 +111,7 @@ const PhaseForm = ({ initialData, onSubmit, isSubmitting, phases = [] }: PhaseFo
       <div className="form-actions">
         <button 
           type="submit" 
-          disabled={isSubmitting || !!overlapError || !!sleepError} 
+          disabled={isSubmitting || !!sleepError} 
           className="primary-button"
         >
           {isSubmitting ? 'Saving...' : initialData ? 'Update Phase' : 'Create Phase'}

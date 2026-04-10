@@ -15,6 +15,11 @@ export interface UserSettingsDTO {
   updatedAt: string;
 }
 
+export interface UserSettingsRequiredDTO {
+  requiredFilled: boolean;
+  hasPhases: boolean;
+}
+
 export interface UpdateUserSettingsDTO {
   wakeTime?: string;
   sleepTime?: string;
@@ -39,10 +44,10 @@ export const UserSettingsApi = {
     return response.data as UserSettingsDTO;
   },
 
-  checkRequiredSettings: async (): Promise<{ requiredFilled: boolean }> => {
+  checkRequiredSettings: async (): Promise<UserSettingsRequiredDTO> => {
     const response = await apiCall({ method: 'GET', url: '/user-settings/required' });
     if (!response) throw new Error('No response from server');
-    return response.data as { requiredFilled: boolean };
+    return response.data as UserSettingsRequiredDTO;
   },
 
 

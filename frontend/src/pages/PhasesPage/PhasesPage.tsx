@@ -1,5 +1,5 @@
 import { useGetAllPhasesQuery, useCreatePhaseMutation, useUpdatePhaseMutation, useDeletePhaseMutation } from 'api/phasesApi';
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import PhaseForm from 'modules/phases/components/PhaseForm';
 import type { PhaseDTO } from 'api/phases.api';
 import './styles.scss';
@@ -9,6 +9,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
 import PhasesCalendar from 'modules/phases/components/PhasesCalendar';
+import { showErrorToast } from 'utils/toast';
 
 const PhasesPage: React.FC = () => {
   const { data: phases = [], isLoading, error } = useGetAllPhasesQuery();
@@ -44,6 +45,18 @@ const PhasesPage: React.FC = () => {
     setEditingPhase(null);
   };
 
+  const handlePhaseTimeChange = useCallback(
+    async (phaseId: string, startTime: string, endTime: string) => {
+      try {
+        await updatePhase({ id: phaseId, phase: { startTime, endTime } }).unwrap();
+      } catch {
+        showErrorToast('Не вдалося оновити час фази.');
+        throw new Error('phase-update-failed');
+      }
+    },
+    [updatePhase],
+  );
+
   if (isLoading) return <div className="categories-container loading">Loading...</div>;
   if (error) return <div className="categories-container">Error loading phases</div>;
 
@@ -63,7 +76,6 @@ const PhasesPage: React.FC = () => {
             initialData={editingPhase}
             onSubmit={handleFormSubmit}
             isSubmitting={isCreating || isUpdating}
-            phases={phases}
           />
         </DialogContent>
         <DialogActions>
@@ -72,7 +84,11 @@ const PhasesPage: React.FC = () => {
       </Dialog>
       
       {/* Додаємо календар фаз */}
-      <PhasesCalendar phases={phases} onEditPhase={handleEdit} />
+      <PhasesCalendar
+        phases={phases}
+        onEditPhase={handleEdit}
+        onPhaseTimeChange={handlePhaseTimeChange}
+      />
 
       <div className="categories-container">
         {phases.length === 0 ? (

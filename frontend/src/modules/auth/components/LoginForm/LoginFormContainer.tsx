@@ -31,24 +31,18 @@ const LoginFormContainer = () => {
 
     useEffect(() => {
         if (loginStatus === requestsStatuses.success) {
-            console.log('Login successful, checking required settings...');
-            // Перевіряємо required settings після успішного логіну
             const checkRequiredSettings = async () => {
                 try {
-                    console.log('Calling UserSettingsApi.checkRequiredSettings()...');
                     const response = await UserSettingsApi.checkRequiredSettings();
-                    const hasRequiredSettings = response.requiredFilled;
-                    console.log('Required settings check result:', hasRequiredSettings);
-                    
-                    // Якщо всі required settings заповнені - на головну сторінку
-                    // Інакше - на сторінку налаштувань
-                    const redirectUrl = hasRequiredSettings ? '/' : '/settings';
-                    console.log('Redirecting to:', redirectUrl);
+                    const { requiredFilled, hasPhases } = response;
+                    let redirectUrl = '/';
+                    if (!requiredFilled) {
+                        redirectUrl = '/settings';
+                    } else if (!hasPhases) {
+                        redirectUrl = '/setup/phases';
+                    }
                     navigate(redirectUrl);
-                } catch (error) {
-                    console.error('Error checking required settings:', error);
-                    // Якщо не можемо перевірити - перенаправляємо на налаштування
-                    console.log('Redirecting to /settings due to error');
+                } catch {
                     navigate('/settings');
                 }
             };

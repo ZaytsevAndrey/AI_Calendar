@@ -1,6 +1,7 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import apiCall from '../modules/common/utils/apiCall';
 import { PhaseDTO, CreatePhaseDTO, UpdatePhaseDTO } from './phases.api';
+import { userSettingsApi } from './userSettingsApi';
 
 export const phasesApi = createApi({
   reducerPath: 'phasesApi',
@@ -30,6 +31,22 @@ export const phasesApi = createApi({
     createPhase: builder.mutation<PhaseDTO, CreatePhaseDTO>({
       query: (phase) => ({ url: '/phases', method: 'POST', data: phase }),
       invalidatesTags: [{ type: 'Phases', id: 'LIST' }],
+    }),
+    setupDefaultPhases: builder.mutation<PhaseDTO[], { weekDays?: number[] } | void>({
+      query: (arg) => ({
+        url: '/phases/setup-defaults',
+        method: 'POST',
+        data: arg && typeof arg === 'object' ? arg : {},
+      }),
+      invalidatesTags: [{ type: 'Phases', id: 'LIST' }],
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled;
+          dispatch(userSettingsApi.util.invalidateTags(['UserSettingsRequired']));
+        } catch {
+          /* noop */
+        }
+      },
     }),
     updatePhase: builder.mutation<PhaseDTO, { id: string; phase: UpdatePhaseDTO }>({
       query: ({ id, phase }) => ({ url: `/phases/${id}`, method: 'PATCH', data: phase }),
@@ -61,6 +78,7 @@ export const {
   useGetAllPhasesQuery,
   useGetPhaseQuery,
   useCreatePhaseMutation,
+  useSetupDefaultPhasesMutation,
   useUpdatePhaseMutation,
   useDeletePhaseMutation,
   useGetTimePhasesQuery,

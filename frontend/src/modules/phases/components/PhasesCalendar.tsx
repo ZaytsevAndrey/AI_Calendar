@@ -1,237 +1,417 @@
-import React from 'react';
-import { Box, Typography, Paper } from '@mui/material';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { Box, Paper, Typography } from '@mui/material';
 import { PhaseDTO } from 'api/phases.api';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
-import { timeToMinutes } from '../utils/phasesTimeUtils';
+import {
+  minutesToTime,
+  snapMinutes,
+  timeToMinutes,
+} from '../utils/phasesTimeUtils';
+
+const PX_PER_HOUR = 44;
+const SNAP_MIN = 15;
+const MIN_DURATION_MIN = 15;
+const HANDLE_PX = 8;
+
+const COLUMNS: { dow: number; label: string }[] = [
+  { dow: 1, label: 'Пн' },
+  { dow: 2, label: 'Вт' },
+  { dow: 3, label: 'Ср' },
+  { dow: 4, label: 'Чт' },
+  { dow: 5, label: 'Пт' },
+  { dow: 6, label: 'Сб' },
+  { dow: 0, label: 'Нд' },
+];
 
 interface PhasesCalendarProps {
   phases: PhaseDTO[];
   onEditPhase?: (phase: PhaseDTO) => void;
+  onPhaseTimeChange?: (
+    phaseId: string,
+    startTime: string,
+    endTime: string,
+  ) => Promise<void>;
 }
 
-const PhasesCalendar: React.FC<PhasesCalendarProps> = ({ phases, onEditPhase }) => {
-  // Отримуємо налаштування користувача для часу сну
+function phaseAppliesOnDay(phase: PhaseDTO, dayOfWeek: number): boolean {
+  if (!phase.weekDays || phase.weekDays.length === 0) return true;
+  return phase.weekDays.includes(dayOfWeek);
+}
+
+const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
+  phases,
+  onEditPhase,
+  onPhaseTimeChange,
+}) => {
   const { data: userSettings } = useGetUserSettingsQuery();
+  const wake = userSettings?.wakeTime || '07:00';
+  const sleep = userSettings?.sleepTime || '22:00';
+  const dayStartMin = timeToMinutes(wake);
+  const dayEndMin = timeToMinutes(sleep);
+  const daySpanMin = Math.max(dayEndMin - dayStartMin, 60);
+  const gridHeightPx = (daySpanMin / 60) * PX_PER_HOUR;
 
-  // Витягуємо початок і кінець дня з userSettings
-  const startTime = userSettings?.wakeTime || '07:00';
-  const endTime = userSettings?.sleepTime || '22:00';
-  const startTimeMinutes = timeToMinutes(startTime);
-  const endTimeMinutes = timeToMinutes(endTime);
+  const onPhaseTimeChangeRef = useRef(onPhaseTimeChange);
+  onPhaseTimeChangeRef.current = onPhaseTimeChange;
 
-  // Створюємо масив днів тижня (без конкретних дат)
-  const getWeekDays = () => {
-    const days = [];
-    for (let i = 1; i <= 6; i++) {
-      days.push(i); // 1 = Monday, ..., 6 = Saturday
+  const hourLabels = useMemo(() => {
+    const labels: { minutes: number; label: string }[] = [];
+    const startH = Math.floor(dayStartMin / 60);
+    const endH = Math.ceil(dayEndMin / 60);
+    for (let h = startH; h <= endH; h++) {
+      const m = h * 60;
+      if (m >= dayStartMin && m <= dayEndMin) {
+        labels.push({ minutes: m, label: minutesToTime(m) });
+      }
     }
-    days.push(0); // 0 = Sunday
-    return days;
+    return labels;
+  }, [dayStartMin, dayEndMin]);
+
+  const displayPhases = useMemo(
+    () => phases.filter((p) => p.type !== 'sleep_time'),
+    [phases],
+  );
+
+  const [live, setLive] = useState<{
+    phaseId: string;
+    dayOfWeek: number;
+    startMin: number;
+    endMin: number;
+  } | null>(null);
+
+  const skipClickAfterDragRef = useRef(false);
+
+  const minutesFromY = (
+    clientY: number,
+    columnEl: HTMLElement,
+  ): number => {
+    const rect = columnEl.getBoundingClientRect();
+    const y = Math.max(0, Math.min(gridHeightPx, clientY - rect.top));
+    const rawMin = dayStartMin + (y / gridHeightPx) * daySpanMin;
+    return snapMinutes(
+      Math.max(dayStartMin, Math.min(dayEndMin - 1, rawMin)),
+      SNAP_MIN,
+    );
   };
 
-  // Створюємо часові слоти тільки в межах дня
-  const getTimeSlots = () => {
-    const slots = [];
-    for (let hour = startTimeMinutes / 60; hour <= endTimeMinutes / 60; hour++) {
-      const time = `${hour.toString().padStart(2, '0')}:00`;
-      slots.push(time);
-    }
-    return slots;
+  const bindDragSession = useCallback(
+    (
+      phaseId: string,
+      dayOfWeek: number,
+      initStart: number,
+      initEnd: number,
+      mode: 'move' | 'resize-start' | 'resize-end',
+      grabOffsetMin: number,
+    ) => {
+      const col = document.getElementById(`phase-col-${dayOfWeek}`);
+      if (!col || !onPhaseTimeChangeRef.current) return;
+
+      let startMin = initStart;
+      let endMin = initEnd;
+      let moved = false;
+
+      const syncLive = () => {
+        setLive({ phaseId, dayOfWeek, startMin, endMin });
+      };
+      syncLive();
+
+      const handleMove = (e: PointerEvent) => {
+        moved = true;
+        if (mode === 'move') {
+          let nextStart = minutesFromY(e.clientY, col) - grabOffsetMin;
+          nextStart = snapMinutes(nextStart, SNAP_MIN);
+          const dur = endMin - startMin;
+          const maxStart = dayEndMin - dur;
+          nextStart = Math.max(dayStartMin, Math.min(maxStart, nextStart));
+          startMin = nextStart;
+          endMin = nextStart + dur;
+        } else if (mode === 'resize-start') {
+          let nextStart = minutesFromY(e.clientY, col);
+          nextStart = Math.max(
+            dayStartMin,
+            Math.min(endMin - MIN_DURATION_MIN, nextStart),
+          );
+          nextStart = snapMinutes(nextStart, SNAP_MIN);
+          startMin = nextStart;
+        } else {
+          let nextEnd = minutesFromY(e.clientY, col);
+          nextEnd = Math.max(
+            startMin + MIN_DURATION_MIN,
+            Math.min(dayEndMin, nextEnd),
+          );
+          nextEnd = snapMinutes(nextEnd, SNAP_MIN);
+          endMin = nextEnd;
+        }
+        syncLive();
+      };
+
+      const handleUp = async () => {
+        window.removeEventListener('pointermove', handleMove);
+        window.removeEventListener('pointerup', handleUp);
+        window.removeEventListener('pointercancel', handleUp);
+        setLive(null);
+
+        if (!moved || !onPhaseTimeChangeRef.current) return;
+        if (endMin <= startMin || endMin - startMin < MIN_DURATION_MIN) return;
+
+        skipClickAfterDragRef.current = true;
+        try {
+          await onPhaseTimeChangeRef.current(
+            phaseId,
+            minutesToTime(startMin),
+            minutesToTime(endMin),
+          );
+        } catch {
+          skipClickAfterDragRef.current = false;
+          return;
+        }
+        setTimeout(() => {
+          skipClickAfterDragRef.current = false;
+        }, 0);
+      };
+
+      window.addEventListener('pointermove', handleMove);
+      window.addEventListener('pointerup', handleUp);
+      window.addEventListener('pointercancel', handleUp);
+    },
+    [dayStartMin, dayEndMin, daySpanMin, gridHeightPx],
+  );
+
+  const startMove = (
+    e: React.PointerEvent,
+    phase: PhaseDTO,
+    dayOfWeek: number,
+  ) => {
+    if (!onPhaseTimeChange) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const col = document.getElementById(`phase-col-${dayOfWeek}`);
+    if (!col) return;
+    const startMin = timeToMinutes(phase.startTime);
+    const endMin = timeToMinutes(phase.endTime);
+    if (endMin <= startMin) return;
+    const rect = col.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const blockTop = ((startMin - dayStartMin) / daySpanMin) * gridHeightPx;
+    const grabOffsetMin = ((y - blockTop) / gridHeightPx) * daySpanMin;
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    bindDragSession(phase.id, dayOfWeek, startMin, endMin, 'move', grabOffsetMin);
   };
 
-  // Фільтруємо фази - приховуємо час сну
-  const getDisplayPhases = () => {
-    console.log('All phases:', phases);
-    const filtered = phases.filter(phase => phase.type !== 'sleep_time');
-    console.log('Filtered phases (excluding sleep):', filtered);
-    return filtered;
+  const startResizeStart = (e: React.PointerEvent, phase: PhaseDTO, dayOfWeek: number) => {
+    if (!onPhaseTimeChange) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startMin = timeToMinutes(phase.startTime);
+    const endMin = timeToMinutes(phase.endTime);
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    bindDragSession(phase.id, dayOfWeek, startMin, endMin, 'resize-start', 0);
   };
 
-  // Перевіряємо, чи час входить в час сну
-  const isSleepTime = (time: string): boolean => {
-    console.log('Checking sleep time for:', time);
-    console.log('User settings:', userSettings);
-    
-    if (!userSettings?.sleepTime) {
-      console.log('No sleep time set, returning false');
-      return false;
-    }
-
-    const timeMinutes = timeToMinutes(time);
-    const sleepMinutes = timeToMinutes(userSettings.sleepTime);
-    
-    // Припускаємо, що час сну триває 8 годин
-    const sleepDuration = 8 * 60; // 8 годин у хвилинах
-    const sleepStartMinutes = sleepMinutes;
-    const sleepEndMinutes = (sleepMinutes + sleepDuration) % (24 * 60); // Обмежуємо до 24 годин
-
-    console.log(`Sleep calculation: start=${sleepStartMinutes}, end=${sleepEndMinutes}, current=${timeMinutes}`);
-
-    if (sleepStartMinutes > sleepEndMinutes) {
-      // Час сну перетинає північ
-      const isSleep = timeMinutes >= sleepStartMinutes || timeMinutes <= sleepEndMinutes;
-      console.log(`Sleep crosses midnight, isSleep: ${isSleep}`);
-      return isSleep;
-    } else {
-      const isSleep = timeMinutes >= sleepStartMinutes && timeMinutes <= sleepEndMinutes;
-      console.log(`Normal sleep time, isSleep: ${isSleep}`);
-      return isSleep;
-    }
+  const startResizeEnd = (e: React.PointerEvent, phase: PhaseDTO, dayOfWeek: number) => {
+    if (!onPhaseTimeChange) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startMin = timeToMinutes(phase.startTime);
+    const endMin = timeToMinutes(phase.endTime);
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    bindDragSession(phase.id, dayOfWeek, startMin, endMin, 'resize-end', 0);
   };
 
-  const weekDays = getWeekDays();
-  const timeSlots = getTimeSlots();
-  const displayPhases = getDisplayPhases();
-
-  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const blockMetrics = (
+    phase: PhaseDTO,
+    dayOfWeek: number,
+  ): { top: string; height: string } | null => {
+    let startMin = timeToMinutes(phase.startTime);
+    let endMin = timeToMinutes(phase.endTime);
+    if (live && live.phaseId === phase.id && live.dayOfWeek === dayOfWeek) {
+      startMin = live.startMin;
+      endMin = live.endMin;
+    }
+    if (endMin <= startMin) return null;
+    const top = ((startMin - dayStartMin) / daySpanMin) * gridHeightPx;
+    const height = ((endMin - startMin) / daySpanMin) * gridHeightPx;
+    return {
+      top: `${Math.max(0, top)}px`,
+      height: `${Math.max(HANDLE_PX * 2, height)}px`,
+    };
+  };
 
   return (
-    <Paper sx={{ p: 2, mt: 2 }}>
+    <Paper sx={{ p: 2, mt: 2, overflow: 'auto' }}>
       <Typography variant="h6" gutterBottom>
-        Weekly Phases Template
+        Тижневий шаблон фаз
       </Typography>
-      
-      <Box sx={{ 
-        display: 'grid', 
-        gridTemplateColumns: '80px repeat(7, 1fr)',
-        gap: 1
-      }}>
-        {/* Заголовок з днями тижня */}
-        <Box sx={{ 
-          p: 1, 
-          backgroundColor: 'grey.100', 
-          borderBottom: '1px solid #e0e0e0',
-          fontWeight: 'bold',
-          textAlign: 'center'
-        }}>
-          Time
-        </Box>
-        {weekDays.map((dayOfWeek, index) => (
-          <Box 
-            key={dayOfWeek}
-            sx={{ 
-              p: 1, 
-              backgroundColor: 'grey.100', 
-              borderBottom: '1px solid #e0e0e0',
-              fontWeight: 'bold',
-              textAlign: 'center'
+      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+        Тягніть блок або верхній/нижній край. Крок {SNAP_MIN} хв. Клік по середині — редагування.
+      </Typography>
+
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: `56px repeat(${COLUMNS.length}, minmax(72px, 1fr))`,
+          gap: 0,
+          minWidth: 520,
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: 1,
+        }}
+      >
+        <Box
+          sx={{
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'action.hover',
+            p: 0.5,
+          }}
+        />
+        {COLUMNS.map(({ dow, label }) => (
+          <Box
+            key={dow}
+            sx={{
+              borderBottom: '1px solid',
+              borderLeft: '1px solid',
+              borderColor: 'divider',
+              bgcolor: 'action.hover',
+              p: 0.5,
+              textAlign: 'center',
             }}
           >
-            <Typography variant="caption" display="block">
-              {dayNames[index]}
+            <Typography variant="caption" fontWeight={600}>
+              {label}
             </Typography>
           </Box>
         ))}
 
-        {/* Часові мітки зліва */}
-        <Box sx={{ 
-          position: 'relative',
-          minHeight: '600px',
-          borderRight: '1px solid #e0e0e0',
-          backgroundColor: 'grey.50'
-        }}>
-          {timeSlots.filter(time => !isSleepTime(time)).map((time, index) => {
-            const timeMinutes = timeToMinutes(time);
-            // Замість жорстко заданого '09:00' використовуємо startTime
-            const startTimeMinutes = timeToMinutes(startTime);
-            const timeDiff = timeMinutes - startTimeMinutes;
-            const top = (timeDiff / 60) * 40 + (index * 1); // 40px на годину + бордери
-            
+        <Box
+          sx={{
+            position: 'relative',
+            borderRight: '1px solid',
+            borderColor: 'divider',
+            height: gridHeightPx,
+            bgcolor: 'grey.50',
+          }}
+        >
+          {hourLabels.map(({ minutes, label }) => {
+            const top = ((minutes - dayStartMin) / daySpanMin) * gridHeightPx;
             return (
-              <Box
-                key={time}
+              <Typography
+                key={label}
+                variant="caption"
                 sx={{
                   position: 'absolute',
                   top: `${top}px`,
-                  left: 0,
-                  right: 0,
-                  height: '40px',
-                  fontSize: '0.6rem',
-                  color: 'grey.600',
-                  padding: '2px 4px',
-                  borderTop: '1px solid rgba(0,0,0,0.1)',
-                  backgroundColor: 'rgba(255,255,255,0.5)',
-                  display: 'flex',
-                  alignItems: 'center'
+                  left: 4,
+                  right: 2,
+                  fontSize: '0.65rem',
+                  color: 'text.secondary',
+                  lineHeight: 1,
                 }}
               >
-                {time}
-              </Box>
+                {label}
+              </Typography>
             );
           })}
         </Box>
 
-        {/* Суцільні прямокутники фаз для кожного дня */}
-        {weekDays.map((dayOfWeek, dayIndex) => {
-          const phases = getDisplayPhases().filter(phase => {
-            if (!phase.weekDays || phase.weekDays.length === 0) {
-              return true; // Show for all days if not specified
-            }
-            return phase.weekDays.includes(dayOfWeek);
-          });
-
+        {COLUMNS.map(({ dow: dayOfWeek }, dayIndex) => {
+          const colPhases = displayPhases.filter((p) =>
+            phaseAppliesOnDay(p, dayOfWeek),
+          );
           return (
             <Box
-              key={`day-${dayOfWeek}`}
+              key={dayOfWeek}
+              id={`phase-col-${dayOfWeek}`}
               sx={{
                 position: 'relative',
-                minHeight: '600px',
-                borderRight: dayIndex < 6 ? '1px solid #e0e0e0' : 'none',
-                backgroundColor: 'grey.50'
+                height: gridHeightPx,
+                borderLeft: '1px solid',
+                borderRight:
+                  dayIndex < COLUMNS.length - 1 ? '1px solid' : undefined,
+                borderColor: 'divider',
+                bgcolor: 'grey.50',
               }}
             >
-              {/* Відображаємо фази як суцільні прямокутники */}
-              {phases.map((phase) => {
-                const startMinutes = timeToMinutes(phase.startTime);
-                const endMinutes = timeToMinutes(phase.endTime);
-                // Замість жорстко заданого '09:00' використовуємо startTime
-                const startTimeMinutes = timeToMinutes(startTime);
-                
-                // Розраховуємо позицію та висоту прямокутника
-                const startDiff = startMinutes - startTimeMinutes;
-                const top = (startDiff / 60) * 40 + Math.floor(startDiff / 60) * 1; // 40px на годину + бордери
-                
-                const duration = endMinutes - startMinutes;
-                const height = (duration / 60) * 40 + Math.floor(duration / 60) * 1; // 40px на годину + бордери
-                
+              {colPhases.map((phase) => {
+                const pos = blockMetrics(phase, dayOfWeek);
+                if (!pos) return null;
                 return (
                   <Box
                     key={`${dayOfWeek}-${phase.id}`}
                     sx={{
                       position: 'absolute',
-                      top: `${top}px`,
-                      left: '2px',
-                      right: '2px',
-                      height: `${height}px`,
-                      backgroundColor: phase.color,
-                      opacity: 0.7, // 70% прозорість тільки для кольору
+                      left: 2,
+                      right: 2,
+                      top: pos.top,
+                      height: pos.height,
+                      borderRadius: 1,
+                      border: '1px solid rgba(0,0,0,0.12)',
+                      overflow: 'hidden',
+                      zIndex: 1,
+                      touchAction: 'none',
                       display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: '1px solid rgba(0,0,0,0.1)',
-                      borderRadius: '2px',
-                      cursor: onEditPhase ? 'pointer' : 'default',
-                      '&:hover': {
-                        opacity: 0.9 // 90% прозорість при hover
-                      }
+                      flexDirection: 'column',
                     }}
-                    title={`${phase.name} (${phase.startTime}-${phase.endTime})`}
-                    onClick={onEditPhase ? () => onEditPhase(phase) : undefined}
                   >
-                    <Typography 
-                      variant="caption" 
-                      sx={{ 
-                        fontSize: '0.7rem',
-                        color: 'white',
-                        fontWeight: 'bold',
-                        textShadow: '1px 1px 2px rgba(0,0,0,0.7)',
-                        textAlign: 'center',
-                        padding: '2px',
-                        lineHeight: 1
+                    {onPhaseTimeChange ? (
+                      <Box
+                        onPointerDown={(e) => startResizeStart(e, phase, dayOfWeek)}
+                        sx={{
+                          height: HANDLE_PX,
+                          cursor: 'ns-resize',
+                          bgcolor: 'rgba(0,0,0,0.15)',
+                          flexShrink: 0,
+                        }}
+                      />
+                    ) : null}
+                    <Box
+                      onPointerDown={(e) => startMove(e, phase, dayOfWeek)}
+                      onClick={(e) => {
+                        if (skipClickAfterDragRef.current) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          skipClickAfterDragRef.current = false;
+                          return;
+                        }
+                        onEditPhase?.(phase);
+                      }}
+                      sx={{
+                        flex: 1,
+                        minHeight: 0,
+                        backgroundColor: phase.color,
+                        opacity: 0.85,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: onPhaseTimeChange ? 'grab' : 'pointer',
                       }}
                     >
-                      {phase.name}
-                    </Typography>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          fontSize: '0.65rem',
+                          color: 'common.white',
+                          fontWeight: 700,
+                          textAlign: 'center',
+                          px: 0.25,
+                          textShadow: '0 1px 2px rgba(0,0,0,0.45)',
+                          lineHeight: 1.15,
+                          pointerEvents: 'none',
+                        }}
+                      >
+                        {phase.name}
+                      </Typography>
+                    </Box>
+                    {onPhaseTimeChange ? (
+                      <Box
+                        onPointerDown={(e) => startResizeEnd(e, phase, dayOfWeek)}
+                        sx={{
+                          height: HANDLE_PX,
+                          cursor: 'ns-resize',
+                          bgcolor: 'rgba(0,0,0,0.15)',
+                        }}
+                      />
+                    ) : null}
                   </Box>
                 );
               })}
@@ -240,48 +420,38 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({ phases, onEditPhase }) 
         })}
       </Box>
 
-      {/* Легенда */}
       {displayPhases.length > 0 && (
         <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          <Typography variant="subtitle2" sx={{ width: '100%', mb: 1 }}>
-            Legend:
+          <Typography variant="subtitle2" sx={{ width: '100%' }}>
+            Легенда
           </Typography>
-          {displayPhases
-            .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime))
+          {[...displayPhases]
+            .sort(
+              (a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime),
+            )
             .map((phase) => (
-            <Box 
-              key={phase.id}
-              sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 0.5,
-                p: 0.5,
-                borderRadius: 1,
-                backgroundColor: phase.color,
-                opacity: 0.7,
-                color: 'white',
-                fontWeight: 'bold',
-                fontSize: '0.8rem'
-              }}
-            >
-              <Box 
-                sx={{ 
-                  width: 12, 
-                  height: 12, 
-                  borderRadius: '50%', 
-                  backgroundColor: 'white',
-                  border: '1px solid rgba(255,255,255,0.3)'
-                }} 
-              />
-              <Typography variant="caption" sx={{ color: 'white', fontWeight: 'bold' }}>
-                {phase.name} ({phase.startTime}-{phase.endTime})
-              </Typography>
-            </Box>
-          ))}
+              <Box
+                key={phase.id}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  px: 1,
+                  py: 0.25,
+                  borderRadius: 1,
+                  bgcolor: phase.color,
+                  color: 'common.white',
+                }}
+              >
+                <Typography variant="caption" fontWeight={600}>
+                  {phase.name} ({phase.startTime}–{phase.endTime})
+                </Typography>
+              </Box>
+            ))}
         </Box>
       )}
     </Paper>
   );
 };
 
-export default PhasesCalendar; 
+export default PhasesCalendar;

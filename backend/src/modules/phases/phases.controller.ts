@@ -18,6 +18,7 @@ import {
 import { PhasesService } from './phases.service';
 import { CreatePhaseDto } from './dto/create-phase.dto';
 import { UpdatePhaseDto } from './dto/update-phase.dto';
+import { SetupDefaultPhasesDto } from './dto/setup-default-phases.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('phases')
@@ -33,6 +34,19 @@ export class PhasesController {
   @ApiResponse({ status: 400, description: 'Bad request.' })
   create(@Request() req, @Body() createPhaseDto: CreatePhaseDto) {
     return this.phasesService.create(req.user.userId, createPhaseDto);
+  }
+
+  @Post('setup-defaults')
+  @ApiOperation({
+    summary: 'Create default Sleep + Focus phases from user settings (once)',
+  })
+  @ApiResponse({ status: 201, description: 'Default phases created.' })
+  @ApiResponse({ status: 400, description: 'Phases already exist.' })
+  setupDefaults(@Request() req, @Body() dto: SetupDefaultPhasesDto) {
+    return this.phasesService.setupDefaultPhases(
+      req.user.userId,
+      dto.weekDays ?? null,
+    );
   }
 
   @Get()

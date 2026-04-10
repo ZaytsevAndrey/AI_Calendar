@@ -43,10 +43,10 @@ Detailed steps:
 ```text
 New feature — progress
 - [ ] Phase 1: Plan + open questions; blocking items answered (or explicitly waived)
-- [ ] Phase 2: Implemented minimal change set
+- [ ] Phase 2: Implemented minimal change set; English in code; root build passes
 - [ ] Phase 3: Removed unused / obsolete code paths
 - [ ] Phase 4: Simplified; aligned with project conventions
-- [ ] Phase 5: Wrap-up (tests, risk notes, summary)
+- [ ] Phase 5: Wrap-up (tests, risk notes, summary; build re-checked if needed)
 ```
 
 ## Reuse in other projects

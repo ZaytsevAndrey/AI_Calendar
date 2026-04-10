@@ -14,7 +14,7 @@ After behavior or requirements shift, remove **unused** or **obsolete** pieces s
    - unused files, functions, types, CSS, copy, translation keys (if applicable)
    - obsolete migrations-only helpers **only** if truly unused and safe
 4. **Tighten public surface**: narrow exports if the feature no longer needs them.
-5. **Run** project checks (typecheck / lint / tests) and fix fallout.
+5. **Run** project checks (typecheck / lint / tests) and the **root build** if that is how the repo validates production output; fix fallout.
 
 ## Guardrails
 

@@ -15,13 +15,17 @@ import {
 import { UserSettingsService } from './user-settings.service';
 import { UpdateUserSettingsDto } from './dto/update-user-settings.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PhasesService } from '../phases/phases.service';
 
 @ApiTags('user-settings')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('user-settings')
 export class UserSettingsController {
-  constructor(private readonly userSettingsService: UserSettingsService) {}
+  constructor(
+    private readonly userSettingsService: UserSettingsService,
+    private readonly phasesService: PhasesService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Get the current user settings' })
@@ -62,6 +66,7 @@ export class UserSettingsController {
       !!settings.wakeTime &&
       !!settings.sleepTime &&
       settings.googleCalendarLinked;
-    return { requiredFilled };
+    const phaseCount = await this.phasesService.countForUser(req.user.userId);
+    return { requiredFilled, hasPhases: phaseCount > 0 };
   }
 }

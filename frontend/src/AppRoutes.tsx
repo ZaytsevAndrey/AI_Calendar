@@ -13,6 +13,7 @@ import SchedulePage from 'pages/SchedulePage';
 import CalendarPage from 'pages/CalendarPage';
 import EventsPage from 'pages/EventsPage';
 import GoogleCallbackPage from 'modules/auth/pages/GoogleCallbackPage';
+import PhaseSetupPage from 'pages/PhaseSetupPage/PhaseSetupPage';
 
 import PublicRoute from 'modules/common/hocs/PublicRoute';
 import ProtectedRoute from 'modules/common/hocs/ProtectedRoute';
@@ -73,6 +74,14 @@ const AppRoutes = () => {
                 element={
                     <ProtectedRoute>
                         <SettingsPage />
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/setup/phases"
+                element={
+                    <ProtectedRoute>
+                        <PhaseSetupPage />
                     </ProtectedRoute>
                 }
             />

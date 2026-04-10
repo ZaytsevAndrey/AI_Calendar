@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UserSettingsService } from './user-settings.service';
 import { UserSettings } from './entities/user-settings.entity';
-import { PhasesService } from '../phases/phases.service';
 
 describe('UserSettingsService', () => {
   let service: UserSettingsService;
@@ -18,12 +17,6 @@ describe('UserSettingsService', () => {
             create: jest.fn(),
             save: jest.fn(),
             merge: jest.fn(),
-          },
-        },
-        {
-          provide: PhasesService,
-          useValue: {
-            ensureDefaultPhasesForUser: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],

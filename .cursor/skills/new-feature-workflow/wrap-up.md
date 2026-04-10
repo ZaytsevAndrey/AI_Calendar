@@ -17,3 +17,4 @@
 - No known **blocking** bugs for the agreed scope
 - No obvious **unused** code left from the change
 - **Simplification** pass completed or explicitly skipped with reason
+- **Build** still succeeds from the project root (or standard CI build)—re-run if there were late edits after Phase 2

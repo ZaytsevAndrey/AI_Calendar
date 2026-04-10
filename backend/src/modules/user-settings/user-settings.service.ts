@@ -3,14 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserSettings } from './entities/user-settings.entity';
 import { UpdateUserSettingsDto } from './dto/update-user-settings.dto';
-import { PhasesService } from '../phases/phases.service';
 
 @Injectable()
 export class UserSettingsService {
   constructor(
     @InjectRepository(UserSettings)
     private userSettingsRepository: Repository<UserSettings>,
-    private readonly phasesService: PhasesService,
   ) {}
 
   async getSettings(userId: string): Promise<UserSettings> {
@@ -46,12 +44,6 @@ export class UserSettingsService {
       // Save updated settings if any defaults were applied
       await this.userSettingsRepository.save(userSettings);
     }
-
-    await this.phasesService.ensureDefaultPhasesForUser(
-      userId,
-      userSettings.wakeTime,
-      userSettings.sleepTime,
-    );
 
     return userSettings;
   }
