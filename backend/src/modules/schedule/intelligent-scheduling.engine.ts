@@ -10,9 +10,12 @@ import {
   TaskEventType,
   getEventTypeRules,
 } from '../scheduling/event-type.enum';
+import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 
-const HORIZON_DAYS = 30;
+const DEFAULT_HORIZON_DAYS = 30;
 const BEYOND_HORIZON_EXTRA_DAYS = 30;
+const MIN_HORIZON_DAYS = 1;
+const MAX_HORIZON_DAYS = 365;
 
 export type SegmentSnapshot = {
   id: string;
@@ -29,6 +32,8 @@ export type DiffItem = {
 };
 
 type MsInterval = { start: number; end: number };
+
+type RecurrencePattern = 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
 
 function atDayWithTime(day: Date, timeStr: string): Date {
   const [h, m] = timeStr.split(':').map(Number);
@@ -115,6 +120,46 @@ function priorityWeight(p: TaskPriority): number {
   }
 }
 
+function normalizeHorizonDays(value?: number | null): number {
+  if (typeof value !== 'number' || Number.isNaN(value)) return DEFAULT_HORIZON_DAYS;
+  return Math.min(MAX_HORIZON_DAYS, Math.max(MIN_HORIZON_DAYS, Math.floor(value)));
+}
+
+function normalizeRecurrencePattern(value?: string | null): RecurrencePattern | null {
+  if (!value) return null;
+  const upper = value.toUpperCase();
+  if (upper === 'DAILY' || upper === 'WEEKLY' || upper === 'BIWEEKLY' || upper === 'MONTHLY') {
+    return upper;
+  }
+  return null;
+}
+
+function taskPreferredIntervalOnDay(task: Task, day: Date): MsInterval | null {
+  if (!task.scheduledStartTime || !task.scheduledEndTime) return null;
+  const startRef = new Date(task.scheduledStartTime);
+  const endRef = new Date(task.scheduledEndTime);
+  const start = new Date(day);
+  start.setHours(startRef.getHours(), startRef.getMinutes(), 0, 0);
+  const end = new Date(day);
+  end.setHours(endRef.getHours(), endRef.getMinutes(), 0, 0);
+  let startMs = start.getTime();
+  let endMs = end.getTime();
+  if (endMs <= startMs) {
+    endMs += 24 * 60 * 60 * 1000;
+  }
+  return { start: startMs, end: endMs };
+}
+
+function advanceOccurrenceStart(from: Date, pattern: RecurrencePattern): Date {
+  const next = new Date(from);
+  if (pattern === 'DAILY') next.setDate(next.getDate() + 1);
+  if (pattern === 'WEEKLY') next.setDate(next.getDate() + 7);
+  if (pattern === 'BIWEEKLY') next.setDate(next.getDate() + 14);
+  if (pattern === 'MONTHLY') next.setMonth(next.getMonth() + 1);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
 @Injectable()
 export class IntelligentSchedulingEngine {
   constructor(
@@ -123,6 +168,7 @@ export class IntelligentSchedulingEngine {
     @InjectRepository(ScheduledTask)
     private readonly scheduledRepo: Repository<ScheduledTask>,
     private readonly userSettingsService: UserSettingsService,
+    private readonly googleCalendarService: GoogleCalendarService,
   ) {}
 
   async captureAutoSegmentsSnapshot(userId: string): Promise<SegmentSnapshot[]> {
@@ -167,7 +213,33 @@ export class IntelligentSchedulingEngine {
       order: { createdAt: 'ASC' },
     });
 
-    const anchorBusy = await this.buildAnchorBusyIntervals(userId, allTasks);
+    const startDay = new Date();
+    startDay.setHours(0, 0, 0, 0);
+    const horizonDays = normalizeHorizonDays(settings.recurringScheduleHorizonDays);
+    const horizonEnd = new Date(startDay);
+    horizonEnd.setDate(horizonEnd.getDate() + horizonDays);
+    const extendedEnd = new Date(startDay);
+    extendedEnd.setDate(
+      extendedEnd.getDate() + horizonDays + BEYOND_HORIZON_EXTRA_DAYS,
+    );
+
+    const warnings: string[] = [];
+    let googleBusy: MsInterval[] = [];
+    if (settings.googleCalendarLinked) {
+      try {
+        googleBusy = await this.collectGoogleBusyIntervals(
+          userId,
+          startDay,
+          extendedEnd,
+        );
+      } catch {
+        warnings.push(
+          'Could not load Google Calendar; external events were not treated as busy.',
+        );
+      }
+    }
+
+    const anchorBusy = await this.buildAnchorBusyIntervals(allTasks, googleBusy);
 
     if (allTasks.length) {
       await this.scheduledRepo
@@ -194,18 +266,8 @@ export class IntelligentSchedulingEngine {
         );
       });
 
-    const warnings: string[] = [];
     const errors: { taskId: string; message: string }[] = [];
     const newSegments = new Map<string, { start: Date; end: Date }[]>();
-
-    const startDay = new Date();
-    startDay.setHours(0, 0, 0, 0);
-    const horizonEnd = new Date(startDay);
-    horizonEnd.setDate(horizonEnd.getDate() + HORIZON_DAYS);
-    const extendedEnd = new Date(startDay);
-    extendedEnd.setDate(
-      extendedEnd.getDate() + HORIZON_DAYS + BEYOND_HORIZON_EXTRA_DAYS,
-    );
 
     const nowMs = Date.now();
     const tiers = this.groupMovableIntoPriorityTiers(movable);
@@ -233,7 +295,7 @@ export class IntelligentSchedulingEngine {
           });
         } else if (res.beyondHorizon) {
           warnings.push(
-            `Task "${task.name}" was placed outside the ${HORIZON_DAYS}-day window.`,
+            `Task "${task.name}" was placed outside the ${horizonDays}-day window.`,
           );
         }
       }
@@ -316,6 +378,22 @@ export class IntelligentSchedulingEngine {
     segments: { start: Date; end: Date }[];
     beyondHorizon: boolean;
   } {
+    const recurrencePattern =
+      task.isRecurring ? normalizeRecurrencePattern(task.recurrencePattern) : null;
+    if (task.isRecurring && recurrencePattern) {
+      return this.attemptPlaceRecurringTask(
+        task,
+        settings,
+        horizonEnd,
+        extendedEnd,
+        startDay,
+        newSegments,
+        anchorBusy,
+        nowMs,
+        recurrencePattern,
+      );
+    }
+
     const rules = getEventTypeRules(task.eventType);
     const durationMin = task.estimatedTimeInMinutes;
     const minChunk =
@@ -366,6 +444,124 @@ export class IntelligentSchedulingEngine {
       segments: result.segments,
       beyondHorizon,
     };
+  }
+
+  private attemptPlaceRecurringTask(
+    task: Task,
+    settings: UserSettings,
+    horizonEnd: Date,
+    extendedEnd: Date,
+    startDay: Date,
+    newSegments: Map<string, { start: Date; end: Date }[]>,
+    anchorBusy: MsInterval[],
+    nowMs: number,
+    recurrencePattern: RecurrencePattern,
+  ): {
+    ok: boolean;
+    segments: { start: Date; end: Date }[];
+    beyondHorizon: boolean;
+  } {
+    const rules = getEventTypeRules(task.eventType);
+    const durationMin = task.estimatedTimeInMinutes;
+    const minChunk =
+      settings.allowSplitScheduling && rules.splittable && task.allowSplit
+        ? Math.max(5, settings.minSplitMinutes ?? 30)
+        : durationMin;
+    const effectiveSplittable = this.isTaskSplittable(task, settings);
+    const deadlineMs = task.deadline ? new Date(task.deadline).getTime() : null;
+    const phases = this.resolvePhasesForTask(task);
+    const segments: { start: Date; end: Date }[] = [];
+
+    let beyondHorizon = false;
+    let occurrenceStart = new Date(startDay);
+    occurrenceStart.setHours(0, 0, 0, 0);
+
+    while (occurrenceStart < horizonEnd) {
+      const placedBusy = this.rebuildBusy(anchorBusy, newSegments);
+      for (const seg of segments) {
+        placedBusy.push({ start: seg.start.getTime(), end: seg.end.getTime() });
+      }
+      const mergedBusy = mergeIntervals(placedBusy);
+
+      const occurrenceEnd = advanceOccurrenceStart(occurrenceStart, recurrencePattern);
+      const preferredInterval =
+        recurrencePattern === 'DAILY' && task.eventType === TaskEventType.DAILY_ROUTINE
+          ? taskPreferredIntervalOnDay(task, occurrenceStart)
+          : null;
+      if (preferredInterval) {
+        const eligible = subtractMany(
+          this.eligibleIntervalsForDay(
+            occurrenceStart,
+            phases,
+            settings.wakeTime,
+            settings.sleepTime,
+            settings.weekendWorkEnabled,
+          ),
+          mergedBusy,
+        );
+
+        const fitsEligible = eligible.some(
+          (slot) =>
+            preferredInterval.start >= slot.start &&
+            preferredInterval.end <= slot.end,
+        );
+        const durationMin = (preferredInterval.end - preferredInterval.start) / 60000;
+        const canPlaceByNow = preferredInterval.start >= nowMs;
+        const canPlaceByDeadline =
+          deadlineMs == null || preferredInterval.end <= deadlineMs;
+
+        if (fitsEligible && canPlaceByNow && canPlaceByDeadline && durationMin > 0) {
+          segments.push({
+            start: new Date(preferredInterval.start),
+            end: new Date(preferredInterval.end),
+          });
+          occurrenceStart = occurrenceEnd;
+          continue;
+        }
+      }
+
+      let result = this.placeTaskGreedy(
+        durationMin,
+        minChunk,
+        effectiveSplittable,
+        phases,
+        occurrenceStart,
+        occurrenceEnd,
+        deadlineMs,
+        settings.wakeTime,
+        settings.sleepTime,
+        settings.weekendWorkEnabled,
+        mergedBusy,
+        nowMs,
+      );
+
+      if (!result.ok) {
+        result = this.placeTaskGreedy(
+          durationMin,
+          minChunk,
+          effectiveSplittable,
+          phases,
+          occurrenceStart,
+          extendedEnd,
+          deadlineMs,
+          settings.wakeTime,
+          settings.sleepTime,
+          settings.weekendWorkEnabled,
+          mergedBusy,
+          nowMs,
+        );
+        if (result.ok) beyondHorizon = true;
+      }
+
+      if (!result.ok) {
+        return { ok: false, segments: [], beyondHorizon: false };
+      }
+
+      segments.push(...result.segments);
+      occurrenceStart = occurrenceEnd;
+    }
+
+    return { ok: true, segments, beyondHorizon };
   }
 
   /**
@@ -488,12 +684,14 @@ export class IntelligentSchedulingEngine {
   }
 
   private async buildAnchorBusyIntervals(
-    userId: string,
     tasks: Task[],
+    googleBusy: MsInterval[] = [],
   ): Promise<MsInterval[]> {
-    const busy: MsInterval[] = [];
+    const busy: MsInterval[] = [...googleBusy];
     const taskIds = tasks.map((t) => t.id);
-    if (!taskIds.length) return busy;
+    if (!taskIds.length) {
+      return mergeIntervals(busy);
+    }
 
     const scheduled = await this.scheduledRepo.find({
       where: { taskId: In(taskIds) },
@@ -524,6 +722,51 @@ export class IntelligentSchedulingEngine {
       }
     }
 
+    return mergeIntervals(busy);
+  }
+
+  private googleEventToBusyInterval(ev: {
+    status?: string | null;
+    start?: { dateTime?: string | null; date?: string | null };
+    end?: { dateTime?: string | null; date?: string | null };
+  }): MsInterval | null {
+    if (!ev || ev.status === 'cancelled') return null;
+    if (ev.start?.dateTime && ev.end?.dateTime) {
+      const s = new Date(ev.start.dateTime).getTime();
+      const e = new Date(ev.end.dateTime).getTime();
+      if (e > s) return { start: s, end: e };
+      return null;
+    }
+    if (ev.start?.date && ev.end?.date) {
+      const s = new Date(`${ev.start.date}T00:00:00.000Z`).getTime();
+      const e = new Date(`${ev.end.date}T00:00:00.000Z`).getTime();
+      if (e > s) return { start: s, end: e };
+    }
+    return null;
+  }
+
+  private async collectGoogleBusyIntervals(
+    userId: string,
+    rangeStart: Date,
+    rangeEnd: Date,
+  ): Promise<MsInterval[]> {
+    const busy: MsInterval[] = [];
+    let pageToken: string | undefined;
+    do {
+      const page = await this.googleCalendarService.getEvents(
+        userId,
+        rangeStart.toISOString(),
+        rangeEnd.toISOString(),
+        2500,
+        pageToken,
+        'primary',
+      );
+      for (const ev of page.events) {
+        const iv = this.googleEventToBusyInterval(ev);
+        if (iv) busy.push(iv);
+      }
+      pageToken = page.nextPageToken ?? undefined;
+    } while (pageToken);
     return mergeIntervals(busy);
   }
 

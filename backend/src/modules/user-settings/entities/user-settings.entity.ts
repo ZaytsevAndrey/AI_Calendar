@@ -51,6 +51,10 @@ export class UserSettings {
   @Column({ type: 'int', default: 30 })
   minSplitMinutes: number;
 
+  /** How many days ahead recurring tasks should be auto-scheduled. */
+  @Column({ type: 'int', default: 30 })
+  recurringScheduleHorizonDays: number;
+
   @Column({ default: () => 'CURRENT_TIMESTAMP' })
   createdAt: Date;
 

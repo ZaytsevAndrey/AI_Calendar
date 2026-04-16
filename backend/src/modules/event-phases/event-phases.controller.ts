@@ -1,4 +1,14 @@
-import { Controller, Post, Body, Get, Param, Patch, Delete, Request, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Param,
+  Patch,
+  Delete,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
 import { EventPhasesService } from './event-phases.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -8,8 +18,15 @@ export class EventPhasesController {
   constructor(private readonly eventPhasesService: EventPhasesService) {}
 
   @Post()
-  create(@Request() req, @Body() body: { eventId: string; phaseId: string }) {
-    return this.eventPhasesService.create(body.eventId, body.phaseId, req.user.userId);
+  create(
+    @Request() req,
+    @Body() body: { eventId: string; phaseId: string },
+  ) {
+    return this.eventPhasesService.create(
+      body.eventId,
+      body.phaseId,
+      req.user.userId,
+    );
   }
 
   @Get('event/:eventId')
@@ -23,12 +40,16 @@ export class EventPhasesController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() body: { phaseId: string }) {
-    return this.eventPhasesService.update(id, body.phaseId);
+  update(
+    @Request() req,
+    @Param('id') id: string,
+    @Body() body: { phaseId: string },
+  ) {
+    return this.eventPhasesService.update(id, req.user.userId, body.phaseId);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.eventPhasesService.remove(id);
+  remove(@Request() req, @Param('id') id: string) {
+    return this.eventPhasesService.remove(id, req.user.userId);
   }
-} 
+}

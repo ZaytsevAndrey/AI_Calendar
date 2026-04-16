@@ -1,4 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { google } from 'googleapis';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -6,6 +11,13 @@ import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { EventPhasesService } from '../event-phases/event-phases.service';
+import { PhasesService } from '../phases/phases.service';
+import {
+  extractPhaseId,
+  isMinutesInSleepWindow,
+  stripAppManagedEventProperties,
+  wallClockMinutesInTimeZone,
+} from './google-calendar-event.helpers';
 
 @Injectable()
 export class GoogleCalendarService {
@@ -19,6 +31,7 @@ export class GoogleCalendarService {
     @InjectRepository(UserSettings)
     private userSettingsRepo: Repository<UserSettings>,
     private eventPhasesService: EventPhasesService,
+    private readonly phasesService: PhasesService,
   ) {
     const clientId = this.configService.get('GOOGLE_CLIENT_ID');
     const clientSecret = this.configService.get('GOOGLE_CLIENT_SECRET');
@@ -412,7 +425,53 @@ export class GoogleCalendarService {
     }
   }
 
-  async createEvent(userId: string, event: any) {
+  private async assertCalendarWritePayload(
+    userId: string,
+    body: Record<string, unknown>,
+  ): Promise<{ phaseId?: string }> {
+    const phaseId = extractPhaseId(body);
+    if (phaseId) {
+      await this.phasesService.findOne(phaseId, userId);
+    }
+
+    const start = body.start as
+      | { dateTime?: string; date?: string; timeZone?: string }
+      | undefined;
+    const end = body.end as
+      | { dateTime?: string; date?: string; timeZone?: string }
+      | undefined;
+
+    if (start?.dateTime && end?.dateTime) {
+      const startMs = new Date(start.dateTime).getTime();
+      const endMs = new Date(end.dateTime).getTime();
+      if (!(endMs > startMs)) {
+        throw new BadRequestException('Event end must be after start.');
+      }
+      const settings = await this.userSettingsRepo.findOne({
+        where: { userId },
+      });
+      if (settings?.wakeTime && settings?.sleepTime) {
+        const tz = start.timeZone || end.timeZone || 'UTC';
+        const startM = wallClockMinutesInTimeZone(start.dateTime, tz);
+        const endM = wallClockMinutesInTimeZone(end.dateTime, tz);
+        if (
+          isMinutesInSleepWindow(startM, settings.sleepTime, settings.wakeTime) ||
+          isMinutesInSleepWindow(endM, settings.sleepTime, settings.wakeTime)
+        ) {
+          throw new BadRequestException(
+            'Events cannot be scheduled during sleep time.',
+          );
+        }
+      }
+    }
+
+    return { phaseId };
+  }
+
+  async createEvent(userId: string, event: Record<string, unknown>) {
+    const { phaseId } = await this.assertCalendarWritePayload(userId, event);
+    const requestBody = stripAppManagedEventProperties(event);
+
     const user = await this.userRepo.findOne({
       where: { id: userId },
       select: {
@@ -423,7 +482,7 @@ export class GoogleCalendarService {
     });
 
     if (!user?.googleAccessToken) {
-      throw new Error('Google Calendar not connected');
+      throw new BadRequestException('Google Calendar is not connected.');
     }
 
     // Refresh token when needed
@@ -439,7 +498,7 @@ export class GoogleCalendarService {
         });
         user.googleAccessToken = credentials.access_token;
       } else {
-        throw new Error('Google Calendar token expired');
+        throw new BadRequestException('Google Calendar token expired.');
       }
     }
 
@@ -451,22 +510,40 @@ export class GoogleCalendarService {
       version: 'v3',
       auth: this.oauth2Client,
     });
-    const response = await calendar.events.insert({
-      calendarId: 'primary',
-      requestBody: event,
-    });
 
-    // If event carries phaseId, persist link in event_phases
-    if (event.phaseId) {
-      if (typeof response.data.id === 'string' && event.phaseId && userId) {
-        await this.eventPhasesService.create(response.data.id, String(event.phaseId), String(userId));
-      }
+    let response;
+    try {
+      response = await calendar.events.insert({
+        calendarId: 'primary',
+        requestBody,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Google Calendar insert failed: ${msg}`);
+      throw new ServiceUnavailableException(
+        'Google Calendar could not create the event.',
+      );
+    }
+
+    if (phaseId && typeof response.data.id === 'string') {
+      await this.eventPhasesService.create(
+        response.data.id,
+        phaseId,
+        String(userId),
+      );
     }
 
     return response.data;
   }
 
-  async updateEvent(userId: string, eventId: string, event: any) {
+  async updateEvent(
+    userId: string,
+    eventId: string,
+    event: Record<string, unknown>,
+  ) {
+    const { phaseId } = await this.assertCalendarWritePayload(userId, event);
+    const requestBody = stripAppManagedEventProperties(event);
+
     const user = await this.userRepo.findOne({
       where: { id: userId },
       select: {
@@ -477,7 +554,7 @@ export class GoogleCalendarService {
     });
 
     if (!user?.googleAccessToken) {
-      throw new Error('Google Calendar not connected');
+      throw new BadRequestException('Google Calendar is not connected.');
     }
 
     // Refresh token when needed
@@ -493,7 +570,7 @@ export class GoogleCalendarService {
         });
         user.googleAccessToken = credentials.access_token;
       } else {
-        throw new Error('Google Calendar token expired');
+        throw new BadRequestException('Google Calendar token expired.');
       }
     }
 
@@ -505,25 +582,43 @@ export class GoogleCalendarService {
       version: 'v3',
       auth: this.oauth2Client,
     });
-    const response = await calendar.events.update({
-      calendarId: 'primary',
-      eventId,
-      requestBody: event,
-    });
 
-    // Upsert link in event_phases
-    if (event.phaseId) {
-      const existing = await this.eventPhasesService.findByEvent(eventId, String(userId));
+    let response;
+    try {
+      response = await calendar.events.update({
+        calendarId: 'primary',
+        eventId,
+        requestBody,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Google Calendar update failed: ${msg}`);
+      throw new ServiceUnavailableException(
+        'Google Calendar could not update the event.',
+      );
+    }
+
+    if (phaseId) {
+      const existing = await this.eventPhasesService.findByEvent(
+        eventId,
+        String(userId),
+      );
       if (existing) {
-        await this.eventPhasesService.update(existing.id, String(event.phaseId));
+        await this.eventPhasesService.update(
+          existing.id,
+          String(userId),
+          phaseId,
+        );
       } else {
-        await this.eventPhasesService.create(eventId, String(event.phaseId), String(userId));
+        await this.eventPhasesService.create(eventId, phaseId, String(userId));
       }
     } else {
-      // No phaseId — remove link
-      const existing = await this.eventPhasesService.findByEvent(eventId, String(userId));
+      const existing = await this.eventPhasesService.findByEvent(
+        eventId,
+        String(userId),
+      );
       if (existing) {
-        await this.eventPhasesService.remove(existing.id);
+        await this.eventPhasesService.remove(existing.id, String(userId));
       }
     }
 
@@ -637,6 +732,14 @@ export class GoogleCalendarService {
       calendarId: 'primary',
       eventId,
     });
+
+    const link = await this.eventPhasesService.findByEvent(
+      eventId,
+      String(userId),
+    );
+    if (link) {
+      await this.eventPhasesService.remove(link.id, String(userId));
+    }
 
     return response.data;
   }

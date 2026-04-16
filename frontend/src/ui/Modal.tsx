@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 
 export type ModalProps = {
     open: boolean;
@@ -21,7 +22,11 @@ export const Modal: React.FC<ModalProps> = ({
         return null;
     }
 
-    return (
+    if (typeof document === 'undefined') {
+        return null;
+    }
+
+    return createPortal(
         <div className="fixed inset-0 z-[1300] flex items-end justify-center p-0 sm:items-center sm:p-4">
             <button
                 type="button"
@@ -46,6 +51,7 @@ export const Modal: React.FC<ModalProps> = ({
                     </div>
                 ) : null}
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };

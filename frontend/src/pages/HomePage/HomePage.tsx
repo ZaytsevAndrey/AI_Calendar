@@ -5,7 +5,6 @@ const HomePage: React.FC = () => {
     const links = [
         { to: '/calendar', label: 'Calendar' },
         { to: '/events', label: 'Events' },
-        { to: '/tasks', label: 'Tasks' },
         { to: '/schedule', label: 'Schedule' },
         { to: '/phases', label: 'Phases' },
         { to: '/settings', label: 'Settings' },

@@ -7,8 +7,8 @@ import {
 } from 'api/schedule.api';
 import { PhasesApi } from 'api/phases.api';
 import { TasksApi } from 'api/tasks.api';
-import TaskForm from 'modules/tasks/components/TaskForm';
-import TaskItem from 'modules/tasks/components/TaskItem';
+import EventForm from 'modules/events/components/EventForm';
+import EventItem from 'modules/events/components/EventItem';
 import CalendarComponent from 'modules/schedule/components/Calendar';
 import { showErrorToast, showSuccessToast, showWarningToast } from 'utils/toast';
 
@@ -306,7 +306,7 @@ const SchedulePage: React.FC = () => {
         {selectedTask ? (
           <aside className="schedule-side-panel max-h-[min(70vh,560px)] overflow-y-auto lg:max-h-none">
             <div className="mb-4 flex items-start justify-between gap-3 border-b border-ide-border pb-3">
-              <h2 className="text-lg font-semibold text-ide-text">Task details</h2>
+              <h2 className="text-lg font-semibold text-ide-text">Event details</h2>
               <button
                 type="button"
                 className="ui-btn-ghost -mr-2 min-h-10 min-w-10 shrink-0 rounded-lg px-0 text-xl leading-none"
@@ -318,16 +318,18 @@ const SchedulePage: React.FC = () => {
             </div>
 
             {isEditing ? (
-              <TaskForm
+              <EventForm
                 initialData={selectedTask}
                 phases={phases}
                 onSubmit={handleUpdateTask}
                 isSubmitting={false}
+                onCancel={() => setIsEditing(false)}
+                mode="edit"
               />
             ) : (
               <>
-                <TaskItem
-                  task={selectedTask}
+                <EventItem
+                  event={selectedTask}
                   onEdit={handleEditTask}
                   onDelete={handleDeleteTask}
                   onStatusChange={handleStatusChange}

@@ -35,6 +35,36 @@
     textarea {
         @apply transition-colors duration-150;
     }
+
+    /* Global scrollbar (dark theme, stable on hover) */
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: #515151 #2b2b2b;
+    }
+
+    *::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    *::-webkit-scrollbar-track {
+        background: #2b2b2b;
+    }
+
+    *::-webkit-scrollbar-thumb {
+        background-color: #515151;
+        border-radius: 9999px;
+        border: 2px solid #2b2b2b;
+    }
+
+    *::-webkit-scrollbar-thumb:hover,
+    *::-webkit-scrollbar-thumb:active {
+        background-color: #515151;
+    }
+
+    *::-webkit-scrollbar-corner {
+        background: #2b2b2b;
+    }
 }
 
 @layer components {
@@ -210,7 +240,7 @@
 
     .task-form .form-actions,
     .phase-form .form-actions {
-        @apply mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end;
+        @apply mt-10 pt-2 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end;
     }
 
     .primary-button {
@@ -220,7 +250,11 @@
     }
 
     .phase-form .form-actions .primary-button {
-        @apply w-full sm:w-full;
+        @apply w-full sm:w-40;
+    }
+
+    .phase-form .form-actions .ui-btn-secondary {
+        @apply w-full sm:w-40;
     }
 
     /* Дні тижня (PhaseForm + PhaseSetup) */
@@ -255,6 +289,18 @@
 
     .phase-form .color-input-container input[type='color'] {
         @apply h-11 w-full max-w-[4.5rem] cursor-pointer rounded-lg border border-ide-border bg-transparent p-1 sm:h-10;
+    }
+
+    .phase-time-range-grid {
+        @apply grid grid-cols-1 gap-3 sm:grid-cols-2;
+    }
+
+    .phase-time-range-col {
+        @apply min-w-0;
+    }
+
+    .phase-time-range-label {
+        @apply mb-1 block text-xs font-medium uppercase tracking-wide text-ide-muted;
     }
 
     /* Картки задач */
@@ -498,7 +544,97 @@
     .rs-picker-daterange-menu,
     .rs-picker-popup,
     .rs-picker-menu {
-        z-index: 2001 !important;
+        z-index: 4000 !important;
+    }
+
+    .phase-time-range-picker.rs-picker {
+        width: 100%;
+    }
+
+    .phase-time-range-picker .rs-picker-toggle {
+        border: 1px solid #515151 !important;
+        background-color: #3c3f41 !important;
+        color: #a9b7c6 !important;
+    }
+
+    .phase-time-range-picker .rs-picker-toggle .rs-picker-toggle-placeholder,
+    .phase-time-range-picker .rs-picker-toggle .rs-picker-toggle-clean,
+    .phase-time-range-picker .rs-picker-toggle .rs-picker-toggle-indicator {
+        color: #808080 !important;
+    }
+
+    .phase-time-range-picker .rs-input-group-addon {
+        border-left: 1px solid #515151 !important;
+        background-color: #3c3f41 !important;
+        color: #a9b7c6 !important;
+    }
+
+    .rs-picker-popup .rs-picker-toolbar,
+    .rs-picker-popup .rs-picker-time-menu,
+    .rs-picker-popup .rs-picker-time-menu-column {
+        background-color: #2b2b2b !important;
+        border-color: #515151 !important;
+        color: #a9b7c6 !important;
+    }
+
+    .rs-picker-popup .rs-picker-time-menu-cell-content {
+        color: #a9b7c6 !important;
+    }
+
+    .rs-picker-popup .rs-picker-time-menu-cell-content:hover {
+        background-color: #214283 !important;
+        color: #a9b7c6 !important;
+    }
+
+    .rs-picker-popup .rs-picker-time-menu-cell-active .rs-picker-time-menu-cell-content {
+        background-color: #214283 !important;
+        color: #a9b7c6 !important;
+    }
+
+    .phase-time-range-popup {
+        z-index: 10000 !important;
+    }
+
+    .phase-time-range-popup.rs-picker-popup,
+    .phase-time-range-popup .rs-picker-menu,
+    .phase-time-range-popup .rs-picker-menu-content,
+    .phase-time-range-popup .rs-picker-menu-items,
+    .phase-time-range-popup .rs-picker-menu-group,
+    .phase-time-range-popup .rs-picker-toolbar,
+    .phase-time-range-popup .rs-picker-time-menu,
+    .phase-time-range-popup .rs-picker-time-menu-column,
+    .phase-time-range-popup .rs-picker-time-menu-cell,
+    .phase-time-range-popup .rs-picker-time-menu-group {
+        background-color: #2b2b2b !important;
+        border-color: #515151 !important;
+        color: #a9b7c6 !important;
+    }
+
+    .phase-time-range-popup .rs-picker-menu-item,
+    .phase-time-range-popup .rs-picker-toolbar-btn,
+    .phase-time-range-popup .rs-btn {
+        color: #a9b7c6 !important;
+    }
+
+    .phase-time-range-popup .rs-picker-menu-item:hover,
+    .phase-time-range-popup .rs-picker-toolbar-btn:hover,
+    .phase-time-range-popup .rs-btn:hover {
+        background-color: #214283 !important;
+        color: #a9b7c6 !important;
+    }
+
+    .phase-time-range-popup .rs-picker-time-menu-cell-content {
+        color: #a9b7c6 !important;
+    }
+
+    .phase-time-range-popup .rs-picker-time-menu-cell-content:hover {
+        background-color: #214283 !important;
+        color: #a9b7c6 !important;
+    }
+
+    .phase-time-range-popup .rs-picker-time-menu-cell-active .rs-picker-time-menu-cell-content {
+        background-color: #214283 !important;
+        color: #a9b7c6 !important;
     }
 }
 

@@ -3,8 +3,9 @@ import { PhaseDTO } from 'api/phases.api';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import {
   minutesToTime,
+  resolveActiveWindow,
+  resolvePhaseRangeInActiveWindow,
   snapMinutes,
-  timeToMinutes,
 } from '../utils/phasesTimeUtils';
 
 const PX_PER_HOUR = 44;
@@ -37,6 +38,10 @@ function phaseAppliesOnDay(phase: PhaseDTO, dayOfWeek: number): boolean {
   return phase.weekDays.includes(dayOfWeek);
 }
 
+function isSystemMainPhase(phase: PhaseDTO): boolean {
+  return phase.type === 'main_phase' || phase.name === 'Focus hours';
+}
+
 const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
   phases,
   onEditPhase,
@@ -45,8 +50,9 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
   const { data: userSettings } = useGetUserSettingsQuery();
   const wake = userSettings?.wakeTime || '07:00';
   const sleep = userSettings?.sleepTime || '22:00';
-  const dayStartMin = timeToMinutes(wake);
-  const dayEndMin = timeToMinutes(sleep);
+  const activeWindow = useMemo(() => resolveActiveWindow(wake, sleep), [wake, sleep]);
+  const dayStartMin = activeWindow.start;
+  const dayEndMin = activeWindow.end;
   const daySpanMin = Math.max(dayEndMin - dayStartMin, 60);
   const gridHeightPx = (daySpanMin / 60) * PX_PER_HOUR;
 
@@ -67,7 +73,7 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
   }, [dayStartMin, dayEndMin]);
 
   const displayPhases = useMemo(
-    () => phases.filter((p) => p.type !== 'sleep_time'),
+    () => phases.filter((p) => p.type !== 'sleep_time' && !isSystemMainPhase(p)),
     [phases],
   );
 
@@ -173,7 +179,7 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
       window.addEventListener('pointerup', handleUp);
       window.addEventListener('pointercancel', handleUp);
     },
-    [dayStartMin, dayEndMin, daySpanMin, gridHeightPx],
+    [activeWindow, dayStartMin, dayEndMin, daySpanMin, gridHeightPx],
   );
 
   const startMove = (
@@ -186,8 +192,13 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
     e.stopPropagation();
     const col = document.getElementById(`phase-col-${dayOfWeek}`);
     if (!col) return;
-    const startMin = timeToMinutes(phase.startTime);
-    const endMin = timeToMinutes(phase.endTime);
+    const range = resolvePhaseRangeInActiveWindow(
+      phase.startTime,
+      phase.endTime,
+      activeWindow,
+    );
+    const startMin = range.start;
+    const endMin = range.end;
     if (endMin <= startMin) return;
     const rect = col.getBoundingClientRect();
     const y = e.clientY - rect.top;
@@ -201,8 +212,13 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
     if (!onPhaseTimeChange) return;
     e.preventDefault();
     e.stopPropagation();
-    const startMin = timeToMinutes(phase.startTime);
-    const endMin = timeToMinutes(phase.endTime);
+    const range = resolvePhaseRangeInActiveWindow(
+      phase.startTime,
+      phase.endTime,
+      activeWindow,
+    );
+    const startMin = range.start;
+    const endMin = range.end;
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     bindDragSession(phase.id, dayOfWeek, startMin, endMin, 'resize-start', 0);
   };
@@ -211,8 +227,13 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
     if (!onPhaseTimeChange) return;
     e.preventDefault();
     e.stopPropagation();
-    const startMin = timeToMinutes(phase.startTime);
-    const endMin = timeToMinutes(phase.endTime);
+    const range = resolvePhaseRangeInActiveWindow(
+      phase.startTime,
+      phase.endTime,
+      activeWindow,
+    );
+    const startMin = range.start;
+    const endMin = range.end;
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     bindDragSession(phase.id, dayOfWeek, startMin, endMin, 'resize-end', 0);
   };
@@ -221,15 +242,22 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
     phase: PhaseDTO,
     dayOfWeek: number,
   ): { top: string; height: string } | null => {
-    let startMin = timeToMinutes(phase.startTime);
-    let endMin = timeToMinutes(phase.endTime);
+    const range = resolvePhaseRangeInActiveWindow(
+      phase.startTime,
+      phase.endTime,
+      activeWindow,
+    );
+    let startMin = range.start;
+    let endMin = range.end;
     if (live && live.phaseId === phase.id && live.dayOfWeek === dayOfWeek) {
       startMin = live.startMin;
       endMin = live.endMin;
     }
-    if (endMin <= startMin) return null;
-    const top = ((startMin - dayStartMin) / daySpanMin) * gridHeightPx;
-    const height = ((endMin - startMin) / daySpanMin) * gridHeightPx;
+    const clippedStart = Math.max(startMin, dayStartMin);
+    const clippedEnd = Math.min(endMin, dayEndMin);
+    if (clippedEnd <= clippedStart) return null;
+    const top = ((clippedStart - dayStartMin) / daySpanMin) * gridHeightPx;
+    const height = ((clippedEnd - clippedStart) / daySpanMin) * gridHeightPx;
     return {
       top: `${Math.max(0, top)}px`,
       height: `${Math.max(HANDLE_PX * 2, height)}px`,
@@ -347,7 +375,11 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
         <div className="mt-4 flex flex-wrap gap-2">
           <span className="w-full text-sm font-semibold text-ide-text">Legend</span>
           {[...displayPhases]
-            .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime))
+            .sort((a, b) => {
+              const aRange = resolvePhaseRangeInActiveWindow(a.startTime, a.endTime, activeWindow);
+              const bRange = resolvePhaseRangeInActiveWindow(b.startTime, b.endTime, activeWindow);
+              return aRange.start - bRange.start;
+            })
             .map((phase) => (
               <div
                 key={phase.id}

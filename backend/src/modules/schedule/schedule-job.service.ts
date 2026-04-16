@@ -11,6 +11,7 @@ import { ScheduleUndoSnapshot } from './entities/schedule-undo-snapshot.entity';
 import { IntelligentSchedulingEngine } from './intelligent-scheduling.engine';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { Task } from '../tasks/entities/task.entity';
+import { TaskEventType } from '../scheduling/event-type.enum';
 
 @Injectable()
 export class ScheduleJobService {
@@ -78,6 +79,7 @@ export class ScheduleJobService {
       const savedSnap = await this.snapshotRepo.save(snap);
 
       const result = await this.engine.run(job.userId);
+      await this.syncGoogleAfterReplan(job.userId, result.diff);
 
       job.status = 'done';
       job.resultDiffJson = JSON.stringify({
@@ -95,6 +97,148 @@ export class ScheduleJobService {
     }
 
     return true;
+  }
+
+  private toGoogleFreq(pattern?: string | null): 'DAILY' | 'WEEKLY' | 'MONTHLY' | null {
+    const p = (pattern ?? '').toUpperCase();
+    if (p === 'DAILY') return 'DAILY';
+    if (p === 'WEEKLY') return 'WEEKLY';
+    if (p === 'BIWEEKLY') return 'WEEKLY';
+    if (p === 'MONTHLY') return 'MONTHLY';
+    return null;
+  }
+
+  private buildGoogleRecurrenceRule(
+    pattern: string,
+    untilIso: string,
+  ): string {
+    const freq = this.toGoogleFreq(pattern);
+    if (!freq) return '';
+    const interval = pattern.toUpperCase() === 'BIWEEKLY' ? 2 : 1;
+    const until = untilIso.replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+    return `RRULE:FREQ=${freq};INTERVAL=${interval};UNTIL=${until}`;
+  }
+
+  /**
+   * Sync Google Calendar after successful replan for all changed tasks.
+   * Uses one Google event per task; event span is min(start)-max(end) over task segments.
+   */
+  private async syncGoogleAfterReplan(
+    userId: string,
+    diff: {
+      taskId: string;
+      taskName: string;
+      before: { id?: string; start: string; end: string }[];
+      after: { id?: string; start: string; end: string }[];
+    }[],
+  ): Promise<void> {
+    if (!diff.length) return;
+
+    const conn = await this.googleCalendarService.checkConnection(userId);
+    if (!conn.connected) return;
+
+    for (const item of diff) {
+      const task = await this.taskRepo.findOne({
+        where: { id: item.taskId, userId },
+        select: [
+          'id',
+          'name',
+          'description',
+          'googleEventId',
+          'eventType',
+          'isRecurring',
+          'recurrencePattern',
+          'scheduledStartTime',
+          'scheduledEndTime',
+        ],
+      });
+      if (!task) continue;
+
+      // Fixed events are synced in TasksService on create/update.
+      if (task.eventType === TaskEventType.FIXED) continue;
+
+      if (!item.after.length) {
+        if (task.googleEventId) {
+          try {
+            await this.googleCalendarService.deleteEvent(userId, task.googleEventId);
+            task.googleEventId = null;
+            await this.taskRepo.save(task);
+          } catch (e: any) {
+            this.logger.warn(
+              `Google delete skipped for task ${task.id}: ${e?.message ?? e}`,
+            );
+          }
+        }
+        continue;
+      }
+
+      const minStart = item.after.reduce((min, s) => {
+        const t = new Date(s.start).getTime();
+        return Math.min(min, t);
+      }, Number.POSITIVE_INFINITY);
+      const maxEnd = item.after.reduce((max, s) => {
+        const t = new Date(s.end).getTime();
+        return Math.max(max, t);
+      }, Number.NEGATIVE_INFINITY);
+
+      if (!Number.isFinite(minStart) || !Number.isFinite(maxEnd) || maxEnd <= minStart) {
+        continue;
+      }
+
+      const payload: Record<string, unknown> = {
+        summary: task.name,
+        description: task.description || undefined,
+        start: { dateTime: new Date(minStart).toISOString(), timeZone: 'UTC' },
+        end: { dateTime: new Date(maxEnd).toISOString(), timeZone: 'UTC' },
+      };
+
+      if (task.isRecurring && task.recurrencePattern) {
+        const firstSegment = [...item.after].sort(
+          (a, b) =>
+            new Date(a.start).getTime() - new Date(b.start).getTime(),
+        )[0];
+        const lastEnd = new Date(maxEnd).toISOString();
+        const rule = this.buildGoogleRecurrenceRule(
+          task.recurrencePattern,
+          lastEnd,
+        );
+        if (firstSegment) {
+          const firstStart = new Date(firstSegment.start).getTime();
+          const firstEnd = new Date(firstSegment.end).getTime();
+          payload.start = {
+            dateTime: new Date(firstStart).toISOString(),
+            timeZone: 'UTC',
+          };
+          payload.end = {
+            dateTime: new Date(firstEnd).toISOString(),
+            timeZone: 'UTC',
+          };
+        }
+        if (rule) {
+          payload.recurrence = [rule];
+        }
+      }
+
+      try {
+        if (task.googleEventId) {
+          await this.googleCalendarService.updateEvent(
+            userId,
+            task.googleEventId,
+            payload,
+          );
+        } else {
+          const ev = await this.googleCalendarService.createEvent(userId, payload);
+          if (typeof ev?.id === 'string') {
+            task.googleEventId = ev.id;
+            await this.taskRepo.save(task);
+          }
+        }
+      } catch (e: any) {
+        this.logger.warn(
+          `Google sync skipped for task ${task.id}: ${e?.message ?? e}`,
+        );
+      }
+    }
   }
 
   async undoLast(userId: string): Promise<{ restored: boolean }> {

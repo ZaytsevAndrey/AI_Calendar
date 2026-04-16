@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -12,6 +13,8 @@ import { UserSettings } from '../user-settings/entities/user-settings.entity';
 
 @Injectable()
 export class PhasesService {
+  private static readonly LEGACY_MAIN_PHASE_NAME = 'Focus hours';
+
   constructor(
     @InjectRepository(Phase)
     private phasesRepository: Repository<Phase>,
@@ -23,6 +26,14 @@ export class PhasesService {
   private normalizeWeekDays(weekDays?: number[] | null): number[] | null {
     if (!weekDays?.length) return null;
     return [...new Set(weekDays)].sort((a, b) => a - b);
+  }
+
+  private isSystemMainPhase(phase: Phase): boolean {
+    return (
+      phase.type === 'main_phase' ||
+      (phase.type === 'time_phase' &&
+        phase.name === PhasesService.LEGACY_MAIN_PHASE_NAME)
+    );
   }
 
   /**
@@ -56,7 +67,7 @@ export class PhasesService {
       description: 'Main working window (wake → sleep from settings)',
       startTime: wakeTime,
       endTime: sleepTime,
-      type: 'time_phase',
+      type: 'main_phase',
       weekDays: wd,
     });
     await this.phasesRepository.save([sleep, focus]);
@@ -83,11 +94,7 @@ export class PhasesService {
       settings.sleepTime,
       weekDays ?? null,
     );
-    return this.phasesRepository.find({
-      where: { userId },
-      order: { name: 'ASC' },
-      relations: ['subphases', 'tasks'],
-    });
+    return this.findAll(userId);
   }
 
   countForUser(userId: string): Promise<number> {
@@ -107,11 +114,12 @@ export class PhasesService {
   }
 
   async findAll(userId: string): Promise<Phase[]> {
-    return this.phasesRepository.find({
+    const phases = await this.phasesRepository.find({
       where: { userId },
       order: { name: 'ASC' },
       relations: ['subphases', 'tasks'],
     });
+    return phases.filter((phase) => !this.isSystemMainPhase(phase));
   }
 
   async findOne(id: string, userId: string): Promise<Phase> {
@@ -144,7 +152,7 @@ export class PhasesService {
   async remove(id: string, userId: string): Promise<void> {
     const phase = await this.findOne(id, userId);
     if (phase.tasks && phase.tasks.length > 0) {
-      throw new NotFoundException(`Cannot delete phase with assigned tasks`);
+      throw new ConflictException('Cannot delete phase with assigned tasks');
     }
     await this.phasesRepository.remove(phase);
   }

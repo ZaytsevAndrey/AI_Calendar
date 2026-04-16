@@ -1,24 +1,28 @@
 import React from 'react';
 
 interface ColorFieldProps {
-  register: any;
   errors: any;
+  colorValue?: string;
+  setColor: (value: string) => void;
 }
 
-export const ColorField = ({ register, errors }: ColorFieldProps) => {
+export const ColorField = ({ errors, colorValue = '#000000', setColor }: ColorFieldProps) => {
   return (
     <div className="form-group">
       <label htmlFor="color">Color*</label>
       <div className="color-input-container">
         <input 
-          {...register('color')} 
           id="color" 
           type="color"
+          value={colorValue}
+          onChange={(event) => setColor(event.target.value)}
           className={errors.color ? 'error' : ''} 
         />
         <input 
-          {...register('color')} 
+          id="colorText"
           type="text" 
+          value={colorValue}
+          onChange={(event) => setColor(event.target.value)}
           className={`color-text ${errors.color ? 'error' : ''}`}
         />
       </div>

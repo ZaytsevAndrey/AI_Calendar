@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Inject,
   forwardRef,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -13,9 +14,12 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { Phase } from '../event-phases/entities/phase.entity';
 import { TaskEventType, getEventTypeRules } from '../scheduling/event-type.enum';
 import { ScheduleJobService } from '../schedule/schedule-job.service';
+import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 
 @Injectable()
 export class TasksService {
+  private readonly logger = new Logger(TasksService.name);
+
   constructor(
     @InjectRepository(Task)
     private tasksRepository: Repository<Task>,
@@ -23,7 +27,73 @@ export class TasksService {
     private phasesRepository: Repository<Phase>,
     @Inject(forwardRef(() => ScheduleJobService))
     private readonly scheduleJobService: ScheduleJobService,
+    private readonly googleCalendarService: GoogleCalendarService,
   ) {}
+
+  private canSyncTaskToGoogle(task: Task): boolean {
+    return (
+      task.eventType === TaskEventType.FIXED &&
+      !!task.scheduledStartTime &&
+      !!task.scheduledEndTime
+    );
+  }
+
+  private buildGoogleEventPayload(task: Task): Record<string, unknown> {
+    return {
+      summary: task.name,
+      description: task.description || undefined,
+      start: {
+        dateTime: task.scheduledStartTime?.toISOString(),
+        timeZone: 'UTC',
+      },
+      end: {
+        dateTime: task.scheduledEndTime?.toISOString(),
+        timeZone: 'UTC',
+      },
+    };
+  }
+
+  private async syncTaskWithGoogleCalendar(
+    userId: string,
+    task: Task,
+  ): Promise<void> {
+    if (!this.canSyncTaskToGoogle(task)) {
+      if (task.googleEventId) {
+        try {
+          await this.googleCalendarService.deleteEvent(userId, task.googleEventId);
+        } catch (e: any) {
+          this.logger.warn(
+            `Failed to delete Google event for task ${task.id}: ${e?.message ?? e}`,
+          );
+        }
+        task.googleEventId = null;
+      }
+      return;
+    }
+
+    const conn = await this.googleCalendarService.checkConnection(userId);
+    if (!conn.connected) return;
+
+    const payload = this.buildGoogleEventPayload(task);
+    try {
+      if (task.googleEventId) {
+        await this.googleCalendarService.updateEvent(
+          userId,
+          task.googleEventId,
+          payload,
+        );
+      } else {
+        const ev = await this.googleCalendarService.createEvent(userId, payload);
+        if (typeof ev?.id === 'string') {
+          task.googleEventId = ev.id;
+        }
+      }
+    } catch (e: any) {
+      this.logger.warn(
+        `Failed to sync task ${task.id} to Google Calendar: ${e?.message ?? e}`,
+      );
+    }
+  }
 
   private async loadPhasesForUser(
     userId: string,
@@ -94,6 +164,8 @@ export class TasksService {
     }
 
     const saved = await this.tasksRepository.save(task);
+    await this.syncTaskWithGoogleCalendar(userId, saved);
+    await this.tasksRepository.save(saved);
 
     if (eventType !== TaskEventType.FIXED) {
       await this.scheduleJobService.enqueueReplan(userId);
@@ -181,6 +253,8 @@ export class TasksService {
     }
 
     const saved = await this.tasksRepository.save(task);
+    await this.syncTaskWithGoogleCalendar(userId, saved);
+    await this.tasksRepository.save(saved);
 
     if (saved.eventType !== TaskEventType.FIXED && saved.status === TaskStatus.TODO) {
       await this.scheduleJobService.enqueueReplan(userId);
@@ -191,6 +265,15 @@ export class TasksService {
 
   async remove(id: string, userId: string): Promise<void> {
     const task = await this.findOne(id, userId);
+    if (task.googleEventId) {
+      try {
+        await this.googleCalendarService.deleteEvent(userId, task.googleEventId);
+      } catch (e: any) {
+        this.logger.warn(
+          `Failed to delete Google event for removed task ${task.id}: ${e?.message ?? e}`,
+        );
+      }
+    }
     await this.tasksRepository.remove(task);
     await this.scheduleJobService.enqueueReplan(userId);
   }

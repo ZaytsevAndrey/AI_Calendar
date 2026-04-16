@@ -104,18 +104,18 @@ const EventForm: React.FC<EventFormProps> = ({
                 const startMinutes = timeToMinutes(cat.startTime);
                 const endMinutes = timeToMinutes(cat.endTime);
                 if (startMinutes > endMinutes) {
-                    return timeMinutes >= startMinutes || timeMinutes <= endMinutes;
+                    return timeMinutes >= startMinutes || timeMinutes < endMinutes;
                 }
-                return timeMinutes >= startMinutes && timeMinutes <= endMinutes;
+                return timeMinutes >= startMinutes && timeMinutes < endMinutes;
             });
         }
         const timeMinutes = timeToMinutes(time);
         const sleepStart = timeToMinutes(userSettings.sleepTime);
         const sleepEnd = timeToMinutes(userSettings.wakeTime);
         if (sleepStart > sleepEnd) {
-            return timeMinutes >= sleepStart || timeMinutes <= sleepEnd;
+            return timeMinutes >= sleepStart || timeMinutes < sleepEnd;
         }
-        return timeMinutes >= sleepStart && timeMinutes <= sleepEnd;
+        return timeMinutes >= sleepStart && timeMinutes < sleepEnd;
     };
 
     const timeToMinutes = (time: string): number => {
@@ -242,6 +242,12 @@ const EventForm: React.FC<EventFormProps> = ({
                 const suggestedPhase = getPhaseByTime(timePhases, value);
                 if (suggestedPhase) {
                     newData.selectedPhaseId = suggestedPhase.id;
+                }
+            }
+            if (field === 'selectedPhaseId' && value && timePhases.length > 0) {
+                const selected = timePhases.find((phase: any) => phase.id === value);
+                if (selected?.startTime) {
+                    newData.startTime = selected.startTime;
                 }
             }
             return newData;

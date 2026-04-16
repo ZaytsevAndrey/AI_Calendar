@@ -1,11 +1,11 @@
 import React from 'react';
 import { TaskDTO } from '../../../api/tasks.api';
 
-interface TaskItemProps {
-  task: TaskDTO;
-  onEdit: (task: TaskDTO) => void;
-  onDelete: (taskId: string) => void;
-  onStatusChange: (taskId: string, status: 'todo' | 'in_progress' | 'completed' | 'canceled') => void;
+interface EventItemProps {
+  event: TaskDTO;
+  onEdit: (event: TaskDTO) => void;
+  onDelete: (eventId: string) => void;
+  onStatusChange: (eventId: string, status: 'todo' | 'in_progress' | 'completed' | 'canceled') => void;
 }
 
 const priorityColors = {
@@ -22,9 +22,9 @@ const statusLabels = {
   canceled: 'Canceled'
 };
 
-const TaskItem: React.FC<TaskItemProps> = ({ task, onEdit, onDelete, onStatusChange }) => {
+const EventItem: React.FC<EventItemProps> = ({ event, onEdit, onDelete, onStatusChange }) => {
   const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    onStatusChange(task.id, e.target.value as 'todo' | 'in_progress' | 'completed' | 'canceled');
+    onStatusChange(event.id, e.target.value as 'todo' | 'in_progress' | 'completed' | 'canceled');
   };
 
   const formatDate = (dateString: string | undefined) => {
@@ -36,43 +36,43 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onEdit, onDelete, onStatusCha
   return (
     <div className="task-item">
       <div className="task-header">
-        <div 
-          className="task-priority" 
-          style={{ backgroundColor: priorityColors[task.priority] }}
+        <div
+          className="task-priority"
+          style={{ backgroundColor: priorityColors[event.priority] }}
         />
-        <h3 className="task-name">{task.name}</h3>
-        {task.phase && (
-          <span className="task-phase" style={{ color: task.phase.color || '#000' }}>
-            {task.phase.name}
+        <h3 className="task-name">{event.name}</h3>
+        {event.phase && (
+          <span className="task-phase" style={{ color: event.phase.color || '#000' }}>
+            {event.phase.name}
           </span>
         )}
       </div>
-      
-      {task.description && (
-        <p className="task-description">{task.description}</p>
+
+      {event.description && (
+        <p className="task-description">{event.description}</p>
       )}
-      
+
       <div className="task-details">
         <div className="task-detail">
           <span className="detail-label">Estimated Time:</span>
-          <span className="detail-value">{task.estimatedTimeInMinutes} minutes</span>
+          <span className="detail-value">{event.estimatedTimeInMinutes} minutes</span>
         </div>
-        
-        {task.deadline && (
+
+        {event.deadline && (
           <div className="task-detail">
             <span className="detail-label">Deadline:</span>
-            <span className={`detail-value ${new Date(task.deadline) < new Date() ? 'overdue' : ''}`}>
-              {formatDate(task.deadline)}
+            <span className={`detail-value ${new Date(event.deadline) < new Date() ? 'overdue' : ''}`}>
+              {formatDate(event.deadline)}
             </span>
           </div>
         )}
-        
+
         <div className="task-detail">
           <span className="detail-label">Status:</span>
-          <select 
-            value={task.status} 
+          <select
+            value={event.status}
             onChange={handleStatusChange}
-            className={`status-selector ${task.status}`}
+            className={`status-selector ${event.status}`}
           >
             {Object.entries(statusLabels).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
@@ -80,12 +80,12 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onEdit, onDelete, onStatusCha
           </select>
         </div>
       </div>
-      
+
       <div className="task-actions">
-        <button onClick={() => onEdit(task)} className="edit-button">
+        <button onClick={() => onEdit(event)} className="edit-button">
           Edit
         </button>
-        <button onClick={() => onDelete(task.id)} className="delete-button">
+        <button onClick={() => onDelete(event.id)} className="delete-button">
           Delete
         </button>
       </div>
@@ -93,4 +93,4 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onEdit, onDelete, onStatusCha
   );
 };
 
-export default TaskItem; 
+export default EventItem;

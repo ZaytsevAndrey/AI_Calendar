@@ -21,6 +21,35 @@ export class ScheduleService {
     private tasksService: TasksService,
   ) {}
 
+  private intervalsOverlap(
+    aStart: Date,
+    aEnd: Date,
+    bStart: Date,
+    bEnd: Date,
+  ): boolean {
+    return aStart < bEnd && bStart < aEnd;
+  }
+
+  private async findOverlappingSlots(
+    taskId: string,
+    start: Date,
+    end: Date,
+    excludeId?: string,
+  ): Promise<ScheduledTask[]> {
+    const rows = await this.scheduledTaskRepository.find({
+      where: { taskId },
+    });
+    return rows.filter((st) => {
+      if (excludeId && st.id === excludeId) return false;
+      return this.intervalsOverlap(
+        start,
+        end,
+        st.scheduledStartTime,
+        st.scheduledEndTime,
+      );
+    });
+  }
+
   async create(
     userId: string,
     createScheduleDto: CreateScheduleDto,
@@ -36,25 +65,17 @@ export class ScheduleService {
       );
     }
 
-    // Reject overlap with other scheduled slots for this task
-    const overlappingTasks = await this.scheduledTaskRepository.find({
-      where: [
-        {
-          taskId: createScheduleDto.taskId,
-          scheduledStartTime: Between(
-            new Date(createScheduleDto.scheduledStartTime),
-            new Date(createScheduleDto.scheduledEndTime),
-          ),
-        },
-        {
-          taskId: createScheduleDto.taskId,
-          scheduledEndTime: Between(
-            new Date(createScheduleDto.scheduledStartTime),
-            new Date(createScheduleDto.scheduledEndTime),
-          ),
-        },
-      ],
-    });
+    const start = new Date(createScheduleDto.scheduledStartTime);
+    const end = new Date(createScheduleDto.scheduledEndTime);
+    if (!(end > start)) {
+      throw new BadRequestException('scheduledEndTime must be after scheduledStartTime');
+    }
+
+    const overlappingTasks = await this.findOverlappingSlots(
+      createScheduleDto.taskId,
+      start,
+      end,
+    );
 
     if (overlappingTasks.length > 0) {
       throw new BadRequestException(
@@ -138,6 +159,22 @@ export class ScheduleService {
         ? new Date(updateScheduleDto.scheduledEndTime)
         : scheduledTask.scheduledEndTime,
     });
+
+    if (!(scheduledTask.scheduledEndTime > scheduledTask.scheduledStartTime)) {
+      throw new BadRequestException('scheduledEndTime must be after scheduledStartTime');
+    }
+
+    const overlaps = await this.findOverlappingSlots(
+      scheduledTask.taskId,
+      scheduledTask.scheduledStartTime,
+      scheduledTask.scheduledEndTime,
+      scheduledTask.id,
+    );
+    if (overlaps.length > 0) {
+      throw new BadRequestException(
+        'This task is already scheduled for this time period',
+      );
+    }
 
     return this.scheduledTaskRepository.save(scheduledTask);
   }

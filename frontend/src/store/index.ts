@@ -14,7 +14,7 @@ import storage from 'redux-persist/lib/storage';
 import { combineReducers } from 'redux';
 import authReducer from '../modules/auth/slice/authSlice';
 import userSettingsReducer from '../modules/user-settings/slice/userSettingsSlice';
-import { tasksApi } from '../api/tasksApi';
+import { eventTasksApi } from '../api/eventTasksApi';
 import { phasesApi } from '../api/phasesApi';
 import { eventsApi } from '../api/eventsApi';
 import { userSettingsApi } from '../api/userSettingsApi';
@@ -36,7 +36,7 @@ const persistConfig = {
 const rootReducer = combineReducers({
     auth: authReducer,
     userSettings: userSettingsReducer,
-    [tasksApi.reducerPath]: tasksApi.reducer,
+    [eventTasksApi.reducerPath]: eventTasksApi.reducer,
     [phasesApi.reducerPath]: phasesApi.reducer,
     [eventsApi.reducerPath]: eventsApi.reducer,
     [userSettingsApi.reducerPath]: userSettingsApi.reducer,
@@ -51,7 +51,7 @@ export const store = configureStore({
             serializableCheck: {
                 ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER],
             },
-        }).concat(thunk, logger, tasksApi.middleware, phasesApi.middleware, eventsApi.middleware, userSettingsApi.middleware),
+        }).concat(thunk, logger, eventTasksApi.middleware, phasesApi.middleware, eventsApi.middleware, userSettingsApi.middleware),
 });
 
 // Log initial state for debugging

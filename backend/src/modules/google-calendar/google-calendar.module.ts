@@ -6,6 +6,7 @@ import { UserSettingsModule } from '../user-settings/user-settings.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { EventPhasesModule } from '../event-phases/event-phases.module';
+import { PhasesModule } from '../phases/phases.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { EventPhasesModule } from '../event-phases/event-phases.module';
     UserSettingsModule,
     TypeOrmModule.forFeature([UserSettings]),
     EventPhasesModule,
+    PhasesModule,
   ],
   controllers: [GoogleCalendarController],
   providers: [GoogleCalendarService],

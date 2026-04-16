@@ -9,7 +9,7 @@ const SettingsPage: React.FC = () => {
         data: userSettings,
         isLoading,
         error: apiError,
-    } = useGetUserSettingsQuery();
+    } = useGetUserSettingsQuery(undefined, { refetchOnMountOrArgChange: true });
 
     const handleRetry = () => {
         if (apiError instanceof Error) {

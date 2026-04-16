@@ -53,6 +53,12 @@ export class GetUserSettingsDto {
   weekendWorkEnabled: boolean;
 
   @ApiProperty({
+    example: 30,
+    description: 'How many days ahead recurring tasks should be auto-scheduled',
+  })
+  recurringScheduleHorizonDays: number;
+
+  @ApiProperty({
     example: '2023-07-15T10:00:00Z',
     description: 'Date and time when the settings were created',
   })

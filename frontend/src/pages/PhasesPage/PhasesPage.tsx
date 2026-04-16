@@ -8,6 +8,7 @@ import { Modal } from '../../ui/Modal';
 
 const PhasesPage: React.FC = () => {
     const { data: phases = [], isLoading, error } = useGetAllPhasesQuery();
+    const visiblePhases = phases.filter((phase) => phase.type !== 'main_phase' && phase.name !== 'Focus hours');
     const [createPhase, { isLoading: isCreating }] = useCreatePhaseMutation();
     const [updatePhase, { isLoading: isUpdating }] = useUpdatePhaseMutation();
     const [deletePhase, { isLoading: isDeleting }] = useDeletePhaseMutation();
@@ -24,9 +25,9 @@ const PhasesPage: React.FC = () => {
         setShowForm(true);
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (window.confirm('Delete this phase?')) {
-            deletePhase(id);
+            await deletePhase(id);
         }
     };
 
@@ -51,6 +52,16 @@ const PhasesPage: React.FC = () => {
         },
         [updatePhase]
     );
+
+    const handleDeleteFromModal = async () => {
+        if (!editingPhase?.id) {
+            return;
+        }
+
+        await handleDelete(editingPhase.id);
+        setShowForm(false);
+        setEditingPhase(null);
+    };
 
     if (isLoading) {
         return (
@@ -87,36 +98,30 @@ const PhasesPage: React.FC = () => {
                 onClose={() => setShowForm(false)}
                 title={editingPhase ? 'Edit Phase' : 'Create Phase'}
                 maxWidthClass="max-w-lg"
-                footer={
-                    <button
-                        type="button"
-                        onClick={() => setShowForm(false)}
-                        className="ui-btn-secondary"
-                    >
-                        Cancel
-                    </button>
-                }
             >
                 <PhaseForm
                     initialData={editingPhase}
                     onSubmit={handleFormSubmit}
                     isSubmitting={isCreating || isUpdating}
+                    onCancel={() => setShowForm(false)}
+                    onDelete={editingPhase ? handleDeleteFromModal : undefined}
+                    isDeleting={isDeleting}
                 />
             </Modal>
 
             <div className="mb-8 overflow-x-auto">
                 <PhasesCalendar
-                    phases={phases}
+                    phases={visiblePhases}
                     onEditPhase={handleEdit}
                     onPhaseTimeChange={handlePhaseTimeChange}
                 />
             </div>
 
-            {phases.length === 0 ? (
+            {visiblePhases.length === 0 ? (
                 <div className="empty-list">No phases yet. Add one to get started.</div>
             ) : (
                 <div className="phase-grid">
-                    {phases.map((phase: PhaseDTO) => (
+                    {visiblePhases.map((phase: PhaseDTO) => (
                         <article key={phase.id} className="phase-card">
                             <div className="category-header">
                                 <span className="category-name" style={{ color: phase.color }}>

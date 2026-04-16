@@ -116,4 +116,15 @@ export class UpdateUserSettingsDto {
   @Max(240)
   @IsOptional()
   minSplitMinutes?: number;
+
+  @ApiProperty({
+    example: 30,
+    description: 'How many days ahead recurring tasks should be auto-scheduled',
+    required: false,
+  })
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  @IsOptional()
+  recurringScheduleHorizonDays?: number;
 }

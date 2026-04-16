@@ -13,6 +13,8 @@ import CalendarGrid from 'modules/calendar/components/CalendarGrid';
 import { EventType } from 'modules/calendar/types';
 import { Modal } from '../../ui/Modal';
 import { Spinner } from '../../ui/Spinner';
+import { showErrorToast, showSuccessToast } from '../../utils/toast';
+import { extractApiErrorMessage } from '../../utils/extractApiErrorMessage';
 
 type CalendarView = 'day' | 'week' | 'month';
 
@@ -97,10 +99,11 @@ const CalendarPage: React.FC = () => {
     const confirmDeleteEvent = async () => {
         if (deleteConfirmDialog.eventId) {
             try {
-                await deleteEventTrigger({ eventId: deleteConfirmDialog.eventId });
+                await deleteEventTrigger({ eventId: deleteConfirmDialog.eventId }).unwrap();
+                showSuccessToast('Event deleted.');
                 setDeleteConfirmDialog({ open: false, eventId: null, eventName: '' });
             } catch (err) {
-                console.error('Failed to delete event:', err);
+                showErrorToast(extractApiErrorMessage(err));
             }
         }
     };
@@ -122,11 +125,12 @@ const CalendarPage: React.FC = () => {
                 await updateEventTrigger({
                     eventId: eventFormDialog.event.id,
                     eventData: data,
-                });
+                }).unwrap();
             }
+            showSuccessToast('Event updated.');
             setEventFormDialog({ open: false, event: null });
         } catch (err) {
-            console.error('Failed to update event:', err);
+            showErrorToast(extractApiErrorMessage(err));
         }
     };
 

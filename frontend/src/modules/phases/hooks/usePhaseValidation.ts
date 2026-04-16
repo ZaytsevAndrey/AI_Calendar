@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { isRangeWithinActiveWindow } from '../utils/phasesTimeUtils';
 
 interface UsePhaseValidationProps {
   startTime: string;
@@ -9,14 +10,6 @@ interface UsePhaseValidationProps {
     wakeTime?: string;
   };
 }
-
-const isFirstTimeBigger = (time1: string, time2: string): boolean => {
-  const [hours1, minutes1] = time1.split(':').map(Number);
-  const [hours2, minutes2] = time2.split(':').map(Number);
-  const totalMinutes1 = hours1 * 60 + minutes1;
-  const totalMinutes2 = hours2 * 60 + minutes2;
-  return totalMinutes1 > totalMinutes2;
-};
 
 /** Validates only the active-day bounds (wake–sleep). Overlaps between phases are allowed. */
 export const usePhaseValidation = ({
@@ -37,10 +30,14 @@ export const usePhaseValidation = ({
       return null;
     }
 
-    const dayStart = userSettings.wakeTime;
-    const dayEnd = userSettings.sleepTime;
-
-    if (isFirstTimeBigger(startTime, dayEnd) || isFirstTimeBigger(dayStart, endTime)) {
+    if (
+      !isRangeWithinActiveWindow(
+        startTime,
+        endTime,
+        userSettings.wakeTime,
+        userSettings.sleepTime,
+      )
+    ) {
       return 'Phase cannot be outside of active day time!';
     }
 

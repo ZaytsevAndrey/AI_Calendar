@@ -40,6 +40,9 @@ export class UserSettingsService {
         userSettings.allowSplitScheduling = defaults.allowSplitScheduling;
       if (userSettings.minSplitMinutes === undefined)
         userSettings.minSplitMinutes = defaults.minSplitMinutes;
+      if (userSettings.recurringScheduleHorizonDays === undefined)
+        userSettings.recurringScheduleHorizonDays =
+          defaults.recurringScheduleHorizonDays;
 
       // Save updated settings if any defaults were applied
       await this.userSettingsRepository.save(userSettings);
@@ -72,6 +75,7 @@ export class UserSettingsService {
       weekendWorkEnabled: false,
       allowSplitScheduling: true,
       minSplitMinutes: 30,
+      recurringScheduleHorizonDays: 30,
     };
   }
 
@@ -87,6 +91,7 @@ export class UserSettingsService {
       weekendWorkEnabled: false,
       allowSplitScheduling: true,
       minSplitMinutes: 30,
+      recurringScheduleHorizonDays: 30,
     });
 
     return this.userSettingsRepository.save(defaultSettings);

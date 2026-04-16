@@ -24,9 +24,19 @@ interface PhaseFormProps {
   initialData?: PhaseDTO;
   onSubmit: (data: CreatePhaseDTO | UpdatePhaseDTO) => void;
   isSubmitting: boolean;
+  onCancel?: () => void;
+  onDelete?: () => void;
+  isDeleting?: boolean;
 }
 
-const PhaseForm = ({ initialData, onSubmit, isSubmitting }: PhaseFormProps) => {
+const PhaseForm = ({
+  initialData,
+  onSubmit,
+  isSubmitting,
+  onCancel,
+  onDelete,
+  isDeleting = false
+}: PhaseFormProps) => {
   const { data: userSettings } = useGetUserSettingsQuery();
   const [selectedDays, setSelectedDays] = useState<number[]>(initialData?.weekDays || [1,2,3,4,5]);
   
@@ -37,7 +47,7 @@ const PhaseForm = ({ initialData, onSubmit, isSubmitting }: PhaseFormProps) => {
       weekDays: initialData.weekDays || [1, 2, 3, 4, 5],
     } : {
       name: '',
-      color: '#' + Math.floor(Math.random()*16777215).toString(16),
+      color: `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`,
       description: '',
       startTime: '09:00',
       endTime: '22:00',
@@ -77,8 +87,9 @@ const PhaseForm = ({ initialData, onSubmit, isSubmitting }: PhaseFormProps) => {
       </div>
 
       <ColorField 
-        register={register} 
         errors={errors} 
+        colorValue={watchedValues.color}
+        setColor={(value) => setValue('color', value, { shouldDirty: true, shouldValidate: true })}
       />
 
       <div className="form-group">
@@ -87,7 +98,6 @@ const PhaseForm = ({ initialData, onSubmit, isSubmitting }: PhaseFormProps) => {
       </div>
 
       <TimeRangeField 
-        register={register}
         errors={errors}
         watchedValues={watchedValues}
         setValue={setValue}
@@ -108,6 +118,25 @@ const PhaseForm = ({ initialData, onSubmit, isSubmitting }: PhaseFormProps) => {
       />
 
       <div className="form-actions">
+        {initialData && onDelete ? (
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={isDeleting || isSubmitting}
+            className="ui-btn-danger"
+          >
+            {isDeleting ? 'Deleting...' : 'Delete'}
+          </button>
+        ) : null}
+        {onCancel ? (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="ui-btn-secondary"
+          >
+            Cancel
+          </button>
+        ) : null}
         <button 
           type="submit" 
           disabled={isSubmitting || !!sleepError} 

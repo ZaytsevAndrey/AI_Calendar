@@ -1,23 +1,23 @@
 import React, { useState } from 'react';
 import { TaskDTO } from '../../../api/tasks.api';
-import TaskItem from './TaskItem';
+import EventItem from './EventItem';
 
-interface TaskListProps {
-  tasks: TaskDTO[];
-  onEdit: (task: TaskDTO) => void;
-  onDelete: (taskId: string) => void;
-  onStatusChange: (taskId: string, status: 'todo' | 'in_progress' | 'completed' | 'canceled') => void;
+interface EventListProps {
+  events: TaskDTO[];
+  onEdit: (event: TaskDTO) => void;
+  onDelete: (eventId: string) => void;
+  onStatusChange: (eventId: string, status: 'todo' | 'in_progress' | 'completed' | 'canceled') => void;
   onSort: (field: 'name' | 'priority' | 'deadline' | 'estimatedTimeInMinutes') => void;
   isLoading: boolean;
 }
 
-const TaskList: React.FC<TaskListProps> = ({ 
-  tasks, 
-  onEdit, 
-  onDelete, 
-  onStatusChange, 
+const EventList: React.FC<EventListProps> = ({
+  events,
+  onEdit,
+  onDelete,
+  onStatusChange,
   onSort,
-  isLoading 
+  isLoading
 }) => {
   const [sortField, setSortField] = useState<string>('deadline');
 
@@ -27,39 +27,39 @@ const TaskList: React.FC<TaskListProps> = ({
   };
 
   if (isLoading) {
-    return <div className="loading">Loading tasks...</div>;
+    return <div className="loading">Loading events...</div>;
   }
 
-  if (tasks.length === 0) {
-    return <div className="empty-list">No tasks found. Add a new task to get started.</div>;
+  if (events.length === 0) {
+    return <div className="empty-list">No events found. Add a new event to get started.</div>;
   }
 
   return (
     <div className="task-list">
       <div className="task-list-header">
-        <button 
-          className="list-header-item" 
+        <button
+          className="list-header-item"
           onClick={() => handleSort('name')}
           type="button"
         >
-          Task Name {sortField === 'name' && '↓'}
+          Event Name {sortField === 'name' && '↓'}
         </button>
-        <button 
-          className="list-header-item" 
+        <button
+          className="list-header-item"
           onClick={() => handleSort('priority')}
           type="button"
         >
           Priority {sortField === 'priority' && '↓'}
         </button>
-        <button 
-          className="list-header-item" 
+        <button
+          className="list-header-item"
           onClick={() => handleSort('deadline')}
           type="button"
         >
           Deadline {sortField === 'deadline' && '↓'}
         </button>
-        <button 
-          className="list-header-item" 
+        <button
+          className="list-header-item"
           onClick={() => handleSort('estimatedTimeInMinutes')}
           type="button"
         >
@@ -67,10 +67,10 @@ const TaskList: React.FC<TaskListProps> = ({
         </button>
       </div>
 
-      {tasks.map(task => (
-        <TaskItem
-          key={task.id}
-          task={task}
+      {events.map((event) => (
+        <EventItem
+          key={event.id}
+          event={event}
           onEdit={onEdit}
           onDelete={onDelete}
           onStatusChange={onStatusChange}
@@ -80,4 +80,4 @@ const TaskList: React.FC<TaskListProps> = ({
   );
 };
 
-export default TaskList;
+export default EventList;

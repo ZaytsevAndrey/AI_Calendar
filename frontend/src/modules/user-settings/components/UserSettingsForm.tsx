@@ -2,7 +2,8 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useForm, useController } from 'react-hook-form';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { UserSettingsApi, UserSettingsDTO } from '../../../api/user-settings.api';
+import { UserSettingsDTO } from '../../../api/user-settings.api';
+import { useUpdateUserSettingsMutation } from '../../../api/userSettingsApi';
 import { googleCalendarAPI } from '../../../api/google-calendar.api';
 import { Spinner } from '../../../ui/Spinner';
 
@@ -14,6 +15,7 @@ interface UserSettingsFormData {
     sleepTime: string;
     wakeTime: string;
     googleCalendarLinked: boolean;
+    recurringScheduleHorizonDays: number;
 }
 
 const fieldClass = 'ui-input max-w-xs';
@@ -25,7 +27,8 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
     const [isDisconnecting, setIsDisconnecting] = useState(false);
     const [isCalendarConnected, setIsCalendarConnected] = useState(false);
     const [isCheckingConnection, setIsCheckingConnection] = useState(true);
-    const [initialValues, setInitialValues] = useState<{ sleepTime: string; wakeTime: string } | null>(
+    const [updateUserSettings] = useUpdateUserSettingsMutation();
+    const [initialValues, setInitialValues] = useState<{ sleepTime: string; wakeTime: string; recurringScheduleHorizonDays: number } | null>(
         null
     );
 
@@ -36,11 +39,16 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             wakeTime:
                 initialData?.wakeTime && initialData.wakeTime !== '' ? initialData.wakeTime : '07:00',
             googleCalendarLinked: initialData?.googleCalendarLinked || false,
+            recurringScheduleHorizonDays:
+                typeof initialData?.recurringScheduleHorizonDays === 'number'
+                    ? initialData.recurringScheduleHorizonDays
+                    : 30,
         },
     });
 
     const sleepTime = watch('sleepTime');
     const wakeTime = watch('wakeTime');
+    const recurringScheduleHorizonDays = watch('recurringScheduleHorizonDays');
 
     const sleepTimeController = useController({
         name: 'sleepTime',
@@ -126,39 +134,47 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
     };
 
     const autoSaveTimeSettings = useCallback(
-        async (st: string | null | undefined, wt: string | null | undefined) => {
+        async (st: string | null | undefined, wt: string | null | undefined, horizonDays: number | null | undefined) => {
             if (!st || !wt || st === '' || wt === '' || typeof st !== 'string' || typeof wt !== 'string') {
+                return;
+            }
+            if (typeof horizonDays !== 'number' || Number.isNaN(horizonDays) || horizonDays < 1 || horizonDays > 365) {
                 return;
             }
 
             try {
-                await UserSettingsApi.updateUserSettings({
+                await updateUserSettings({
                     sleepTime: st,
                     wakeTime: wt,
                     googleCalendarLinked: isCalendarConnected,
-                });
-                toast.success('Time settings saved automatically');
+                    recurringScheduleHorizonDays: horizonDays,
+                }).unwrap();
+                toast.success('Settings saved automatically');
             } catch (error: any) {
                 if (error?.response?.status === 401) {
                     return;
                 }
-                toast.error('Failed to save time settings');
-                console.error('Error auto-saving time settings:', error);
+                toast.error('Failed to save settings');
+                console.error('Error auto-saving settings:', error);
             }
         },
-        [isCalendarConnected]
+        [isCalendarConnected, updateUserSettings]
     );
 
     useEffect(() => {
-        if (sleepTime && wakeTime && !initialValues) {
-            setInitialValues({ sleepTime, wakeTime });
+        if (sleepTime && wakeTime && typeof recurringScheduleHorizonDays === 'number' && !initialValues) {
+            setInitialValues({ sleepTime, wakeTime, recurringScheduleHorizonDays });
         }
-    }, [sleepTime, wakeTime, initialValues]);
+    }, [sleepTime, wakeTime, recurringScheduleHorizonDays, initialValues]);
 
     useEffect(() => {
         const hasChanged =
             initialValues &&
-            (sleepTime !== initialValues.sleepTime || wakeTime !== initialValues.wakeTime);
+            (
+                sleepTime !== initialValues.sleepTime ||
+                wakeTime !== initialValues.wakeTime ||
+                recurringScheduleHorizonDays !== initialValues.recurringScheduleHorizonDays
+            );
 
         if (
             sleepTime &&
@@ -167,15 +183,16 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             wakeTime !== '' &&
             typeof sleepTime === 'string' &&
             typeof wakeTime === 'string' &&
+            typeof recurringScheduleHorizonDays === 'number' &&
             hasChanged
         ) {
             const timeoutId = setTimeout(() => {
-                autoSaveTimeSettings(sleepTime, wakeTime);
+                autoSaveTimeSettings(sleepTime, wakeTime, recurringScheduleHorizonDays);
             }, 1000);
 
             return () => clearTimeout(timeoutId);
         }
-    }, [sleepTime, wakeTime, autoSaveTimeSettings, initialValues]);
+    }, [sleepTime, wakeTime, recurringScheduleHorizonDays, autoSaveTimeSettings, initialValues]);
 
     return (
         <div className="space-y-10">
@@ -211,6 +228,23 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                             onBlur={sleepTimeController.field.onBlur}
                             name={sleepTimeController.field.name}
                             ref={sleepTimeController.field.ref}
+                        />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <label htmlFor="recurring-horizon-days" className="ui-label">
+                            Recurring schedule horizon (days)
+                        </label>
+                        <input
+                            id="recurring-horizon-days"
+                            type="number"
+                            min={1}
+                            max={365}
+                            className={fieldClass}
+                            value={recurringScheduleHorizonDays || 30}
+                            onChange={(e) => {
+                                const parsed = parseInt(e.target.value, 10);
+                                setValue('recurringScheduleHorizonDays', Number.isNaN(parsed) ? 30 : parsed);
+                            }}
                         />
                     </div>
                 </div>

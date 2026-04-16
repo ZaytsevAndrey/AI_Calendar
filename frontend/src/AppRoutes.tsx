@@ -6,12 +6,11 @@ import LoginPage from 'pages/LoginPage';
 import RegisterPage from 'pages/RegisterPage';
 import ForgotPasswordPage from 'pages/ForgotPasswordPage';
 import ResetPasswordPage from 'pages/ResetPasswordPage';
-import TasksPage from 'pages/TasksPage';
+import EventsPage from 'pages/EventsPage';
 import PhasesPage from 'pages/PhasesPage/PhasesPage';
 import SettingsPage from 'pages/SettingsPage';
 import SchedulePage from 'pages/SchedulePage';
 import CalendarPage from 'pages/CalendarPage';
-import EventsPage from 'pages/EventsPage';
 import GoogleCallbackPage from 'modules/auth/pages/GoogleCallbackPage';
 import PhaseSetupPage from 'pages/PhaseSetupPage/PhaseSetupPage';
 
@@ -31,9 +30,13 @@ const AppRoutes = () => {
             />
             <Route
                 path="/tasks"
+                element={<Navigate to="/events" replace />}
+            />
+            <Route
+                path="/events"
                 element={
                     <ProtectedRoute>
-                        <TasksPage />
+                        <EventsPage />
                     </ProtectedRoute>
                 }
             />
@@ -50,14 +53,6 @@ const AppRoutes = () => {
                 element={
                     <ProtectedRoute>
                         <CalendarPage />
-                    </ProtectedRoute>
-                }
-            />
-            <Route
-                path="/events"
-                element={
-                    <ProtectedRoute>
-                        <EventsPage />
                     </ProtectedRoute>
                 }
             />
