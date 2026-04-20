@@ -102,7 +102,9 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Body() loginDto: LoginDto) {
-    this.logger.log(`Login request received: ${JSON.stringify(loginDto)}`);
+    this.logger.log(
+      `Login request received for: ${loginDto?.username ?? '(no username)'}`,
+    );
     const tokens = await this.authService.validateUser(loginDto);
     this.logger.log('Login successful');
     return tokens;

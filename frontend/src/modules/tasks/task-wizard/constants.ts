@@ -30,7 +30,7 @@ export const DEFAULT_DURATION_BY_TYPE: Partial<Record<TaskEventType, number>> = 
   learning: 60,
 };
 
-export const WIZARD_STEP_LABELS = ['Type & Context', 'Details', 'Scheduling', 'Review'] as const;
+export const WIZARD_STEP_LABELS = ['Type & phase', 'Details', 'Scheduling', 'Review'] as const;
 
 export const PRIORITY_OPTIONS = [
   { value: 'low', label: 'Low' },

@@ -428,6 +428,7 @@ export class GoogleCalendarService {
   private async assertCalendarWritePayload(
     userId: string,
     body: Record<string, unknown>,
+    opts?: { skipSleepWindowCheck?: boolean },
   ): Promise<{ phaseId?: string }> {
     const phaseId = extractPhaseId(body);
     if (phaseId) {
@@ -447,20 +448,22 @@ export class GoogleCalendarService {
       if (!(endMs > startMs)) {
         throw new BadRequestException('Event end must be after start.');
       }
-      const settings = await this.userSettingsRepo.findOne({
-        where: { userId },
-      });
-      if (settings?.wakeTime && settings?.sleepTime) {
-        const tz = start.timeZone || end.timeZone || 'UTC';
-        const startM = wallClockMinutesInTimeZone(start.dateTime, tz);
-        const endM = wallClockMinutesInTimeZone(end.dateTime, tz);
-        if (
-          isMinutesInSleepWindow(startM, settings.sleepTime, settings.wakeTime) ||
-          isMinutesInSleepWindow(endM, settings.sleepTime, settings.wakeTime)
-        ) {
-          throw new BadRequestException(
-            'Events cannot be scheduled during sleep time.',
-          );
+      if (!opts?.skipSleepWindowCheck) {
+        const settings = await this.userSettingsRepo.findOne({
+          where: { userId },
+        });
+        if (settings?.wakeTime && settings?.sleepTime) {
+          const tz = start.timeZone || end.timeZone || 'UTC';
+          const startM = wallClockMinutesInTimeZone(start.dateTime, tz);
+          const endM = wallClockMinutesInTimeZone(end.dateTime, tz);
+          if (
+            isMinutesInSleepWindow(startM, settings.sleepTime, settings.wakeTime) ||
+            isMinutesInSleepWindow(endM, settings.sleepTime, settings.wakeTime)
+          ) {
+            throw new BadRequestException(
+              'Events cannot be scheduled during sleep time.',
+            );
+          }
         }
       }
     }
@@ -468,8 +471,16 @@ export class GoogleCalendarService {
     return { phaseId };
   }
 
-  async createEvent(userId: string, event: Record<string, unknown>) {
-    const { phaseId } = await this.assertCalendarWritePayload(userId, event);
+  async createEvent(
+    userId: string,
+    event: Record<string, unknown>,
+    opts?: { skipSleepWindowCheck?: boolean },
+  ) {
+    const { phaseId } = await this.assertCalendarWritePayload(
+      userId,
+      event,
+      opts,
+    );
     const requestBody = stripAppManagedEventProperties(event);
 
     const user = await this.userRepo.findOne({
@@ -540,8 +551,13 @@ export class GoogleCalendarService {
     userId: string,
     eventId: string,
     event: Record<string, unknown>,
+    opts?: { skipSleepWindowCheck?: boolean },
   ) {
-    const { phaseId } = await this.assertCalendarWritePayload(userId, event);
+    const { phaseId } = await this.assertCalendarWritePayload(
+      userId,
+      event,
+      opts,
+    );
     const requestBody = stripAppManagedEventProperties(event);
 
     const user = await this.userRepo.findOne({

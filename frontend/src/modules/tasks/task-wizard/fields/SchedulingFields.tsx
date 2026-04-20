@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Controller, Control, FieldErrors } from 'react-hook-form';
 import type { TaskWizardFormValues } from '../schema';
 import {
@@ -7,6 +7,11 @@ import {
   SCHEDULING_FIELD_LABELS,
   SPLIT_UNAVAILABLE_HINT,
 } from '../schedulingFields.config';
+import type { PhaseSchedulingTimeBounds } from '../phaseSchedulingBounds';
+import {
+  buildPreferredStartSlotOptions,
+  mergeSavedPreferredStartIntoOptions,
+} from '../phaseSchedulingBounds';
 
 const inp =
   'w-full rounded border border-ide-border bg-ide-input px-3 py-2 text-sm text-ide-text focus:border-ide-link focus:outline-none focus:ring-1 focus:ring-ide-link';
@@ -15,6 +20,10 @@ const lbl = 'mb-1 block text-sm font-medium text-ide-text';
 type CommonFieldProps = {
   control: Control<TaskWizardFormValues>;
   errors: FieldErrors<TaskWizardFormValues>;
+};
+
+type PreferredStartProps = CommonFieldProps & {
+  phaseTimeBounds: PhaseSchedulingTimeBounds | null;
 };
 
 export const FixedStartField: React.FC<CommonFieldProps> = ({ control, errors }) => (
@@ -203,55 +212,58 @@ export const RecurrencePatternField: React.FC<CommonFieldProps> = ({ control, er
   </div>
 );
 
-export const PreferredStartField: React.FC<CommonFieldProps> = ({ control, errors }) => (
-  <div>
-    <label htmlFor="task-wizard-preferred-start" className={lbl}>
-      {SCHEDULING_FIELD_LABELS.preferredStartTime}
-    </label>
-    <Controller
-      name="preferredStartTime"
-      control={control}
-      render={({ field }) => (
-        <input
-          {...field}
-          id="task-wizard-preferred-start"
-          type="time"
-          className={`${inp} ${errors.preferredStartTime ? 'border-ide-error' : ''}`}
-          value={field.value ?? ''}
-        />
-      )}
-    />
-    {errors.preferredStartTime ? (
-      <p className="mt-1 text-sm text-ide-error" role="alert">
-        {errors.preferredStartTime.message}
-      </p>
-    ) : null}
-  </div>
-);
+export const PreferredStartField: React.FC<PreferredStartProps> = ({
+  control,
+  errors,
+  phaseTimeBounds,
+}) => {
+  const slotOptionsBase = useMemo(
+    () => buildPreferredStartSlotOptions(phaseTimeBounds),
+    [phaseTimeBounds],
+  );
 
-export const PreferredEndField: React.FC<CommonFieldProps> = ({ control, errors }) => (
-  <div>
-    <label htmlFor="task-wizard-preferred-end" className={lbl}>
-      {SCHEDULING_FIELD_LABELS.preferredEndTime}
-    </label>
-    <Controller
-      name="preferredEndTime"
-      control={control}
-      render={({ field }) => (
-        <input
-          {...field}
-          id="task-wizard-preferred-end"
-          type="time"
-          className={`${inp} ${errors.preferredEndTime ? 'border-ide-error' : ''}`}
-          value={field.value ?? ''}
-        />
-      )}
-    />
-    {errors.preferredEndTime ? (
-      <p className="mt-1 text-sm text-ide-error" role="alert">
-        {errors.preferredEndTime.message}
+  return (
+    <div>
+      <label htmlFor="task-wizard-preferred-start" className={lbl}>
+        {SCHEDULING_FIELD_LABELS.preferredStartTime}{' '}
+        <span className="text-ide-muted">(optional)</span>
+      </label>
+      <Controller
+        name="preferredStartTime"
+        control={control}
+        render={({ field }) => {
+          const options = mergeSavedPreferredStartIntoOptions(
+            slotOptionsBase,
+            field.value,
+            phaseTimeBounds,
+          );
+          return (
+            <select
+              id="task-wizard-preferred-start"
+              className={`${inp} ${errors.preferredStartTime ? 'border-ide-error' : ''}`}
+              value={field.value ?? ''}
+              onChange={(e) => field.onChange(e.target.value || undefined)}
+              onBlur={field.onBlur}
+              ref={field.ref}
+              name={field.name}
+            >
+              {options.map((opt) => (
+                <option key={opt.value || '__none__'} value={opt.value} disabled={opt.disabled}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          );
+        }}
+      />
+      <p className="mt-1 text-sm text-ide-muted">
+        End time is derived from preferred start plus estimated duration.
       </p>
-    ) : null}
-  </div>
-);
-
+      {errors.preferredStartTime ? (
+        <p className="mt-1 text-sm text-ide-error" role="alert">
+          {errors.preferredStartTime.message}
+        </p>
+      ) : null}
+    </div>
+  );
+};

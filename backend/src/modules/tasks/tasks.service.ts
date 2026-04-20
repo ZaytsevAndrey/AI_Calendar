@@ -58,32 +58,34 @@ export class TasksService {
     task: Task,
   ): Promise<void> {
     if (!this.canSyncTaskToGoogle(task)) {
-      if (task.googleEventId) {
-        try {
-          await this.googleCalendarService.deleteEvent(userId, task.googleEventId);
-        } catch (e: any) {
-          this.logger.warn(
-            `Failed to delete Google event for task ${task.id}: ${e?.message ?? e}`,
-          );
-        }
-        task.googleEventId = null;
-      }
+      // Non-FIXED tasks use googleEventId from replan sync; do not delete here.
       return;
     }
 
     const conn = await this.googleCalendarService.checkConnection(userId);
-    if (!conn.connected) return;
+    if (!conn.connected) {
+      this.logger.warn(
+        `Google Calendar not connected for user ${userId}; skipped sync for FIXED task ${task.id}.`,
+      );
+      return;
+    }
 
     const payload = this.buildGoogleEventPayload(task);
+    const syncOpts = { skipSleepWindowCheck: true } as const;
     try {
       if (task.googleEventId) {
         await this.googleCalendarService.updateEvent(
           userId,
           task.googleEventId,
           payload,
+          syncOpts,
         );
       } else {
-        const ev = await this.googleCalendarService.createEvent(userId, payload);
+        const ev = await this.googleCalendarService.createEvent(
+          userId,
+          payload,
+          syncOpts,
+        );
         if (typeof ev?.id === 'string') {
           task.googleEventId = ev.id;
         }
@@ -169,6 +171,7 @@ export class TasksService {
 
     if (eventType !== TaskEventType.FIXED) {
       await this.scheduleJobService.enqueueReplan(userId);
+      await this.scheduleJobService.processNextPendingForUser(userId);
     }
 
     return this.findOne(saved.id, userId);
@@ -258,6 +261,7 @@ export class TasksService {
 
     if (saved.eventType !== TaskEventType.FIXED && saved.status === TaskStatus.TODO) {
       await this.scheduleJobService.enqueueReplan(userId);
+      await this.scheduleJobService.processNextPendingForUser(userId);
     }
 
     return this.findOne(saved.id, userId);
@@ -276,6 +280,7 @@ export class TasksService {
     }
     await this.tasksRepository.remove(task);
     await this.scheduleJobService.enqueueReplan(userId);
+    await this.scheduleJobService.processNextPendingForUser(userId);
   }
 
   async findByStatus(userId: string, status: TaskStatus): Promise<Task[]> {
@@ -308,6 +313,7 @@ export class TasksService {
     const saved = await this.tasksRepository.save(task);
     if (saved.eventType !== TaskEventType.FIXED) {
       await this.scheduleJobService.enqueueReplan(userId);
+      await this.scheduleJobService.processNextPendingForUser(userId);
     }
     return saved;
   }

@@ -11,6 +11,7 @@ import {
   getEventTypeRules,
 } from '../scheduling/event-type.enum';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { effectiveRecurrenceWeekDaysFromPhases } from './recurrence-from-phases.util';
 
 const DEFAULT_HORIZON_DAYS = 30;
 const BEYOND_HORIZON_EXTRA_DAYS = 30;
@@ -471,12 +472,25 @@ export class IntelligentSchedulingEngine {
     const deadlineMs = task.deadline ? new Date(task.deadline).getTime() : null;
     const phases = this.resolvePhasesForTask(task);
     const segments: { start: Date; end: Date }[] = [];
+    const restrictedWeekDays =
+      recurrencePattern === 'DAILY'
+        ? effectiveRecurrenceWeekDaysFromPhases(phases)
+        : null;
 
     let beyondHorizon = false;
     let occurrenceStart = new Date(startDay);
     occurrenceStart.setHours(0, 0, 0, 0);
 
     while (occurrenceStart < horizonEnd) {
+      if (
+        recurrencePattern === 'DAILY' &&
+        restrictedWeekDays?.length &&
+        !restrictedWeekDays.includes(occurrenceStart.getDay())
+      ) {
+        occurrenceStart = advanceOccurrenceStart(occurrenceStart, recurrencePattern);
+        continue;
+      }
+
       const placedBusy = this.rebuildBusy(anchorBusy, newSegments);
       for (const seg of segments) {
         placedBusy.push({ start: seg.start.getTime(), end: seg.end.getTime() });

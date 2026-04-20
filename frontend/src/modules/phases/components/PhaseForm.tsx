@@ -18,7 +18,7 @@ const phaseSchema = z.object({
   weekDays: z.array(z.number()).min(1, 'Select at least one day of the week'),
 });
 
-type PhaseFormData = z.infer<typeof phaseSchema>;
+export type PhaseFormData = z.infer<typeof phaseSchema>;
 
 interface PhaseFormProps {
   initialData?: PhaseDTO;
@@ -40,7 +40,7 @@ const PhaseForm = ({
   const { data: userSettings } = useGetUserSettingsQuery();
   const [selectedDays, setSelectedDays] = useState<number[]>(initialData?.weekDays || [1,2,3,4,5]);
   
-  const { register, handleSubmit, formState: { errors }, watch, setValue } = useForm<PhaseFormData>({
+  const { register, handleSubmit, formState: { errors }, watch, setValue, control } = useForm<PhaseFormData>({
     resolver: zodResolver(phaseSchema),
     defaultValues: initialData ? {
       ...initialData,
@@ -97,11 +97,7 @@ const PhaseForm = ({
         <textarea {...register('description')} id="description" rows={3} />
       </div>
 
-      <TimeRangeField 
-        errors={errors}
-        watchedValues={watchedValues}
-        setValue={setValue}
-      />
+      <TimeRangeField<PhaseFormData> control={control} errors={errors} />
 
       {/* Field errors */}
       {sleepError && (

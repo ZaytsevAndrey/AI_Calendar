@@ -8,6 +8,7 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Setup and build](setup-and-build.md) | Dependencies, environment variables, ports, npm commands (root / frontend / backend) |
 | [API reference](api-reference.md) | Main HTTP routes (aligned with Nest controllers) |
 | [Integrations](integrations.md) | Google OAuth / Calendar, common errors (`redirect_uri_mismatch`) |
+| [Task creation rules](task-creation-rules.md) | Wizard steps, validation, phase limits, recurrence, Google sync rules |
 | [Roadmap](roadmap.md) | Done, in progress, planned |
 | [Spec: Intelligent scheduling](spec-intelligent-scheduling.md) | Unified items, types, phases, queue, diff/undo, Google anchors |
 

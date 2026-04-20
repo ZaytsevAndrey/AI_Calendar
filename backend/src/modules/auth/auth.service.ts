@@ -115,12 +115,13 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     this.logger.log(`Password hashed successfully`);
 
-    await this.updatePassword(user.id.toString(), hashedPassword);
-    this.logger.log(`Password updated for user ID: ${user.id}`);
-
-    user.resetToken = null;
-    await this.usersRepo.save(user);
-    this.logger.log(`Reset token cleared for user ID: ${user.id}`);
+    // Single update — do not `save(user)` here: the loaded entity still has the
+    // old password in memory and would overwrite the new hash on flush.
+    await this.usersRepo.update(
+      { id: user.id },
+      { password: hashedPassword, resetToken: null },
+    );
+    this.logger.log(`Password and reset token updated for user ID: ${user.id}`);
 
     this.emailService.sendEmail(
       user.email,

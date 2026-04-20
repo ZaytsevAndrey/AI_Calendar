@@ -13,6 +13,9 @@ import {
 import storage from 'redux-persist/lib/storage';
 import { combineReducers } from 'redux';
 import authReducer from '../modules/auth/slice/authSlice';
+import forgotPasswordReducer from '../modules/auth/reducers/forgotPasswordReducer';
+import resetPasswordReducer from '../modules/auth/reducers/resetPasswordReducer';
+import emailVerificationReducer from '../modules/auth/reducers/emailVerificationReducer';
 import userSettingsReducer from '../modules/user-settings/slice/userSettingsSlice';
 import { eventTasksApi } from '../api/eventTasksApi';
 import { phasesApi } from '../api/phasesApi';
@@ -35,6 +38,9 @@ const persistConfig = {
 
 const rootReducer = combineReducers({
     auth: authReducer,
+    forgotPassword: forgotPasswordReducer,
+    resetPassword: resetPasswordReducer,
+    emailVerification: emailVerificationReducer,
     userSettings: userSettingsReducer,
     [eventTasksApi.reducerPath]: eventTasksApi.reducer,
     [phasesApi.reducerPath]: phasesApi.reducer,

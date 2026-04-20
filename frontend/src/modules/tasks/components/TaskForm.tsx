@@ -146,7 +146,12 @@ const TaskForm: React.FC<TaskFormProps> = ({
         ) : null}
         {step === 1 ? <TaskDetailsStep control={control} errors={errors} /> : null}
         {step === 2 ? (
-          <TaskSchedulingStep control={control} errors={errors} eventType={eventType} />
+          <TaskSchedulingStep
+            control={control}
+            errors={errors}
+            eventType={eventType}
+            phases={phases}
+          />
         ) : null}
         {step === 3 ? <TaskReviewStep getValues={getValues} phases={phases} /> : null}
       </div>

@@ -12,6 +12,10 @@ import { IntelligentSchedulingEngine } from './intelligent-scheduling.engine';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { Task } from '../tasks/entities/task.entity';
 import { TaskEventType } from '../scheduling/event-type.enum';
+import {
+  effectiveRecurrenceWeekDaysFromPhases,
+  rruleByDayFromJsWeekdays,
+} from './recurrence-from-phases.util';
 
 @Injectable()
 export class ScheduleJobService {
@@ -63,7 +67,26 @@ export class ScheduleJobService {
     });
     const job = pending[0];
     if (!job) return false;
+    await this.runPendingJob(job);
+    return true;
+  }
 
+  /**
+   * Process this user's oldest pending replan job (so calendar sync runs right after task changes).
+   */
+  async processNextPendingForUser(userId: string): Promise<boolean> {
+    const pending = await this.jobRepo.find({
+      where: { status: 'pending', userId },
+      order: { createdAt: 'ASC' },
+      take: 1,
+    });
+    const job = pending[0];
+    if (!job) return false;
+    await this.runPendingJob(job);
+    return true;
+  }
+
+  private async runPendingJob(job: ScheduleJob): Promise<void> {
     job.status = 'running';
     await this.jobRepo.save(job);
 
@@ -95,8 +118,6 @@ export class ScheduleJobService {
       job.errorMessage = e?.message ?? String(e);
       await this.jobRepo.save(job);
     }
-
-    return true;
   }
 
   private toGoogleFreq(pattern?: string | null): 'DAILY' | 'WEEKLY' | 'MONTHLY' | null {
@@ -111,11 +132,21 @@ export class ScheduleJobService {
   private buildGoogleRecurrenceRule(
     pattern: string,
     untilIso: string,
+    restrictToWeekDays: number[] | null,
   ): string {
     const freq = this.toGoogleFreq(pattern);
     if (!freq) return '';
     const interval = pattern.toUpperCase() === 'BIWEEKLY' ? 2 : 1;
     const until = untilIso.replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+    const upper = pattern.toUpperCase();
+    if (
+      upper === 'DAILY' &&
+      restrictToWeekDays?.length &&
+      restrictToWeekDays.length < 7
+    ) {
+      const byday = rruleByDayFromJsWeekdays(restrictToWeekDays);
+      return `RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=${byday};UNTIL=${until}`;
+    }
     return `RRULE:FREQ=${freq};INTERVAL=${interval};UNTIL=${until}`;
   }
 
@@ -135,22 +166,19 @@ export class ScheduleJobService {
     if (!diff.length) return;
 
     const conn = await this.googleCalendarService.checkConnection(userId);
-    if (!conn.connected) return;
+    if (!conn.connected) {
+      this.logger.warn(
+        `Google Calendar not connected for user ${userId}; skipped post-replan sync.`,
+      );
+      return;
+    }
+
+    const googleSyncOpts = { skipSleepWindowCheck: true } as const;
 
     for (const item of diff) {
       const task = await this.taskRepo.findOne({
         where: { id: item.taskId, userId },
-        select: [
-          'id',
-          'name',
-          'description',
-          'googleEventId',
-          'eventType',
-          'isRecurring',
-          'recurrencePattern',
-          'scheduledStartTime',
-          'scheduledEndTime',
-        ],
+        relations: ['phase', 'phases'],
       });
       if (!task) continue;
 
@@ -172,39 +200,49 @@ export class ScheduleJobService {
         continue;
       }
 
-      const minStart = item.after.reduce((min, s) => {
-        const t = new Date(s.start).getTime();
-        return Math.min(min, t);
-      }, Number.POSITIVE_INFINITY);
-      const maxEnd = item.after.reduce((max, s) => {
-        const t = new Date(s.end).getTime();
-        return Math.max(max, t);
-      }, Number.NEGATIVE_INFINITY);
+      const sortedSegments = [...item.after].sort(
+        (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+      );
+      const firstSegment = sortedSegments[0];
+      const firstStart = firstSegment ? new Date(firstSegment.start).getTime() : NaN;
+      const lastSegment = sortedSegments[sortedSegments.length - 1];
+      const lastEndMs = lastSegment ? new Date(lastSegment.end).getTime() : NaN;
+      const totalDurationMs = sortedSegments.reduce((sum, seg) => {
+        const s = new Date(seg.start).getTime();
+        const e = new Date(seg.end).getTime();
+        if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) return sum;
+        return sum + (e - s);
+      }, 0);
+      const defaultDurationMs = Math.max(1, task.estimatedTimeInMinutes || 1) * 60 * 1000;
+      const durationMs = totalDurationMs > 0 ? totalDurationMs : defaultDurationMs;
 
-      if (!Number.isFinite(minStart) || !Number.isFinite(maxEnd) || maxEnd <= minStart) {
+      if (!Number.isFinite(firstStart) || durationMs <= 0) {
         continue;
       }
 
       const payload: Record<string, unknown> = {
         summary: task.name,
         description: task.description || undefined,
-        start: { dateTime: new Date(minStart).toISOString(), timeZone: 'UTC' },
-        end: { dateTime: new Date(maxEnd).toISOString(), timeZone: 'UTC' },
+        start: { dateTime: new Date(firstStart).toISOString(), timeZone: 'UTC' },
+        end: { dateTime: new Date(firstStart + durationMs).toISOString(), timeZone: 'UTC' },
       };
 
       if (task.isRecurring && task.recurrencePattern) {
-        const firstSegment = [...item.after].sort(
-          (a, b) =>
-            new Date(a.start).getTime() - new Date(b.start).getTime(),
-        )[0];
-        const lastEnd = new Date(maxEnd).toISOString();
+        const lastEnd = new Date(
+          Number.isFinite(lastEndMs) && lastEndMs > firstStart
+            ? lastEndMs
+            : firstStart + durationMs,
+        ).toISOString();
+        const phaseList =
+          task.phases?.length ? task.phases : task.phase ? [task.phase] : [];
+        const restrictDays = effectiveRecurrenceWeekDaysFromPhases(phaseList);
         const rule = this.buildGoogleRecurrenceRule(
           task.recurrencePattern,
           lastEnd,
+          restrictDays,
         );
         if (firstSegment) {
-          const firstStart = new Date(firstSegment.start).getTime();
-          const firstEnd = new Date(firstSegment.end).getTime();
+          const firstEnd = firstStart + defaultDurationMs;
           payload.start = {
             dateTime: new Date(firstStart).toISOString(),
             timeZone: 'UTC',
@@ -225,9 +263,14 @@ export class ScheduleJobService {
             userId,
             task.googleEventId,
             payload,
+            googleSyncOpts,
           );
         } else {
-          const ev = await this.googleCalendarService.createEvent(userId, payload);
+          const ev = await this.googleCalendarService.createEvent(
+            userId,
+            payload,
+            googleSyncOpts,
+          );
           if (typeof ev?.id === 'string') {
             task.googleEventId = ev.id;
             await this.taskRepo.save(task);

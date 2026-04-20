@@ -16,7 +16,8 @@ export const taskWizardSchema = z
     name: z.string().min(1, 'Task name is required'),
     description: z.string().optional(),
     eventType: eventTypeEnum.optional(),
-    phaseIds: z.array(z.string()).optional(),
+    /** Single scheduling phase, or empty / unset for any time window */
+    phaseId: z.string().optional(),
     estimatedTimeInMinutes: z.number().optional(),
     isRecurring: z.boolean().optional(),
     recurrencePattern: z.string().optional(),
@@ -26,7 +27,6 @@ export const taskWizardSchema = z
     scheduledStartTime: z.string().optional(),
     scheduledEndTime: z.string().optional(),
     preferredStartTime: z.string().optional(),
-    preferredEndTime: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (!data.eventType) {
@@ -88,28 +88,6 @@ export const taskWizardSchema = z
       });
     }
 
-    if (data.eventType === 'daily_routine') {
-      const hasStart = !!data.preferredStartTime?.trim();
-      const hasEnd = !!data.preferredEndTime?.trim();
-      if (hasStart !== hasEnd) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Provide both start and end time',
-          path: [hasStart ? 'preferredEndTime' : 'preferredStartTime'],
-        });
-      }
-      if (hasStart && hasEnd) {
-        const start = data.preferredStartTime!;
-        const end = data.preferredEndTime!;
-        if (end <= start) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'Preferred end must be after start',
-            path: ['preferredEndTime'],
-          });
-        }
-      }
-    }
   });
 
 export type TaskWizardFormValues = z.infer<typeof taskWizardSchema>;

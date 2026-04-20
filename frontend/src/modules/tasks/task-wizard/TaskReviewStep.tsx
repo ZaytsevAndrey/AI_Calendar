@@ -31,10 +31,9 @@ export const TaskReviewStep: React.FC<Props> = ({ getValues, phases }) => {
   const eventLabel =
     EVENT_TYPE_OPTIONS.find((o) => o.value === values.eventType)?.label ?? values.eventType;
 
-  const phaseNames = (values.phaseIds ?? [])
-    .map((id) => phases.find((p) => p.id === id)?.name)
-    .filter(Boolean)
-    .join(', ');
+  const phaseLabel = values.phaseId
+    ? phases.find((p) => p.id === values.phaseId)?.name ?? values.phaseId
+    : '';
 
   const typeAllowsSplit = SPLITTABLE_TYPES.has(values.eventType as TaskEventType);
 
@@ -71,8 +70,8 @@ export const TaskReviewStep: React.FC<Props> = ({ getValues, phases }) => {
           </>
         ) : null}
         <div className="grid grid-cols-1 gap-1 px-3 py-2 sm:grid-cols-[8rem_1fr] sm:gap-4">
-          <dt className="font-medium text-ide-muted">Phases</dt>
-          <dd className="text-ide-text">{phaseNames || 'Any (full day window)'}</dd>
+          <dt className="font-medium text-ide-muted">Phase</dt>
+          <dd className="text-ide-text">{phaseLabel || 'Any (full day window)'}</dd>
         </div>
         {isFixed ? (
           <div className="grid grid-cols-1 gap-1 px-3 py-2 sm:grid-cols-[8rem_1fr] sm:gap-4">
@@ -105,14 +104,20 @@ export const TaskReviewStep: React.FC<Props> = ({ getValues, phases }) => {
               </dd>
             </div>
             {values.eventType === 'daily_routine' ? (
-              <div className="grid grid-cols-1 gap-1 px-3 py-2 sm:grid-cols-[8rem_1fr] sm:gap-4">
-                <dt className="font-medium text-ide-muted">Preferred time</dt>
-                <dd className="text-ide-text">
-                  {values.preferredStartTime && values.preferredEndTime
-                    ? `${values.preferredStartTime} - ${values.preferredEndTime}`
-                    : 'Not set'}
-                </dd>
-              </div>
+              <>
+                <div className="grid grid-cols-1 gap-1 px-3 py-2 sm:grid-cols-[8rem_1fr] sm:gap-4">
+                  <dt className="font-medium text-ide-muted">Preferred start</dt>
+                  <dd className="text-ide-text">{values.preferredStartTime?.trim() || '—'}</dd>
+                </div>
+                <div className="grid grid-cols-1 gap-1 px-3 py-2 sm:grid-cols-[8rem_1fr] sm:gap-4">
+                  <dt className="font-medium text-ide-muted">Computed window</dt>
+                  <dd className="text-ide-text">
+                    {payload.scheduledStartTime && payload.scheduledEndTime
+                      ? `${formatLocal(payload.scheduledStartTime)} → ${formatLocal(payload.scheduledEndTime)}`
+                      : '— (set a preferred start to preview)'}
+                  </dd>
+                </div>
+              </>
             ) : null}
           </>
         ) : null}

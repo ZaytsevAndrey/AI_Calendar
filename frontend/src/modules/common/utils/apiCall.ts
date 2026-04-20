@@ -17,9 +17,15 @@ export default async function apiCall(config: any) {
     try {
         return await axios(config);
     } catch (error: any) {
+        const requestUrl = String(error?.config?.url ?? '');
+        const isCredentialEntryRequest =
+            requestUrl.includes('/auth/login') ||
+            requestUrl.includes('/auth/register');
+
         if (
-            error?.response?.status === 401 ||
-            error?.response?.data?.statusCode === 401
+            !isCredentialEntryRequest &&
+            (error?.response?.status === 401 ||
+                error?.response?.data?.statusCode === 401)
         ) {
             store.dispatch<any>(clientLogout(true));
             throw error;

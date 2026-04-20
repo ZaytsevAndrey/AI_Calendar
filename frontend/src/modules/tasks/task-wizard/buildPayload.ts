@@ -5,7 +5,8 @@ import { DEFAULT_DURATION_BY_TYPE, SPLITTABLE_TYPES } from './constants';
 export function buildTaskPayload(data: TaskWizardFormValues): CreateTaskDTO | UpdateTaskDTO {
   const eventType = (data.eventType ?? 'admin') as TaskEventType;
   const typeAllowsSplit = SPLITTABLE_TYPES.has(eventType);
-  const phaseIds = (data.phaseIds ?? []).filter(Boolean);
+  const primaryPhaseId = data.phaseId?.trim();
+  const phaseIds = primaryPhaseId ? [primaryPhaseId] : [];
   const estimatedTimeInMinutes =
     data.estimatedTimeInMinutes ?? DEFAULT_DURATION_BY_TYPE[eventType] ?? 30;
 
@@ -20,7 +21,7 @@ export function buildTaskPayload(data: TaskWizardFormValues): CreateTaskDTO | Up
     priority: data.priority,
     deadline: data.deadline || undefined,
     phaseIds: phaseIds.length ? phaseIds : undefined,
-    phaseId: phaseIds[0],
+    phaseId: primaryPhaseId || undefined,
   };
 
   if (eventType === 'fixed' && data.scheduledStartTime && data.scheduledEndTime) {
@@ -28,21 +29,15 @@ export function buildTaskPayload(data: TaskWizardFormValues): CreateTaskDTO | Up
     payload.scheduledEndTime = new Date(data.scheduledEndTime).toISOString();
   }
 
-  if (
-    eventType === 'daily_routine' &&
-    data.preferredStartTime &&
-    data.preferredEndTime
-  ) {
+  if (eventType === 'daily_routine' && data.preferredStartTime?.trim()) {
     const baseDate = new Date();
     const yyyy = baseDate.getFullYear();
     const mm = String(baseDate.getMonth() + 1).padStart(2, '0');
     const dd = String(baseDate.getDate()).padStart(2, '0');
-    payload.scheduledStartTime = new Date(
-      `${yyyy}-${mm}-${dd}T${data.preferredStartTime}:00`,
-    ).toISOString();
-    payload.scheduledEndTime = new Date(
-      `${yyyy}-${mm}-${dd}T${data.preferredEndTime}:00`,
-    ).toISOString();
+    const startLocal = new Date(`${yyyy}-${mm}-${dd}T${data.preferredStartTime.trim()}:00`);
+    const endLocal = new Date(startLocal.getTime() + estimatedTimeInMinutes * 60 * 1000);
+    payload.scheduledStartTime = startLocal.toISOString();
+    payload.scheduledEndTime = endLocal.toISOString();
   }
 
   return payload;
@@ -54,22 +49,21 @@ export function initialWizardValues(data?: TaskDTO): TaskWizardFormValues {
       name: '',
       description: '',
       eventType: undefined,
-      phaseIds: [],
+      phaseId: '',
       estimatedTimeInMinutes: 30,
       isRecurring: false,
       allowSplit: true,
       priority: 'medium',
       preferredStartTime: undefined,
-      preferredEndTime: undefined,
     };
   }
-  const phaseIds =
-    data.phases?.length ? data.phases.map((p) => p.id) : data.phaseId ? [data.phaseId] : [];
+  const phaseId =
+    data.phaseId ?? (data.phases?.length ? data.phases[0].id : undefined) ?? '';
   return {
     name: data.name,
     description: data.description ?? '',
     eventType: (data.eventType ?? 'admin') as TaskWizardFormValues['eventType'],
-    phaseIds,
+    phaseId,
     estimatedTimeInMinutes: data.estimatedTimeInMinutes,
     isRecurring: data.isRecurring,
     recurrencePattern: data.recurrencePattern ?? '',
@@ -86,9 +80,6 @@ export function initialWizardValues(data?: TaskDTO): TaskWizardFormValues {
       : undefined,
     preferredStartTime: data.scheduledStartTime
       ? new Date(data.scheduledStartTime).toISOString().substring(11, 16)
-      : undefined,
-    preferredEndTime: data.scheduledEndTime
-      ? new Date(data.scheduledEndTime).toISOString().substring(11, 16)
       : undefined,
   };
 }

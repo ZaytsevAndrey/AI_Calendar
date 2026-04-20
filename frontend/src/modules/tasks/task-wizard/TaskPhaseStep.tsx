@@ -32,32 +32,44 @@ export const TaskPhaseStep: React.FC<Props> = ({ control, phases }) => {
     <div className="space-y-5">
       <div>
         <p className="text-sm text-ide-muted">
-          Optionally pick phases where this task should be considered. Leave empty to allow the full
-          day window.
+          Optionally pick one time phase for this event. Leave as &quot;Any time&quot; to allow the
+          full day window.
         </p>
       </div>
       <div>
-        <span className={lbl}>Eligible phases</span>
+        <span className={lbl}>Phase</span>
         {schedulingPhases.length === 0 ? (
           <p className="text-sm text-ide-muted">No time phases yet. You can skip this step.</p>
         ) : (
           <Controller
-            name="phaseIds"
+            name="phaseId"
             control={control}
             render={({ field }) => (
               <ul className="max-h-48 space-y-2 overflow-y-auto rounded-md border border-ide-border p-3">
+                <li>
+                  <label className="flex cursor-pointer items-start gap-2 text-sm text-ide-text">
+                    <input
+                      type="radio"
+                      className="mt-1"
+                      name={field.name}
+                      checked={!field.value}
+                      onChange={() => field.onChange('')}
+                      onBlur={field.onBlur}
+                      ref={field.ref}
+                    />
+                    <span>Any time (full day window)</span>
+                  </label>
+                </li>
                 {schedulingPhases.map((phase) => (
                   <li key={phase.id}>
                     <label className="flex cursor-pointer items-start gap-2 text-sm text-ide-text">
                       <input
-                        type="checkbox"
+                        type="radio"
                         className="mt-1"
-                        checked={(field.value ?? []).includes(phase.id)}
-                        onChange={(e) => {
-                          const cur = field.value ?? [];
-                          if (e.target.checked) field.onChange([...cur, phase.id]);
-                          else field.onChange(cur.filter((id) => id !== phase.id));
-                        }}
+                        name={field.name}
+                        checked={field.value === phase.id}
+                        onChange={() => field.onChange(phase.id)}
+                        onBlur={field.onBlur}
                       />
                       <span>
                         <span

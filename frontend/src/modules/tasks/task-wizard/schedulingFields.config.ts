@@ -9,8 +9,7 @@ export type SchedulingFieldKey =
   | 'allowSplit'
   | 'isRecurring'
   | 'recurrencePattern'
-  | 'preferredStartTime'
-  | 'preferredEndTime';
+  | 'preferredStartTime';
 
 export type EventSchedulingConfig = {
   mode: 'fixed' | 'flexible';
@@ -25,7 +24,8 @@ export const SCHEDULING_MODE_DESCRIPTION: Record<EventSchedulingConfig['mode'], 
 };
 
 export const EVENT_TYPE_SCHEDULING_HINTS: Partial<Record<TaskEventType, string>> = {
-  daily_routine: 'Optional: set preferred execution time for daily routine.',
+  daily_routine:
+    'Optional: preferred start time; end = start + estimated duration. If the task has a phase with specific weekdays (e.g. Mon–Fri), recurring copies follow only those days in the planner and in Google Calendar.',
 };
 
 export const SCHEDULING_FIELD_VISIBILITY: Partial<
@@ -43,7 +43,6 @@ export const SCHEDULING_FIELD_LABELS: Record<SchedulingFieldKey, string> = {
   isRecurring: 'Recurring task',
   recurrencePattern: 'Recurrence pattern',
   preferredStartTime: 'Preferred start',
-  preferredEndTime: 'Preferred end',
 };
 
 export const SCHEDULING_FIELD_HINTS: Partial<Record<SchedulingFieldKey, string>> = {
@@ -84,23 +83,14 @@ const DAILY_ROUTINE_CONFIG: EventSchedulingConfig = {
     'isRecurring',
     'recurrencePattern',
     'preferredStartTime',
-    'preferredEndTime',
   ],
   validationFieldsWhenRecurring: [
     'estimatedTimeInMinutes',
     'allowSplit',
     'isRecurring',
     'recurrencePattern',
-    'preferredStartTime',
-    'preferredEndTime',
   ],
-  validationFieldsWhenNotRecurring: [
-    'estimatedTimeInMinutes',
-    'allowSplit',
-    'isRecurring',
-    'preferredStartTime',
-    'preferredEndTime',
-  ],
+  validationFieldsWhenNotRecurring: ['estimatedTimeInMinutes', 'allowSplit', 'isRecurring'],
 };
 
 export const EVENT_TYPE_SCHEDULING_CONFIG: Record<TaskEventType, EventSchedulingConfig> = {
