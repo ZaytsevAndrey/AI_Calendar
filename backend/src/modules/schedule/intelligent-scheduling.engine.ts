@@ -294,10 +294,17 @@ export class IntelligentSchedulingEngine {
               ? `Cannot fit "${task.name}" before deadline; adjust priority, phases, split settings, or deadline.`
               : `Cannot fit "${task.name}" in the available window.`,
           });
-        } else if (res.beyondHorizon) {
-          warnings.push(
-            `Task "${task.name}" was placed outside the ${horizonDays}-day window.`,
-          );
+        } else {
+          if (res.beyondHorizon) {
+            warnings.push(
+              `Task "${task.name}" was placed outside the ${horizonDays}-day window.`,
+            );
+          }
+          if (res.skippedOccurrences > 0) {
+            warnings.push(
+              `Task "${task.name}" skipped ${res.skippedOccurrences} recurring occurrence(s) because no eligible slot was available in the phase window.`,
+            );
+          }
         }
       }
     }
@@ -378,6 +385,7 @@ export class IntelligentSchedulingEngine {
     ok: boolean;
     segments: { start: Date; end: Date }[];
     beyondHorizon: boolean;
+    skippedOccurrences: number;
   } {
     const recurrencePattern =
       task.isRecurring ? normalizeRecurrencePattern(task.recurrencePattern) : null;
@@ -401,6 +409,10 @@ export class IntelligentSchedulingEngine {
       settings.allowSplitScheduling && rules.splittable && task.allowSplit
         ? Math.max(5, settings.minSplitMinutes ?? 30)
         : durationMin;
+    const maxChunk =
+      settings.allowSplitScheduling && rules.splittable && task.allowSplit
+        ? Math.max(minChunk, settings.maxSplitMinutes ?? minChunk)
+        : durationMin;
     const effectiveSplittable = this.isTaskSplittable(task, settings);
     const deadlineMs = task.deadline
       ? new Date(task.deadline).getTime()
@@ -411,6 +423,7 @@ export class IntelligentSchedulingEngine {
     let result = this.placeTaskGreedy(
       durationMin,
       minChunk,
+      maxChunk,
       effectiveSplittable,
       phases,
       startDay,
@@ -427,6 +440,7 @@ export class IntelligentSchedulingEngine {
       result = this.placeTaskGreedy(
         durationMin,
         minChunk,
+        maxChunk,
         effectiveSplittable,
         phases,
         startDay,
@@ -444,6 +458,7 @@ export class IntelligentSchedulingEngine {
       ok: result.ok,
       segments: result.segments,
       beyondHorizon,
+      skippedOccurrences: 0,
     };
   }
 
@@ -461,12 +476,17 @@ export class IntelligentSchedulingEngine {
     ok: boolean;
     segments: { start: Date; end: Date }[];
     beyondHorizon: boolean;
+    skippedOccurrences: number;
   } {
     const rules = getEventTypeRules(task.eventType);
     const durationMin = task.estimatedTimeInMinutes;
     const minChunk =
       settings.allowSplitScheduling && rules.splittable && task.allowSplit
         ? Math.max(5, settings.minSplitMinutes ?? 30)
+        : durationMin;
+    const maxChunk =
+      settings.allowSplitScheduling && rules.splittable && task.allowSplit
+        ? Math.max(minChunk, settings.maxSplitMinutes ?? minChunk)
         : durationMin;
     const effectiveSplittable = this.isTaskSplittable(task, settings);
     const deadlineMs = task.deadline ? new Date(task.deadline).getTime() : null;
@@ -478,6 +498,7 @@ export class IntelligentSchedulingEngine {
         : null;
 
     let beyondHorizon = false;
+    let skippedOccurrences = 0;
     let occurrenceStart = new Date(startDay);
     occurrenceStart.setHours(0, 0, 0, 0);
 
@@ -532,11 +553,15 @@ export class IntelligentSchedulingEngine {
           occurrenceStart = occurrenceEnd;
           continue;
         }
+        skippedOccurrences += 1;
+        occurrenceStart = occurrenceEnd;
+        continue;
       }
 
       let result = this.placeTaskGreedy(
         durationMin,
         minChunk,
+        maxChunk,
         effectiveSplittable,
         phases,
         occurrenceStart,
@@ -550,32 +575,16 @@ export class IntelligentSchedulingEngine {
       );
 
       if (!result.ok) {
-        result = this.placeTaskGreedy(
-          durationMin,
-          minChunk,
-          effectiveSplittable,
-          phases,
-          occurrenceStart,
-          extendedEnd,
-          deadlineMs,
-          settings.wakeTime,
-          settings.sleepTime,
-          settings.weekendWorkEnabled,
-          mergedBusy,
-          nowMs,
-        );
-        if (result.ok) beyondHorizon = true;
-      }
-
-      if (!result.ok) {
-        return { ok: false, segments: [], beyondHorizon: false };
+        skippedOccurrences += 1;
+        occurrenceStart = occurrenceEnd;
+        continue;
       }
 
       segments.push(...result.segments);
       occurrenceStart = occurrenceEnd;
     }
 
-    return { ok: true, segments, beyondHorizon };
+    return { ok: true, segments, beyondHorizon, skippedOccurrences };
   }
 
   /**
@@ -592,7 +601,7 @@ export class IntelligentSchedulingEngine {
     horizonEnd: Date,
     extendedEnd: Date,
     nowMs: number,
-  ): { ok: boolean; beyondHorizon: boolean } {
+  ): { ok: boolean; beyondHorizon: boolean; skippedOccurrences: number } {
     const att = this.attemptPlaceTask(
       task,
       settings,
@@ -606,7 +615,11 @@ export class IntelligentSchedulingEngine {
     if (att.ok) {
       newSegments.set(task.id, att.segments);
       tierStack.push(task);
-      return { ok: true, beyondHorizon: att.beyondHorizon };
+      return {
+        ok: true,
+        beyondHorizon: att.beyondHorizon,
+        skippedOccurrences: att.skippedOccurrences,
+      };
     }
 
     const displaced: { task: Task; segments: { start: Date; end: Date }[] }[] =
@@ -665,7 +678,11 @@ export class IntelligentSchedulingEngine {
         }
 
         if (!fatal) {
-          return { ok: true, beyondHorizon: att2.beyondHorizon };
+          return {
+            ok: true,
+            beyondHorizon: att2.beyondHorizon,
+            skippedOccurrences: att2.skippedOccurrences,
+          };
         }
 
         for (const R of replanned.slice().reverse()) {
@@ -679,7 +696,7 @@ export class IntelligentSchedulingEngine {
           newSegments.set(d.task.id, d.segments);
           tierStack.push(d.task);
         }
-        return { ok: false, beyondHorizon: false };
+        return { ok: false, beyondHorizon: false, skippedOccurrences: 0 };
       }
     }
 
@@ -688,7 +705,7 @@ export class IntelligentSchedulingEngine {
       newSegments.set(d.task.id, d.segments);
       tierStack.push(d.task);
     }
-    return { ok: false, beyondHorizon: false };
+    return { ok: false, beyondHorizon: false, skippedOccurrences: 0 };
   }
 
   private resolvePhasesForTask(task: Task): Phase[] {
@@ -791,11 +808,10 @@ export class IntelligentSchedulingEngine {
     sleep: string,
     weekendOk: boolean,
   ): MsInterval[] {
-    const dow = day.getDay();
-    if ((dow === 0 || dow === 6) && !weekendOk) return [];
-
     const ws = dayWakeSleep(day, wake, sleep);
     if (!phases.length) {
+      const dow = day.getDay();
+      if ((dow === 0 || dow === 6) && !weekendOk) return [];
       return [ws];
     }
     const parts: MsInterval[] = [];
@@ -812,6 +828,7 @@ export class IntelligentSchedulingEngine {
   private placeTaskGreedy(
     durationMin: number,
     minChunk: number,
+    maxChunk: number,
     splittable: boolean,
     phases: Phase[],
     rangeStart: Date,
@@ -856,7 +873,7 @@ export class IntelligentSchedulingEngine {
             if (remaining <= minChunk) {
               takeMin = remaining;
             } else {
-              takeMin = Math.min(remaining, Math.floor(roomMin));
+              takeMin = Math.min(remaining, Math.floor(roomMin), Math.floor(maxChunk));
               if (takeMin < minChunk) break;
             }
           }

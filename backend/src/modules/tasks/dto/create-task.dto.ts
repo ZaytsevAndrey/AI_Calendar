@@ -10,6 +10,7 @@ import {
   Max,
   IsArray,
   IsUUID,
+  ArrayMaxSize,
 } from 'class-validator';
 import { TaskPriority } from '../entities/task.entity';
 import { TaskEventType } from '../../scheduling/event-type.enum';
@@ -42,6 +43,7 @@ export class CreateTaskDto {
     type: [String],
   })
   @IsArray()
+  @ArrayMaxSize(1)
   @IsUUID('4', { each: true })
   @IsOptional()
   phaseIds?: string[];

@@ -238,21 +238,38 @@ export const PreferredStartField: React.FC<PreferredStartProps> = ({
             phaseTimeBounds,
           );
           return (
-            <select
-              id="task-wizard-preferred-start"
-              className={`${inp} ${errors.preferredStartTime ? 'border-ide-error' : ''}`}
-              value={field.value ?? ''}
-              onChange={(e) => field.onChange(e.target.value || undefined)}
-              onBlur={field.onBlur}
-              ref={field.ref}
-              name={field.name}
-            >
-              {options.map((opt) => (
-                <option key={opt.value || '__none__'} value={opt.value} disabled={opt.disabled}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                id="task-wizard-preferred-start"
+                className={`${inp} pr-16 ${errors.preferredStartTime ? 'border-ide-error' : ''}`}
+                value={field.value ?? ''}
+                onChange={(e) => field.onChange(e.target.value)}
+                onBlur={field.onBlur}
+                ref={field.ref}
+                name={field.name}
+              >
+                {options.map((opt) => (
+                  <option key={opt.value || '__none__'} value={opt.value} disabled={opt.disabled}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              {field.value ? (
+                <button
+                  type="button"
+                  aria-label="Clear preferred start"
+                  title="Clear preferred start"
+                  className="absolute right-8 top-1/2 z-10 -translate-y-1/2 rounded px-1 text-base leading-none text-ide-muted hover:text-ide-text"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onClick={() => field.onChange('')}
+                >
+                  ×
+                </button>
+              ) : null}
+            </div>
           );
         }}
       />

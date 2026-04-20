@@ -137,6 +137,10 @@ export class TasksService {
       ...rest
     } = createTaskDto;
 
+    if (phaseIds && phaseIds.length > 1) {
+      throw new BadRequestException('Only one phase is supported per task');
+    }
+
     const task = this.tasksRepository.create({
       ...rest,
       userId,
@@ -214,6 +218,9 @@ export class TasksService {
     };
 
     if (dto.phaseIds !== undefined) {
+      if (dto.phaseIds.length > 1) {
+        throw new BadRequestException('Only one phase is supported per task');
+      }
       if (dto.phaseIds.length === 0) {
         task.phases = [];
         task.phaseId = null;
@@ -311,7 +318,10 @@ export class TasksService {
     const task = await this.findOne(id, userId);
     task.status = status;
     const saved = await this.tasksRepository.save(task);
-    if (saved.eventType !== TaskEventType.FIXED) {
+    if (
+      saved.eventType !== TaskEventType.FIXED &&
+      saved.status === TaskStatus.TODO
+    ) {
       await this.scheduleJobService.enqueueReplan(userId);
       await this.scheduleJobService.processNextPendingForUser(userId);
     }

@@ -35,6 +35,13 @@ export interface ScheduleJobStatusResponse {
   updatedAt?: string;
 }
 
+export interface SchedulingAlerts {
+  errors: string[];
+  warnings: string[];
+  issueCount: number;
+  updatedAt: string | null;
+}
+
 async function pollJobUntilDone(jobId: string, timeoutMs = 120_000): Promise<ScheduleJobStatusResponse> {
   const deadline = Date.now() + timeoutMs;
   let status = 'pending';
@@ -121,6 +128,27 @@ export const ScheduleApi = {
       '/schedule-jobs/latest/done',
     );
     return data;
+  },
+
+  getLatestAlerts: async (
+    maxAgeHours = 24,
+  ): Promise<SchedulingAlerts> => {
+    const { job } = await ScheduleApi.getLatestDoneJob();
+    if (!job?.result) {
+      return { errors: [], warnings: [], issueCount: 0, updatedAt: null };
+    }
+    const updatedAtMs = job.updatedAt ? new Date(job.updatedAt).getTime() : NaN;
+    const maxAgeMs = maxAgeHours * 60 * 60 * 1000;
+    if (!Number.isFinite(updatedAtMs) || Date.now() - updatedAtMs > maxAgeMs) {
+      return { errors: [], warnings: [], issueCount: 0, updatedAt: job.updatedAt ?? null };
+    }
+
+    const errorsRaw = (job.result.errors ?? []).map((e) => e.message).filter(Boolean);
+    const warningsRaw = (job.result.warnings ?? []).filter(Boolean);
+    const errors = [...new Set(errorsRaw)];
+    const warnings = [...new Set(warningsRaw)];
+    const issueCount = errors.length + warnings.length;
+    return { errors, warnings, issueCount, updatedAt: job.updatedAt ?? null };
   },
 
   undoLastReplan: async (): Promise<{ restored: boolean }> => {

@@ -11,6 +11,8 @@ export interface UserSettingsDTO {
   preferredLunchTime: string;
   weekendWorkEnabled: boolean;
   googleCalendarLinked: boolean;
+  minSplitMinutes: number;
+  maxSplitMinutes: number;
   recurringScheduleHorizonDays: number;
   createdAt: string;
   updatedAt: string;
@@ -30,6 +32,8 @@ export interface UpdateUserSettingsDTO {
   preferredLunchTime?: string;
   weekendWorkEnabled?: boolean;
   googleCalendarLinked?: boolean;
+  minSplitMinutes?: number;
+  maxSplitMinutes?: number;
   recurringScheduleHorizonDays?: number;
 }
 

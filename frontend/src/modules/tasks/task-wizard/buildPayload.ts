@@ -2,6 +2,27 @@ import type { CreateTaskDTO, TaskDTO, UpdateTaskDTO, TaskEventType } from '../..
 import type { TaskWizardFormValues } from './schema';
 import { DEFAULT_DURATION_BY_TYPE, SPLITTABLE_TYPES } from './constants';
 
+function toLocalDateTimeInput(value?: string): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+}
+
+function toLocalTimeInput(value?: string): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  const hh = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  return `${hh}:${min}`;
+}
+
 export function buildTaskPayload(data: TaskWizardFormValues): CreateTaskDTO | UpdateTaskDTO {
   const eventType = (data.eventType ?? 'admin') as TaskEventType;
   const typeAllowsSplit = SPLITTABLE_TYPES.has(eventType);
@@ -69,17 +90,9 @@ export function initialWizardValues(data?: TaskDTO): TaskWizardFormValues {
     recurrencePattern: data.recurrencePattern ?? '',
     allowSplit: data.allowSplit,
     priority: data.priority,
-    deadline: data.deadline
-      ? new Date(data.deadline).toISOString().substring(0, 16)
-      : undefined,
-    scheduledStartTime: data.scheduledStartTime
-      ? new Date(data.scheduledStartTime).toISOString().substring(0, 16)
-      : undefined,
-    scheduledEndTime: data.scheduledEndTime
-      ? new Date(data.scheduledEndTime).toISOString().substring(0, 16)
-      : undefined,
-    preferredStartTime: data.scheduledStartTime
-      ? new Date(data.scheduledStartTime).toISOString().substring(11, 16)
-      : undefined,
+    deadline: toLocalDateTimeInput(data.deadline),
+    scheduledStartTime: toLocalDateTimeInput(data.scheduledStartTime),
+    scheduledEndTime: toLocalDateTimeInput(data.scheduledEndTime),
+    preferredStartTime: toLocalTimeInput(data.scheduledStartTime),
   };
 }

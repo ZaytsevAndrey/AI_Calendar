@@ -40,6 +40,8 @@ export class UserSettingsService {
         userSettings.allowSplitScheduling = defaults.allowSplitScheduling;
       if (userSettings.minSplitMinutes === undefined)
         userSettings.minSplitMinutes = defaults.minSplitMinutes;
+      if (userSettings.maxSplitMinutes === undefined)
+        userSettings.maxSplitMinutes = defaults.maxSplitMinutes;
       if (userSettings.recurringScheduleHorizonDays === undefined)
         userSettings.recurringScheduleHorizonDays =
           defaults.recurringScheduleHorizonDays;
@@ -56,6 +58,13 @@ export class UserSettingsService {
     updateUserSettingsDto: UpdateUserSettingsDto,
   ): Promise<UserSettings> {
     const userSettings = await this.getSettings(userId);
+    const nextMin =
+      updateUserSettingsDto.minSplitMinutes ?? userSettings.minSplitMinutes;
+    const nextMax =
+      updateUserSettingsDto.maxSplitMinutes ?? userSettings.maxSplitMinutes;
+    if (nextMin > nextMax) {
+      updateUserSettingsDto.maxSplitMinutes = nextMin;
+    }
 
     const updatedSettings = this.userSettingsRepository.merge(
       userSettings,
@@ -75,6 +84,7 @@ export class UserSettingsService {
       weekendWorkEnabled: false,
       allowSplitScheduling: true,
       minSplitMinutes: 30,
+      maxSplitMinutes: 30,
       recurringScheduleHorizonDays: 30,
     };
   }
@@ -91,6 +101,7 @@ export class UserSettingsService {
       weekendWorkEnabled: false,
       allowSplitScheduling: true,
       minSplitMinutes: 30,
+      maxSplitMinutes: 30,
       recurringScheduleHorizonDays: 30,
     });
 

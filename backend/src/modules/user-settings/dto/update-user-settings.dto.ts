@@ -119,6 +119,17 @@ export class UpdateUserSettingsDto {
 
   @ApiProperty({
     example: 30,
+    description: 'Maximum chunk length when splitting (minutes)',
+    required: false,
+  })
+  @IsInt()
+  @Min(5)
+  @Max(480)
+  @IsOptional()
+  maxSplitMinutes?: number;
+
+  @ApiProperty({
+    example: 30,
     description: 'How many days ahead recurring tasks should be auto-scheduled',
     required: false,
   })
