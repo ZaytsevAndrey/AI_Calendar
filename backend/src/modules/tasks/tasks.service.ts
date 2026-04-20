@@ -13,7 +13,10 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { Phase } from '../event-phases/entities/phase.entity';
 import { TaskEventType, getEventTypeRules } from '../scheduling/event-type.enum';
-import { ScheduleJobService } from '../schedule/schedule-job.service';
+import {
+  FlexibleGoogleSyncSnapshot,
+  ScheduleJobService,
+} from '../schedule/schedule-job.service';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 
 @Injectable()
@@ -210,6 +213,15 @@ export class TasksService {
     updateTaskDto: UpdateTaskDto,
   ): Promise<Task> {
     const task = await this.findOne(id, userId);
+    let flexibleGoogleSnapshotBefore: FlexibleGoogleSyncSnapshot | null = null;
+    if (task.eventType !== TaskEventType.FIXED) {
+      flexibleGoogleSnapshotBefore =
+        await this.scheduleJobService.captureFlexibleGoogleSnapshotForTask(
+          userId,
+          task.id,
+        );
+    }
+
     const dto = updateTaskDto as UpdateTaskDto & {
       phaseIds?: string[];
       scheduledStartTime?: string;
@@ -266,9 +278,22 @@ export class TasksService {
     await this.syncTaskWithGoogleCalendar(userId, saved);
     await this.tasksRepository.save(saved);
 
-    if (saved.eventType !== TaskEventType.FIXED && saved.status === TaskStatus.TODO) {
+    const shouldReplanNonFixed =
+      saved.eventType !== TaskEventType.FIXED &&
+      (saved.status === TaskStatus.TODO ||
+        saved.status === TaskStatus.IN_PROGRESS);
+
+    if (shouldReplanNonFixed) {
       await this.scheduleJobService.enqueueReplan(userId);
       await this.scheduleJobService.processNextPendingForUser(userId);
+    }
+
+    if (flexibleGoogleSnapshotBefore) {
+      await this.scheduleJobService.syncFlexibleTaskAfterUserEditIfNeeded(
+        userId,
+        saved.id,
+        flexibleGoogleSnapshotBefore,
+      );
     }
 
     return this.findOne(saved.id, userId);

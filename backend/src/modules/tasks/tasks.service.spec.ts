@@ -30,6 +30,8 @@ describe('TasksService', () => {
   const scheduleJobService = {
     enqueueReplan: jest.fn(),
     processNextPendingForUser: jest.fn(),
+    captureFlexibleGoogleSnapshotForTask: jest.fn().mockResolvedValue(null),
+    syncFlexibleTaskAfterUserEditIfNeeded: jest.fn().mockResolvedValue(undefined),
   };
   const googleCalendarService = {
     checkConnection: jest.fn().mockResolvedValue({ connected: false }),

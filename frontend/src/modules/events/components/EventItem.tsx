@@ -22,6 +22,17 @@ const statusLabels = {
   canceled: 'Canceled'
 };
 
+const eventTypeLabels: Record<string, string> = {
+  fixed: 'Fixed',
+  daily_routine: 'Daily routine',
+  quick_win: 'Quick win',
+  deep_work: 'Deep work',
+  errand: 'Errand',
+  admin: 'Admin',
+  focus_block: 'Focus block',
+  learning: 'Learning',
+};
+
 const EventItem: React.FC<EventItemProps> = ({ event, onEdit, onDelete, onStatusChange }) => {
   const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     onStatusChange(event.id, e.target.value as 'todo' | 'in_progress' | 'completed' | 'canceled');
@@ -32,6 +43,16 @@ const EventItem: React.FC<EventItemProps> = ({ event, onEdit, onDelete, onStatus
     const date = new Date(dateString);
     return date.toLocaleString();
   };
+
+  const formatDateTime = (value?: string, fallback = 'Not set') => {
+    if (!value) return fallback;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString();
+  };
+
+  const eventType = event.eventType ? (eventTypeLabels[event.eventType] ?? event.eventType) : 'Not set';
+  const recurrencePattern = event.recurrencePattern ?? 'Not set';
 
   return (
     <div className="task-item">
@@ -58,6 +79,16 @@ const EventItem: React.FC<EventItemProps> = ({ event, onEdit, onDelete, onStatus
           <span className="detail-value">{event.estimatedTimeInMinutes} minutes</span>
         </div>
 
+        <div className="task-detail">
+          <span className="detail-label">Type:</span>
+          <span className="detail-value">{eventType}</span>
+        </div>
+
+        <div className="task-detail">
+          <span className="detail-label">Priority:</span>
+          <span className="detail-value">{event.priority}</span>
+        </div>
+
         {event.deadline && (
           <div className="task-detail">
             <span className="detail-label">Deadline:</span>
@@ -66,6 +97,33 @@ const EventItem: React.FC<EventItemProps> = ({ event, onEdit, onDelete, onStatus
             </span>
           </div>
         )}
+
+        <div className="task-detail">
+          <span className="detail-label">Recurring:</span>
+          <span className="detail-value">{event.isRecurring ? 'Yes' : 'No'}</span>
+        </div>
+
+        {event.isRecurring && (
+          <div className="task-detail">
+            <span className="detail-label">Recurrence Pattern:</span>
+            <span className="detail-value">{recurrencePattern}</span>
+          </div>
+        )}
+
+        <div className="task-detail">
+          <span className="detail-label">Allow Split:</span>
+          <span className="detail-value">{event.allowSplit ? 'Yes' : 'No'}</span>
+        </div>
+
+        <div className="task-detail">
+          <span className="detail-label">Created:</span>
+          <span className="detail-value">{formatDateTime(event.createdAt)}</span>
+        </div>
+
+        <div className="task-detail">
+          <span className="detail-label">Updated:</span>
+          <span className="detail-value">{formatDateTime(event.updatedAt)}</span>
+        </div>
 
         <div className="task-detail">
           <span className="detail-label">Status:</span>

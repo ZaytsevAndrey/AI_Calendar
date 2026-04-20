@@ -18,6 +18,7 @@ describe('IntelligentSchedulingEngine', () => {
   let engine: IntelligentSchedulingEngine;
   let taskRepo: MockRepo;
   let scheduledRepo: MockRepo;
+  let getSettingsMock: jest.Mock;
 
   const userId = 'user-1';
   const phaseWorkday = makePhase('phase-1', '09:00', '12:00', [1, 2, 3, 4, 5]);
@@ -61,11 +62,13 @@ describe('IntelligentSchedulingEngine', () => {
       ),
     };
 
+    getSettingsMock = jest.fn().mockResolvedValue(baseSettings);
+
     engine = new IntelligentSchedulingEngine(
       taskRepo as never,
       scheduledRepo as never,
       {
-        getSettings: jest.fn().mockResolvedValue(baseSettings),
+        getSettings: getSettingsMock,
       } as never,
       {
         getEvents: jest.fn(),
@@ -431,6 +434,96 @@ describe('IntelligentSchedulingEngine', () => {
       ),
     ).toBe(true);
   });
+
+  it('does not treat own synced Google events as external busy when replanning', async () => {
+    const phase911 = makePhase('phase-911', '09:00', '11:00', [1, 2, 3, 4, 5]);
+    const googleSvc = (engine as any).googleCalendarService as {
+      getEvents: jest.Mock;
+    };
+
+    const t1 = makeTask({
+      id: 'own-sync-1',
+      name: 'R1',
+      createdAt: new Date('2026-04-20T08:01:00.000Z'),
+      estimatedTimeInMinutes: 30,
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      phases: [phase911],
+      scheduledStartTime: new Date(atLocalTimeWithMinutesIso(0, 9, 0)),
+      scheduledEndTime: new Date(atLocalTimeWithMinutesIso(0, 9, 30)),
+      googleEventId: 'google-master-1',
+    });
+    const t2 = makeTask({
+      id: 'own-sync-2',
+      name: 'R2',
+      createdAt: new Date('2026-04-20T08:02:00.000Z'),
+      estimatedTimeInMinutes: 20,
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      phases: [phase911],
+      scheduledStartTime: new Date(atLocalTimeWithMinutesIso(0, 9, 30)),
+      scheduledEndTime: new Date(atLocalTimeWithMinutesIso(0, 9, 50)),
+      googleEventId: 'google-master-2',
+    });
+    const t3 = makeTask({
+      id: 'own-sync-3',
+      name: 'R3',
+      createdAt: new Date('2026-04-20T08:03:00.000Z'),
+      estimatedTimeInMinutes: 30,
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      phases: [phase911],
+      scheduledStartTime: new Date(atLocalTimeWithMinutesIso(0, 10, 0)),
+      scheduledEndTime: new Date(atLocalTimeWithMinutesIso(0, 10, 30)),
+      googleEventId: 'google-master-3',
+    });
+
+    getSettingsMock.mockResolvedValueOnce(
+      makeSettings({
+        googleCalendarLinked: true,
+        recurringScheduleHorizonDays: 2,
+        wakeTime: '08:00',
+        sleepTime: '23:00',
+      }),
+    );
+
+    googleSvc.getEvents.mockResolvedValue({
+      events: [
+        {
+          id: 'google-master-1_20260420',
+          recurringEventId: 'google-master-1',
+          status: 'confirmed',
+          start: { dateTime: '2026-04-20T09:00:00.000Z' },
+          end: { dateTime: '2026-04-20T09:30:00.000Z' },
+        },
+        {
+          id: 'google-master-2_20260420',
+          recurringEventId: 'google-master-2',
+          status: 'confirmed',
+          start: { dateTime: '2026-04-20T09:30:00.000Z' },
+          end: { dateTime: '2026-04-20T09:50:00.000Z' },
+        },
+        {
+          id: 'google-master-3_20260420',
+          recurringEventId: 'google-master-3',
+          status: 'confirmed',
+          start: { dateTime: '2026-04-20T10:00:00.000Z' },
+          end: { dateTime: '2026-04-20T10:30:00.000Z' },
+        },
+      ],
+      nextPageToken: undefined,
+    });
+
+    taskRepo.find.mockResolvedValue([t1, t2, t3]);
+
+    const { errors } = await engine.run(userId);
+
+    expect(errors).toHaveLength(0);
+    const byTask = extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls);
+    expect(byTask.get('own-sync-1')?.length).toBeGreaterThan(0);
+    expect(byTask.get('own-sync-2')?.length).toBeGreaterThan(0);
+    expect(byTask.get('own-sync-3')?.length).toBeGreaterThan(0);
+  });
 });
 
 let taskCounter = 0;
@@ -501,7 +594,7 @@ function makeTask(partial: Partial<Task>): Task {
     status: partial.status ?? TaskStatus.TODO,
     scheduledStartTime: partial.scheduledStartTime ?? null,
     scheduledEndTime: partial.scheduledEndTime ?? null,
-    googleEventId: null,
+    googleEventId: partial.googleEventId ?? null,
     isFixedExternal: false,
     createdAt: partial.createdAt ?? new Date('2026-04-20T08:00:00.000Z'),
     updatedAt: new Date('2026-04-20T08:00:00.000Z'),
