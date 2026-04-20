@@ -21,7 +21,13 @@ export interface ScheduleDiffItem {
 
 export interface ScheduleJobResultPayload {
   diff: ScheduleDiffItem[];
-  warnings: string[];
+  warnings: {
+    code: string;
+    message: string;
+    taskId?: string;
+    taskName?: string;
+    meta?: Record<string, unknown>;
+  }[];
   errors: { taskId: string; message: string }[];
 }
 
@@ -144,7 +150,9 @@ export const ScheduleApi = {
     }
 
     const errorsRaw = (job.result.errors ?? []).map((e) => e.message).filter(Boolean);
-    const warningsRaw = (job.result.warnings ?? []).filter(Boolean);
+    const warningsRaw = (job.result.warnings ?? [])
+      .map((w) => w?.message)
+      .filter(Boolean) as string[];
     const errors = [...new Set(errorsRaw)];
     const warnings = [...new Set(warningsRaw)];
     const issueCount = errors.length + warnings.length;

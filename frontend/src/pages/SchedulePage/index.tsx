@@ -18,7 +18,9 @@ function parseJobResult(result: unknown): ScheduleJobResultPayload | null {
   if (!Array.isArray(o.diff)) return null;
   return {
     diff: o.diff as ScheduleJobResultPayload['diff'],
-    warnings: Array.isArray(o.warnings) ? (o.warnings as string[]) : [],
+    warnings: Array.isArray(o.warnings)
+      ? (o.warnings as ScheduleJobResultPayload['warnings'])
+      : [],
     errors: Array.isArray(o.errors)
       ? (o.errors as ScheduleJobResultPayload['errors'])
       : [],
@@ -113,7 +115,7 @@ const SchedulePage: React.FC = () => {
         canUndo: !!job.undoSnapshotId,
       });
       if (parsed?.warnings?.length) {
-        parsed.warnings.forEach((w) => showWarningToast(w));
+        parsed.warnings.forEach((w) => showWarningToast(w.message));
       }
       if (parsed?.errors?.length) {
         parsed.errors.forEach((e) => showErrorToast(e.message));
@@ -246,7 +248,7 @@ const SchedulePage: React.FC = () => {
             {lastReplan.result.warnings.length > 0 && (
               <ul className="replan-panel__warnings">
                 {lastReplan.result.warnings.map((w) => (
-                  <li key={w}>{w}</li>
+                  <li key={`${w.code}-${w.taskId ?? w.message}`}>{w.message}</li>
                 ))}
               </ul>
             )}

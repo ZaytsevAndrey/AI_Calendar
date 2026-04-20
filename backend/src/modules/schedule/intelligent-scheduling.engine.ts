@@ -32,6 +32,20 @@ export type DiffItem = {
   after: { id?: string; start: string; end: string }[];
 };
 
+export enum SchedulingWarningCode {
+  GOOGLE_BUSY_UNAVAILABLE = 'SCHEDULING_GOOGLE_BUSY_UNAVAILABLE',
+  OUTSIDE_HORIZON = 'SCHEDULING_HORIZON_EXCEEDED',
+  OCCURRENCE_SKIPPED = 'SCHEDULING_OCCURRENCE_SKIPPED',
+}
+
+export type SchedulingWarning = {
+  code: SchedulingWarningCode;
+  taskId?: string;
+  taskName?: string;
+  meta?: Record<string, unknown>;
+  message: string;
+};
+
 type MsInterval = { start: number; end: number };
 
 type RecurrencePattern = 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
@@ -189,7 +203,7 @@ export class IntelligentSchedulingEngine {
 
   async run(userId: string): Promise<{
     diff: DiffItem[];
-    warnings: string[];
+    warnings: SchedulingWarning[];
     errors: { taskId: string; message: string }[];
   }> {
     const settings = await this.userSettingsService.getSettings(userId);
@@ -224,7 +238,7 @@ export class IntelligentSchedulingEngine {
       extendedEnd.getDate() + horizonDays + BEYOND_HORIZON_EXTRA_DAYS,
     );
 
-    const warnings: string[] = [];
+    const warnings: SchedulingWarning[] = [];
     let googleBusy: MsInterval[] = [];
     if (settings.googleCalendarLinked) {
       try {
@@ -234,9 +248,11 @@ export class IntelligentSchedulingEngine {
           extendedEnd,
         );
       } catch {
-        warnings.push(
-          'Could not load Google Calendar; external events were not treated as busy.',
-        );
+        warnings.push({
+          code: SchedulingWarningCode.GOOGLE_BUSY_UNAVAILABLE,
+          message:
+            'Could not load Google Calendar; external events were not treated as busy.',
+        });
       }
     }
 
@@ -296,14 +312,22 @@ export class IntelligentSchedulingEngine {
           });
         } else {
           if (res.beyondHorizon) {
-            warnings.push(
-              `Task "${task.name}" was placed outside the ${horizonDays}-day window.`,
-            );
+            warnings.push({
+              code: SchedulingWarningCode.OUTSIDE_HORIZON,
+              taskId: task.id,
+              taskName: task.name,
+              meta: { horizonDays },
+              message: `Task "${task.name}" was placed outside the ${horizonDays}-day window.`,
+            });
           }
           if (res.skippedOccurrences > 0) {
-            warnings.push(
-              `Task "${task.name}" skipped ${res.skippedOccurrences} recurring occurrence(s) because no eligible slot was available in the phase window.`,
-            );
+            warnings.push({
+              code: SchedulingWarningCode.OCCURRENCE_SKIPPED,
+              taskId: task.id,
+              taskName: task.name,
+              meta: { skippedOccurrences: res.skippedOccurrences },
+              message: `Task "${task.name}" skipped ${res.skippedOccurrences} recurring occurrence(s) because no eligible slot was available in the phase window.`,
+            });
           }
         }
       }
