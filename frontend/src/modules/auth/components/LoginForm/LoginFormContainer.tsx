@@ -1,73 +1,52 @@
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 
-import { loginUser } from 'modules/auth/actions/loginUser';
 import requestsStatuses from 'modules/common/constants/requestsStatuses';
-import { getLoginStatus, getAuthError } from 'modules/auth/selectors/authSelectors';
-import { UserSettingsApi } from '../../../../api/user-settings.api';
+import { getLoginStatus } from 'modules/auth/selectors/authSelectors';
+import { LOGIN } from 'modules/auth/actions/actionTypes';
+import apiCall from 'modules/common/utils/apiCall';
+import { showErrorToast } from '../../../../utils/toast';
 
 import LoginForm from './LoginForm';
-import loginSchema, { LoginFormData } from './validation/schema';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
-import setBackendErrors from 'modules/common/utils/setBackendErrors';
 
 const LoginFormContainer = () => {
     const dispatch = useDispatch<any>();
-    const navigate = useNavigate();
-
+    const [searchParams] = useSearchParams();
     const loginStatus = useSelector(getLoginStatus);
-    const backendError = useSelector(getAuthError);
-
-    const {
-        handleSubmit,
-        setError,
-        formState: { isSubmitting, errors },
-        ...form
-    } = useForm<LoginFormData>({
-        resolver: zodResolver(loginSchema),
-    });
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     useEffect(() => {
-        if (loginStatus === requestsStatuses.success) {
-            const checkRequiredSettings = async () => {
-                try {
-                    const response = await UserSettingsApi.checkRequiredSettings();
-                    const { requiredFilled, hasPhases } = response;
-                    let redirectUrl = '/';
-                    if (!requiredFilled) {
-                        redirectUrl = '/settings';
-                    } else if (!hasPhases) {
-                        redirectUrl = '/setup/phases';
-                    }
-                    navigate(redirectUrl);
-                } catch {
-                    navigate('/settings');
-                }
-            };
-
-            checkRequiredSettings();
+        const err = searchParams.get('error');
+        if (err) {
+            setErrorMessage('Google sign-in failed. Try again.');
         }
-    }, [loginStatus, navigate]);
+    }, [searchParams]);
 
-    useEffect(() => {
-        if (backendError) {
-            setBackendErrors<LoginFormData>({ general: backendError }, setError);
+    const onGoogleSignIn = async () => {
+        dispatch({ type: LOGIN.pending });
+        try {
+            const response = await apiCall({ method: 'GET', url: '/auth/google' });
+            const url = (response?.data as { url?: string } | undefined)?.url;
+            if (!url) {
+                throw new Error('Missing Google authorization URL');
+            }
+            window.location.assign(url);
+        } catch (error) {
+            console.error('Google sign-in start failed:', error);
+            showErrorToast('Could not start Google sign-in.');
+            dispatch({
+                type: LOGIN.failure,
+                payload: 'Could not start Google sign-in.',
+            });
         }
-    }, [backendError, setError]);
-
-    const onSubmit = (data: LoginFormData) => {
-        dispatch(loginUser(data));
     };
 
     return (
         <LoginForm
-            { ...form }
-            onSubmit={ handleSubmit(onSubmit) }
-            requestStatus={ loginStatus }
-            isSubmitting={ isSubmitting }
-            errors={ errors }
+            onGoogleSignIn={onGoogleSignIn}
+            requestStatus={loginStatus}
+            errorMessage={errorMessage}
         />
     );
 };

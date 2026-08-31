@@ -3,11 +3,15 @@ import {
   Injectable,
   Logger,
   ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { google } from 'googleapis';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
+import { JwtService } from '@nestjs/jwt';
 import { Repository } from 'typeorm';
+import { randomBytes } from 'crypto';
+import * as bcrypt from 'bcrypt';
 import { User } from '../users/user.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { EventPhasesService } from '../event-phases/event-phases.service';
@@ -18,11 +22,19 @@ import {
   stripAppManagedEventProperties,
   wallClockMinutesInTimeZone,
 } from './google-calendar-event.helpers';
+import { phaseHexToGoogleColorId } from './phase-hex-to-google-color-id.util';
+
+type LoginTicket = {
+  access_token: string;
+  refresh_token: string;
+  expiresAt: number;
+};
 
 @Injectable()
 export class GoogleCalendarService {
   private oauth2Client;
   private readonly logger = new Logger(GoogleCalendarService.name);
+  private readonly loginTickets = new Map<string, LoginTicket>();
 
   constructor(
     private configService: ConfigService,
@@ -32,10 +44,13 @@ export class GoogleCalendarService {
     private userSettingsRepo: Repository<UserSettings>,
     private eventPhasesService: EventPhasesService,
     private readonly phasesService: PhasesService,
+    private readonly jwtService: JwtService,
   ) {
     const clientId = this.configService.get('GOOGLE_CLIENT_ID');
     const clientSecret = this.configService.get('GOOGLE_CLIENT_SECRET');
-    const redirectUri = this.configService.get('GOOGLE_REDIRECT_URI');
+    const redirectUri =
+      this.configService.get('GOOGLE_REDIRECT_URI') ||
+      'http://localhost:3001/google-calendar/callback';
 
     this.logger.log(`Initializing Google OAuth2 with:`);
     this.logger.log(`Client ID: ${clientId ? 'SET' : 'NOT SET'}`);
@@ -45,25 +60,220 @@ export class GoogleCalendarService {
     this.oauth2Client = new google.auth.OAuth2(
       clientId,
       clientSecret,
-      'http://localhost:3001/google-calendar/callback', // Backend port
+      redirectUri,
     );
   }
 
-  getAuthUrl(userId?: string) {
+  getLoginAuthUrl() {
     const scopes = [
+      'openid',
+      'email',
+      'profile',
       'https://www.googleapis.com/auth/calendar',
       'https://www.googleapis.com/auth/calendar.events',
     ];
 
     const authUrl = this.oauth2Client.generateAuthUrl({
       access_type: 'offline',
+      include_granted_scopes: true,
+      prompt: 'select_account',
       scope: scopes,
-      prompt: 'consent',
-      state: userId, // Pass userId via OAuth state
     });
 
-    this.logger.log(`Generated auth URL for user ${userId}: ${authUrl}`);
+    this.logger.log('Generated Google sign-in URL');
     return authUrl;
+  }
+
+  /** @deprecated Use getLoginAuthUrl; kept for config diagnostics. */
+  getAuthUrl(_userId?: string) {
+    return this.getLoginAuthUrl();
+  }
+
+  async completeGoogleSignIn(code: string): Promise<string> {
+    const { tokens } = await this.oauth2Client.getToken(code);
+    this.oauth2Client.setCredentials(tokens);
+
+    let googleId: string | undefined;
+    let email: string | undefined;
+    try {
+      const oauth2 = google.oauth2({
+        version: 'v2',
+        auth: this.oauth2Client,
+      });
+      const { data: profile } = await oauth2.userinfo.get();
+      googleId = profile.id ?? undefined;
+      email = profile.email ?? undefined;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger.warn(`Google userinfo failed, falling back to id_token: ${msg}`);
+    }
+
+    if ((!googleId || !email) && tokens.id_token) {
+      const fromId = this.parseGoogleIdToken(tokens.id_token);
+      googleId = googleId ?? fromId.sub;
+      email = email ?? fromId.email;
+    }
+
+    email = (email ?? '').trim().toLowerCase();
+    if (!googleId || !email) {
+      throw new BadRequestException(
+        'Google did not return an email address for this account.',
+      );
+    }
+
+    const user = await this.findOrLinkGoogleUser(googleId, email);
+    await this.persistGoogleTokens(user.id, tokens);
+    await this.ensureSettingsLinked(user.id);
+
+    try {
+      const cal = google.calendar({
+        version: 'v3',
+        auth: this.oauth2Client,
+      });
+      await this.ensureAppCalendarIdWithClient(cal, user.id);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger.warn(
+        `Could not ensure app Google Calendar after sign-in: ${msg}`,
+      );
+    }
+
+    const pair = this.createAppTokenPair(user.id);
+    await this.userRepo.update({ id: user.id }, { refreshToken: pair.refresh_token });
+    return this.issueLoginTicket(pair);
+  }
+
+  redeemLoginTicket(ticket: string): {
+    access_token: string;
+    refresh_token: string;
+  } {
+    const row = this.loginTickets.get(ticket);
+    this.loginTickets.delete(ticket);
+    if (!row || row.expiresAt < Date.now()) {
+      throw new UnauthorizedException('Sign-in session expired. Try again.');
+    }
+    return {
+      access_token: row.access_token,
+      refresh_token: row.refresh_token,
+    };
+  }
+
+  private parseGoogleIdToken(idToken: string): {
+    sub?: string;
+    email?: string;
+  } {
+    try {
+      const payload = idToken.split('.')[1];
+      if (!payload) return {};
+      const json = Buffer.from(payload, 'base64url').toString('utf8');
+      const parsed = JSON.parse(json) as { sub?: string; email?: string };
+      return { sub: parsed.sub, email: parsed.email };
+    } catch {
+      return {};
+    }
+  }
+
+  private createAppTokenPair(userId: string): {
+    access_token: string;
+    refresh_token: string;
+  } {
+    const payload = { sub: userId };
+    return {
+      access_token: this.jwtService.sign(payload, { expiresIn: '15m' }),
+      refresh_token: this.jwtService.sign(payload, { expiresIn: '7d' }),
+    };
+  }
+
+  private issueLoginTicket(pair: {
+    access_token: string;
+    refresh_token: string;
+  }): string {
+    const ticket = randomBytes(24).toString('hex');
+    this.loginTickets.set(ticket, {
+      ...pair,
+      expiresAt: Date.now() + 120_000,
+    });
+    return ticket;
+  }
+
+  private async findOrLinkGoogleUser(
+    googleId: string,
+    email: string,
+  ): Promise<User> {
+    const byGoogleId = await this.userRepo.findOne({ where: { googleId } });
+    if (byGoogleId) return byGoogleId;
+
+    const byEmail = await this.userRepo
+      .createQueryBuilder('user')
+      .where('LOWER(user.email) = LOWER(:email)', { email })
+      .getOne();
+
+    if (byEmail) {
+      await this.userRepo.update({ id: byEmail.id }, { googleId });
+      this.logger.log(
+        `Linked Google account ${googleId} to existing user ${byEmail.id}`,
+      );
+      return { ...byEmail, googleId };
+    }
+
+    const placeholderPassword = await bcrypt.hash(randomBytes(32).toString('hex'), 10);
+    const created = this.userRepo.create({
+      email,
+      googleId,
+      password: placeholderPassword,
+      isEmailVerified: true,
+    });
+    const saved = await this.userRepo.save(created);
+    this.logger.log(`Created user ${saved.id} from Google sign-in`);
+    return saved;
+  }
+
+  private async persistGoogleTokens(
+    userId: string,
+    tokens: {
+      access_token?: string | null;
+      refresh_token?: string | null;
+      expiry_date?: number | null;
+    },
+  ): Promise<void> {
+    const existing = await this.userRepo.findOne({
+      where: { id: userId },
+      select: { googleRefreshToken: true },
+    });
+    await this.userRepo.update(userId, {
+      googleAccessToken: tokens.access_token ?? existing?.googleAccessToken ?? null,
+      googleRefreshToken:
+        tokens.refresh_token ?? existing?.googleRefreshToken ?? null,
+      googleTokenExpiry: new Date(
+        tokens.expiry_date ?? Date.now() + 3_600_000,
+      ),
+    });
+  }
+
+  private async ensureSettingsLinked(userId: string): Promise<void> {
+    const settings = await this.userSettingsRepo.findOne({ where: { userId } });
+    if (settings) {
+      await this.userSettingsRepo.update({ userId }, { googleCalendarLinked: true });
+      return;
+    }
+    await this.userSettingsRepo.save(
+      this.userSettingsRepo.create({
+        userId,
+        googleCalendarLinked: true,
+        wakeTime: '07:00',
+        sleepTime: '22:00',
+        defaultWorkBlockDuration: 25,
+        defaultBreakDuration: 5,
+        defaultLunchDuration: 60,
+        preferredLunchTime: '12:00',
+        weekendWorkEnabled: false,
+        allowSplitScheduling: true,
+        minSplitMinutes: 30,
+        maxSplitMinutes: 30,
+        recurringScheduleHorizonDays: 30,
+        appGoogleCalendarName: 'AI Calendar Assistant',
+      }),
+    );
   }
 
   async saveToken(code: string, userId?: string) {
@@ -91,7 +301,9 @@ export class GoogleCalendarService {
       await this.userRepo.update(user.id, {
         googleAccessToken: tokens.access_token,
         googleRefreshToken: tokens.refresh_token,
-        googleTokenExpiry: new Date(tokens.expiry_date),
+        googleTokenExpiry: new Date(
+          tokens.expiry_date ?? Date.now() + 3_600_000,
+        ),
       });
 
       await this.userSettingsRepo.update(
@@ -100,6 +312,21 @@ export class GoogleCalendarService {
       );
 
       this.logger.log(`Successfully saved Google tokens for user ${user.id}`);
+
+      try {
+        this.oauth2Client.setCredentials({
+          access_token: tokens.access_token,
+        });
+        const cal = google.calendar({
+          version: 'v3',
+          auth: this.oauth2Client,
+        });
+        await this.ensureAppCalendarIdWithClient(cal, user.id);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.logger.warn(`Could not ensure app Google Calendar after link: ${msg}`);
+      }
+
       return { success: true };
     } catch (error) {
       this.logger.error(`Error saving Google token: ${error.message}`);
@@ -151,6 +378,109 @@ export class GoogleCalendarService {
 
     this.logger.log(`Connection confirmed for user ${userId}`);
     return { connected: true };
+  }
+
+  /** Returns persisted app calendar id without creating or calling Google. */
+  async getStoredAppCalendarId(userId: string): Promise<string | null> {
+    const s = await this.userSettingsRepo.findOne({
+      where: { userId },
+      select: { appGoogleCalendarId: true },
+    });
+    return s?.appGoogleCalendarId ?? null;
+  }
+
+  /**
+   * Creates the user's app-managed secondary calendar if missing, updates settings, and returns its id.
+   * Caller must have set OAuth credentials on `this.oauth2Client`.
+   */
+  private async ensureAppCalendarIdWithClient(
+    calendar: ReturnType<typeof google.calendar>,
+    userId: string,
+  ): Promise<string> {
+    const settings = await this.userSettingsRepo.findOne({ where: { userId } });
+    const name =
+      (settings?.appGoogleCalendarName ?? '').trim() || 'AI Calendar Assistant';
+    const existing = settings?.appGoogleCalendarId;
+    if (existing) {
+      try {
+        await calendar.calendars.get({ calendarId: existing });
+        return existing;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.logger.warn(
+          `Stored app calendar missing or inaccessible (${msg}); creating a new one.`,
+        );
+      }
+    }
+    const res = await calendar.calendars.insert({
+      requestBody: { summary: name },
+    });
+    const id = res.data.id;
+    if (!id) {
+      throw new ServiceUnavailableException(
+        'Google Calendar did not return a calendar id.',
+      );
+    }
+    await this.userSettingsRepo.update({ userId }, { appGoogleCalendarId: id });
+    return id;
+  }
+
+  /** Updates the Google calendar title when the user renames it in settings (calendar must already exist). */
+  async updateAppCalendarSummaryIfLinked(userId: string): Promise<void> {
+    const settings = await this.userSettingsRepo.findOne({ where: { userId } });
+    if (!settings?.appGoogleCalendarId) return;
+
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: {
+        googleAccessToken: true,
+        googleRefreshToken: true,
+        googleTokenExpiry: true,
+      },
+    });
+    if (!user?.googleAccessToken) return;
+
+    if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
+      if (!user.googleRefreshToken) return;
+      this.oauth2Client.setCredentials({
+        refresh_token: user.googleRefreshToken,
+      });
+      const { credentials } = await this.oauth2Client.refreshAccessToken();
+      await this.userRepo.update(userId, {
+        googleAccessToken: credentials.access_token,
+        googleTokenExpiry: new Date(
+          credentials.expiry_date ?? Date.now() + 3_600_000,
+        ),
+      });
+      user.googleAccessToken = credentials.access_token;
+    }
+
+    this.oauth2Client.setCredentials({
+      access_token: user.googleAccessToken,
+    });
+    const calendar = google.calendar({
+      version: 'v3',
+      auth: this.oauth2Client,
+    });
+    const summary =
+      (settings.appGoogleCalendarName ?? '').trim() || 'AI Calendar Assistant';
+    await calendar.calendars.patch({
+      calendarId: settings.appGoogleCalendarId,
+      requestBody: { summary },
+    });
+  }
+
+  private async applyPhaseColorToRequestBody(
+    userId: string,
+    phaseId: string | undefined,
+    requestBody: Record<string, unknown>,
+  ): Promise<void> {
+    if (!phaseId) return;
+    const phase = await this.phasesService.findOne(phaseId, userId);
+    const cid = phaseHexToGoogleColorId(phase.color);
+    if (cid) {
+      requestBody.colorId = cid;
+    }
   }
 
   async checkAllUsersWithTokens() {
@@ -217,7 +547,7 @@ export class GoogleCalendarService {
     timeMax: string,
     maxResults: number = 100,
     pageToken?: string,
-    calendarId: string = 'primary',
+    calendarId?: string,
   ) {
     this.logger.log(
       `Fetching events for user ${userId} from ${timeMin} to ${timeMax}`,
@@ -263,9 +593,15 @@ export class GoogleCalendarService {
       auth: this.oauth2Client,
     });
 
+    let calId = calendarId;
+    if (calId === undefined || calId === '') {
+      calId =
+        (await this.getStoredAppCalendarId(userId)) ?? 'primary';
+    }
+
     try {
       const response = await calendar.events.list({
-        calendarId,
+        calendarId: calId,
         timeMin,
         timeMax,
         maxResults,
@@ -296,7 +632,7 @@ export class GoogleCalendarService {
   async getEvent(
     userId: string,
     eventId: string,
-    calendarId: string = 'primary',
+    calendarId?: string,
   ) {
     this.logger.log(`Fetching event ${eventId} for user ${userId}`);
 
@@ -339,9 +675,15 @@ export class GoogleCalendarService {
       auth: this.oauth2Client,
     });
 
+    let calId = calendarId;
+    if (calId === undefined || calId === '') {
+      calId =
+        (await this.getStoredAppCalendarId(userId)) ?? 'primary';
+    }
+
     try {
       const response = await calendar.events.get({
-        calendarId,
+        calendarId: calId,
         eventId,
       });
 
@@ -474,7 +816,7 @@ export class GoogleCalendarService {
   async createEvent(
     userId: string,
     event: Record<string, unknown>,
-    opts?: { skipSleepWindowCheck?: boolean },
+    opts?: { skipSleepWindowCheck?: boolean; calendarId?: string },
   ) {
     const { phaseId } = await this.assertCalendarWritePayload(
       userId,
@@ -482,6 +824,7 @@ export class GoogleCalendarService {
       opts,
     );
     const requestBody = stripAppManagedEventProperties(event);
+    await this.applyPhaseColorToRequestBody(userId, phaseId, requestBody);
 
     const user = await this.userRepo.findOne({
       where: { id: userId },
@@ -522,10 +865,15 @@ export class GoogleCalendarService {
       auth: this.oauth2Client,
     });
 
+    const writableCalendarId = await this.ensureAppCalendarIdWithClient(
+      calendar,
+      userId,
+    );
+
     let response;
     try {
       response = await calendar.events.insert({
-        calendarId: 'primary',
+        calendarId: writableCalendarId,
         requestBody,
       });
     } catch (err: unknown) {
@@ -544,14 +892,17 @@ export class GoogleCalendarService {
       );
     }
 
-    return response.data;
+    return {
+      ...response.data,
+      appCalendarId: writableCalendarId,
+    };
   }
 
   async updateEvent(
     userId: string,
     eventId: string,
     event: Record<string, unknown>,
-    opts?: { skipSleepWindowCheck?: boolean },
+    opts?: { skipSleepWindowCheck?: boolean; calendarId?: string },
   ) {
     const { phaseId } = await this.assertCalendarWritePayload(
       userId,
@@ -559,6 +910,7 @@ export class GoogleCalendarService {
       opts,
     );
     const requestBody = stripAppManagedEventProperties(event);
+    await this.applyPhaseColorToRequestBody(userId, phaseId, requestBody);
 
     const user = await this.userRepo.findOne({
       where: { id: userId },
@@ -599,10 +951,15 @@ export class GoogleCalendarService {
       auth: this.oauth2Client,
     });
 
+    const writableCalendarId =
+      opts?.calendarId != null && opts.calendarId !== ''
+        ? opts.calendarId
+        : await this.ensureAppCalendarIdWithClient(calendar, userId);
+
     let response;
     try {
       response = await calendar.events.update({
-        calendarId: 'primary',
+        calendarId: writableCalendarId,
         eventId,
         requestBody,
       });
@@ -638,7 +995,10 @@ export class GoogleCalendarService {
       }
     }
 
-    return response.data;
+    return {
+      ...response.data,
+      appCalendarId: writableCalendarId,
+    };
   }
 
   /**
@@ -650,8 +1010,13 @@ export class GoogleCalendarService {
     eventId: string,
     start: Date,
     end: Date,
+    calendarId?: string,
   ): Promise<void> {
-    const existing = await this.getEvent(userId, eventId);
+    const calId =
+      calendarId ??
+      (await this.getStoredAppCalendarId(userId)) ??
+      'primary';
+    const existing = await this.getEvent(userId, eventId, calId);
     const tz =
       (existing.start as { timeZone?: string } | undefined)?.timeZone ||
       (existing.end as { timeZone?: string } | undefined)?.timeZone ||
@@ -696,7 +1061,7 @@ export class GoogleCalendarService {
     });
 
     await calendar.events.patch({
-      calendarId: 'primary',
+      calendarId: calId,
       eventId,
       requestBody: {
         start: { dateTime: start.toISOString(), timeZone: tz },
@@ -705,7 +1070,7 @@ export class GoogleCalendarService {
     });
   }
 
-  async deleteEvent(userId: string, eventId: string) {
+  async deleteEvent(userId: string, eventId: string, calendarId?: string) {
     const user = await this.userRepo.findOne({
       where: { id: userId },
       select: {
@@ -744,8 +1109,14 @@ export class GoogleCalendarService {
       version: 'v3',
       auth: this.oauth2Client,
     });
+
+    const writableCalendarId =
+      calendarId != null && calendarId !== ''
+        ? calendarId
+        : await this.ensureAppCalendarIdWithClient(calendar, userId);
+
     const response = await calendar.events.delete({
-      calendarId: 'primary',
+      calendarId: writableCalendarId,
       eventId,
     });
 

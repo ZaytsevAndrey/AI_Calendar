@@ -1,59 +1,34 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 
-import { LoginFormProps } from './types';
+export interface LoginFormProps {
+    requestStatus: string;
+    errorMessage?: string | null;
+    onGoogleSignIn: () => void;
+}
 
 const LoginForm: React.FC<LoginFormProps> = ({
-    onSubmit,
-    register,
-    errors,
+    onGoogleSignIn,
     requestStatus,
+    errorMessage,
 }) => {
+    const pending = requestStatus === 'pending';
+
     return (
-        <form className="auth-form-card" onSubmit={onSubmit}>
-            <h2 className="auth-form-title">Log in</h2>
-
-            <div className="auth-form-field">
-                <label htmlFor="email" className="auth-form-label">
-                    Email
-                </label>
-                <input id="email" type="email" className="auth-form-input" {...register('email')} />
-                {errors.email && (
-                    <span className="auth-form-error">{errors.email.message}</span>
-                )}
-            </div>
-
-            <div className="auth-form-field">
-                <label htmlFor="password" className="auth-form-label">
-                    Password
-                </label>
-                <input
-                    id="password"
-                    type="password"
-                    className="auth-form-input"
-                    {...register('password')}
-                />
-                {errors.password && (
-                    <span className="auth-form-error">{errors.password.message}</span>
-                )}
-            </div>
-
+        <div className="auth-form-card">
+            <h2 className="auth-form-title">Sign in</h2>
+            <p className="mb-6 text-sm text-ide-muted">
+                Continue with Google. Calendar access is requested once when you create an account.
+            </p>
+            {errorMessage ? <p className="auth-form-error mb-4">{errorMessage}</p> : null}
             <button
-                type="submit"
+                type="button"
                 className="auth-form-submit"
-                disabled={requestStatus === 'pending'}
+                disabled={pending}
+                onClick={onGoogleSignIn}
             >
-                {requestStatus === 'pending' ? 'Signing in...' : 'Log in'}
+                {pending ? 'Redirecting to Google…' : 'Continue with Google'}
             </button>
-
-            <div className="auth-form-footer">
-                No account? <Link to="/register">Sign up</Link>
-            </div>
-
-            <div className="auth-form-footer">
-                Forgot password? <Link to="/forgot-password">Reset</Link>
-            </div>
-        </form>
+        </div>
     );
 };
 

@@ -12,6 +12,10 @@ export class User {
   @Column({ unique: true })
   email: string;
 
+  /** Google subject (`sub`); set when the user signs in with Google. */
+  @Column({ type: 'varchar', length: 255, nullable: true, unique: true })
+  googleId: string | null;
+
   @Column()
   password: string;
 

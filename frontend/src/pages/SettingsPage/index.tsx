@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
+import { useDispatch } from 'react-redux';
+import { LogOut } from 'lucide-react';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import UserSettingsForm from 'modules/user-settings/components/UserSettingsForm';
+import { logout } from 'modules/auth/actions/logoutActions';
 
 const SettingsPage: React.FC = () => {
+    const dispatch = useDispatch<any>();
     const [error, setError] = useState<string | null>(null);
 
     const {
@@ -49,7 +53,7 @@ const SettingsPage: React.FC = () => {
             <header className="page-head">
                 <div>
                     <h1 className="page-title">Settings</h1>
-                    <p className="page-lead">Wake/sleep times and Google Calendar.</p>
+                    <p className="page-lead">Wake/sleep times, Google Calendar, and account.</p>
                 </div>
             </header>
 
@@ -72,6 +76,22 @@ const SettingsPage: React.FC = () => {
                     <UserSettingsForm initialData={userSettings} />
                 )}
             </div>
+
+            <section className="settings-card mt-6">
+                <h2 className="mb-2 text-xl font-semibold text-ide-text">Account</h2>
+                <p className="mb-4 text-sm text-ide-muted">
+                    You are signed in with Google. Signing out only ends this session; your data stays on this
+                    account.
+                </p>
+                <button
+                    type="button"
+                    onClick={() => dispatch(logout(true))}
+                    className="ui-btn-secondary inline-flex items-center gap-2 border-ide-error text-ide-error hover:bg-ide-error/10"
+                >
+                    <LogOut className="h-4 w-4" aria-hidden />
+                    Sign out
+                </button>
+            </section>
         </div>
     );
 };

@@ -7,12 +7,14 @@ import { JwtStrategy } from './jwt.strategy';
 import { UsersModule } from '../users/users.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EmailService } from '../common/services/email.service';
+import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
 
 @Module({
   imports: [
     ConfigModule,
     UsersModule,
     PassportModule,
+    GoogleCalendarModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

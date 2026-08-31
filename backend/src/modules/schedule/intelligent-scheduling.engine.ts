@@ -848,28 +848,36 @@ export class IntelligentSchedulingEngine {
     excludeGoogleEventIds?: Set<string>,
   ): Promise<MsInterval[]> {
     const busy: MsInterval[] = [];
-    let pageToken: string | undefined;
-    do {
-      const page = await this.googleCalendarService.getEvents(
-        userId,
-        rangeStart.toISOString(),
-        rangeEnd.toISOString(),
-        2500,
-        pageToken,
-        'primary',
-      );
-      for (const ev of page.events) {
-        if (
-          excludeGoogleEventIds?.size &&
-          this.isGoogleEventFromOurSyncedTasks(ev, excludeGoogleEventIds)
-        ) {
-          continue;
+    const calendarIds = ['primary'];
+    const appCalId =
+      await this.googleCalendarService.getStoredAppCalendarId(userId);
+    if (appCalId) {
+      calendarIds.push(appCalId);
+    }
+    for (const calId of calendarIds) {
+      let pageToken: string | undefined;
+      do {
+        const page = await this.googleCalendarService.getEvents(
+          userId,
+          rangeStart.toISOString(),
+          rangeEnd.toISOString(),
+          2500,
+          pageToken,
+          calId,
+        );
+        for (const ev of page.events) {
+          if (
+            excludeGoogleEventIds?.size &&
+            this.isGoogleEventFromOurSyncedTasks(ev, excludeGoogleEventIds)
+          ) {
+            continue;
+          }
+          const iv = this.googleEventToBusyInterval(ev);
+          if (iv) busy.push(iv);
         }
-        const iv = this.googleEventToBusyInterval(ev);
-        if (iv) busy.push(iv);
-      }
-      pageToken = page.nextPageToken ?? undefined;
-    } while (pageToken);
+        pageToken = page.nextPageToken ?? undefined;
+      } while (pageToken);
+    }
     return mergeIntervals(busy);
   }
 

@@ -30,17 +30,10 @@ export class GoogleCalendarController {
   constructor(private readonly googleCalendarService: GoogleCalendarService) {}
 
   @Get('auth-url')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get Google Calendar authorization URL' })
+  @ApiOperation({ summary: 'Google sign-in URL (calendar scopes included)' })
   @ApiResponse({ status: 200, description: 'Return the authorization URL.' })
-  getAuthUrl(@Req() req) {
-    this.logger.log(
-      `Getting Google Calendar auth URL for user ${req.user.userId}`,
-    );
-    const url = this.googleCalendarService.getAuthUrl(req.user.userId);
-    this.logger.log(`Returning auth URL: ${url}`);
-    return { url };
+  getAuthUrl() {
+    return { url: this.googleCalendarService.getLoginAuthUrl() };
   }
 
   @Get('callback')
@@ -52,99 +45,40 @@ export class GoogleCalendarController {
   async handleCallback(
     @Query('code') code: string,
     @Query('error') error: string,
-    @Query('state') state: string,
     @Res() res: Response,
   ) {
-    this.logger.log(`Google OAuth callback received`);
-    this.logger.log(
-      `Code: ${code ? code.substring(0, 10) + '...' : 'NO CODE'}`,
-    );
-    this.logger.log(`Error: ${error || 'NO ERROR'}`);
-    this.logger.log(`State: ${state || 'NO STATE'}`);
+    const frontend = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const redirect = (path: string) => {
+      const redirectUrl = `${frontend}${path}`;
+      res.status(302);
+      res.header('Location', redirectUrl);
+      res.header('Access-Control-Allow-Origin', frontend);
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.redirect(redirectUrl);
+    };
+
+    this.logger.log('Google OAuth callback received');
 
     if (error) {
       this.logger.error(`Google OAuth error: ${error}`);
-      const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/settings?googleCalendar=error&error=${error}`;
-      this.logger.log(`Redirecting to error page: ${redirectUrl}`);
-
-      // Set redirect headers (CORS, cache)
-      res.status(302);
-      res.header('Location', redirectUrl);
-      res.header(
-        'Access-Control-Allow-Origin',
-        process.env.FRONTEND_URL || 'http://localhost:3000',
-      );
-      res.header('Access-Control-Allow-Credentials', 'true');
-      res.header('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.header('Pragma', 'no-cache');
-      res.header('Expires', '0');
-      res.redirect(redirectUrl);
+      redirect(`/login?error=${encodeURIComponent(error)}`);
       return;
     }
 
     if (!code) {
       this.logger.error('No authorization code received');
-      const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/settings?googleCalendar=error&error=no_code`;
-      this.logger.log(`Redirecting to error page: ${redirectUrl}`);
-
-      // Set redirect headers (CORS, cache)
-      res.status(302);
-      res.header('Location', redirectUrl);
-      res.header(
-        'Access-Control-Allow-Origin',
-        process.env.FRONTEND_URL || 'http://localhost:3000',
-      );
-      res.header('Access-Control-Allow-Credentials', 'true');
-      res.header('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.header('Pragma', 'no-cache');
-      res.header('Expires', '0');
-      res.redirect(redirectUrl);
+      redirect('/login?error=no_code');
       return;
     }
 
     try {
-      this.logger.log('Processing Google OAuth callback');
-      // OAuth state carries userId
-      const userId = state;
-      this.logger.log(`Using userId from state: ${userId}`);
-      await this.googleCalendarService.saveToken(code, userId);
-      this.logger.log('Google OAuth callback processed successfully');
-
-      const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/settings?googleCalendar=success`;
-      this.logger.log(`Redirecting to: ${redirectUrl}`);
-
-      // Set redirect headers (CORS, cache)
-      res.status(302);
-      res.header('Location', redirectUrl);
-      res.header(
-        'Access-Control-Allow-Origin',
-        process.env.FRONTEND_URL || 'http://localhost:3000',
-      );
-      res.header('Access-Control-Allow-Credentials', 'true');
-      res.header('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.header('Pragma', 'no-cache');
-      res.header('Expires', '0');
-      res.redirect(redirectUrl);
-    } catch (error) {
-      this.logger.error(
-        `Error processing Google OAuth callback: ${error.message}`,
-      );
-
-      const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/settings?googleCalendar=error&error=${error.message}`;
-      this.logger.log(`Redirecting to error page: ${redirectUrl}`);
-
-      // Set redirect headers (CORS, cache)
-      res.status(302);
-      res.header('Location', redirectUrl);
-      res.header(
-        'Access-Control-Allow-Origin',
-        process.env.FRONTEND_URL || 'http://localhost:3000',
-      );
-      res.header('Access-Control-Allow-Credentials', 'true');
-      res.header('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.header('Pragma', 'no-cache');
-      res.header('Expires', '0');
-      res.redirect(redirectUrl);
+      const ticket = await this.googleCalendarService.completeGoogleSignIn(code);
+      redirect(`/auth/google/callback?ticket=${encodeURIComponent(ticket)}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'sign_in_failed';
+      this.logger.error(`Error processing Google OAuth callback: ${msg}`);
+      redirect(`/login?error=${encodeURIComponent(msg)}`);
     }
   }
 
@@ -171,21 +105,6 @@ export class GoogleCalendarController {
     return this.googleCalendarService.checkAllUsersWithTokens();
   }
 
-  @Delete('disconnect')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Disconnect Google Calendar' })
-  @ApiResponse({
-    status: 200,
-    description: 'Google Calendar disconnected successfully.',
-  })
-  async disconnectCalendar(@Req() req) {
-    this.logger.log(
-      `Disconnecting Google Calendar for user ${req.user.userId}`,
-    );
-    return this.googleCalendarService.disconnectCalendar(req.user.userId);
-  }
-
   @Get('events')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -201,7 +120,7 @@ export class GoogleCalendarController {
     @Query('timeMax') timeMax: string,
     @Query('maxResults') maxResults: number = 100,
     @Query('pageToken') pageToken: string,
-    @Query('calendarId') calendarId: string = 'primary',
+    @Query('calendarId') calendarId?: string,
   ) {
     this.logger.log(
       `Getting events for user ${req.user.userId} from ${timeMin} to ${timeMax}`,
@@ -225,7 +144,7 @@ export class GoogleCalendarController {
   async getEvent(
     @Req() req,
     @Param('eventId') eventId: string,
-    @Query('calendarId') calendarId: string = 'primary',
+    @Query('calendarId') calendarId?: string,
   ) {
     this.logger.log(`Getting event ${eventId} for user ${req.user.userId}`);
     return this.googleCalendarService.getEvent(
@@ -273,8 +192,16 @@ export class GoogleCalendarController {
 
   @Delete('events/:eventId')
   @UseGuards(JwtAuthGuard)
-  async deleteEvent(@Req() req, @Param('eventId') eventId: string) {
-    return this.googleCalendarService.deleteEvent(req.user.userId, eventId);
+  async deleteEvent(
+    @Req() req,
+    @Param('eventId') eventId: string,
+    @Query('calendarId') calendarId?: string,
+  ) {
+    return this.googleCalendarService.deleteEvent(
+      req.user.userId,
+      eventId,
+      calendarId,
+    );
   }
 
   @Get('test-config')

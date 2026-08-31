@@ -1,40 +1,77 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { googleCalendarAPI } from '../../../api/google-calendar.api';
+import { useDispatch } from 'react-redux';
 import { toast } from 'react-toastify';
 import { Spinner } from '../../../ui/Spinner';
+import apiCall from '../../common/utils/apiCall';
+import { LOGIN } from '../actions/actionTypes';
+import { setLocalStorageItem } from '../../../utils/localStorage';
+import { UserSettingsApi } from '../../../api/user-settings.api';
 
 const GoogleCallbackPage: React.FC = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
-    const code = searchParams.get('code');
+    const dispatch = useDispatch();
+    const started = useRef(false);
 
     useEffect(() => {
-        const handleCallback = async () => {
-            if (!code) {
-                toast.error('No authorization code received');
-                navigate('/settings');
-                return;
-            }
+        if (started.current) return;
+        started.current = true;
 
+        const ticket = searchParams.get('ticket');
+        if (!ticket) {
+            toast.error('Google sign-in did not complete.');
+            navigate('/login', { replace: true });
+            return;
+        }
+
+        const finish = async () => {
             try {
-                await googleCalendarAPI.saveToken(code);
-                toast.success('Google Calendar connected successfully');
+                const response = await apiCall({
+                    method: 'POST',
+                    url: '/auth/google/session',
+                    data: { ticket },
+                });
+                const data = response?.data as {
+                    access_token: string;
+                    refresh_token: string;
+                };
+                setLocalStorageItem('access_token', data.access_token);
+                setLocalStorageItem('refresh_token', data.refresh_token);
+                dispatch({
+                    type: LOGIN.success,
+                    payload: data,
+                });
+
+                try {
+                    const settings = await UserSettingsApi.checkRequiredSettings();
+                    if (!settings.requiredFilled) {
+                        navigate('/settings', { replace: true });
+                        return;
+                    }
+                    if (!settings.hasPhases) {
+                        navigate('/setup/phases', { replace: true });
+                        return;
+                    }
+                } catch {
+                    navigate('/', { replace: true });
+                    return;
+                }
+                navigate('/', { replace: true });
             } catch (error) {
-                console.error('Error saving Google Calendar token:', error);
-                toast.error('Failed to connect Google Calendar');
-            } finally {
-                navigate('/settings');
+                console.error('Google sign-in ticket exchange failed:', error);
+                toast.error('Google sign-in failed. Try again.');
+                navigate('/login', { replace: true });
             }
         };
 
-        handleCallback();
-    }, [code, navigate]);
+        void finish();
+    }, [dispatch, navigate, searchParams]);
 
     return (
         <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-ide-bg text-ide-text">
             <Spinner className="h-10 w-10" />
-            <p className="text-lg font-medium text-ide-text">Connecting Google Calendar...</p>
+            <p className="text-lg font-medium text-ide-text">Signing you in…</p>
         </div>
     );
 };

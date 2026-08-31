@@ -42,17 +42,37 @@ const CalendarComponent: React.FC<CalendarProps> = ({
 
   // Transform tasks into calendar events
   const events = useMemo(() => {
-    return tasks.map(task => ({
-      id: task.id,
-      title: task.name,
-      start: new Date(task.scheduledStartTime),
-      end: new Date(task.scheduledEndTime),
-      priority: task.priority,
-      phaseId: task.phaseId,
-      phase: task.phase,
-      resource: {},
-    }));
-  }, [tasks]);
+    const now = new Date();
+    let rangeEnd = new Date(date);
+    if (view === 'day') {
+      rangeEnd.setHours(23, 59, 59, 999);
+    } else if (view === 'week') {
+      const weekStart = startOfWeek(date, { locale: enUS });
+      rangeEnd = new Date(weekStart);
+      rangeEnd.setDate(rangeEnd.getDate() + 7);
+    } else if (view === 'month') {
+      rangeEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+    }
+    const viewingPastRange = rangeEnd.getTime() < now.getTime();
+
+    return tasks
+      .filter((task) => {
+        if (task.status === 'completed' || task.status === 'canceled') return false;
+        if (viewingPastRange) return true;
+        const endMs = new Date(task.scheduledEndTime).getTime();
+        return !Number.isNaN(endMs) && endMs >= now.getTime();
+      })
+      .map((task) => ({
+        id: task.id,
+        title: task.name,
+        start: new Date(task.scheduledStartTime),
+        end: new Date(task.scheduledEndTime),
+        priority: task.priority,
+        phaseId: task.phaseId,
+        phase: task.phase,
+        resource: {},
+      }));
+  }, [tasks, view, date]);
 
   // Event styling based on task priority and phase
   const eventStyleGetter = (event: any) => {

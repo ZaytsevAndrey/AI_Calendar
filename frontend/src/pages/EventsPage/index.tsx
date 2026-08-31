@@ -8,6 +8,7 @@ import {
 import { useGetAllPhasesQuery } from 'api/phasesApi';
 import EventList from 'modules/events/components/EventList';
 import EventForm from 'modules/events/components/EventForm';
+import { hasTaskAlreadyEnded, isCurrentTask } from 'modules/events/utils/isCurrentTask';
 import { TaskDTO } from 'api/tasks.api';
 import { CreateTaskDTO, UpdateTaskDTO } from 'api/tasks.api';
 import { Modal } from '../../ui/Modal';
@@ -22,7 +23,7 @@ const EventsPage: React.FC = () => {
   const [sortField, setSortField] = useState<
     'name' | 'priority' | 'deadline' | 'estimatedTimeInMinutes'
   >('deadline');
-  const [filterStatus, setFilterStatus] = useState<string>('');
+  const [filterStatus, setFilterStatus] = useState<string>('active');
 
   const { data: events = [], isLoading: isLoadingEvents } = useGetEventsQuery();
   const { data: phases = [] } = useGetAllPhasesQuery();
@@ -105,9 +106,15 @@ const EventsPage: React.FC = () => {
     setSortField(field);
   };
 
-  const filteredEvents = filterStatus
-    ? sortedEvents.filter((event) => event.status === filterStatus)
-    : sortedEvents;
+  const filteredEvents = sortedEvents.filter((event) => {
+    if (filterStatus === 'all') return true;
+    if (filterStatus === 'active') return isCurrentTask(event);
+    if (event.status !== filterStatus) return false;
+    if (filterStatus === 'todo' || filterStatus === 'in_progress') {
+      return !hasTaskAlreadyEnded(event);
+    }
+    return true;
+  });
 
   const wizardTitle = editingEvent ? 'Edit event' : 'Create event';
   const isSaving = createEventState.isLoading || updateEventState.isLoading;
@@ -117,7 +124,7 @@ const EventsPage: React.FC = () => {
       <header className="page-head">
         <div>
           <h1 className="page-title">Events</h1>
-          <p className="page-lead">Create, filter and sort your events.</p>
+          <p className="page-lead">Current and upcoming events. Use the filter to see completed or past items.</p>
         </div>
         <button type="button" onClick={openCreate} className="ui-btn-primary w-full shrink-0 sm:w-auto">
           Create event
@@ -135,11 +142,12 @@ const EventsPage: React.FC = () => {
             onChange={(e) => setFilterStatus(e.target.value)}
             className="ui-select"
           >
-            <option value="">All Events</option>
+            <option value="active">Active</option>
             <option value="todo">To Do</option>
             <option value="in_progress">In Progress</option>
             <option value="completed">Completed</option>
             <option value="canceled">Canceled</option>
+            <option value="all">All (including past)</option>
           </select>
         </div>
       </div>

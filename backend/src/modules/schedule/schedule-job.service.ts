@@ -17,6 +17,7 @@ import {
   effectiveRecurrenceWeekDaysFromPhases,
   rruleByDayFromJsWeekdays,
 } from './recurrence-from-phases.util';
+import { phaseHexToGoogleColorId } from '../google-calendar/phase-hex-to-google-color-id.util';
 
 /** Drives Google Calendar payload for non-FIXED tasks (before vs after user edit / replan). */
 export type FlexibleGoogleSyncSnapshot = {
@@ -204,12 +205,10 @@ export class ScheduleJobService {
       return;
     }
 
-    const googleSyncOpts = { skipSleepWindowCheck: true } as const;
     await this.syncNonFixedTaskGoogleFromAfterSegments(
       userId,
       taskId,
       current.segments,
-      googleSyncOpts,
     );
   }
 
@@ -250,7 +249,6 @@ export class ScheduleJobService {
     userId: string,
     taskId: string,
     afterSegments: { start: string; end: string }[],
-    googleSyncOpts: { skipSleepWindowCheck: true },
   ): Promise<void> {
     const task = await this.taskRepo.findOne({
       where: { id: taskId, userId },
@@ -262,8 +260,13 @@ export class ScheduleJobService {
     if (!afterSegments.length) {
       if (task.googleEventId) {
         try {
-          await this.googleCalendarService.deleteEvent(userId, task.googleEventId);
+          await this.googleCalendarService.deleteEvent(
+            userId,
+            task.googleEventId,
+            task.googleEventCalendarId ?? 'primary',
+          );
           task.googleEventId = null;
+          task.googleEventCalendarId = null;
           await this.taskRepo.save(task);
         } catch (e: any) {
           this.logger.warn(
@@ -301,6 +304,13 @@ export class ScheduleJobService {
       end: { dateTime: new Date(firstStart + durationMs).toISOString(), timeZone: 'UTC' },
     };
 
+    const phaseForColor =
+      task.phases?.length && task.phases[0] ? task.phases[0] : task.phase;
+    const colorId = phaseHexToGoogleColorId(phaseForColor?.color);
+    if (colorId) {
+      payload.colorId = colorId;
+    }
+
     if (task.isRecurring && task.recurrencePattern) {
       const lastEnd = new Date(
         Number.isFinite(lastEndMs) && lastEndMs > firstStart
@@ -331,6 +341,14 @@ export class ScheduleJobService {
       }
     }
 
+    const googleSyncOpts: {
+      skipSleepWindowCheck: true;
+      calendarId: string;
+    } = {
+      skipSleepWindowCheck: true,
+      calendarId: task.googleEventCalendarId ?? 'primary',
+    };
+
     try {
       if (task.googleEventId) {
         await this.googleCalendarService.updateEvent(
@@ -347,6 +365,10 @@ export class ScheduleJobService {
         );
         if (typeof ev?.id === 'string') {
           task.googleEventId = ev.id;
+          const appCal = (ev as { appCalendarId?: string }).appCalendarId;
+          if (appCal) {
+            task.googleEventCalendarId = appCal;
+          }
           await this.taskRepo.save(task);
         }
       }
@@ -380,15 +402,12 @@ export class ScheduleJobService {
       return;
     }
 
-    const googleSyncOpts = { skipSleepWindowCheck: true } as const;
-
     for (const item of diff) {
       const afterIso = item.after.map((s) => ({ start: s.start, end: s.end }));
       await this.syncNonFixedTaskGoogleFromAfterSegments(
         userId,
         item.taskId,
         afterIso,
-        googleSyncOpts,
       );
     }
   }
@@ -460,7 +479,7 @@ export class ScheduleJobService {
     for (const [taskId, range] of byTask) {
       const task = await this.taskRepo.findOne({
         where: { id: taskId, userId },
-        select: ['id', 'googleEventId'],
+        select: ['id', 'googleEventId', 'googleEventCalendarId'],
       });
       if (!task?.googleEventId) continue;
 
@@ -470,6 +489,7 @@ export class ScheduleJobService {
           task.googleEventId,
           new Date(range.minStart),
           new Date(range.maxEnd),
+          task.googleEventCalendarId ?? 'primary',
         );
       } catch (e: any) {
         this.logger.warn(

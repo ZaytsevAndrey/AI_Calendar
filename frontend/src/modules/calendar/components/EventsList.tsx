@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
-import { formatEventTime, getEventColor, isEventToday, isEventThisWeek } from '../hooks/useCalendar';
+import { formatEventTime, getEventColor, isEventToday, isEventThisWeek, isGoogleEventCurrent } from '../hooks/useCalendar';
 
 interface EventsListProps {
     events: GoogleCalendarEvent[];
@@ -8,14 +8,14 @@ interface EventsListProps {
     error: any;
 }
 
-type FilterType = 'all' | 'today' | 'this-week' | 'upcoming';
+type FilterType = 'today' | 'this-week' | 'upcoming';
 
 const field = 'w-full rounded border border-ide-border bg-ide-input px-3 py-2 text-sm text-ide-text';
 const lbl = 'mb-1 block text-sm text-ide-muted';
 
 const EventsList: React.FC<EventsListProps> = ({ events, isLoading, error }) => {
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterType, setFilterType] = useState<FilterType>('all');
+    const [filterType, setFilterType] = useState<FilterType>('upcoming');
 
     const filteredEvents = events.filter((event) => {
         const matchesSearch =
@@ -29,17 +29,13 @@ const EventsList: React.FC<EventsListProps> = ({ events, isLoading, error }) => 
 
         switch (filterType) {
             case 'today':
-                return isEventToday(event);
+                return isEventToday(event) && isGoogleEventCurrent(event);
             case 'this-week':
-                return isEventThisWeek(event);
-            case 'upcoming': {
-                const eventDate = event.start.dateTime
-                    ? new Date(event.start.dateTime)
-                    : new Date(event.start.date!);
-                return eventDate >= new Date();
-            }
+                return isEventThisWeek(event) && isGoogleEventCurrent(event);
+            case 'upcoming':
+                return isGoogleEventCurrent(event);
             default:
-                return true;
+                return isGoogleEventCurrent(event);
         }
     });
 
@@ -93,10 +89,9 @@ const EventsList: React.FC<EventsListProps> = ({ events, isLoading, error }) => 
                         value={filterType}
                         onChange={(e) => setFilterType(e.target.value as FilterType)}
                     >
-                        <option value="all">All Events</option>
+                        <option value="upcoming">Upcoming</option>
                         <option value="today">Today</option>
                         <option value="this-week">This Week</option>
-                        <option value="upcoming">Upcoming</option>
                     </select>
                 </div>
             </div>
@@ -159,9 +154,9 @@ const EventsList: React.FC<EventsListProps> = ({ events, isLoading, error }) => 
                 </div>
             ) : (
                 <div className="py-8 text-center text-ide-muted">
-                    {searchTerm || filterType !== 'all'
+                    {searchTerm || filterType !== 'upcoming'
                         ? 'No events match your search criteria'
-                        : 'No events found'}
+                        : 'No upcoming events'}
                 </div>
             )}
         </div>

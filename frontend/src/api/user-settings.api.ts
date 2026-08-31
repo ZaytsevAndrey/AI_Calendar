@@ -11,6 +11,8 @@ export interface UserSettingsDTO {
   preferredLunchTime: string;
   weekendWorkEnabled: boolean;
   googleCalendarLinked: boolean;
+  /** Name of the dedicated Google calendar used for app-created events */
+  appGoogleCalendarName?: string;
   minSplitMinutes: number;
   maxSplitMinutes: number;
   recurringScheduleHorizonDays: number;
@@ -32,6 +34,7 @@ export interface UpdateUserSettingsDTO {
   preferredLunchTime?: string;
   weekendWorkEnabled?: boolean;
   googleCalendarLinked?: boolean;
+  appGoogleCalendarName?: string;
   minSplitMinutes?: number;
   maxSplitMinutes?: number;
   recurringScheduleHorizonDays?: number;

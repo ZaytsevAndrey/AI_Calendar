@@ -30,22 +30,48 @@ export const eventsApi = createApi({
           : [{ type: 'Event', id: 'LIST' }],
     }),
     getEvent: builder.query<GoogleCalendarEvent, { eventId: string; calendarId?: string }>({
-      query: ({ eventId, calendarId = 'primary' }) => ({ url: `/google-calendar/events/${eventId}?calendarId=${calendarId}` }),
+      query: ({ eventId, calendarId }) => ({
+        url:
+          calendarId != null && calendarId !== ''
+            ? `/google-calendar/events/${eventId}?calendarId=${encodeURIComponent(calendarId)}`
+            : `/google-calendar/events/${eventId}`,
+        method: 'GET',
+      }),
       providesTags: (result, error, { eventId }) => [{ type: 'Event', id: eventId }],
     }),
     createEvent: builder.mutation<GoogleCalendarEvent, { eventData: CreateEventParams; calendarId?: string }>({
-      query: ({ eventData, calendarId = 'primary' }) => ({ url: `/google-calendar/events?calendarId=${calendarId}`, method: 'POST', data: eventData }),
+      query: ({ eventData, calendarId }) => ({
+        url:
+          calendarId != null && calendarId !== ''
+            ? `/google-calendar/events?calendarId=${encodeURIComponent(calendarId)}`
+            : `/google-calendar/events`,
+        method: 'POST',
+        data: eventData,
+      }),
       invalidatesTags: [{ type: 'Event', id: 'LIST' }],
     }),
     updateEvent: builder.mutation<GoogleCalendarEvent, { eventId: string; eventData: UpdateEventParams; calendarId?: string }>({
-      query: ({ eventId, eventData, calendarId = 'primary' }) => ({ url: `/google-calendar/events/${eventId}?calendarId=${calendarId}`, method: 'PUT', data: eventData }),
+      query: ({ eventId, eventData, calendarId }) => ({
+        url:
+          calendarId != null && calendarId !== ''
+            ? `/google-calendar/events/${eventId}?calendarId=${encodeURIComponent(calendarId)}`
+            : `/google-calendar/events/${eventId}`,
+        method: 'PUT',
+        data: eventData,
+      }),
       invalidatesTags: (result, error, { eventId }) => [
         { type: 'Event', id: eventId },
         { type: 'Event', id: 'LIST' },
       ],
     }),
     deleteEvent: builder.mutation<void, { eventId: string; calendarId?: string }>({
-      query: ({ eventId, calendarId = 'primary' }) => ({ url: `/google-calendar/events/${eventId}?calendarId=${calendarId}`, method: 'DELETE' }),
+      query: ({ eventId, calendarId }) => ({
+        url:
+          calendarId != null && calendarId !== ''
+            ? `/google-calendar/events/${eventId}?calendarId=${encodeURIComponent(calendarId)}`
+            : `/google-calendar/events/${eventId}`,
+        method: 'DELETE',
+      }),
       invalidatesTags: (result, error, { eventId }) => [
         { type: 'Event', id: eventId },
         { type: 'Event', id: 'LIST' },

@@ -3,9 +3,6 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 
 import HomePage from 'pages/HomePage';
 import LoginPage from 'pages/LoginPage';
-import RegisterPage from 'pages/RegisterPage';
-import ForgotPasswordPage from 'pages/ForgotPasswordPage';
-import ResetPasswordPage from 'pages/ResetPasswordPage';
 import EventsPage from 'pages/EventsPage';
 import PhasesPage from 'pages/PhasesPage/PhasesPage';
 import SettingsPage from 'pages/SettingsPage';
@@ -80,14 +77,7 @@ const AppRoutes = () => {
                     </ProtectedRoute>
                 }
             />
-            <Route
-                path="/auth/google/callback"
-                element={
-                    <ProtectedRoute>
-                        <GoogleCallbackPage />
-                    </ProtectedRoute>
-                }
-            />
+            <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
             <Route
                 path="/login"
                 element={
@@ -96,30 +86,9 @@ const AppRoutes = () => {
                     </PublicRoute>
                 }
             />
-            <Route
-                path="/register"
-                element={
-                    <PublicRoute>
-                        <RegisterPage />
-                    </PublicRoute>
-                }
-            />
-            <Route
-                path="/forgot-password"
-                element={
-                    <PublicRoute>
-                        <ForgotPasswordPage />
-                    </PublicRoute>
-                }
-            />
-            <Route
-                path="/reset-password"
-                element={
-                    <PublicRoute>
-                        <ResetPasswordPage />
-                    </PublicRoute>
-                }
-            />
+            <Route path="/register" element={<Navigate to="/login" replace />} />
+            <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
+            <Route path="/reset-password" element={<Navigate to="/login" replace />} />
             <Route path="*" element={ <Navigate to="/" /> } />
         </Routes>
     );

@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useForm, useController } from 'react-hook-form';
-import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { UserSettingsDTO } from '../../../api/user-settings.api';
 import { useUpdateUserSettingsMutation } from '../../../api/userSettingsApi';
@@ -15,6 +14,7 @@ interface UserSettingsFormData {
     sleepTime: string;
     wakeTime: string;
     googleCalendarLinked: boolean;
+    appGoogleCalendarName: string;
     minSplitMinutes: number;
     maxSplitMinutes: number;
     recurringScheduleHorizonDays: number;
@@ -23,10 +23,6 @@ interface UserSettingsFormData {
 const fieldClass = 'ui-input max-w-xs';
 
 const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
-    const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
-    const [isConnecting, setIsConnecting] = useState(false);
-    const [isDisconnecting, setIsDisconnecting] = useState(false);
     const [isCalendarConnected, setIsCalendarConnected] = useState(false);
     const [isCheckingConnection, setIsCheckingConnection] = useState(true);
     const [updateUserSettings] = useUpdateUserSettingsMutation();
@@ -34,13 +30,15 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
         null
     );
 
-    const { control, setValue, watch } = useForm<UserSettingsFormData>({
+    const { control, setValue, watch, getValues } = useForm<UserSettingsFormData>({
         defaultValues: {
             sleepTime:
                 initialData?.sleepTime && initialData.sleepTime !== '' ? initialData.sleepTime : '22:00',
             wakeTime:
                 initialData?.wakeTime && initialData.wakeTime !== '' ? initialData.wakeTime : '07:00',
             googleCalendarLinked: initialData?.googleCalendarLinked || false,
+            appGoogleCalendarName:
+                initialData?.appGoogleCalendarName?.trim() || 'AI Calendar Assistant',
             minSplitMinutes:
                 typeof initialData?.minSplitMinutes === 'number'
                     ? initialData.minSplitMinutes
@@ -61,6 +59,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
     const minSplitMinutes = watch('minSplitMinutes');
     const maxSplitMinutes = watch('maxSplitMinutes');
     const recurringScheduleHorizonDays = watch('recurringScheduleHorizonDays');
+    const appGoogleCalendarName = watch('appGoogleCalendarName');
 
     const sleepTimeController = useController({
         name: 'sleepTime',
@@ -92,56 +91,18 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
         checkCalendarConnection();
     }, [setValue]);
 
-    useEffect(() => {
-        const googleCalendarStatus = searchParams.get('googleCalendar');
-        const error = searchParams.get('error');
-
-        if (googleCalendarStatus === 'success') {
-            toast.success('Google Calendar connected successfully!');
-            setIsCalendarConnected(true);
-            setValue('googleCalendarLinked', true);
-            navigate('/settings', { replace: true });
-        } else if (googleCalendarStatus === 'error') {
-            toast.error(`Failed to connect Google Calendar: ${error || 'Unknown error'}`);
-            navigate('/settings', { replace: true });
-        }
-    }, [searchParams, setValue, navigate]);
-
-    const handleGoogleCalendarConnect = async () => {
+    const saveAppCalendarName = async () => {
+        const v = (getValues('appGoogleCalendarName') ?? '').trim() || 'AI Calendar Assistant';
         try {
-            setIsConnecting(true);
-            toast.info('Getting Google Calendar authorization URL...');
-
-            const { data } = await googleCalendarAPI.getAuthUrl();
-            const urlData = data as { url: string };
-
-            toast.info('Redirecting to Google...');
-
-            setTimeout(() => {
-                window.location.replace(urlData.url);
-            }, 500);
-        } catch (error) {
-            toast.error('Failed to get Google Calendar authorization URL');
-            console.error('Error getting auth URL:', error);
-            setIsConnecting(false);
-        }
-    };
-
-    const handleGoogleCalendarDisconnect = async () => {
-        try {
-            setIsDisconnecting(true);
-            toast.info('Disconnecting Google Calendar...');
-
-            await googleCalendarAPI.disconnectCalendar();
-
-            toast.success('Google Calendar disconnected successfully!');
-            setIsCalendarConnected(false);
-            setValue('googleCalendarLinked', false);
-        } catch (error) {
-            toast.error('Failed to disconnect Google Calendar');
-            console.error('Error disconnecting Google Calendar:', error);
-        } finally {
-            setIsDisconnecting(false);
+            await updateUserSettings({
+                appGoogleCalendarName: v,
+                googleCalendarLinked: isCalendarConnected,
+            }).unwrap();
+            toast.success('Calendar name saved');
+        } catch (error: any) {
+            if (error?.response?.status === 401) return;
+            toast.error('Failed to save calendar name');
+            console.error(error);
         }
     };
 
@@ -345,54 +306,42 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             <section className="border-t border-ide-border pt-10">
                 <h2 className="mb-4 text-lg font-semibold text-ide-text">Google Calendar</h2>
 
+                <div className="mb-6 flex max-w-md flex-col gap-1">
+                    <label htmlFor="app-google-calendar-name" className="ui-label">
+                        App calendar name
+                    </label>
+                    <input
+                        id="app-google-calendar-name"
+                        type="text"
+                        className={fieldClass}
+                        maxLength={200}
+                        value={appGoogleCalendarName ?? ''}
+                        onChange={(e) => setValue('appGoogleCalendarName', e.target.value, { shouldDirty: true })}
+                        onBlur={() => void saveAppCalendarName()}
+                    />
+                    <p className="text-xs text-ide-muted">
+                        Events created by this app are written to a separate Google calendar with this title. Rename
+                        it here anytime; if Google is connected, the calendar title updates automatically.
+                    </p>
+                </div>
+
                 {isCheckingConnection ? (
                     <div className="flex items-center gap-3">
                         <Spinner className="h-5 w-5" />
                         <span className="text-sm text-ide-muted">Checking connection status...</span>
                     </div>
                 ) : isCalendarConnected ? (
-                    <div className="flex flex-col gap-4">
-                        <div className="mb-2 flex items-center gap-3">
-                            <span className="flex h-3 w-3 items-center justify-center rounded-full bg-ide-dim text-[0.65rem] text-ide-bg">
-                                ✓
-                            </span>
-                            <span className="font-medium text-ide-dim">Connected to Google Calendar</span>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={handleGoogleCalendarDisconnect}
-                            disabled={isDisconnecting}
-                            className="ui-btn-secondary border-ide-error text-ide-error hover:bg-ide-error/10 sm:w-auto"
-                        >
-                            {isDisconnecting ? (
-                                <span className="inline-flex items-center gap-2">
-                                    <Spinner className="h-4 w-4" /> Disconnecting...
-                                </span>
-                            ) : (
-                                'Disconnect'
-                            )}
-                        </button>
+                    <div className="flex items-center gap-3">
+                        <span className="flex h-3 w-3 items-center justify-center rounded-full bg-ide-dim text-[0.65rem] text-ide-bg">
+                            ✓
+                        </span>
+                        <span className="font-medium text-ide-dim">Linked with your Google account</span>
                     </div>
                 ) : (
-                    <div className="flex flex-col gap-4">
-                        <p className="mb-1 text-sm text-ide-muted">
-                            Connect your Google Calendar to sync events and manage your schedule
-                        </p>
-                        <button
-                            type="button"
-                            onClick={handleGoogleCalendarConnect}
-                            disabled={isConnecting}
-                            className="ui-btn-primary w-full sm:w-auto sm:min-w-[200px]"
-                        >
-                            {isConnecting ? (
-                                <span className="inline-flex items-center gap-2">
-                                    <Spinner className="h-4 w-4 border-t-white" /> Connecting...
-                                </span>
-                            ) : (
-                                'Connect Google Calendar'
-                            )}
-                        </button>
-                    </div>
+                    <p className="text-sm text-ide-muted">
+                        Calendar is linked automatically when you sign in with Google. Sign out and sign in again if
+                        this status does not update.
+                    </p>
                 )}
             </section>
         </div>

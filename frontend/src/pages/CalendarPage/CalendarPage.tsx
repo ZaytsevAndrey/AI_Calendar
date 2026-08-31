@@ -5,6 +5,7 @@ import {
     useEventsForMonth,
     useUpdateEvent,
     useDeleteEvent,
+    visibleGoogleEvents,
 } from 'modules/calendar/hooks/useCalendar';
 import EventForm from 'modules/calendar/components/EventForm';
 import { GoogleCalendarEvent } from 'api/google-calendar.api';
@@ -59,6 +60,11 @@ const CalendarPage: React.FC = () => {
     const getEventsQuery = queryMap[currentView];
     const [updateEventTrigger, updateEventState] = useUpdateEvent();
     const [deleteEventTrigger, deleteEventState] = useDeleteEvent();
+    const displayEvents = visibleGoogleEvents(
+        getEventsQuery.data?.events || [],
+        currentView,
+        currentDate,
+    );
 
     const formatDate = (date: Date, view: CalendarView): string => {
         switch (view) {
@@ -113,7 +119,7 @@ const CalendarPage: React.FC = () => {
     };
 
     const handleEditEvent = (eventId: string) => {
-        const event = getEventsQuery.data?.events?.find((e: EventType) => e.id === eventId);
+        const event = displayEvents.find((e: EventType) => e.id === eventId);
         if (event) {
             setEventFormDialog({ open: true, event });
         }
@@ -226,14 +232,14 @@ const CalendarPage: React.FC = () => {
                 <CalendarGrid
                     view={currentView}
                     date={currentDate}
-                    events={getEventsQuery.data?.events || []}
+                    events={displayEvents}
                     onEditEvent={handleEditEvent}
                     onDeleteEvent={handleDeleteEvent}
                 />
             </div>
 
             <CalendarEvents
-                events={getEventsQuery.data?.events || []}
+                events={displayEvents}
                 isLoading={getEventsQuery.isLoading}
                 error={getEventsQuery.error}
                 title={`${currentView.charAt(0).toUpperCase() + currentView.slice(1)} Events`}

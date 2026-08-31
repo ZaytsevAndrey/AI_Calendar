@@ -7,8 +7,90 @@ import {
 } from '../../../api/eventsApi';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 
-// Calendar connection (stub; wire via RTK Query if needed)
-// export const useCalendarConnection = ...
+export function startOfLocalDay(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+export function endOfLocalDay(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+/** Monday as week start (same convention as CalendarGrid). */
+export function startOfWeekMonday(date: Date): Date {
+  const d = startOfLocalDay(date);
+  const dayOfWeek = d.getDay();
+  const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  d.setDate(d.getDate() - daysToSubtract);
+  return d;
+}
+
+/**
+ * For ranges that overlap today/future, skip days before today so past events are not fetched.
+ * Fully historical ranges (e.g. yesterday) are left unchanged.
+ */
+export function clampRangeStartToToday(rangeStart: Date, rangeEnd: Date, now = new Date()): Date {
+  const today = startOfLocalDay(now);
+  if (rangeEnd.getTime() < today.getTime()) return rangeStart;
+  return rangeStart.getTime() < today.getTime() ? today : rangeStart;
+}
+
+export function getGoogleEventEndMs(event: GoogleCalendarEvent): number | null {
+  if (event.end?.dateTime) {
+    const t = new Date(event.end.dateTime).getTime();
+    return Number.isNaN(t) ? null : t;
+  }
+  if (event.end?.date) {
+    const t = new Date(`${event.end.date}T00:00:00`).getTime();
+    return Number.isNaN(t) ? null : t;
+  }
+  if (event.start?.dateTime) {
+    const t = new Date(event.start.dateTime).getTime();
+    return Number.isNaN(t) ? null : t;
+  }
+  return null;
+}
+
+/** Still happening or upcoming; cancelled events are never current. */
+export function isGoogleEventCurrent(event: GoogleCalendarEvent, nowMs = Date.now()): boolean {
+  if (event.status === 'cancelled') return false;
+  const endMs = getGoogleEventEndMs(event);
+  if (endMs == null) return true;
+  return endMs >= nowMs;
+}
+
+export function isCalendarRangeCurrentOrFuture(
+  view: 'day' | 'week' | 'month',
+  date: Date,
+  now = new Date(),
+): boolean {
+  if (view === 'day') {
+    return endOfLocalDay(date).getTime() >= now.getTime();
+  }
+  if (view === 'week') {
+    const start = startOfWeekMonday(date);
+    const end = endOfLocalDay(new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6));
+    return end.getTime() >= now.getTime();
+  }
+  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+  return end.getTime() >= now.getTime();
+}
+
+export function visibleGoogleEvents(
+  events: GoogleCalendarEvent[],
+  view: 'day' | 'week' | 'month',
+  date: Date,
+  now = new Date(),
+): GoogleCalendarEvent[] {
+  const nowMs = now.getTime();
+  if (!isCalendarRangeCurrentOrFuture(view, date, now)) {
+    return events.filter((event) => event.status !== 'cancelled');
+  }
+  return events.filter((event) => isGoogleEventCurrent(event, nowMs));
+}
 
 export const useCalendarEvents = (params: any) => {
   return useGetEventsQuery(params);
@@ -18,30 +100,29 @@ export const useCalendarEvent = (eventId: string, calendarId: string = 'primary'
   return useGetEventQuery({ eventId, calendarId });
 };
 
-// Create, update, delete events
 export const useCreateEvent = useCreateEventMutation;
 export const useUpdateEvent = useUpdateEventMutation;
 export const useDeleteEvent = useDeleteEventMutation;
 
-// For day/week/month views, pass the right params into useGetEventsQuery
 export const useEventsForDay = (date: Date, calendarId: string = 'primary') => {
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
+  const startOfDay = startOfLocalDay(date);
+  const endOfDay = endOfLocalDay(date);
+  const timeMin = clampRangeStartToToday(startOfDay, endOfDay);
   return useGetEventsQuery({
-    timeMin: startOfDay.toISOString(),
+    timeMin: timeMin.toISOString(),
     timeMax: endOfDay.toISOString(),
     calendarId,
   });
 };
 
-export const useEventsForWeek = (startOfWeek: Date, calendarId: string = 'primary') => {
-  const endOfWeek = new Date(startOfWeek);
-  endOfWeek.setDate(startOfWeek.getDate() + 6);
-  endOfWeek.setHours(23, 59, 59, 999);
+export const useEventsForWeek = (dateInWeek: Date, calendarId: string = 'primary') => {
+  const startOfWeek = startOfWeekMonday(dateInWeek);
+  const endOfWeek = endOfLocalDay(
+    new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), startOfWeek.getDate() + 6),
+  );
+  const timeMin = clampRangeStartToToday(startOfWeek, endOfWeek);
   return useGetEventsQuery({
-    timeMin: startOfWeek.toISOString(),
+    timeMin: timeMin.toISOString(),
     timeMax: endOfWeek.toISOString(),
     calendarId,
   });
@@ -50,8 +131,9 @@ export const useEventsForWeek = (startOfWeek: Date, calendarId: string = 'primar
 export const useEventsForMonth = (year: number, month: number, calendarId: string = 'primary') => {
   const startOfMonth = new Date(year, month - 1, 1);
   const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
+  const timeMin = clampRangeStartToToday(startOfMonth, endOfMonth);
   return useGetEventsQuery({
-    timeMin: startOfMonth.toISOString(),
+    timeMin: timeMin.toISOString(),
     timeMax: endOfMonth.toISOString(),
     calendarId,
   });

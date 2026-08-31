@@ -18,6 +18,7 @@ import {
   ScheduleJobService,
 } from '../schedule/schedule-job.service';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { phaseHexToGoogleColorId } from '../google-calendar/phase-hex-to-google-color-id.util';
 
 @Injectable()
 export class TasksService {
@@ -41,8 +42,14 @@ export class TasksService {
     );
   }
 
+  private resolveTaskPhaseColorHex(task: Task): string | undefined {
+    const p = task.phases?.[0] ?? task.phase;
+    return p?.color;
+  }
+
   private buildGoogleEventPayload(task: Task): Record<string, unknown> {
-    return {
+    const colorId = phaseHexToGoogleColorId(this.resolveTaskPhaseColorHex(task));
+    const payload: Record<string, unknown> = {
       summary: task.name,
       description: task.description || undefined,
       start: {
@@ -54,6 +61,10 @@ export class TasksService {
         timeZone: 'UTC',
       },
     };
+    if (colorId) {
+      payload.colorId = colorId;
+    }
+    return payload;
   }
 
   private async syncTaskWithGoogleCalendar(
@@ -74,7 +85,10 @@ export class TasksService {
     }
 
     const payload = this.buildGoogleEventPayload(task);
-    const syncOpts = { skipSleepWindowCheck: true } as const;
+    const syncOpts = {
+      skipSleepWindowCheck: true as const,
+      calendarId: task.googleEventCalendarId ?? 'primary',
+    };
     try {
       if (task.googleEventId) {
         await this.googleCalendarService.updateEvent(
@@ -91,6 +105,10 @@ export class TasksService {
         );
         if (typeof ev?.id === 'string') {
           task.googleEventId = ev.id;
+        }
+        const appCal = (ev as { appCalendarId?: string }).appCalendarId;
+        if (appCal) {
+          task.googleEventCalendarId = appCal;
         }
       }
     } catch (e: any) {
@@ -303,7 +321,11 @@ export class TasksService {
     const task = await this.findOne(id, userId);
     if (task.googleEventId) {
       try {
-        await this.googleCalendarService.deleteEvent(userId, task.googleEventId);
+        await this.googleCalendarService.deleteEvent(
+          userId,
+          task.googleEventId,
+          task.googleEventCalendarId ?? 'primary',
+        );
       } catch (e: any) {
         this.logger.warn(
           `Failed to delete Google event for removed task ${task.id}: ${e?.message ?? e}`,

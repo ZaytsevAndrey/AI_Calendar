@@ -105,6 +105,10 @@ export class Task {
   @Column({ type: 'varchar', nullable: true })
   googleEventId: string | null;
 
+  /** Google calendar id where `googleEventId` lives; null = legacy events on `primary`. */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  googleEventCalendarId: string | null;
+
   @Column({ default: false })
   isFixedExternal: boolean;
 

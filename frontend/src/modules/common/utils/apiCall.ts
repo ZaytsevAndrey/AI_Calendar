@@ -2,50 +2,54 @@ import axios from 'api/axios';
 import { store } from 'store';
 
 import { refreshToken } from 'modules/auth/actions/refreshToken';
-import { logout, clientLogout } from 'modules/auth/actions/logoutActions';
+import { clientLogout } from 'modules/auth/actions/logoutActions';
 
-import hasApiErrorCode from './hasApiErrorCode';
+let refreshInFlight: Promise<void> | null = null;
 
-import {
-    INVALID_JWT,
-    EMPTY_JWT,
-    INVALID_SESSION,
-    INVALID_REFRESH_TOKEN,
-} from 'modules/common/constants/apiErrorCodes';
+function isAuthBootstrapRequest(url: string): boolean {
+    return (
+        url.includes('/auth/login') ||
+        url.includes('/auth/register') ||
+        url.includes('/auth/refresh') ||
+        url.includes('/auth/google')
+    );
+}
+
+async function ensureFreshSession(): Promise<void> {
+    if (!refreshInFlight) {
+        refreshInFlight = store
+            .dispatch<any>(refreshToken())
+            .then(() => undefined)
+            .finally(() => {
+                refreshInFlight = null;
+            });
+    }
+    await refreshInFlight;
+}
 
 export default async function apiCall(config: any) {
     try {
         return await axios(config);
     } catch (error: any) {
-        const requestUrl = String(error?.config?.url ?? '');
-        const isCredentialEntryRequest =
-            requestUrl.includes('/auth/login') ||
-            requestUrl.includes('/auth/register');
+        const requestUrl = String(error?.config?.url ?? config?.url ?? '');
+        const status = error?.response?.status ?? error?.response?.data?.statusCode;
+        const alreadyRetried = Boolean(config?._authRetry);
 
-        if (
-            !isCredentialEntryRequest &&
-            (error?.response?.status === 401 ||
-                error?.response?.data?.statusCode === 401)
-        ) {
-            store.dispatch<any>(clientLogout(true));
-            throw error;
-        }
-        if (!error?.response?.data) {
-            throw error;
-        }
-
-        if (hasApiErrorCode(error, [INVALID_SESSION, INVALID_REFRESH_TOKEN])) {
-            store.dispatch<any>(logout(true));
-            throw error;
-        }
-
-        if (hasApiErrorCode(error, [INVALID_JWT, EMPTY_JWT])) {
+        if (!isAuthBootstrapRequest(requestUrl) && status === 401 && !alreadyRetried) {
             try {
-                await store.dispatch<any>(refreshToken());
-                return axios(config);
-            } catch (e) {
-                store.dispatch<any>(logout(true));
-                throw e;
+                await ensureFreshSession();
+                const nextConfig = {
+                    ...config,
+                    _authRetry: true,
+                    headers: {
+                        ...(config.headers || {}),
+                        Authorization: `Bearer ${localStorage.getItem('access_token') || ''}`,
+                    },
+                };
+                return await axios(nextConfig);
+            } catch {
+                store.dispatch<any>(clientLogout(true));
+                throw error;
             }
         }
 

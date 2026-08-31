@@ -7,6 +7,7 @@ import {
   Min,
   Max,
   Matches,
+  MaxLength,
 } from 'class-validator';
 
 export class UpdateUserSettingsDto {
@@ -96,6 +97,17 @@ export class UpdateUserSettingsDto {
   @IsBoolean()
   @IsOptional()
   googleCalendarLinked?: boolean;
+
+  @ApiProperty({
+    example: 'AI Calendar Assistant',
+    description:
+      'Display name of the dedicated Google calendar where this app creates and syncs events',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(200)
+  appGoogleCalendarName?: string;
 
   @ApiProperty({
     example: true,

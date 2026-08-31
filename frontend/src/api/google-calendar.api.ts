@@ -157,36 +157,48 @@ class GoogleCalendarAPI {
         return axiosInstance.get<GoogleCalendarEventsResponse>(url);
     }
 
-    // Get specific event by ID
-    getEvent(eventId: string, calendarId: string = 'primary') {
-        const queryParams = new URLSearchParams();
-        queryParams.append('calendarId', calendarId);
-        
-        return axiosInstance.get<GoogleCalendarEvent>(`/google-calendar/events/${eventId}?${queryParams.toString()}`);
+    // Get specific event by ID (omit calendarId to use app-managed calendar when configured)
+    getEvent(eventId: string, calendarId?: string) {
+        const suffix =
+            calendarId != null && calendarId !== ''
+                ? `?calendarId=${encodeURIComponent(calendarId)}`
+                : '';
+        return axiosInstance.get<GoogleCalendarEvent>(
+            `/google-calendar/events/${eventId}${suffix}`,
+        );
     }
 
-    // Create new event
-    createEvent(eventData: CreateEventParams, calendarId: string = 'primary') {
-        const queryParams = new URLSearchParams();
-        queryParams.append('calendarId', calendarId);
-        
-        return axiosInstance.post<GoogleCalendarEvent>(`/google-calendar/events?${queryParams.toString()}`, eventData);
+    // Create new event (always uses app-managed calendar on the server)
+    createEvent(eventData: CreateEventParams, calendarId?: string) {
+        const suffix =
+            calendarId != null && calendarId !== ''
+                ? `?calendarId=${encodeURIComponent(calendarId)}`
+                : '';
+        return axiosInstance.post<GoogleCalendarEvent>(
+            `/google-calendar/events${suffix}`,
+            eventData,
+        );
     }
 
     // Update existing event
-    updateEvent(eventId: string, eventData: UpdateEventParams, calendarId: string = 'primary') {
-        const queryParams = new URLSearchParams();
-        queryParams.append('calendarId', calendarId);
-        
-        return axiosInstance.put<GoogleCalendarEvent>(`/google-calendar/events/${eventId}?${queryParams.toString()}`, eventData);
+    updateEvent(eventId: string, eventData: UpdateEventParams, calendarId?: string) {
+        const suffix =
+            calendarId != null && calendarId !== ''
+                ? `?calendarId=${encodeURIComponent(calendarId)}`
+                : '';
+        return axiosInstance.put<GoogleCalendarEvent>(
+            `/google-calendar/events/${eventId}${suffix}`,
+            eventData,
+        );
     }
 
     // Delete event
-    deleteEvent(eventId: string, calendarId: string = 'primary') {
-        const queryParams = new URLSearchParams();
-        queryParams.append('calendarId', calendarId);
-        
-        return axiosInstance.delete(`/google-calendar/events/${eventId}?${queryParams.toString()}`);
+    deleteEvent(eventId: string, calendarId?: string) {
+        const suffix =
+            calendarId != null && calendarId !== ''
+                ? `?calendarId=${encodeURIComponent(calendarId)}`
+                : '';
+        return axiosInstance.delete(`/google-calendar/events/${eventId}${suffix}`);
     }
 
     // Utility methods for date formatting

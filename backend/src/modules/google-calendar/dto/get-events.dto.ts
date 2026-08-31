@@ -37,12 +37,12 @@ export class GetEventsDto {
   pageToken?: string;
 
   @ApiProperty({
-    description: 'Calendar ID to fetch events from',
+    description:
+      'Calendar ID to fetch events from; omit to use the app-managed calendar when configured, otherwise primary',
     example: 'primary',
     required: false,
-    default: 'primary',
   })
   @IsOptional()
   @IsString()
-  calendarId?: string = 'primary';
+  calendarId?: string;
 }

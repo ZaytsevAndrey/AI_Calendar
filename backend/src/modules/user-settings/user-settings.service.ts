@@ -1,14 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserSettings } from './entities/user-settings.entity';
 import { UpdateUserSettingsDto } from './dto/update-user-settings.dto';
+import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 
 @Injectable()
 export class UserSettingsService {
+  private readonly logger = new Logger(UserSettingsService.name);
+
   constructor(
     @InjectRepository(UserSettings)
     private userSettingsRepository: Repository<UserSettings>,
+    private readonly googleCalendarService: GoogleCalendarService,
   ) {}
 
   async getSettings(userId: string): Promise<UserSettings> {
@@ -45,6 +49,8 @@ export class UserSettingsService {
       if (userSettings.recurringScheduleHorizonDays === undefined)
         userSettings.recurringScheduleHorizonDays =
           defaults.recurringScheduleHorizonDays;
+      if (!userSettings.appGoogleCalendarName)
+        userSettings.appGoogleCalendarName = defaults.appGoogleCalendarName;
 
       // Save updated settings if any defaults were applied
       await this.userSettingsRepository.save(userSettings);
@@ -58,6 +64,7 @@ export class UserSettingsService {
     updateUserSettingsDto: UpdateUserSettingsDto,
   ): Promise<UserSettings> {
     const userSettings = await this.getSettings(userId);
+    const previousAppCalendarName = userSettings.appGoogleCalendarName;
     const nextMin =
       updateUserSettingsDto.minSplitMinutes ?? userSettings.minSplitMinutes;
     const nextMax =
@@ -70,7 +77,25 @@ export class UserSettingsService {
       userSettings,
       updateUserSettingsDto,
     );
-    return this.userSettingsRepository.save(updatedSettings);
+    const saved = await this.userSettingsRepository.save(updatedSettings);
+
+    if (
+      updateUserSettingsDto.appGoogleCalendarName !== undefined &&
+      saved.appGoogleCalendarName !== previousAppCalendarName
+    ) {
+      try {
+        await this.googleCalendarService.updateAppCalendarSummaryIfLinked(
+          userId,
+        );
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.logger.warn(
+          `Could not rename Google app calendar for user ${userId}: ${msg}`,
+        );
+      }
+    }
+
+    return saved;
   }
 
   getDefaultSettings() {
@@ -86,6 +111,7 @@ export class UserSettingsService {
       minSplitMinutes: 30,
       maxSplitMinutes: 30,
       recurringScheduleHorizonDays: 30,
+      appGoogleCalendarName: 'AI Calendar Assistant',
     };
   }
 
@@ -103,6 +129,7 @@ export class UserSettingsService {
       minSplitMinutes: 30,
       maxSplitMinutes: 30,
       recurringScheduleHorizonDays: 30,
+      appGoogleCalendarName: 'AI Calendar Assistant',
     });
 
     return this.userSettingsRepository.save(defaultSettings);
