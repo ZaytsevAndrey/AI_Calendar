@@ -96,7 +96,7 @@ export const useCalendarEvents = (params: any) => {
   return useGetEventsQuery(params);
 };
 
-export const useCalendarEvent = (eventId: string, calendarId: string = 'primary') => {
+export const useCalendarEvent = (eventId: string, calendarId?: string) => {
   return useGetEventQuery({ eventId, calendarId });
 };
 
@@ -104,7 +104,7 @@ export const useCreateEvent = useCreateEventMutation;
 export const useUpdateEvent = useUpdateEventMutation;
 export const useDeleteEvent = useDeleteEventMutation;
 
-export const useEventsForDay = (date: Date, calendarId: string = 'primary') => {
+export const useEventsForDay = (date: Date, calendarId?: string) => {
   const startOfDay = startOfLocalDay(date);
   const endOfDay = endOfLocalDay(date);
   const timeMin = clampRangeStartToToday(startOfDay, endOfDay);
@@ -115,7 +115,7 @@ export const useEventsForDay = (date: Date, calendarId: string = 'primary') => {
   });
 };
 
-export const useEventsForWeek = (dateInWeek: Date, calendarId: string = 'primary') => {
+export const useEventsForWeek = (dateInWeek: Date, calendarId?: string) => {
   const startOfWeek = startOfWeekMonday(dateInWeek);
   const endOfWeek = endOfLocalDay(
     new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), startOfWeek.getDate() + 6),
@@ -128,7 +128,7 @@ export const useEventsForWeek = (dateInWeek: Date, calendarId: string = 'primary
   });
 };
 
-export const useEventsForMonth = (year: number, month: number, calendarId: string = 'primary') => {
+export const useEventsForMonth = (year: number, month: number, calendarId?: string) => {
   const startOfMonth = new Date(year, month - 1, 1);
   const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
   const timeMin = clampRangeStartToToday(startOfMonth, endOfMonth);

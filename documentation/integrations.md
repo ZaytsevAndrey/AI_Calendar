@@ -41,9 +41,9 @@ FRONTEND_URL=http://localhost:3000
 
 Full list: Swagger (`/api`).
 
-## Schedule undo and Google
+## Clear schedule and Google
 
-After **`POST /schedule-jobs/undo-last`**, the backend restores auto-generated `scheduled_tasks` from the last snapshot. For each affected task that has **`googleEventId`**, it calls the Calendar API to **patch only start/end** on that event (summary and other fields unchanged). If Google is disconnected or the call fails, undo still applies in the database; failures are logged and do not roll back the DB restore.
+**`DELETE /schedule`** removes **app-generated** local slots from today through the **Recurring schedule horizon** in Settings, then deletes leftover events on the **app Google calendar** in that same window (even if local rows were already gone). If Google is disconnected, local rows are still removed.
 
 ## Error `redirect_uri_mismatch`
 

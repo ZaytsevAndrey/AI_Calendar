@@ -2,7 +2,38 @@
 :root {
     --toastify-color-light: #3c3f41;
     --toastify-text-color-light: #a9b7c6;
+    --toastify-color-dark: #3c3f41;
+    --toastify-text-color-dark: #a9b7c6;
     --toastify-toast-background: #3c3f41;
+    --toastify-color-warning: #3c3f41;
+    --toastify-text-color-warning: #bbb529;
+    --toastify-color-error: #3c3f41;
+    --toastify-text-color-error: #a9b7c6;
+    --toastify-color-success: #3c3f41;
+    --toastify-text-color-success: #a9b7c6;
+    --toastify-color-info: #3c3f41;
+    --toastify-text-color-info: #a9b7c6;
+    --toastify-icon-color-warning: #bbb529;
+    --toastify-icon-color-error: #bc3f3c;
     --toastify-spinner-color: #a9b7c6;
     --toastify-spinner-color-empty-area: #515151;
+}
+
+.Toastify__toast {
+    background: #3c3f41;
+    color: #a9b7c6;
+}
+
+.Toastify__toast-body {
+    color: inherit;
+}
+
+.Toastify__toast--warning,
+.Toastify__toast--warning .Toastify__toast-body {
+    color: #bbb529;
+}
+
+.Toastify__toast--error,
+.Toastify__toast--error .Toastify__toast-body {
+    color: #a9b7c6;
 }

@@ -4,7 +4,6 @@ import { ScheduleController } from './schedule.controller';
 import { ScheduleService } from './schedule.service';
 import { ScheduledTask } from './schedule.entity';
 import { ScheduleJob } from './entities/schedule-job.entity';
-import { ScheduleUndoSnapshot } from './entities/schedule-undo-snapshot.entity';
 import { IntelligentSchedulingEngine } from './intelligent-scheduling.engine';
 import { ScheduleJobService } from './schedule-job.service';
 import { ScheduleJobProcessor } from './schedule-job.processor';
@@ -19,7 +18,6 @@ import { GoogleCalendarModule } from '../google-calendar/google-calendar.module'
     TypeOrmModule.forFeature([
       ScheduledTask,
       ScheduleJob,
-      ScheduleUndoSnapshot,
       Task,
     ]),
     forwardRef(() => TasksModule),

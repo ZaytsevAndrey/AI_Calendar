@@ -1,6 +1,6 @@
 # AI Calendar Assistant
 
-Web app for time planning: **day phases**, **tasks**, **sleep/wake settings**, **Google Calendar** integration, and an **automatic schedule** page (`/schedule`).
+Web app for time planning: **day phases**, **tasks**, **sleep/wake settings**, **Google Calendar** integration, and an automatic schedule from the **Calendar** page (`/calendar`).
 
 ## Documentation
 

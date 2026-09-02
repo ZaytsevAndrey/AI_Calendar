@@ -48,17 +48,9 @@ export class ScheduleJobController {
         id: job.id,
         status: job.status,
         result,
-        undoSnapshotId: job.undoSnapshotId,
         updatedAt: job.updatedAt,
       },
     };
-  }
-
-  @Post('undo-last')
-  @ApiOperation({ summary: 'Undo last completed replan (DB only; Google sync TODO)' })
-  @ApiResponse({ status: 200, description: 'Restored' })
-  async undoLast(@Request() req) {
-    return this.scheduleJobService.undoLast(req.user.userId);
   }
 
   @Get(':id')
@@ -79,7 +71,6 @@ export class ScheduleJobController {
       status: job.status,
       errorMessage: job.errorMessage,
       result,
-      undoSnapshotId: job.undoSnapshotId,
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
     };

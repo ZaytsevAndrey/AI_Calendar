@@ -482,59 +482,6 @@
         @apply ui-btn-danger flex-1 sm:flex-none;
     }
 
-    /* Schedule */
-    .schedule-layout {
-        @apply flex flex-col gap-6 lg:flex-row lg:items-start;
-    }
-
-    .schedule-calendar-wrap {
-        @apply min-w-0 flex-1 rounded-xl border border-ide-border bg-ide-panel p-3 shadow-ide sm:p-4;
-    }
-
-    .schedule-side-panel {
-        @apply w-full shrink-0 rounded-xl border border-ide-border bg-ide-panel p-4 shadow-ide lg:w-[min(100%,380px)] xl:w-96;
-    }
-
-    .replan-panel {
-        @apply mb-6 rounded-xl border border-ide-border bg-ide-surface/50 p-4 text-sm sm:p-5;
-    }
-
-    .replan-panel__title {
-        @apply mb-3 text-base font-semibold text-ide-text;
-    }
-
-    .replan-panel__errors {
-        @apply mb-3 list-inside list-disc text-ide-error;
-    }
-
-    .replan-panel__warnings {
-        @apply mb-3 list-inside list-disc text-ide-warn;
-    }
-
-    .replan-panel__diff {
-        @apply list-none space-y-4 p-0;
-    }
-
-    .replan-panel__diff-row {
-        @apply border-t border-ide-border pt-4 first:border-0 first:pt-0;
-    }
-
-    .replan-panel__diff-name {
-        @apply mb-2 font-semibold text-ide-text;
-    }
-
-    .replan-panel__diff-cols {
-        @apply grid gap-4 md:grid-cols-2;
-    }
-
-    .replan-panel__label {
-        @apply mb-1 block text-[0.65rem] font-semibold uppercase tracking-wider text-ide-muted;
-    }
-
-    .replan-panel__empty {
-        @apply text-ide-muted;
-    }
-
     /* Settings */
     .settings-card {
         @apply rounded-xl border border-ide-border bg-ide-panel p-5 shadow-ide sm:p-6;
@@ -635,64 +582,5 @@
     .phase-time-range-popup .rs-picker-time-menu-cell-active .rs-picker-time-menu-cell-content {
         background-color: #214283 !important;
         color: #a9b7c6 !important;
-    }
-}
-
-/* react-big-calendar — глобально (plain CSS для сумісності з rbc) */
-.rbc-calendar {
-    color: #a9b7c6;
-}
-
-.rbc-header,
-.rbc-time-header-content,
-.rbc-day-bg,
-.rbc-month-row,
-.rbc-time-content,
-.rbc-time-slot,
-.rbc-timeslot-group {
-    border-color: #515151 !important;
-}
-
-.rbc-today {
-    background-color: rgba(33, 66, 131, 0.25) !important;
-}
-
-.rbc-off-range {
-    color: #808080;
-}
-
-.rbc-toolbar button {
-    border-radius: 0.5rem;
-    border: 1px solid #515151;
-    background-color: #45494a;
-    color: #a9b7c6;
-    padding: 0.25rem 0.5rem;
-    font-size: 0.875rem;
-}
-
-@media (min-width: 640px) {
-    .rbc-toolbar button {
-        padding: 0.25rem 0.75rem;
-    }
-}
-
-.rbc-toolbar button.rbc-active {
-    border-color: #589df6;
-    background-color: #214283;
-    color: #a9b7c6;
-}
-
-.rbc-event {
-    border-radius: 0.25rem !important;
-    border: 1px solid #515151 !important;
-}
-
-.rbc-time-slot {
-    min-height: 28px;
-}
-
-@media (min-width: 640px) {
-    .rbc-time-slot {
-        min-height: 32px;
     }
 }

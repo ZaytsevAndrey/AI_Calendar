@@ -6,7 +6,6 @@ import LoginPage from 'pages/LoginPage';
 import EventsPage from 'pages/EventsPage';
 import PhasesPage from 'pages/PhasesPage/PhasesPage';
 import SettingsPage from 'pages/SettingsPage';
-import SchedulePage from 'pages/SchedulePage';
 import CalendarPage from 'pages/CalendarPage';
 import GoogleCallbackPage from 'modules/auth/pages/GoogleCallbackPage';
 import PhaseSetupPage from 'pages/PhaseSetupPage/PhaseSetupPage';
@@ -37,14 +36,7 @@ const AppRoutes = () => {
                     </ProtectedRoute>
                 }
             />
-            <Route
-                path="/schedule"
-                element={
-                    <ProtectedRoute>
-                        <SchedulePage />
-                    </ProtectedRoute>
-                }
-            />
+            <Route path="/schedule" element={<Navigate to="/calendar" replace />} />
             <Route
                 path="/calendar"
                 element={

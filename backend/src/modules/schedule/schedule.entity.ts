@@ -33,6 +33,13 @@ export class ScheduledTask {
   @Column({ type: 'varchar', length: 128, nullable: true })
   generationRun: string | null;
 
+  /** Google event for this segment, or shared RRULE master id for recurring tasks. */
+  @Column({ type: 'varchar', nullable: true })
+  googleEventId: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  googleEventCalendarId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

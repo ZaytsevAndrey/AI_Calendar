@@ -6,7 +6,7 @@ This reflects the **actual** codebase as of the last update (April 2026). Implem
 
 **Core product MVP** (user, settings, phases, tasks, Google Calendar, UI) is **done**.
 
-**Intelligent scheduling** (see [spec-intelligent-scheduling](spec-intelligent-scheduling.md)) is **implemented**: job queue, engine with phase windows and anchors, diff/undo, Google time patch on undo, frontend summary + undo on Schedule.
+**Intelligent scheduling** (see [spec-intelligent-scheduling](spec-intelligent-scheduling.md)) is **implemented**: job queue, engine with phase windows and anchors, diff, Google sync after replan, frontend summary on Schedule.
 
 ## Phases
 
@@ -28,13 +28,13 @@ This reflects the **actual** codebase as of the last update (April 2026). Implem
 ### Phase 3 — UI polish (done)
 
 - [x] MUI, responsive layout, toast, loading / error states  
-- [x] Schedule page: poll generate job, show replan diff, undo last replan  
+- [x] Calendar page: generate; clear app-generated slots in the Settings planning horizon  
 
 ### Phase 4 — Scheduling engine (done — iterative improvements possible)
 
 - [x] Intelligent engine: priority, FIFO tie-break, phase union, wake/sleep, weekends, split, displacement within priority tier  
 - [x] `/schedule` API + async generate (job) + clear  
-- [x] Schedule jobs: replan, latest done, undo-last, poll by id  
+- [x] Schedule jobs: replan, latest done, poll by id  
 - [ ] Further heuristics (e.g. deeper multi-task optimization), analytics  
 
 ### Phase 5 — Advanced product (planned)

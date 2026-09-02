@@ -319,13 +319,9 @@ export class TasksService {
 
   async remove(id: string, userId: string): Promise<void> {
     const task = await this.findOne(id, userId);
-    if (task.googleEventId) {
+    if (task.googleEventId || task.eventType !== TaskEventType.FIXED) {
       try {
-        await this.googleCalendarService.deleteEvent(
-          userId,
-          task.googleEventId,
-          task.googleEventCalendarId ?? 'primary',
-        );
+        await this.scheduleJobService.deleteSyncedGoogleEventsForTask(userId, task);
       } catch (e: any) {
         this.logger.warn(
           `Failed to delete Google event for removed task ${task.id}: ${e?.message ?? e}`,

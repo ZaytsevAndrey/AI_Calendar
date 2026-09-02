@@ -1,6 +1,7 @@
 import {
   IntelligentSchedulingEngine,
   SchedulingWarningCode,
+  planningHorizonRange,
 } from './intelligent-scheduling.engine';
 import { Task, TaskPriority, TaskStatus } from '../tasks/entities/task.entity';
 import { TaskEventType } from '../scheduling/event-type.enum';
@@ -13,6 +14,32 @@ type MockRepo = {
   create?: jest.Mock;
   createQueryBuilder?: jest.Mock;
 };
+
+describe('planningHorizonRange', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('uses today through Settings horizon days (exclusive end)', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-04-20T15:30:00'));
+    const { start, end, horizonDays } = planningHorizonRange({
+      recurringScheduleHorizonDays: 30,
+    });
+    expect(horizonDays).toBe(30);
+    expect(start.getHours()).toBe(0);
+    expect(start.getMinutes()).toBe(0);
+    const expectedEnd = new Date(start);
+    expectedEnd.setDate(expectedEnd.getDate() + 30);
+    expect(end.getTime()).toBe(expectedEnd.getTime());
+  });
+
+  it('clamps invalid horizon to 1–365', () => {
+    expect(planningHorizonRange({ recurringScheduleHorizonDays: 0 }).horizonDays).toBe(1);
+    expect(planningHorizonRange({ recurringScheduleHorizonDays: 999 }).horizonDays).toBe(365);
+    expect(planningHorizonRange({}).horizonDays).toBe(30);
+  });
+});
 
 describe('IntelligentSchedulingEngine', () => {
   let engine: IntelligentSchedulingEngine;
@@ -72,6 +99,7 @@ describe('IntelligentSchedulingEngine', () => {
       } as never,
       {
         getEvents: jest.fn(),
+        getStoredAppCalendarId: jest.fn().mockResolvedValue(undefined),
       } as never,
     );
   });
@@ -293,14 +321,52 @@ describe('IntelligentSchedulingEngine', () => {
     expect(byTask[0]).toHaveLength(3);
     expect(byTask[1]).toHaveLength(3);
     expect(byTask[2]).toBeUndefined();
+    const skipWarning = result.warnings.find(
+      (w) =>
+        w.code === SchedulingWarningCode.OCCURRENCE_SKIPPED &&
+        w.taskName === 'Skip 3',
+    );
+    expect(skipWarning).toBeDefined();
+    expect(skipWarning?.meta?.skippedOccurrences).toBe(3);
+    expect(skipWarning?.message).toContain('no free slot in the phase window');
+    expect(skipWarning?.message).toContain('20 Apr 2026');
+    const skipped = skipWarning?.meta?.skipped as Array<{
+      dateKey: string;
+      reason: string;
+    }>;
+    expect(skipped.map((s) => s.dateKey)).toEqual([
+      '2026-04-20',
+      '2026-04-21',
+      '2026-04-22',
+    ]);
+    expect(skipped.every((s) => s.reason === 'no_slot')).toBe(true);
+  });
+
+  it('does not warn when a preferred recurring time already passed', async () => {
+    jest.setSystemTime(new Date(2026, 3, 20, 14, 0, 0, 0));
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'english',
+        name: 'English',
+        isRecurring: true,
+        recurrencePattern: 'DAILY',
+        eventType: TaskEventType.DAILY_ROUTINE,
+        estimatedTimeInMinutes: 30,
+        scheduledStartTime: new Date(atLocalTimeIso(0, 9)),
+        scheduledEndTime: new Date(atLocalTimeWithMinutesIso(0, 9, 30)),
+        phases: [phaseWorkday],
+      }),
+    ]);
+
+    const result = await engine.run(userId);
+
     expect(
-      result.warnings.some(
-        (w) =>
-          w.code === SchedulingWarningCode.OCCURRENCE_SKIPPED &&
-          w.taskName === 'Skip 3' &&
-          (w.meta?.skippedOccurrences as number) === 3,
-      ),
-    ).toBe(true);
+      result.warnings.some((w) => w.code === SchedulingWarningCode.OCCURRENCE_SKIPPED),
+    ).toBe(false);
+    expect(result.errors).toHaveLength(0);
+
+    const [slots] = extractTaskSegments(scheduledRepo.save.mock.calls);
+    expect(slots).toHaveLength(2);
   });
 
   it('keeps fixed tasks as anchors and moves recurring to next exact slot', async () => {
@@ -524,6 +590,80 @@ describe('IntelligentSchedulingEngine', () => {
     expect(byTask.get('own-sync-2')?.length).toBeGreaterThan(0);
     expect(byTask.get('own-sync-3')?.length).toBeGreaterThan(0);
   });
+
+  it('keeps recurring preferred clock times when a later day is displaced', async () => {
+    const preferredStart = new Date(atLocalTimeIso(0, 9));
+    const preferredEnd = new Date(atLocalTimeIso(0, 10));
+    const recurring = makeTask({
+      id: 'rec-pref',
+      name: 'Recurring',
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      estimatedTimeInMinutes: 60,
+      scheduledStartTime: preferredStart,
+      scheduledEndTime: preferredEnd,
+      phases: [phaseWorkday],
+    });
+    const fixed = makeTask({
+      id: 'fixed-last-day',
+      name: 'Fixed last day',
+      eventType: TaskEventType.FIXED,
+      scheduledStartTime: new Date(atLocalTimeIso(2, 9)),
+      scheduledEndTime: new Date(atLocalTimeIso(2, 10)),
+      phases: [phaseWorkday],
+    });
+    taskRepo.find.mockResolvedValue([recurring, fixed]);
+
+    await engine.run(userId);
+
+    const byTask = extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls);
+    expect(byTask.get('rec-pref')?.[2]).toEqual([
+      atLocalTimeIso(2, 10),
+      atLocalTimeIso(2, 11),
+    ]);
+    expect(recurring.scheduledStartTime?.toISOString()).toBe(
+      preferredStart.toISOString(),
+    );
+    expect(recurring.scheduledEndTime?.toISOString()).toBe(
+      preferredEnd.toISOString(),
+    );
+  });
+
+  it('treats in-progress auto segments as busy anchors', async () => {
+    const inProgress = makeTask({
+      id: 'in-progress',
+      name: 'Already started',
+      status: TaskStatus.IN_PROGRESS,
+      scheduledStartTime: new Date(atLocalTimeIso(0, 9)),
+      scheduledEndTime: new Date(atLocalTimeIso(0, 10)),
+      phases: [phaseWorkday],
+    });
+    const incoming = makeTask({
+      id: 'incoming',
+      name: 'Incoming',
+      estimatedTimeInMinutes: 60,
+      phases: [phaseWorkday],
+    });
+    taskRepo.find.mockResolvedValue([inProgress, incoming]);
+    scheduledRepo.find.mockResolvedValue([
+      {
+        id: 'st-ip',
+        taskId: inProgress.id,
+        task: inProgress,
+        isAutoGenerated: true,
+        scheduledStartTime: new Date(atLocalTimeIso(0, 9)),
+        scheduledEndTime: new Date(atLocalTimeIso(0, 10)),
+      },
+    ]);
+
+    await engine.run(userId);
+
+    const [incomingSlots] = extractTaskSegments(scheduledRepo.save.mock.calls);
+    expect(incomingSlots[0]).toEqual([
+      atLocalTimeIso(0, 10),
+      atLocalTimeIso(0, 11),
+    ]);
+  });
 });
 
 let taskCounter = 0;
@@ -564,6 +704,8 @@ function makeSettings(partial: Partial<UserSettings>): UserSettings {
     preferredLunchTime: '12:00',
     weekendWorkEnabled: false,
     googleCalendarLinked: false,
+    appGoogleCalendarName: 'AI Calendar Assistant',
+    appGoogleCalendarId: null,
     allowSplitScheduling: true,
     minSplitMinutes: 30,
     maxSplitMinutes: 60,
@@ -595,6 +737,8 @@ function makeTask(partial: Partial<Task>): Task {
     scheduledStartTime: partial.scheduledStartTime ?? null,
     scheduledEndTime: partial.scheduledEndTime ?? null,
     googleEventId: partial.googleEventId ?? null,
+    googleEventCalendarId: (partial as { googleEventCalendarId?: string | null })
+      .googleEventCalendarId ?? null,
     isFixedExternal: false,
     createdAt: partial.createdAt ?? new Date('2026-04-20T08:00:00.000Z'),
     updatedAt: new Date('2026-04-20T08:00:00.000Z'),

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { format } from 'date-fns';
 import {
     useEventsForDay,
     useEventsForWeek,
@@ -6,18 +7,43 @@ import {
     useUpdateEvent,
     useDeleteEvent,
     visibleGoogleEvents,
+    startOfWeekMonday,
 } from 'modules/calendar/hooks/useCalendar';
 import EventForm from 'modules/calendar/components/EventForm';
 import { GoogleCalendarEvent } from 'api/google-calendar.api';
 import CalendarEvents from 'modules/calendar/components/CalendarEvents';
 import CalendarGrid from 'modules/calendar/components/CalendarGrid';
 import { EventType } from 'modules/calendar/types';
+import { useScheduleActions } from 'modules/schedule/hooks/useScheduleActions';
+import { GenerateAlertsBanner } from 'modules/schedule/components/GenerateAlertsBanner';
 import { Modal } from '../../ui/Modal';
 import { Spinner } from '../../ui/Spinner';
 import { showErrorToast, showSuccessToast } from '../../utils/toast';
 import { extractApiErrorMessage } from '../../utils/extractApiErrorMessage';
 
 type CalendarView = 'day' | 'week' | 'month';
+
+function visibleRangeYmd(view: CalendarView, date: Date): { startDate: string; endDate: string } {
+    if (view === 'day') {
+        const day = format(date, 'yyyy-MM-dd');
+        return { startDate: day, endDate: day };
+    }
+    if (view === 'week') {
+        const start = startOfWeekMonday(date);
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        return {
+            startDate: format(start, 'yyyy-MM-dd'),
+            endDate: format(end, 'yyyy-MM-dd'),
+        };
+    }
+    const start = new Date(date.getFullYear(), date.getMonth(), 1);
+    const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    return {
+        startDate: format(start, 'yyyy-MM-dd'),
+        endDate: format(end, 'yyyy-MM-dd'),
+    };
+}
 
 const toggleBtn = (active: boolean) =>
     `min-h-[44px] rounded-md px-4 py-2 text-sm font-medium transition ${
@@ -60,6 +86,9 @@ const CalendarPage: React.FC = () => {
     const getEventsQuery = queryMap[currentView];
     const [updateEventTrigger, updateEventState] = useUpdateEvent();
     const [deleteEventTrigger, deleteEventState] = useDeleteEvent();
+    const { isGenerating, isClearing, generate, clear, generateAlerts, dismissGenerateAlerts } =
+        useScheduleActions();
+    const busy = isGenerating || isClearing;
     const displayEvents = visibleGoogleEvents(
         getEventsQuery.data?.events || [],
         currentView,
@@ -170,7 +199,38 @@ const CalendarPage: React.FC = () => {
     return (
         <div className="page-shell">
             <header className="mb-6 space-y-4 sm:mb-8">
-                <h1 className="page-title">Calendar</h1>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <h1 className="page-title">Calendar</h1>
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const { startDate, endDate } = visibleRangeYmd(currentView, currentDate);
+                                void generate(startDate, endDate);
+                            }}
+                            disabled={busy}
+                            className="ui-btn-primary w-full sm:w-auto"
+                        >
+                            {isGenerating ? 'Generating…' : 'Generate schedule'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                void clear();
+                            }}
+                            disabled={busy}
+                            className="ui-btn-danger w-full sm:w-auto"
+                        >
+                            {isClearing ? 'Clearing…' : 'Clear schedule'}
+                        </button>
+                    </div>
+                </div>
+                {generateAlerts ? (
+                    <GenerateAlertsBanner
+                        alerts={generateAlerts}
+                        onDismiss={dismissGenerateAlerts}
+                    />
+                ) : null}
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
                     <div className="inline-flex w-full max-w-md rounded-lg border border-ide-border bg-ide-surface p-1 sm:w-auto">
                         {(['day', 'week', 'month'] as const).map((v) => (

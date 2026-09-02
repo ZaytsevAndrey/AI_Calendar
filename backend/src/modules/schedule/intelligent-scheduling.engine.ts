@@ -23,6 +23,8 @@ export type SegmentSnapshot = {
   taskId: string;
   scheduledStartTime: string;
   scheduledEndTime: string;
+  googleEventId?: string | null;
+  googleEventCalendarId?: string | null;
 };
 
 export type DiffItem = {
@@ -49,6 +51,73 @@ export type SchedulingWarning = {
 type MsInterval = { start: number; end: number };
 
 type RecurrencePattern = 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
+
+export type OccurrenceSkipReason =
+  | 'already_passed'
+  | 'preferred_unavailable'
+  | 'deadline'
+  | 'no_slot';
+
+export type SkippedOccurrence = {
+  date: string;
+  dateKey: string;
+  reason: OccurrenceSkipReason;
+};
+
+function occurrenceDateKey(day: Date): string {
+  const y = day.getFullYear();
+  const m = String(day.getMonth() + 1).padStart(2, '0');
+  const d = String(day.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function formatOccurrenceDay(day: Date): string {
+  return day.toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function skipReasonLabel(reason: OccurrenceSkipReason): string {
+  switch (reason) {
+    case 'already_passed':
+      return 'already in the past';
+    case 'preferred_unavailable':
+      return 'preferred time was busy or outside the phase';
+    case 'deadline':
+      return 'would miss the deadline';
+    default:
+      return 'no free slot in the phase window';
+  }
+}
+
+function recordSkip(
+  skipped: SkippedOccurrence[],
+  day: Date,
+  reason: OccurrenceSkipReason,
+): void {
+  skipped.push({
+    date: formatOccurrenceDay(day),
+    dateKey: occurrenceDateKey(day),
+    reason,
+  });
+}
+
+function formatSkippedOccurrencesMessage(
+  taskName: string,
+  skipped: SkippedOccurrence[],
+): string {
+  const shown = skipped.slice(0, 5);
+  const extra = skipped.length - shown.length;
+  const details = shown
+    .map((s) => `${s.date} (${skipReasonLabel(s.reason)})`)
+    .join('; ');
+  const more = extra > 0 ? `; and ${extra} more` : '';
+  const n = skipped.length;
+  return `Task "${taskName}" skipped ${n} recurring occurrence${n === 1 ? '' : 's'}: ${details}${more}.`;
+}
 
 function atDayWithTime(day: Date, timeStr: string): Date {
   const [h, m] = timeStr.split(':').map(Number);
@@ -140,6 +209,19 @@ function normalizeHorizonDays(value?: number | null): number {
   return Math.min(MAX_HORIZON_DAYS, Math.max(MIN_HORIZON_DAYS, Math.floor(value)));
 }
 
+/** Today (local midnight) through `recurringScheduleHorizonDays` — exclusive end. */
+export function planningHorizonRange(
+  settings: { recurringScheduleHorizonDays?: number | null },
+  now = new Date(),
+): { start: Date; end: Date; horizonDays: number } {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const horizonDays = normalizeHorizonDays(settings.recurringScheduleHorizonDays);
+  const end = new Date(start);
+  end.setDate(end.getDate() + horizonDays);
+  return { start, end, horizonDays };
+}
+
 function normalizeRecurrencePattern(value?: string | null): RecurrencePattern | null {
   if (!value) return null;
   const upper = value.toUpperCase();
@@ -198,6 +280,8 @@ export class IntelligentSchedulingEngine {
       taskId: r.taskId,
       scheduledStartTime: r.scheduledStartTime.toISOString(),
       scheduledEndTime: r.scheduledEndTime.toISOString(),
+      googleEventId: r.googleEventId ?? null,
+      googleEventCalendarId: r.googleEventCalendarId ?? null,
     }));
   }
 
@@ -254,11 +338,8 @@ export class IntelligentSchedulingEngine {
         .execute();
     }
 
-    const startDay = new Date();
-    startDay.setHours(0, 0, 0, 0);
-    const horizonDays = normalizeHorizonDays(settings.recurringScheduleHorizonDays);
-    const horizonEnd = new Date(startDay);
-    horizonEnd.setDate(horizonEnd.getDate() + horizonDays);
+    const { start: startDay, end: horizonEnd, horizonDays } =
+      planningHorizonRange(settings);
     const extendedEnd = new Date(startDay);
     extendedEnd.setDate(
       extendedEnd.getDate() + horizonDays + BEYOND_HORIZON_EXTRA_DAYS,
@@ -271,6 +352,9 @@ export class IntelligentSchedulingEngine {
         .map((t) => t.googleEventId)
         .filter((id): id is string => typeof id === 'string' && id.length > 0),
     );
+    for (const row of autoBefore) {
+      if (row.googleEventId) ourGoogleEventIds.add(row.googleEventId);
+    }
     if (settings.googleCalendarLinked) {
       try {
         googleBusy = await this.collectGoogleBusyIntervals(
@@ -327,13 +411,19 @@ export class IntelligentSchedulingEngine {
               message: `Task "${task.name}" was placed outside the ${horizonDays}-day window.`,
             });
           }
-          if (res.skippedOccurrences > 0) {
+          const noteworthySkips = res.skipped.filter(
+            (s) => s.reason !== 'already_passed',
+          );
+          if (noteworthySkips.length > 0) {
             warnings.push({
               code: SchedulingWarningCode.OCCURRENCE_SKIPPED,
               taskId: task.id,
               taskName: task.name,
-              meta: { skippedOccurrences: res.skippedOccurrences },
-              message: `Task "${task.name}" skipped ${res.skippedOccurrences} recurring occurrence(s) because no eligible slot was available in the phase window.`,
+              meta: {
+                skippedOccurrences: noteworthySkips.length,
+                skipped: noteworthySkips,
+              },
+              message: formatSkippedOccurrencesMessage(task.name, noteworthySkips),
             });
           }
         }
@@ -346,8 +436,17 @@ export class IntelligentSchedulingEngine {
       if (!segs?.length) continue;
       const first = segs[0];
       const last = segs[segs.length - 1];
-      task.scheduledStartTime = first.start;
-      task.scheduledEndTime = last.end;
+      if (task.isRecurring) {
+        // Keep preferred clock times. first→last across the horizon would
+        // turn 09:00–10:00 into 09:00–11:00 when a later day is displaced.
+        if (!task.scheduledStartTime || !task.scheduledEndTime) {
+          task.scheduledStartTime = first.start;
+          task.scheduledEndTime = first.end;
+        }
+      } else {
+        task.scheduledStartTime = first.start;
+        task.scheduledEndTime = last.end;
+      }
       await this.taskRepo.save(task);
 
       for (const s of segs) {
@@ -435,6 +534,7 @@ export class IntelligentSchedulingEngine {
     segments: { start: Date; end: Date }[];
     beyondHorizon: boolean;
     skippedOccurrences: number;
+    skipped: SkippedOccurrence[];
   } {
     const recurrencePattern =
       task.isRecurring ? normalizeRecurrencePattern(task.recurrencePattern) : null;
@@ -508,6 +608,7 @@ export class IntelligentSchedulingEngine {
       segments: result.segments,
       beyondHorizon,
       skippedOccurrences: 0,
+      skipped: [],
     };
   }
 
@@ -526,6 +627,7 @@ export class IntelligentSchedulingEngine {
     segments: { start: Date; end: Date }[];
     beyondHorizon: boolean;
     skippedOccurrences: number;
+    skipped: SkippedOccurrence[];
   } {
     const rules = getEventTypeRules(task.eventType);
     const durationMin = task.estimatedTimeInMinutes;
@@ -547,7 +649,7 @@ export class IntelligentSchedulingEngine {
         : null;
 
     let beyondHorizon = false;
-    let skippedOccurrences = 0;
+    const skipped: SkippedOccurrence[] = [];
     let occurrenceStart = new Date(startDay);
     occurrenceStart.setHours(0, 0, 0, 0);
 
@@ -602,7 +704,10 @@ export class IntelligentSchedulingEngine {
           occurrenceStart = occurrenceEnd;
           continue;
         }
-        skippedOccurrences += 1;
+        let reason: OccurrenceSkipReason = 'preferred_unavailable';
+        if (!canPlaceByNow) reason = 'already_passed';
+        else if (!canPlaceByDeadline) reason = 'deadline';
+        recordSkip(skipped, occurrenceStart, reason);
         occurrenceStart = occurrenceEnd;
         continue;
       }
@@ -624,7 +729,19 @@ export class IntelligentSchedulingEngine {
       );
 
       if (!result.ok) {
-        skippedOccurrences += 1;
+        const dayEligible = this.eligibleIntervalsForDay(
+          occurrenceStart,
+          phases,
+          settings.wakeTime,
+          settings.sleepTime,
+          settings.weekendWorkEnabled,
+        );
+        const anyTimeLeftToday = dayEligible.some((slot) => slot.end > nowMs);
+        recordSkip(
+          skipped,
+          occurrenceStart,
+          anyTimeLeftToday ? 'no_slot' : 'already_passed',
+        );
         occurrenceStart = occurrenceEnd;
         continue;
       }
@@ -633,7 +750,13 @@ export class IntelligentSchedulingEngine {
       occurrenceStart = occurrenceEnd;
     }
 
-    return { ok: true, segments, beyondHorizon, skippedOccurrences };
+    return {
+      ok: true,
+      segments,
+      beyondHorizon,
+      skippedOccurrences: skipped.length,
+      skipped,
+    };
   }
 
   /**
@@ -650,7 +773,7 @@ export class IntelligentSchedulingEngine {
     horizonEnd: Date,
     extendedEnd: Date,
     nowMs: number,
-  ): { ok: boolean; beyondHorizon: boolean; skippedOccurrences: number } {
+  ): { ok: boolean; beyondHorizon: boolean; skippedOccurrences: number; skipped: SkippedOccurrence[] } {
     const att = this.attemptPlaceTask(
       task,
       settings,
@@ -668,6 +791,7 @@ export class IntelligentSchedulingEngine {
         ok: true,
         beyondHorizon: att.beyondHorizon,
         skippedOccurrences: att.skippedOccurrences,
+        skipped: att.skipped,
       };
     }
 
@@ -731,6 +855,7 @@ export class IntelligentSchedulingEngine {
             ok: true,
             beyondHorizon: att2.beyondHorizon,
             skippedOccurrences: att2.skippedOccurrences,
+            skipped: att2.skipped,
           };
         }
 
@@ -745,7 +870,7 @@ export class IntelligentSchedulingEngine {
           newSegments.set(d.task.id, d.segments);
           tierStack.push(d.task);
         }
-        return { ok: false, beyondHorizon: false, skippedOccurrences: 0 };
+        return { ok: false, beyondHorizon: false, skippedOccurrences: 0, skipped: [] };
       }
     }
 
@@ -754,7 +879,7 @@ export class IntelligentSchedulingEngine {
       newSegments.set(d.task.id, d.segments);
       tierStack.push(d.task);
     }
-    return { ok: false, beyondHorizon: false, skippedOccurrences: 0 };
+    return { ok: false, beyondHorizon: false, skippedOccurrences: 0, skipped: [] };
   }
 
   private resolvePhasesForTask(task: Task): Phase[] {
@@ -784,7 +909,8 @@ export class IntelligentSchedulingEngine {
       const isAnchor =
         !st.isAutoGenerated ||
         t.isFixedExternal ||
-        t.eventType === TaskEventType.FIXED;
+        t.eventType === TaskEventType.FIXED ||
+        t.status === TaskStatus.IN_PROGRESS;
       if (isAnchor) {
         busy.push({
           start: st.scheduledStartTime.getTime(),
@@ -1012,31 +1138,5 @@ export class IntelligentSchedulingEngine {
     }
 
     return diff;
-  }
-
-  async restoreSnapshot(userId: string, snapshot: SegmentSnapshot[]) {
-    const tasks = await this.taskRepo.find({ where: { userId }, select: ['id'] });
-    const ids = tasks.map((t) => t.id);
-    if (!ids.length) return;
-
-    await this.scheduledRepo
-      .createQueryBuilder()
-      .delete()
-      .from(ScheduledTask)
-      .where('taskId IN (:...ids)', { ids })
-      .andWhere('isAutoGenerated = :ig', { ig: true })
-      .execute();
-
-    for (const seg of snapshot) {
-      const row = this.scheduledRepo.create({
-        id: seg.id,
-        taskId: seg.taskId,
-        scheduledStartTime: new Date(seg.scheduledStartTime),
-        scheduledEndTime: new Date(seg.scheduledEndTime),
-        isAutoGenerated: true,
-        generationRun: 'undo-restore',
-      });
-      await this.scheduledRepo.save(row);
-    }
   }
 }

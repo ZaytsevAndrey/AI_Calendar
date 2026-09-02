@@ -28,10 +28,6 @@ export class ScheduleJob {
   @Column({ type: 'text', nullable: true })
   errorMessage: string | null;
 
-  /** Snapshot row id for POST undo (auto-generated segments before this run). */
-  @Column({ type: 'varchar', length: 36, nullable: true })
-  undoSnapshotId: string | null;
-
   @CreateDateColumn()
   createdAt: Date;
 

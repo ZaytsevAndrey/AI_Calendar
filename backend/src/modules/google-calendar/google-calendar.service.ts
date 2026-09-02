@@ -1001,73 +1001,19 @@ export class GoogleCalendarService {
     };
   }
 
-  /**
-   * Partial update of event start/end only (used e.g. after schedule undo).
-   * Preserves summary, attendees, etc. Requires Google connection.
-   */
-  async patchEventDateTime(
-    userId: string,
-    eventId: string,
-    start: Date,
-    end: Date,
-    calendarId?: string,
-  ): Promise<void> {
-    const calId =
-      calendarId ??
-      (await this.getStoredAppCalendarId(userId)) ??
-      'primary';
-    const existing = await this.getEvent(userId, eventId, calId);
-    const tz =
-      (existing.start as { timeZone?: string } | undefined)?.timeZone ||
-      (existing.end as { timeZone?: string } | undefined)?.timeZone ||
-      'UTC';
-
-    const user = await this.userRepo.findOne({
-      where: { id: userId },
-      select: {
-        googleAccessToken: true,
-        googleRefreshToken: true,
-        googleTokenExpiry: true,
-      },
-    });
-
-    if (!user?.googleAccessToken) {
-      throw new Error('Google Calendar not connected');
-    }
-
-    if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
-      if (user.googleRefreshToken) {
-        this.oauth2Client.setCredentials({
-          refresh_token: user.googleRefreshToken,
-        });
-        const { credentials } = await this.oauth2Client.refreshAccessToken();
-        await this.userRepo.update(userId, {
-          googleAccessToken: credentials.access_token,
-          googleTokenExpiry: new Date(credentials.expiry_date),
-        });
-        user.googleAccessToken = credentials.access_token;
-      } else {
-        throw new Error('Google Calendar token expired');
-      }
-    }
-
-    this.oauth2Client.setCredentials({
-      access_token: user.googleAccessToken,
-    });
-
-    const calendar = google.calendar({
-      version: 'v3',
-      auth: this.oauth2Client,
-    });
-
-    await calendar.events.patch({
-      calendarId: calId,
-      eventId,
-      requestBody: {
-        start: { dateTime: start.toISOString(), timeZone: tz },
-        end: { dateTime: end.toISOString(), timeZone: tz },
-      },
-    });
+  private isGoogleNotFound(err: unknown): boolean {
+    if (!err || typeof err !== 'object') return false;
+    const e = err as {
+      code?: number | string;
+      status?: number;
+      response?: { status?: number };
+    };
+    return (
+      e.code === 404 ||
+      e.code === '404' ||
+      e.status === 404 ||
+      e.response?.status === 404
+    );
   }
 
   async deleteEvent(userId: string, eventId: string, calendarId?: string) {
@@ -1110,15 +1056,37 @@ export class GoogleCalendarService {
       auth: this.oauth2Client,
     });
 
-    const writableCalendarId =
-      calendarId != null && calendarId !== ''
-        ? calendarId
-        : await this.ensureAppCalendarIdWithClient(calendar, userId);
+    const storedApp = await this.getStoredAppCalendarId(userId);
+    const calendarIds: string[] = [];
+    const pushId = (id?: string | null) => {
+      if (id && !calendarIds.includes(id)) calendarIds.push(id);
+    };
+    pushId(calendarId);
+    pushId(storedApp);
+    if (!calendarIds.length) {
+      pushId(await this.ensureAppCalendarIdWithClient(calendar, userId));
+    }
+    pushId('primary');
 
-    const response = await calendar.events.delete({
-      calendarId: writableCalendarId,
-      eventId,
-    });
+    let deleted = false;
+    for (const calId of calendarIds) {
+      try {
+        await calendar.events.delete({
+          calendarId: calId,
+          eventId,
+        });
+        deleted = true;
+        break;
+      } catch (e: unknown) {
+        if (!this.isGoogleNotFound(e)) throw e;
+      }
+    }
+
+    if (!deleted) {
+      this.logger.warn(
+        `Google event ${eventId} not found on calendars [${calendarIds.join(', ')}]; treating as already deleted.`,
+      );
+    }
 
     const link = await this.eventPhasesService.findByEvent(
       eventId,
@@ -1128,6 +1096,6 @@ export class GoogleCalendarService {
       await this.eventPhasesService.remove(link.id, String(userId));
     }
 
-    return response.data;
+    return { success: true };
   }
 }

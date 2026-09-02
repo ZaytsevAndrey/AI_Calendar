@@ -1,6 +1,6 @@
 # Specification: Intelligent scheduling & unified items
 
-**Status:** implemented in codebase (engine, jobs, diff/undo, task types); see [overview](overview.md) and [api-reference](api-reference.md) for HTTP/UI.  
+**Status:** implemented in codebase (engine, jobs, diff, task types); see [overview](overview.md) and [api-reference](api-reference.md) for HTTP/UI.  
 **Language:** English (implementation reference)  
 **Last updated:** April 2026
 
@@ -160,7 +160,7 @@ If multiple `phaseIds`: consider **union** of windows; pick the **earliest start
 
 - `POST /items` (or extend `POST /tasks`) — creates item, enqueues job, returns `202` + `jobId` or sync wait with timeout (prefer async + poll `GET /schedule-jobs/:id`).  
 - `GET /schedule-jobs/:id` — status + `diff` when done.  
-- `POST /schedule-jobs/:id/undo` — restores snapshot (valid for last completed job per user).  
+- `DELETE /schedule` — clear app-generated slots in the Settings planning horizon (`recurringScheduleHorizonDays`).  
 - Deprecate or align legacy `POST /schedule/generate` with new pipeline (see §10).
 
 ---

@@ -96,6 +96,16 @@ export class ScheduleController {
     return this.scheduleService.update(id, req.user.userId, updateScheduleDto);
   }
 
+  @Delete()
+  @ApiOperation({
+    summary:
+      'Clear app-generated slots in the planning horizon (Settings: recurringScheduleHorizonDays)',
+  })
+  @ApiResponse({ status: 200, description: 'Schedule cleared' })
+  async clearSchedule(@Request() req): Promise<{ deleted: number }> {
+    return this.scheduleService.clearSchedule(req.user.userId);
+  }
+
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a scheduled item' })
   @ApiResponse({ status: 200, description: 'Deleted successfully' })
@@ -121,19 +131,5 @@ export class ScheduleController {
       message:
         'Poll GET /schedule-jobs/:id until status is done, then refresh /schedule.',
     };
-  }
-
-  @Delete()
-  @ApiOperation({ summary: 'Clear schedule for the given period' })
-  @ApiResponse({ status: 200, description: 'Schedule cleared' })
-  async clearSchedule(
-    @Request() req,
-    @Body() clearDto: GenerateScheduleDto,
-  ): Promise<void> {
-    return this.scheduleService.clearSchedule(
-      req.user.userId,
-      clearDto.startDate,
-      clearDto.endDate,
-    );
   }
 }

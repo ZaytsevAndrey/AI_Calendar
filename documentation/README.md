@@ -14,4 +14,4 @@ Single source of truth for the project. Keep these files in sync with code chang
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** April 2026 (aligned with intelligent scheduling, per-user phases, Schedule UI diff/undo, integrations note for Google on undo).
+**Last documentation update:** September 2026 (Clear uses Settings horizon, not calendar view).

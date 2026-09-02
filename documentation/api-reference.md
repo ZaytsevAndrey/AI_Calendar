@@ -80,8 +80,8 @@ Protected with JWT (`JwtAuthGuard`).
 | POST | `/schedule` | Create a scheduled slot |
 | PATCH | `/schedule/:id` | Change times |
 | DELETE | `/schedule/:id` | Delete |
-| POST | `/schedule/generate` | Enqueues intelligent replan for range; returns `{ jobId, status, message }` — poll `GET /schedule-jobs/:id`, then reload `GET /schedule` |
-| DELETE | `/schedule` | Clear schedule in a range (body with dates, same as generate) |
+| POST | `/schedule/generate` | Enqueues intelligent replan for range; returns `{ jobId, status, message }` — poll `GET /schedule-jobs/:id`, then refresh Google events on Calendar |
+| DELETE | `/schedule` | Clear app-generated local slots from today through Settings horizon, and leftover events on the app Google calendar in that window. Returns `{ deleted: number }`. |
 
 ## Event phases — `/event-phases`
 
@@ -93,12 +93,11 @@ Links Google Calendar events to phases (separate from CRUD `/phases`). See `even
 |--------|------|-------------|
 | POST | `/schedule-jobs/replan` | Enqueue full replan (same pipeline as after task changes) |
 | GET | `/schedule-jobs/latest/done` | Latest completed job + parsed `result` (diff / warnings / errors) |
-| POST | `/schedule-jobs/undo-last` | Restore auto-generated `scheduled_tasks` from snapshot before last successful job; if a task has `googleEventId`, Google event start/end are patched to match restored segments |
 | GET | `/schedule-jobs/:id` | Poll job status until `done` or `failed` |
 
 `POST /schedule/generate` enqueues the same pipeline and returns `{ jobId, status, message }` (frontend polls `GET /schedule-jobs/:id`).
 
-Completed jobs expose a parsed `result` with `diff`, `warnings`, and `errors` (see [spec-intelligent-scheduling](spec-intelligent-scheduling.md)). The Schedule UI shows the last replan summary and an **Undo last replan** action when `undoSnapshotId` is present on the latest done job.
+Completed jobs expose a parsed `result` with `diff`, `warnings`, and `errors` (see [spec-intelligent-scheduling](spec-intelligent-scheduling.md)). Generate / Clear live on the **Calendar** page. A dismissible **Last generate** notes panel lists warnings/errors; a single toast summarizes the run.
 
 ## Tasks (scheduling-related fields)
 

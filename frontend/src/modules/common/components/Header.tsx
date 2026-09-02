@@ -1,13 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
     CalendarDays,
-    CalendarClock,
     ListTodo,
     Layers,
     Settings,
 } from 'lucide-react';
-import { ScheduleApi } from 'api/schedule.api';
 
 const linkBase =
     'whitespace-nowrap rounded-lg px-3 py-2.5 text-sm font-medium text-ide-text transition min-h-[44px] inline-flex items-center gap-2';
@@ -15,23 +13,15 @@ const linkBase =
 const navItems = [
     { to: '/calendar', label: 'Calendar', icon: CalendarDays, match: (path: string) => path === '/calendar' },
     { to: '/events', label: 'Events', icon: ListTodo, match: (path: string) => path === '/events' },
-    { to: '/schedule', label: 'Schedule', icon: CalendarClock, match: (path: string) => path === '/schedule' },
     { to: '/phases', label: 'Phases', icon: Layers, match: (path: string) => path === '/phases' },
     { to: '/settings', label: 'Settings', icon: Settings, match: (path: string) => path === '/settings' },
 ] as const;
 
 const Header: React.FC = () => {
     const location = useLocation();
-    const [issueCount, setIssueCount] = useState(0);
 
     const active = (cond: boolean) =>
         cond ? 'bg-ide-link/15 text-ide-text' : 'hover:bg-white/5';
-
-    useEffect(() => {
-        ScheduleApi.getLatestAlerts()
-            .then((alerts) => setIssueCount(alerts.issueCount))
-            .catch(() => setIssueCount(0));
-    }, [location.pathname]);
 
     return (
         <header className="fixed top-0 z-[1200] w-full border-b border-ide-border bg-ide-panel/95 backdrop-blur-sm">
@@ -57,11 +47,6 @@ const Header: React.FC = () => {
                         >
                             <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
                             {label}
-                            {to === '/schedule' && issueCount > 0 ? (
-                                <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-ide-error px-1.5 text-xs text-white">
-                                    {issueCount > 99 ? '99+' : issueCount}
-                                </span>
-                            ) : null}
                         </Link>
                     ))}
                 </nav>
