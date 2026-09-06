@@ -56,7 +56,7 @@ Task `phaseIds` must reference phases owned by the same user.
 
 ## Tasks — `/tasks`
 
-Task CRUD (JWT). Bodies/responses include `phaseId`, **`phaseIds`**, **`eventType`**, status, priority, deadline, estimated minutes, `allowSplit`, optional `scheduledStartTime` / `scheduledEndTime` for **fixed** types, etc. `phaseIds` must belong to the current user.
+Task CRUD (JWT). Bodies/responses include `phaseId`, **`phaseIds`** (max 1), **`eventType`** (`fixed` or `admin` on new writes), status, priority, deadline, estimated minutes, `allowSplit`, `isRecurring`, `recurrencePattern`, **`recurrenceWeekDays`**, optional `scheduledStartTime` / `scheduledEndTime`. `phaseIds` must belong to the current user.
 
 ## Google Calendar — `/google-calendar`
 
@@ -103,9 +103,12 @@ Completed jobs expose a parsed `result` with `diff`, `warnings`, and `errors` (s
 
 Create/update body may include:
 
-- `eventType` — enum (`fixed`, `daily_routine`, `quick_win`, …)
-- `phaseIds` — array of phase UUIDs (union of allowed windows)
-- `estimatedTimeInMinutes` — optional; defaults by `eventType` if omitted
-- `scheduledStartTime` / `scheduledEndTime` — required when `eventType` is `fixed`
+- `eventType` — `fixed` (pinned, not moved) or `admin` (flexible / recurring). Optional; default `admin`. Legacy values may still exist on old rows.
+- `phaseIds` — at most one phase UUID (empty = full wake/sleep window)
+- `estimatedTimeInMinutes` — optional; default 30 for non-fixed, or derived from start/end for fixed
+- `scheduledStartTime` / `scheduledEndTime` — required when `eventType` is `fixed`. For movable tasks, optional preferred window (end = start + duration). `null` clears them.
+- `isRecurring`, `recurrencePattern` — `DAILY` / `WEEKLY` / `BIWEEKLY` / `MONTHLY`
+- `recurrenceWeekDays` — `0` = Sunday … `6` = Saturday. Empty / omitted / all seven = no extra weekday filter. Intersected with the phase `weekDays`.
+- `allowSplit` — per-task; engine also requires the user setting `allowSplitScheduling`
 
 Non-`fixed` tasks trigger an automatic replan job after create/update/delete/status change.

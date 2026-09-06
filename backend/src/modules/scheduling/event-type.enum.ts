@@ -1,11 +1,18 @@
+/** Legacy column values. New writes use only FIXED or ADMIN. */
 export enum TaskEventType {
   FIXED = 'fixed',
-  DAILY_ROUTINE = 'daily_routine',
-  QUICK_WIN = 'quick_win',
-  DEEP_WORK = 'deep_work',
-  ERRAND = 'errand',
   ADMIN = 'admin',
+  /** @deprecated stored rows only */
+  DAILY_ROUTINE = 'daily_routine',
+  /** @deprecated stored rows only */
+  QUICK_WIN = 'quick_win',
+  /** @deprecated stored rows only */
+  DEEP_WORK = 'deep_work',
+  /** @deprecated stored rows only */
+  ERRAND = 'errand',
+  /** @deprecated stored rows only */
   FOCUS_BLOCK = 'focus_block',
+  /** @deprecated stored rows only */
   LEARNING = 'learning',
 }
 
@@ -15,49 +22,22 @@ export interface EventTypeRules {
   defaultDurationMinutes: number;
 }
 
-export const EVENT_TYPE_RULES: Record<TaskEventType, EventTypeRules> = {
-  [TaskEventType.FIXED]: {
-    movable: false,
-    splittable: false,
-    defaultDurationMinutes: 60,
-  },
-  [TaskEventType.DAILY_ROUTINE]: {
-    movable: true,
-    splittable: true,
-    defaultDurationMinutes: 30,
-  },
-  [TaskEventType.QUICK_WIN]: {
-    movable: true,
-    splittable: false,
-    defaultDurationMinutes: 15,
-  },
-  [TaskEventType.DEEP_WORK]: {
-    movable: true,
-    splittable: true,
-    defaultDurationMinutes: 120,
-  },
-  [TaskEventType.ERRAND]: {
-    movable: true,
-    splittable: false,
-    defaultDurationMinutes: 45,
-  },
-  [TaskEventType.ADMIN]: {
-    movable: true,
-    splittable: true,
-    defaultDurationMinutes: 30,
-  },
-  [TaskEventType.FOCUS_BLOCK]: {
-    movable: true,
-    splittable: true,
-    defaultDurationMinutes: 90,
-  },
-  [TaskEventType.LEARNING]: {
-    movable: true,
-    splittable: true,
-    defaultDurationMinutes: 60,
-  },
+const FIXED_RULES: EventTypeRules = {
+  movable: false,
+  splittable: false,
+  defaultDurationMinutes: 60,
 };
 
+const FLEXIBLE_RULES: EventTypeRules = {
+  movable: true,
+  splittable: true,
+  defaultDurationMinutes: 30,
+};
+
+export function isFixedEventType(type?: TaskEventType | string | null): boolean {
+  return type === TaskEventType.FIXED;
+}
+
 export function getEventTypeRules(type: TaskEventType): EventTypeRules {
-  return EVENT_TYPE_RULES[type] ?? EVENT_TYPE_RULES[TaskEventType.ADMIN];
+  return isFixedEventType(type) ? FIXED_RULES : FLEXIBLE_RULES;
 }

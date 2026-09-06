@@ -1,6 +1,6 @@
 # Roadmap
 
-This reflects the **actual** codebase as of the last update (April 2026). Implementation details: [overview](overview.md) and the repository.
+This reflects the **actual** codebase as of the last update (September 2026). Implementation details: [overview](overview.md) and the repository.
 
 ## Current status
 
@@ -14,7 +14,7 @@ This reflects the **actual** codebase as of the last update (April 2026). Implem
 
 - [x] Auth: JWT, email verification, refresh, protected routes  
 - [x] User settings: wake/sleep, weekend, Google Calendar flags, split scheduling settings  
-- [x] Tasks CRUD, statuses, priorities, deadlines, `phaseId` / `phaseIds`, `eventType`  
+- [x] Tasks CRUD, statuses, priorities, deadlines, one phase, fixed vs movable, recurrence + weekdays  
 - [x] Phases CRUD (per-user, JWT), overlap validation, default Sleep / Focus hours from settings, phase calendar  
 - [x] Google Calendar: OAuth, events, connect/disconnect  
 
@@ -23,7 +23,7 @@ This reflects the **actual** codebase as of the last update (April 2026). Implem
 - [x] Phase validation (overlaps, sleep window)  
 - [x] Modal forms for phases  
 - [x] PhasesCalendar / display with user settings  
-- [x] Task form: event types, multi-phase, fixed datetime fields  
+- [x] Task form: single-page, Flexible / Fixed / Recurring presets, weekday chips, preferred start  
 
 ### Phase 3 — UI polish (done)
 
@@ -32,7 +32,7 @@ This reflects the **actual** codebase as of the last update (April 2026). Implem
 
 ### Phase 4 — Scheduling engine (done — iterative improvements possible)
 
-- [x] Intelligent engine: priority, FIFO tie-break, phase union, wake/sleep, weekends, split, displacement within priority tier  
+- [x] Intelligent engine: priority, FIFO tie-break, phase window, wake/sleep, weekends, split, weekday filter, displacement within priority tier  
 - [x] `/schedule` API + async generate (job) + clear  
 - [x] Schedule jobs: replan, latest done, poll by id  
 - [ ] Further heuristics (e.g. deeper multi-task optimization), analytics  

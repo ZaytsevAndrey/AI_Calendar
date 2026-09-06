@@ -1,26 +1,15 @@
 import { z } from 'zod';
 
-const eventTypeEnum = z.enum([
-  'fixed',
-  'daily_routine',
-  'quick_win',
-  'deep_work',
-  'errand',
-  'admin',
-  'focus_block',
-  'learning',
-]);
-
-export const taskWizardSchema = z
+export const taskFormSchema = z
   .object({
     name: z.string().min(1, 'Task name is required'),
     description: z.string().optional(),
-    eventType: eventTypeEnum.optional(),
-    /** Single scheduling phase, or empty / unset for any time window */
+    isFixed: z.boolean(),
     phaseId: z.string().optional(),
     estimatedTimeInMinutes: z.number().optional(),
     isRecurring: z.boolean().optional(),
     recurrencePattern: z.string().optional(),
+    recurrenceWeekDays: z.array(z.number().int().min(0).max(6)).optional(),
     allowSplit: z.boolean().optional(),
     priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
     deadline: z.string().optional(),
@@ -29,27 +18,18 @@ export const taskWizardSchema = z
     preferredStartTime: z.string().optional(),
   })
   .superRefine((data, ctx) => {
-    if (!data.eventType) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Task type is required',
-        path: ['eventType'],
-      });
-      return;
-    }
-
-    if (data.eventType === 'fixed') {
+    if (data.isFixed) {
       if (!data.scheduledStartTime?.trim()) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'Start time is required for fixed blocks',
+          message: 'Start time is required for fixed tasks',
           path: ['scheduledStartTime'],
         });
       }
       if (!data.scheduledEndTime?.trim()) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'End time is required for fixed blocks',
+          message: 'End time is required for fixed tasks',
           path: ['scheduledEndTime'],
         });
       }
@@ -64,22 +44,23 @@ export const taskWizardSchema = z
           path: ['scheduledEndTime'],
         });
       }
+      return;
     }
-    if (data.eventType !== 'fixed') {
-      if (typeof data.estimatedTimeInMinutes !== 'number' || Number.isNaN(data.estimatedTimeInMinutes)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Estimated time is required',
-          path: ['estimatedTimeInMinutes'],
-        });
-      } else if (data.estimatedTimeInMinutes < 1 || data.estimatedTimeInMinutes > 1440) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Time must be between 1 and 1440 minutes',
-          path: ['estimatedTimeInMinutes'],
-        });
-      }
+
+    if (typeof data.estimatedTimeInMinutes !== 'number' || Number.isNaN(data.estimatedTimeInMinutes)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Estimated time is required',
+        path: ['estimatedTimeInMinutes'],
+      });
+    } else if (data.estimatedTimeInMinutes < 1 || data.estimatedTimeInMinutes > 1440) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Time must be between 1 and 1440 minutes',
+        path: ['estimatedTimeInMinutes'],
+      });
     }
+
     if (data.isRecurring && !data.recurrencePattern?.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -87,11 +68,6 @@ export const taskWizardSchema = z
         path: ['recurrencePattern'],
       });
     }
-
   });
 
-export type TaskWizardFormValues = z.infer<typeof taskWizardSchema>;
-
-/** RHF resolver path keys for per-step validation */
-export const STEP_0_FIELDS = ['eventType'] as const;
-export const STEP_1_FIELDS = ['name', 'priority'] as const;
+export type TaskFormValues = z.infer<typeof taskFormSchema>;

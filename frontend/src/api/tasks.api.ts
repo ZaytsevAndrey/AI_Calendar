@@ -1,14 +1,7 @@
 import apiCall from 'modules/common/utils/apiCall';
 
-export type TaskEventType =
-  | 'fixed'
-  | 'daily_routine'
-  | 'quick_win'
-  | 'deep_work'
-  | 'errand'
-  | 'admin'
-  | 'focus_block'
-  | 'learning';
+/** Stored scheduling mode. UI writes only `fixed` or `admin` (flexible/recurring). */
+export type TaskEventType = 'fixed' | 'admin' | string;
 
 export interface TaskDTO {
   id: string;
@@ -20,6 +13,7 @@ export interface TaskDTO {
   estimatedTimeInMinutes: number;
   isRecurring: boolean;
   recurrencePattern?: string;
+  recurrenceWeekDays?: number[] | null;
   allowSplit: boolean;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   deadline?: string;
@@ -42,10 +36,11 @@ export interface CreateTaskDTO {
   phaseIds?: string[];
   eventType?: TaskEventType;
   estimatedTimeInMinutes?: number;
-  scheduledStartTime?: string;
-  scheduledEndTime?: string;
+  scheduledStartTime?: string | null;
+  scheduledEndTime?: string | null;
   isRecurring?: boolean;
   recurrencePattern?: string;
+  recurrenceWeekDays?: number[] | null;
   allowSplit?: boolean;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   deadline?: string;

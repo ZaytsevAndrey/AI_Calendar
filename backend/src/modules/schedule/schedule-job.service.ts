@@ -12,7 +12,7 @@ import { Task, TaskStatus } from '../tasks/entities/task.entity';
 import { TaskEventType } from '../scheduling/event-type.enum';
 import { ScheduledTask } from './schedule.entity';
 import { phaseHexToGoogleColorId } from '../google-calendar/phase-hex-to-google-color-id.util';
-import { effectiveRecurrenceWeekDaysFromPhases } from './recurrence-from-phases.util';
+import { effectiveRecurrenceWeekDays } from './recurrence-from-phases.util';
 import { buildGoogleRecurrenceRules } from './google-recurrence.util';
 import {
   GoogleEventRef,
@@ -27,6 +27,7 @@ export type FlexibleGoogleSyncSnapshot = {
   description: string | null;
   isRecurring: boolean;
   recurrencePattern: string | null;
+  recurrenceWeekDays: number[] | null;
   phaseIdsSorted: string[];
   segments: { start: string; end: string }[];
 };
@@ -133,6 +134,7 @@ export class ScheduleJobService {
       description: s.description ?? '',
       isRecurring: s.isRecurring,
       recurrencePattern: s.recurrencePattern ?? '',
+      recurrenceWeekDays: s.recurrenceWeekDays ?? [],
       phaseIds: s.phaseIdsSorted,
       segments: s.segments.map((x) => [x.start, x.end]),
     });
@@ -163,6 +165,7 @@ export class ScheduleJobService {
       description: task.description ?? null,
       isRecurring: task.isRecurring,
       recurrencePattern: task.recurrencePattern ?? null,
+      recurrenceWeekDays: task.recurrenceWeekDays ?? null,
       phaseIdsSorted,
       segments: rows.map((r) => ({
         start: r.scheduledStartTime.toISOString(),
@@ -410,7 +413,7 @@ export class ScheduleJobService {
         pattern: task.recurrencePattern,
         firstStart: first.scheduledStartTime,
         lastStart: last.scheduledStartTime,
-        weekDays: effectiveRecurrenceWeekDaysFromPhases(phases),
+        weekDays: effectiveRecurrenceWeekDays(task.recurrenceWeekDays, phases),
       }),
     };
 

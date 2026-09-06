@@ -76,6 +76,10 @@ export class Task {
   @Column({ type: 'varchar', nullable: true })
   recurrencePattern: string | null;
 
+  /** 0 = Sunday … 6 = Saturday. Null / all seven days = no extra weekday filter. */
+  @Column({ type: 'json', nullable: true })
+  recurrenceWeekDays: number[] | null;
+
   @Column({ default: true })
   allowSplit: boolean;
 

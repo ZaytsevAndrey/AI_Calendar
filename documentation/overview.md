@@ -2,7 +2,7 @@
 
 ## Purpose
 
-**AI Calendar Assistant** is a web app for time planning with **day phases**, **tasks** (priority, deadline, event types), personal **sleep/wake** settings, and **Google Calendar** integration. **Intelligent scheduling** places movable tasks into allowed phase windows (union of `phaseIds`), respects anchors (manual slots, fixed blocks, external Google events), supports splitting and a **job queue** with **diff**. The **Calendar** page runs generation and can clear app-generated slots in the Settings planning horizon.
+**AI Calendar Assistant** is a web app for time planning with **day phases**, **tasks** (priority, deadline, fixed / flexible / recurring settings), personal **sleep/wake** settings, and **Google Calendar** integration. **Intelligent scheduling** places movable tasks into the selected phase window, respects anchors (manual slots, fixed blocks, external Google events), supports splitting and a **job queue** with **diff**. The **Calendar** page runs generation and can clear app-generated slots in the Settings planning horizon.
 
 ## Monorepo layout
 
@@ -39,7 +39,7 @@ AI_Calendar/
 - Registration / login, refresh, password reset, email verification (see [integrations](integrations.md) and `auth` code)  
 - **User settings:** wake/sleep, weekends, Google Calendar flags, `allowSplitScheduling` / `minSplitMinutes` for the intelligent engine  
 - **Phases:** per-user CRUD (JWT), overlap validation, default **Sleep** + **Focus hours** from wake/sleep when the user has no phases, phase calendar UI  
-- **Tasks:** CRUD, statuses, priorities, deadlines, `phaseId` / `phaseIds`, `eventType`, optional split flag; **fixed** blocks require scheduled start/end  
+- **Tasks:** CRUD, statuses, priorities, deadlines, one optional phase, split / recurring flags, optional `recurrenceWeekDays`; **fixed** blocks require scheduled start/end; movable tasks may set a preferred start. The create form is a single page with **Flexible / Fixed / Recurring** presets.  
 - **Google Calendar:** OAuth, events, connect / disconnect; replan and **clear schedule** create/update/delete linked Google events when `googleEventId` is set  
 - **Schedule:** scheduled tasks, **POST `/schedule/generate`** (async job + poll), **DELETE `/schedule`** (app-generated slots in the Settings horizon); **Calendar** page (`/calendar`) has Generate / Clear  
 
@@ -53,9 +53,9 @@ Implementation notes:
 Core logic lives in `backend/src/modules/schedule/intelligent-scheduling.engine.ts` and runs inside **schedule jobs** (`ScheduleJobService` / processor). Summary:
 
 - Movable tasks: TODO, not fixed external, not `eventType` **fixed**; ordered by **priority** then **FIFO** (`createdAt` ascending).  
-- **Phase union:** eligible intervals from selected phases intersected with wake/sleep and weekend rules.  
+- **Phase window:** one optional phase, intersected with wake/sleep and weekend rules. Recurring days = task `recurrenceWeekDays` ∩ phase `weekDays`.  
 - **Anchors:** non-auto-generated scheduled rows, fixed tasks, in-progress auto segments, and fixed-external tasks block time.  
-- **Splitting** when event type and user/task settings allow it (`minSplitMinutes`, horizon extensions, intra-priority displacement of splittable peers).  
+- **Splitting** when the task and user settings allow it (`allowSplit` ∧ `allowSplitScheduling`, `minSplitMinutes`, horizon extensions, intra-priority displacement of splittable peers).  
 - Output: persisted `scheduled_tasks` (auto-generated), task-level scheduled range, job **diff** / warnings / errors.  
 
 For HTTP details see [api-reference](api-reference.md) and the full spec [spec-intelligent-scheduling](spec-intelligent-scheduling.md).

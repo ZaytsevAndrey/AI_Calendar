@@ -176,6 +176,27 @@ describe('IntelligentSchedulingEngine', () => {
     ]);
   });
 
+  it('places recurring only on selected weekdays', async () => {
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'mon-wed',
+        name: 'Mon Wed',
+        isRecurring: true,
+        recurrencePattern: 'DAILY',
+        recurrenceWeekDays: [1, 3],
+        phases: [phaseWorkday],
+      }),
+    ]);
+
+    await engine.run(userId);
+
+    const [slots] = extractTaskSegments(scheduledRepo.save.mock.calls);
+    expect(slots).toEqual([
+      [atLocalTimeIso(0, 9), atLocalTimeIso(0, 10)],
+      [atLocalTimeIso(2, 9), atLocalTimeIso(2, 10)],
+    ]);
+  });
+
   it('creates all recurring occurrences when daily capacity is enough', async () => {
     taskRepo.find.mockResolvedValue([
       makeTask({
@@ -229,7 +250,7 @@ describe('IntelligentSchedulingEngine', () => {
         name: 'Rec 1',
         isRecurring: true,
         recurrencePattern: 'DAILY',
-        eventType: TaskEventType.DAILY_ROUTINE,
+        eventType: TaskEventType.ADMIN,
         estimatedTimeInMinutes: 30,
         scheduledStartTime: new Date(atLocalTimeIso(0, 9)),
         scheduledEndTime: new Date(atLocalTimeWithMinutesIso(0, 9, 30)),
@@ -240,7 +261,7 @@ describe('IntelligentSchedulingEngine', () => {
         name: 'Rec 2',
         isRecurring: true,
         recurrencePattern: 'DAILY',
-        eventType: TaskEventType.DAILY_ROUTINE,
+        eventType: TaskEventType.ADMIN,
         estimatedTimeInMinutes: 20,
         scheduledStartTime: null,
         scheduledEndTime: null,
@@ -251,7 +272,7 @@ describe('IntelligentSchedulingEngine', () => {
         name: 'Rec 3',
         isRecurring: true,
         recurrencePattern: 'DAILY',
-        eventType: TaskEventType.DAILY_ROUTINE,
+        eventType: TaskEventType.ADMIN,
         estimatedTimeInMinutes: 30,
         scheduledStartTime: new Date(atLocalTimeIso(0, 10)),
         scheduledEndTime: new Date(atLocalTimeWithMinutesIso(0, 10, 30)),
@@ -350,7 +371,7 @@ describe('IntelligentSchedulingEngine', () => {
         name: 'English',
         isRecurring: true,
         recurrencePattern: 'DAILY',
-        eventType: TaskEventType.DAILY_ROUTINE,
+        eventType: TaskEventType.ADMIN,
         estimatedTimeInMinutes: 30,
         scheduledStartTime: new Date(atLocalTimeIso(0, 9)),
         scheduledEndTime: new Date(atLocalTimeWithMinutesIso(0, 9, 30)),
@@ -730,6 +751,7 @@ function makeTask(partial: Partial<Task>): Task {
     estimatedTimeInMinutes: partial.estimatedTimeInMinutes ?? 60,
     isRecurring: partial.isRecurring ?? false,
     recurrencePattern: partial.recurrencePattern ?? null,
+    recurrenceWeekDays: partial.recurrenceWeekDays ?? null,
     allowSplit: partial.allowSplit ?? false,
     priority: partial.priority ?? TaskPriority.MEDIUM,
     deadline: partial.deadline ?? null,

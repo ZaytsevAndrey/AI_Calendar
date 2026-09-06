@@ -11,6 +11,7 @@ import {
   IsArray,
   IsUUID,
   ArrayMaxSize,
+  ValidateIf,
 } from 'class-validator';
 import { TaskPriority } from '../entities/task.entity';
 import { TaskEventType } from '../../scheduling/event-type.enum';
@@ -78,6 +79,20 @@ export class CreateTaskDto {
   @IsOptional()
   recurrencePattern?: string;
 
+  @ApiProperty({
+    description: 'Weekdays for recurrence (0 = Sunday … 6 = Saturday). Empty or omitted = every day.',
+    required: false,
+    type: [Number],
+    nullable: true,
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsArray()
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  @Max(6, { each: true })
+  @IsOptional()
+  recurrenceWeekDays?: number[] | null;
+
   @ApiProperty({ default: true, required: false })
   @IsBoolean()
   @IsOptional()
@@ -98,18 +113,24 @@ export class CreateTaskDto {
   deadline?: string;
 
   @ApiProperty({
-    description: 'Required for FIXED type: block start (ISO 8601)',
+    description:
+      'Exact start for fixed tasks, or preferred start window for movable tasks. Null clears it.',
     required: false,
+    nullable: true,
   })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
   @IsDateString()
   @IsOptional()
-  scheduledStartTime?: string;
+  scheduledStartTime?: string | null;
 
   @ApiProperty({
-    description: 'Required for FIXED type: block end (ISO 8601)',
+    description:
+      'Exact end for fixed tasks, or preferred end window for movable tasks. Null clears it.',
     required: false,
+    nullable: true,
   })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
   @IsDateString()
   @IsOptional()
-  scheduledEndTime?: string;
+  scheduledEndTime?: string | null;
 }

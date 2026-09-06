@@ -22,16 +22,11 @@ const statusLabels = {
   canceled: 'Canceled'
 };
 
-const eventTypeLabels: Record<string, string> = {
-  fixed: 'Fixed',
-  daily_routine: 'Daily routine',
-  quick_win: 'Quick win',
-  deep_work: 'Deep work',
-  errand: 'Errand',
-  admin: 'Admin',
-  focus_block: 'Focus block',
-  learning: 'Learning',
-};
+function schedulingModeLabel(event: TaskDTO): string {
+  if (event.eventType === 'fixed') return 'Fixed';
+  if (event.isRecurring) return 'Recurring';
+  return 'Flexible';
+}
 
 const EventItem: React.FC<EventItemProps> = ({ event, onEdit, onDelete, onStatusChange }) => {
   const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -51,7 +46,7 @@ const EventItem: React.FC<EventItemProps> = ({ event, onEdit, onDelete, onStatus
     return date.toLocaleString();
   };
 
-  const eventType = event.eventType ? (eventTypeLabels[event.eventType] ?? event.eventType) : 'Not set';
+  const schedulingMode = schedulingModeLabel(event);
   const recurrencePattern = event.recurrencePattern ?? 'Not set';
 
   return (
@@ -80,8 +75,8 @@ const EventItem: React.FC<EventItemProps> = ({ event, onEdit, onDelete, onStatus
         </div>
 
         <div className="task-detail">
-          <span className="detail-label">Type:</span>
-          <span className="detail-value">{eventType}</span>
+          <span className="detail-label">Schedule:</span>
+          <span className="detail-value">{schedulingMode}</span>
         </div>
 
         <div className="task-detail">
@@ -106,7 +101,16 @@ const EventItem: React.FC<EventItemProps> = ({ event, onEdit, onDelete, onStatus
         {event.isRecurring && (
           <div className="task-detail">
             <span className="detail-label">Recurrence Pattern:</span>
-            <span className="detail-value">{recurrencePattern}</span>
+            <span className="detail-value">
+              {recurrencePattern}
+              {event.recurrenceWeekDays?.length
+                ? ` · ${event.recurrenceWeekDays
+                    .slice()
+                    .sort((a, b) => ((a === 0 ? 7 : a) - (b === 0 ? 7 : b)))
+                    .map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d])
+                    .join(', ')}`
+                : ''}
+            </span>
           </div>
         )}
 

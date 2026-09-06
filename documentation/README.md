@@ -8,10 +8,10 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Setup and build](setup-and-build.md) | Dependencies, environment variables, ports, npm commands (root / frontend / backend) |
 | [API reference](api-reference.md) | Main HTTP routes (aligned with Nest controllers) |
 | [Integrations](integrations.md) | Google OAuth / Calendar, common errors (`redirect_uri_mismatch`) |
-| [Task creation rules](task-creation-rules.md) | Wizard steps, validation, phase limits, recurrence, Google sync rules |
+| [Task creation rules](task-creation-rules.md) | Presets vs settings, validation, phase, recurrence weekdays, Google sync |
 | [Roadmap](roadmap.md) | Done, in progress, planned |
-| [Spec: Intelligent scheduling](spec-intelligent-scheduling.md) | Unified items, types, phases, queue, diff/undo, Google anchors |
+| [Spec: Intelligent scheduling](spec-intelligent-scheduling.md) | Unified items, settings, phases, queue, diff/undo, Google anchors |
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** September 2026 (Clear uses Settings horizon, not calendar view).
+**Last documentation update:** September 2026 (task form: presets + settings, recurrence weekdays).

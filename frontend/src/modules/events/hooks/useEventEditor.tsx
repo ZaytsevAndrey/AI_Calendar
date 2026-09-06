@@ -61,7 +61,7 @@ export function useEventEditor() {
       maxWidthClass="max-w-xl"
       footer={null}
     >
-      <div className="p-4 pt-0 sm:p-6 sm:pt-0">
+      <div>
         <EventForm
           key={editingEvent?.id ?? 'new'}
           initialData={editingEvent || undefined}

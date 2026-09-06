@@ -22,7 +22,7 @@
 ## T01 — Validation: required fields
 
 **Given**
-- Payload без `name`, або без `eventType`, або без `priority`.
+- Payload без `name`.
 
 **When**
 - Виклик create task endpoint.
@@ -30,6 +30,8 @@
 **Then**
 - 4xx помилка валідації.
 - Запис задачі не створено.
+
+`eventType` і `priority` опційні (дефолти: `admin`, `medium`).
 
 ## T02 — Validation: only one phase
 
@@ -45,13 +47,14 @@
 ## T03 — Validation: estimatedTime for non-fixed
 
 **Given**
-- Non-fixed task без `estimatedTimeInMinutes`.
+- Non-fixed task без `estimatedTimeInMinutes` у **формі**.
 
 **When**
-- Create task.
+- Submit create form.
 
 **Then**
-- 4xx помилка валідації.
+- Клієнтська валідація не пускає.
+- API без поля підставляє дефолт 30 хв (не 4xx).
 
 ## T04 — Validation: estimatedTime <= 0
 
@@ -215,6 +218,20 @@
 - Occurrence створені тільки в `Mon-Fri`.
 - Загальна кількість = 5.
 - Для `Sat/Sun` occurrence не створюються.
+
+## T30b — DAILY recurrence trimmed by task recurrenceWeekDays ∩ phase
+
+**Given**
+- Recurring `R`: DAILY, `recurrenceWeekDays=[1,3]` (Mon, Wed), duration=60.
+- Фаза `Mon-Fri`.
+- Горизонт: 7 днів (пн–нд).
+
+**When**
+- Планування occurrence.
+
+**Then**
+- Occurrence лише в Mon і Wed.
+- Загальна кількість = 2.
 
 ## T31 — No window today -> move to next valid day
 

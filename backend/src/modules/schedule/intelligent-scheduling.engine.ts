@@ -11,7 +11,7 @@ import {
   getEventTypeRules,
 } from '../scheduling/event-type.enum';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
-import { effectiveRecurrenceWeekDaysFromPhases } from './recurrence-from-phases.util';
+import { effectiveRecurrenceWeekDays } from './recurrence-from-phases.util';
 
 const DEFAULT_HORIZON_DAYS = 30;
 const BEYOND_HORIZON_EXTRA_DAYS = 30;
@@ -255,6 +255,12 @@ function advanceOccurrenceStart(from: Date, pattern: RecurrencePattern): Date {
   if (pattern === 'MONTHLY') next.setMonth(next.getMonth() + 1);
   next.setHours(0, 0, 0, 0);
   return next;
+}
+
+function weeksBetween(from: Date, to: Date): number {
+  const start = Date.UTC(from.getFullYear(), from.getMonth(), from.getDate());
+  const end = Date.UTC(to.getFullYear(), to.getMonth(), to.getDate());
+  return Math.floor((end - start) / (7 * 24 * 60 * 60 * 1000));
 }
 
 @Injectable()
@@ -643,23 +649,48 @@ export class IntelligentSchedulingEngine {
     const deadlineMs = task.deadline ? new Date(task.deadline).getTime() : null;
     const phases = this.resolvePhasesForTask(task);
     const segments: { start: Date; end: Date }[] = [];
-    const restrictedWeekDays =
-      recurrencePattern === 'DAILY'
-        ? effectiveRecurrenceWeekDaysFromPhases(phases)
-        : null;
+    const restrictedWeekDays = effectiveRecurrenceWeekDays(
+      task.recurrenceWeekDays,
+      phases,
+    );
+    const stepDailyForWeekDays =
+      !!restrictedWeekDays?.length &&
+      (recurrencePattern === 'DAILY' ||
+        recurrencePattern === 'WEEKLY' ||
+        recurrencePattern === 'BIWEEKLY');
+    const stepPattern: RecurrencePattern = stepDailyForWeekDays
+      ? 'DAILY'
+      : recurrencePattern;
 
     let beyondHorizon = false;
     const skipped: SkippedOccurrence[] = [];
     let occurrenceStart = new Date(startDay);
     occurrenceStart.setHours(0, 0, 0, 0);
 
+    if (restrictedWeekDays && restrictedWeekDays.length === 0) {
+      return {
+        ok: true,
+        segments: [],
+        beyondHorizon: false,
+        skippedOccurrences: 0,
+        skipped: [],
+      };
+    }
+
     while (occurrenceStart < horizonEnd) {
       if (
-        recurrencePattern === 'DAILY' &&
         restrictedWeekDays?.length &&
         !restrictedWeekDays.includes(occurrenceStart.getDay())
       ) {
-        occurrenceStart = advanceOccurrenceStart(occurrenceStart, recurrencePattern);
+        occurrenceStart = advanceOccurrenceStart(occurrenceStart, stepPattern);
+        continue;
+      }
+      if (
+        stepDailyForWeekDays &&
+        recurrencePattern === 'BIWEEKLY' &&
+        weeksBetween(startDay, occurrenceStart) % 2 !== 0
+      ) {
+        occurrenceStart = advanceOccurrenceStart(occurrenceStart, stepPattern);
         continue;
       }
 
@@ -669,9 +700,12 @@ export class IntelligentSchedulingEngine {
       }
       const mergedBusy = mergeIntervals(placedBusy);
 
-      const occurrenceEnd = advanceOccurrenceStart(occurrenceStart, recurrencePattern);
+      const occurrenceEnd = advanceOccurrenceStart(occurrenceStart, stepPattern);
       const preferredInterval =
-        recurrencePattern === 'DAILY' && task.eventType === TaskEventType.DAILY_ROUTINE
+        (recurrencePattern === 'DAILY' || stepDailyForWeekDays) &&
+        task.eventType !== TaskEventType.FIXED &&
+        task.scheduledStartTime &&
+        task.scheduledEndTime
           ? taskPreferredIntervalOnDay(task, occurrenceStart)
           : null;
       if (preferredInterval) {
@@ -704,12 +738,16 @@ export class IntelligentSchedulingEngine {
           occurrenceStart = occurrenceEnd;
           continue;
         }
-        let reason: OccurrenceSkipReason = 'preferred_unavailable';
-        if (!canPlaceByNow) reason = 'already_passed';
-        else if (!canPlaceByDeadline) reason = 'deadline';
-        recordSkip(skipped, occurrenceStart, reason);
-        occurrenceStart = occurrenceEnd;
-        continue;
+        if (!canPlaceByNow || !canPlaceByDeadline) {
+          recordSkip(
+            skipped,
+            occurrenceStart,
+            !canPlaceByNow ? 'already_passed' : 'deadline',
+          );
+          occurrenceStart = occurrenceEnd;
+          continue;
+        }
+        // Preferred clock time is busy: fall through to earliest remaining slot today.
       }
 
       let result = this.placeTaskGreedy(

@@ -1,6 +1,5 @@
-import type { CreateTaskDTO, TaskDTO, UpdateTaskDTO, TaskEventType } from '../../../api/tasks.api';
-import type { TaskWizardFormValues } from './schema';
-import { DEFAULT_DURATION_BY_TYPE, SPLITTABLE_TYPES } from './constants';
+import type { CreateTaskDTO, TaskDTO, UpdateTaskDTO } from '../../../api/tasks.api';
+import type { TaskFormValues } from './schema';
 
 function toLocalDateTimeInput(value?: string): string | undefined {
   if (!value) return undefined;
@@ -23,76 +22,101 @@ function toLocalTimeInput(value?: string): string | undefined {
   return `${hh}:${min}`;
 }
 
-export function buildTaskPayload(data: TaskWizardFormValues): CreateTaskDTO | UpdateTaskDTO {
-  const eventType = (data.eventType ?? 'admin') as TaskEventType;
-  const typeAllowsSplit = SPLITTABLE_TYPES.has(eventType);
+function preferredWindowIso(
+  preferredStartTime: string,
+  estimatedTimeInMinutes: number,
+): { start: string; end: string } {
+  const baseDate = new Date();
+  const yyyy = baseDate.getFullYear();
+  const mm = String(baseDate.getMonth() + 1).padStart(2, '0');
+  const dd = String(baseDate.getDate()).padStart(2, '0');
+  const startLocal = new Date(`${yyyy}-${mm}-${dd}T${preferredStartTime}:00`);
+  const endLocal = new Date(startLocal.getTime() + estimatedTimeInMinutes * 60 * 1000);
+  return { start: startLocal.toISOString(), end: endLocal.toISOString() };
+}
+
+export function buildTaskPayload(data: TaskFormValues): CreateTaskDTO | UpdateTaskDTO {
+  const isFixed = !!data.isFixed;
+  const estimatedTimeInMinutes =
+    data.estimatedTimeInMinutes ??
+    (isFixed && data.scheduledStartTime && data.scheduledEndTime
+      ? Math.max(
+          1,
+          Math.round(
+            (new Date(data.scheduledEndTime).getTime() - new Date(data.scheduledStartTime).getTime()) /
+              60000,
+          ),
+        )
+      : 30);
+
   const primaryPhaseId = data.phaseId?.trim();
   const phaseIds = primaryPhaseId ? [primaryPhaseId] : [];
-  const estimatedTimeInMinutes =
-    data.estimatedTimeInMinutes ?? DEFAULT_DURATION_BY_TYPE[eventType] ?? 30;
 
   const payload: CreateTaskDTO | UpdateTaskDTO = {
     name: data.name,
     description: data.description || undefined,
-    eventType,
+    eventType: isFixed ? 'fixed' : 'admin',
     estimatedTimeInMinutes,
-    isRecurring: !!data.isRecurring,
-    recurrencePattern: data.isRecurring ? data.recurrencePattern || undefined : undefined,
-    allowSplit: typeAllowsSplit ? data.allowSplit : false,
+    isRecurring: !isFixed && !!data.isRecurring,
+    recurrencePattern: !isFixed && data.isRecurring ? data.recurrencePattern || undefined : undefined,
+    recurrenceWeekDays:
+      !isFixed && data.isRecurring ? data.recurrenceWeekDays ?? [] : [],
+    allowSplit: isFixed ? false : !!data.allowSplit,
     priority: data.priority,
     deadline: data.deadline || undefined,
     phaseIds: phaseIds.length ? phaseIds : undefined,
     phaseId: primaryPhaseId || undefined,
   };
 
-  if (eventType === 'fixed' && data.scheduledStartTime && data.scheduledEndTime) {
+  if (isFixed && data.scheduledStartTime && data.scheduledEndTime) {
     payload.scheduledStartTime = new Date(data.scheduledStartTime).toISOString();
     payload.scheduledEndTime = new Date(data.scheduledEndTime).toISOString();
-  }
-
-  if (eventType === 'daily_routine' && data.preferredStartTime?.trim()) {
-    const baseDate = new Date();
-    const yyyy = baseDate.getFullYear();
-    const mm = String(baseDate.getMonth() + 1).padStart(2, '0');
-    const dd = String(baseDate.getDate()).padStart(2, '0');
-    const startLocal = new Date(`${yyyy}-${mm}-${dd}T${data.preferredStartTime.trim()}:00`);
-    const endLocal = new Date(startLocal.getTime() + estimatedTimeInMinutes * 60 * 1000);
-    payload.scheduledStartTime = startLocal.toISOString();
-    payload.scheduledEndTime = endLocal.toISOString();
+  } else if (!isFixed && data.preferredStartTime?.trim()) {
+    const window = preferredWindowIso(data.preferredStartTime.trim(), estimatedTimeInMinutes);
+    payload.scheduledStartTime = window.start;
+    payload.scheduledEndTime = window.end;
+  } else {
+    payload.scheduledStartTime = null;
+    payload.scheduledEndTime = null;
   }
 
   return payload;
 }
 
-export function initialWizardValues(data?: TaskDTO): TaskWizardFormValues {
+export function initialFormValues(data?: TaskDTO): TaskFormValues {
   if (!data) {
     return {
       name: '',
       description: '',
-      eventType: undefined,
+      isFixed: false,
       phaseId: '',
       estimatedTimeInMinutes: 30,
       isRecurring: false,
+      recurrenceWeekDays: [],
       allowSplit: true,
       priority: 'medium',
-      preferredStartTime: undefined,
+      deadline: '',
+      scheduledStartTime: '',
+      scheduledEndTime: '',
+      preferredStartTime: '',
     };
   }
-  const phaseId =
-    data.phaseId ?? (data.phases?.length ? data.phases[0].id : undefined) ?? '';
+  const isFixed = data.eventType === 'fixed';
+  const phaseId = data.phaseId ?? (data.phases?.length ? data.phases[0].id : undefined) ?? '';
   return {
     name: data.name,
     description: data.description ?? '',
-    eventType: (data.eventType ?? 'admin') as TaskWizardFormValues['eventType'],
+    isFixed,
     phaseId,
     estimatedTimeInMinutes: data.estimatedTimeInMinutes,
     isRecurring: data.isRecurring,
     recurrencePattern: data.recurrencePattern ?? '',
+    recurrenceWeekDays: data.recurrenceWeekDays ?? [],
     allowSplit: data.allowSplit,
     priority: data.priority,
-    deadline: toLocalDateTimeInput(data.deadline),
-    scheduledStartTime: toLocalDateTimeInput(data.scheduledStartTime),
-    scheduledEndTime: toLocalDateTimeInput(data.scheduledEndTime),
-    preferredStartTime: toLocalTimeInput(data.scheduledStartTime),
+    deadline: toLocalDateTimeInput(data.deadline) ?? '',
+    scheduledStartTime: isFixed ? toLocalDateTimeInput(data.scheduledStartTime) ?? '' : '',
+    scheduledEndTime: isFixed ? toLocalDateTimeInput(data.scheduledEndTime) ?? '' : '',
+    preferredStartTime: isFixed ? '' : toLocalTimeInput(data.scheduledStartTime) ?? '',
   };
 }
