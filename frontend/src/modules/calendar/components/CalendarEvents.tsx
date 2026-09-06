@@ -1,6 +1,18 @@
 import React from 'react';
+import {
+    CalendarDays,
+    Clock,
+    ExternalLink,
+    MapPin,
+    Pencil,
+    Repeat,
+    Timer,
+    Trash2,
+    UserRound,
+    Users,
+} from 'lucide-react';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
-import { formatEventTime, getEventColor, isEventToday } from '../hooks/useCalendar';
+import { getEventColor, isEventToday } from '../hooks/useCalendar';
 import { Spinner } from '../../../ui/Spinner';
 
 interface CalendarEventsProps {
@@ -10,6 +22,93 @@ interface CalendarEventsProps {
     title?: string;
     onEditEvent?: (eventId: string) => void;
     onDeleteEvent?: (eventId: string, eventName: string) => void;
+}
+
+function eventStart(event: GoogleCalendarEvent): Date | null {
+    if (event.start.dateTime) {
+        const d = new Date(event.start.dateTime);
+        return Number.isNaN(d.getTime()) ? null : d;
+    }
+    if (event.start.date) {
+        const d = new Date(`${event.start.date}T00:00:00`);
+        return Number.isNaN(d.getTime()) ? null : d;
+    }
+    return null;
+}
+
+function eventEnd(event: GoogleCalendarEvent): Date | null {
+    if (event.end.dateTime) {
+        const d = new Date(event.end.dateTime);
+        return Number.isNaN(d.getTime()) ? null : d;
+    }
+    if (event.end.date) {
+        const d = new Date(`${event.end.date}T00:00:00`);
+        return Number.isNaN(d.getTime()) ? null : d;
+    }
+    return null;
+}
+
+function isAllDay(event: GoogleCalendarEvent): boolean {
+    return !event.start.dateTime && !!event.start.date;
+}
+
+function formatDateLine(event: GoogleCalendarEvent): string {
+    const start = eventStart(event);
+    if (!start) return 'Time not set';
+    return start.toLocaleDateString('en-GB', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+    });
+}
+
+function formatTimeRange(event: GoogleCalendarEvent): string {
+    if (isAllDay(event)) return 'All day';
+    const start = eventStart(event);
+    const end = eventEnd(event);
+    if (!start) return 'Time not set';
+    const timeOpts: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: false };
+    const startLabel = start.toLocaleTimeString('en-GB', timeOpts);
+    if (!end) return startLabel;
+    return `${startLabel} – ${end.toLocaleTimeString('en-GB', timeOpts)}`;
+}
+
+function formatDuration(event: GoogleCalendarEvent): string | null {
+    if (isAllDay(event)) return null;
+    const start = eventStart(event);
+    const end = eventEnd(event);
+    if (!start || !end) return null;
+    const mins = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+    if (mins < 60) return `${mins} min`;
+    const hours = Math.floor(mins / 60);
+    const rest = mins % 60;
+    return rest ? `${hours}h ${rest}m` : `${hours}h`;
+}
+
+function attendeeLabel(person: NonNullable<GoogleCalendarEvent['attendees']>[number]): string {
+    const name = person.displayName || person.email;
+    if (!person.responseStatus || person.responseStatus === 'needsAction') return name;
+    const status =
+        person.responseStatus === 'accepted'
+            ? 'accepted'
+            : person.responseStatus === 'declined'
+              ? 'declined'
+              : 'tentative';
+    return `${name} (${status})`;
+}
+
+function formatStamp(iso?: string): string | null {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
 }
 
 const CalendarEvents: React.FC<CalendarEventsProps> = ({
@@ -41,87 +140,180 @@ const CalendarEvents: React.FC<CalendarEventsProps> = ({
 
     if (!events || events.length === 0) {
         return (
-            <div className="py-8 text-center text-ide-muted">No events found for this period</div>
+            <div className="rounded-xl border border-ide-border bg-ide-panel px-4 py-8 text-center text-ide-muted">
+                No events found for this period
+            </div>
         );
     }
 
     return (
-        <div>
-            <h2 className="mb-4 text-lg font-semibold text-ide-text">
+        <section className="min-h-0">
+            <h2 className="mb-3 text-lg font-semibold text-ide-text">
                 {title} ({events.length})
             </h2>
 
-            <div className="flex flex-col gap-4">
-                {events.map((event) => (
-                    <div
-                        key={event.id}
-                        className="rounded-lg border border-ide-border bg-ide-panel p-4 shadow-ide transition hover:-translate-y-px hover:shadow-ide-md"
-                        style={{ borderLeftWidth: 4, borderLeftColor: getEventColor(event) }}
-                    >
-                        <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-                            <h3 className="text-lg font-semibold text-ide-text">
-                                {event.summary || 'Untitled Event'}
-                            </h3>
-                            <div className="flex flex-wrap items-center gap-2">
-                                {isEventToday(event) ? (
-                                    <span className="rounded border border-ide-link px-2 py-0.5 text-xs text-ide-link">
-                                        Today
-                                    </span>
-                                ) : null}
-                                {onEditEvent ? (
-                                    <button
-                                        type="button"
-                                        onClick={() => onEditEvent(event.id)}
-                                        className="rounded px-2 py-1 text-sm text-ide-link hover:bg-ide-surface"
-                                    >
-                                        ✏️ Edit
-                                    </button>
-                                ) : null}
-                                {onDeleteEvent ? (
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            onDeleteEvent(event.id, event.summary || 'Untitled Event')
-                                        }
-                                        className="rounded px-2 py-1 text-sm text-ide-error hover:bg-ide-error/10"
-                                    >
-                                        🗑️ Delete
-                                    </button>
-                                ) : null}
+            <div className="max-h-[min(32rem,55vh)] space-y-3 overflow-y-auto pr-1">
+                {events.map((event) => {
+                    const duration = formatDuration(event);
+                    const organizer = event.organizer?.displayName || event.organizer?.email;
+                    const created = formatStamp(event.created);
+                    const updated = formatStamp(event.updated);
+                    const attendees = event.attendees ?? [];
+
+                    return (
+                        <article
+                            key={event.id}
+                            className="rounded-lg border border-ide-border bg-ide-panel p-4 shadow-ide"
+                            style={{ borderLeftWidth: 4, borderLeftColor: getEventColor(event) }}
+                        >
+                            <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                    <h3 className="text-base font-semibold text-ide-text">
+                                        {event.summary || 'Untitled Event'}
+                                    </h3>
+                                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                        {isEventToday(event) ? (
+                                            <span className="inline-flex items-center gap-1 rounded border border-ide-link px-2 py-0.5 text-xs text-ide-link">
+                                                <CalendarDays className="h-3 w-3" aria-hidden />
+                                                Today
+                                            </span>
+                                        ) : null}
+                                        {isAllDay(event) ? (
+                                            <span className="inline-flex items-center gap-1 rounded border border-ide-border px-2 py-0.5 text-xs text-ide-muted">
+                                                All day
+                                            </span>
+                                        ) : null}
+                                        {event.recurringEventId ? (
+                                            <span className="inline-flex items-center gap-1 rounded border border-ide-border px-2 py-0.5 text-xs text-ide-muted">
+                                                <Repeat className="h-3 w-3" aria-hidden />
+                                                Recurring
+                                            </span>
+                                        ) : null}
+                                        {event.status && event.status !== 'confirmed' ? (
+                                            <span
+                                                className={`inline-flex rounded px-2 py-0.5 text-xs ${
+                                                    event.status === 'cancelled'
+                                                        ? 'bg-ide-error text-white'
+                                                        : 'bg-ide-warn text-ide-bg'
+                                                }`}
+                                            >
+                                                {event.status}
+                                            </span>
+                                        ) : null}
+                                    </div>
+                                </div>
+                                <div className="flex shrink-0 flex-wrap items-center gap-1">
+                                    {event.htmlLink ? (
+                                        <a
+                                            href={event.htmlLink}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="inline-flex min-h-[36px] items-center gap-1 rounded px-2 py-1 text-sm text-ide-link hover:bg-ide-surface"
+                                        >
+                                            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                                            Google
+                                        </a>
+                                    ) : null}
+                                    {onEditEvent ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => onEditEvent(event.id)}
+                                            className="inline-flex min-h-[36px] items-center gap-1 rounded px-2 py-1 text-sm text-ide-link hover:bg-ide-surface"
+                                        >
+                                            <Pencil className="h-3.5 w-3.5" aria-hidden />
+                                            Edit
+                                        </button>
+                                    ) : null}
+                                    {onDeleteEvent ? (
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                onDeleteEvent(event.id, event.summary || 'Untitled Event')
+                                            }
+                                            className="inline-flex min-h-[36px] items-center gap-1 rounded px-2 py-1 text-sm text-ide-error hover:bg-ide-error/10"
+                                        >
+                                            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                                            Delete
+                                        </button>
+                                    ) : null}
+                                </div>
                             </div>
-                        </div>
 
-                        <p className="mb-2 text-sm text-ide-muted">{formatEventTime(event)}</p>
+                            <dl className="grid gap-1.5 text-sm text-ide-muted">
+                                <div className="flex items-start gap-2">
+                                    <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-ide-link" aria-hidden />
+                                    <div>
+                                        <dt className="sr-only">Date</dt>
+                                        <dd className="text-ide-text">{formatDateLine(event)}</dd>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                    <Clock className="mt-0.5 h-4 w-4 shrink-0 text-ide-link" aria-hidden />
+                                    <div>
+                                        <dt className="sr-only">Time</dt>
+                                        <dd className="text-ide-text">{formatTimeRange(event)}</dd>
+                                    </div>
+                                </div>
+                                {duration ? (
+                                    <div className="flex items-start gap-2">
+                                        <Timer className="mt-0.5 h-4 w-4 shrink-0 text-ide-link" aria-hidden />
+                                        <div>
+                                            <dt className="sr-only">Duration</dt>
+                                            <dd>{duration}</dd>
+                                        </div>
+                                    </div>
+                                ) : null}
+                                {event.location ? (
+                                    <div className="flex items-start gap-2">
+                                        <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-ide-link" aria-hidden />
+                                        <div>
+                                            <dt className="sr-only">Location</dt>
+                                            <dd className="text-ide-text">{event.location}</dd>
+                                        </div>
+                                    </div>
+                                ) : null}
+                                {organizer ? (
+                                    <div className="flex items-start gap-2">
+                                        <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-ide-link" aria-hidden />
+                                        <div>
+                                            <dt className="sr-only">Organizer</dt>
+                                            <dd>
+                                                {organizer}
+                                                {event.organizer?.self ? ' (you)' : ''}
+                                            </dd>
+                                        </div>
+                                    </div>
+                                ) : null}
+                                {attendees.length > 0 ? (
+                                    <div className="flex items-start gap-2">
+                                        <Users className="mt-0.5 h-4 w-4 shrink-0 text-ide-link" aria-hidden />
+                                        <div>
+                                            <dt className="sr-only">Attendees</dt>
+                                            <dd>
+                                                {attendees.length} attendee{attendees.length === 1 ? '' : 's'}:{' '}
+                                                {attendees.map(attendeeLabel).join(', ')}
+                                            </dd>
+                                        </div>
+                                    </div>
+                                ) : null}
+                            </dl>
 
-                        {event.description ? (
-                            <p className="mb-2 text-sm text-ide-text">{event.description}</p>
-                        ) : null}
+                            {event.description ? (
+                                <p className="mt-3 whitespace-pre-wrap text-sm text-ide-text">{event.description}</p>
+                            ) : null}
 
-                        {event.location ? (
-                            <p className="flex items-center gap-1 text-sm text-ide-muted">
-                                📍 {event.location}
-                            </p>
-                        ) : null}
-
-                        {event.attendees && event.attendees.length > 0 ? (
-                            <p className="mt-2 text-xs text-ide-muted">
-                                Attendees: {event.attendees.length}
-                            </p>
-                        ) : null}
-
-                        {event.status && event.status !== 'confirmed' ? (
-                            <span
-                                className={`mt-2 inline-block rounded px-2 py-0.5 text-xs text-white ${
-                                    event.status === 'cancelled' ? 'bg-ide-error' : 'bg-ide-warn text-ide-bg'
-                                }`}
-                            >
-                                {event.status}
-                            </span>
-                        ) : null}
-                    </div>
-                ))}
+                            {created || updated ? (
+                                <p className="mt-3 text-xs text-ide-muted">
+                                    {created ? `Created ${created}` : null}
+                                    {created && updated ? ' · ' : null}
+                                    {updated ? `Updated ${updated}` : null}
+                                </p>
+                            ) : null}
+                        </article>
+                    );
+                })}
             </div>
-        </div>
+        </section>
     );
 };
 

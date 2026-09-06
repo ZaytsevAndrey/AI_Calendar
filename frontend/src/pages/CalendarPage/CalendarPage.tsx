@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { format } from 'date-fns';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import {
     useEventsForDay,
     useEventsForWeek,
@@ -16,6 +17,7 @@ import CalendarGrid from 'modules/calendar/components/CalendarGrid';
 import { EventType } from 'modules/calendar/types';
 import { useScheduleActions } from 'modules/schedule/hooks/useScheduleActions';
 import { GenerateAlertsBanner } from 'modules/schedule/components/GenerateAlertsBanner';
+import { useEventEditor } from 'modules/events/hooks/useEventEditor';
 import { Modal } from '../../ui/Modal';
 import { Spinner } from '../../ui/Spinner';
 import { showErrorToast, showSuccessToast } from '../../utils/toast';
@@ -49,6 +51,14 @@ const toggleBtn = (active: boolean) =>
     `min-h-[44px] rounded-md px-4 py-2 text-sm font-medium transition ${
         active ? 'bg-ide-selection text-ide-text' : 'text-ide-muted hover:bg-ide-surface'
     }`;
+
+function shiftPeriod(date: Date, view: CalendarView, delta: number): Date {
+    const next = new Date(date);
+    if (view === 'day') next.setDate(next.getDate() + delta);
+    else if (view === 'week') next.setDate(next.getDate() + delta * 7);
+    else next.setMonth(next.getMonth() + delta);
+    return next;
+}
 
 const CalendarPage: React.FC = () => {
     const [currentView, setCurrentView] = useState<CalendarView>('week');
@@ -88,6 +98,7 @@ const CalendarPage: React.FC = () => {
     const [deleteEventTrigger, deleteEventState] = useDeleteEvent();
     const { isGenerating, isClearing, generate, clear, generateAlerts, dismissGenerateAlerts } =
         useScheduleActions();
+    const { openCreate, editorModal } = useEventEditor();
     const busy = isGenerating || isClearing;
     const displayEvents = visibleGoogleEvents(
         getEventsQuery.data?.events || [],
@@ -173,12 +184,27 @@ const CalendarPage: React.FC = () => {
         setEventFormDialog({ open: false, event: null });
     };
 
+    const createEventFab = (
+        <>
+            <button
+                type="button"
+                onClick={openCreate}
+                className="fixed bottom-6 right-6 z-[1100] flex h-14 w-14 items-center justify-center rounded-full bg-ide-accentBlue text-white shadow-ide-md hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link"
+                aria-label="Create event"
+            >
+                <Plus className="h-7 w-7" aria-hidden />
+            </button>
+            {editorModal}
+        </>
+    );
+
     if (getEventsQuery.isLoading) {
         return (
             <div className="page-shell">
                 <div className="flex justify-center py-20">
                     <Spinner className="h-10 w-10" />
                 </div>
+                {createEventFab}
             </div>
         );
     }
@@ -192,6 +218,7 @@ const CalendarPage: React.FC = () => {
                 >
                     Failed to load calendar events. Please check your Google Calendar connection.
                 </div>
+                {createEventFab}
             </div>
         );
     }
@@ -250,41 +277,27 @@ const CalendarPage: React.FC = () => {
                         {formatDate(currentDate, currentView)}
                     </h2>
 
-                    {currentView === 'day' ? (
-                        <div className="flex items-center justify-center gap-1 sm:justify-end lg:shrink-0">
-                            <button
-                                type="button"
-                                className="ui-btn-ghost min-h-[44px] min-w-[44px] px-0"
-                                onClick={() =>
-                                    setCurrentDate((prev) => {
-                                        const d = new Date(prev);
-                                        d.setDate(d.getDate() - 1);
-                                        return d;
-                                    })
-                                }
-                                aria-label="Previous day"
-                            >
-                                ←
-                            </button>
-                            <button type="button" className="ui-btn-secondary px-4" onClick={() => setCurrentDate(new Date())}>
-                                Today
-                            </button>
-                            <button
-                                type="button"
-                                className="ui-btn-ghost min-h-[44px] min-w-[44px] px-0"
-                                onClick={() =>
-                                    setCurrentDate((prev) => {
-                                        const d = new Date(prev);
-                                        d.setDate(d.getDate() + 1);
-                                        return d;
-                                    })
-                                }
-                                aria-label="Next day"
-                            >
-                                →
-                            </button>
-                        </div>
-                    ) : null}
+                    <div className="flex items-center justify-center gap-1 sm:justify-end lg:shrink-0">
+                        <button
+                            type="button"
+                            className="ui-btn-ghost min-h-[44px] min-w-[44px] px-0"
+                            onClick={() => setCurrentDate((prev) => shiftPeriod(prev, currentView, -1))}
+                            aria-label={`Previous ${currentView}`}
+                        >
+                            <ChevronLeft className="mx-auto h-5 w-5" aria-hidden />
+                        </button>
+                        <button type="button" className="ui-btn-secondary px-4" onClick={() => setCurrentDate(new Date())}>
+                            Today
+                        </button>
+                        <button
+                            type="button"
+                            className="ui-btn-ghost min-h-[44px] min-w-[44px] px-0"
+                            onClick={() => setCurrentDate((prev) => shiftPeriod(prev, currentView, 1))}
+                            aria-label={`Next ${currentView}`}
+                        >
+                            <ChevronRight className="mx-auto h-5 w-5" aria-hidden />
+                        </button>
+                    </div>
                 </div>
             </header>
 
@@ -353,6 +366,8 @@ const CalendarPage: React.FC = () => {
                     Calendar.
                 </p>
             </Modal>
+
+            {createEventFab}
         </div>
     );
 };

@@ -1,7 +1,6 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 
-import HomePage from 'pages/HomePage';
 import LoginPage from 'pages/LoginPage';
 import EventsPage from 'pages/EventsPage';
 import PhasesPage from 'pages/PhasesPage/PhasesPage';
@@ -20,7 +19,7 @@ const AppRoutes = () => {
                 path="/"
                 element={
                     <ProtectedRoute>
-                        <HomePage />
+                        <CalendarPage />
                     </ProtectedRoute>
                 }
             />
@@ -36,15 +35,8 @@ const AppRoutes = () => {
                     </ProtectedRoute>
                 }
             />
-            <Route path="/schedule" element={<Navigate to="/calendar" replace />} />
-            <Route
-                path="/calendar"
-                element={
-                    <ProtectedRoute>
-                        <CalendarPage />
-                    </ProtectedRoute>
-                }
-            />
+            <Route path="/schedule" element={<Navigate to="/" replace />} />
+            <Route path="/calendar" element={<Navigate to="/" replace />} />
             <Route
                 path="/phases"
                 element={

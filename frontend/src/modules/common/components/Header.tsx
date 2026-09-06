@@ -11,7 +11,7 @@ const linkBase =
     'whitespace-nowrap rounded-lg px-3 py-2.5 text-sm font-medium text-ide-text transition min-h-[44px] inline-flex items-center gap-2';
 
 const navItems = [
-    { to: '/calendar', label: 'Calendar', icon: CalendarDays, match: (path: string) => path === '/calendar' },
+    { to: '/', label: 'Calendar', icon: CalendarDays, match: (path: string) => path === '/' || path === '/calendar' },
     { to: '/events', label: 'Events', icon: ListTodo, match: (path: string) => path === '/events' },
     { to: '/phases', label: 'Phases', icon: Layers, match: (path: string) => path === '/phases' },
     { to: '/settings', label: 'Settings', icon: Settings, match: (path: string) => path === '/settings' },

@@ -609,7 +609,7 @@ export class GoogleCalendarService {
         singleEvents: true,
         orderBy: 'startTime',
         fields:
-          'items(id,summary,description,start,end,location,attendees,recurringEventId,status,colorId,created,updated),nextPageToken',
+          'items(id,summary,description,start,end,location,attendees,recurringEventId,status,colorId,created,updated,htmlLink,organizer),nextPageToken',
       });
 
       this.logger.log(

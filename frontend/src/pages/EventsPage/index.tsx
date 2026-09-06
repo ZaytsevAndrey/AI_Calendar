@@ -1,36 +1,22 @@
 import React, { useState } from 'react';
-import {
-  useGetEventsQuery,
-  useCreateEventMutation,
-  useUpdateEventMutation,
-  useDeleteEventMutation,
-} from 'api/eventTasksApi';
-import { useGetAllPhasesQuery } from 'api/phasesApi';
+import { useGetEventsQuery, useDeleteEventMutation } from 'api/eventTasksApi';
 import EventList from 'modules/events/components/EventList';
-import EventForm from 'modules/events/components/EventForm';
+import { useEventEditor } from 'modules/events/hooks/useEventEditor';
 import { hasTaskAlreadyEnded, isCurrentTask } from 'modules/events/utils/isCurrentTask';
-import { TaskDTO } from 'api/tasks.api';
-import { CreateTaskDTO, UpdateTaskDTO } from 'api/tasks.api';
-import { Modal } from '../../ui/Modal';
 import { showErrorToast, showSuccessToast } from '../../utils/toast';
 import { extractApiErrorMessage } from '../../utils/extractApiErrorMessage';
 
 type Priority = 'urgent' | 'high' | 'medium' | 'low';
 
 const EventsPage: React.FC = () => {
-  const [wizardOpen, setWizardOpen] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<TaskDTO | null>(null);
   const [sortField, setSortField] = useState<
     'name' | 'priority' | 'deadline' | 'estimatedTimeInMinutes'
   >('deadline');
   const [filterStatus, setFilterStatus] = useState<string>('active');
 
   const { data: events = [], isLoading: isLoadingEvents } = useGetEventsQuery();
-  const { data: phases = [] } = useGetAllPhasesQuery();
-
-  const [createEvent, createEventState] = useCreateEventMutation();
-  const [updateEvent, updateEventState] = useUpdateEventMutation();
   const [deleteEvent, deleteEventState] = useDeleteEventMutation();
+  const { openCreate, openEdit, editorModal } = useEventEditor();
 
   const sortedEvents = [...events].sort((a, b) => {
     switch (sortField) {
@@ -58,40 +44,6 @@ const EventsPage: React.FC = () => {
     }
   });
 
-  const closeWizard = () => {
-    setWizardOpen(false);
-    setEditingEvent(null);
-  };
-
-  const openCreate = () => {
-    setEditingEvent(null);
-    setWizardOpen(true);
-  };
-
-  const openEdit = (event: TaskDTO) => {
-    setEditingEvent(event);
-    setWizardOpen(true);
-  };
-
-  const handleSubmitEvent = async (data: CreateTaskDTO | UpdateTaskDTO) => {
-    const cleanData = { ...data };
-    if ((cleanData as { phaseId?: string }).phaseId === '') {
-      delete (cleanData as { phaseId?: string }).phaseId;
-    }
-    try {
-      if (editingEvent) {
-        await updateEvent({ id: editingEvent.id, body: cleanData as UpdateTaskDTO }).unwrap();
-        showSuccessToast('Event updated.');
-      } else {
-        await createEvent(cleanData as CreateTaskDTO).unwrap();
-        showSuccessToast('Event created.');
-      }
-      closeWizard();
-    } catch (err) {
-      showErrorToast(extractApiErrorMessage(err));
-    }
-  };
-
   const handleDeleteEvent = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this event?')) return;
     try {
@@ -115,9 +67,6 @@ const EventsPage: React.FC = () => {
     }
     return true;
   });
-
-  const wizardTitle = editingEvent ? 'Edit event' : 'Create event';
-  const isSaving = createEventState.isLoading || updateEventState.isLoading;
 
   return (
     <div className="page-shell">
@@ -161,25 +110,7 @@ const EventsPage: React.FC = () => {
         isLoading={isLoadingEvents || deleteEventState.isLoading}
       />
 
-      <Modal
-        open={wizardOpen}
-        onClose={closeWizard}
-        title={wizardTitle}
-        maxWidthClass="max-w-xl"
-        footer={null}
-      >
-        <div className="p-4 pt-0 sm:p-6 sm:pt-0">
-          <EventForm
-            key={editingEvent?.id ?? 'new'}
-            initialData={editingEvent || undefined}
-            phases={phases}
-            onSubmit={handleSubmitEvent}
-            isSubmitting={isSaving}
-            onCancel={closeWizard}
-            mode={editingEvent ? 'edit' : 'create'}
-          />
-        </div>
-      </Modal>
+      {editorModal}
     </div>
   );
 };

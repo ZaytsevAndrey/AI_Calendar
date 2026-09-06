@@ -1,6 +1,7 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { customBaseQuery } from './customBaseQuery';
 import { TaskDTO, CreateTaskDTO, UpdateTaskDTO } from './tasks.api';
+import { eventsApi } from './eventsApi';
 
 export const eventTasksApi = createApi({
   reducerPath: 'eventTasksApi',
@@ -24,6 +25,14 @@ export const eventTasksApi = createApi({
     createEvent: builder.mutation<TaskDTO, CreateTaskDTO>({
       query: (body) => ({ url: '/tasks', method: 'POST', data: body }),
       invalidatesTags: [{ type: 'EventTask', id: 'LIST' }],
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled;
+          dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+        } catch {
+          return;
+        }
+      },
     }),
     updateEvent: builder.mutation<TaskDTO, { id: string; body: UpdateTaskDTO }>({
       query: ({ id, body }) => ({ url: `/tasks/${id}`, method: 'PATCH', data: body }),
@@ -31,6 +40,14 @@ export const eventTasksApi = createApi({
         { type: 'EventTask', id: 'LIST' },
         { type: 'EventTask', id },
       ],
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled;
+          dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+        } catch {
+          return;
+        }
+      },
     }),
     deleteEvent: builder.mutation<void, string>({
       query: (id) => ({ url: `/tasks/${id}`, method: 'DELETE' }),
@@ -38,6 +55,14 @@ export const eventTasksApi = createApi({
         { type: 'EventTask', id: 'LIST' },
         { type: 'EventTask', id },
       ],
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled;
+          dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+        } catch {
+          return;
+        }
+      },
     }),
   }),
 });
