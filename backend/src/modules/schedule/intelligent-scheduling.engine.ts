@@ -4,7 +4,7 @@ import { In, Repository } from 'typeorm';
 import { Task, TaskPriority, TaskStatus } from '../tasks/entities/task.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { ScheduledTask } from './schedule.entity';
-import { Phase } from '../event-phases/entities/phase.entity';
+import { Phase } from '../phases/entities/phase.entity';
 import { UserSettingsService } from '../user-settings/user-settings.service';
 import {
   TaskEventType,

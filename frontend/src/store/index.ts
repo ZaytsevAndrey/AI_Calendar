@@ -13,10 +13,6 @@ import {
 import storage from 'redux-persist/lib/storage';
 import { combineReducers } from 'redux';
 import authReducer from '../modules/auth/slice/authSlice';
-import forgotPasswordReducer from '../modules/auth/reducers/forgotPasswordReducer';
-import resetPasswordReducer from '../modules/auth/reducers/resetPasswordReducer';
-import emailVerificationReducer from '../modules/auth/reducers/emailVerificationReducer';
-import userSettingsReducer from '../modules/user-settings/slice/userSettingsSlice';
 import { eventTasksApi } from '../api/eventTasksApi';
 import { phasesApi } from '../api/phasesApi';
 import { eventsApi } from '../api/eventsApi';
@@ -24,24 +20,14 @@ import { userSettingsApi } from '../api/userSettingsApi';
 
 import logger from './middlewares/logger';
 
-// Log localStorage tokens for debugging
-console.log('localStorage auth state:', {
-    access_token: localStorage.getItem('access_token'),
-    refresh_token: localStorage.getItem('refresh_token')
-});
-
 const persistConfig = {
     key: 'root',
     storage,
-    whitelist: ['auth', 'userSettings'],
+    whitelist: ['auth'],
 };
 
 const rootReducer = combineReducers({
     auth: authReducer,
-    forgotPassword: forgotPasswordReducer,
-    resetPassword: resetPasswordReducer,
-    emailVerification: emailVerificationReducer,
-    userSettings: userSettingsReducer,
     [eventTasksApi.reducerPath]: eventTasksApi.reducer,
     [phasesApi.reducerPath]: phasesApi.reducer,
     [eventsApi.reducerPath]: eventsApi.reducer,
@@ -59,9 +45,6 @@ export const store = configureStore({
             },
         }).concat(thunk, logger, eventTasksApi.middleware, phasesApi.middleware, eventsApi.middleware, userSettingsApi.middleware),
 });
-
-// Log initial state for debugging
-console.log('Initial Redux state:', store.getState());
 
 export const persistor = persistStore(store);
 

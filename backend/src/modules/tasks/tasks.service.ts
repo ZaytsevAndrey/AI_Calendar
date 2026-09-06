@@ -11,7 +11,7 @@ import { In, Repository } from 'typeorm';
 import { Task, TaskStatus } from './entities/task.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
-import { Phase } from '../event-phases/entities/phase.entity';
+import { Phase } from '../phases/entities/phase.entity';
 import { TaskEventType, getEventTypeRules } from '../scheduling/event-type.enum';
 import {
   FlexibleGoogleSyncSnapshot,

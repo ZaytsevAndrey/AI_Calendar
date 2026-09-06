@@ -5,7 +5,7 @@ import {
 } from 'api/eventTasksApi';
 import { useGetAllPhasesQuery } from 'api/phasesApi';
 import { CreateTaskDTO, TaskDTO, UpdateTaskDTO } from 'api/tasks.api';
-import EventForm from 'modules/events/components/EventForm';
+import TaskForm from 'modules/tasks/components/TaskForm';
 import { Modal } from '../../../ui/Modal';
 import { showErrorToast, showSuccessToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
@@ -62,7 +62,7 @@ export function useEventEditor() {
       footer={null}
     >
       <div>
-        <EventForm
+        <TaskForm
           key={editingEvent?.id ?? 'new'}
           initialData={editingEvent || undefined}
           phases={phases}

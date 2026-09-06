@@ -5,7 +5,7 @@ import {
 } from './intelligent-scheduling.engine';
 import { Task, TaskPriority, TaskStatus } from '../tasks/entities/task.entity';
 import { TaskEventType } from '../scheduling/event-type.enum';
-import { Phase } from '../event-phases/entities/phase.entity';
+import { Phase } from '../phases/entities/phase.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 
 type MockRepo = {

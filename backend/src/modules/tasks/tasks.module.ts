@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { TasksService } from './tasks.service';
 import { TasksController } from './tasks.controller';
 import { Task } from './entities/task.entity';
-import { Phase } from '../event-phases/entities/phase.entity';
+import { Phase } from '../phases/entities/phase.entity';
 import { ScheduleModule } from '../schedule/schedule.module';
 import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
 

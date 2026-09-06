@@ -1,7 +1,5 @@
 import {
   useGetEventsQuery,
-  useGetEventQuery,
-  useCreateEventMutation,
   useUpdateEventMutation,
   useDeleteEventMutation,
 } from '../../../api/eventsApi';
@@ -92,15 +90,6 @@ export function visibleGoogleEvents(
   return events.filter((event) => isGoogleEventCurrent(event, nowMs));
 }
 
-export const useCalendarEvents = (params: any) => {
-  return useGetEventsQuery(params);
-};
-
-export const useCalendarEvent = (eventId: string, calendarId?: string) => {
-  return useGetEventQuery({ eventId, calendarId });
-};
-
-export const useCreateEvent = useCreateEventMutation;
 export const useUpdateEvent = useUpdateEventMutation;
 export const useDeleteEvent = useDeleteEventMutation;
 
@@ -177,20 +166,4 @@ export const isEventToday = (event: GoogleCalendarEvent): boolean => {
     ? new Date(event.start.dateTime)
     : new Date(event.start.date!);
   return eventDate.toDateString() === today.toDateString();
-};
-
-export const isEventThisWeek = (event: GoogleCalendarEvent): boolean => {
-  const today = new Date();
-  const startOfWeek = new Date(today);
-  const dayOfWeek = today.getDay();
-  const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-  startOfWeek.setDate(today.getDate() - daysToSubtract);
-  startOfWeek.setHours(0, 0, 0, 0);
-  const endOfWeek = new Date(startOfWeek);
-  endOfWeek.setDate(startOfWeek.getDate() + 6);
-  endOfWeek.setHours(23, 59, 59, 999);
-  const eventDate = event.start.dateTime 
-    ? new Date(event.start.dateTime)
-    : new Date(event.start.date!);
-  return eventDate >= startOfWeek && eventDate <= endOfWeek;
 }; 

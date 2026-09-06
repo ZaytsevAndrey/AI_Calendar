@@ -8,7 +8,7 @@ import {
   JoinTable,
 } from 'typeorm';
 import { User } from '../../users/user.entity';
-import { Phase } from '../../event-phases/entities/phase.entity';
+import { Phase } from '../../phases/entities/phase.entity';
 import { TaskEventType } from '../../scheduling/event-type.enum';
 
 export enum TaskPriority {

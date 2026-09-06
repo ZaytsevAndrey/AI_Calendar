@@ -1,4 +1,4 @@
-import { Phase } from '../event-phases/entities/phase.entity';
+import { Phase } from '../phases/entities/phase.entity';
 
 export function normalizeWeekDays(days?: number[] | null): number[] | null {
   if (!days?.length) return null;

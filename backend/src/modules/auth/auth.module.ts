@@ -6,7 +6,6 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { UsersModule } from '../users/users.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { EmailService } from '../common/services/email.service';
 import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
 
 @Module({
@@ -25,7 +24,7 @@ import { GoogleCalendarModule } from '../google-calendar/google-calendar.module'
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, EmailService],
+  providers: [AuthService, JwtStrategy],
   exports: [AuthService],
 })
 export class AuthModule {}

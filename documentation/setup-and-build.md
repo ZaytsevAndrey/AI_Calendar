@@ -48,8 +48,6 @@ Create `frontend/.env` from `frontend/.env.example`.
 |----------|---------|
 | `REACT_APP_API_BASE_URL` | API base URL for Axios (`src/api/axios.ts`); code default is `http://localhost:3001` |
 
-> The codebase also uses `REACT_APP_API_URL` in `getApiUrl.ts` for other cases; for the main HTTP client use **`REACT_APP_API_BASE_URL`**.
-
 ## Development run
 
 From the root:

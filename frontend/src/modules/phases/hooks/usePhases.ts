@@ -1,9 +1,4 @@
 import {
-  useGetAllPhasesQuery,
-  useGetPhaseQuery,
-  useCreatePhaseMutation,
-  useUpdatePhaseMutation,
-  useDeletePhaseMutation,
   useGetTimePhasesQuery,
   useGetTimePhasesForDateQuery,
   useGetSleepTimePhasesQuery,
@@ -13,13 +8,7 @@ import { PhaseDTO } from '../../../api/phases.api';
 export const useTimePhases = () => useGetTimePhasesQuery();
 export const useTimePhasesForDate = (date: Date) => useGetTimePhasesForDateQuery(date.toISOString().split('T')[0]);
 export const useSleepTimePhases = () => useGetSleepTimePhasesQuery();
-export const usePhases = () => useGetAllPhasesQuery();
-export const usePhase = (id: string) => useGetPhaseQuery(id);
-export const useCreatePhase = () => useCreatePhaseMutation();
-export const useUpdatePhase = () => useUpdatePhaseMutation();
-export const useDeletePhase = () => useDeletePhaseMutation();
 
-// Utility function to get phase by time
 export const getPhaseByTime = (phases: PhaseDTO[], time: string): PhaseDTO | null => {
     const timeToMinutes = (time: string): number => {
         const [hours, minutes] = time.split(':').map(Number);
@@ -36,5 +25,3 @@ export const getPhaseByTime = (phases: PhaseDTO[], time: string): PhaseDTO | nul
         }
     }) || null;
 };
-
-export const formatTimeRange = (startTime: string, endTime: string): string => `${startTime} - ${endTime}`; 

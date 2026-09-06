@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UserSettingsService } from './user-settings.service';
 import { UserSettings } from './entities/user-settings.entity';
+import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 
 describe('UserSettingsService', () => {
   let service: UserSettingsService;
@@ -17,6 +18,12 @@ describe('UserSettingsService', () => {
             create: jest.fn(),
             save: jest.fn(),
             merge: jest.fn(),
+          },
+        },
+        {
+          provide: GoogleCalendarService,
+          useValue: {
+            getOrCreateAppManagedCalendarId: jest.fn(),
           },
         },
       ],

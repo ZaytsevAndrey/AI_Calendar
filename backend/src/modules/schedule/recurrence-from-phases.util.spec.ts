@@ -2,7 +2,7 @@ import {
   effectiveRecurrenceWeekDays,
   normalizeWeekDays,
 } from './recurrence-from-phases.util';
-import { Phase } from '../event-phases/entities/phase.entity';
+import { Phase } from '../phases/entities/phase.entity';
 
 function phase(weekDays: number[] | null): Phase {
   return { weekDays } as Phase;

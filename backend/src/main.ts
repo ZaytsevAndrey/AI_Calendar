@@ -3,8 +3,6 @@ import { AppModule } from './app.module';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { JwtExceptionFilter } from './modules/auth/jwt-exception.filter';
 import fastifyCors from '@fastify/cors';
-import fastifySwagger from '@fastify/swagger';
-import fastifySwaggerUi from '@fastify/swagger-ui';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 

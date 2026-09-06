@@ -3,7 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { Task } from './entities/task.entity';
-import { Phase } from '../event-phases/entities/phase.entity';
+import { Phase } from '../phases/entities/phase.entity';
 import { ScheduleJobService } from '../schedule/schedule-job.service';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { TaskEventType } from '../scheduling/event-type.enum';
