@@ -65,7 +65,7 @@ const PhasesPage: React.FC = () => {
 
     if (isLoading) {
         return (
-            <div className="page-shell">
+            <div className="page-shell-fill">
                 <div className="loading">Loading phases…</div>
             </div>
         );
@@ -73,7 +73,7 @@ const PhasesPage: React.FC = () => {
 
     if (error) {
         return (
-            <div className="page-shell">
+            <div className="page-shell-fill">
                 <div className="rounded-xl border border-ide-error bg-ide-error/10 px-4 py-6 text-center text-ide-error">
                     Error loading phases
                 </div>
@@ -82,8 +82,8 @@ const PhasesPage: React.FC = () => {
     }
 
     return (
-        <div className="page-shell">
-            <header className="page-head">
+        <div className="page-shell-fill">
+            <header className="page-head shrink-0">
                 <div>
                     <h1 className="page-title">Phases</h1>
                     <p className="page-lead">Time windows for scheduling and the weekly template.</p>
@@ -109,53 +109,55 @@ const PhasesPage: React.FC = () => {
                 />
             </Modal>
 
-            <div className="mb-8 overflow-x-auto">
-                <PhasesCalendar
-                    phases={visiblePhases}
-                    onEditPhase={handleEdit}
-                    onPhaseTimeChange={handlePhaseTimeChange}
-                />
-            </div>
-
-            {visiblePhases.length === 0 ? (
-                <div className="empty-list">No phases yet. Add one to get started.</div>
-            ) : (
-                <div className="phase-grid">
-                    {visiblePhases.map((phase: PhaseDTO) => (
-                        <article key={phase.id} className="phase-card">
-                            <div className="category-header">
-                                <span className="category-name" style={{ color: phase.color }}>
-                                    {phase.name}
-                                </span>
-                            </div>
-                            <p className="category-description">{phase.description}</p>
-                            <div className="time-block-info">
-                                {phase.startTime} – {phase.endTime}
-                            </div>
-                            <p className="text-xs text-ide-muted">
-                                Type: {phase.type} · Days: {phase.weekDays?.join(', ')}
-                            </p>
-                            <div className="category-actions">
-                                <button
-                                    type="button"
-                                    className="edit-button"
-                                    onClick={() => handleEdit(phase)}
-                                >
-                                    Edit
-                                </button>
-                                <button
-                                    type="button"
-                                    className="delete-button"
-                                    onClick={() => handleDelete(phase.id)}
-                                    disabled={isDeleting}
-                                >
-                                    Delete
-                                </button>
-                            </div>
-                        </article>
-                    ))}
+            <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="mb-8 overflow-x-auto">
+                    <PhasesCalendar
+                        phases={visiblePhases}
+                        onEditPhase={handleEdit}
+                        onPhaseTimeChange={handlePhaseTimeChange}
+                    />
                 </div>
-            )}
+
+                {visiblePhases.length === 0 ? (
+                    <div className="empty-list">No phases yet. Add one to get started.</div>
+                ) : (
+                    <div className="phase-grid">
+                        {visiblePhases.map((phase: PhaseDTO) => (
+                            <article key={phase.id} className="phase-card">
+                                <div className="category-header">
+                                    <span className="category-name" style={{ color: phase.color }}>
+                                        {phase.name}
+                                    </span>
+                                </div>
+                                <p className="category-description">{phase.description}</p>
+                                <div className="time-block-info">
+                                    {phase.startTime} – {phase.endTime}
+                                </div>
+                                <p className="text-xs text-ide-muted">
+                                    Type: {phase.type} · Days: {phase.weekDays?.join(', ')}
+                                </p>
+                                <div className="category-actions">
+                                    <button
+                                        type="button"
+                                        className="edit-button"
+                                        onClick={() => handleEdit(phase)}
+                                    >
+                                        Edit
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="delete-button"
+                                        onClick={() => handleDelete(phase.id)}
+                                        disabled={isDeleting}
+                                    >
+                                        Delete
+                                    </button>
+                                </div>
+                            </article>
+                        ))}
+                    </div>
+                )}
+            </div>
         </div>
     );
 };

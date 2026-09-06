@@ -14,6 +14,7 @@ import ProtectedRoute from 'modules/common/hocs/ProtectedRoute';
 
 const AppRoutes = () => {
     return (
+        <div className="flex h-full min-h-0 flex-col">
         <Routes>
             <Route
                 path="/"
@@ -72,6 +73,7 @@ const AppRoutes = () => {
             <Route path="/reset-password" element={<Navigate to="/login" replace />} />
             <Route path="*" element={ <Navigate to="/" /> } />
         </Routes>
+        </div>
     );
 };
 

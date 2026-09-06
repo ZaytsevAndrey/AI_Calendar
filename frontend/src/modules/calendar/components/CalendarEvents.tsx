@@ -121,7 +121,7 @@ const CalendarEvents: React.FC<CalendarEventsProps> = ({
 }) => {
     if (isLoading) {
         return (
-            <div className="flex justify-center py-8">
+            <div className="flex h-full items-center justify-center">
                 <Spinner className="h-8 w-8" />
             </div>
         );
@@ -130,7 +130,7 @@ const CalendarEvents: React.FC<CalendarEventsProps> = ({
     if (error) {
         return (
             <div
-                className="mb-4 rounded border border-ide-error bg-ide-error/10 px-4 py-3 text-sm text-ide-error"
+                className="rounded border border-ide-error bg-ide-error/10 px-4 py-3 text-sm text-ide-error"
                 role="alert"
             >
                 Failed to load events: {error.message}
@@ -140,19 +140,19 @@ const CalendarEvents: React.FC<CalendarEventsProps> = ({
 
     if (!events || events.length === 0) {
         return (
-            <div className="rounded-xl border border-ide-border bg-ide-panel px-4 py-8 text-center text-ide-muted">
+            <div className="flex h-full items-center justify-center rounded-xl border border-ide-border bg-ide-panel px-4 text-center text-ide-muted">
                 No events found for this period
             </div>
         );
     }
 
     return (
-        <section className="min-h-0">
-            <h2 className="mb-3 text-lg font-semibold text-ide-text">
+        <section className="flex h-full min-h-0 flex-col">
+            <h2 className="mb-3 shrink-0 text-lg font-semibold text-ide-text">
                 {title} ({events.length})
             </h2>
 
-            <div className="max-h-[min(32rem,55vh)] space-y-3 overflow-y-auto pr-1">
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
                 {events.map((event) => {
                     const duration = formatDuration(event);
                     const organizer = event.organizer?.displayName || event.organizer?.email;

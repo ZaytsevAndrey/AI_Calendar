@@ -2,6 +2,7 @@ import axiosInstance from './axios';
 
 export interface GoogleCalendarEvent {
     id: string;
+    calendarId?: string;
     summary?: string;
     description?: string;
     location?: string;

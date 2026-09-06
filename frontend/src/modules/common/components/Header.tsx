@@ -25,7 +25,7 @@ const Header: React.FC = () => {
 
     return (
         <header className="fixed top-0 z-[1200] w-full border-b border-ide-border bg-ide-panel/95 backdrop-blur-sm">
-            <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:h-16 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5 lg:px-8">
+            <div className="flex w-full flex-col gap-3 px-4 py-3 sm:h-16 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5 lg:px-8">
                 <div className="min-w-0 shrink-0 text-base font-semibold text-ide-text sm:text-lg">
                     <Link
                         to="/"

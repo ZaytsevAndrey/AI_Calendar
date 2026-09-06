@@ -125,13 +125,21 @@ export class GoogleCalendarController {
     this.logger.log(
       `Getting events for user ${req.user.userId} from ${timeMin} to ${timeMax}`,
     );
-    return this.googleCalendarService.getEvents(
+    if (calendarId) {
+      return this.googleCalendarService.getEvents(
+        req.user.userId,
+        timeMin,
+        timeMax,
+        maxResults,
+        pageToken,
+        calendarId,
+      );
+    }
+    return this.googleCalendarService.getDisplayEvents(
       req.user.userId,
       timeMin,
       timeMax,
       maxResults,
-      pageToken,
-      calendarId,
     );
   }
 

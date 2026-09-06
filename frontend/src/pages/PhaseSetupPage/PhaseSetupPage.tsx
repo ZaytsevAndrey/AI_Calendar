@@ -71,62 +71,66 @@ const PhaseSetupPage: React.FC = () => {
     const busy = savingSettings || bootstrapping;
 
     return (
-        <div className="page-shell max-w-2xl">
-            <div className="rounded-xl border border-ide-border bg-ide-panel p-5 shadow-ide-md sm:p-8">
-                <h1 className="page-title mb-2">Set up your phases</h1>
-                <p className="page-lead mb-8">
-                    Wake and sleep times define the day. Pick weekdays for default phases (e.g. Mon–Fri).
-                </p>
+        <div className="page-shell-fill">
+            <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="mx-auto w-full max-w-2xl">
+                    <div className="rounded-xl border border-ide-border bg-ide-panel p-5 shadow-ide-md sm:p-8">
+                        <h1 className="page-title mb-2">Set up your phases</h1>
+                        <p className="page-lead mb-8">
+                            Wake and sleep times define the day. Pick weekdays for default phases (e.g. Mon–Fri).
+                        </p>
 
-                <div className="space-y-6">
-                    <div>
-                        <label htmlFor="setup-wake" className="ui-label">
-                            Wake
-                        </label>
-                        <input
-                            id="setup-wake"
-                            type="time"
-                            value={wakeTime}
-                            onChange={(e) => setWakeTime(e.target.value)}
-                            className="ui-input max-w-xs"
-                        />
-                    </div>
-                    <div>
-                        <label htmlFor="setup-sleep" className="ui-label">
-                            Sleep
-                        </label>
-                        <input
-                            id="setup-sleep"
-                            type="time"
-                            value={sleepTime}
-                            onChange={(e) => setSleepTime(e.target.value)}
-                            className="ui-input max-w-xs"
-                        />
-                    </div>
-                    <WeekDaysSelector
-                        selectedDays={selectedDays}
-                        setSelectedDays={setSelectedDays}
-                        errors={errors}
-                    />
-                </div>
+                        <div className="space-y-6">
+                            <div>
+                                <label htmlFor="setup-wake" className="ui-label">
+                                    Wake
+                                </label>
+                                <input
+                                    id="setup-wake"
+                                    type="time"
+                                    value={wakeTime}
+                                    onChange={(e) => setWakeTime(e.target.value)}
+                                    className="ui-input max-w-xs"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="setup-sleep" className="ui-label">
+                                    Sleep
+                                </label>
+                                <input
+                                    id="setup-sleep"
+                                    type="time"
+                                    value={sleepTime}
+                                    onChange={(e) => setSleepTime(e.target.value)}
+                                    className="ui-input max-w-xs"
+                                />
+                            </div>
+                            <WeekDaysSelector
+                                selectedDays={selectedDays}
+                                setSelectedDays={setSelectedDays}
+                                errors={errors}
+                            />
+                        </div>
 
-                <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                    <button
-                        type="button"
-                        disabled={busy || selectedDays.length === 0}
-                        onClick={handleSave}
-                        className="ui-btn-primary flex-1 sm:flex-initial sm:min-w-[200px]"
-                    >
-                        Save and create phases
-                    </button>
-                    <button
-                        type="button"
-                        disabled={busy}
-                        onClick={handleSkip}
-                        className="ui-btn-secondary flex-1 sm:flex-initial"
-                    >
-                        Skip — default phases
-                    </button>
+                        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                            <button
+                                type="button"
+                                disabled={busy || selectedDays.length === 0}
+                                onClick={handleSave}
+                                className="ui-btn-primary flex-1 sm:flex-initial sm:min-w-[200px]"
+                            >
+                                Save and create phases
+                            </button>
+                            <button
+                                type="button"
+                                disabled={busy}
+                                onClick={handleSkip}
+                                className="ui-btn-secondary flex-1 sm:flex-initial"
+                            >
+                                Skip — default phases
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

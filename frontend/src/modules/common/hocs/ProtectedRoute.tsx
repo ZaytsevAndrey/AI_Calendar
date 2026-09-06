@@ -22,7 +22,13 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     }
 
     if (isLoading) {
-        return <div>Loading...</div>;
+        return (
+            <div className="page-shell-fill">
+                <div className="flex flex-1 items-center justify-center text-sm text-ide-muted">
+                    Loading…
+                </div>
+            </div>
+        );
     }
 
     const requiredFilled = !isError && data ? data.requiredFilled : false;

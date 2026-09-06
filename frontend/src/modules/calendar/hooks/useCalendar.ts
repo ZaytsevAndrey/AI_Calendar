@@ -26,68 +26,8 @@ export function startOfWeekMonday(date: Date): Date {
   return d;
 }
 
-/**
- * For ranges that overlap today/future, skip days before today so past events are not fetched.
- * Fully historical ranges (e.g. yesterday) are left unchanged.
- */
-export function clampRangeStartToToday(rangeStart: Date, rangeEnd: Date, now = new Date()): Date {
-  const today = startOfLocalDay(now);
-  if (rangeEnd.getTime() < today.getTime()) return rangeStart;
-  return rangeStart.getTime() < today.getTime() ? today : rangeStart;
-}
-
-export function getGoogleEventEndMs(event: GoogleCalendarEvent): number | null {
-  if (event.end?.dateTime) {
-    const t = new Date(event.end.dateTime).getTime();
-    return Number.isNaN(t) ? null : t;
-  }
-  if (event.end?.date) {
-    const t = new Date(`${event.end.date}T00:00:00`).getTime();
-    return Number.isNaN(t) ? null : t;
-  }
-  if (event.start?.dateTime) {
-    const t = new Date(event.start.dateTime).getTime();
-    return Number.isNaN(t) ? null : t;
-  }
-  return null;
-}
-
-/** Still happening or upcoming; cancelled events are never current. */
-export function isGoogleEventCurrent(event: GoogleCalendarEvent, nowMs = Date.now()): boolean {
-  if (event.status === 'cancelled') return false;
-  const endMs = getGoogleEventEndMs(event);
-  if (endMs == null) return true;
-  return endMs >= nowMs;
-}
-
-export function isCalendarRangeCurrentOrFuture(
-  view: 'day' | 'week' | 'month',
-  date: Date,
-  now = new Date(),
-): boolean {
-  if (view === 'day') {
-    return endOfLocalDay(date).getTime() >= now.getTime();
-  }
-  if (view === 'week') {
-    const start = startOfWeekMonday(date);
-    const end = endOfLocalDay(new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6));
-    return end.getTime() >= now.getTime();
-  }
-  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
-  return end.getTime() >= now.getTime();
-}
-
-export function visibleGoogleEvents(
-  events: GoogleCalendarEvent[],
-  view: 'day' | 'week' | 'month',
-  date: Date,
-  now = new Date(),
-): GoogleCalendarEvent[] {
-  const nowMs = now.getTime();
-  if (!isCalendarRangeCurrentOrFuture(view, date, now)) {
-    return events.filter((event) => event.status !== 'cancelled');
-  }
-  return events.filter((event) => isGoogleEventCurrent(event, nowMs));
+export function visibleGoogleEvents(events: GoogleCalendarEvent[]): GoogleCalendarEvent[] {
+  return events.filter((event) => event.status !== 'cancelled');
 }
 
 export const useUpdateEvent = useUpdateEventMutation;
@@ -96,9 +36,8 @@ export const useDeleteEvent = useDeleteEventMutation;
 export const useEventsForDay = (date: Date, calendarId?: string) => {
   const startOfDay = startOfLocalDay(date);
   const endOfDay = endOfLocalDay(date);
-  const timeMin = clampRangeStartToToday(startOfDay, endOfDay);
   return useGetEventsQuery({
-    timeMin: timeMin.toISOString(),
+    timeMin: startOfDay.toISOString(),
     timeMax: endOfDay.toISOString(),
     calendarId,
   });
@@ -109,9 +48,8 @@ export const useEventsForWeek = (dateInWeek: Date, calendarId?: string) => {
   const endOfWeek = endOfLocalDay(
     new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), startOfWeek.getDate() + 6),
   );
-  const timeMin = clampRangeStartToToday(startOfWeek, endOfWeek);
   return useGetEventsQuery({
-    timeMin: timeMin.toISOString(),
+    timeMin: startOfWeek.toISOString(),
     timeMax: endOfWeek.toISOString(),
     calendarId,
   });
@@ -120,9 +58,8 @@ export const useEventsForWeek = (dateInWeek: Date, calendarId?: string) => {
 export const useEventsForMonth = (year: number, month: number, calendarId?: string) => {
   const startOfMonth = new Date(year, month - 1, 1);
   const endOfMonth = new Date(year, month, 0, 23, 59, 59, 999);
-  const timeMin = clampRangeStartToToday(startOfMonth, endOfMonth);
   return useGetEventsQuery({
-    timeMin: timeMin.toISOString(),
+    timeMin: startOfMonth.toISOString(),
     timeMax: endOfMonth.toISOString(),
     calendarId,
   });

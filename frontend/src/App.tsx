@@ -10,7 +10,9 @@ const App: React.FC = () => {
         <div className="flex h-[100dvh] flex-col overflow-hidden bg-ide-bg">
             {isAuthenticated && <Header />}
             <main
-                className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-ide-bg ${isAuthenticated ? 'pt-[5.75rem] sm:pt-16' : ''}`}
+                className={`min-h-0 flex-1 overflow-x-hidden bg-ide-bg ${
+                    isAuthenticated ? 'overflow-hidden pt-[5.75rem] sm:pt-16' : 'overflow-y-auto'
+                }`}
             >
                 <AppRoutes />
             </main>

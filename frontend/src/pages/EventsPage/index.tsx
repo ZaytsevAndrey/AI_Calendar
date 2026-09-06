@@ -76,8 +76,8 @@ const TasksPage: React.FC = () => {
   });
 
   return (
-    <div className="page-shell">
-      <header className="page-head">
+    <div className="page-shell-fill">
+      <header className="page-head shrink-0">
         <div>
           <h1 className="page-title">Tasks</h1>
           <p className="page-lead">Current and upcoming tasks. Use the filter to see completed or past items.</p>
@@ -87,7 +87,7 @@ const TasksPage: React.FC = () => {
         </button>
       </header>
 
-      <div className="filter-bar">
+      <div className="filter-bar shrink-0">
         <div className="w-full sm:max-w-xs">
           <label htmlFor="statusFilter" className="ui-label">
             Status
@@ -124,13 +124,15 @@ const TasksPage: React.FC = () => {
         </div>
       </div>
 
-      <EventList
-        events={filteredEvents}
-        onEdit={openEdit}
-        onDelete={requestDelete}
-        onCreate={() => openCreate()}
-        isLoading={isLoadingEvents || deleteEventState.isLoading}
-      />
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <EventList
+          events={filteredEvents}
+          onEdit={openEdit}
+          onDelete={requestDelete}
+          onCreate={() => openCreate()}
+          isLoading={isLoadingEvents || deleteEventState.isLoading}
+        />
+      </div>
 
       <Modal
         open={deleteConfirm.open}

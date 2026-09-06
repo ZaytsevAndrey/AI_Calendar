@@ -14,6 +14,7 @@ import EventForm from 'modules/calendar/components/EventForm';
 import { GoogleCalendarEvent } from 'api/google-calendar.api';
 import CalendarEvents from 'modules/calendar/components/CalendarEvents';
 import CalendarGrid from 'modules/calendar/components/CalendarGrid';
+import { CalendarDatePicker } from 'modules/calendar/components/CalendarDatePicker';
 import { EventType } from 'modules/calendar/types';
 import { useScheduleActions } from 'modules/schedule/hooks/useScheduleActions';
 import { GenerateAlertsBanner } from 'modules/schedule/components/GenerateAlertsBanner';
@@ -82,6 +83,7 @@ const CalendarPage: React.FC = () => {
     const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
         open: boolean;
         eventId: string | null;
+        calendarId?: string;
         eventName: string;
     }>({
         open: false,
@@ -117,16 +119,14 @@ const CalendarPage: React.FC = () => {
         useScheduleActions();
     const { openCreate, editorModal } = useEventEditor();
     const busy = isGenerating || isClearing;
-    const displayEvents = visibleGoogleEvents(
-        getEventsQuery.data?.events || [],
-        currentView,
-        currentDate,
-    );
+    const displayEvents = visibleGoogleEvents(getEventsQuery.data?.events || []);
 
     const handleDeleteEvent = (eventId: string, eventName: string) => {
+        const event = displayEvents.find((item) => item.id === eventId);
         setDeleteConfirmDialog({
             open: true,
             eventId,
+            calendarId: event?.calendarId,
             eventName,
         });
     };
@@ -134,7 +134,10 @@ const CalendarPage: React.FC = () => {
     const confirmDeleteEvent = async () => {
         if (deleteConfirmDialog.eventId) {
             try {
-                await deleteEventTrigger({ eventId: deleteConfirmDialog.eventId }).unwrap();
+                await deleteEventTrigger({
+                    eventId: deleteConfirmDialog.eventId,
+                    calendarId: deleteConfirmDialog.calendarId,
+                }).unwrap();
                 showSuccessToast('Event deleted.');
                 setDeleteConfirmDialog({ open: false, eventId: null, eventName: '' });
             } catch (err) {
@@ -160,6 +163,7 @@ const CalendarPage: React.FC = () => {
                 await updateEventTrigger({
                     eventId: eventFormDialog.event.id,
                     eventData: data,
+                    calendarId: eventFormDialog.event.calendarId,
                 }).unwrap();
             }
             showSuccessToast('Event updated.');
@@ -171,11 +175,6 @@ const CalendarPage: React.FC = () => {
 
     const closeEventForm = () => {
         setEventFormDialog({ open: false, event: null });
-    };
-
-    const handleSelectDay = (day: Date) => {
-        setCurrentDate(day);
-        setCurrentView('day');
     };
 
     const handleCreateForDate = (day: Date) => {
@@ -193,8 +192,8 @@ const CalendarPage: React.FC = () => {
     };
 
     return (
-        <div className="page-shell">
-            <header className="mb-6 space-y-4">
+        <div className="page-shell-fill">
+            <header className="mb-4 shrink-0 space-y-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                         <h1 className="page-title">Calendar</h1>
@@ -238,7 +237,7 @@ const CalendarPage: React.FC = () => {
                         ))}
                     </div>
 
-                    <div className="flex items-center justify-center gap-1 sm:justify-end">
+                    <div className="flex flex-wrap items-center justify-center gap-1 sm:justify-end">
                         <button
                             type="button"
                             className="ui-btn-ghost min-h-[44px] min-w-[44px] px-0"
@@ -247,9 +246,11 @@ const CalendarPage: React.FC = () => {
                         >
                             <ChevronLeft className="mx-auto h-5 w-5" aria-hidden />
                         </button>
-                        <button type="button" className="ui-btn-secondary px-4" onClick={() => setCurrentDate(new Date())}>
-                            Today
-                        </button>
+                        <CalendarDatePicker
+                            value={currentDate}
+                            label={periodLabel(currentDate, currentView)}
+                            onChange={setCurrentDate}
+                        />
                         <button
                             type="button"
                             className="ui-btn-ghost min-h-[44px] min-w-[44px] px-0"
@@ -258,12 +259,15 @@ const CalendarPage: React.FC = () => {
                         >
                             <ChevronRight className="mx-auto h-5 w-5" aria-hidden />
                         </button>
+                        <button type="button" className="ui-btn-secondary px-4" onClick={() => setCurrentDate(new Date())}>
+                            Today
+                        </button>
                     </div>
                 </div>
             </header>
 
             {getEventsQuery.isLoading ? (
-                <div className="flex justify-center py-20">
+                <div className="flex min-h-0 flex-1 items-center justify-center">
                     <Spinner className="h-10 w-10" />
                 </div>
             ) : getEventsQuery.isError ? (
@@ -274,29 +278,27 @@ const CalendarPage: React.FC = () => {
                     Failed to load calendar events. Please check your Google Calendar connection.
                 </div>
             ) : (
-                <>
-                    <div className="mb-6 min-w-0 overflow-x-auto">
+                <div className="flex min-h-0 flex-1 flex-col gap-4 xl:flex-row">
+                    <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
                         <CalendarGrid
                             view={currentView}
                             date={currentDate}
                             events={displayEvents}
                             onEditEvent={handleEditEvent}
-                            onSelectDay={handleSelectDay}
                             onCreateForDate={handleCreateForDate}
                         />
                     </div>
-
-                    {currentView === 'day' ? (
+                    <div className="flex h-[min(18rem,38vh)] min-h-0 w-full shrink-0 flex-col overflow-hidden xl:h-auto xl:w-[24rem]">
                         <CalendarEvents
                             events={displayEvents}
                             isLoading={getEventsQuery.isLoading}
                             error={getEventsQuery.error}
-                            title="Day events"
+                            title={`${currentView.charAt(0).toUpperCase() + currentView.slice(1)} events`}
                             onEditEvent={handleEditEvent}
                             onDeleteEvent={handleDeleteEvent}
                         />
-                    ) : null}
-                </>
+                    </div>
+                </div>
             )}
 
             <EventForm

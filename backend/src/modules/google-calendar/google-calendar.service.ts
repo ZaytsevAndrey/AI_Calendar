@@ -30,6 +30,22 @@ type LoginTicket = {
   expiresAt: number;
 };
 
+function googleEventStartMs(event: {
+  start?: { dateTime?: string | null; date?: string | null };
+}): number {
+  const dateTime = event.start?.dateTime;
+  if (dateTime) {
+    const t = new Date(dateTime).getTime();
+    return Number.isNaN(t) ? 0 : t;
+  }
+  const date = event.start?.date;
+  if (date) {
+    const t = new Date(`${date}T00:00:00`).getTime();
+    return Number.isNaN(t) ? 0 : t;
+  }
+  return 0;
+}
+
 @Injectable()
 export class GoogleCalendarService {
   private oauth2Client;
@@ -629,6 +645,86 @@ export class GoogleCalendarService {
     }
   }
 
+  /**
+   * Events for the Calendar UI: primary + app calendar + other selected Google calendars.
+   * Single-calendar getEvents() stays app-calendar-only so Clear schedule does not wipe primary.
+   */
+  async getDisplayEvents(
+    userId: string,
+    timeMin: string,
+    timeMax: string,
+    maxResults: number = 250,
+  ) {
+    const calendarIds = await this.listDisplayCalendarIds(userId);
+    const seen = new Set<string>();
+    const events: Array<{
+      id?: string | null;
+      calendarId?: string;
+      start?: { dateTime?: string | null; date?: string | null };
+      [key: string]: unknown;
+    }> = [];
+
+    for (const calendarId of calendarIds) {
+      let pageToken: string | undefined;
+      try {
+        do {
+          const page = await this.getEvents(
+            userId,
+            timeMin,
+            timeMax,
+            maxResults,
+            pageToken,
+            calendarId,
+          );
+          for (const ev of page.events ?? []) {
+            if (!ev?.id) continue;
+            const key = `${calendarId}:${ev.id}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            events.push({ ...ev, calendarId });
+          }
+          pageToken = page.nextPageToken ?? undefined;
+        } while (pageToken);
+      } catch (error) {
+        this.logger.warn(
+          `Skip calendar ${calendarId} for display: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
+    events.sort((a, b) => googleEventStartMs(a) - googleEventStartMs(b));
+    return {
+      events,
+      totalEvents: events.length,
+    };
+  }
+
+  private async listDisplayCalendarIds(userId: string): Promise<string[]> {
+    const ids = new Set<string>(['primary']);
+    const appId = await this.getStoredAppCalendarId(userId);
+    if (appId) ids.add(appId);
+
+    try {
+      const items = await this.getCalendars(userId);
+      for (const item of items) {
+        if (!item?.id || item.primary || item.selected === false) continue;
+        const role = item.accessRole;
+        if (role && !['owner', 'writer', 'reader'].includes(role)) continue;
+        ids.add(item.id);
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Could not list Google calendars for display; using primary/app only: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    return [...ids];
+  }
+
   async getEvent(
     userId: string,
     eventId: string,
@@ -752,7 +848,7 @@ export class GoogleCalendarService {
     try {
       const response = await calendar.calendarList.list({
         fields:
-          'items(id,summary,description,primary,accessRole,backgroundColor,foregroundColor)',
+          'items(id,summary,description,primary,selected,accessRole,backgroundColor,foregroundColor)',
       });
 
       this.logger.log(

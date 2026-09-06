@@ -10,7 +10,6 @@ interface CalendarGridProps {
     date: Date;
     events: GoogleCalendarEvent[];
     onEditEvent?: (eventId: string) => void;
-    onSelectDay?: (day: Date) => void;
     onCreateForDate?: (day: Date) => void;
 }
 
@@ -34,7 +33,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     date,
     events,
     onEditEvent,
-    onSelectDay,
     onCreateForDate,
 }) => {
     const { data: timePhases = [] } = useTimePhasesForDate(date);
@@ -158,9 +156,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
         const timeSlots = createTimeSlots();
 
         return (
-            <div className="min-h-[600px] rounded-lg border border-ide-border bg-ide-panel p-4">
+            <div className="flex h-full min-h-0 flex-col rounded-lg border border-ide-border bg-ide-panel p-4">
                 {getDisplayPhases().length > 0 && (
-                    <div className="mb-4 flex flex-wrap gap-2">
+                    <div className="mb-4 flex shrink-0 flex-wrap gap-2">
                         {getDisplayPhases().map((phase: any) => (
                             <div
                                 key={phase.id}
@@ -182,7 +180,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                     </div>
                 )}
 
-                <div className="flex flex-col">
+                <div className="min-h-0 flex-1 overflow-y-auto">
                     {timeSlots.map((slot, index) => {
                         const eventsInSlot = dayEvents.filter((event) => {
                             if (!event.start.dateTime) return false;
@@ -273,9 +271,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     const weeks = createWeeks(days);
 
     return (
-        <div className="w-full min-w-[44rem]">
+        <div className="flex h-full min-h-0 w-full flex-col">
             {getDisplayPhases().length > 0 && (
-                <div className="mb-4 flex flex-wrap gap-2">
+                <div className="mb-4 flex shrink-0 flex-wrap gap-2">
                     {getDisplayPhases().map((phase: any) => (
                         <div
                             key={phase.id}
@@ -297,7 +295,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                 </div>
             )}
 
-            <div className="mb-1 grid grid-cols-7 border-b border-ide-border">
+            <div className="mb-1 grid shrink-0 grid-cols-7 border-b border-ide-border">
                 {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((dayName) => (
                     <div key={dayName} className="border-r border-ide-border bg-ide-surface last:border-r-0">
                         <div className="p-2 text-center text-xs font-bold text-ide-text">{dayName}</div>
@@ -305,11 +303,11 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                 ))}
             </div>
 
-            <div className="flex flex-col">
+            <div className="flex min-h-0 flex-1 flex-col overflow-auto">
                 {weeks.map((week, weekIndex) => (
                     <div
                         key={weekIndex}
-                        className="grid grid-cols-7 border-b border-ide-border last:border-b-0"
+                        className="grid min-h-[5.5rem] flex-1 grid-cols-7 border-b border-ide-border last:border-b-0"
                     >
                         {week.map((day, dayIndex) => {
                             const dayEvents = getEventsForDay(day);
@@ -319,25 +317,23 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                             return (
                                 <div
                                     key={dayIndex}
-                                    className={`relative min-h-[100px] cursor-pointer border-r border-ide-border p-2 last:border-r-0 ${
+                                    className={`relative flex h-full min-w-0 flex-col overflow-hidden border-r border-ide-border p-2 last:border-r-0 ${
                                         view === 'month' && !isInCurrentMonth ? 'opacity-50' : ''
                                     } ${
                                         isCurrentDay
                                             ? 'bg-ide-selection/30 ring-1 ring-inset ring-ide-link'
                                             : 'bg-ide-panel'
                                     }`}
-                                    style={{ minHeight: view === 'month' ? '120px' : '100px' }}
-                                    onClick={() => onSelectDay?.(day)}
                                 >
                                     <span
-                                        className={`text-xs ${
+                                        className={`shrink-0 text-xs ${
                                             isCurrentDay ? 'font-bold text-ide-link' : 'text-ide-text'
                                         }`}
                                     >
                                         {day.getDate()}
                                     </span>
 
-                                    <div className="mt-1">
+                                    <div className="mt-1 min-h-0 flex-1 overflow-y-auto">
                                         {dayEvents
                                             .filter((event) => {
                                                 if (!event.start?.dateTime) return true;
@@ -350,7 +346,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                                 });
                                                 return !isSleepTime(eventTime);
                                             })
-                                            .slice(0, view === 'month' ? 2 : 3)
                                             .map((event) => {
                                                 let eventPhase = null;
                                                 if (event.start?.dateTime) {
@@ -399,32 +394,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                                     </div>
                                                 );
                                             })}
-                                        {(() => {
-                                            const filtered = dayEvents.filter((event) => {
-                                                if (!event.start?.dateTime) return true;
-                                                const eventTime = new Date(
-                                                    event.start.dateTime
-                                                ).toLocaleTimeString('en-US', {
-                                                    hour12: false,
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                });
-                                                return !isSleepTime(eventTime);
-                                            });
-                                            const maxEvents = view === 'month' ? 2 : 3;
-                                            return filtered.length > maxEvents ? (
-                                                <button
-                                                    type="button"
-                                                    className="text-xs text-ide-link hover:underline"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        onSelectDay?.(day);
-                                                    }}
-                                                >
-                                                    +{filtered.length - maxEvents} more
-                                                </button>
-                                            ) : null;
-                                        })()}
                                     </div>
                                 </div>
                             );

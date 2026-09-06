@@ -16,6 +16,7 @@ declare global {
     eventsUpdate: jest.Mock;
     eventsDelete: jest.Mock;
     eventsList: jest.Mock;
+    calendarListList: jest.Mock;
     calendarsGet: jest.Mock;
     calendarsInsert: jest.Mock;
   };
@@ -27,6 +28,7 @@ jest.mock('googleapis', () => {
     eventsUpdate: jest.fn(),
     eventsDelete: jest.fn(),
     eventsList: jest.fn(),
+    calendarListList: jest.fn(),
     calendarsGet: jest.fn(),
     calendarsInsert: jest.fn(),
   };
@@ -71,6 +73,9 @@ jest.mock('googleapis', () => {
           insert: m.calendarsInsert,
           patch: jest.fn().mockResolvedValue({ data: {} }),
         },
+        calendarList: {
+          list: m.calendarListList,
+        },
       }),
       oauth2: jest.fn().mockReturnValue({
         userinfo: {
@@ -97,6 +102,11 @@ describe('GoogleCalendarService', () => {
     g().eventsDelete.mockResolvedValue({ data: { success: true } });
     g().eventsList.mockResolvedValue({
       data: { items: ['event1', 'event2'] },
+    });
+    g().calendarListList.mockResolvedValue({
+      data: {
+        items: [{ id: 'user@gmail.com', primary: true, selected: true, accessRole: 'owner' }],
+      },
     });
     g().calendarsGet.mockResolvedValue({ data: {} });
     g().calendarsInsert.mockResolvedValue({
@@ -258,6 +268,47 @@ describe('GoogleCalendarService', () => {
       nextPageToken: undefined,
       totalEvents: 2,
     });
+  });
+
+  it('should merge primary and app calendar events for display', async () => {
+    const userId = '123';
+    const timeMin = '2024-01-01T00:00:00Z';
+    const timeMax = '2024-01-31T23:59:59Z';
+    const user = {
+      googleAccessToken: 'valid-token',
+      googleRefreshToken: 'refresh-token',
+      googleTokenExpiry: new Date(Date.now() + 10000),
+    };
+
+    jest.spyOn(userRepo, 'findOne').mockResolvedValue(user as User);
+    jest.spyOn(userSettingsRepo, 'findOne').mockResolvedValue({
+      appGoogleCalendarId: 'app-cal@test.google.com',
+    } as UserSettings);
+    g().eventsList
+      .mockResolvedValueOnce({
+        data: {
+          items: [{ id: 'g1', summary: 'Google meeting', start: { dateTime: '2024-01-02T10:00:00Z' } }],
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [{ id: 'a1', summary: 'App task', start: { dateTime: '2024-01-03T10:00:00Z' } }],
+        },
+      });
+
+    const result = await service.getDisplayEvents(userId, timeMin, timeMax);
+
+    expect(g().eventsList).toHaveBeenCalledWith(
+      expect.objectContaining({ calendarId: 'primary' }),
+    );
+    expect(g().eventsList).toHaveBeenCalledWith(
+      expect.objectContaining({ calendarId: 'app-cal@test.google.com' }),
+    );
+    expect(result.events).toEqual([
+      expect.objectContaining({ id: 'g1', calendarId: 'primary' }),
+      expect.objectContaining({ id: 'a1', calendarId: 'app-cal@test.google.com' }),
+    ]);
+    expect(result.totalEvents).toBe(2);
   });
 
   it('should create event', async () => {
