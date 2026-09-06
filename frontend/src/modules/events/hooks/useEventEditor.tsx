@@ -10,9 +10,14 @@ import { Modal } from '../../../ui/Modal';
 import { showErrorToast, showSuccessToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 
+export type CreateTaskDefaults = {
+  deadline?: string;
+};
+
 export function useEventEditor() {
   const [open, setOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<TaskDTO | null>(null);
+  const [createDefaults, setCreateDefaults] = useState<CreateTaskDefaults | undefined>();
   const { data: phases = [] } = useGetAllPhasesQuery();
   const [createEvent, createEventState] = useCreateEventMutation();
   const [updateEvent, updateEventState] = useUpdateEventMutation();
@@ -20,10 +25,12 @@ export function useEventEditor() {
   const close = () => {
     setOpen(false);
     setEditingEvent(null);
+    setCreateDefaults(undefined);
   };
 
-  const openCreate = () => {
+  const openCreate = (defaults?: CreateTaskDefaults) => {
     setEditingEvent(null);
+    setCreateDefaults(defaults);
     setOpen(true);
   };
 
@@ -40,10 +47,10 @@ export function useEventEditor() {
     try {
       if (editingEvent) {
         await updateEvent({ id: editingEvent.id, body: cleanData as UpdateTaskDTO }).unwrap();
-        showSuccessToast('Event updated.');
+        showSuccessToast('Task updated.');
       } else {
         await createEvent(cleanData as CreateTaskDTO).unwrap();
-        showSuccessToast('Event created.');
+        showSuccessToast('Task created.');
       }
       close();
     } catch (err) {
@@ -57,14 +64,15 @@ export function useEventEditor() {
     <Modal
       open={open}
       onClose={close}
-      title={editingEvent ? 'Edit event' : 'Create event'}
+      title={editingEvent ? 'Edit task' : 'Create task'}
       maxWidthClass="max-w-xl"
       footer={null}
     >
       <div>
         <TaskForm
-          key={editingEvent?.id ?? 'new'}
+          key={editingEvent?.id ?? createDefaults?.deadline ?? 'new'}
           initialData={editingEvent || undefined}
+          createDefaults={createDefaults}
           phases={phases}
           onSubmit={submit}
           isSubmitting={isSaving}

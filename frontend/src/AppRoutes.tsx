@@ -25,16 +25,13 @@ const AppRoutes = () => {
             />
             <Route
                 path="/tasks"
-                element={<Navigate to="/events" replace />}
-            />
-            <Route
-                path="/events"
                 element={
                     <ProtectedRoute>
                         <EventsPage />
                     </ProtectedRoute>
                 }
             />
+            <Route path="/events" element={<Navigate to="/tasks" replace />} />
             <Route path="/schedule" element={<Navigate to="/" replace />} />
             <Route path="/calendar" element={<Navigate to="/" replace />} />
             <Route

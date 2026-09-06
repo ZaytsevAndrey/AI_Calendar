@@ -26,6 +26,7 @@ const lbl = 'mb-0.5 block text-xs font-medium text-ide-text';
 
 interface TaskFormProps {
   initialData?: TaskDTO;
+  createDefaults?: { deadline?: string };
   phases: PhaseDTO[];
   onSubmit: (data: CreateTaskDTO | UpdateTaskDTO) => void;
   isSubmitting: boolean;
@@ -35,13 +36,17 @@ interface TaskFormProps {
 
 const TaskForm: React.FC<TaskFormProps> = ({
   initialData,
+  createDefaults,
   phases,
   onSubmit,
   isSubmitting,
   onCancel,
   mode,
 }) => {
-  const defaultValues = useMemo(() => initialFormValues(initialData), [initialData]);
+  const defaultValues = useMemo(
+    () => initialFormValues(initialData, createDefaults),
+    [initialData, createDefaults],
+  );
   const [showDescription, setShowDescription] = useState(!!initialData?.description);
 
   const {
@@ -58,9 +63,9 @@ const TaskForm: React.FC<TaskFormProps> = ({
   });
 
   useEffect(() => {
-    reset(initialFormValues(initialData));
+    reset(initialFormValues(initialData, createDefaults));
     setShowDescription(!!initialData?.description);
-  }, [initialData, reset]);
+  }, [initialData, createDefaults, reset]);
 
   const isFixed = useWatch({ control, name: 'isFixed' });
   const isRecurring = useWatch({ control, name: 'isRecurring' });
@@ -491,7 +496,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
           Cancel
         </button>
         <button type="submit" className="ui-btn-primary w-full sm:w-auto" disabled={isSubmitting}>
-          {isSubmitting ? 'Saving…' : mode === 'create' ? 'Create event' : 'Save changes'}
+          {isSubmitting ? 'Saving…' : mode === 'create' ? 'Create task' : 'Save changes'}
         </button>
       </div>
     </form>

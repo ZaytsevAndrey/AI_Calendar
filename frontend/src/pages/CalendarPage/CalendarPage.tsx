@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { format } from 'date-fns';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
     useEventsForDay,
     useEventsForWeek,
@@ -17,11 +17,18 @@ import CalendarGrid from 'modules/calendar/components/CalendarGrid';
 import { EventType } from 'modules/calendar/types';
 import { useScheduleActions } from 'modules/schedule/hooks/useScheduleActions';
 import { GenerateAlertsBanner } from 'modules/schedule/components/GenerateAlertsBanner';
+import { ScheduleMenu } from 'modules/schedule/components/ScheduleMenu';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
 import { Modal } from '../../ui/Modal';
 import { Spinner } from '../../ui/Spinner';
 import { showErrorToast, showSuccessToast } from '../../utils/toast';
 import { extractApiErrorMessage } from '../../utils/extractApiErrorMessage';
+import {
+    endOfLocalDayIso,
+    formatLongDate,
+    formatMonthYear,
+    formatWeekRange,
+} from '../../utils/formatDate';
 
 type CalendarView = 'day' | 'week' | 'month';
 
@@ -60,6 +67,15 @@ function shiftPeriod(date: Date, view: CalendarView, delta: number): Date {
     return next;
 }
 
+function periodLabel(date: Date, view: CalendarView): string {
+    if (view === 'day') return formatLongDate(date);
+    if (view === 'month') return formatMonthYear(date);
+    const start = startOfWeekMonday(date);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    return formatWeekRange(start, end);
+}
+
 const CalendarPage: React.FC = () => {
     const [currentView, setCurrentView] = useState<CalendarView>('week');
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -72,6 +88,7 @@ const CalendarPage: React.FC = () => {
         eventId: null,
         eventName: '',
     });
+    const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
     const [eventFormDialog, setEventFormDialog] = useState<{
         open: boolean;
         event: GoogleCalendarEvent | null;
@@ -105,34 +122,6 @@ const CalendarPage: React.FC = () => {
         currentView,
         currentDate,
     );
-
-    const formatDate = (date: Date, view: CalendarView): string => {
-        switch (view) {
-            case 'day':
-                return date.toLocaleDateString('en-US', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                });
-            case 'week': {
-                const startOfWeek = new Date(date);
-                const dayOfWeek = date.getDay();
-                const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-                startOfWeek.setDate(date.getDate() - daysToSubtract);
-                const endOfWeek = new Date(startOfWeek);
-                endOfWeek.setDate(startOfWeek.getDate() + 6);
-                return `${startOfWeek.toLocaleDateString()} - ${endOfWeek.toLocaleDateString()}`;
-            }
-            case 'month':
-                return date.toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'long',
-                });
-            default:
-                return date.toLocaleDateString();
-        }
-    };
 
     const handleDeleteEvent = (eventId: string, eventName: string) => {
         setDeleteConfirmDialog({
@@ -184,72 +173,48 @@ const CalendarPage: React.FC = () => {
         setEventFormDialog({ open: false, event: null });
     };
 
-    const createEventFab = (
-        <>
-            <button
-                type="button"
-                onClick={openCreate}
-                className="fixed bottom-6 right-6 z-[1100] flex h-14 w-14 items-center justify-center rounded-full bg-ide-accentBlue text-white shadow-ide-md hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link"
-                aria-label="Create event"
-            >
-                <Plus className="h-7 w-7" aria-hidden />
-            </button>
-            {editorModal}
-        </>
-    );
+    const handleSelectDay = (day: Date) => {
+        setCurrentDate(day);
+        setCurrentView('day');
+    };
 
-    if (getEventsQuery.isLoading) {
-        return (
-            <div className="page-shell">
-                <div className="flex justify-center py-20">
-                    <Spinner className="h-10 w-10" />
-                </div>
-                {createEventFab}
-            </div>
-        );
-    }
+    const handleCreateForDate = (day: Date) => {
+        openCreate({ deadline: endOfLocalDayIso(day) });
+    };
 
-    if (getEventsQuery.isError) {
-        return (
-            <div className="page-shell">
-                <div
-                    className="rounded-lg border border-ide-error bg-ide-error/10 px-4 py-3 text-sm text-ide-error"
-                    role="alert"
-                >
-                    Failed to load calendar events. Please check your Google Calendar connection.
-                </div>
-                {createEventFab}
-            </div>
-        );
-    }
+    const runGenerate = () => {
+        const { startDate, endDate } = visibleRangeYmd(currentView, currentDate);
+        void generate(startDate, endDate);
+    };
+
+    const confirmClear = async () => {
+        setClearConfirmOpen(false);
+        await clear();
+    };
 
     return (
         <div className="page-shell">
-            <header className="mb-6 space-y-4 sm:mb-8">
+            <header className="mb-6 space-y-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <h1 className="page-title">Calendar</h1>
+                    <div>
+                        <h1 className="page-title">Calendar</h1>
+                        <p className="page-lead">{periodLabel(currentDate, currentView)}</p>
+                    </div>
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
                         <button
                             type="button"
-                            onClick={() => {
-                                const { startDate, endDate } = visibleRangeYmd(currentView, currentDate);
-                                void generate(startDate, endDate);
-                            }}
-                            disabled={busy}
+                            onClick={() => openCreate()}
                             className="ui-btn-primary w-full sm:w-auto"
                         >
-                            {isGenerating ? 'Generating…' : 'Generate schedule'}
+                            Create task
                         </button>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                void clear();
-                            }}
-                            disabled={busy}
-                            className="ui-btn-danger w-full sm:w-auto"
-                        >
-                            {isClearing ? 'Clearing…' : 'Clear schedule'}
-                        </button>
+                        <ScheduleMenu
+                            busy={busy}
+                            isGenerating={isGenerating}
+                            isClearing={isClearing}
+                            onGenerate={runGenerate}
+                            onClear={() => setClearConfirmOpen(true)}
+                        />
                     </div>
                 </div>
                 {generateAlerts ? (
@@ -258,7 +223,7 @@ const CalendarPage: React.FC = () => {
                         onDismiss={dismissGenerateAlerts}
                     />
                 ) : null}
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="inline-flex w-full max-w-md rounded-lg border border-ide-border bg-ide-surface p-1 sm:w-auto">
                         {(['day', 'week', 'month'] as const).map((v) => (
                             <button
@@ -273,11 +238,7 @@ const CalendarPage: React.FC = () => {
                         ))}
                     </div>
 
-                    <h2 className="text-center text-lg font-medium text-ide-text lg:order-none lg:flex-1 lg:text-left">
-                        {formatDate(currentDate, currentView)}
-                    </h2>
-
-                    <div className="flex items-center justify-center gap-1 sm:justify-end lg:shrink-0">
+                    <div className="flex items-center justify-center gap-1 sm:justify-end">
                         <button
                             type="button"
                             className="ui-btn-ghost min-h-[44px] min-w-[44px] px-0"
@@ -301,24 +262,42 @@ const CalendarPage: React.FC = () => {
                 </div>
             </header>
 
-            <div className="mb-6 min-w-0 overflow-x-auto">
-                <CalendarGrid
-                    view={currentView}
-                    date={currentDate}
-                    events={displayEvents}
-                    onEditEvent={handleEditEvent}
-                    onDeleteEvent={handleDeleteEvent}
-                />
-            </div>
+            {getEventsQuery.isLoading ? (
+                <div className="flex justify-center py-20">
+                    <Spinner className="h-10 w-10" />
+                </div>
+            ) : getEventsQuery.isError ? (
+                <div
+                    className="rounded-lg border border-ide-error bg-ide-error/10 px-4 py-3 text-sm text-ide-error"
+                    role="alert"
+                >
+                    Failed to load calendar events. Please check your Google Calendar connection.
+                </div>
+            ) : (
+                <>
+                    <div className="mb-6 min-w-0 overflow-x-auto">
+                        <CalendarGrid
+                            view={currentView}
+                            date={currentDate}
+                            events={displayEvents}
+                            onEditEvent={handleEditEvent}
+                            onSelectDay={handleSelectDay}
+                            onCreateForDate={handleCreateForDate}
+                        />
+                    </div>
 
-            <CalendarEvents
-                events={displayEvents}
-                isLoading={getEventsQuery.isLoading}
-                error={getEventsQuery.error}
-                title={`${currentView.charAt(0).toUpperCase() + currentView.slice(1)} Events`}
-                onEditEvent={handleEditEvent}
-                onDeleteEvent={handleDeleteEvent}
-            />
+                    {currentView === 'day' ? (
+                        <CalendarEvents
+                            events={displayEvents}
+                            isLoading={getEventsQuery.isLoading}
+                            error={getEventsQuery.error}
+                            title="Day events"
+                            onEditEvent={handleEditEvent}
+                            onDeleteEvent={handleDeleteEvent}
+                        />
+                    ) : null}
+                </>
+            )}
 
             <EventForm
                 open={eventFormDialog.open}
@@ -367,7 +346,37 @@ const CalendarPage: React.FC = () => {
                 </p>
             </Modal>
 
-            {createEventFab}
+            <Modal
+                open={clearConfirmOpen}
+                onClose={() => setClearConfirmOpen(false)}
+                title="Clear schedule"
+                footer={
+                    <>
+                        <button
+                            type="button"
+                            onClick={() => setClearConfirmOpen(false)}
+                            disabled={isClearing}
+                            className="ui-btn-secondary w-full sm:w-auto"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => void confirmClear()}
+                            disabled={isClearing}
+                            className="ui-btn-danger w-full sm:w-auto"
+                        >
+                            {isClearing ? 'Clearing…' : 'Clear schedule'}
+                        </button>
+                    </>
+                }
+            >
+                <p className="text-ide-text">
+                    Clear all app-generated schedule blocks in the planning horizon? This cannot be undone.
+                </p>
+            </Modal>
+
+            {editorModal}
         </div>
     );
 };

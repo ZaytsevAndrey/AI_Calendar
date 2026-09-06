@@ -83,7 +83,10 @@ export function buildTaskPayload(data: TaskFormValues): CreateTaskDTO | UpdateTa
   return payload;
 }
 
-export function initialFormValues(data?: TaskDTO): TaskFormValues {
+export function initialFormValues(
+  data?: TaskDTO,
+  defaults?: { deadline?: string },
+): TaskFormValues {
   if (!data) {
     return {
       name: '',
@@ -95,7 +98,7 @@ export function initialFormValues(data?: TaskDTO): TaskFormValues {
       recurrenceWeekDays: [],
       allowSplit: true,
       priority: 'medium',
-      deadline: '',
+      deadline: toLocalDateTimeInput(defaults?.deadline) ?? '',
       scheduledStartTime: '',
       scheduledEndTime: '',
       preferredStartTime: '',

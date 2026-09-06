@@ -12,7 +12,7 @@ const linkBase =
 
 const navItems = [
     { to: '/', label: 'Calendar', icon: CalendarDays, match: (path: string) => path === '/' || path === '/calendar' },
-    { to: '/events', label: 'Events', icon: ListTodo, match: (path: string) => path === '/events' },
+    { to: '/tasks', label: 'Tasks', icon: ListTodo, match: (path: string) => path === '/tasks' || path === '/events' },
     { to: '/phases', label: 'Phases', icon: Layers, match: (path: string) => path === '/phases' },
     { to: '/settings', label: 'Settings', icon: Settings, match: (path: string) => path === '/settings' },
 ] as const;

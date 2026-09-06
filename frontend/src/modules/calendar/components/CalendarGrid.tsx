@@ -3,13 +3,23 @@ import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 import { formatEventTime, getEventColor } from '../hooks/useCalendar';
 import { useTimePhasesForDate, getPhaseByTime } from '../../phases/hooks/usePhases';
 import { useGetUserSettingsQuery } from '../../../api/userSettingsApi';
+import { formatClock } from '../../../utils/formatDate';
 
 interface CalendarGridProps {
     view: 'day' | 'week' | 'month';
     date: Date;
     events: GoogleCalendarEvent[];
     onEditEvent?: (eventId: string) => void;
-    onDeleteEvent?: (eventId: string, eventName: string) => void;
+    onSelectDay?: (day: Date) => void;
+    onCreateForDate?: (day: Date) => void;
+}
+
+function chipLabel(event: GoogleCalendarEvent): string {
+    const title = event.summary || 'Event';
+    if (!event.start.dateTime) return title;
+    const start = new Date(event.start.dateTime);
+    if (Number.isNaN(start.getTime())) return title;
+    return `${formatClock(start)} ${title}`;
 }
 
 function tooltipText(event: GoogleCalendarEvent): string {
@@ -24,7 +34,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     date,
     events,
     onEditEvent,
-    onDeleteEvent,
+    onSelectDay,
+    onCreateForDate,
 }) => {
     const { data: timePhases = [] } = useTimePhasesForDate(date);
     const { data: userSettings } = useGetUserSettingsQuery();
@@ -148,15 +159,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
 
         return (
             <div className="min-h-[600px] rounded-lg border border-ide-border bg-ide-panel p-4">
-                <h2 className="mb-4 text-lg font-semibold text-ide-text">
-                    {days[0].toLocaleDateString('en-US', {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                    })}
-                </h2>
-
                 {getDisplayPhases().length > 0 && (
                     <div className="mb-4 flex flex-wrap gap-2">
                         {getDisplayPhases().map((phase: any) => (
@@ -197,9 +199,20 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                         return (
                             <div
                                 key={index}
-                                className="relative flex min-h-[40px] border-b border-ide-border transition-colors hover:bg-white/[0.03]"
+                                role={eventsInSlot.length === 0 ? 'button' : undefined}
+                                tabIndex={eventsInSlot.length === 0 ? 0 : undefined}
+                                className="relative flex min-h-[44px] border-b border-ide-border transition-colors hover:bg-white/[0.03]"
                                 style={{
                                     backgroundColor: slot.phase ? `${slot.phase.color}14` : undefined,
+                                }}
+                                onClick={() => {
+                                    if (eventsInSlot.length === 0) onCreateForDate?.(days[0]);
+                                }}
+                                onKeyDown={(e) => {
+                                    if (eventsInSlot.length === 0 && (e.key === 'Enter' || e.key === ' ')) {
+                                        e.preventDefault();
+                                        onCreateForDate?.(days[0]);
+                                    }
                                 }}
                             >
                                 <div className="flex w-[60px] shrink-0 items-center justify-center border-r border-ide-border bg-ide-surface p-2">
@@ -223,36 +236,21 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                             title={tooltipText(event)}
                                             role="button"
                                             tabIndex={0}
-                                            className="group relative cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded border border-white/30 px-1 py-0.5 text-[0.7rem] text-white"
+                                            className="cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded border border-white/30 px-1.5 py-1 text-xs text-white"
                                             style={{ backgroundColor: getEventColor(event) }}
-                                            onClick={() => onEditEvent?.(event.id)}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onEditEvent?.(event.id);
+                                            }}
                                             onKeyDown={(e) => {
-                                                if (e.key === 'Enter' || e.key === ' ') onEditEvent?.(event.id);
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    onEditEvent?.(event.id);
+                                                }
                                             }}
                                         >
-                                            {event.summary || 'Event'}
-                                            <div className="event-actions absolute right-0.5 top-0.5 hidden gap-0.5 group-hover:flex">
-                                                <button
-                                                    type="button"
-                                                    className="min-w-0 rounded p-0.5 text-xs text-white hover:bg-black/20"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        onEditEvent?.(event.id);
-                                                    }}
-                                                >
-                                                    ✏️
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className="min-w-0 rounded p-0.5 text-xs text-white hover:bg-black/20"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        onDeleteEvent?.(event.id, event.summary || 'Event');
-                                                    }}
-                                                >
-                                                    🗑️
-                                                </button>
-                                            </div>
+                                            {chipLabel(event)}
                                         </div>
                                     ))}
                                 </div>
@@ -275,7 +273,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     const weeks = createWeeks(days);
 
     return (
-        <div className="w-full">
+        <div className="w-full min-w-[44rem]">
             {getDisplayPhases().length > 0 && (
                 <div className="mb-4 flex flex-wrap gap-2">
                     {getDisplayPhases().map((phase: any) => (
@@ -321,7 +319,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                             return (
                                 <div
                                     key={dayIndex}
-                                    className={`relative min-h-[100px] border-r border-ide-border p-2 last:border-r-0 ${
+                                    className={`relative min-h-[100px] cursor-pointer border-r border-ide-border p-2 last:border-r-0 ${
                                         view === 'month' && !isInCurrentMonth ? 'opacity-50' : ''
                                     } ${
                                         isCurrentDay
@@ -329,6 +327,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                             : 'bg-ide-panel'
                                     }`}
                                     style={{ minHeight: view === 'month' ? '120px' : '100px' }}
+                                    onClick={() => onSelectDay?.(day)}
                                 >
                                     <span
                                         className={`text-xs ${
@@ -371,20 +370,26 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                                         title={tooltipText(event)}
                                                         role="button"
                                                         tabIndex={0}
-                                                        className="relative mb-1 cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded px-1 py-0.5 text-[0.7rem] text-white"
+                                                        className="relative mb-1 cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded px-1.5 py-1 text-xs text-white"
                                                         style={{
                                                             backgroundColor: getEventColor(event),
                                                             border: eventPhase
                                                                 ? `2px solid ${eventPhase.color}`
                                                                 : '1px solid rgba(255,255,255,0.3)',
                                                         }}
-                                                        onClick={() => onEditEvent?.(event.id)}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            onEditEvent?.(event.id);
+                                                        }}
                                                         onKeyDown={(e) => {
-                                                            if (e.key === 'Enter' || e.key === ' ')
+                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
                                                                 onEditEvent?.(event.id);
+                                                            }
                                                         }}
                                                     >
-                                                        {event.summary || 'Event'}
+                                                        {chipLabel(event)}
                                                         {eventPhase && (
                                                             <span
                                                                 className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-white"
@@ -408,9 +413,16 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                             });
                                             const maxEvents = view === 'month' ? 2 : 3;
                                             return filtered.length > maxEvents ? (
-                                                <div className="text-[0.6rem] text-ide-muted">
+                                                <button
+                                                    type="button"
+                                                    className="text-xs text-ide-link hover:underline"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onSelectDay?.(day);
+                                                    }}
+                                                >
                                                     +{filtered.length - maxEvents} more
-                                                </div>
+                                                </button>
                                             ) : null;
                                         })()}
                                     </div>

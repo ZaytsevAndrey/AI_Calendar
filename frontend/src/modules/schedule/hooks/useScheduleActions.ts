@@ -120,9 +120,6 @@ export function useScheduleActions() {
   };
 
   const clear = async () => {
-    if (!window.confirm('Clear all app-generated schedule blocks in the planning horizon?')) {
-      return;
-    }
     setIsClearing(true);
     try {
       const { deleted } = await ScheduleApi.clearSchedule();

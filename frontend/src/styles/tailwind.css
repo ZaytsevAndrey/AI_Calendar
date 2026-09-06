@@ -385,15 +385,6 @@
         @apply ui-btn-danger flex-1 sm:flex-none;
     }
 
-    /* Списки задач — горизонтальний скрол на мобільному */
-    .task-list-header {
-        @apply mb-3 flex gap-2 overflow-x-auto rounded-lg border border-ide-border bg-ide-surface/80 p-2 [-webkit-overflow-scrolling:touch] sm:grid sm:grid-cols-4 sm:overflow-visible;
-    }
-
-    .task-list .list-header-item {
-        @apply shrink-0 rounded-md px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ide-muted hover:bg-ide-elevated sm:shrink;
-    }
-
     .loading,
     .empty-list {
         @apply rounded-xl border border-dashed border-ide-border bg-ide-surface/30 px-6 py-12 text-center text-sm text-ide-muted;

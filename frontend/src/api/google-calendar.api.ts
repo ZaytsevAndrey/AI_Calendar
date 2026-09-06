@@ -24,6 +24,7 @@ export interface GoogleCalendarEvent {
     recurringEventId?: string;
     status?: 'confirmed' | 'tentative' | 'cancelled';
     colorId?: string;
+    phaseId?: string;
     created?: string;
     updated?: string;
     htmlLink?: string;

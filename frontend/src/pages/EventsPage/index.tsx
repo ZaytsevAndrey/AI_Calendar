@@ -3,16 +3,21 @@ import { useGetEventsQuery, useDeleteEventMutation } from 'api/eventTasksApi';
 import EventList from 'modules/events/components/EventList';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
 import { hasTaskAlreadyEnded, isCurrentTask } from 'modules/events/utils/isCurrentTask';
+import { Modal } from '../../ui/Modal';
 import { showErrorToast, showSuccessToast } from '../../utils/toast';
 import { extractApiErrorMessage } from '../../utils/extractApiErrorMessage';
 
 type Priority = 'urgent' | 'high' | 'medium' | 'low';
+type SortField = 'name' | 'priority' | 'deadline' | 'estimatedTimeInMinutes';
 
-const EventsPage: React.FC = () => {
-  const [sortField, setSortField] = useState<
-    'name' | 'priority' | 'deadline' | 'estimatedTimeInMinutes'
-  >('deadline');
+const TasksPage: React.FC = () => {
+  const [sortField, setSortField] = useState<SortField>('deadline');
   const [filterStatus, setFilterStatus] = useState<string>('active');
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string | null; name: string }>({
+    open: false,
+    id: null,
+    name: '',
+  });
 
   const { data: events = [], isLoading: isLoadingEvents } = useGetEventsQuery();
   const [deleteEvent, deleteEventState] = useDeleteEventMutation();
@@ -44,18 +49,20 @@ const EventsPage: React.FC = () => {
     }
   });
 
-  const handleDeleteEvent = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this event?')) return;
+  const requestDelete = (id: string) => {
+    const task = events.find((item) => item.id === id);
+    setDeleteConfirm({ open: true, id, name: task?.name || 'this task' });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm.id) return;
     try {
-      await deleteEvent(id).unwrap();
-      showSuccessToast('Event deleted.');
+      await deleteEvent(deleteConfirm.id).unwrap();
+      showSuccessToast('Task deleted.');
+      setDeleteConfirm({ open: false, id: null, name: '' });
     } catch (err) {
       showErrorToast(extractApiErrorMessage(err));
     }
-  };
-
-  const handleSort = (field: 'name' | 'priority' | 'deadline' | 'estimatedTimeInMinutes') => {
-    setSortField(field);
   };
 
   const filteredEvents = sortedEvents.filter((event) => {
@@ -72,11 +79,11 @@ const EventsPage: React.FC = () => {
     <div className="page-shell">
       <header className="page-head">
         <div>
-          <h1 className="page-title">Events</h1>
-          <p className="page-lead">Current and upcoming events. Use the filter to see completed or past items.</p>
+          <h1 className="page-title">Tasks</h1>
+          <p className="page-lead">Current and upcoming tasks. Use the filter to see completed or past items.</p>
         </div>
-        <button type="button" onClick={openCreate} className="ui-btn-primary w-full shrink-0 sm:w-auto">
-          Create event
+        <button type="button" onClick={() => openCreate()} className="ui-btn-primary w-full shrink-0 sm:w-auto">
+          Create task
         </button>
       </header>
 
@@ -99,20 +106,65 @@ const EventsPage: React.FC = () => {
             <option value="all">All (including past)</option>
           </select>
         </div>
+        <div className="w-full sm:max-w-xs">
+          <label htmlFor="sortField" className="ui-label">
+            Sort by
+          </label>
+          <select
+            id="sortField"
+            value={sortField}
+            onChange={(e) => setSortField(e.target.value as SortField)}
+            className="ui-select"
+          >
+            <option value="deadline">Deadline</option>
+            <option value="priority">Priority</option>
+            <option value="name">Name</option>
+            <option value="estimatedTimeInMinutes">Duration</option>
+          </select>
+        </div>
       </div>
 
       <EventList
         events={filteredEvents}
         onEdit={openEdit}
-        onDelete={handleDeleteEvent}
-        onStatusChange={() => {}}
-        onSort={handleSort}
+        onDelete={requestDelete}
+        onCreate={() => openCreate()}
         isLoading={isLoadingEvents || deleteEventState.isLoading}
       />
+
+      <Modal
+        open={deleteConfirm.open}
+        onClose={() => setDeleteConfirm({ open: false, id: null, name: '' })}
+        title="Delete task"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setDeleteConfirm({ open: false, id: null, name: '' })}
+              disabled={deleteEventState.isLoading}
+              className="ui-btn-secondary w-full sm:w-auto"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmDelete}
+              disabled={deleteEventState.isLoading}
+              className="ui-btn-danger w-full sm:w-auto"
+            >
+              {deleteEventState.isLoading ? 'Deleting…' : 'Delete'}
+            </button>
+          </>
+        }
+      >
+        <p className="text-ide-text">
+          Are you sure you want to delete &quot;{deleteConfirm.name}&quot;? This cannot be undone.
+        </p>
+      </Modal>
 
       {editorModal}
     </div>
   );
 };
 
-export default EventsPage;
+export default TasksPage;
