@@ -13,7 +13,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     const authState = useSelector((state: RootState) => state.auth);
     const isAuthenticated = !!authState?.accessToken;
 
-    const { data, isLoading, isError } = useCheckRequiredSettingsQuery(undefined, {
+    const { data, isLoading, isError, refetch } = useCheckRequiredSettingsQuery(undefined, {
         skip: !isAuthenticated,
     });
 
@@ -31,8 +31,23 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         );
     }
 
-    const requiredFilled = !isError && data ? data.requiredFilled : false;
-    const hasPhases = !isError && data ? data.hasPhases : true;
+    if (isError) {
+        return (
+            <div className="page-shell-fill">
+                <div className="mx-auto flex max-w-md flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
+                    <p className="text-sm text-ide-muted">
+                        Could not reach the API. The production instance may still be waking up.
+                    </p>
+                    <button type="button" className="ui-btn-primary" onClick={() => void refetch()}>
+                        Retry
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    const requiredFilled = data ? data.requiredFilled : false;
+    const hasPhases = data ? data.hasPhases : true;
 
     if (!requiredFilled && location.pathname !== '/settings') {
         return <Navigate to="/settings" replace />;

@@ -35,10 +35,12 @@ Schedule **jobs** stay in-process (`setInterval` every 2s). They run only while 
 
 ## URLs after deploy
 
-- App: `https://ai-calendar-web.onrender.com` (suffix may be added if the name is taken)
-- API: `https://ai-calendar-api.onrender.com`
+- App: `https://ai-calendar-web-o81n.onrender.com`
+- API: `https://ai-calendar-api-fxsw.onrender.com`
 - Health: `GET /health` → `{ "status": "ok" }`
-- Swagger: `https://<api-host>/api`
+- Swagger: `https://ai-calendar-api-fxsw.onrender.com/api`
+
+Do not use `https://ai-calendar-web.onrender.com` or `https://ai-calendar-api.onrender.com` — those names were already taken and are a different project.
 
 ## Git workflow
 

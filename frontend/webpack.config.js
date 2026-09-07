@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import TsconfigPathsPlugin from 'tsconfig-paths-webpack-plugin';
 import HtmlWebpackPlugin from 'html-webpack-plugin';
@@ -8,10 +9,36 @@ import webpack from 'webpack';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function resolveBuildSha() {
+    const fromEnv = (process.env.RENDER_GIT_COMMIT || process.env.REACT_APP_BUILD_SHA || '').trim();
+    if (fromEnv) {
+        return fromEnv.slice(0, 7);
+    }
+    try {
+        return execSync('git rev-parse --short HEAD', {
+            encoding: 'utf8',
+            cwd: path.resolve(__dirname, '..'),
+        }).trim();
+    } catch {
+        return 'unknown';
+    }
+}
+
+function formatBuildTimeUtc(date = new Date()) {
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(date.getUTCDate()).padStart(2, '0');
+    const hh = String(date.getUTCHours()).padStart(2, '0');
+    const mm = String(date.getUTCMinutes()).padStart(2, '0');
+    return `${y}-${m}-${d} ${hh}:${mm} UTC`;
+}
+
 export default async (_env, argv) => {
     const mode = argv?.mode === 'production' ? 'production' : 'development';
     const isProd = mode === 'production';
     const apiBaseUrl = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
+    const buildSha = resolveBuildSha();
+    const buildTime = formatBuildTimeUtc();
 
     return {
         mode,
@@ -58,6 +85,8 @@ export default async (_env, argv) => {
             }),
             new webpack.DefinePlugin({
                 'process.env.REACT_APP_API_BASE_URL': JSON.stringify(apiBaseUrl),
+                __BUILD_SHA__: JSON.stringify(buildSha),
+                __BUILD_TIME__: JSON.stringify(buildTime),
             }),
             {
                 apply: (compiler) => {
