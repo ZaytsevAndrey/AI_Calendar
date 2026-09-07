@@ -182,6 +182,10 @@ export class TasksService {
         : undefined,
     });
 
+    this.logger.log(
+      `create task "${createTaskDto.name}": incoming earliest=${earliestStartTime ?? 'null'} deadline=${deadline ?? 'null'} tz=${timeZone ?? 'null'} scheduledStart=${scheduledStartTime ?? 'null'} → stored earliest=${task.earliestStartTime?.toISOString() ?? 'null'} deadline=${task.deadline?.toISOString() ?? 'null'} scheduleTz=${task.scheduleTimeZone ?? 'null'}`,
+    );
+
     if (phaseIds?.length) {
       const phases = await this.loadPhasesForUser(userId, phaseIds);
       task.phases = phases;
