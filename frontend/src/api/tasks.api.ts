@@ -17,6 +17,8 @@ export interface TaskDTO {
   allowSplit: boolean;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   deadline?: string;
+  earliestStartTime?: string;
+  eligibleWeekDays?: number[] | null;
   status: 'todo' | 'in_progress' | 'completed' | 'canceled';
   scheduledStartTime?: string;
   scheduledEndTime?: string;
@@ -44,6 +46,8 @@ export interface CreateTaskDTO {
   allowSplit?: boolean;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   deadline?: string;
+  earliestStartTime?: string | null;
+  eligibleWeekDays?: number[] | null;
 }
 
 export interface UpdateTaskDTO extends Partial<CreateTaskDTO> {

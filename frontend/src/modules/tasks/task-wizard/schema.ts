@@ -13,6 +13,8 @@ export const taskFormSchema = z
     allowSplit: z.boolean().optional(),
     priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
     deadline: z.string().optional(),
+    earliestStartTime: z.string().optional(),
+    eligibleWeekDays: z.array(z.number().int().min(0).max(6)).optional(),
     scheduledStartTime: z.string().optional(),
     scheduledEndTime: z.string().optional(),
     preferredStartTime: z.string().optional(),
@@ -66,6 +68,18 @@ export const taskFormSchema = z
         code: z.ZodIssueCode.custom,
         message: 'Select a recurrence pattern',
         path: ['recurrencePattern'],
+      });
+    }
+
+    if (
+      data.earliestStartTime?.trim() &&
+      data.deadline?.trim() &&
+      new Date(data.deadline).getTime() <= new Date(data.earliestStartTime).getTime()
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Until must be after From',
+        path: ['deadline'],
       });
     }
   });

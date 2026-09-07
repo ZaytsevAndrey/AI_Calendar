@@ -30,6 +30,7 @@ import { showErrorToast, showSuccessToast } from '../../utils/toast';
 import { extractApiErrorMessage } from '../../utils/extractApiErrorMessage';
 import {
     endOfLocalDayIso,
+    startOfLocalDayIso,
     formatLongDate,
     formatMonthYear,
     formatWeekRange,
@@ -186,7 +187,10 @@ const CalendarPage: React.FC = () => {
     };
 
     const handleCreateForDate = (day: Date) => {
-        openCreate({ deadline: endOfLocalDayIso(day) });
+        openCreate({
+            earliestStartTime: startOfLocalDayIso(day),
+            deadline: endOfLocalDayIso(day),
+        });
     };
 
     const runGenerate = () => {

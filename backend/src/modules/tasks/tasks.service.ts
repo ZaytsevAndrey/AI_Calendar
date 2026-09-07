@@ -155,6 +155,7 @@ export class TasksService {
       scheduledStartTime,
       scheduledEndTime,
       deadline,
+      earliestStartTime,
       ...rest
     } = createTaskDto;
 
@@ -168,6 +169,9 @@ export class TasksService {
       eventType,
       estimatedTimeInMinutes,
       deadline: deadline ? new Date(deadline) : undefined,
+      earliestStartTime: earliestStartTime
+        ? new Date(earliestStartTime)
+        : undefined,
       scheduledStartTime: scheduledStartTime
         ? new Date(scheduledStartTime)
         : undefined,
@@ -244,6 +248,7 @@ export class TasksService {
       phaseIds?: string[];
       scheduledStartTime?: string;
       scheduledEndTime?: string;
+      earliestStartTime?: string | null;
       eventType?: TaskEventType;
     };
 
@@ -264,6 +269,7 @@ export class TasksService {
     const {
       phaseIds: _p,
       deadline,
+      earliestStartTime,
       scheduledStartTime,
       scheduledEndTime,
       ...rest
@@ -272,6 +278,11 @@ export class TasksService {
 
     if (deadline !== undefined) {
       task.deadline = deadline ? new Date(deadline) : null;
+    }
+    if (earliestStartTime !== undefined) {
+      task.earliestStartTime = earliestStartTime
+        ? new Date(earliestStartTime)
+        : null;
     }
     if (scheduledStartTime !== undefined) {
       task.scheduledStartTime = scheduledStartTime

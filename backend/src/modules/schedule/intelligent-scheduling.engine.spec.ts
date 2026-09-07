@@ -686,15 +686,14 @@ describe('IntelligentSchedulingEngine', () => {
     ]);
   });
 
-  it('does not place a flexible task before its preferred start day', async () => {
+  it('does not place a flexible task before its earliestStartTime day', async () => {
     taskRepo.find.mockResolvedValue([
       makeTask({
         id: 'tomorrow-wash',
         name: 'Wash the car',
         estimatedTimeInMinutes: 60,
         allowSplit: false,
-        scheduledStartTime: new Date(atLocalTimeIso(1, 0)),
-        scheduledEndTime: new Date(atLocalTimeIso(1, 1)),
+        earliestStartTime: new Date(atLocalTimeIso(1, 0)),
         deadline: new Date(atLocalTimeIso(1, 23)),
         phases: [phaseWorkday],
       }),
@@ -704,6 +703,64 @@ describe('IntelligentSchedulingEngine', () => {
 
     const [slots] = extractTaskSegments(scheduledRepo.save.mock.calls);
     expect(slots[0]).toEqual([atLocalTimeIso(1, 9), atLocalTimeIso(1, 10)]);
+  });
+
+  it('does not place before the earliestStartTime instant on the same day', async () => {
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'after-eleven',
+        name: 'Call after 11',
+        estimatedTimeInMinutes: 60,
+        allowSplit: false,
+        earliestStartTime: new Date(atLocalTimeIso(0, 11)),
+        deadline: new Date(atLocalTimeIso(0, 23)),
+        phases: [phaseWorkday],
+      }),
+    ]);
+
+    await engine.run(userId);
+
+    const [slots] = extractTaskSegments(scheduledRepo.save.mock.calls);
+    expect(slots[0]).toEqual([atLocalTimeIso(0, 11), atLocalTimeIso(0, 12)]);
+  });
+
+  it('keeps a Friday-only window off earlier weekdays', async () => {
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'friday-gym',
+        name: 'Gym',
+        estimatedTimeInMinutes: 60,
+        allowSplit: false,
+        earliestStartTime: new Date(atLocalTimeIso(4, 0)),
+        deadline: new Date(atLocalTimeIso(4, 23)),
+        phases: [phaseWorkday],
+      }),
+    ]);
+
+    await engine.run(userId);
+
+    const [slots] = extractTaskSegments(scheduledRepo.save.mock.calls);
+    expect(slots[0]).toEqual([atLocalTimeIso(4, 9), atLocalTimeIso(4, 10)]);
+  });
+
+  it('places only on eligibleWeekDays inside a multi-day window', async () => {
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'thu-only',
+        name: 'Thursday review',
+        estimatedTimeInMinutes: 60,
+        allowSplit: false,
+        earliestStartTime: new Date(atLocalTimeIso(0, 0)),
+        deadline: new Date(atLocalTimeIso(4, 23)),
+        eligibleWeekDays: [3],
+        phases: [phaseWorkday],
+      }),
+    ]);
+
+    await engine.run(userId);
+
+    const [slots] = extractTaskSegments(scheduledRepo.save.mock.calls);
+    expect(slots[0]).toEqual([atLocalTimeIso(2, 9), atLocalTimeIso(2, 10)]);
   });
 });
 
@@ -775,6 +832,8 @@ function makeTask(partial: Partial<Task>): Task {
     allowSplit: partial.allowSplit ?? false,
     priority: partial.priority ?? TaskPriority.MEDIUM,
     deadline: partial.deadline ?? null,
+    earliestStartTime: partial.earliestStartTime ?? null,
+    eligibleWeekDays: partial.eligibleWeekDays ?? null,
     status: partial.status ?? TaskStatus.TODO,
     scheduledStartTime: partial.scheduledStartTime ?? null,
     scheduledEndTime: partial.scheduledEndTime ?? null,

@@ -14,6 +14,8 @@ export type VoiceParsedTask = {
   allowSplit: boolean;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   deadline?: string | null;
+  earliestStartTime?: string | null;
+  eligibleWeekDays?: number[] | null;
   scheduledStartTime?: string | null;
   scheduledEndTime?: string | null;
   phaseId?: string | null;

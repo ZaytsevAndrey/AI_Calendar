@@ -22,16 +22,30 @@ function toLocalTimeInput(value?: string): string | undefined {
   return `${hh}:${min}`;
 }
 
+export function windowSpansMultipleDays(from?: string, until?: string): boolean {
+  if (!from?.trim() || !until?.trim()) return false;
+  const start = new Date(from);
+  const end = new Date(until);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+  return (
+    start.getFullYear() !== end.getFullYear() ||
+    start.getMonth() !== end.getMonth() ||
+    start.getDate() !== end.getDate()
+  );
+}
+
 function preferredWindowIso(
   preferredStartTime: string,
   estimatedTimeInMinutes: number,
   deadline?: string,
+  earliestStartTime?: string,
 ): { start: string; end: string } {
   let baseDate = new Date();
-  if (deadline?.trim()) {
-    const fromDeadline = new Date(deadline);
-    if (!Number.isNaN(fromDeadline.getTime())) {
-      baseDate = fromDeadline;
+  const windowStart = earliestStartTime?.trim() || deadline?.trim();
+  if (windowStart) {
+    const fromWindow = new Date(windowStart);
+    if (!Number.isNaN(fromWindow.getTime())) {
+      baseDate = fromWindow;
     }
   }
   const yyyy = baseDate.getFullYear();
@@ -71,6 +85,17 @@ export function buildTaskPayload(data: TaskFormValues): CreateTaskDTO | UpdateTa
     allowSplit: isFixed ? false : !!data.allowSplit,
     priority: data.priority,
     deadline: data.deadline || undefined,
+    earliestStartTime:
+      !isFixed && data.earliestStartTime?.trim()
+        ? new Date(data.earliestStartTime).toISOString()
+        : null,
+    eligibleWeekDays:
+      !isFixed &&
+      !data.isRecurring &&
+      windowSpansMultipleDays(data.earliestStartTime, data.deadline) &&
+      data.eligibleWeekDays?.length
+        ? data.eligibleWeekDays
+        : null,
     phaseIds: phaseIds.length ? phaseIds : undefined,
     phaseId: primaryPhaseId || undefined,
   };
@@ -83,6 +108,7 @@ export function buildTaskPayload(data: TaskFormValues): CreateTaskDTO | UpdateTa
       data.preferredStartTime.trim(),
       estimatedTimeInMinutes,
       data.deadline,
+      data.earliestStartTime,
     );
     payload.scheduledStartTime = window.start;
     payload.scheduledEndTime = window.end;
@@ -109,6 +135,8 @@ export function formValuesFromCreatePayload(payload: CreateTaskDTO): TaskFormVal
     allowSplit: payload.allowSplit ?? !isFixed,
     priority: payload.priority ?? 'medium',
     deadline: payload.deadline,
+    earliestStartTime: payload.earliestStartTime ?? undefined,
+    eligibleWeekDays: payload.eligibleWeekDays ?? [],
     scheduledStartTime: payload.scheduledStartTime ?? undefined,
     scheduledEndTime: payload.scheduledEndTime ?? undefined,
     status: 'todo',
@@ -119,7 +147,7 @@ export function formValuesFromCreatePayload(payload: CreateTaskDTO): TaskFormVal
 
 export function initialFormValues(
   data?: TaskDTO,
-  defaults?: { deadline?: string; formPrefill?: TaskFormValues },
+  defaults?: { deadline?: string; earliestStartTime?: string; formPrefill?: TaskFormValues },
 ): TaskFormValues {
   if (defaults?.formPrefill) {
     return defaults.formPrefill;
@@ -136,6 +164,8 @@ export function initialFormValues(
       allowSplit: true,
       priority: 'medium',
       deadline: toLocalDateTimeInput(defaults?.deadline) ?? '',
+      earliestStartTime: toLocalDateTimeInput(defaults?.earliestStartTime) ?? '',
+      eligibleWeekDays: [],
       scheduledStartTime: '',
       scheduledEndTime: '',
       preferredStartTime: '',
@@ -155,6 +185,8 @@ export function initialFormValues(
     allowSplit: data.allowSplit,
     priority: data.priority,
     deadline: toLocalDateTimeInput(data.deadline) ?? '',
+    earliestStartTime: isFixed ? '' : toLocalDateTimeInput(data.earliestStartTime) ?? '',
+    eligibleWeekDays: data.eligibleWeekDays ?? [],
     scheduledStartTime: isFixed ? toLocalDateTimeInput(data.scheduledStartTime) ?? '' : '',
     scheduledEndTime: isFixed ? toLocalDateTimeInput(data.scheduledEndTime) ?? '' : '',
     preferredStartTime: isFixed ? '' : toLocalTimeInput(data.scheduledStartTime) ?? '',

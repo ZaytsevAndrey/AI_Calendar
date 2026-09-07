@@ -8,6 +8,22 @@ const WEEKDAY_NAMES = [
   'Saturday',
 ] as const;
 
+const WEEKDAY_PATTERNS: Array<[number, RegExp]> = [
+  [1, /понеділок|понедельник|\bmonday\b/],
+  [2, /вівторк|вторник|\btuesday\b/],
+  [3, /серед[ауи]|сред[ауы]|\bwednesday\b/],
+  [4, /четверг?а?|\bthursday\b/],
+  [5, /п'?ятниц|пятниц|\bfriday\b/],
+  [6, /субот|суббот|\bsaturday\b/],
+  [0, /нед[іи]л[юяі]|воскресень|\bsunday\b/],
+];
+
+export type InferredScheduleWindow = {
+  startYmd: string;
+  endYmd: string;
+  weekDays?: number[];
+};
+
 export function localYmd(nowIso: string, timeZone: string): string {
   const date = new Date(nowIso);
   const instant = Number.isNaN(date.getTime()) ? new Date() : date;
@@ -60,35 +76,155 @@ export function endOfLocalDayIso(ymd: string, timeZone: string): string {
   return `${ymd}T23:59:00${offsetForTimeZone(timeZone, ymd)}`;
 }
 
-export function inferDueYmd(transcript: string, todayYmd: string): string | null {
+export function localDateTimeIso(
+  ymd: string,
+  hm: string,
+  timeZone: string,
+): string {
+  return `${ymd}T${hm}:00${offsetForTimeZone(timeZone, ymd)}`;
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+function namedWeekdaysInOrder(text: string): number[] {
+  const hits: { dow: number; index: number }[] = [];
+  for (const [dow, pattern] of WEEKDAY_PATTERNS) {
+    const match = pattern.exec(text);
+    if (match && match.index >= 0) {
+      hits.push({ dow, index: match.index });
+    }
+  }
+  hits.sort((a, b) => a.index - b.index);
+  return hits.map((hit) => hit.dow);
+}
+
+function ymdOnOrAfter(fromYmd: string, dow: number): string {
+  const first = nextWeekdayYmd(fromYmd, dow);
+  return first < fromYmd ? addDaysToYmd(first, 7) : first;
+}
+
+function daysInYmdRange(startYmd: string, endYmd: string): number[] {
+  const days: number[] = [];
+  let cursor = startYmd;
+  while (cursor <= endYmd) {
+    days.push(weekdayIndex(cursor));
+    cursor = addDaysToYmd(cursor, 1);
+  }
+  return days;
+}
+
+function isContiguousSelection(
+  selected: number[],
+  startYmd: string,
+  endYmd: string,
+): boolean {
+  const span = daysInYmdRange(startYmd, endYmd);
+  return (
+    span.every((day) => selected.includes(day)) &&
+    selected.every((day) => span.includes(day))
+  );
+}
+
+function looksLikeDateRange(text: string, weekdayCount: number): boolean {
+  if (/(?:^|\s)(?:з|с)\s+/.test(text) && /(?:^|\s)(?:по|до)\s+/.test(text)) {
+    return true;
+  }
+  if (/\bfrom\b/.test(text) && /\bto\b/.test(text)) return true;
+  return weekdayCount >= 2 && /\bto\b/.test(text);
+}
+
+function windowFromWeekdays(
+  todayYmd: string,
+  weekdays: number[],
+  rangeLike: boolean,
+): InferredScheduleWindow {
+  const startYmd = nextWeekdayYmd(todayYmd, weekdays[0]);
+  let endYmd = ymdOnOrAfter(startYmd, weekdays[weekdays.length - 1]);
+  for (const dow of weekdays) {
+    const ymd = ymdOnOrAfter(startYmd, dow);
+    if (ymd > endYmd) endYmd = ymd;
+  }
+  const weekDays =
+    !rangeLike &&
+    weekdays.length > 1 &&
+    !isContiguousSelection(weekdays, startYmd, endYmd)
+      ? weekdays
+      : undefined;
+  return { startYmd, endYmd, weekDays };
+}
+
+export function inferClockHmRange(
+  transcript: string,
+): { startHm: string; endHm: string } | null {
+  const text = transcript.toLowerCase();
+  const stamped = [...text.matchAll(/\b(\d{1,2})[:.](\d{2})\b/g)];
+  if (stamped.length >= 2) {
+    const startH = Number(stamped[0][1]);
+    const startM = Number(stamped[0][2]);
+    const endH = Number(stamped[1][1]);
+    const endM = Number(stamped[1][2]);
+    if (
+      startH <= 23 &&
+      endH <= 23 &&
+      startM <= 59 &&
+      endM <= 59 &&
+      endH * 60 + endM > startH * 60 + startM
+    ) {
+      return {
+        startHm: `${pad2(startH)}:${pad2(startM)}`,
+        endHm: `${pad2(endH)}:${pad2(endM)}`,
+      };
+    }
+  }
+  const loose = text.match(
+    /(?:^|[^\p{L}])(?:з|с|from)\s+(\d{1,2})\s+(?:до|по|to)\s+(\d{1,2})(?:[^\p{L}]|$)/u,
+  );
+  if (loose) {
+    const startH = Number(loose[1]);
+    const endH = Number(loose[2]);
+    if (startH <= 23 && endH <= 23 && endH > startH) {
+      return { startHm: `${pad2(startH)}:00`, endHm: `${pad2(endH)}:00` };
+    }
+  }
+  return null;
+}
+
+export function inferScheduleWindow(
+  transcript: string,
+  todayYmd: string,
+): InferredScheduleWindow | null {
   const text = transcript.toLowerCase().replace(/[’']/g, "'");
   if (
     text.includes('післязавтра') ||
     text.includes('послезавтра') ||
     text.includes('day after tomorrow')
   ) {
-    return addDaysToYmd(todayYmd, 2);
+    const ymd = addDaysToYmd(todayYmd, 2);
+    return { startYmd: ymd, endYmd: ymd };
   }
   if (text.includes('завтра') || /\btomorrow\b/.test(text)) {
-    return addDaysToYmd(todayYmd, 1);
+    const ymd = addDaysToYmd(todayYmd, 1);
+    return { startYmd: ymd, endYmd: ymd };
   }
   if (text.includes('сьогодні') || text.includes('сегодня') || /\btoday\b/.test(text)) {
-    return todayYmd;
+    return { startYmd: todayYmd, endYmd: todayYmd };
   }
 
-  const weekdays: Array<[number, RegExp]> = [
-    [1, /понеділок|понедельник|\bmonday\b/],
-    [2, /вівторк|вторник|\btuesday\b/],
-    [3, /серед[ауи]|сред[ауы]|\bwednesday\b/],
-    [4, /четверг?а?|\bthursday\b/],
-    [5, /п'?ятниц|пятниц|\bfriday\b/],
-    [6, /субот|суббот|\bsaturday\b/],
-    [0, /неділ|воскресень|\bsunday\b/],
-  ];
-  for (const [dow, pattern] of weekdays) {
-    if (pattern.test(text)) return nextWeekdayYmd(todayYmd, dow);
+  const weekdays = namedWeekdaysInOrder(text);
+  if (weekdays.length === 1) {
+    const ymd = nextWeekdayYmd(todayYmd, weekdays[0]);
+    return { startYmd: ymd, endYmd: ymd };
+  }
+  if (weekdays.length >= 2) {
+    return windowFromWeekdays(todayYmd, weekdays, looksLikeDateRange(text, weekdays.length));
   }
   return null;
+}
+
+export function inferDueYmd(transcript: string, todayYmd: string): string | null {
+  return inferScheduleWindow(transcript, todayYmd)?.startYmd ?? null;
 }
 
 export function buildLocalCalendarContext(nowIso: string, timeZone: string): string {
@@ -98,5 +234,5 @@ export function buildLocalCalendarContext(nowIso: string, timeZone: string): str
   return `Local calendar (${timeZone}):
 - today: ${today} (${weekday})
 - tomorrow: ${tomorrow}
-If the speaker names a calendar day without a clock time, set deadline to that day's 23:59 and scheduledStartTime to 00:00 that same day (this timezone). Keep eventType admin.`;
+If the speaker names a calendar day or range without a clock time, set earliestStartTime to 00:00 of the first day and deadline to 23:59 of the last day (this timezone). Keep eventType admin. Do not set scheduledStartTime for day-only speech.`;
 }

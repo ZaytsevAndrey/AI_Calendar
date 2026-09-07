@@ -21,6 +21,8 @@ JSON shape:
     "allowSplit": boolean,
     "priority": "low" | "medium" | "high" | "urgent",
     "deadline": string | null,
+    "earliestStartTime": string | null,
+    "eligibleWeekDays": number[] | null,
     "scheduledStartTime": string | null,
     "scheduledEndTime": string | null,
     "phaseId": string | null
@@ -47,8 +49,10 @@ NOT critical (use defaults, prefer sufficient over asking):
 
 Task rules:
 - eventType "fixed" = immovable exact slot. Requires scheduledStartTime AND scheduledEndTime (ISO-8601 with offset). Use only when they gave a clock time (15:00, о третій, at 3pm).
-- eventType "admin" = flexible/movable. Optional preferred window via scheduledStartTime/End (end = start + duration).
-- Day without a clock time ("tomorrow", "завтра", "в п'ятницю", "on Monday"): this is allowed. Set eventType "admin", deadline to 23:59 of that local day, and scheduledStartTime/scheduledEndTime to a window that starts at 00:00 that same local day (end = start + duration). Do not ask for a time. Do not place it today.
+- eventType "admin" = flexible/movable. Optional preferred clock via scheduledStartTime/End (end = start + duration) ONLY when they named a clock time they prefer, not a calendar day.
+- Day or range without a clock time ("tomorrow", "завтра", "в п'ятницю", "on Monday", "з п'ятниці по неділю", "Friday to Sunday"): this is allowed. Set eventType "admin", earliestStartTime to 00:00 of the first local day, deadline to 23:59 of the last local day. Leave scheduledStartTime and scheduledEndTime null. Do not ask for a time. Do not place it before that window.
+- Several specific weekdays ("в понеділок і середу", "Monday and Thursday"): earliestStartTime = 00:00 of the first named day, deadline = 23:59 of the last, eligibleWeekDays = those weekdays (0=Sunday … 6=Saturday).
+- Clock range ("з 14:00 до 18:00", "from 2pm to 6pm") on a named day or today: earliestStartTime = start clock, deadline = end clock.
 - One phase only. phaseId MUST be one of the provided phase ids, or null. Match by meaning (work, gym, evening). Never invent ids.
 - Recurrence: isRecurring true only if they asked to repeat. Pattern DAILY/WEEKLY/BIWEEKLY/MONTHLY. recurrenceWeekDays: 0=Sunday … 6=Saturday. Default Mon–Fri for "every weekday" / "щодня по буднях". Empty/null = no extra weekday filter.
 - allowSplit false when fixed; true otherwise unless they forbid splitting.

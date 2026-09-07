@@ -1,6 +1,8 @@
 import {
   endOfLocalDayIso,
-  inferDueYmd,
+  inferClockHmRange,
+  inferScheduleWindow,
+  localDateTimeIso,
   localYmd,
   startOfLocalDayIso,
 } from './voice-local-date.util';
@@ -85,6 +87,64 @@ function fallbackNameFromTranscript(transcript: string): string {
   return compact.length > 80 ? `${compact.slice(0, 77)}…` : compact;
 }
 
+function isMidnightIso(iso: string): boolean {
+  return /T00:00/.test(iso);
+}
+
+function applyInferredScheduleWindow(
+  task: VoiceParsedTask,
+  ctx: {
+    transcript: string;
+    timeZone: string;
+    nowIso: string;
+    eventType: 'fixed' | 'admin';
+  },
+): void {
+  const window = inferScheduleWindow(
+    ctx.transcript,
+    localYmd(ctx.nowIso, ctx.timeZone),
+  );
+  const clocks = inferClockHmRange(ctx.transcript);
+
+  if (window) {
+    if (!task.earliestStartTime) {
+      task.earliestStartTime = clocks
+        ? localDateTimeIso(window.startYmd, clocks.startHm, ctx.timeZone)
+        : startOfLocalDayIso(window.startYmd, ctx.timeZone);
+    }
+    if (!task.deadline) {
+      task.deadline =
+        clocks && window.startYmd === window.endYmd
+          ? localDateTimeIso(window.endYmd, clocks.endHm, ctx.timeZone)
+          : endOfLocalDayIso(window.endYmd, ctx.timeZone);
+    }
+    if (
+      ctx.eventType !== 'fixed' &&
+      !task.isRecurring &&
+      window.weekDays?.length &&
+      !task.eligibleWeekDays?.length
+    ) {
+      task.eligibleWeekDays = window.weekDays;
+    }
+  } else if (clocks && !task.earliestStartTime && !task.deadline) {
+    const today = localYmd(ctx.nowIso, ctx.timeZone);
+    task.earliestStartTime = localDateTimeIso(today, clocks.startHm, ctx.timeZone);
+    task.deadline = localDateTimeIso(today, clocks.endHm, ctx.timeZone);
+  }
+
+  if (
+    ctx.eventType !== 'fixed' &&
+    task.scheduledStartTime &&
+    isMidnightIso(task.scheduledStartTime)
+  ) {
+    if (!task.earliestStartTime) {
+      task.earliestStartTime = task.scheduledStartTime;
+    }
+    task.scheduledStartTime = null;
+    task.scheduledEndTime = null;
+  }
+}
+
 export function normalizeVoiceParse(
   raw: unknown,
   ctx: {
@@ -122,6 +182,9 @@ export function normalizeVoiceParse(
   const deadline = isIsoLike(asNullableString(taskRaw.deadline))
     ? asNullableString(taskRaw.deadline)
     : null;
+  const earliestStartTime = isIsoLike(asNullableString(taskRaw.earliestStartTime))
+    ? asNullableString(taskRaw.earliestStartTime)
+    : null;
 
   let name = asString(taskRaw.name);
   const task: VoiceParsedTask = {
@@ -137,6 +200,11 @@ export function normalizeVoiceParse(
       ? (asString(taskRaw.priority) as VoiceParsedTask['priority'])
       : 'medium',
     deadline,
+    earliestStartTime,
+    eligibleWeekDays:
+      eventType !== 'fixed' && !isRecurring
+        ? asWeekDays(taskRaw.eligibleWeekDays)
+        : null,
     scheduledStartTime,
     scheduledEndTime,
     phaseId,
@@ -144,20 +212,12 @@ export function normalizeVoiceParse(
   };
 
   if (ctx.timeZone && ctx.nowIso) {
-    const dueYmd = inferDueYmd(ctx.transcript, localYmd(ctx.nowIso, ctx.timeZone));
-    if (dueYmd) {
-      if (!task.deadline) {
-        task.deadline = endOfLocalDayIso(dueYmd, ctx.timeZone);
-      }
-      if (eventType !== 'fixed' && !task.scheduledStartTime) {
-        const dayStart = startOfLocalDayIso(dueYmd, ctx.timeZone);
-        const startMs = Date.parse(dayStart);
-        task.scheduledStartTime = dayStart;
-        task.scheduledEndTime = new Date(
-          startMs + task.estimatedTimeInMinutes * 60 * 1000,
-        ).toISOString();
-      }
-    }
+    applyInferredScheduleWindow(task, {
+      transcript: ctx.transcript,
+      timeZone: ctx.timeZone,
+      nowIso: ctx.nowIso,
+      eventType,
+    });
   }
 
   if (

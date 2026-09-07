@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { CreateTaskDTO, TaskDTO, UpdateTaskDTO } from '../../../api/tasks.api';
 import { PhaseDTO } from '../../../api/phases.api';
 import { taskFormSchema, type TaskFormValues } from '../task-wizard/schema';
-import { buildTaskPayload, initialFormValues } from '../task-wizard/buildPayload';
+import { buildTaskPayload, initialFormValues, windowSpansMultipleDays } from '../task-wizard/buildPayload';
 import {
   matchPreset,
   presetPatch,
@@ -26,7 +26,7 @@ const lbl = 'mb-0.5 block text-xs font-medium text-ide-text';
 
 interface TaskFormProps {
   initialData?: TaskDTO;
-  createDefaults?: { deadline?: string; formPrefill?: TaskFormValues };
+  createDefaults?: { deadline?: string; earliestStartTime?: string; formPrefill?: TaskFormValues };
   phases: PhaseDTO[];
   onSubmit: (data: CreateTaskDTO | UpdateTaskDTO) => void;
   isSubmitting: boolean;
@@ -75,6 +75,11 @@ const TaskForm: React.FC<TaskFormProps> = ({
   const recurrencePattern = useWatch({ control, name: 'recurrencePattern' });
   const phaseId = useWatch({ control, name: 'phaseId' });
   const selectedDays = useWatch({ control, name: 'recurrenceWeekDays' }) ?? [];
+  const earliestStartTime = useWatch({ control, name: 'earliestStartTime' });
+  const deadline = useWatch({ control, name: 'deadline' });
+  const selectedEligibleDays = useWatch({ control, name: 'eligibleWeekDays' }) ?? [];
+  const showWindowDays =
+    !isFixed && !isRecurring && windowSpansMultipleDays(earliestStartTime, deadline);
 
   useEffect(() => {
     if (isFixed) {
@@ -133,6 +138,13 @@ const TaskForm: React.FC<TaskFormProps> = ({
       ? selectedDays.filter((d) => d !== day)
       : [...selectedDays, day];
     setValue('recurrenceWeekDays', next, { shouldDirty: true });
+  };
+
+  const toggleEligibleDay = (day: number) => {
+    const next = selectedEligibleDays.includes(day)
+      ? selectedEligibleDays.filter((d) => d !== day)
+      : [...selectedEligibleDays, day];
+    setValue('eligibleWeekDays', next, { shouldDirty: true });
   };
 
   return (
@@ -471,21 +483,88 @@ const TaskForm: React.FC<TaskFormProps> = ({
                 />
               </div>
             </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor="task-form-from" className={lbl}>
+                  From
+                </label>
+                <Controller
+                  name="earliestStartTime"
+                  control={control}
+                  render={({ field }) => (
+                    <input
+                      {...field}
+                      id="task-form-from"
+                      type="datetime-local"
+                      className={inp}
+                    />
+                  )}
+                />
+              </div>
+              <div>
+                <label htmlFor="task-form-deadline" className={lbl}>
+                  Until
+                </label>
+                <Controller
+                  name="deadline"
+                  control={control}
+                  render={({ field }) => (
+                    <input
+                      {...field}
+                      id="task-form-deadline"
+                      type="datetime-local"
+                      className={`${inp} ${errors.deadline ? 'border-ide-error' : ''}`}
+                    />
+                  )}
+                />
+                {errors.deadline ? (
+                  <p className="mt-0.5 text-xs text-ide-error">{errors.deadline.message}</p>
+                ) : null}
+              </div>
+            </div>
+            <p className="text-xs text-ide-muted">
+              Optional. One day, a range, or empty for any time.
+            </p>
+
+            {showWindowDays ? (
+              <div>
+                <span className={lbl}>Only these days</span>
+                <div className="weekdays-toggle">
+                  {WEEKDAY_OPTIONS.map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`weekday-btn${selectedEligibleDays.includes(value) ? ' active' : ''}`}
+                      onClick={() => toggleEligibleDay(value)}
+                      aria-pressed={selectedEligibleDays.includes(value)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1 text-xs text-ide-muted">
+                  None selected = any day in the window.
+                </p>
+              </div>
+            ) : null}
           </>
         )}
 
-        <div>
-          <label htmlFor="task-form-deadline" className={lbl}>
-            Deadline
-          </label>
-          <Controller
-            name="deadline"
-            control={control}
-            render={({ field }) => (
-              <input {...field} id="task-form-deadline" type="datetime-local" className={inp} />
-            )}
-          />
-        </div>
+        {isFixed ? (
+          <div>
+            <label htmlFor="task-form-deadline" className={lbl}>
+              Deadline
+            </label>
+            <Controller
+              name="deadline"
+              control={control}
+              render={({ field }) => (
+                <input {...field} id="task-form-deadline" type="datetime-local" className={inp} />
+              )}
+            />
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-4 flex flex-col-reverse gap-2 border-t border-ide-border pt-3 sm:flex-row sm:justify-end">

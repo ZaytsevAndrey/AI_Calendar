@@ -17,12 +17,12 @@
 ## 2) Базові правила створення
 
 - Обов’язкові в UI: **назва**; для non-fixed — **тривалість**; для fixed — **старт і кінець** (end > start).
-- День без години (у формі або голосом: «завтра», «в п’ятницю») — **deadline** 23:59 того дня і preferred start з 00:00 того ж дня (flexible). Планувальник не ставить її раніше цього дня. Фіксований слот лише якщо є конкретний час.
+- День / проміжок без години (форма **From / Until** або голос: «завтра», «в п’ятницю», «з п’ятниці по неділю») — **`earliestStartTime`** 00:00 першого дня і **deadline** 23:59 останнього. Планувальник ставить задачу лише в цьому вікні і **не затирає** `earliestStartTime` після replan. Кілька окремих днів («понеділок і середа») додатково ставлять `eligibleWeekDays`. Фіксований слот лише якщо є конкретний час.
 - `priority` у формі завжди є (дефолт medium); в API опційний.
 - Задача може мати **тільки одну фазу** (`phaseId` / `phaseIds` max 1). Порожня фаза = будь-який час у межах wake/sleep.
 - **XOR часу:**
   - Fixed → `scheduledStartTime` + `scheduledEndTime`.
-  - Non-fixed → optional **preferred start** (час доби). Якщо задано, кінець = старт + `estimatedTimeInMinutes`; зберігається в тих самих `scheduledStartTime` / `scheduledEndTime`.
+  - Non-fixed → optional **preferred start** (час доби). Якщо задано, кінець = старт + `estimatedTimeInMinutes`; зберігається в `scheduledStartTime` / `scheduledEndTime` (після replan це вже поставлений слот). Вікно днів — окремі `earliestStartTime` + `deadline`.
 - Recurring: `isRecurring` + `recurrencePattern` (`DAILY` / `WEEKLY` / `BIWEEKLY` / `MONTHLY`).
 - Optional: `recurrenceWeekDays` (0 = Sunday … 6 = Saturday). Порожньо або всі 7 днів = без додаткового фільтра днів.
 - `allowSplit` — лише для non-fixed; фактичний спліт = цей прапорець **і** user setting `allowSplitScheduling`.
@@ -48,9 +48,12 @@
 - **Fixed:** не пересуваємо.
 - **Flexible:** шукаємо в наступні дні (в рамках горизонту).
 
-### 3.4 Deadline
+### 3.4 Deadline / schedule window
 
-- Якщо задача не влазить до дедлайну, формуємо warning:
+- `earliestStartTime` — hard «не раніше» (instant, не midnight сервера).
+- `deadline` — hard «не пізніше»; усі сегменти мають закінчитись до нього.
+- `eligibleWeekDays` — опційний фільтр днів усередині From–Until (лише non-recurring).
+- Якщо задача не влазить у вікно, формуємо warning:
   - рекомендуємо підняти пріоритет або переглянути фазу/тривалість/спліт.
 
 ### 3.5 Weekend vs phase

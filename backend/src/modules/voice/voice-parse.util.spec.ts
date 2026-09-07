@@ -1,4 +1,9 @@
-import { inferDueYmd, localYmd } from './voice-local-date.util';
+import {
+  inferClockHmRange,
+  inferDueYmd,
+  inferScheduleWindow,
+  localYmd,
+} from './voice-local-date.util';
 import { extractJsonObject, normalizeVoiceParse } from './voice-parse.util';
 
 describe('extractJsonObject', () => {
@@ -124,7 +129,89 @@ describe('normalizeVoiceParse', () => {
     );
     expect(result.task?.deadline).toBe('2026-09-08T23:59:00+03:00');
     expect(result.task?.eventType).toBe('admin');
-    expect(result.task?.scheduledStartTime).toBe('2026-09-08T00:00:00+03:00');
+    expect(result.task?.earliestStartTime).toBe('2026-09-08T00:00:00+03:00');
+    expect(result.task?.scheduledStartTime).toBeNull();
+  });
+
+  it('maps Friday speech to that local day only', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: { name: 'Зал', eventType: 'admin' },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: "в п'ятницю в зал",
+        timeZone: 'Asia/Nicosia',
+        nowIso: '2026-09-07T16:00:00.000Z',
+      },
+    );
+    expect(result.task?.earliestStartTime).toBe('2026-09-11T00:00:00+03:00');
+    expect(result.task?.deadline).toBe('2026-09-11T23:59:00+03:00');
+    expect(result.task?.scheduledStartTime).toBeNull();
+  });
+
+  it('maps a Friday–Sunday range without weekday filter', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: { name: 'Trip prep', eventType: 'admin' },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: "з п'ятниці по неділю зібрати речі",
+        timeZone: 'Asia/Nicosia',
+        nowIso: '2026-09-07T16:00:00.000Z',
+      },
+    );
+    expect(result.task?.earliestStartTime).toBe('2026-09-11T00:00:00+03:00');
+    expect(result.task?.deadline).toBe('2026-09-13T23:59:00+03:00');
+    expect(result.task?.eligibleWeekDays).toBeNull();
+  });
+
+  it('maps Monday and Wednesday to those weekdays only', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: { name: 'Review', eventType: 'admin' },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'в понеділок і середу зробити ревʼю',
+        timeZone: 'Asia/Nicosia',
+        nowIso: '2026-09-07T16:00:00.000Z',
+      },
+    );
+    expect(result.task?.earliestStartTime).toBe('2026-09-07T00:00:00+03:00');
+    expect(result.task?.deadline).toBe('2026-09-09T23:59:00+03:00');
+    expect(result.task?.eligibleWeekDays).toEqual([1, 3]);
+  });
+
+  it('moves a midnight preferred start from the model onto earliestStartTime', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'Wash the car',
+          eventType: 'admin',
+          scheduledStartTime: '2026-09-08T00:00:00+03:00',
+          scheduledEndTime: '2026-09-08T00:30:00+03:00',
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'tomorrow wash the car',
+        timeZone: 'Asia/Nicosia',
+        nowIso: '2026-09-07T16:00:00.000Z',
+      },
+    );
+    expect(result.task?.earliestStartTime).toBe('2026-09-08T00:00:00+03:00');
+    expect(result.task?.scheduledStartTime).toBeNull();
+    expect(result.task?.scheduledEndTime).toBeNull();
   });
 
   it('does not overwrite a deadline the model already set', () => {
@@ -160,6 +247,42 @@ describe('inferDueYmd', () => {
   it('maps the next named weekday', () => {
     expect(inferDueYmd("в п'ятницю в зал", today)).toBe('2026-09-11');
     expect(inferDueYmd('on Monday', today)).toBe('2026-09-07');
+  });
+});
+
+describe('inferScheduleWindow', () => {
+  const today = '2026-09-07';
+
+  it('maps a contiguous spoken range', () => {
+    expect(inferScheduleWindow("з п'ятниці по неділю", today)).toEqual({
+      startYmd: '2026-09-11',
+      endYmd: '2026-09-13',
+    });
+    expect(inferScheduleWindow('Friday to Sunday', today)).toEqual({
+      startYmd: '2026-09-11',
+      endYmd: '2026-09-13',
+    });
+  });
+
+  it('keeps non-contiguous weekdays as a filter', () => {
+    expect(inferScheduleWindow('в понеділок і середу', today)).toEqual({
+      startYmd: '2026-09-07',
+      endYmd: '2026-09-09',
+      weekDays: [1, 3],
+    });
+  });
+});
+
+describe('inferClockHmRange', () => {
+  it('reads stamped and loose hour ranges', () => {
+    expect(inferClockHmRange('з 14:00 до 18:00')).toEqual({
+      startHm: '14:00',
+      endHm: '18:00',
+    });
+    expect(inferClockHmRange('from 9 to 11')).toEqual({
+      startHm: '09:00',
+      endHm: '11:00',
+    });
   });
 });
 

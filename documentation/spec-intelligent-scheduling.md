@@ -29,7 +29,9 @@ One persisted entity (evolve current `Task` or merge with calendar event model�
 | `phaseIds` | At most one phase; empty = wake/sleep window |
 | `priority` | Ordered; ties broken by **creation time** (older first) |
 | `durationMinutes` | User-set; default 30 for movable tasks |
-| `deadline` | Optional |
+| `deadline` | Optional not-after bound |
+| `earliestStartTime` | Optional not-before bound (survives replan) |
+| `eligibleWeekDays` | Optional weekday filter inside the window (non-recurring) |
 | `isRecurring` / `recurrencePattern` | `DAILY` / `WEEKLY` / `BIWEEKLY` / `MONTHLY` |
 | `recurrenceWeekDays` | Optional `0–6` (Sun–Sat); intersected with phase `weekDays` |
 | `allowSplit` | Effective value = user setting **and** per-task flag; never for `fixed` |
@@ -59,7 +61,7 @@ Behavior comes from **fields**, not from a catalog of event types. The UI offers
 | Setting | Movable | Splittable | Notes |
 |---------|---------|------------|--------|
 | `eventType = fixed` | No | No | Exact start/end required. Anchor. |
-| Movable (`admin`) | Yes | If `allowSplit` and user setting | Duration required. Optional preferred start, deadline, recurrence. |
+| Movable (`admin`) | Yes | If `allowSplit` and user setting | Duration required. Optional preferred start, From/Until window, recurrence. |
 
 **Product rule:** `fixed` never participates in “bump others”; it only consumes slots.
 
@@ -95,9 +97,11 @@ Items are processed in **priority order** (highest first). For each item:
 
 *Note:* A later iteration may add **explicit bumping** of strictly **lower-priority** movable items before step 4; MVP follows the steps above.
 
-### 4.4 Deadline
+### 4.4 Deadline / schedule window
 
+- If `earliestStartTime` is set: hard constraint—do not start any segment before that **instant** (do not snap to server-local midnight).
 - If `deadline` is set: hard constraint—**all segments must end by deadline**. If impossible: **do not silently fail**—return structured error / UI message: e.g. “Cannot fit before deadline; raise priority, extend deadline, enable split, or remove other work.”
+- If `eligibleWeekDays` is set on a non-recurring task: only those weekdays inside the window are eligible.
 
 ### 4.5 Phase and preferred start
 

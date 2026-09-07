@@ -31,6 +31,7 @@ const statusClass = {
 
 const EventItem: React.FC<EventItemProps> = ({ event, onEdit, onDelete }) => {
   const deadline = formatDateTime(event.deadline);
+  const from = formatDateTime(event.earliestStartTime);
   const overdue = event.deadline ? new Date(event.deadline) < new Date() && event.status !== 'completed' : false;
 
   return (
@@ -57,9 +58,11 @@ const EventItem: React.FC<EventItemProps> = ({ event, onEdit, onDelete }) => {
               {statusLabels[event.status]}
             </span>
             <span className="capitalize">{event.priority}</span>
+            {from ? <span>From {from}</span> : null}
             {deadline ? (
               <span className={overdue ? 'font-medium text-ide-error' : ''}>
                 {overdue ? 'Overdue · ' : ''}
+                {from ? 'Until ' : ''}
                 {deadline}
               </span>
             ) : (

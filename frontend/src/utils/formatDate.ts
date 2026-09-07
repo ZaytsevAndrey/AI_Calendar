@@ -41,6 +41,12 @@ export function formatMinutes(mins: number): string {
     return rest ? `${hours}h ${rest}m` : `${hours}h`;
 }
 
+export function startOfLocalDayIso(date: Date): string {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString();
+}
+
 export function endOfLocalDayIso(date: Date): string {
     const d = new Date(date);
     d.setHours(23, 59, 0, 0);

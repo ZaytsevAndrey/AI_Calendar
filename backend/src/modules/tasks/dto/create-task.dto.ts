@@ -114,6 +114,32 @@ export class CreateTaskDto {
 
   @ApiProperty({
     description:
+      'Movable tasks: do not place before this instant (start of a day or a clock time). Null clears it. Survives replan.',
+    required: false,
+    nullable: true,
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsDateString()
+  @IsOptional()
+  earliestStartTime?: string | null;
+
+  @ApiProperty({
+    description:
+      'Movable non-recurring: only these weekdays inside the From–Until window (0 = Sunday … 6 = Saturday). Empty or omitted = any day in the window.',
+    required: false,
+    type: [Number],
+    nullable: true,
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsArray()
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  @Max(6, { each: true })
+  @IsOptional()
+  eligibleWeekDays?: number[] | null;
+
+  @ApiProperty({
+    description:
       'Exact start for fixed tasks, or preferred start window for movable tasks. Null clears it.',
     required: false,
     nullable: true,

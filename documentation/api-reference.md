@@ -67,7 +67,7 @@ JWT. Free Groq backend (`GROQ_API_KEY`). Audio is **not** stored.
 
 ## Tasks — `/tasks`
 
-Task CRUD (JWT). Bodies/responses include `phaseId`, **`phaseIds`** (max 1), **`eventType`** (`fixed` or `admin` on new writes), status, priority, deadline, estimated minutes, `allowSplit`, `isRecurring`, `recurrencePattern`, **`recurrenceWeekDays`**, optional `scheduledStartTime` / `scheduledEndTime`. `phaseIds` must belong to the current user.
+Task CRUD (JWT). Bodies/responses include `phaseId`, **`phaseIds`** (max 1), **`eventType`** (`fixed` or `admin` on new writes), status, priority, deadline, **`earliestStartTime`**, **`eligibleWeekDays`**, estimated minutes, `allowSplit`, `isRecurring`, `recurrencePattern`, **`recurrenceWeekDays`**, optional `scheduledStartTime` / `scheduledEndTime`. `phaseIds` must belong to the current user.
 
 ## Google Calendar — `/google-calendar`
 
@@ -117,7 +117,9 @@ Create/update body may include:
 - `eventType` — `fixed` (pinned, not moved) or `admin` (flexible / recurring). Optional; default `admin`. Legacy values may still exist on old rows.
 - `phaseIds` — at most one phase UUID (empty = full wake/sleep window)
 - `estimatedTimeInMinutes` — optional; default 30 for non-fixed, or derived from start/end for fixed
-- `scheduledStartTime` / `scheduledEndTime` — required when `eventType` is `fixed`. For movable tasks, optional preferred window (end = start + duration). `null` clears them.
+- `scheduledStartTime` / `scheduledEndTime` — required when `eventType` is `fixed`. For movable tasks, optional preferred clock (end = start + duration). After replan these hold the placed slot. `null` clears them.
+- `earliestStartTime` — movable: do not place before this instant (day or clock). Survives replan. `null` clears it.
+- `eligibleWeekDays` — movable non-recurring: only these weekdays inside the From–Until window. Empty / omitted = any day in the window.
 - `isRecurring`, `recurrencePattern` — `DAILY` / `WEEKLY` / `BIWEEKLY` / `MONTHLY`
 - `recurrenceWeekDays` — `0` = Sunday … `6` = Saturday. Empty / omitted / all seven = no extra weekday filter. Intersected with the phase `weekDays`.
 - `allowSplit` — per-task; engine also requires the user setting `allowSplitScheduling`

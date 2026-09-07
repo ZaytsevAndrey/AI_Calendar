@@ -231,18 +231,18 @@ function normalizeRecurrencePattern(value?: string | null): RecurrencePattern | 
   return null;
 }
 
-/** Movable non-recurring: do not search before the preferred start's local day. */
-function placementStartDay(task: Task, startDay: Date): Date {
-  if (
-    task.isRecurring ||
-    task.eventType === TaskEventType.FIXED ||
-    !task.scheduledStartTime
-  ) {
+/**
+ * Movable non-recurring: do not search before earliestStartTime.
+ * Uses the stored instant (not server-local midnight) so a +03:00 Friday
+ * does not collapse to Thursday/today on a UTC host.
+ */
+function placementNotBefore(task: Task, startDay: Date): Date {
+  if (task.isRecurring || task.eventType === TaskEventType.FIXED) {
     return startDay;
   }
-  const preferredDay = new Date(task.scheduledStartTime);
-  preferredDay.setHours(0, 0, 0, 0);
-  return preferredDay > startDay ? preferredDay : startDay;
+  if (!task.earliestStartTime) return startDay;
+  const bound = new Date(task.earliestStartTime);
+  return bound > startDay ? bound : startDay;
 }
 
 function taskPreferredIntervalOnDay(task: Task, day: Date): MsInterval | null {
@@ -588,7 +588,10 @@ export class IntelligentSchedulingEngine {
       : null;
     const phases = this.resolvePhasesForTask(task);
     const placedBusy = this.rebuildBusy(anchorBusy, newSegments);
-    const searchStart = placementStartDay(task, startDay);
+    const searchStart = placementNotBefore(task, startDay);
+    const weekDays = task.eligibleWeekDays?.length
+      ? task.eligibleWeekDays
+      : null;
 
     let result = this.placeTaskGreedy(
       durationMin,
@@ -604,6 +607,7 @@ export class IntelligentSchedulingEngine {
       settings.weekendWorkEnabled,
       placedBusy,
       nowMs,
+      weekDays,
     );
     let beyondHorizon = false;
     if (!result.ok) {
@@ -621,6 +625,7 @@ export class IntelligentSchedulingEngine {
         settings.weekendWorkEnabled,
         placedBusy,
         nowMs,
+        weekDays,
       );
       beyondHorizon = result.ok;
     }
@@ -779,6 +784,7 @@ export class IntelligentSchedulingEngine {
         settings.weekendWorkEnabled,
         mergedBusy,
         nowMs,
+        null,
       );
 
       if (!result.ok) {
@@ -1098,15 +1104,22 @@ export class IntelligentSchedulingEngine {
     weekendOk: boolean,
     globalBusy: MsInterval[],
     nowMs: number,
+    eligibleWeekDays: number[] | null = null,
   ): { ok: boolean; segments: { start: Date; end: Date }[] } {
     let remaining = durationMin;
     const segments: { start: Date; end: Date }[] = [];
     const myBusy: MsInterval[] = [...globalBusy];
+    const notBeforeMs = rangeStart.getTime();
 
     const day = new Date(rangeStart);
+    day.setHours(0, 0, 0, 0);
     while (day < rangeEnd && remaining > 0) {
       if (deadlineMs && day.getTime() > deadlineMs) {
         return { ok: false, segments: [] };
+      }
+      if (eligibleWeekDays?.length && !eligibleWeekDays.includes(day.getDay())) {
+        day.setDate(day.getDate() + 1);
+        continue;
       }
 
       let eligible = this.eligibleIntervalsForDay(
@@ -1119,7 +1132,7 @@ export class IntelligentSchedulingEngine {
       eligible = subtractMany(eligible, myBusy);
 
       for (const slot of eligible) {
-        let cursor = Math.max(slot.start, nowMs);
+        let cursor = Math.max(slot.start, nowMs, notBeforeMs);
         while (remaining > 0 && cursor < slot.end) {
           const roomMin = (slot.end - cursor) / 60000;
           if (roomMin < 1) break;

@@ -13,6 +13,7 @@ import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 
 export type CreateTaskDefaults = {
   deadline?: string;
+  earliestStartTime?: string;
   formPrefill?: TaskFormValues;
 };
 

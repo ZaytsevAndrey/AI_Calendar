@@ -96,6 +96,20 @@ export class Task {
   @Column({ type: timestampColumnType(), nullable: true })
   deadline: Date | null;
 
+  /**
+   * Movable tasks only. Hard "not before" bound. The engine never overwrites this
+   * (unlike scheduledStartTime, which stores the placed slot).
+   */
+  @Column({ type: timestampColumnType(), nullable: true })
+  earliestStartTime: Date | null;
+
+  /**
+   * Movable non-recurring tasks: only these weekdays inside the From–Until window.
+   * 0 = Sunday … 6 = Saturday. Null / empty = any day in the window.
+   */
+  @Column({ type: 'json', nullable: true })
+  eligibleWeekDays: number[] | null;
+
   @Column({
     type: 'varchar',
     enum: TaskStatus,
