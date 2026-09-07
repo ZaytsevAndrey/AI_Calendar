@@ -46,7 +46,6 @@ services:
   - type: web
     name: ai-calendar-web
     runtime: static
-    region: frankfurt
     branch: master
     autoDeployTrigger: commit
     buildCommand: npm ci --workspace=frontend --include-workspace-root --include=dev && npm run build:frontend
