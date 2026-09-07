@@ -78,3 +78,25 @@ On Render: each service → **Custom Domains** → add e.g. `calendar.yourdomain
 - Free instance hours exhausted: API suspends until next calendar month.
 - Neon Free: storage and compute quotas; compute scales to zero when idle (next API request waits on DB wake-up too).
 - Do not rely on files written next to the API process — the disk is not persistent. All app data must live in Postgres.
+
+## Copy local SQLite into Neon
+
+Run this **on your machine** (Render does not have `db.sqlite`). It wipes production tables, then copies current product tables. Leftover local-only tables (`categories`, `migrations`, `schedule_undo_snapshots`) are skipped.
+
+From `backend/` (PowerShell):
+
+```powershell
+$env:PROD_DATABASE_URL="postgresql://USER:PASSWORD@HOST/neondb?sslmode=require"
+$env:CONFIRM_OVERWRITE="yes"
+npm run copy-db:prod
+```
+
+From `backend/` (Command Prompt / cmd.exe):
+
+```bat
+set PROD_DATABASE_URL=postgresql://USER:PASSWORD@HOST/neondb?sslmode=require
+set CONFIRM_OVERWRITE=yes
+npm run copy-db:prod
+```
+
+`PROD_DATABASE_URL` is the same Neon string as Render `DATABASE_URL`. After the copy, sign in again on the deployed site: production `JWT_SECRET` is not the local one. Google Calendar tokens on the user row are copied, so an existing Google connection should still work once you log in.
