@@ -30,7 +30,7 @@ export class Phase {
   @Column()
   endTime: string;
 
-  @Column({ type: 'varchar', length: 36, nullable: true })
+  @Column({ type: 'uuid', nullable: true })
   parentPhaseId: string | null;
 
   @OneToMany(() => Phase, (phase) => phase.parentPhase)
@@ -47,7 +47,7 @@ export class Phase {
   type: string; // 'time_phase' | 'sleep_time'
 
   /** Owner; phases are per-user. */
-  @Column({ type: 'varchar', length: 36, nullable: true })
+  @Column({ type: 'uuid', nullable: true })
   userId: string | null;
 
   @OneToMany(() => Task, (task) => task.phase)

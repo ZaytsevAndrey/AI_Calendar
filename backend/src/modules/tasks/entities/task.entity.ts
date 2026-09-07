@@ -47,7 +47,7 @@ export class Task {
   user: User;
 
   /** @deprecated Prefer `phases`; kept for backward compatibility (first phase). */
-  @Column({ nullable: true, type: 'varchar' })
+  @Column({ nullable: true, type: 'uuid' })
   phaseId: string | null;
 
   @ManyToOne(() => Phase, (phase) => phase.tasks)
