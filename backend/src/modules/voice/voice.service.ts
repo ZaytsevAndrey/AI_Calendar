@@ -107,6 +107,8 @@ export class VoiceService {
     return normalizeVoiceParse(parsed, {
       validPhaseIds: new Set(phases.map((phase) => phase.id)),
       alreadyClarified,
+      timeZone: dto.timeZone || 'UTC',
+      nowIso,
       transcript: alreadyClarified
         ? `${dto.previousTranscript || ''} ${dto.clarificationAnswer || ''} ${transcript}`
         : transcript,

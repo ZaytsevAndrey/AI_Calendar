@@ -1,3 +1,8 @@
+import {
+  endOfLocalDayIso,
+  inferDueYmd,
+  localYmd,
+} from './voice-local-date.util';
 import type {
   VoiceParsedTask,
   VoiceParseResult,
@@ -85,6 +90,8 @@ export function normalizeVoiceParse(
     validPhaseIds: Set<string>;
     alreadyClarified: boolean;
     transcript: string;
+    timeZone?: string;
+    nowIso?: string;
   },
 ): VoiceParseResult {
   const root = asRecord(raw);
@@ -134,6 +141,13 @@ export function normalizeVoiceParse(
     phaseId,
     phaseIds: phaseId ? [phaseId] : undefined,
   };
+
+  if (!task.deadline && ctx.timeZone && ctx.nowIso) {
+    const dueYmd = inferDueYmd(ctx.transcript, localYmd(ctx.nowIso, ctx.timeZone));
+    if (dueYmd) {
+      task.deadline = endOfLocalDayIso(dueYmd, ctx.timeZone);
+    }
+  }
 
   if (
     eventType === 'fixed' &&

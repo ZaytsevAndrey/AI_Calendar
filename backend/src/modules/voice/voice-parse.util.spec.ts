@@ -1,3 +1,4 @@
+import { inferDueYmd, localYmd } from './voice-local-date.util';
 import { extractJsonObject, normalizeVoiceParse } from './voice-parse.util';
 
 describe('extractJsonObject', () => {
@@ -105,5 +106,65 @@ describe('normalizeVoiceParse', () => {
     );
     expect(result.understanding).toBe('sufficient');
     expect(result.task?.name).toBe('call the bank about the card');
+  });
+
+  it('fills end-of-day deadline when the transcript names tomorrow without a time', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: { name: 'Помити машину', eventType: 'admin' },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'завтра треба помити машину',
+        timeZone: 'Asia/Nicosia',
+        nowIso: '2026-09-07T16:00:00.000Z',
+      },
+    );
+    expect(result.task?.deadline).toBe('2026-09-08T23:59:00+03:00');
+    expect(result.task?.eventType).toBe('admin');
+    expect(result.task?.scheduledStartTime).toBeNull();
+  });
+
+  it('does not overwrite a deadline the model already set', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'Wash the car',
+          eventType: 'admin',
+          deadline: '2026-09-10T12:00:00+03:00',
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'tomorrow wash the car',
+        timeZone: 'Asia/Nicosia',
+        nowIso: '2026-09-07T16:00:00.000Z',
+      },
+    );
+    expect(result.task?.deadline).toBe('2026-09-10T12:00:00+03:00');
+  });
+});
+
+describe('inferDueYmd', () => {
+  const today = '2026-09-07';
+
+  it('maps tomorrow in uk/en', () => {
+    expect(inferDueYmd('завтра треба помити машину', today)).toBe('2026-09-08');
+    expect(inferDueYmd('wash the car tomorrow', today)).toBe('2026-09-08');
+  });
+
+  it('maps the next named weekday', () => {
+    expect(inferDueYmd("в п'ятницю в зал", today)).toBe('2026-09-11');
+    expect(inferDueYmd('on Monday', today)).toBe('2026-09-07');
+  });
+});
+
+describe('localYmd', () => {
+  it('uses the client timezone', () => {
+    expect(localYmd('2026-09-07T16:00:00.000Z', 'Asia/Nicosia')).toBe('2026-09-07');
   });
 });
