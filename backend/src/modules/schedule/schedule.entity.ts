@@ -7,6 +7,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
+import { timestampColumnType } from '../../database/column-types';
 import { Task } from '../tasks/entities/task.entity';
 
 @Entity('scheduled_tasks')
@@ -21,10 +22,10 @@ export class ScheduledTask {
   @JoinColumn({ name: 'taskId' })
   task: Task;
 
-  @Column({ type: 'datetime' })
+  @Column({ type: timestampColumnType() })
   scheduledStartTime: Date;
 
-  @Column({ type: 'datetime' })
+  @Column({ type: timestampColumnType() })
   scheduledEndTime: Date;
 
   @Column({ default: false })

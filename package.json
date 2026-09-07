@@ -21,6 +21,9 @@
   "author": "",
   "license": "ISC",
   "description": "AI Calendar Assistant Monorepo",
+  "engines": {
+    "node": ">=18.18.0"
+  },
   "devDependencies": {
     "concurrently": "^8.2.2"
   },

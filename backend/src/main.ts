@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
@@ -5,17 +6,26 @@ import { JwtExceptionFilter } from './modules/auth/jwt-exception.filter';
 import fastifyCors from '@fastify/cors';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { getFrontendBaseUrl } from './common/public-url';
+
+function isAllowedOrigin(origin: string | undefined): boolean {
+  if (!origin) {
+    return true;
+  }
+  if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+    return true;
+  }
+  return origin === getFrontendBaseUrl();
+}
 
 async function bootstrap() {
-  const adapter = new FastifyAdapter();
-  // Register CORS before creating the Nest app
+  const adapter = new FastifyAdapter({ trustProxy: true });
   await adapter.getInstance().register(fastifyCors, {
     origin: (origin, cb) => {
-      // Allow local origins in development
-      if (!origin || origin.startsWith('http://localhost')) {
+      if (isAllowedOrigin(origin)) {
         cb(null, true);
       } else {
-        cb(new Error('Not allowed by CORS'), false);
+        cb(null, false);
       }
     },
     credentials: true,
@@ -24,11 +34,9 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule, adapter as any);
 
-  // Global exception filters
   app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalFilters(new JwtExceptionFilter());
 
-  // Swagger
   const config = new DocumentBuilder()
     .setTitle('Calendar Assistant API')
     .setDescription('API documentation for Calendar Assistant')
@@ -51,6 +59,10 @@ async function bootstrap() {
     },
   });
 
-  await app.listen(process.env.PORT ?? 3001);
+  const fastify = app.getHttpAdapter().getInstance();
+  fastify.get('/health', async () => ({ status: 'ok' }));
+
+  const port = Number(process.env.PORT ?? 3001);
+  await app.listen(port, '0.0.0.0');
 }
 bootstrap();

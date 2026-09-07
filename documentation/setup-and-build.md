@@ -34,11 +34,13 @@ Create `backend/.env` from `backend/.env.example`.
 | `JWT_SECRET` | JWT signing secret |
 | `JWT_EXPIRES_IN` | Access token lifetime (e.g. `3600s`) |
 | `EMAIL_USER`, `EMAIL_PASS` | SMTP for mail (verification / password) |
-| `APP_URL` | Backend base URL when needed |
+| `APP_URL` | Backend public URL (local `http://localhost:3001`; on Render set from `RENDER_EXTERNAL_URL`) |
 | `FRONTEND_URL` | Where to redirect after Google OAuth (e.g. `http://localhost:3000`) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth |
 | `GOOGLE_REDIRECT_URI` | Must **exactly** match an **Authorized redirect URI** in Google Cloud Console; local dev is usually `http://localhost:3001/google-calendar/callback` |
-| `DATABASE_URL` | TypeORM currently uses `database: 'db.sqlite'` in `app.module.ts`; the `.env` value may be reserved for future use — follow the actual `app.module` |
+| `DATABASE_URL` | If this is a `postgres://` / `postgresql://` URL, TypeORM uses **Postgres** (production / Neon). Otherwise the backend uses **SQLite** (`SQLITE_PATH` or `db.sqlite`) |
+| `TYPEORM_SYNC` | Set to `false` to disable `synchronize`. Default is on so an empty Neon database gets a schema on first boot |
+| `DATABASE_SSL` | Postgres SSL is on by default (`rejectUnauthorized: false` for Neon). Set `false` only for local Postgres without SSL |
 
 ### Frontend
 
@@ -92,9 +94,11 @@ npm run clean   # remove node_modules / build / dist (see scripts/clean.js)
 
 ## Database
 
-The SQLite file is created when the backend runs (path set in `app.module.ts`). `*.sqlite` files are in `.gitignore`.
+The SQLite file is created when the backend runs **without** a Postgres `DATABASE_URL` (path: `SQLITE_PATH` or `db.sqlite`). `*.sqlite` files are in `.gitignore`.
 
-With `synchronize: true`, schema changes apply automatically; if you hit odd TypeORM/SQLite metadata errors after pulling, deleting `backend/db.sqlite` and restarting forces a clean schema (dev data loss).
+Production uses **Neon Postgres**; see [deploy](deploy.md). Do not expect a SQLite file to survive on Render’s free web service (ephemeral disk).
+
+With `synchronize` enabled (default; disable with `TYPEORM_SYNC=false`), schema changes apply automatically; if you hit odd TypeORM/SQLite metadata errors after pulling, deleting `backend/db.sqlite` and restarting forces a clean schema (dev data loss).
 
 ## Phases API and login
 

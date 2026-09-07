@@ -15,6 +15,7 @@ import {
 import { GoogleCalendarService } from './google-calendar.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Response } from 'express';
+import { getFrontendBaseUrl } from '../../common/public-url';
 import {
   ApiTags,
   ApiOperation,
@@ -47,7 +48,7 @@ export class GoogleCalendarController {
     @Query('error') error: string,
     @Res() res: Response,
   ) {
-    const frontend = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontend = getFrontendBaseUrl();
     const redirect = (path: string) => {
       const redirectUrl = `${frontend}${path}`;
       res.status(302);
@@ -221,7 +222,7 @@ export class GoogleCalendarController {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     const redirectUri = process.env.GOOGLE_REDIRECT_URI;
-    const frontendUrl = process.env.FRONTEND_URL;
+    const frontendUrl = getFrontendBaseUrl();
 
     const config = {
       clientId: clientId ? 'SET' : 'NOT SET',

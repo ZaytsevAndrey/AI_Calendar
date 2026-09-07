@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { User } from '../../users/user.entity';
 import { Phase } from '../../phases/entities/phase.entity';
+import { timestampColumnType } from '../../../database/column-types';
 import { TaskEventType } from '../../scheduling/event-type.enum';
 
 export enum TaskPriority {
@@ -90,7 +91,7 @@ export class Task {
   })
   priority: TaskPriority;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: timestampColumnType(), nullable: true })
   deadline: Date | null;
 
   @Column({
@@ -100,10 +101,10 @@ export class Task {
   })
   status: TaskStatus;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: timestampColumnType(), nullable: true })
   scheduledStartTime: Date | null;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: timestampColumnType(), nullable: true })
   scheduledEndTime: Date | null;
 
   @Column({ type: 'varchar', nullable: true })
@@ -116,11 +117,11 @@ export class Task {
   @Column({ default: false })
   isFixedExternal: boolean;
 
-  @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
+  @Column({ type: timestampColumnType(), default: () => 'CURRENT_TIMESTAMP' })
   createdAt: Date;
 
   @Column({
-    type: 'datetime',
+    type: timestampColumnType(),
     default: () => 'CURRENT_TIMESTAMP',
     onUpdate: 'CURRENT_TIMESTAMP',
   })

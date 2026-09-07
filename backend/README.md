@@ -5,6 +5,7 @@ Full project documentation lives at the repo root:
 - [Setup and build](../documentation/setup-and-build.md)  
 - [API reference](../documentation/api-reference.md)  
 - [Google OAuth / Calendar](../documentation/integrations.md)  
+- [Deploy (Render + Neon)](../documentation/deploy.md)  
 
 ## Quick reference
 

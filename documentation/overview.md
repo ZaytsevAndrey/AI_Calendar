@@ -29,7 +29,7 @@ AI_Calendar/
 
 - NestJS 10, TypeScript  
 - **Fastify** adapter (`@nestjs/platform-fastify`)  
-- TypeORM + **SQLite** (`db.sqlite` relative to the backend process)  
+- TypeORM + **SQLite** locally (`db.sqlite`) or **Postgres** when `DATABASE_URL` is a `postgres://` URL  
 - JWT (Passport), Google OAuth 2.0, Google Calendar API  
 - Swagger UI at `/api`  
 - Tests: Jest (`backend/test/`, `*.spec.ts` in modules)

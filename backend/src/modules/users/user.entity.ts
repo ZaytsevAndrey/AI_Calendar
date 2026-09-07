@@ -1,4 +1,5 @@
 import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { timestampColumnType } from '../../database/column-types';
 import { Task } from '../tasks/entities/task.entity';
 
 @Entity()
@@ -31,7 +32,7 @@ export class User {
   @Column({ nullable: true, type: 'text' })
   googleRefreshToken: string | null;
 
-  @Column({ nullable: true, type: 'datetime' })
+  @Column({ nullable: true, type: timestampColumnType() })
   googleTokenExpiry: Date | null;
 
   @Column({ default: false })

@@ -10,6 +10,7 @@ All up-to-date docs live under **[documentation/](documentation/README.md)**:
 - [Setup and build](documentation/setup-and-build.md)  
 - [API reference](documentation/api-reference.md)  
 - [Google OAuth / Calendar](documentation/integrations.md)  
+- [Deploy (Render + Neon)](documentation/deploy.md)  
 - [Roadmap](documentation/roadmap.md)  
 
 After starting the backend, interactive API docs: `http://localhost:3001/api` (Swagger).
@@ -29,6 +30,8 @@ npm start
 ```
 
 Typical URLs: frontend **http://localhost:3000**, API **http://localhost:3001**.
+
+Production (free): [Deploy on Render + Neon](documentation/deploy.md).
 
 ## Useful commands (from root)
 

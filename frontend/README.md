@@ -4,6 +4,7 @@ Project documentation (single source):
 
 - [Setup and build](../documentation/setup-and-build.md)  
 - [Stack and module overview](../documentation/overview.md)  
+- [Deploy (Render + Neon)](../documentation/deploy.md)  
 
 ## Quick reference
 

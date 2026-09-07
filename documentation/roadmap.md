@@ -48,12 +48,15 @@ This reflects the **actual** codebase as of the last update (September 2026). Im
 ### Phase 6 — Testing & optimization (partial)
 
 - [x] Jest tests on the backend (`backend/test/`, module `*.spec.ts`)  
-- [ ] Systematic coverage increase and CI  
+- [x] GitHub Actions CI (tests, production build) on `develop` / `master`  
+- [x] Free production deploy: Render + Neon ([deploy](deploy.md))  
+- [ ] Systematic coverage increase  
 - [ ] E2E for critical flows  
 - [ ] Frontend bundle optimization (currently one large `bundle.js`) and API performance  
 
 ## Recommended next steps
 
 1. Drag-and-drop and calendar polish.  
-2. Expand tests and wire them into CI.  
-3. Update this file when scope changes.
+2. Expand tests.  
+3. Optional: attach a custom subdomain (see [deploy](deploy.md)).  
+4. Update this file when scope changes.

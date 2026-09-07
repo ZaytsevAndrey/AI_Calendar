@@ -17,7 +17,11 @@ Typical local development value:
 http://localhost:3001/google-calendar/callback
 ```
 
-The backend listens on port **3001** by default; the callback is handled by the **server**, not the frontend dev server.
+Typical production values (see [deploy](deploy.md)):
+
+```text
+https://<ai-calendar-api>.onrender.com/google-calendar/callback
+```
 
 ## Backend environment variables
 
