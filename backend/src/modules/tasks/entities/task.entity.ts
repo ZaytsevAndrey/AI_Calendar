@@ -6,6 +6,8 @@ import {
   ManyToMany,
   JoinColumn,
   JoinTable,
+  CreateDateColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 import { User } from '../../users/user.entity';
 import { Phase } from '../../phases/entities/phase.entity';
@@ -117,13 +119,9 @@ export class Task {
   @Column({ default: false })
   isFixedExternal: boolean;
 
-  @Column({ type: timestampColumnType(), default: () => 'CURRENT_TIMESTAMP' })
+  @CreateDateColumn()
   createdAt: Date;
 
-  @Column({
-    type: timestampColumnType(),
-    default: () => 'CURRENT_TIMESTAMP',
-    onUpdate: 'CURRENT_TIMESTAMP',
-  })
+  @UpdateDateColumn()
   updatedAt: Date;
 }

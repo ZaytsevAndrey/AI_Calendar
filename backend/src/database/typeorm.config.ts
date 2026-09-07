@@ -17,6 +17,7 @@ export function createTypeOrmOptions(
   const synchronize = env.TYPEORM_SYNC !== 'false';
 
   if (isPostgresUrl(databaseUrl)) {
+    console.log('[TypeORM] Using postgres');
     return {
       type: 'postgres',
       url: databaseUrl,
@@ -26,6 +27,7 @@ export function createTypeOrmOptions(
     };
   }
 
+  console.log('[TypeORM] Using sqlite');
   return {
     type: 'sqlite',
     database: env.SQLITE_PATH || 'db.sqlite',

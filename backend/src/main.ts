@@ -65,4 +65,9 @@ async function bootstrap() {
   const port = Number(process.env.PORT ?? 3001);
   await app.listen(port, '0.0.0.0');
 }
-bootstrap();
+
+bootstrap().catch((err: unknown) => {
+  const message = err instanceof Error ? err.stack || err.message : String(err);
+  console.error('Failed to start API:', message);
+  process.exit(1);
+});
