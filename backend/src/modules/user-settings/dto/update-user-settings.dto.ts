@@ -150,4 +150,14 @@ export class UpdateUserSettingsDto {
   @Max(365)
   @IsOptional()
   recurringScheduleHorizonDays?: number;
+
+  @ApiProperty({
+    example: 'Asia/Nicosia',
+    description: 'IANA time zone for interpreting calendar days',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(64)
+  timeZone?: string;
 }

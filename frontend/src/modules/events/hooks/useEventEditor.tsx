@@ -51,6 +51,9 @@ export function useEventEditor() {
     if ((cleanData as { phaseId?: string }).phaseId === '') {
       delete (cleanData as { phaseId?: string }).phaseId;
     }
+    if (!cleanData.timeZone) {
+      cleanData.timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    }
     return cleanData;
   };
 

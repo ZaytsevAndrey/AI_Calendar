@@ -216,8 +216,14 @@ export class ScheduleJobService {
     const payload: Record<string, unknown> = {
       summary: task.name,
       description: task.description || undefined,
-      start: { dateTime: start.toISOString(), timeZone: 'UTC' },
-      end: { dateTime: end.toISOString(), timeZone: 'UTC' },
+      start: {
+        dateTime: start.toISOString(),
+        timeZone: task.scheduleTimeZone || 'UTC',
+      },
+      end: {
+        dateTime: end.toISOString(),
+        timeZone: task.scheduleTimeZone || 'UTC',
+      },
     };
     const phaseForColor =
       task.phases?.length && task.phases[0] ? task.phases[0] : task.phase;

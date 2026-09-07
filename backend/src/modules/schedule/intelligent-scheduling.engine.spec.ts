@@ -762,6 +762,36 @@ describe('IntelligentSchedulingEngine', () => {
     const [slots] = extractTaskSegments(scheduledRepo.save.mock.calls);
     expect(slots[0]).toEqual([atLocalTimeIso(2, 9), atLocalTimeIso(2, 10)]);
   });
+
+  it('does not place a +03:00 tomorrow midnight window on today UTC', async () => {
+    getSettingsMock.mockResolvedValue(
+      makeSettings({
+        ...baseSettings,
+        timeZone: 'Asia/Nicosia',
+        weekendWorkEnabled: true,
+      }),
+    );
+    jest.setSystemTime(new Date('2026-09-07T18:47:00.000Z'));
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'nicosia-tomorrow',
+        name: 'Wash the car',
+        estimatedTimeInMinutes: 60,
+        allowSplit: false,
+        earliestStartTime: new Date('2026-09-08T00:00:00+03:00'),
+        deadline: new Date('2026-09-08T23:59:00+03:00'),
+        scheduleTimeZone: 'Asia/Nicosia',
+        phases: [makePhase('any-day', '09:00', '12:00', null)],
+      }),
+    ]);
+
+    await engine.run(userId);
+
+    const [slots] = extractTaskSegments(scheduledRepo.save.mock.calls);
+    expect(slots[0]?.[0]).toBeDefined();
+    expect(slots[0][0].startsWith('2026-09-07')).toBe(false);
+    expect(new Date(slots[0][0]).getUTCDate()).toBe(8);
+  });
 });
 
 let taskCounter = 0;
@@ -808,6 +838,7 @@ function makeSettings(partial: Partial<UserSettings>): UserSettings {
     minSplitMinutes: 30,
     maxSplitMinutes: 60,
     recurringScheduleHorizonDays: 3,
+    timeZone: partial.timeZone ?? null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...partial,
@@ -834,6 +865,7 @@ function makeTask(partial: Partial<Task>): Task {
     deadline: partial.deadline ?? null,
     earliestStartTime: partial.earliestStartTime ?? null,
     eligibleWeekDays: partial.eligibleWeekDays ?? null,
+    scheduleTimeZone: partial.scheduleTimeZone ?? null,
     status: partial.status ?? TaskStatus.TODO,
     scheduledStartTime: partial.scheduledStartTime ?? null,
     scheduledEndTime: partial.scheduledEndTime ?? null,

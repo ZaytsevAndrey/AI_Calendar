@@ -12,6 +12,7 @@ import {
   IsUUID,
   ArrayMaxSize,
   ValidateIf,
+  MaxLength,
 } from 'class-validator';
 import { TaskPriority } from '../entities/task.entity';
 import { TaskEventType } from '../../scheduling/event-type.enum';
@@ -137,6 +138,16 @@ export class CreateTaskDto {
   @Max(6, { each: true })
   @IsOptional()
   eligibleWeekDays?: number[] | null;
+
+  @ApiProperty({
+    example: 'Asia/Nicosia',
+    description: 'IANA time zone for From/Until calendar days. Optional; also stored on the task.',
+    required: false,
+  })
+  @IsString()
+  @MaxLength(64)
+  @IsOptional()
+  timeZone?: string;
 
   @ApiProperty({
     description:

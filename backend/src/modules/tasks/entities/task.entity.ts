@@ -110,6 +110,10 @@ export class Task {
   @Column({ type: 'json', nullable: true })
   eligibleWeekDays: number[] | null;
 
+  /** IANA zone used to interpret day-only From/Until (e.g. Asia/Nicosia). */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  scheduleTimeZone: string | null;
+
   @Column({
     type: 'varchar',
     enum: TaskStatus,

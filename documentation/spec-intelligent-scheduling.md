@@ -99,7 +99,7 @@ Items are processed in **priority order** (highest first). For each item:
 
 ### 4.4 Deadline / schedule window
 
-- If `earliestStartTime` is set: hard constraint—do not start any segment before that **instant** (do not snap to server-local midnight).
+- If `earliestStartTime` is set: hard constraint—do not start any segment before that **instant**. Day-only From (00:00 in the user IANA zone) snaps to wake that local day so `+03:00` midnight is not treated as “this evening” on a UTC host.
 - If `deadline` is set: hard constraint—**all segments must end by deadline**. If impossible: **do not silently fail**—return structured error / UI message: e.g. “Cannot fit before deadline; raise priority, extend deadline, enable split, or remove other work.”
 - If `eligibleWeekDays` is set on a non-recurring task: only those weekdays inside the window are eligible.
 

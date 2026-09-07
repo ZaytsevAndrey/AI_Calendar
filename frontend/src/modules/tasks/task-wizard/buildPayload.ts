@@ -84,11 +84,14 @@ export function buildTaskPayload(data: TaskFormValues): CreateTaskDTO | UpdateTa
       !isFixed && data.isRecurring ? data.recurrenceWeekDays ?? [] : [],
     allowSplit: isFixed ? false : !!data.allowSplit,
     priority: data.priority,
-    deadline: data.deadline || undefined,
+    deadline: data.deadline?.trim()
+      ? new Date(data.deadline).toISOString()
+      : undefined,
     earliestStartTime:
       !isFixed && data.earliestStartTime?.trim()
         ? new Date(data.earliestStartTime).toISOString()
         : null,
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     eligibleWeekDays:
       !isFixed &&
       !data.isRecurring &&

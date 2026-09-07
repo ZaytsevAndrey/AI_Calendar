@@ -16,6 +16,7 @@ export interface UserSettingsDTO {
   minSplitMinutes: number;
   maxSplitMinutes: number;
   recurringScheduleHorizonDays: number;
+  timeZone?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -38,6 +39,7 @@ export interface UpdateUserSettingsDTO {
   minSplitMinutes?: number;
   maxSplitMinutes?: number;
   recurringScheduleHorizonDays?: number;
+  timeZone?: string;
 }
 
 export const UserSettingsApi = {

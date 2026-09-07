@@ -12,6 +12,11 @@ import {
 } from '../scheduling/event-type.enum';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { effectiveRecurrenceWeekDays } from './recurrence-from-phases.util';
+import {
+  localDateTimeIso,
+  localHm,
+  localYmd,
+} from '../voice/voice-local-date.util';
 
 const DEFAULT_HORIZON_DAYS = 30;
 const BEYOND_HORIZON_EXTRA_DAYS = 30;
@@ -233,16 +238,30 @@ function normalizeRecurrencePattern(value?: string | null): RecurrencePattern | 
 
 /**
  * Movable non-recurring: do not search before earliestStartTime.
- * Uses the stored instant (not server-local midnight) so a +03:00 Friday
- * does not collapse to Thursday/today on a UTC host.
+ * Day-only From (00:00 in the user zone) snaps to wake that local day so a
+ * +03:00 midnight is not treated as "this evening" on a UTC host.
  */
-function placementNotBefore(task: Task, startDay: Date): Date {
+function placementNotBefore(
+  task: Task,
+  startDay: Date,
+  timeZone?: string | null,
+  wakeTime?: string,
+): Date {
   if (task.isRecurring || task.eventType === TaskEventType.FIXED) {
     return startDay;
   }
   if (!task.earliestStartTime) return startDay;
   const bound = new Date(task.earliestStartTime);
-  return bound > startDay ? bound : startDay;
+  let effective = bound;
+  if (timeZone) {
+    const iso = bound.toISOString();
+    if (localHm(iso, timeZone) === '00:00') {
+      effective = new Date(
+        localDateTimeIso(localYmd(iso, timeZone), wakeTime || '00:00', timeZone),
+      );
+    }
+  }
+  return effective > startDay ? effective : startDay;
 }
 
 function taskPreferredIntervalOnDay(task: Task, day: Date): MsInterval | null {
@@ -588,7 +607,13 @@ export class IntelligentSchedulingEngine {
       : null;
     const phases = this.resolvePhasesForTask(task);
     const placedBusy = this.rebuildBusy(anchorBusy, newSegments);
-    const searchStart = placementNotBefore(task, startDay);
+    const timeZone = task.scheduleTimeZone || settings.timeZone;
+    const searchStart = placementNotBefore(
+      task,
+      startDay,
+      timeZone,
+      settings.wakeTime,
+    );
     const weekDays = task.eligibleWeekDays?.length
       ? task.eligibleWeekDays
       : null;

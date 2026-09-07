@@ -2,6 +2,7 @@ import {
   inferClockHmRange,
   inferDueYmd,
   inferScheduleWindow,
+  localHm,
   localYmd,
 } from './voice-local-date.util';
 import { extractJsonObject, normalizeVoiceParse } from './voice-parse.util';
@@ -289,5 +290,11 @@ describe('inferClockHmRange', () => {
 describe('localYmd', () => {
   it('uses the client timezone', () => {
     expect(localYmd('2026-09-07T16:00:00.000Z', 'Asia/Nicosia')).toBe('2026-09-07');
+  });
+});
+
+describe('localHm', () => {
+  it('maps a UTC evening instant to +03:00 midnight', () => {
+    expect(localHm('2026-09-07T21:00:00.000Z', 'Asia/Nicosia')).toBe('00:00');
   });
 });

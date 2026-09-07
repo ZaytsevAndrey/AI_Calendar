@@ -156,6 +156,7 @@ export class TasksService {
       scheduledEndTime,
       deadline,
       earliestStartTime,
+      timeZone,
       ...rest
     } = createTaskDto;
 
@@ -172,6 +173,7 @@ export class TasksService {
       earliestStartTime: earliestStartTime
         ? new Date(earliestStartTime)
         : undefined,
+      scheduleTimeZone: timeZone?.trim() || undefined,
       scheduledStartTime: scheduledStartTime
         ? new Date(scheduledStartTime)
         : undefined,
@@ -249,6 +251,7 @@ export class TasksService {
       scheduledStartTime?: string;
       scheduledEndTime?: string;
       earliestStartTime?: string | null;
+      timeZone?: string;
       eventType?: TaskEventType;
     };
 
@@ -270,6 +273,7 @@ export class TasksService {
       phaseIds: _p,
       deadline,
       earliestStartTime,
+      timeZone,
       scheduledStartTime,
       scheduledEndTime,
       ...rest
@@ -283,6 +287,9 @@ export class TasksService {
       task.earliestStartTime = earliestStartTime
         ? new Date(earliestStartTime)
         : null;
+    }
+    if (timeZone !== undefined) {
+      task.scheduleTimeZone = timeZone?.trim() || null;
     }
     if (scheduledStartTime !== undefined) {
       task.scheduledStartTime = scheduledStartTime

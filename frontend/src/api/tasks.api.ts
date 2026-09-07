@@ -19,6 +19,7 @@ export interface TaskDTO {
   deadline?: string;
   earliestStartTime?: string;
   eligibleWeekDays?: number[] | null;
+  scheduleTimeZone?: string;
   status: 'todo' | 'in_progress' | 'completed' | 'canceled';
   scheduledStartTime?: string;
   scheduledEndTime?: string;
@@ -48,6 +49,7 @@ export interface CreateTaskDTO {
   deadline?: string;
   earliestStartTime?: string | null;
   eligibleWeekDays?: number[] | null;
+  timeZone?: string;
 }
 
 export interface UpdateTaskDTO extends Partial<CreateTaskDTO> {

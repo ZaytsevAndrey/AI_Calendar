@@ -84,6 +84,20 @@ export function localDateTimeIso(
   return `${ymd}T${hm}:00${offsetForTimeZone(timeZone, ymd)}`;
 }
 
+export function localHm(nowIso: string, timeZone: string): string {
+  const date = new Date(nowIso);
+  const instant = Number.isNaN(date.getTime()) ? new Date() : date;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(instant);
+  const hour = parts.find((part) => part.type === 'hour')?.value ?? '00';
+  const minute = parts.find((part) => part.type === 'minute')?.value ?? '00';
+  return `${hour}:${minute}`;
+}
+
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
 }
