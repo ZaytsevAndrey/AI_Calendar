@@ -25,8 +25,15 @@ function toLocalTimeInput(value?: string): string | undefined {
 function preferredWindowIso(
   preferredStartTime: string,
   estimatedTimeInMinutes: number,
+  deadline?: string,
 ): { start: string; end: string } {
-  const baseDate = new Date();
+  let baseDate = new Date();
+  if (deadline?.trim()) {
+    const fromDeadline = new Date(deadline);
+    if (!Number.isNaN(fromDeadline.getTime())) {
+      baseDate = fromDeadline;
+    }
+  }
   const yyyy = baseDate.getFullYear();
   const mm = String(baseDate.getMonth() + 1).padStart(2, '0');
   const dd = String(baseDate.getDate()).padStart(2, '0');
@@ -72,7 +79,11 @@ export function buildTaskPayload(data: TaskFormValues): CreateTaskDTO | UpdateTa
     payload.scheduledStartTime = new Date(data.scheduledStartTime).toISOString();
     payload.scheduledEndTime = new Date(data.scheduledEndTime).toISOString();
   } else if (!isFixed && data.preferredStartTime?.trim()) {
-    const window = preferredWindowIso(data.preferredStartTime.trim(), estimatedTimeInMinutes);
+    const window = preferredWindowIso(
+      data.preferredStartTime.trim(),
+      estimatedTimeInMinutes,
+      data.deadline,
+    );
     payload.scheduledStartTime = window.start;
     payload.scheduledEndTime = window.end;
   } else {

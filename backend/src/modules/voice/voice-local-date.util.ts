@@ -52,6 +52,10 @@ export function offsetForTimeZone(timeZone: string, ymd: string): string {
   return `${match[1]}${match[2].padStart(2, '0')}:${match[3] ?? '00'}`;
 }
 
+export function startOfLocalDayIso(ymd: string, timeZone: string): string {
+  return `${ymd}T00:00:00${offsetForTimeZone(timeZone, ymd)}`;
+}
+
 export function endOfLocalDayIso(ymd: string, timeZone: string): string {
   return `${ymd}T23:59:00${offsetForTimeZone(timeZone, ymd)}`;
 }
@@ -94,5 +98,5 @@ export function buildLocalCalendarContext(nowIso: string, timeZone: string): str
   return `Local calendar (${timeZone}):
 - today: ${today} (${weekday})
 - tomorrow: ${tomorrow}
-If the speaker names a calendar day without a clock time, set deadline to that day's 23:59 in this timezone. Keep eventType admin and leave scheduledStartTime/scheduledEndTime null.`;
+If the speaker names a calendar day without a clock time, set deadline to that day's 23:59 and scheduledStartTime to 00:00 that same day (this timezone). Keep eventType admin.`;
 }

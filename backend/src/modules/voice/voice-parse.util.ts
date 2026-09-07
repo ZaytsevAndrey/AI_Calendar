@@ -2,6 +2,7 @@ import {
   endOfLocalDayIso,
   inferDueYmd,
   localYmd,
+  startOfLocalDayIso,
 } from './voice-local-date.util';
 import type {
   VoiceParsedTask,
@@ -142,10 +143,20 @@ export function normalizeVoiceParse(
     phaseIds: phaseId ? [phaseId] : undefined,
   };
 
-  if (!task.deadline && ctx.timeZone && ctx.nowIso) {
+  if (ctx.timeZone && ctx.nowIso) {
     const dueYmd = inferDueYmd(ctx.transcript, localYmd(ctx.nowIso, ctx.timeZone));
     if (dueYmd) {
-      task.deadline = endOfLocalDayIso(dueYmd, ctx.timeZone);
+      if (!task.deadline) {
+        task.deadline = endOfLocalDayIso(dueYmd, ctx.timeZone);
+      }
+      if (eventType !== 'fixed' && !task.scheduledStartTime) {
+        const dayStart = startOfLocalDayIso(dueYmd, ctx.timeZone);
+        const startMs = Date.parse(dayStart);
+        task.scheduledStartTime = dayStart;
+        task.scheduledEndTime = new Date(
+          startMs + task.estimatedTimeInMinutes * 60 * 1000,
+        ).toISOString();
+      }
     }
   }
 

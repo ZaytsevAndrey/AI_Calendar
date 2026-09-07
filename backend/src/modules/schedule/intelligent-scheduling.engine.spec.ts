@@ -685,6 +685,26 @@ describe('IntelligentSchedulingEngine', () => {
       atLocalTimeIso(0, 11),
     ]);
   });
+
+  it('does not place a flexible task before its preferred start day', async () => {
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'tomorrow-wash',
+        name: 'Wash the car',
+        estimatedTimeInMinutes: 60,
+        allowSplit: false,
+        scheduledStartTime: new Date(atLocalTimeIso(1, 0)),
+        scheduledEndTime: new Date(atLocalTimeIso(1, 1)),
+        deadline: new Date(atLocalTimeIso(1, 23)),
+        phases: [phaseWorkday],
+      }),
+    ]);
+
+    await engine.run(userId);
+
+    const [slots] = extractTaskSegments(scheduledRepo.save.mock.calls);
+    expect(slots[0]).toEqual([atLocalTimeIso(1, 9), atLocalTimeIso(1, 10)]);
+  });
 });
 
 let taskCounter = 0;

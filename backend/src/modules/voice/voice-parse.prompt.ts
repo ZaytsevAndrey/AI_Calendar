@@ -48,7 +48,7 @@ NOT critical (use defaults, prefer sufficient over asking):
 Task rules:
 - eventType "fixed" = immovable exact slot. Requires scheduledStartTime AND scheduledEndTime (ISO-8601 with offset). Use only when they gave a clock time (15:00, о третій, at 3pm).
 - eventType "admin" = flexible/movable. Optional preferred window via scheduledStartTime/End (end = start + duration).
-- Day without a clock time ("tomorrow", "завтра", "в п'ятницю", "on Monday"): this is allowed. Set eventType "admin", deadline to 23:59 of that local day, and leave scheduledStartTime/scheduledEndTime null. Do not ask for a time.
+- Day without a clock time ("tomorrow", "завтра", "в п'ятницю", "on Monday"): this is allowed. Set eventType "admin", deadline to 23:59 of that local day, and scheduledStartTime/scheduledEndTime to a window that starts at 00:00 that same local day (end = start + duration). Do not ask for a time. Do not place it today.
 - One phase only. phaseId MUST be one of the provided phase ids, or null. Match by meaning (work, gym, evening). Never invent ids.
 - Recurrence: isRecurring true only if they asked to repeat. Pattern DAILY/WEEKLY/BIWEEKLY/MONTHLY. recurrenceWeekDays: 0=Sunday … 6=Saturday. Default Mon–Fri for "every weekday" / "щодня по буднях". Empty/null = no extra weekday filter.
 - allowSplit false when fixed; true otherwise unless they forbid splitting.

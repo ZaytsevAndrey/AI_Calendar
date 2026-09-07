@@ -124,7 +124,7 @@ describe('normalizeVoiceParse', () => {
     );
     expect(result.task?.deadline).toBe('2026-09-08T23:59:00+03:00');
     expect(result.task?.eventType).toBe('admin');
-    expect(result.task?.scheduledStartTime).toBeNull();
+    expect(result.task?.scheduledStartTime).toBe('2026-09-08T00:00:00+03:00');
   });
 
   it('does not overwrite a deadline the model already set', () => {

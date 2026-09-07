@@ -231,6 +231,20 @@ function normalizeRecurrencePattern(value?: string | null): RecurrencePattern | 
   return null;
 }
 
+/** Movable non-recurring: do not search before the preferred start's local day. */
+function placementStartDay(task: Task, startDay: Date): Date {
+  if (
+    task.isRecurring ||
+    task.eventType === TaskEventType.FIXED ||
+    !task.scheduledStartTime
+  ) {
+    return startDay;
+  }
+  const preferredDay = new Date(task.scheduledStartTime);
+  preferredDay.setHours(0, 0, 0, 0);
+  return preferredDay > startDay ? preferredDay : startDay;
+}
+
 function taskPreferredIntervalOnDay(task: Task, day: Date): MsInterval | null {
   if (!task.scheduledStartTime || !task.scheduledEndTime) return null;
   const startRef = new Date(task.scheduledStartTime);
@@ -574,6 +588,7 @@ export class IntelligentSchedulingEngine {
       : null;
     const phases = this.resolvePhasesForTask(task);
     const placedBusy = this.rebuildBusy(anchorBusy, newSegments);
+    const searchStart = placementStartDay(task, startDay);
 
     let result = this.placeTaskGreedy(
       durationMin,
@@ -581,7 +596,7 @@ export class IntelligentSchedulingEngine {
       maxChunk,
       effectiveSplittable,
       phases,
-      startDay,
+      searchStart,
       horizonEnd,
       deadlineMs,
       settings.wakeTime,
@@ -598,7 +613,7 @@ export class IntelligentSchedulingEngine {
         maxChunk,
         effectiveSplittable,
         phases,
-        startDay,
+        searchStart,
         extendedEnd,
         deadlineMs,
         settings.wakeTime,
