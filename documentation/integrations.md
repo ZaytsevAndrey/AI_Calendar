@@ -66,7 +66,7 @@ Older examples in the wild used port **3000** for the callback; that is misleadi
 Voice task creation uses a **free Groq API key** (no credit card). Create one at [console.groq.com/keys](https://console.groq.com/keys) and set `GROQ_API_KEY` in `backend/.env` (and on Render for production).
 
 - Speech-to-text: `whisper-large-v3-turbo` (auto-detects Ukrainian, English, Russian). Do not send audio to the LLM.
-- Task parse: `llama-3.3-70b-versatile` with JSON mode; falls back to `llama-3.1-8b-instant` on HTTP 429.
+- Task parse: `openai/gpt-oss-20b` with JSON mode; falls back to `openai/gpt-oss-120b` on rate limit or if the model is unavailable. Llama 3.x IDs on Groq are enterprise-only and will 503 on a free key.
 - Audio and transcripts are not persisted.
 
 Microphone access needs HTTPS (or `localhost`). The frontend is an installable PWA.

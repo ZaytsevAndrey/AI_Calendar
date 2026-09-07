@@ -9,8 +9,15 @@ const GROQ_AUDIO_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
 const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 const DEFAULT_STT_MODEL = 'whisper-large-v3-turbo';
-const DEFAULT_LLM_MODEL = 'llama-3.3-70b-versatile';
-const FALLBACK_LLM_MODEL = 'llama-3.1-8b-instant';
+/** Free-tier production chat model. Llama 3.3/3.1 on Groq are enterprise-only. */
+const DEFAULT_LLM_MODEL = 'openai/gpt-oss-20b';
+const FALLBACK_LLM_MODEL = 'openai/gpt-oss-120b';
+
+type GroqChatPayload = {
+  choices?: Array<{ message?: { content?: string } }>;
+  error?: { message?: string } | string;
+  message?: string;
+};
 
 @Injectable()
 export class GroqClient {
@@ -56,10 +63,11 @@ export class GroqClient {
     const payload = (await response.json().catch(() => ({}))) as {
       text?: string;
       language?: string;
-      error?: { message?: string };
+      error?: { message?: string } | string;
+      message?: string;
     };
     if (!response.ok) {
-      const message = payload.error?.message || `Groq STT failed (${response.status})`;
+      const message = groqErrorMessage(payload, response.status, 'STT');
       this.logger.warn(message);
       throw new ServiceUnavailableException(message);
     }
@@ -76,7 +84,9 @@ export class GroqClient {
     );
     let lastError = 'Groq LLM failed';
 
-    for (const model of models) {
+    for (let i = 0; i < models.length; i += 1) {
+      const model = models[i];
+      const hasNext = i < models.length - 1;
       const response = await fetch(GROQ_CHAT_URL, {
         method: 'POST',
         headers: {
@@ -93,27 +103,55 @@ export class GroqClient {
           ],
         }),
       });
-      const payload = (await response.json().catch(() => ({}))) as {
-        choices?: Array<{ message?: { content?: string } }>;
-        error?: { message?: string };
-      };
-      if (response.status === 429 && model !== models[models.length - 1]) {
-        this.logger.warn(`Groq rate-limited on ${model}; trying fallback model`);
-        lastError = payload.error?.message || 'Groq rate limited';
-        continue;
-      }
+      const payload = (await response.json().catch(() => ({}))) as GroqChatPayload;
       if (!response.ok) {
-        lastError = payload.error?.message || `Groq LLM failed (${response.status})`;
+        lastError = groqErrorMessage(payload, response.status, 'LLM');
+        if (hasNext && shouldTryNextModel(response.status, lastError)) {
+          this.logger.warn(`${lastError}; trying fallback model`);
+          continue;
+        }
         this.logger.warn(lastError);
         throw new ServiceUnavailableException(lastError);
       }
       const content = payload.choices?.[0]?.message?.content?.trim();
       if (!content) {
-        throw new ServiceUnavailableException('Groq LLM returned an empty response');
+        lastError = 'Groq LLM returned an empty response';
+        if (hasNext) {
+          this.logger.warn(`${lastError}; trying fallback model`);
+          continue;
+        }
+        throw new ServiceUnavailableException(lastError);
       }
       return content;
     }
 
     throw new ServiceUnavailableException(lastError);
   }
+}
+
+function groqErrorMessage(
+  payload: { error?: { message?: string } | string; message?: string },
+  status: number,
+  kind: string,
+): string {
+  const err = payload.error;
+  if (typeof err === 'string' && err.trim()) return err.trim();
+  if (err && typeof err === 'object' && typeof err.message === 'string') {
+    return err.message;
+  }
+  if (typeof payload.message === 'string' && payload.message.trim()) {
+    return payload.message.trim();
+  }
+  return `Groq ${kind} failed (${status})`;
+}
+
+function shouldTryNextModel(status: number, message: string): boolean {
+  if (status === 429) return true;
+  const lower = message.toLowerCase();
+  return (
+    (status === 400 || status === 403 || status === 404 || status === 503) &&
+    (lower.includes('does not exist') ||
+      lower.includes('do not have access') ||
+      lower.includes('model_not_found'))
+  );
 }

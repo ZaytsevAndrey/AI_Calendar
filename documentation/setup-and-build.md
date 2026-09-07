@@ -43,7 +43,7 @@ Create `backend/.env` from `backend/.env.example`.
 | `DATABASE_SSL` | Postgres SSL is on by default (`rejectUnauthorized: false` for Neon). Set `false` only for local Postgres without SSL |
 | `GROQ_API_KEY` | Free Groq API key for voice STT + task parse ([console.groq.com/keys](https://console.groq.com/keys)). Voice buttons fail with 503 if unset |
 | `GROQ_STT_MODEL` | Optional. Default `whisper-large-v3-turbo` |
-| `GROQ_LLM_MODEL` | Optional. Default `llama-3.3-70b-versatile` |
+| `GROQ_LLM_MODEL` | Optional. Default `openai/gpt-oss-20b` (Llama 3.x on Groq is enterprise-only) |
 
 ### Frontend
 
