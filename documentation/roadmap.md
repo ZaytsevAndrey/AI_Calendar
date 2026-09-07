@@ -39,6 +39,8 @@ This reflects the **actual** codebase as of the last update (September 2026). Im
 
 ### Phase 5 — Advanced product (planned)
 
+- [x] Voice task creation (PWA mic → Groq Whisper → LLM parse → create / prefill / one clarifying question)  
+- [x] Installable PWA (manifest, icons, service worker, Add to Home Screen)  
 - [ ] Drag & drop on schedule / event calendars  
 - [ ] Statistics and dashboard  
 - [ ] Integrations (Telegram, Notion, etc.)  

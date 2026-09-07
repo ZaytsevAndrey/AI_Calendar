@@ -61,6 +61,16 @@ Check:
 
 Older examples in the wild used port **3000** for the callback; that is misleading when Nest handles OAuth on **3001**. Use `backend/.env.example` and `google-calendar.controller.ts` as the source of truth.
 
+## Groq (voice)
+
+Voice task creation uses a **free Groq API key** (no credit card). Create one at [console.groq.com/keys](https://console.groq.com/keys) and set `GROQ_API_KEY` in `backend/.env` (and on Render for production).
+
+- Speech-to-text: `whisper-large-v3-turbo` (auto-detects Ukrainian, English, Russian). Do not send audio to the LLM.
+- Task parse: `llama-3.3-70b-versatile` with JSON mode; falls back to `llama-3.1-8b-instant` on HTTP 429.
+- Audio and transcripts are not persisted.
+
+Microphone access needs HTTPS (or `localhost`). The frontend is an installable PWA.
+
 ## Diagnostics
 
 - Backend logs when clicking “Connect Google Calendar”.  

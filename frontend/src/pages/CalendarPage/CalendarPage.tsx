@@ -20,6 +20,10 @@ import { useScheduleActions } from 'modules/schedule/hooks/useScheduleActions';
 import { GenerateAlertsBanner } from 'modules/schedule/components/GenerateAlertsBanner';
 import { ScheduleMenu } from 'modules/schedule/components/ScheduleMenu';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
+import { formValuesFromCreatePayload } from 'modules/tasks/task-wizard/buildPayload';
+import { VoiceTaskButton } from 'modules/voice/components/VoiceTaskButton';
+import { VoiceTaskSheet } from 'modules/voice/components/VoiceTaskSheet';
+import { useVoiceTask } from 'modules/voice/hooks/useVoiceTask';
 import { Modal } from '../../ui/Modal';
 import { Spinner } from '../../ui/Spinner';
 import { showErrorToast, showSuccessToast } from '../../utils/toast';
@@ -117,7 +121,11 @@ const CalendarPage: React.FC = () => {
     const [deleteEventTrigger, deleteEventState] = useDeleteEvent();
     const { isGenerating, isClearing, generate, clear, generateAlerts, dismissGenerateAlerts } =
         useScheduleActions();
-    const { openCreate, editorModal } = useEventEditor();
+    const { openCreate, openCreateFromPrefill, createFromPayload, editorModal } = useEventEditor();
+    const voice = useVoiceTask({
+        onComplete: createFromPayload,
+        onSufficient: (task) => openCreateFromPrefill(formValuesFromCreatePayload(task)),
+    });
     const busy = isGenerating || isClearing;
     const displayEvents = visibleGoogleEvents(getEventsQuery.data?.events || []);
 
@@ -207,6 +215,7 @@ const CalendarPage: React.FC = () => {
                         >
                             Create task
                         </button>
+                        <VoiceTaskButton onClick={voice.open} />
                         <ScheduleMenu
                             busy={busy}
                             isGenerating={isGenerating}
@@ -379,6 +388,7 @@ const CalendarPage: React.FC = () => {
             </Modal>
 
             {editorModal}
+            <VoiceTaskSheet voice={voice} />
         </div>
     );
 };

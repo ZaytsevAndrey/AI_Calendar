@@ -10,6 +10,9 @@ import './styles/toastify-ide.css';
 
 import App from './App';
 import { store, persistor } from './store';
+import { registerServiceWorker } from './modules/pwa/registerServiceWorker';
+
+registerServiceWorker();
 
 const root = createRoot(document.getElementById('root')!);
 

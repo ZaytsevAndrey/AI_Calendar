@@ -39,7 +39,8 @@ AI_Calendar/
 - Registration / login, refresh, password reset, email verification (see [integrations](integrations.md) and `auth` code)  
 - **User settings:** wake/sleep, weekends, Google Calendar flags, `allowSplitScheduling` / `minSplitMinutes` for the intelligent engine  
 - **Phases:** per-user CRUD (JWT), overlap validation, default **Sleep** + **Focus hours** from wake/sleep when the user has no phases, phase calendar UI  
-- **Tasks:** CRUD, statuses, priorities, deadlines, one optional phase, split / recurring flags, optional `recurrenceWeekDays`; **fixed** blocks require scheduled start/end; movable tasks may set a preferred start. The create form is a single page with **Flexible / Fixed / Recurring** presets.  
+- **Tasks:** CRUD, statuses, priorities, deadlines, one optional phase, split / recurring flags, optional `recurrenceWeekDays`; **fixed** blocks require scheduled start/end; movable tasks may set a preferred start. The create form is a single page with **Flexible / Fixed / Recurring** presets. **Voice:** mic on Tasks/Calendar records audio, Groq Whisper transcribes (uk/en/ru auto), an LLM maps speech to a task. High confidence creates immediately; medium prefills the form; gaps ask one follow-up question.  
+- **PWA:** installable (manifest + service worker + icons). Android Chrome shows an install prompt; iOS uses Share → Add to Home Screen.  
 - **Google Calendar:** OAuth, events, connect / disconnect; replan and **clear schedule** create/update/delete linked Google events when `googleEventId` is set  
 - **Schedule:** scheduled tasks, **POST `/schedule/generate`** (async job + poll), **DELETE `/schedule`** (app-generated slots in the Settings horizon); **Calendar** page (`/calendar`) has Generate / Clear  
 

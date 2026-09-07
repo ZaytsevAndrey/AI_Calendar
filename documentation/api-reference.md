@@ -54,6 +54,17 @@ Defaults are created on first **`GET /phases`** (using stored settings, or `07:0
 
 Task `phaseIds` must reference phases owned by the same user.
 
+## Voice — `/voice`
+
+JWT. Free Groq backend (`GROQ_API_KEY`). Audio is **not** stored.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/voice/transcribe` | Body `{ audioBase64, mimeType? }` → `{ transcript, language? }` (Whisper, auto language) |
+| POST | `/voice/parse-task` | Body `{ transcript, timeZone, clientNowIso?, previousTranscript?, clarificationAnswer? }` → `{ understanding, clarifyingQuestion, task }` |
+
+`understanding`: `complete` (client creates immediately), `sufficient` (prefill form), `needs_clarification` (one follow-up question). After a clarification reply the API will not ask a second question.
+
 ## Tasks — `/tasks`
 
 Task CRUD (JWT). Bodies/responses include `phaseId`, **`phaseIds`** (max 1), **`eventType`** (`fixed` or `admin` on new writes), status, priority, deadline, estimated minutes, `allowSplit`, `isRecurring`, `recurrencePattern`, **`recurrenceWeekDays`**, optional `scheduledStartTime` / `scheduledEndTime`. `phaseIds` must belong to the current user.

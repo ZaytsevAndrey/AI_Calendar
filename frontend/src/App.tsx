@@ -2,6 +2,7 @@ import React from 'react';
 import { useAuth } from './modules/auth/hooks/useAuth';
 import Header from './modules/common/components/Header';
 import AppRoutes from './AppRoutes';
+import { PwaInstallBanner } from './modules/pwa/PwaInstallBanner';
 
 const App: React.FC = () => {
     const { isAuthenticated } = useAuth();
@@ -16,6 +17,7 @@ const App: React.FC = () => {
             >
                 <AppRoutes />
             </main>
+            {isAuthenticated ? <PwaInstallBanner /> : null}
         </div>
     );
 };

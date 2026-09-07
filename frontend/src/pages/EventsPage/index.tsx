@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { useGetEventsQuery, useDeleteEventMutation } from 'api/eventTasksApi';
 import EventList from 'modules/events/components/EventList';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
+import { formValuesFromCreatePayload } from 'modules/tasks/task-wizard/buildPayload';
+import { VoiceTaskButton } from 'modules/voice/components/VoiceTaskButton';
+import { VoiceTaskSheet } from 'modules/voice/components/VoiceTaskSheet';
+import { useVoiceTask } from 'modules/voice/hooks/useVoiceTask';
 import { hasTaskAlreadyEnded, isCurrentTask } from 'modules/events/utils/isCurrentTask';
 import { Modal } from '../../ui/Modal';
 import { showErrorToast, showSuccessToast } from '../../utils/toast';
@@ -21,7 +25,11 @@ const TasksPage: React.FC = () => {
 
   const { data: events = [], isLoading: isLoadingEvents } = useGetEventsQuery();
   const [deleteEvent, deleteEventState] = useDeleteEventMutation();
-  const { openCreate, openEdit, editorModal } = useEventEditor();
+  const { openCreate, openCreateFromPrefill, openEdit, createFromPayload, editorModal } = useEventEditor();
+  const voice = useVoiceTask({
+    onComplete: createFromPayload,
+    onSufficient: (task) => openCreateFromPrefill(formValuesFromCreatePayload(task)),
+  });
 
   const sortedEvents = [...events].sort((a, b) => {
     switch (sortField) {
@@ -82,9 +90,12 @@ const TasksPage: React.FC = () => {
           <h1 className="page-title">Tasks</h1>
           <p className="page-lead">Current and upcoming tasks. Use the filter to see completed or past items.</p>
         </div>
-        <button type="button" onClick={() => openCreate()} className="ui-btn-primary w-full shrink-0 sm:w-auto">
-          Create task
-        </button>
+        <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
+          <button type="button" onClick={() => openCreate()} className="ui-btn-primary w-full sm:w-auto">
+            Create task
+          </button>
+          <VoiceTaskButton onClick={voice.open} />
+        </div>
       </header>
 
       <div className="filter-bar shrink-0">
@@ -165,6 +176,7 @@ const TasksPage: React.FC = () => {
       </Modal>
 
       {editorModal}
+      <VoiceTaskSheet voice={voice} />
     </div>
   );
 };

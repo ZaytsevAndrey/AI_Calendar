@@ -26,7 +26,7 @@ const lbl = 'mb-0.5 block text-xs font-medium text-ide-text';
 
 interface TaskFormProps {
   initialData?: TaskDTO;
-  createDefaults?: { deadline?: string };
+  createDefaults?: { deadline?: string; formPrefill?: TaskFormValues };
   phases: PhaseDTO[];
   onSubmit: (data: CreateTaskDTO | UpdateTaskDTO) => void;
   isSubmitting: boolean;
@@ -47,7 +47,9 @@ const TaskForm: React.FC<TaskFormProps> = ({
     () => initialFormValues(initialData, createDefaults),
     [initialData, createDefaults],
   );
-  const [showDescription, setShowDescription] = useState(!!initialData?.description);
+  const [showDescription, setShowDescription] = useState(
+    !!initialData?.description || !!createDefaults?.formPrefill?.description,
+  );
 
   const {
     control,
@@ -64,7 +66,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
 
   useEffect(() => {
     reset(initialFormValues(initialData, createDefaults));
-    setShowDescription(!!initialData?.description);
+    setShowDescription(!!initialData?.description || !!createDefaults?.formPrefill?.description);
   }, [initialData, createDefaults, reset]);
 
   const isFixed = useWatch({ control, name: 'isFixed' });

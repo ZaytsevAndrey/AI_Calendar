@@ -41,6 +41,9 @@ Create `backend/.env` from `backend/.env.example`.
 | `DATABASE_URL` | If this is a `postgres://` / `postgresql://` URL, TypeORM uses **Postgres** (production / Neon). Otherwise the backend uses **SQLite** (`SQLITE_PATH` or `db.sqlite`) |
 | `TYPEORM_SYNC` | Set to `false` to disable `synchronize`. Default is on so an empty Neon database gets a schema on first boot |
 | `DATABASE_SSL` | Postgres SSL is on by default (`rejectUnauthorized: false` for Neon). Set `false` only for local Postgres without SSL |
+| `GROQ_API_KEY` | Free Groq API key for voice STT + task parse ([console.groq.com/keys](https://console.groq.com/keys)). Voice buttons fail with 503 if unset |
+| `GROQ_STT_MODEL` | Optional. Default `whisper-large-v3-turbo` |
+| `GROQ_LLM_MODEL` | Optional. Default `llama-3.3-70b-versatile` |
 
 ### Frontend
 

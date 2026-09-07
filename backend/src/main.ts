@@ -19,7 +19,10 @@ function isAllowedOrigin(origin: string | undefined): boolean {
 }
 
 async function bootstrap() {
-  const adapter = new FastifyAdapter({ trustProxy: true });
+  const adapter = new FastifyAdapter({
+    trustProxy: true,
+    bodyLimit: 15 * 1024 * 1024,
+  });
   await adapter.getInstance().register(fastifyCors, {
     origin: (origin, cb) => {
       if (isAllowedOrigin(origin)) {
@@ -48,6 +51,7 @@ async function bootstrap() {
     .addTag('user-settings', 'User settings endpoints')
     .addTag('schedule', 'Schedule management endpoints')
     .addTag('google-calendar', 'Google Calendar integration endpoints')
+    .addTag('voice', 'Voice transcription and task parsing')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

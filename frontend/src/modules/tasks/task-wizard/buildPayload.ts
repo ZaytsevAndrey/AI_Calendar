@@ -83,10 +83,36 @@ export function buildTaskPayload(data: TaskFormValues): CreateTaskDTO | UpdateTa
   return payload;
 }
 
+export function formValuesFromCreatePayload(payload: CreateTaskDTO): TaskFormValues {
+  const isFixed = payload.eventType === 'fixed';
+  return initialFormValues({
+    id: 'voice-prefill',
+    name: payload.name,
+    description: payload.description,
+    phaseId: payload.phaseId ?? payload.phaseIds?.[0],
+    eventType: payload.eventType,
+    estimatedTimeInMinutes: payload.estimatedTimeInMinutes ?? 30,
+    isRecurring: payload.isRecurring ?? false,
+    recurrencePattern: payload.recurrencePattern ?? undefined,
+    recurrenceWeekDays: payload.recurrenceWeekDays ?? [],
+    allowSplit: payload.allowSplit ?? !isFixed,
+    priority: payload.priority ?? 'medium',
+    deadline: payload.deadline,
+    scheduledStartTime: payload.scheduledStartTime ?? undefined,
+    scheduledEndTime: payload.scheduledEndTime ?? undefined,
+    status: 'todo',
+    createdAt: '',
+    updatedAt: '',
+  });
+}
+
 export function initialFormValues(
   data?: TaskDTO,
-  defaults?: { deadline?: string },
+  defaults?: { deadline?: string; formPrefill?: TaskFormValues },
 ): TaskFormValues {
+  if (defaults?.formPrefill) {
+    return defaults.formPrefill;
+  }
   if (!data) {
     return {
       name: '',

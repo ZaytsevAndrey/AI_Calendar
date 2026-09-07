@@ -60,6 +60,7 @@ Set on the **API** service (Blueprint prompts the secrets):
 | `FRONTEND_URL` | From the static service |
 | `APP_URL` | From the API service |
 | `GOOGLE_*` | OAuth — redirect URI must match Google Console |
+| `GROQ_API_KEY` | Voice STT + parse (set in the Render dashboard; Blueprint `sync: false`) |
 | `TYPEORM_SYNC` | `true` on first empty database; schema is applied automatically |
 
 Frontend **build-time** variable:

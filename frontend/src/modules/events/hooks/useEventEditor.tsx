@@ -6,12 +6,14 @@ import {
 import { useGetAllPhasesQuery } from 'api/phasesApi';
 import { CreateTaskDTO, TaskDTO, UpdateTaskDTO } from 'api/tasks.api';
 import TaskForm from 'modules/tasks/components/TaskForm';
+import type { TaskFormValues } from 'modules/tasks/task-wizard/schema';
 import { Modal } from '../../../ui/Modal';
 import { showErrorToast, showSuccessToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 
 export type CreateTaskDefaults = {
   deadline?: string;
+  formPrefill?: TaskFormValues;
 };
 
 export function useEventEditor() {
@@ -34,16 +36,25 @@ export function useEventEditor() {
     setOpen(true);
   };
 
+  const openCreateFromPrefill = (formPrefill: TaskFormValues) => {
+    openCreate({ formPrefill });
+  };
+
   const openEdit = (event: TaskDTO) => {
     setEditingEvent(event);
     setOpen(true);
   };
 
-  const submit = async (data: CreateTaskDTO | UpdateTaskDTO) => {
+  const cleanPayload = (data: CreateTaskDTO | UpdateTaskDTO): CreateTaskDTO | UpdateTaskDTO => {
     const cleanData = { ...data };
     if ((cleanData as { phaseId?: string }).phaseId === '') {
       delete (cleanData as { phaseId?: string }).phaseId;
     }
+    return cleanData;
+  };
+
+  const submit = async (data: CreateTaskDTO | UpdateTaskDTO) => {
+    const cleanData = cleanPayload(data);
     try {
       if (editingEvent) {
         await updateEvent({ id: editingEvent.id, body: cleanData as UpdateTaskDTO }).unwrap();
@@ -58,6 +69,11 @@ export function useEventEditor() {
     }
   };
 
+  const createFromPayload = async (data: CreateTaskDTO) => {
+    await createEvent(cleanPayload(data) as CreateTaskDTO).unwrap();
+    showSuccessToast('Task created.');
+  };
+
   const isSaving = createEventState.isLoading || updateEventState.isLoading;
 
   const editorModal = (
@@ -70,7 +86,12 @@ export function useEventEditor() {
     >
       <div>
         <TaskForm
-          key={editingEvent?.id ?? createDefaults?.deadline ?? 'new'}
+          key={
+            editingEvent?.id ??
+            createDefaults?.formPrefill?.name ??
+            createDefaults?.deadline ??
+            'new'
+          }
           initialData={editingEvent || undefined}
           createDefaults={createDefaults}
           phases={phases}
@@ -83,5 +104,5 @@ export function useEventEditor() {
     </Modal>
   );
 
-  return { openCreate, openEdit, editorModal };
+  return { openCreate, openCreateFromPrefill, openEdit, createFromPayload, editorModal };
 }

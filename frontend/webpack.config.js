@@ -72,11 +72,22 @@ export default async (_env, argv) => {
                                     '_redirects',
                                     new webpack.sources.RawSource('/*    /index.html   200\n'),
                                 );
-                                const faviconPath = path.join(__dirname, 'public', 'favicon.svg');
-                                compilation.emitAsset(
+                                const publicFiles = [
                                     'favicon.svg',
-                                    new webpack.sources.RawSource(fs.readFileSync(faviconPath)),
-                                );
+                                    'manifest.webmanifest',
+                                    'sw.js',
+                                    'icon-192.png',
+                                    'icon-512.png',
+                                    'apple-touch-icon.png',
+                                ];
+                                for (const fileName of publicFiles) {
+                                    const filePath = path.join(__dirname, 'public', fileName);
+                                    if (!fs.existsSync(filePath)) continue;
+                                    compilation.emitAsset(
+                                        fileName,
+                                        new webpack.sources.RawSource(fs.readFileSync(filePath)),
+                                    );
+                                }
                             },
                         );
                     });
