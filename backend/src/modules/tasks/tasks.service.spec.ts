@@ -33,8 +33,6 @@ describe('TasksService', () => {
   const scheduleJobService = {
     enqueueReplan: jest.fn(),
     processNextPendingForUser: jest.fn(),
-    captureFlexibleGoogleSnapshotForTask: jest.fn().mockResolvedValue(null),
-    syncFlexibleTaskAfterUserEditIfNeeded: jest.fn().mockResolvedValue(undefined),
     deleteSyncedGoogleEventsForTask: jest.fn().mockResolvedValue(undefined),
   };
   const googleCalendarService = {
@@ -103,6 +101,27 @@ describe('TasksService', () => {
     expect(scheduleJobService.processNextPendingForUser).toHaveBeenCalledWith(
       'user-1',
     );
+  });
+
+  it('returns from create without waiting for replan to finish', async () => {
+    let resolveProcess: (() => void) | undefined;
+    const processGate = new Promise<void>((resolve) => {
+      resolveProcess = resolve;
+    });
+    scheduleJobService.processNextPendingForUser.mockImplementation(
+      () => processGate,
+    );
+
+    await expect(
+      service.create('user-1', {
+        name: 'Task',
+        eventType: TaskEventType.ADMIN,
+        estimatedTimeInMinutes: 60,
+      } as any),
+    ).resolves.toBeDefined();
+
+    resolveProcess?.();
+    await processGate;
   });
 
   it('does not enqueue replan for fixed tasks', async () => {

@@ -90,7 +90,7 @@ Legacy `eventType` strings (`daily_routine`, `learning`, …) may still exist in
 
 ### 4.2 Slot graph
 
-- Build **busy** intervals: anchors (Google fixed) + `FIXED` user items + any immovable blocks.  
+- Build **busy** intervals: anchors (Google fixed) + `FIXED` user items + in-progress auto segments + **fully ended** auto-generated slots kept from earlier plans.  
 - Build **available** intervals = the task’s phase window (or wake/sleep if none) intersected with **weekend** rules from user settings.  
 - Respect **minimum split** when placing segments.
 
@@ -119,7 +119,8 @@ One optional phase. If a movable task has preferred start/end stored on the task
 
 ## 5. Triggers and UX
 
-- **On create** (and on relevant **update**): enqueue **replan job**; UI shows **loading** then **diff** (what moved: item id, old range → new range).  
+- **On create** (and on relevant **update**): enqueue **replan job** and return immediately; processing continues in the background (HTTP does not wait for Google sync). The Calendar page shows a **stage timeline** while Generate runs (`preparing` → `computing` → `syncing_google`).  
+- **Generate / Clear** keep **fully ended** app-generated slots (`scheduledEndTime <= now`), including earlier today. Only still-open blocks are rewritten or cleared. Past app-calendar events render **gray** in the UI; other Google calendars keep their colors.  
 - Optional later: manual **“Replan now”** button (same pipeline).
 
 ### 5.1 Diff
@@ -139,7 +140,7 @@ One optional phase. If a movable task has preferred start/end stored on the task
 
 **Choice:** **SQLite-backed job table** (fits current stack; no Redis required).
 
-- Table e.g. `schedule_jobs`: `id`, `userId`, `payload` (json), `status` (pending/running/done/failed), `createdAt`, `startedAt`, `finishedAt`, `error`, `resultSummary` (json pointer to diff id).  
+- Table e.g. `schedule_jobs`: `id`, `userId`, `payload` (json), `status` (pending/running/done/failed), `progressStage` (`preparing` / `computing` / `syncing_google` / `done` / `failed`), `progressCurrent` / `progressTotal` (Google sync), `createdAt`, `startedAt`, `finishedAt`, `error`, `resultSummary` (json pointer to diff id).  
 - **Worker:** Nest provider on interval or `@nestjs/bull` not used; simple **polling** or **cron** every N seconds processing `pending` with row lock / `UPDATE … WHERE status='pending' LIMIT 1` pattern (SQLite limitations acknowledged—single worker or `FOR UPDATE` equivalent via transaction).  
 - **Idempotency:** job `correlationId` from client optional to dedupe double-submit.
 
@@ -148,7 +149,8 @@ One optional phase. If a movable task has preferred start/end stored on the task
 ## 7. Google Calendar
 
 - **Inbound:** events from Google → stored as **anchors** (`isFixedExternal=true` or separate table); never moved by scheduler.  
-- **Outbound:** our items with sync flag get **create/update/delete** when segments change.  
+- **Outbound:** our items with sync flag get **create/update/delete** when **still-open** segments change. Fully ended app events are left in place.  
+- **Recurring:** one RRULE master for open occurrences. On replan/clear, if ended instances exist, the old series is **capped** with `UNTIL` (DTSTART unchanged) and a **new** series is created for remaining future slots—two Google writes, not one event per day.  
 - **Undo:** reverse last Google writes for items in snapshot (implementation must track mapping segment ↔ event id).
 
 ---

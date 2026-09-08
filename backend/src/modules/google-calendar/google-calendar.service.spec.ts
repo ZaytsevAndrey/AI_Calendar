@@ -305,8 +305,16 @@ describe('GoogleCalendarService', () => {
       expect.objectContaining({ calendarId: 'app-cal@test.google.com' }),
     );
     expect(result.events).toEqual([
-      expect.objectContaining({ id: 'g1', calendarId: 'primary' }),
-      expect.objectContaining({ id: 'a1', calendarId: 'app-cal@test.google.com' }),
+      expect.objectContaining({
+        id: 'g1',
+        calendarId: 'primary',
+        isAppGenerated: false,
+      }),
+      expect.objectContaining({
+        id: 'a1',
+        calendarId: 'app-cal@test.google.com',
+        isAppGenerated: true,
+      }),
     ]);
     expect(result.totalEvents).toBe(2);
   });

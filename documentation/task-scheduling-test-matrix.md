@@ -316,7 +316,8 @@
 
 **Then**
 - Replan job для користувача поставлено в чергу.
-- Подальший scheduling виконується без падіння.
+- HTTP відповідь **не чекає** завершення replan / Google sync.
+- Covered by `tasks.service.spec.ts` (`returns from create without waiting for replan to finish`).
 
 ## T51 — Google disconnected: sync skipped safely
 
@@ -341,6 +342,45 @@
 
 **Then**
 - Подія в Google не видаляється автоматично.
+
+## T53 — Replan keeps fully ended auto slots
+
+**Given**
+- Movable TODO task has an auto-generated slot that already ended (`scheduledEndTime <= now`).
+
+**When**
+- Generate / replan.
+
+**Then**
+- That row is **not** deleted (`scheduledEndTime > now` filter).
+- It is treated as a busy anchor.
+- Covered by `intelligent-scheduling.engine.spec.ts` (`keeps completed auto segments as busy and only deletes still-open ones`).
+
+## T54 — Clear keeps finished blocks, including earlier today
+
+**Given**
+- Auto slots: one ended this morning, one still open later today.
+
+**When**
+- `DELETE /schedule`.
+
+**Then**
+- Only the still-open row is removed locally.
+- Google wipe receives the ended series id in `keepEventIds` and caps it (`UNTIL`), instead of deleting the master.
+- Covered by `schedule.service.spec.ts` and `schedule-job.service.spec.ts`.
+
+## T55 — Calendar grays only our finished app events
+
+**Given**
+- Display events mix: app calendar (ended + future) and primary/other calendars (ended).
+
+**When**
+- Calendar day/week/month render.
+
+**Then**
+- Gray fill only if `isAppGenerated` and `end <= now`.
+- External calendars keep Google `colorId`.
+- Covered by `frontend/src/modules/calendar/hooks/eventAppearance.spec.ts`.
 
 ---
 
@@ -407,4 +447,4 @@
 
 ## Мінімальний smoke-набір для CI (швидкий прогін)
 
-- `T05`, `T10`, `T20`, `T23`, `T30`, `T33`, `T40`, `T50`, `W01`, `W03`, `W04`.
+- `T05`, `T10`, `T20`, `T23`, `T30`, `T33`, `T40`, `T50`, `T53`, `T54`, `T55`, `W01`, `W03`, `W04`.

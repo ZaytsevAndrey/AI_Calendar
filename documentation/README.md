@@ -12,7 +12,8 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Task creation rules](task-creation-rules.md) | Presets vs settings, validation, phase, recurrence weekdays, Google sync |
 | [Roadmap](roadmap.md) | Done, in progress, planned |
 | [Spec: Intelligent scheduling](spec-intelligent-scheduling.md) | Unified items, settings, phases, queue, diff/undo, Google anchors |
+| [Task scheduling test matrix](task-scheduling-test-matrix.md) | Given/When/Then cases mapped to unit tests |
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** September 2026 (informative type-colored toasts; settings IANA time zone; From/Until, voice + PWA, Render + Neon).
+**Last documentation update:** September 2026 (keep-past generate/clear, gray app events, async replan + generate timeline; settings IANA time zone; From/Until, voice + PWA).
