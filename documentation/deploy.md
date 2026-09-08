@@ -40,6 +40,8 @@ Schedule **jobs** stay in-process (`setInterval` every 2s). They run only while 
 - Health: `GET /health` → `{ "status": "ok" }`
 - Swagger: `https://ai-calendar-api-fxsw.onrender.com/api`
 
+The app footer shows `Build <git SHA> · <UTC time>` from the frontend webpack compile. Use it to confirm production has the commit you expect.
+
 Do not use `https://ai-calendar-web.onrender.com` or `https://ai-calendar-api.onrender.com` — those names were already taken and are a different project.
 
 ## Git workflow

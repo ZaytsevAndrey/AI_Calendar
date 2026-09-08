@@ -50,7 +50,7 @@
 
 ### 3.4 Deadline / schedule window
 
-- `earliestStartTime` — hard «не раніше» (instant, не midnight сервера).
+- `earliestStartTime` — hard «не раніше» (instant у TZ клієнта, не midnight UTC-хоста). Day-only From (локальні **00:00**) snap до wake того локального дня. На Postgres `wakeTime` приходить як `HH:mm:ss` — енджин нормалізує до `HH:mm` (інакше на проді 00:00 падає на «сьогодні», а 00:01 працює).
 - `deadline` — hard «не пізніше»; усі сегменти мають закінчитись до нього.
 - `eligibleWeekDays` — опційний фільтр днів усередині From–Until (лише non-recurring).
 - Якщо задача не влазить у вікно, формуємо warning:

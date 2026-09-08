@@ -33,6 +33,7 @@ This reflects the **actual** codebase as of the last update (September 2026). Im
 ### Phase 4 — Scheduling engine (done — iterative improvements possible)
 
 - [x] Intelligent engine: priority, FIFO tie-break, phase window, wake/sleep, weekends, split, weekday filter, displacement within priority tier  
+- [x] Durable From/Until window (`earliestStartTime` + `deadline` + `eligibleWeekDays`) in the client IANA zone; day-only 00:00 snaps to wake (Postgres `HH:mm:ss` normalized)  
 - [x] `/schedule` API + async generate (job) + clear  
 - [x] Schedule jobs: replan, latest done, poll by id  
 - [ ] Further heuristics (e.g. deeper multi-task optimization), analytics  

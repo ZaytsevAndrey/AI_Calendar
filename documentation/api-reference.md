@@ -26,7 +26,7 @@ Additional routes may exist in `auth.controller.ts` (email verification, etc.).
 
 `GET` (and the logic that creates default settings) also triggers **default phase creation** for the user when they have no phases yet (see Phases below).
 
-Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWorkEnabled`, `allowSplitScheduling`, `minSplitMinutes`.
+Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWorkEnabled`, `allowSplitScheduling`, `minSplitMinutes`, **`timeZone`** (IANA, e.g. `Asia/Nicosia`; the logged-in client PATCHes it from the browser). Postgres stores `wakeTime` / `sleepTime` as `time` (`HH:mm:ss`); the engine normalizes them to `HH:mm`.
 
 ## Phases (day phases) — `/phases`
 
@@ -118,7 +118,8 @@ Create/update body may include:
 - `phaseIds` — at most one phase UUID (empty = full wake/sleep window)
 - `estimatedTimeInMinutes` — optional; default 30 for non-fixed, or derived from start/end for fixed
 - `scheduledStartTime` / `scheduledEndTime` — required when `eventType` is `fixed`. For movable tasks, optional preferred clock (end = start + duration). After replan these hold the placed slot. `null` clears them.
-- `earliestStartTime` — movable: do not place before this instant (day or clock). Survives replan. `null` clears it.
+- `earliestStartTime` — movable: do not place before this instant (day or clock). Survives replan. `null` clears it. Day-only From is local **00:00** in the client zone (stored as UTC).
+- `timeZone` — create/update: IANA zone for that window (copied onto `scheduleTimeZone`). The engine uses `scheduleTimeZone` or settings `timeZone`.
 - `eligibleWeekDays` — movable non-recurring: only these weekdays inside the From–Until window. Empty / omitted = any day in the window.
 - `isRecurring`, `recurrencePattern` — `DAILY` / `WEEKLY` / `BIWEEKLY` / `MONTHLY`
 - `recurrenceWeekDays` — `0` = Sunday … `6` = Saturday. Empty / omitted / all seven = no extra weekday filter. Intersected with the phase `weekDays`.

@@ -31,6 +31,7 @@ One persisted entity (evolve current `Task` or merge with calendar event model�
 | `durationMinutes` | User-set; default 30 for movable tasks |
 | `deadline` | Optional not-after bound |
 | `earliestStartTime` | Optional not-before bound (survives replan) |
+| `scheduleTimeZone` | IANA zone for interpreting day-only From/Until (from the client) |
 | `eligibleWeekDays` | Optional weekday filter inside the window (non-recurring) |
 | `isRecurring` / `recurrencePattern` | `DAILY` / `WEEKLY` / `BIWEEKLY` / `MONTHLY` |
 | `recurrenceWeekDays` | Optional `0–6` (Sun–Sat); intersected with phase `weekDays` |
@@ -99,7 +100,7 @@ Items are processed in **priority order** (highest first). For each item:
 
 ### 4.4 Deadline / schedule window
 
-- If `earliestStartTime` is set: hard constraint—do not start any segment before that **instant**. Day-only From (00:00 in the user IANA zone) snaps to wake that local day so `+03:00` midnight is not treated as “this evening” on a UTC host.
+- If `earliestStartTime` is set: hard constraint—do not start any segment before that **instant**. Day-only From (00:00 in the user IANA zone) snaps to wake that local day so `+03:00` midnight is not treated as “this evening” on a UTC host. Wake/sleep from Postgres (`HH:mm:ss`) are normalized to `HH:mm` before that snap (otherwise the ISO is invalid and the task lands “today” on production). A clock From such as 00:01 is left as an instant and is not snapped.
 - If `deadline` is set: hard constraint—**all segments must end by deadline**. If impossible: **do not silently fail**—return structured error / UI message: e.g. “Cannot fit before deadline; raise priority, extend deadline, enable split, or remove other work.”
 - If `eligibleWeekDays` is set on a non-recurring task: only those weekdays inside the window are eligible.
 

@@ -5,7 +5,8 @@
 
 ## Conventions
 
-- Час у прикладах: UTC.
+- Час у прикладах **T\***: UTC, якщо не вказано інакше.
+- Кейси **W\*** (From/Until): час у TZ клієнта (`Asia/Nicosia`), хост UTC як на Render.
 - Крок слотів: 15 хв.
 - Фаза за замовчуванням: `09:00-17:00`, якщо не вказано інакше.
 - Алгоритм очікування: `priority DESC`, далі FIFO, далі `earliest available`.
@@ -343,6 +344,50 @@
 
 ---
 
+## W01 — From/Until: day-only 00:00 in client TZ (UTC host)
+
+**Given**
+- Host TZ = UTC (production).
+- User TZ = `Asia/Nicosia` (`+03:00`), stored on the task as `scheduleTimeZone`.
+- `wakeTime` from Postgres = `09:00:00`.
+- Now = `2026-09-07T18:47:00.000Z`.
+- Flexible task: `earliestStartTime = 2026-09-08T00:00:00+03:00`, `deadline = 2026-09-08T23:59:00+03:00`.
+
+**When**
+- Replan / create pipeline.
+
+**Then**
+- No segment starts on `2026-09-07` UTC.
+- Placement is on local 8 Sep (UTC date 8).
+- Covered by `intelligent-scheduling.engine.spec.ts` (`+03:00` midnight + Postgres `HH:mm:ss` wakeTime).
+
+## W02 — From 00:01 is an instant (not snapped)
+
+**Given**
+- Same TZ as W01.
+- `earliestStartTime` is local `00:01`, not `00:00`.
+
+**When**
+- Replan.
+
+**Then**
+- Engine does **not** treat it as day-only; the instant is the not-before bound.
+- Must still fall on the intended local day (not the previous UTC calendar day).
+
+## W03 — Create persists the window before replan
+
+**Given**
+- Client sends `earliestStartTime`, `deadline`, `timeZone`, optional `eligibleWeekDays`.
+
+**When**
+- `POST /tasks`.
+
+**Then**
+- Row saved with those fields (`scheduleTimeZone` = `timeZone`) **before** the replan job runs.
+- Covered by `tasks.service.spec.ts` (`create schedule window`).
+
+---
+
 ## Мінімальний smoke-набір для CI (швидкий прогін)
 
-- `T05`, `T10`, `T20`, `T23`, `T30`, `T33`, `T40`, `T50`.
+- `T05`, `T10`, `T20`, `T23`, `T30`, `T33`, `T40`, `T50`, `W01`, `W03`.
