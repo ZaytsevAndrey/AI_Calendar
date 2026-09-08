@@ -11,6 +11,7 @@ import {
   buildVoiceParseUserPrompt,
 } from './voice-parse.prompt';
 import { extractJsonObject, normalizeVoiceParse } from './voice-parse.util';
+import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import type { VoiceParseResult } from './voice-parse.types';
 
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
@@ -82,13 +83,14 @@ export class VoiceService {
       }),
     ]);
 
+    const timeZone = resolveIanaTimeZone(settings.timeZone || dto.timeZone);
     const nowIso = dto.clientNowIso?.trim() || new Date().toISOString();
     const alreadyClarified = Boolean(dto.clarificationAnswer?.trim());
     const content = await this.groq.completeJson(
       buildVoiceParseSystemPrompt(),
       buildVoiceParseUserPrompt({
         transcript,
-        timeZone: dto.timeZone || 'UTC',
+        timeZone,
         nowIso,
         phases,
         settings,
@@ -107,7 +109,7 @@ export class VoiceService {
     return normalizeVoiceParse(parsed, {
       validPhaseIds: new Set(phases.map((phase) => phase.id)),
       alreadyClarified,
-      timeZone: dto.timeZone || 'UTC',
+      timeZone,
       nowIso,
       transcript: alreadyClarified
         ? `${dto.previousTranscript || ''} ${dto.clarificationAnswer || ''} ${transcript}`

@@ -41,6 +41,12 @@ export function addDaysToYmd(ymd: string, days: number): string {
   return utc.toISOString().slice(0, 10);
 }
 
+export function addMonthsToYmd(ymd: string, months: number): string {
+  const [year, month, day] = ymd.split('-').map(Number);
+  const utc = new Date(Date.UTC(year, month - 1 + months, day));
+  return utc.toISOString().slice(0, 10);
+}
+
 export function weekdayIndex(ymd: string): number {
   const [year, month, day] = ymd.split('-').map(Number);
   return new Date(Date.UTC(year, month - 1, day)).getUTCDay();

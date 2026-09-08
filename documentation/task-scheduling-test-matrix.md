@@ -344,11 +344,11 @@
 
 ---
 
-## W01 — From/Until: day-only 00:00 in client TZ (UTC host)
+## W01 — From/Until: day-only 00:00 in settings TZ (UTC host)
 
 **Given**
 - Host TZ = UTC (production).
-- User TZ = `Asia/Nicosia` (`+03:00`), stored on the task as `scheduleTimeZone`.
+- Settings `timeZone` = `Asia/Nicosia` (`+03:00`).
 - `wakeTime` from Postgres = `09:00:00`.
 - Now = `2026-09-07T18:47:00.000Z`.
 - Flexible task: `earliestStartTime = 2026-09-08T00:00:00+03:00`, `deadline = 2026-09-08T23:59:00+03:00`.
@@ -386,8 +386,25 @@
 - Row saved with those fields (`scheduleTimeZone` = `timeZone`) **before** the replan job runs.
 - Covered by `tasks.service.spec.ts` (`create schedule window`).
 
+## W04 — Wake/phase clocks use settings timeZone, not the host clock
+
+**Given**
+- Host TZ = UTC.
+- Settings `timeZone` = `Asia/Nicosia`, `wakeTime`/`phase` = `09:00`–`12:00`.
+- Now = `2026-04-20T00:00:00.000Z`.
+- Flexible 60-minute task, no From/Until.
+
+**When**
+- Replan.
+
+**Then**
+- First slot is `2026-04-20T06:00:00.000Z`–`07:00:00.000Z` (09:00–10:00 Nicosia), not 09:00 UTC.
+- Covered by `intelligent-scheduling.engine.spec.ts` (`places wake and phase windows in the settings time zone`).
+- Horizon midnight in `Asia/Nicosia` is covered by `planningHorizonRange`.
+- PATCH `timeZone` validation: `update-user-settings.dto.spec.ts`. Empty zone is not overwritten on GET: `user-settings.service.spec.ts`.
+
 ---
 
 ## Мінімальний smoke-набір для CI (швидкий прогін)
 
-- `T05`, `T10`, `T20`, `T23`, `T30`, `T33`, `T40`, `T50`, `W01`, `W03`.
+- `T05`, `T10`, `T20`, `T23`, `T30`, `T33`, `T40`, `T50`, `W01`, `W03`, `W04`.

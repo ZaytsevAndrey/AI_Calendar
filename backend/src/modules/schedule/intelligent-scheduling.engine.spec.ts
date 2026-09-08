@@ -22,16 +22,26 @@ describe('planningHorizonRange', () => {
 
   it('uses today through Settings horizon days (exclusive end)', () => {
     jest.useFakeTimers();
-    jest.setSystemTime(new Date('2026-04-20T15:30:00'));
+    jest.setSystemTime(new Date('2026-04-20T15:30:00.000Z'));
     const { start, end, horizonDays } = planningHorizonRange({
       recurringScheduleHorizonDays: 30,
+      timeZone: 'UTC',
     });
     expect(horizonDays).toBe(30);
-    expect(start.getHours()).toBe(0);
-    expect(start.getMinutes()).toBe(0);
-    const expectedEnd = new Date(start);
-    expectedEnd.setDate(expectedEnd.getDate() + 30);
-    expect(end.getTime()).toBe(expectedEnd.getTime());
+    expect(start.toISOString()).toBe('2026-04-20T00:00:00.000Z');
+    expect(end.toISOString()).toBe('2026-05-20T00:00:00.000Z');
+  });
+
+  it('starts the horizon at midnight in the settings time zone', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-04-20T15:30:00.000Z'));
+    const { start, end, horizonDays } = planningHorizonRange({
+      recurringScheduleHorizonDays: 2,
+      timeZone: 'Asia/Nicosia',
+    });
+    expect(horizonDays).toBe(2);
+    expect(start.toISOString()).toBe('2026-04-19T21:00:00.000Z');
+    expect(end.toISOString()).toBe('2026-04-21T21:00:00.000Z');
   });
 
   it('clamps invalid horizon to 1–365', () => {
@@ -823,6 +833,37 @@ describe('IntelligentSchedulingEngine', () => {
     expect(slots[0][0].startsWith('2026-09-07')).toBe(false);
     expect(new Date(slots[0][0]).getUTCDate()).toBe(8);
   });
+
+  it('places wake and phase windows in the settings time zone', async () => {
+    getSettingsMock.mockResolvedValue(
+      makeSettings({
+        ...baseSettings,
+        timeZone: 'Asia/Nicosia',
+        wakeTime: '09:00',
+        sleepTime: '12:00',
+        weekendWorkEnabled: true,
+        recurringScheduleHorizonDays: 1,
+      }),
+    );
+    jest.setSystemTime(new Date('2026-04-20T00:00:00.000Z'));
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'nicosia-wake',
+        name: 'Deep work',
+        estimatedTimeInMinutes: 60,
+        allowSplit: false,
+        phases: [makePhase('any-day', '09:00', '12:00', null)],
+      }),
+    ]);
+
+    await engine.run(userId);
+
+    const [slots] = extractTaskSegments(scheduledRepo.save.mock.calls);
+    expect(slots[0]).toEqual([
+      '2026-04-20T06:00:00.000Z',
+      '2026-04-20T07:00:00.000Z',
+    ]);
+  });
 });
 
 let taskCounter = 0;
@@ -869,7 +910,7 @@ function makeSettings(partial: Partial<UserSettings>): UserSettings {
     minSplitMinutes: 30,
     maxSplitMinutes: 60,
     recurringScheduleHorizonDays: 3,
-    timeZone: partial.timeZone ?? null,
+    timeZone: 'UTC',
     createdAt: new Date(),
     updatedAt: new Date(),
     ...partial,
@@ -924,10 +965,7 @@ function extractTaskSegments(calls: unknown[][]): string[][][] {
 }
 
 function atLocalTimeIso(dayOffset: number, hours: number): string {
-  const local = new Date('2026-04-20T00:00:00.000Z');
-  local.setDate(local.getDate() + dayOffset);
-  local.setHours(hours, 0, 0, 0);
-  return local.toISOString();
+  return new Date(Date.UTC(2026, 3, 20 + dayOffset, hours, 0, 0)).toISOString();
 }
 
 function atLocalTimeWithMinutesIso(
@@ -935,10 +973,9 @@ function atLocalTimeWithMinutesIso(
   hours: number,
   minutes: number,
 ): string {
-  const local = new Date('2026-04-20T00:00:00.000Z');
-  local.setDate(local.getDate() + dayOffset);
-  local.setHours(hours, minutes, 0, 0);
-  return local.toISOString();
+  return new Date(
+    Date.UTC(2026, 3, 20 + dayOffset, hours, minutes, 0),
+  ).toISOString();
 }
 
 function extractTaskSegmentsByTaskId(calls: unknown[][]): Map<string, string[][]> {

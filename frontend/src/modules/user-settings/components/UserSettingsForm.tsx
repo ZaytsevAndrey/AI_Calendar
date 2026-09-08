@@ -5,6 +5,7 @@ import { UserSettingsDTO } from '../../../api/user-settings.api';
 import { useUpdateUserSettingsMutation } from '../../../api/userSettingsApi';
 import { googleCalendarAPI } from '../../../api/google-calendar.api';
 import { Spinner } from '../../../ui/Spinner';
+import { timeZoneSelectOptions } from '../ianaTimeZones';
 
 interface UserSettingsFormProps {
     initialData: UserSettingsDTO;
@@ -13,6 +14,7 @@ interface UserSettingsFormProps {
 interface UserSettingsFormData {
     sleepTime: string;
     wakeTime: string;
+    timeZone: string;
     googleCalendarLinked: boolean;
     appGoogleCalendarName: string;
     minSplitMinutes: number;
@@ -26,9 +28,14 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
     const [isCalendarConnected, setIsCalendarConnected] = useState(false);
     const [isCheckingConnection, setIsCheckingConnection] = useState(true);
     const [updateUserSettings] = useUpdateUserSettingsMutation();
-    const [initialValues, setInitialValues] = useState<{ sleepTime: string; wakeTime: string; minSplitMinutes: number; maxSplitMinutes: number; recurringScheduleHorizonDays: number } | null>(
-        null
-    );
+    const [initialValues, setInitialValues] = useState<{
+        sleepTime: string;
+        wakeTime: string;
+        timeZone: string;
+        minSplitMinutes: number;
+        maxSplitMinutes: number;
+        recurringScheduleHorizonDays: number;
+    } | null>(null);
 
     const { control, setValue, watch, getValues } = useForm<UserSettingsFormData>({
         defaultValues: {
@@ -36,6 +43,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                 initialData?.sleepTime && initialData.sleepTime !== '' ? initialData.sleepTime : '22:00',
             wakeTime:
                 initialData?.wakeTime && initialData.wakeTime !== '' ? initialData.wakeTime : '07:00',
+            timeZone: initialData?.timeZone?.trim() || '',
             googleCalendarLinked: initialData?.googleCalendarLinked || false,
             appGoogleCalendarName:
                 initialData?.appGoogleCalendarName?.trim() || 'AI Calendar Assistant',
@@ -56,6 +64,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
 
     const sleepTime = watch('sleepTime');
     const wakeTime = watch('wakeTime');
+    const timeZone = watch('timeZone');
     const minSplitMinutes = watch('minSplitMinutes');
     const maxSplitMinutes = watch('maxSplitMinutes');
     const recurringScheduleHorizonDays = watch('recurringScheduleHorizonDays');
@@ -110,6 +119,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
         async (
             st: string | null | undefined,
             wt: string | null | undefined,
+            tz: string | null | undefined,
             minSplit: number | null | undefined,
             maxSplit: number | null | undefined,
             horizonDays: number | null | undefined
@@ -117,6 +127,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             if (!st || !wt || st === '' || wt === '' || typeof st !== 'string' || typeof wt !== 'string') {
                 return;
             }
+            const trimmedZone = typeof tz === 'string' ? tz.trim() : '';
             if (
                 typeof minSplit !== 'number' ||
                 Number.isNaN(minSplit) ||
@@ -141,6 +152,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                 await updateUserSettings({
                     sleepTime: st,
                     wakeTime: wt,
+                    ...(trimmedZone ? { timeZone: trimmedZone } : {}),
                     googleCalendarLinked: isCalendarConnected,
                     minSplitMinutes: minSplit,
                     maxSplitMinutes: Math.max(minSplit, maxSplit),
@@ -159,6 +171,13 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
     );
 
     useEffect(() => {
+        const next = initialData?.timeZone?.trim();
+        if (next) {
+            setValue('timeZone', next);
+        }
+    }, [initialData?.timeZone, setValue]);
+
+    useEffect(() => {
         if (
             sleepTime &&
             wakeTime &&
@@ -167,9 +186,16 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             typeof recurringScheduleHorizonDays === 'number' &&
             !initialValues
         ) {
-            setInitialValues({ sleepTime, wakeTime, minSplitMinutes, maxSplitMinutes, recurringScheduleHorizonDays });
+            setInitialValues({
+                sleepTime,
+                wakeTime,
+                timeZone: timeZone || '',
+                minSplitMinutes,
+                maxSplitMinutes,
+                recurringScheduleHorizonDays,
+            });
         }
-    }, [sleepTime, wakeTime, minSplitMinutes, maxSplitMinutes, recurringScheduleHorizonDays, initialValues]);
+    }, [sleepTime, wakeTime, timeZone, minSplitMinutes, maxSplitMinutes, recurringScheduleHorizonDays, initialValues]);
 
     useEffect(() => {
         const hasChanged =
@@ -177,6 +203,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             (
                 sleepTime !== initialValues.sleepTime ||
                 wakeTime !== initialValues.wakeTime ||
+                timeZone !== initialValues.timeZone ||
                 minSplitMinutes !== initialValues.minSplitMinutes ||
                 maxSplitMinutes !== initialValues.maxSplitMinutes ||
                 recurringScheduleHorizonDays !== initialValues.recurringScheduleHorizonDays
@@ -198,6 +225,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                 autoSaveTimeSettings(
                     sleepTime,
                     wakeTime,
+                    timeZone,
                     minSplitMinutes,
                     maxSplitMinutes,
                     recurringScheduleHorizonDays
@@ -206,7 +234,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
 
             return () => clearTimeout(timeoutId);
         }
-    }, [sleepTime, wakeTime, minSplitMinutes, maxSplitMinutes, recurringScheduleHorizonDays, autoSaveTimeSettings, initialValues]);
+    }, [sleepTime, wakeTime, timeZone, minSplitMinutes, maxSplitMinutes, recurringScheduleHorizonDays, autoSaveTimeSettings, initialValues]);
 
     return (
         <div className="space-y-10">
@@ -214,6 +242,28 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                 <h2 className="mb-4 text-lg font-semibold text-ide-text">Sleep schedule</h2>
                 <p className="ui-hint mb-6">Changes save automatically after you stop editing.</p>
                 <div className="flex flex-col gap-6 sm:flex-row sm:flex-wrap">
+                    <div className="flex flex-col gap-1">
+                        <label htmlFor="time-zone" className="ui-label">
+                            Time zone
+                        </label>
+                        <select
+                            id="time-zone"
+                            className="ui-select max-w-xs"
+                            value={timeZone || ''}
+                            onChange={(e) => setValue('timeZone', e.target.value)}
+                        >
+                            {!timeZone ? (
+                                <option value="" disabled>
+                                    Detecting…
+                                </option>
+                            ) : null}
+                            {timeZoneSelectOptions(timeZone).map((zone) => (
+                                <option key={zone} value={zone}>
+                                    {zone}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
                     <div className="flex flex-col gap-1">
                         <label htmlFor="wake-time" className="ui-label">
                             Wake time

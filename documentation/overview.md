@@ -37,7 +37,7 @@ AI_Calendar/
 ## Features (as implemented)
 
 - Registration / login, refresh, password reset, email verification (see [integrations](integrations.md) and `auth` code)  
-- **User settings:** wake/sleep, weekends, Google Calendar flags, `allowSplitScheduling` / `minSplitMinutes`, client **IANA `timeZone`** for the intelligent engine  
+- **User settings:** wake/sleep, weekends, Google Calendar flags, `allowSplitScheduling` / `minSplitMinutes`, IANA **`timeZone`** (filled once on first login, editable in Settings; source of truth for the scheduling engine)  
 - **Phases:** per-user CRUD (JWT), overlap validation, default **Sleep** + **Focus hours** from wake/sleep when the user has no phases, phase calendar UI  
 - **Tasks:** CRUD, statuses, priorities, optional From/Until window (`earliestStartTime` + `deadline` + `scheduleTimeZone`), one optional phase, split / recurring flags, optional `recurrenceWeekDays` / `eligibleWeekDays`; **fixed** blocks require scheduled start/end; movable tasks may set a preferred start. The create form is a single page with **Flexible / Fixed / Recurring** presets. Calendar day-click prefills that local day’s From/Until. **Voice:** mic on Tasks/Calendar records audio, Groq Whisper transcribes (uk/en/ru auto), an LLM maps speech to a task. High confidence creates immediately; medium prefills the form; gaps ask one follow-up question.  
 - **PWA:** installable (manifest + service worker + icons). Android Chrome shows an install prompt; iOS uses Share → Add to Home Screen.  
@@ -54,6 +54,7 @@ Implementation notes:
 Core logic lives in `backend/src/modules/schedule/intelligent-scheduling.engine.ts` and runs inside **schedule jobs** (`ScheduleJobService` / processor). Summary:
 
 - Movable tasks: TODO, not fixed external, not `eventType` **fixed**; ordered by **priority** then **FIFO** (`createdAt` ascending).  
+- **Time zone:** `user_settings.timeZone` (IANA). Wake/sleep, phases, weekdays, and the planning horizon are civil clocks in that zone. Empty/invalid → `UTC`. Changing the setting does not rewrite already stored UTC instants.  
 - **Phase window:** one optional phase, intersected with wake/sleep and weekend rules. Recurring days = task `recurrenceWeekDays` ∩ phase `weekDays`.  
 - **Anchors:** non-auto-generated scheduled rows, fixed tasks, in-progress auto segments, and fixed-external tasks block time.  
 - **Splitting** when the task and user settings allow it (`allowSplit` ∧ `allowSplitScheduling`, `minSplitMinutes`, horizon extensions, intra-priority displacement of splittable peers).  

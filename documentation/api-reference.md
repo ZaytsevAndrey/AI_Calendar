@@ -26,7 +26,7 @@ Additional routes may exist in `auth.controller.ts` (email verification, etc.).
 
 `GET` (and the logic that creates default settings) also triggers **default phase creation** for the user when they have no phases yet (see Phases below).
 
-Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWorkEnabled`, `allowSplitScheduling`, `minSplitMinutes`, **`timeZone`** (IANA, e.g. `Asia/Nicosia`; the logged-in client PATCHes it from the browser). Postgres stores `wakeTime` / `sleepTime` as `time` (`HH:mm:ss`); the engine normalizes them to `HH:mm`.
+Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWorkEnabled`, `allowSplitScheduling`, `minSplitMinutes`, **`timeZone`** (IANA, e.g. `Asia/Nicosia` / `Europe/Kyiv`). Empty `timeZone` is filled **once** from the browser on first login; the user can change it in Settings. Invalid IANA names are rejected. Postgres stores `wakeTime` / `sleepTime` as `time` (`HH:mm:ss`); the engine normalizes them to `HH:mm` and interprets those clocks **in `timeZone`** (fallback `UTC`).
 
 ## Phases (day phases) — `/phases`
 
@@ -63,7 +63,7 @@ JWT. Free Groq backend (`GROQ_API_KEY`). Audio is **not** stored.
 | POST | `/voice/transcribe` | Body `{ audioBase64, mimeType? }` → `{ transcript, language? }` (Whisper, auto language) |
 | POST | `/voice/parse-task` | Body `{ transcript, timeZone, clientNowIso?, previousTranscript?, clarificationAnswer? }` → `{ understanding, clarifyingQuestion, task }` |
 
-`understanding`: `complete` (client creates immediately), `sufficient` (prefill form), `needs_clarification` (one follow-up question). After a clarification reply the API will not ask a second question.
+`understanding`: `complete` (client creates immediately), `sufficient` (prefill form), `needs_clarification` (one follow-up question). After a clarification reply the API will not ask a second question. Calendar-day parsing uses **settings `timeZone`** when set, otherwise the request `timeZone`, otherwise `UTC`.
 
 ## Tasks — `/tasks`
 
@@ -118,8 +118,8 @@ Create/update body may include:
 - `phaseIds` — at most one phase UUID (empty = full wake/sleep window)
 - `estimatedTimeInMinutes` — optional; default 30 for non-fixed, or derived from start/end for fixed
 - `scheduledStartTime` / `scheduledEndTime` — required when `eventType` is `fixed`. For movable tasks, optional preferred clock (end = start + duration). After replan these hold the placed slot. `null` clears them.
-- `earliestStartTime` — movable: do not place before this instant (day or clock). Survives replan. `null` clears it. Day-only From is local **00:00** in the client zone (stored as UTC).
-- `timeZone` — create/update: IANA zone for that window (copied onto `scheduleTimeZone`). The engine uses `scheduleTimeZone` or settings `timeZone`.
+- `earliestStartTime` — movable: do not place before this instant (day or clock). Survives replan. `null` clears it. Day-only From is local **00:00** in the **settings** IANA zone (stored as UTC).
+- `timeZone` — create/update: optional IANA zone copied onto `scheduleTimeZone` (Google payload). The engine’s day/wake/sleep/phase math uses **settings `timeZone`**, not the host process zone.
 - `eligibleWeekDays` — movable non-recurring: only these weekdays inside the From–Until window. Empty / omitted = any day in the window.
 - `isRecurring`, `recurrencePattern` — `DAILY` / `WEEKLY` / `BIWEEKLY` / `MONTHLY`
 - `recurrenceWeekDays` — `0` = Sunday … `6` = Saturday. Empty / omitted / all seven = no extra weekday filter. Intersected with the phase `weekDays`.

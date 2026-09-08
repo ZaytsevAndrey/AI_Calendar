@@ -8,7 +8,22 @@ import {
   Max,
   Matches,
   MaxLength,
+  Validate,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
 } from 'class-validator';
+import { isValidIanaTimeZone } from '../../../common/iana-time-zone';
+
+@ValidatorConstraint({ name: 'isIanaTimeZone', async: false })
+class IsIanaTimeZoneConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean {
+    return typeof value === 'string' && isValidIanaTimeZone(value);
+  }
+
+  defaultMessage(): string {
+    return 'timeZone must be a valid IANA time zone';
+  }
+}
 
 export class UpdateUserSettingsDto {
   @ApiProperty({
@@ -159,5 +174,6 @@ export class UpdateUserSettingsDto {
   @IsString()
   @IsOptional()
   @MaxLength(64)
+  @Validate(IsIanaTimeZoneConstraint)
   timeZone?: string;
 }

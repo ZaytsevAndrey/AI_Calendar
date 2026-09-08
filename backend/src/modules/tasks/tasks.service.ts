@@ -54,11 +54,11 @@ export class TasksService {
       description: task.description || undefined,
       start: {
         dateTime: task.scheduledStartTime?.toISOString(),
-        timeZone: 'UTC',
+        timeZone: task.scheduleTimeZone || 'UTC',
       },
       end: {
         dateTime: task.scheduledEndTime?.toISOString(),
-        timeZone: 'UTC',
+        timeZone: task.scheduleTimeZone || 'UTC',
       },
     };
     if (colorId) {

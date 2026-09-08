@@ -3,17 +3,23 @@ import {
   useGetUserSettingsQuery,
   useUpdateUserSettingsMutation,
 } from '../../../api/userSettingsApi';
+import { detectClientTimeZone } from '../ianaTimeZones';
 
-/** Keep server-side day windows aligned with the browser IANA zone. */
+/** Fill settings.timeZone once from the browser; never overwrite a saved zone. */
 export function useSyncClientTimeZone(enabled: boolean): void {
   const { data: settings } = useGetUserSettingsQuery(undefined, { skip: !enabled });
   const [updateSettings] = useUpdateUserSettingsMutation();
   const sent = useRef(false);
 
   useEffect(() => {
-    if (!enabled || !settings || sent.current) return;
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (!timeZone || settings.timeZone === timeZone) return;
+    if (!enabled) {
+      sent.current = false;
+      return;
+    }
+    if (!settings || sent.current) return;
+    if (settings.timeZone?.trim()) return;
+    const timeZone = detectClientTimeZone();
+    if (!timeZone) return;
     sent.current = true;
     void updateSettings({ timeZone });
   }, [enabled, settings, updateSettings]);

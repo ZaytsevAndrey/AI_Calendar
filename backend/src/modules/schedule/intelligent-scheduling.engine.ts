@@ -12,11 +12,16 @@ import {
 } from '../scheduling/event-type.enum';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { effectiveRecurrenceWeekDays } from './recurrence-from-phases.util';
+import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import {
+  addDaysToYmd,
+  addMonthsToYmd,
   localDateTimeIso,
   localHm,
   localYmd,
   normalizeClockHm,
+  startOfLocalDayIso,
+  weekdayIndex,
 } from '../voice/voice-local-date.util';
 
 const DEFAULT_HORIZON_DAYS = 30;
@@ -70,20 +75,21 @@ export type SkippedOccurrence = {
   reason: OccurrenceSkipReason;
 };
 
-function occurrenceDateKey(day: Date): string {
-  const y = day.getFullYear();
-  const m = String(day.getMonth() + 1).padStart(2, '0');
-  const d = String(day.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+function settingsTimeZone(settings: { timeZone?: string | null }): string {
+  return resolveIanaTimeZone(settings.timeZone);
 }
 
-function formatOccurrenceDay(day: Date): string {
-  return day.toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+function formatOccurrenceDay(ymd: string, timeZone: string): string {
+  return new Date(startOfLocalDayIso(ymd, timeZone)).toLocaleDateString(
+    'en-GB',
+    {
+      timeZone,
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    },
+  );
 }
 
 function skipReasonLabel(reason: OccurrenceSkipReason): string {
@@ -101,12 +107,13 @@ function skipReasonLabel(reason: OccurrenceSkipReason): string {
 
 function recordSkip(
   skipped: SkippedOccurrence[],
-  day: Date,
+  ymd: string,
   reason: OccurrenceSkipReason,
+  timeZone: string,
 ): void {
   skipped.push({
-    date: formatOccurrenceDay(day),
-    dateKey: occurrenceDateKey(day),
+    date: formatOccurrenceDay(ymd, timeZone),
+    dateKey: ymd,
     reason,
   });
 }
@@ -125,35 +132,37 @@ function formatSkippedOccurrencesMessage(
   return `Task "${taskName}" skipped ${n} recurring occurrence${n === 1 ? '' : 's'}: ${details}${more}.`;
 }
 
-function atDayWithTime(day: Date, timeStr: string): Date {
-  const [h, m] = timeStr.split(':').map(Number);
-  const d = new Date(day);
-  d.setHours(h, m, 0, 0);
-  return d;
+function clockOnYmd(ymd: string, timeStr: string, timeZone: string): Date {
+  return new Date(localDateTimeIso(ymd, timeStr, timeZone));
 }
 
-function dayWakeSleep(day: Date, wake: string, sleep: string): MsInterval {
-  const s = atDayWithTime(day, wake).getTime();
-  let e = atDayWithTime(day, sleep).getTime();
+function dayWakeSleep(
+  ymd: string,
+  wake: string,
+  sleep: string,
+  timeZone: string,
+): MsInterval {
+  const s = clockOnYmd(ymd, wake, timeZone).getTime();
+  let e = clockOnYmd(ymd, sleep, timeZone).getTime();
   if (e <= s) e += 24 * 60 * 60 * 1000;
   return { start: s, end: e };
 }
 
-function phaseAppliesOnDay(phase: Phase, day: Date): boolean {
-  const wd = day.getDay();
+function phaseAppliesOnYmd(phase: Phase, ymd: string): boolean {
   if (!phase.weekDays || phase.weekDays.length === 0) return true;
-  return phase.weekDays.includes(wd);
+  return phase.weekDays.includes(weekdayIndex(ymd));
 }
 
-function phaseWindowOnDay(
+function phaseWindowOnYmd(
   phase: Phase,
-  day: Date,
+  ymd: string,
   ws: MsInterval,
+  timeZone: string,
 ): MsInterval | null {
-  if (!phaseAppliesOnDay(phase, day)) return null;
+  if (!phaseAppliesOnYmd(phase, ymd)) return null;
   if (phase.type === 'sleep_time') return null;
-  let ps = atDayWithTime(day, phase.startTime).getTime();
-  let pe = atDayWithTime(day, phase.endTime).getTime();
+  let ps = clockOnYmd(ymd, phase.startTime, timeZone).getTime();
+  let pe = clockOnYmd(ymd, phase.endTime, timeZone).getTime();
   if (pe <= ps) pe += 24 * 60 * 60 * 1000;
   const start = Math.max(ps, ws.start);
   const end = Math.min(pe, ws.end);
@@ -215,17 +224,23 @@ function normalizeHorizonDays(value?: number | null): number {
   return Math.min(MAX_HORIZON_DAYS, Math.max(MIN_HORIZON_DAYS, Math.floor(value)));
 }
 
-/** Today (local midnight) through `recurringScheduleHorizonDays` — exclusive end. */
+/** Today (midnight in the settings time zone) through `recurringScheduleHorizonDays` — exclusive end. */
 export function planningHorizonRange(
-  settings: { recurringScheduleHorizonDays?: number | null },
+  settings: {
+    recurringScheduleHorizonDays?: number | null;
+    timeZone?: string | null;
+  },
   now = new Date(),
 ): { start: Date; end: Date; horizonDays: number } {
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
+  const timeZone = settingsTimeZone(settings);
   const horizonDays = normalizeHorizonDays(settings.recurringScheduleHorizonDays);
-  const end = new Date(start);
-  end.setDate(end.getDate() + horizonDays);
-  return { start, end, horizonDays };
+  const startYmd = localYmd(now.toISOString(), timeZone);
+  const endYmd = addDaysToYmd(startYmd, horizonDays);
+  return {
+    start: new Date(startOfLocalDayIso(startYmd, timeZone)),
+    end: new Date(startOfLocalDayIso(endYmd, timeZone)),
+    horizonDays,
+  };
 }
 
 function normalizeRecurrencePattern(value?: string | null): RecurrencePattern | null {
@@ -272,35 +287,37 @@ function placementNotBefore(
   return effective > startDay ? effective : startDay;
 }
 
-function taskPreferredIntervalOnDay(task: Task, day: Date): MsInterval | null {
+function taskPreferredIntervalOnYmd(
+  task: Task,
+  ymd: string,
+  timeZone: string,
+): MsInterval | null {
   if (!task.scheduledStartTime || !task.scheduledEndTime) return null;
-  const startRef = new Date(task.scheduledStartTime);
-  const endRef = new Date(task.scheduledEndTime);
-  const start = new Date(day);
-  start.setHours(startRef.getHours(), startRef.getMinutes(), 0, 0);
-  const end = new Date(day);
-  end.setHours(endRef.getHours(), endRef.getMinutes(), 0, 0);
-  let startMs = start.getTime();
-  let endMs = end.getTime();
+  const startHm = localHm(
+    new Date(task.scheduledStartTime).toISOString(),
+    timeZone,
+  );
+  const endHm = localHm(new Date(task.scheduledEndTime).toISOString(), timeZone);
+  let startMs = clockOnYmd(ymd, startHm, timeZone).getTime();
+  let endMs = clockOnYmd(ymd, endHm, timeZone).getTime();
   if (endMs <= startMs) {
     endMs += 24 * 60 * 60 * 1000;
   }
   return { start: startMs, end: endMs };
 }
 
-function advanceOccurrenceStart(from: Date, pattern: RecurrencePattern): Date {
-  const next = new Date(from);
-  if (pattern === 'DAILY') next.setDate(next.getDate() + 1);
-  if (pattern === 'WEEKLY') next.setDate(next.getDate() + 7);
-  if (pattern === 'BIWEEKLY') next.setDate(next.getDate() + 14);
-  if (pattern === 'MONTHLY') next.setMonth(next.getMonth() + 1);
-  next.setHours(0, 0, 0, 0);
-  return next;
+function advanceYmd(ymd: string, pattern: RecurrencePattern): string {
+  if (pattern === 'DAILY') return addDaysToYmd(ymd, 1);
+  if (pattern === 'WEEKLY') return addDaysToYmd(ymd, 7);
+  if (pattern === 'BIWEEKLY') return addDaysToYmd(ymd, 14);
+  return addMonthsToYmd(ymd, 1);
 }
 
-function weeksBetween(from: Date, to: Date): number {
-  const start = Date.UTC(from.getFullYear(), from.getMonth(), from.getDate());
-  const end = Date.UTC(to.getFullYear(), to.getMonth(), to.getDate());
+function weeksBetweenYmd(fromYmd: string, toYmd: string): number {
+  const [fy, fm, fd] = fromYmd.split('-').map(Number);
+  const [ty, tm, td] = toYmd.split('-').map(Number);
+  const start = Date.UTC(fy, fm - 1, fd);
+  const end = Date.UTC(ty, tm - 1, td);
   return Math.floor((end - start) / (7 * 24 * 60 * 60 * 1000));
 }
 
@@ -385,11 +402,15 @@ export class IntelligentSchedulingEngine {
         .execute();
     }
 
+    const timeZone = settingsTimeZone(settings);
     const { start: startDay, end: horizonEnd, horizonDays } =
       planningHorizonRange(settings);
-    const extendedEnd = new Date(startDay);
-    extendedEnd.setDate(
-      extendedEnd.getDate() + horizonDays + BEYOND_HORIZON_EXTRA_DAYS,
+    const startYmd = localYmd(startDay.toISOString(), timeZone);
+    const extendedEnd = new Date(
+      startOfLocalDayIso(
+        addDaysToYmd(startYmd, horizonDays + BEYOND_HORIZON_EXTRA_DAYS),
+        timeZone,
+      ),
     );
 
     const warnings: SchedulingWarning[] = [];
@@ -409,6 +430,7 @@ export class IntelligentSchedulingEngine {
           startDay,
           extendedEnd,
           ourGoogleEventIds,
+          timeZone,
         );
       } catch {
         warnings.push({
@@ -615,7 +637,7 @@ export class IntelligentSchedulingEngine {
       : null;
     const phases = this.resolvePhasesForTask(task);
     const placedBusy = this.rebuildBusy(anchorBusy, newSegments);
-    const timeZone = task.scheduleTimeZone || settings.timeZone;
+    const timeZone = settingsTimeZone(settings);
     const searchStart = placementNotBefore(
       task,
       startDay,
@@ -641,6 +663,7 @@ export class IntelligentSchedulingEngine {
       placedBusy,
       nowMs,
       weekDays,
+      timeZone,
     );
     let beyondHorizon = false;
     if (!result.ok) {
@@ -659,6 +682,7 @@ export class IntelligentSchedulingEngine {
         placedBusy,
         nowMs,
         weekDays,
+        timeZone,
       );
       beyondHorizon = result.ok;
     }
@@ -717,8 +741,10 @@ export class IntelligentSchedulingEngine {
 
     let beyondHorizon = false;
     const skipped: SkippedOccurrence[] = [];
-    let occurrenceStart = new Date(startDay);
-    occurrenceStart.setHours(0, 0, 0, 0);
+    const timeZone = settingsTimeZone(settings);
+    const startYmd = localYmd(startDay.toISOString(), timeZone);
+    const horizonEndYmd = localYmd(horizonEnd.toISOString(), timeZone);
+    let occurrenceYmd = startYmd;
 
     if (restrictedWeekDays && restrictedWeekDays.length === 0) {
       return {
@@ -730,20 +756,20 @@ export class IntelligentSchedulingEngine {
       };
     }
 
-    while (occurrenceStart < horizonEnd) {
+    while (occurrenceYmd < horizonEndYmd) {
       if (
         restrictedWeekDays?.length &&
-        !restrictedWeekDays.includes(occurrenceStart.getDay())
+        !restrictedWeekDays.includes(weekdayIndex(occurrenceYmd))
       ) {
-        occurrenceStart = advanceOccurrenceStart(occurrenceStart, stepPattern);
+        occurrenceYmd = advanceYmd(occurrenceYmd, stepPattern);
         continue;
       }
       if (
         stepDailyForWeekDays &&
         recurrencePattern === 'BIWEEKLY' &&
-        weeksBetween(startDay, occurrenceStart) % 2 !== 0
+        weeksBetweenYmd(startYmd, occurrenceYmd) % 2 !== 0
       ) {
-        occurrenceStart = advanceOccurrenceStart(occurrenceStart, stepPattern);
+        occurrenceYmd = advanceYmd(occurrenceYmd, stepPattern);
         continue;
       }
 
@@ -753,22 +779,25 @@ export class IntelligentSchedulingEngine {
       }
       const mergedBusy = mergeIntervals(placedBusy);
 
-      const occurrenceEnd = advanceOccurrenceStart(occurrenceStart, stepPattern);
+      const nextYmd = advanceYmd(occurrenceYmd, stepPattern);
+      const occurrenceStart = new Date(startOfLocalDayIso(occurrenceYmd, timeZone));
+      const occurrenceEnd = new Date(startOfLocalDayIso(nextYmd, timeZone));
       const preferredInterval =
         (recurrencePattern === 'DAILY' || stepDailyForWeekDays) &&
         task.eventType !== TaskEventType.FIXED &&
         task.scheduledStartTime &&
         task.scheduledEndTime
-          ? taskPreferredIntervalOnDay(task, occurrenceStart)
+          ? taskPreferredIntervalOnYmd(task, occurrenceYmd, timeZone)
           : null;
       if (preferredInterval) {
         const eligible = subtractMany(
           this.eligibleIntervalsForDay(
-            occurrenceStart,
+            occurrenceYmd,
             phases,
             settings.wakeTime,
             settings.sleepTime,
             settings.weekendWorkEnabled,
+            timeZone,
           ),
           mergedBusy,
         );
@@ -788,16 +817,17 @@ export class IntelligentSchedulingEngine {
             start: new Date(preferredInterval.start),
             end: new Date(preferredInterval.end),
           });
-          occurrenceStart = occurrenceEnd;
+          occurrenceYmd = nextYmd;
           continue;
         }
         if (!canPlaceByNow || !canPlaceByDeadline) {
           recordSkip(
             skipped,
-            occurrenceStart,
+            occurrenceYmd,
             !canPlaceByNow ? 'already_passed' : 'deadline',
+            timeZone,
           );
-          occurrenceStart = occurrenceEnd;
+          occurrenceYmd = nextYmd;
           continue;
         }
         // Preferred clock time is busy: fall through to earliest remaining slot today.
@@ -818,28 +848,31 @@ export class IntelligentSchedulingEngine {
         mergedBusy,
         nowMs,
         null,
+        timeZone,
       );
 
       if (!result.ok) {
         const dayEligible = this.eligibleIntervalsForDay(
-          occurrenceStart,
+          occurrenceYmd,
           phases,
           settings.wakeTime,
           settings.sleepTime,
           settings.weekendWorkEnabled,
+          timeZone,
         );
         const anyTimeLeftToday = dayEligible.some((slot) => slot.end > nowMs);
         recordSkip(
           skipped,
-          occurrenceStart,
+          occurrenceYmd,
           anyTimeLeftToday ? 'no_slot' : 'already_passed',
+          timeZone,
         );
-        occurrenceStart = occurrenceEnd;
+        occurrenceYmd = nextYmd;
         continue;
       }
 
       segments.push(...result.segments);
-      occurrenceStart = occurrenceEnd;
+      occurrenceYmd = nextYmd;
     }
 
     return {
@@ -1039,11 +1072,14 @@ export class IntelligentSchedulingEngine {
     return false;
   }
 
-  private googleEventToBusyInterval(ev: {
-    status?: string | null;
-    start?: { dateTime?: string | null; date?: string | null };
-    end?: { dateTime?: string | null; date?: string | null };
-  }): MsInterval | null {
+  private googleEventToBusyInterval(
+    ev: {
+      status?: string | null;
+      start?: { dateTime?: string | null; date?: string | null };
+      end?: { dateTime?: string | null; date?: string | null };
+    },
+    timeZone: string,
+  ): MsInterval | null {
     if (!ev || ev.status === 'cancelled') return null;
     if (ev.start?.dateTime && ev.end?.dateTime) {
       const s = new Date(ev.start.dateTime).getTime();
@@ -1052,8 +1088,8 @@ export class IntelligentSchedulingEngine {
       return null;
     }
     if (ev.start?.date && ev.end?.date) {
-      const s = new Date(`${ev.start.date}T00:00:00.000Z`).getTime();
-      const e = new Date(`${ev.end.date}T00:00:00.000Z`).getTime();
+      const s = new Date(startOfLocalDayIso(ev.start.date, timeZone)).getTime();
+      const e = new Date(startOfLocalDayIso(ev.end.date, timeZone)).getTime();
       if (e > s) return { start: s, end: e };
     }
     return null;
@@ -1064,6 +1100,7 @@ export class IntelligentSchedulingEngine {
     rangeStart: Date,
     rangeEnd: Date,
     excludeGoogleEventIds?: Set<string>,
+    timeZone: string = 'UTC',
   ): Promise<MsInterval[]> {
     const busy: MsInterval[] = [];
     const calendarIds = ['primary'];
@@ -1090,7 +1127,7 @@ export class IntelligentSchedulingEngine {
           ) {
             continue;
           }
-          const iv = this.googleEventToBusyInterval(ev);
+          const iv = this.googleEventToBusyInterval(ev, timeZone);
           if (iv) busy.push(iv);
         }
         pageToken = page.nextPageToken ?? undefined;
@@ -1100,21 +1137,22 @@ export class IntelligentSchedulingEngine {
   }
 
   private eligibleIntervalsForDay(
-    day: Date,
+    ymd: string,
     phases: Phase[],
     wake: string,
     sleep: string,
     weekendOk: boolean,
+    timeZone: string,
   ): MsInterval[] {
-    const ws = dayWakeSleep(day, wake, sleep);
+    const ws = dayWakeSleep(ymd, wake, sleep, timeZone);
     if (!phases.length) {
-      const dow = day.getDay();
+      const dow = weekdayIndex(ymd);
       if ((dow === 0 || dow === 6) && !weekendOk) return [];
       return [ws];
     }
     const parts: MsInterval[] = [];
     for (const ph of phases) {
-      const w = phaseWindowOnDay(ph, day, ws);
+      const w = phaseWindowOnYmd(ph, ymd, ws, timeZone);
       if (w) parts.push(w);
     }
     return mergeIntervals(parts);
@@ -1138,29 +1176,33 @@ export class IntelligentSchedulingEngine {
     globalBusy: MsInterval[],
     nowMs: number,
     eligibleWeekDays: number[] | null = null,
+    timeZone: string = 'UTC',
   ): { ok: boolean; segments: { start: Date; end: Date }[] } {
     let remaining = durationMin;
     const segments: { start: Date; end: Date }[] = [];
     const myBusy: MsInterval[] = [...globalBusy];
     const notBeforeMs = rangeStart.getTime();
+    const rangeEndMs = rangeEnd.getTime();
 
-    const day = new Date(rangeStart);
-    day.setHours(0, 0, 0, 0);
-    while (day < rangeEnd && remaining > 0) {
-      if (deadlineMs && day.getTime() > deadlineMs) {
+    let ymd = localYmd(rangeStart.toISOString(), timeZone);
+    while (remaining > 0) {
+      const dayStart = new Date(startOfLocalDayIso(ymd, timeZone));
+      if (dayStart.getTime() >= rangeEndMs) break;
+      if (deadlineMs && dayStart.getTime() > deadlineMs) {
         return { ok: false, segments: [] };
       }
-      if (eligibleWeekDays?.length && !eligibleWeekDays.includes(day.getDay())) {
-        day.setDate(day.getDate() + 1);
+      if (eligibleWeekDays?.length && !eligibleWeekDays.includes(weekdayIndex(ymd))) {
+        ymd = addDaysToYmd(ymd, 1);
         continue;
       }
 
       let eligible = this.eligibleIntervalsForDay(
-        day,
+        ymd,
         phases,
         wake,
         sleep,
         weekendOk,
+        timeZone,
       );
       eligible = subtractMany(eligible, myBusy);
 
@@ -1197,7 +1239,7 @@ export class IntelligentSchedulingEngine {
           if (!splittable) break;
         }
       }
-      day.setDate(day.getDate() + 1);
+      ymd = addDaysToYmd(ymd, 1);
     }
 
     return { ok: remaining <= 0, segments };

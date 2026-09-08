@@ -31,7 +31,7 @@ One persisted entity (evolve current `Task` or merge with calendar event model�
 | `durationMinutes` | User-set; default 30 for movable tasks |
 | `deadline` | Optional not-after bound |
 | `earliestStartTime` | Optional not-before bound (survives replan) |
-| `scheduleTimeZone` | IANA zone for interpreting day-only From/Until (from the client) |
+| `scheduleTimeZone` | IANA zone stored on the task (from the create payload); used for Google event `timeZone`. Engine day math uses **settings `timeZone`**. |
 | `eligibleWeekDays` | Optional weekday filter inside the window (non-recurring) |
 | `isRecurring` / `recurrencePattern` | `DAILY` / `WEEKLY` / `BIWEEKLY` / `MONTHLY` |
 | `recurrenceWeekDays` | Optional `0–6` (Sun–Sat); intersected with phase `weekDays` |
@@ -53,6 +53,13 @@ Phases remain **named windows** (e.g. morning / work / evening) with weekly `wee
 - Any calendar event that is **imported from Google** or explicitly marked **fixed** is an **anchor**: occupies time, **cannot be moved or split** by the engine.
 - Our **user-created** items that were written to Google are movable **only if** they are not `fixed`; engine updates Google after replan.
 
+### 2.4 User time zone
+
+- Stored on `user_settings.timeZone` (IANA).  
+- If empty, the web client PATCHes the browser zone **once** on first login and never overwrites a saved value. Settings UI can change it.  
+- The engine interprets wake/sleep, phase clocks, weekdays, and the planning horizon in this zone (fallback `UTC`). Calendar datetime fields in the UI stay in the **browser** zone.  
+- Changing the setting does **not** rewrite existing UTC instants or auto-replan.
+
 ---
 
 ## 3. Scheduling settings (not a type catalog)
@@ -72,7 +79,7 @@ Legacy `eventType` strings (`daily_routine`, `learning`, …) may still exist in
 
 ## 4. Scheduling algorithm (high level)
 
-**Input:** user id, trigger (new/updated item), horizon = **30 days** from reference start (typically **today** at user timezone, configurable per job).
+**Input:** user id, trigger (new/updated item), horizon = **30 days** from **today at midnight in settings `timeZone`** (fallback `UTC`; length configurable via `recurringScheduleHorizonDays`).
 
 **Output:** new assignment for all **non-fixed** internal items in scope + **diff** list + optional **undo snapshot**.
 
@@ -100,7 +107,7 @@ Items are processed in **priority order** (highest first). For each item:
 
 ### 4.4 Deadline / schedule window
 
-- If `earliestStartTime` is set: hard constraint—do not start any segment before that **instant**. Day-only From (00:00 in the user IANA zone) snaps to wake that local day so `+03:00` midnight is not treated as “this evening” on a UTC host. Wake/sleep from Postgres (`HH:mm:ss`) are normalized to `HH:mm` before that snap (otherwise the ISO is invalid and the task lands “today” on production). A clock From such as 00:01 is left as an instant and is not snapped.
+- If `earliestStartTime` is set: hard constraint—do not start any segment before that **instant**. Day-only From (00:00 in **settings `timeZone`**) snaps to wake that local day so a `+03:00` midnight is not treated as “this evening” on a UTC host. Wake/sleep from Postgres (`HH:mm:ss`) are normalized to `HH:mm` before that snap. A clock From such as 00:01 is left as an instant and is not snapped.
 - If `deadline` is set: hard constraint—**all segments must end by deadline**. If impossible: **do not silently fail**—return structured error / UI message: e.g. “Cannot fit before deadline; raise priority, extend deadline, enable split, or remove other work.”
 - If `eligibleWeekDays` is set on a non-recurring task: only those weekdays inside the window are eligible.
 
@@ -185,7 +192,7 @@ One optional phase. If a movable task has preferred start/end stored on the task
 ## 12. Open implementation details (engineer discretion)
 
 - Exact SQL schema and naming.  
-- Timezone handling (store UTC; display user TZ from `user-settings`).  
+- Timezone: store instants in UTC; **scheduling clocks** use `user_settings.timeZone` (IANA, editable). Calendar UI remains in the browser zone.  
 - Maximum job runtime and retry policy for Google API failures.  
 - Recurring Google sync uses one RRULE (with `BYDAY` when weekdays are restricted); local rows stay one segment per occurrence in the horizon.
 

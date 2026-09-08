@@ -69,7 +69,7 @@ export class UserSettings {
   @Column({ type: 'int', default: 30 })
   recurringScheduleHorizonDays: number;
 
-  /** IANA time zone from the client (e.g. Asia/Nicosia). Used for day-only schedule windows. */
+  /** IANA time zone (e.g. Europe/Kyiv). Source of truth for schedule day windows. */
   @Column({ type: 'varchar', length: 64, nullable: true })
   timeZone: string | null;
 

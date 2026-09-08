@@ -57,7 +57,7 @@ const SettingsPage: React.FC = () => {
             <header className="page-head shrink-0">
                 <div>
                     <h1 className="page-title">Settings</h1>
-                    <p className="page-lead">Wake/sleep times, Google Calendar, and account.</p>
+                    <p className="page-lead">Time zone, wake/sleep times, Google Calendar, and account.</p>
                 </div>
             </header>
 
@@ -66,8 +66,8 @@ const SettingsPage: React.FC = () => {
                     <div className="mb-8 border-b border-ide-border pb-8">
                         <h2 className="mb-2 text-xl font-semibold text-ide-text">Time management</h2>
                         <p className="text-sm text-ide-muted">
-                            These settings affect how your schedule is built. Set wake and sleep times and
-                            connect Google Calendar.
+                            These settings affect how your schedule is built. Wake, sleep, and phases
+                            use the time zone you set here.
                         </p>
                     </div>
 

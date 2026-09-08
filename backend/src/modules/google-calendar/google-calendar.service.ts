@@ -23,6 +23,7 @@ import {
   wallClockMinutesInTimeZone,
 } from './google-calendar-event.helpers';
 import { phaseHexToGoogleColorId } from './phase-hex-to-google-color-id.util';
+import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 
 type LoginTicket = {
   access_token: string;
@@ -891,7 +892,9 @@ export class GoogleCalendarService {
           where: { userId },
         });
         if (settings?.wakeTime && settings?.sleepTime) {
-          const tz = start.timeZone || end.timeZone || 'UTC';
+          const tz = resolveIanaTimeZone(
+            settings.timeZone || start.timeZone || end.timeZone,
+          );
           const startM = wallClockMinutesInTimeZone(start.dateTime, tz);
           const endM = wallClockMinutesInTimeZone(end.dateTime, tz);
           if (
