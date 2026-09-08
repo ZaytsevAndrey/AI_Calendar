@@ -2,8 +2,10 @@ import {
   inferClockHmRange,
   inferDueYmd,
   inferScheduleWindow,
+  localDateTimeIso,
   localHm,
   localYmd,
+  normalizeClockHm,
 } from './voice-local-date.util';
 import { extractJsonObject, normalizeVoiceParse } from './voice-parse.util';
 
@@ -296,5 +298,27 @@ describe('localYmd', () => {
 describe('localHm', () => {
   it('maps a UTC evening instant to +03:00 midnight', () => {
     expect(localHm('2026-09-07T21:00:00.000Z', 'Asia/Nicosia')).toBe('00:00');
+  });
+});
+
+describe('normalizeClockHm', () => {
+  it('strips seconds from a Postgres time value', () => {
+    expect(normalizeClockHm('08:00:00')).toBe('08:00');
+    expect(normalizeClockHm('9:30:00')).toBe('09:30');
+  });
+});
+
+describe('localDateTimeIso', () => {
+  it('accepts a Postgres wakeTime with seconds', () => {
+    expect(localDateTimeIso('2026-09-08', '09:00:00', 'Asia/Nicosia')).toBe(
+      '2026-09-08T09:00:00+03:00',
+    );
+    expect(
+      Number.isNaN(
+        new Date(
+          localDateTimeIso('2026-09-08', '09:00:00', 'Asia/Nicosia'),
+        ).getTime(),
+      ),
+    ).toBe(false);
   });
 });

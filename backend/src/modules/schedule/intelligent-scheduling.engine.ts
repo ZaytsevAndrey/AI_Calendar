@@ -16,6 +16,7 @@ import {
   localDateTimeIso,
   localHm,
   localYmd,
+  normalizeClockHm,
 } from '../voice/voice-local-date.util';
 
 const DEFAULT_HORIZON_DAYS = 30;
@@ -256,9 +257,16 @@ function placementNotBefore(
   if (timeZone) {
     const iso = bound.toISOString();
     if (localHm(iso, timeZone) === '00:00') {
-      effective = new Date(
-        localDateTimeIso(localYmd(iso, timeZone), wakeTime || '00:00', timeZone),
+      const snapped = new Date(
+        localDateTimeIso(
+          localYmd(iso, timeZone),
+          normalizeClockHm(wakeTime),
+          timeZone,
+        ),
       );
+      if (!Number.isNaN(snapped.getTime())) {
+        effective = snapped;
+      }
     }
   }
   return effective > startDay ? effective : startDay;

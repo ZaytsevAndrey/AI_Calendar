@@ -792,6 +792,37 @@ describe('IntelligentSchedulingEngine', () => {
     expect(slots[0][0].startsWith('2026-09-07')).toBe(false);
     expect(new Date(slots[0][0]).getUTCDate()).toBe(8);
   });
+
+  it('snaps a midnight From with Postgres-style wakeTime HH:mm:ss', async () => {
+    getSettingsMock.mockResolvedValue(
+      makeSettings({
+        ...baseSettings,
+        timeZone: 'Asia/Nicosia',
+        wakeTime: '09:00:00',
+        weekendWorkEnabled: true,
+      }),
+    );
+    jest.setSystemTime(new Date('2026-09-07T18:47:00.000Z'));
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'nicosia-midnight-pg-time',
+        name: 'Wash the car',
+        estimatedTimeInMinutes: 60,
+        allowSplit: false,
+        earliestStartTime: new Date('2026-09-08T00:00:00+03:00'),
+        deadline: new Date('2026-09-08T23:59:00+03:00'),
+        scheduleTimeZone: 'Asia/Nicosia',
+        phases: [makePhase('any-day', '09:00', '12:00', null)],
+      }),
+    ]);
+
+    await engine.run(userId);
+
+    const [slots] = extractTaskSegments(scheduledRepo.save.mock.calls);
+    expect(slots[0]?.[0]).toBeDefined();
+    expect(slots[0][0].startsWith('2026-09-07')).toBe(false);
+    expect(new Date(slots[0][0]).getUTCDate()).toBe(8);
+  });
 });
 
 let taskCounter = 0;

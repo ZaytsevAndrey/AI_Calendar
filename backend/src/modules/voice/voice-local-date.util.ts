@@ -81,7 +81,7 @@ export function localDateTimeIso(
   hm: string,
   timeZone: string,
 ): string {
-  return `${ymd}T${hm}:00${offsetForTimeZone(timeZone, ymd)}`;
+  return `${ymd}T${normalizeClockHm(hm)}:00${offsetForTimeZone(timeZone, ymd)}`;
 }
 
 export function localHm(nowIso: string, timeZone: string): string {
@@ -100,6 +100,15 @@ export function localHm(nowIso: string, timeZone: string): string {
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
+}
+
+/** Postgres `time` comes back as `08:00:00`; callers want `HH:mm`. */
+export function normalizeClockHm(value: string | null | undefined): string {
+  const match = String(value ?? '').match(/(\d{1,2}):(\d{2})/);
+  if (!match) return '00:00';
+  const hour = Number(match[1]);
+  if (hour > 23) return '00:00';
+  return `${pad2(hour)}:${match[2]}`;
 }
 
 function namedWeekdaysInOrder(text: string): number[] {
