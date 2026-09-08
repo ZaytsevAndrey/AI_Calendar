@@ -19,6 +19,15 @@ export class ScheduleJob {
   @Column({ type: 'varchar', length: 20, default: 'pending' })
   status: ScheduleJobStatus;
 
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  progressStage: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  progressCurrent: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  progressTotal: number | null;
+
   @Column({ type: 'text', nullable: true })
   payloadJson: string | null;
 

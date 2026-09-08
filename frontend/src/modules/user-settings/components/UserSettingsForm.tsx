@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useForm, useController } from 'react-hook-form';
-import { toast } from 'react-toastify';
 import { UserSettingsDTO } from '../../../api/user-settings.api';
 import { useUpdateUserSettingsMutation } from '../../../api/userSettingsApi';
 import { googleCalendarAPI } from '../../../api/google-calendar.api';
 import { Spinner } from '../../../ui/Spinner';
 import { timeZoneSelectOptions } from '../ianaTimeZones';
+import { showErrorToast, showSuccessToast } from '../../../utils/toast';
 
 interface UserSettingsFormProps {
     initialData: UserSettingsDTO;
@@ -107,10 +107,13 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                 appGoogleCalendarName: v,
                 googleCalendarLinked: isCalendarConnected,
             }).unwrap();
-            toast.success('Calendar name saved');
+            showSuccessToast({ title: 'Calendar name saved', detail: v });
         } catch (error: any) {
             if (error?.response?.status === 401) return;
-            toast.error('Failed to save calendar name');
+            showErrorToast({
+                title: 'Could not save calendar name',
+                detail: 'Check your connection and try again.',
+            });
             console.error(error);
         }
     };
@@ -158,12 +161,18 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                     maxSplitMinutes: Math.max(minSplit, maxSplit),
                     recurringScheduleHorizonDays: horizonDays,
                 }).unwrap();
-                toast.success('Settings saved automatically');
+                showSuccessToast({
+                    title: 'Settings saved',
+                    detail: 'Sleep, wake, and planning times were updated.',
+                });
             } catch (error: any) {
                 if (error?.response?.status === 401) {
                     return;
                 }
-                toast.error('Failed to save settings');
+                showErrorToast({
+                    title: 'Could not save settings',
+                    detail: 'Check your connection and try again.',
+                });
                 console.error('Error auto-saving settings:', error);
             }
         },

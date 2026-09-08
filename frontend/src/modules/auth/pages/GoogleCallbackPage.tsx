@@ -1,12 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
-import { toast } from 'react-toastify';
 import { Spinner } from '../../../ui/Spinner';
 import apiCall from '../../common/utils/apiCall';
 import { LOGIN } from '../actions/actionTypes';
 import { setLocalStorageItem } from '../../../utils/localStorage';
 import { UserSettingsApi } from '../../../api/user-settings.api';
+import { showErrorToast } from '../../../utils/toast';
 
 const GoogleCallbackPage: React.FC = () => {
     const [searchParams] = useSearchParams();
@@ -20,7 +20,10 @@ const GoogleCallbackPage: React.FC = () => {
 
         const ticket = searchParams.get('ticket');
         if (!ticket) {
-            toast.error('Google sign-in did not complete.');
+            showErrorToast({
+                title: 'Sign-in failed',
+                detail: 'Google sign-in did not complete.',
+            });
             navigate('/login', { replace: true });
             return;
         }
@@ -60,7 +63,10 @@ const GoogleCallbackPage: React.FC = () => {
                 navigate('/', { replace: true });
             } catch (error) {
                 console.error('Google sign-in ticket exchange failed:', error);
-                toast.error('Google sign-in failed. Try again.');
+                showErrorToast({
+                    title: 'Sign-in failed',
+                    detail: 'Google sign-in failed. Try again.',
+                });
                 navigate('/login', { replace: true });
             }
         };

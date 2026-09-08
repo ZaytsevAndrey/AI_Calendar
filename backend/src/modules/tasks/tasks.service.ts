@@ -13,10 +13,7 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { Phase } from '../phases/entities/phase.entity';
 import { TaskEventType, getEventTypeRules } from '../scheduling/event-type.enum';
-import {
-  FlexibleGoogleSyncSnapshot,
-  ScheduleJobService,
-} from '../schedule/schedule-job.service';
+import { ScheduleJobService } from '../schedule/schedule-job.service';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { phaseHexToGoogleColorId } from '../google-calendar/phase-hex-to-google-color-id.util';
 
@@ -206,7 +203,7 @@ export class TasksService {
 
     if (eventType !== TaskEventType.FIXED) {
       await this.scheduleJobService.enqueueReplan(userId);
-      await this.scheduleJobService.processNextPendingForUser(userId);
+      void this.scheduleJobService.processNextPendingForUser(userId);
     }
 
     return this.findOne(saved.id, userId);
@@ -241,14 +238,6 @@ export class TasksService {
     updateTaskDto: UpdateTaskDto,
   ): Promise<Task> {
     const task = await this.findOne(id, userId);
-    let flexibleGoogleSnapshotBefore: FlexibleGoogleSyncSnapshot | null = null;
-    if (task.eventType !== TaskEventType.FIXED) {
-      flexibleGoogleSnapshotBefore =
-        await this.scheduleJobService.captureFlexibleGoogleSnapshotForTask(
-          userId,
-          task.id,
-        );
-    }
 
     const dto = updateTaskDto as UpdateTaskDto & {
       phaseIds?: string[];
@@ -325,15 +314,7 @@ export class TasksService {
 
     if (shouldReplanNonFixed) {
       await this.scheduleJobService.enqueueReplan(userId);
-      await this.scheduleJobService.processNextPendingForUser(userId);
-    }
-
-    if (flexibleGoogleSnapshotBefore) {
-      await this.scheduleJobService.syncFlexibleTaskAfterUserEditIfNeeded(
-        userId,
-        saved.id,
-        flexibleGoogleSnapshotBefore,
-      );
+      void this.scheduleJobService.processNextPendingForUser(userId);
     }
 
     return this.findOne(saved.id, userId);
@@ -352,7 +333,7 @@ export class TasksService {
     }
     await this.tasksRepository.remove(task);
     await this.scheduleJobService.enqueueReplan(userId);
-    await this.scheduleJobService.processNextPendingForUser(userId);
+    void this.scheduleJobService.processNextPendingForUser(userId);
   }
 
   async findByStatus(userId: string, status: TaskStatus): Promise<Task[]> {
@@ -388,7 +369,7 @@ export class TasksService {
       saved.status === TaskStatus.TODO
     ) {
       await this.scheduleJobService.enqueueReplan(userId);
-      await this.scheduleJobService.processNextPendingForUser(userId);
+      void this.scheduleJobService.processNextPendingForUser(userId);
     }
     return saved;
   }

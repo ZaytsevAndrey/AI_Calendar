@@ -2,7 +2,7 @@
 
 ## Purpose
 
-**AI Calendar Assistant** is a web app for time planning with **day phases**, **tasks** (priority, deadline, fixed / flexible / recurring settings), personal **sleep/wake** settings, and **Google Calendar** integration. **Intelligent scheduling** places movable tasks into the selected phase window, respects anchors (manual slots, fixed blocks, external Google events), supports splitting and a **job queue** with **diff**. The **Calendar** page runs generation and can clear app-generated slots in the Settings planning horizon.
+**AI Calendar Assistant** is a web app for time planning with **day phases**, **tasks** (priority, deadline, fixed / flexible / recurring settings), personal **sleep/wake** settings, and **Google Calendar** integration. **Intelligent scheduling** places movable tasks into the selected phase window, respects anchors (manual slots, fixed blocks, external Google events), supports splitting and a **job queue** with **diff**. The **Calendar** page runs generation (with a live stage timeline) and can clear still-open app-generated slots; fully ended app events stay and show in gray.
 
 ## Monorepo layout
 
@@ -22,8 +22,9 @@ AI_Calendar/
 - React 18, TypeScript  
 - Redux Toolkit + **RTK Query** (`@reduxjs/toolkit/query`) for part of the API  
 - Axios (`src/api/axios.ts`) with `baseURL` from `REACT_APP_API_BASE_URL` (see [setup-and-build](setup-and-build.md))  
-- Material UI, React Router, React Hook Form, react-toastify  
-- Build: **Webpack** (`npm run build` in the `frontend` package)
+- React Router, React Hook Form, react-toastify (IDE-dark toasts: type colors, title + detail; task CRUD includes name and scheduled time)  
+- Build: **Webpack** (`npm run build` in the `frontend` package)  
+- Tests: Jest (`frontend/src/**/*.spec.ts`, e.g. toast date copy)
 
 ### Backend
 
@@ -39,7 +40,7 @@ AI_Calendar/
 - Registration / login, refresh, password reset, email verification (see [integrations](integrations.md) and `auth` code)  
 - **User settings:** wake/sleep, weekends, Google Calendar flags, `allowSplitScheduling` / `minSplitMinutes`, IANA **`timeZone`** (filled once on first login, editable in Settings; source of truth for the scheduling engine)  
 - **Phases:** per-user CRUD (JWT), overlap validation, default **Sleep** + **Focus hours** from wake/sleep when the user has no phases, phase calendar UI  
-- **Tasks:** CRUD, statuses, priorities, optional From/Until window (`earliestStartTime` + `deadline` + `scheduleTimeZone`), one optional phase, split / recurring flags, optional `recurrenceWeekDays` / `eligibleWeekDays`; **fixed** blocks require scheduled start/end; movable tasks may set a preferred start. The create form is a single page with **Flexible / Fixed / Recurring** presets. Calendar day-click prefills that local day’s From/Until. **Voice:** mic on Tasks/Calendar records audio, Groq Whisper transcribes (uk/en/ru auto), an LLM maps speech to a task. High confidence creates immediately; medium prefills the form; gaps ask one follow-up question.  
+- **Tasks:** CRUD, statuses, priorities, optional From/Until window (`earliestStartTime` + `deadline` + `scheduleTimeZone`), one optional phase, split / recurring flags, optional `recurrenceWeekDays` / `eligibleWeekDays`; **fixed** blocks require scheduled start/end; movable tasks may set a preferred start. The create form is a single page with **Flexible / Fixed / Recurring** presets. Calendar day-click prefills that local day’s From/Until. Success/error **toasts** show the task name and scheduled time. **Voice:** mic on Tasks/Calendar records audio, Groq Whisper transcribes (uk/en/ru auto), an LLM maps speech to a task. High confidence creates immediately; medium prefills the form; gaps ask one follow-up question.  
 - **PWA:** installable (manifest + service worker + icons). Android Chrome shows an install prompt; iOS uses Share → Add to Home Screen.  
 - **Google Calendar:** OAuth, events, connect / disconnect; replan and **clear schedule** create/update/delete linked Google events when `googleEventId` is set  
 - **Schedule:** scheduled tasks, **POST `/schedule/generate`** (async job + poll), **DELETE `/schedule`** (app-generated slots in the Settings horizon); **Calendar** page (`/calendar`) has Generate / Clear  

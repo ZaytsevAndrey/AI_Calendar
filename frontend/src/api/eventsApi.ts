@@ -7,6 +7,29 @@ import {
   UpdateEventParams,
 } from './google-calendar.api';
 
+type EventsCacheDispatch = {
+  (
+    action: unknown,
+  ): { undo: () => void };
+};
+
+function patchCachedEventLists(
+  dispatch: EventsCacheDispatch,
+  getState: () => unknown,
+  updater: (events: GoogleCalendarEvent[]) => GoogleCalendarEvent[],
+) {
+  const argsList = eventsApi.util.selectCachedArgsForQuery(getState() as never, 'getEvents');
+  return argsList.map((args) =>
+    dispatch(
+      eventsApi.util.updateQueryData('getEvents', args, (draft) => {
+        if (!Array.isArray(draft?.events)) return;
+        draft.events = updater(draft.events);
+        draft.totalEvents = draft.events.length;
+      }) as never,
+    ),
+  );
+}
+
 export const eventsApi = createApi({
   reducerPath: 'eventsApi',
   baseQuery: customBaseQuery,
@@ -63,6 +86,18 @@ export const eventsApi = createApi({
         { type: 'Event', id: eventId },
         { type: 'Event', id: 'LIST' },
       ],
+      async onQueryStarted({ eventId, eventData }, { dispatch, getState, queryFulfilled }) {
+        const patches = patchCachedEventLists(dispatch as EventsCacheDispatch, getState, (events) =>
+          events.map((event) =>
+            event.id === eventId ? { ...event, ...eventData, id: event.id } : event,
+          ),
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patches.forEach((patch) => patch.undo());
+        }
+      },
     }),
     deleteEvent: builder.mutation<void, { eventId: string; calendarId?: string }>({
       query: ({ eventId, calendarId }) => ({
@@ -76,6 +111,16 @@ export const eventsApi = createApi({
         { type: 'Event', id: eventId },
         { type: 'Event', id: 'LIST' },
       ],
+      async onQueryStarted({ eventId }, { dispatch, getState, queryFulfilled }) {
+        const patches = patchCachedEventLists(dispatch as EventsCacheDispatch, getState, (events) =>
+          events.filter((event) => event.id !== eventId),
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patches.forEach((patch) => patch.undo());
+        }
+      },
     }),
   }),
 });

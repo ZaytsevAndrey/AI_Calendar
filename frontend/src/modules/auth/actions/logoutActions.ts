@@ -15,7 +15,7 @@ export const logout = (redirect = false) => async (dispatch: any) => {
         removeLocalStorageItem('access_token');
         removeLocalStorageItem('refresh_token');
 
-        showSuccessToast('You have been logged out');
+        showSuccessToast({ title: 'Logged out', detail: 'You have been signed out of this device.' });
         dispatch({ type: LOGOUT });
 
         if (redirect) {
@@ -29,7 +29,7 @@ export const clientLogout = (redirect = false) => (dispatch: any) => {
     console.log('clientLogout called with redirect:', redirect);
     removeLocalStorageItem('access_token');
     removeLocalStorageItem('refresh_token');
-    showSuccessToast('You have been logged out');
+    showSuccessToast({ title: 'Logged out', detail: 'You have been signed out of this device.' });
     dispatch({ type: LOGOUT });
     if (redirect) {
         console.log('Redirecting to login page');

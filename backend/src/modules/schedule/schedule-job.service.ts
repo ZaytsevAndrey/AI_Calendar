@@ -16,6 +16,7 @@ import { effectiveRecurrenceWeekDays } from './recurrence-from-phases.util';
 import { buildGoogleRecurrenceRules } from './google-recurrence.util';
 import {
   GoogleEventRef,
+  partitionEnded,
   planGoogleMasterEventSync,
   planGoogleSegmentSync,
   uniqueGoogleEventRefs,
@@ -31,6 +32,20 @@ export type FlexibleGoogleSyncSnapshot = {
   phaseIdsSorted: string[];
   segments: { start: string; end: string }[];
 };
+
+function googleListedEventEndMs(ev: {
+  end?: { dateTime?: string | null; date?: string | null };
+}): number | null {
+  if (ev.end?.dateTime) {
+    const t = new Date(ev.end.dateTime).getTime();
+    return Number.isNaN(t) ? null : t;
+  }
+  if (ev.end?.date) {
+    const t = Date.parse(`${ev.end.date}T00:00:00.000Z`);
+    return Number.isNaN(t) ? null : t;
+  }
+  return null;
+}
 
 @Injectable()
 export class ScheduleJobService {
@@ -101,8 +116,23 @@ export class ScheduleJobService {
     return true;
   }
 
+  private async setJobProgress(
+    job: ScheduleJob,
+    stage: string,
+    current?: number | null,
+    total?: number | null,
+  ): Promise<void> {
+    job.progressStage = stage;
+    job.progressCurrent = current ?? null;
+    job.progressTotal = total ?? null;
+    await this.jobRepo.save(job);
+  }
+
   private async runPendingJob(job: ScheduleJob): Promise<void> {
     job.status = 'running';
+    job.progressStage = 'preparing';
+    job.progressCurrent = null;
+    job.progressTotal = null;
     await this.jobRepo.save(job);
 
     try {
@@ -110,10 +140,20 @@ export class ScheduleJobService {
         job.userId,
       );
 
+      await this.setJobProgress(job, 'computing');
       const result = await this.engine.run(job.userId);
-      await this.syncGoogleAfterReplan(job.userId, snapshotRows);
+
+      await this.setJobProgress(job, 'syncing_google');
+      await this.syncGoogleAfterReplan(
+        job.userId,
+        snapshotRows,
+        async (current, total) => {
+          await this.setJobProgress(job, 'syncing_google', current, total);
+        },
+      );
 
       job.status = 'done';
+      job.progressStage = 'done';
       job.resultDiffJson = JSON.stringify({
         diff: result.diff,
         warnings: result.warnings,
@@ -123,6 +163,7 @@ export class ScheduleJobService {
       await this.jobRepo.save(job);
     } catch (e: any) {
       job.status = 'failed';
+      job.progressStage = 'failed';
       job.errorMessage = e?.message ?? String(e);
       await this.jobRepo.save(job);
     }
@@ -310,7 +351,8 @@ export class ScheduleJobService {
   }
 
   /**
-   * Recurring tasks: one Google series (RRULE). Other flexible tasks: one event per segment.
+   * Recurring tasks: keep a capped historical series for ended occurrences,
+   * plus a new series for still-open slots. Other flexible tasks: one event per segment.
    */
   private async reconcileGoogleEventsForTask(
     userId: string,
@@ -324,26 +366,40 @@ export class ScheduleJobService {
       (a, b) =>
         a.scheduledStartTime.getTime() - b.scheduledStartTime.getTime(),
     );
+    const nowMs = Date.now();
+    const { ended: pastDesired, open: futureDesired } = partitionEnded(
+      desired,
+      (s) => s.scheduledEndTime,
+      nowMs,
+    );
 
     if (task.isRecurring) {
       await this.reconcileRecurringGoogleMaster(
         userId,
         task,
-        desired,
+        pastDesired,
+        futureDesired,
         existingRefs,
       );
       return;
     }
 
-    const plan = planGoogleSegmentSync(desired.length, existingRefs);
+    const pastIds = new Set(
+      pastDesired
+        .map((s) => s.googleEventId)
+        .filter((id): id is string => Boolean(id)),
+    );
+    const futureRefs = existingRefs.filter((r) => !pastIds.has(r.eventId));
+    const plan = planGoogleSegmentSync(futureDesired.length, futureRefs);
 
     for (const ref of plan.deleteRefs) {
+      if (pastIds.has(ref.eventId)) continue;
       await this.deleteGoogleRef(userId, ref, task.id);
     }
 
     const assigned: GoogleEventRef[] = [];
     let reuseIdx = 0;
-    for (const seg of desired) {
+    for (const seg of futureDesired) {
       const payload = this.buildFlexibleSegmentPayload(
         task,
         seg.scheduledStartTime,
@@ -381,32 +437,51 @@ export class ScheduleJobService {
       }
     }
 
-    const first = assigned[0];
-    task.googleEventId = first?.eventId ?? null;
-    task.googleEventCalendarId = first?.calendarId ?? null;
+    const firstFuture = assigned[0];
+    const firstPast = pastDesired.find((s) => s.googleEventId);
+    task.googleEventId =
+      firstFuture?.eventId ?? firstPast?.googleEventId ?? null;
+    task.googleEventCalendarId =
+      firstFuture?.calendarId ?? firstPast?.googleEventCalendarId ?? null;
     await this.taskRepo.save(task);
   }
 
-  private async reconcileRecurringGoogleMaster(
+  private async capHistoricalSeries(
     userId: string,
     task: Task,
-    desired: ScheduledTask[],
-    existingRefs: GoogleEventRef[],
+    historical: GoogleEventRef | null,
+    pastDesired: ScheduledTask[],
   ): Promise<void> {
-    const plan = planGoogleMasterEventSync(desired.length, existingRefs);
-    for (const ref of plan.deleteRefs) {
-      await this.deleteGoogleRef(userId, ref, task.id);
+    if (!historical || !pastDesired.length) return;
+    const lastPast = pastDesired[pastDesired.length - 1];
+    try {
+      await this.googleCalendarService.capRecurringSeriesUntil(
+        userId,
+        historical.eventId,
+        lastPast.scheduledStartTime,
+        historical.calendarId,
+      );
+    } catch (e: any) {
+      this.logger.warn(
+        `Google series cap skipped for task ${task.id}: ${e?.message ?? e}`,
+      );
     }
-
-    if (!desired.length) {
-      task.googleEventId = null;
-      task.googleEventCalendarId = null;
-      await this.taskRepo.save(task);
-      return;
+    for (const seg of pastDesired) {
+      seg.googleEventId = historical.eventId;
+      seg.googleEventCalendarId = historical.calendarId;
+      await this.scheduledRepo.save(seg);
     }
+  }
 
-    const first = desired[0];
-    const last = desired[desired.length - 1];
+  private async writeRecurringFutureMaster(
+    userId: string,
+    task: Task,
+    futureDesired: ScheduledTask[],
+    reuse: GoogleEventRef | null,
+  ): Promise<GoogleEventRef | null> {
+    if (!futureDesired.length) return null;
+    const first = futureDesired[0];
+    const last = futureDesired[futureDesired.length - 1];
     const phases =
       task.phases?.length ? task.phases : task.phase ? [task.phase] : [];
     const payload = {
@@ -425,20 +500,19 @@ export class ScheduleJobService {
 
     try {
       let master: GoogleEventRef | null = null;
-      if (plan.reuse.length) {
-        const ref = plan.reuse[0];
+      if (reuse) {
         await this.googleCalendarService.updateEvent(
           userId,
-          ref.eventId,
+          reuse.eventId,
           payload,
-          { skipSleepWindowCheck: true, calendarId: ref.calendarId },
+          { skipSleepWindowCheck: true, calendarId: reuse.calendarId },
         );
-        master = ref;
+        master = reuse;
       } else {
         const ev = await this.googleCalendarService.createEvent(userId, payload, {
           skipSleepWindowCheck: true,
         });
-        if (typeof ev?.id !== 'string') return;
+        if (typeof ev?.id !== 'string') return null;
         master = {
           eventId: ev.id,
           calendarId:
@@ -447,19 +521,86 @@ export class ScheduleJobService {
         };
       }
 
-      for (const seg of desired) {
+      for (const seg of futureDesired) {
         seg.googleEventId = master.eventId;
         seg.googleEventCalendarId = master.calendarId;
         await this.scheduledRepo.save(seg);
       }
-      task.googleEventId = master.eventId;
-      task.googleEventCalendarId = master.calendarId;
-      await this.taskRepo.save(task);
+      return master;
     } catch (e: any) {
       this.logger.warn(
         `Google recurring sync skipped for task ${task.id}: ${e?.message ?? e}`,
       );
+      return null;
     }
+  }
+
+  private async reconcileRecurringGoogleMaster(
+    userId: string,
+    task: Task,
+    pastDesired: ScheduledTask[],
+    futureDesired: ScheduledTask[],
+    existingRefs: GoogleEventRef[],
+  ): Promise<void> {
+    const unique = uniqueGoogleEventRefs(existingRefs);
+    const historical = unique[0] ?? null;
+    const extras = unique.slice(1);
+
+    const deleteExtras = async (keepId?: string) => {
+      for (const ref of extras) {
+        if (keepId && ref.eventId === keepId) continue;
+        await this.deleteGoogleRef(userId, ref, task.id);
+      }
+    };
+
+    if (pastDesired.length && futureDesired.length) {
+      await this.capHistoricalSeries(userId, task, historical, pastDesired);
+      await deleteExtras(historical?.eventId);
+      const created = await this.writeRecurringFutureMaster(
+        userId,
+        task,
+        futureDesired,
+        null,
+      );
+      task.googleEventId = created?.eventId ?? historical?.eventId ?? null;
+      task.googleEventCalendarId =
+        created?.calendarId ?? historical?.calendarId ?? null;
+      await this.taskRepo.save(task);
+      return;
+    }
+
+    if (futureDesired.length) {
+      const plan = planGoogleMasterEventSync(futureDesired.length, unique);
+      for (const ref of plan.deleteRefs) {
+        await this.deleteGoogleRef(userId, ref, task.id);
+      }
+      const master = await this.writeRecurringFutureMaster(
+        userId,
+        task,
+        futureDesired,
+        plan.reuse[0] ?? null,
+      );
+      task.googleEventId = master?.eventId ?? null;
+      task.googleEventCalendarId = master?.calendarId ?? null;
+      await this.taskRepo.save(task);
+      return;
+    }
+
+    if (pastDesired.length) {
+      await this.capHistoricalSeries(userId, task, historical, pastDesired);
+      await deleteExtras(historical?.eventId);
+      task.googleEventId = historical?.eventId ?? null;
+      task.googleEventCalendarId = historical?.calendarId ?? null;
+      await this.taskRepo.save(task);
+      return;
+    }
+
+    for (const ref of unique) {
+      await this.deleteGoogleRef(userId, ref, task.id);
+    }
+    task.googleEventId = null;
+    task.googleEventCalendarId = null;
+    await this.taskRepo.save(task);
   }
 
   /**
@@ -496,6 +637,7 @@ export class ScheduleJobService {
   private async syncGoogleAfterReplan(
     userId: string,
     snapshotRows: SegmentSnapshot[],
+    onTaskProgress?: (current: number, total: number) => Promise<void>,
   ): Promise<void> {
     const conn = await this.googleCalendarService.checkConnection(userId);
     if (!conn.connected) {
@@ -529,12 +671,22 @@ export class ScheduleJobService {
       snapByTask.set(row.taskId, list);
     }
 
-    for (const task of tasks) {
-      if (task.eventType === TaskEventType.FIXED) continue;
-      if (task.status !== TaskStatus.TODO) continue;
+    const toSync = tasks.filter((task) => {
+      if (task.eventType === TaskEventType.FIXED) return false;
+      if (task.status !== TaskStatus.TODO) return false;
       const after = afterByTask.get(task.id) ?? [];
       const snap = snapByTask.get(task.id) ?? [];
-      if (!after.length && !snap.length && !task.googleEventId) continue;
+      return after.length > 0 || snap.length > 0 || Boolean(task.googleEventId);
+    });
+
+    let index = 0;
+    for (const task of toSync) {
+      index += 1;
+      if (onTaskProgress) {
+        await onTaskProgress(index, toSync.length);
+      }
+      const after = afterByTask.get(task.id) ?? [];
+      const snap = snapByTask.get(task.id) ?? [];
       await this.reconcileGoogleEventsForTask(
         userId,
         task,
@@ -545,14 +697,19 @@ export class ScheduleJobService {
   }
 
   /**
-   * Delete every event on the app calendar in [start, end).
-   * Clear cannot rely on scheduled_tasks alone — leftover Google events
-   * remain after a previous DB-only clear.
+   * Delete still-open app-calendar events in [start, end). Ended events stay.
+   * Recurring series with kept (ended) instances are capped via RRULE UNTIL
+   * instead of deleting the master.
    */
   async wipeAppCalendarEventsInRange(
     userId: string,
     start: Date,
     end: Date,
+    opts?: {
+      now?: Date;
+      keepEventIds?: Set<string>;
+      untilByEventId?: Map<string, Date>;
+    },
   ): Promise<number> {
     const conn = await this.googleCalendarService.checkConnection(userId);
     if (!conn.connected) {
@@ -562,7 +719,13 @@ export class ScheduleJobService {
       return 0;
     }
 
-    const ids = new Set<string>();
+    const nowMs = (opts?.now ?? new Date()).getTime();
+    const keep = opts?.keepEventIds ?? new Set<string>();
+    const untilByEventId = opts?.untilByEventId ?? new Map<string, Date>();
+
+    const seriesToCap = new Set<string>();
+    const seriesToDelete = new Set<string>();
+    const singlesToDelete = new Set<string>();
     let pageToken: string | undefined;
     do {
       const page = await this.googleCalendarService.getEvents(
@@ -574,13 +737,45 @@ export class ScheduleJobService {
       );
       for (const ev of page.events ?? []) {
         if (!ev?.id || ev.status === 'cancelled') continue;
-        ids.add(ev.recurringEventId || ev.id);
+        const endMs = googleListedEventEndMs(ev);
+        if (endMs != null && endMs <= nowMs) continue;
+
+        const masterId =
+          typeof ev.recurringEventId === 'string' && ev.recurringEventId
+            ? ev.recurringEventId
+            : null;
+        if (masterId) {
+          if (keep.has(masterId)) seriesToCap.add(masterId);
+          else seriesToDelete.add(masterId);
+          continue;
+        }
+        if (!keep.has(ev.id)) singlesToDelete.add(ev.id);
       }
       pageToken = page.nextPageToken ?? undefined;
     } while (pageToken);
 
+    for (const id of seriesToCap) {
+      seriesToDelete.delete(id);
+    }
+
     let deleted = 0;
-    for (const eventId of ids) {
+    for (const eventId of seriesToCap) {
+      const until = untilByEventId.get(eventId);
+      if (!until) continue;
+      try {
+        await this.googleCalendarService.capRecurringSeriesUntil(
+          userId,
+          eventId,
+          until,
+        );
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.logger.warn(`Cap Google series ${eventId}: ${msg}`);
+      }
+    }
+
+    const deleteIds = [...seriesToDelete, ...singlesToDelete];
+    for (const eventId of deleteIds) {
       try {
         await this.googleCalendarService.deleteEvent(userId, eventId);
         deleted += 1;
@@ -590,18 +785,18 @@ export class ScheduleJobService {
       }
     }
 
-    if (ids.size > 0) {
+    if (deleteIds.length > 0) {
       await this.taskRepo
         .createQueryBuilder()
         .update(Task)
         .set({ googleEventId: null, googleEventCalendarId: null })
         .where('userId = :userId', { userId })
-        .andWhere('googleEventId IN (:...ids)', { ids: [...ids] })
+        .andWhere('googleEventId IN (:...ids)', { ids: deleteIds })
         .execute();
     }
 
     this.logger.log(
-      `Cleared ${deleted} app-calendar event(s) for user ${userId} from ${start.toISOString()} to ${end.toISOString()}.`,
+      `Cleared ${deleted} upcoming app-calendar event(s) for user ${userId} from ${start.toISOString()} to ${end.toISOString()}.`,
     );
     return deleted;
   }

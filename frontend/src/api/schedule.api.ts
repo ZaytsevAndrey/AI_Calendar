@@ -36,6 +36,9 @@ export interface ScheduleJobStatusResponse {
   status: string;
   errorMessage?: string | null;
   result: ScheduleJobResultPayload | null;
+  progressStage?: string | null;
+  progressCurrent?: number | null;
+  progressTotal?: number | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -83,7 +86,11 @@ export function alertsFromJob(
   };
 }
 
-async function pollJobUntilDone(jobId: string, timeoutMs = 120_000): Promise<ScheduleJobStatusResponse> {
+async function pollJobUntilDone(
+  jobId: string,
+  timeoutMs = 120_000,
+  onProgress?: (job: ScheduleJobStatusResponse) => void,
+): Promise<ScheduleJobStatusResponse> {
   const deadline = Date.now() + timeoutMs;
   let status = 'pending';
   let last: ScheduleJobStatusResponse | null = null;
@@ -96,6 +103,7 @@ async function pollJobUntilDone(jobId: string, timeoutMs = 120_000): Promise<Sch
     const { data } = await axios.get<ScheduleJobStatusResponse>(`/schedule-jobs/${jobId}`);
     last = data;
     status = data.status;
+    onProgress?.(data);
     if (status === 'failed') {
       throw new Error(data.errorMessage || 'Schedule job failed');
     }
@@ -142,12 +150,13 @@ export const ScheduleApi = {
   generateSchedule: async (
     startDate: string,
     endDate: string,
+    onProgress?: (job: ScheduleJobStatusResponse) => void,
   ): Promise<{ tasks: ScheduledTaskDTO[]; job: ScheduleJobStatusResponse }> => {
     const { data } = await axios.post<{ jobId: string; status: string }>('/schedule/generate', {
       startDate,
       endDate,
     });
-    const job = await pollJobUntilDone(data.jobId);
+    const job = await pollJobUntilDone(data.jobId, 120_000, onProgress);
 
     const queryParams = new URLSearchParams();
     queryParams.append('startDate', startDate);

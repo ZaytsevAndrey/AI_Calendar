@@ -46,7 +46,10 @@ const PhasesPage: React.FC = () => {
             try {
                 await updatePhase({ id: phaseId, phase: { startTime, endTime } }).unwrap();
             } catch {
-                showErrorToast('Could not update phase time.');
+                showErrorToast({
+                    title: 'Could not update phase',
+                    detail: 'The new time was not saved. Try again.',
+                });
                 throw new Error('phase-update-failed');
             }
         },

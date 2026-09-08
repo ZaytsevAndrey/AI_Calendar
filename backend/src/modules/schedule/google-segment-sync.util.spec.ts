@@ -1,4 +1,6 @@
 import {
+  hasFullyEnded,
+  partitionEnded,
   planGoogleSegmentSync,
   planGoogleMasterEventSync,
   uniqueGoogleEventRefs,
@@ -92,6 +94,26 @@ describe('google-segment-sync.util', () => {
         { eventId: 'e1', calendarId: 'cal' },
         { eventId: 'e2', calendarId: 'cal' },
       ],
+    });
+  });
+
+  it('splits fully ended segments from still-open ones', () => {
+    const now = Date.parse('2026-04-20T12:00:00.000Z');
+    expect(hasFullyEnded('2026-04-20T11:00:00.000Z', now)).toBe(true);
+    expect(hasFullyEnded('2026-04-20T12:00:00.000Z', now)).toBe(true);
+    expect(hasFullyEnded('2026-04-20T13:00:00.000Z', now)).toBe(false);
+    expect(
+      partitionEnded(
+        [
+          { id: 'past', end: '2026-04-20T10:00:00.000Z' },
+          { id: 'live', end: '2026-04-20T13:00:00.000Z' },
+        ],
+        (s) => s.end,
+        now,
+      ),
+    ).toEqual({
+      ended: [{ id: 'past', end: '2026-04-20T10:00:00.000Z' }],
+      open: [{ id: 'live', end: '2026-04-20T13:00:00.000Z' }],
     });
   });
 });

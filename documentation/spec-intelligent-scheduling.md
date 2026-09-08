@@ -167,7 +167,7 @@ One optional phase. If a movable task has preferred start/end stored on the task
 
 - `POST /items` (or extend `POST /tasks`) — creates item, enqueues job, returns `202` + `jobId` or sync wait with timeout (prefer async + poll `GET /schedule-jobs/:id`).  
 - `GET /schedule-jobs/:id` — status + `diff` when done.  
-- `DELETE /schedule` — clear app-generated slots in the Settings planning horizon (`recurringScheduleHorizonDays`).  
+- `DELETE /schedule` — clear still-open app-generated slots in the Settings planning horizon (`recurringScheduleHorizonDays`); fully ended blocks stay.  
 - Deprecate or align legacy `POST /schedule/generate` with new pipeline (see §10).
 
 ---
@@ -194,7 +194,7 @@ One optional phase. If a movable task has preferred start/end stored on the task
 - Exact SQL schema and naming.  
 - Timezone: store instants in UTC; **scheduling clocks** use `user_settings.timeZone` (IANA, editable). Calendar UI remains in the browser zone.  
 - Maximum job runtime and retry policy for Google API failures.  
-- Recurring Google sync uses one RRULE (with `BYDAY` when weekdays are restricted); local rows stay one segment per occurrence in the horizon.
+- Recurring Google sync uses one RRULE (with `BYDAY` when weekdays are restricted); local rows stay one segment per occurrence in the horizon. On replan, fully ended occurrences stay: the existing series is capped with `UNTIL` and a new series is created for still-open slots.
 
 ---
 

@@ -12,7 +12,7 @@ import {
     Users,
 } from 'lucide-react';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
-import { getEventColor, isEventToday } from '../hooks/useCalendar';
+import { getEventColor, isEventToday, isPastAppEvent } from '../hooks/useCalendar';
 import { Spinner } from '../../../ui/Spinner';
 
 interface CalendarEventsProps {
@@ -172,6 +172,11 @@ const CalendarEvents: React.FC<CalendarEventsProps> = ({
                                         {event.summary || 'Untitled Event'}
                                     </h3>
                                     <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                        {isPastAppEvent(event) ? (
+                                            <span className="inline-flex items-center gap-1 rounded border border-ide-border px-2 py-0.5 text-xs text-ide-muted">
+                                                Past
+                                            </span>
+                                        ) : null}
                                         {isEventToday(event) ? (
                                             <span className="inline-flex items-center gap-1 rounded border border-ide-link px-2 py-0.5 text-xs text-ide-link">
                                                 <CalendarDays className="h-3 w-3" aria-hidden />

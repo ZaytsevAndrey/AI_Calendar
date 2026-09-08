@@ -55,12 +55,17 @@ export const eventTasksApi = createApi({
         { type: 'EventTask', id: 'LIST' },
         { type: 'EventTask', id },
       ],
-      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+      async onQueryStarted(id, { dispatch, queryFulfilled }) {
+        const patch = dispatch(
+          eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) =>
+            draft.filter((task) => task.id !== id),
+          ),
+        );
         try {
           await queryFulfilled;
           dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
         } catch {
-          return;
+          patch.undo();
         }
       },
     }),

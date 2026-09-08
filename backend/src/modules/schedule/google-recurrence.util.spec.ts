@@ -1,4 +1,4 @@
-import { buildGoogleRecurrenceRules, toRruleUntilUtc } from './google-recurrence.util';
+import { buildGoogleRecurrenceRules, setRruleUntil, toRruleUntilUtc } from './google-recurrence.util';
 
 describe('google-recurrence.util', () => {
   it('formats UNTIL in UTC compact form', () => {
@@ -69,5 +69,15 @@ describe('google-recurrence.util', () => {
         lastStart: last,
       }),
     ).toEqual([`RRULE:FREQ=MONTHLY;UNTIL=${toRruleUntilUtc(last)}`]);
+  });
+
+  it('replaces or appends UNTIL on an existing RRULE', () => {
+    const until = new Date('2026-04-20T09:00:00.000Z');
+    expect(setRruleUntil('RRULE:FREQ=DAILY', until)).toBe(
+      `RRULE:FREQ=DAILY;UNTIL=${toRruleUntilUtc(until)}`,
+    );
+    expect(
+      setRruleUntil('RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20260101T000000Z', until),
+    ).toBe(`RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=${toRruleUntilUtc(until)}`);
   });
 });

@@ -6,7 +6,7 @@ This reflects the **actual** codebase as of the last update (September 2026). Im
 
 **Core product MVP** (user, settings, phases, tasks, Google Calendar, UI) is **done**.
 
-**Intelligent scheduling** (see [spec-intelligent-scheduling](spec-intelligent-scheduling.md)) is **implemented**: job queue, engine with phase windows and anchors, diff, Google sync after replan, frontend summary on Schedule.
+**Intelligent scheduling** (see [spec-intelligent-scheduling](spec-intelligent-scheduling.md)) is **implemented**: job queue, engine with phase windows and anchors, diff, Google sync after replan, frontend summary on Schedule. Replan and Clear keep **fully ended** app-generated events; the Calendar page shows those past app events in gray and a generation timeline while the job runs.
 
 ## Phases
 
@@ -28,14 +28,15 @@ This reflects the **actual** codebase as of the last update (September 2026). Im
 ### Phase 3 — UI polish (done)
 
 - [x] MUI, responsive layout, toast, loading / error states  
-- [x] Calendar page: generate; clear app-generated slots in the Settings planning horizon  
+- [x] Calendar page: generate with a live stage timeline; clear upcoming app-generated slots (finished ones stay, shown gray)  
 
 ### Phase 4 — Scheduling engine (done — iterative improvements possible)
 
 - [x] Intelligent engine: priority, FIFO tie-break, phase window, wake/sleep, weekends, split, weekday filter, displacement within priority tier  
 - [x] Durable From/Until window (`earliestStartTime` + `deadline` + `eligibleWeekDays`); wake/sleep/phases/horizon in settings IANA `timeZone` (not the Node host clock); day-only 00:00 snaps to wake (Postgres `HH:mm:ss` normalized)  
-- [x] `/schedule` API + async generate (job) + clear  
-- [x] Schedule jobs: replan, latest done, poll by id  
+- [x] `/schedule` API + async generate (job) + clear (ended slots kept; only still-open blocks are removed)  
+- [x] Schedule jobs: replan, latest done, poll by id, staged progress (`preparing` / `computing` / `syncing_google`)  
+- [x] Keep fully ended app-generated events on regenerate; recurring Google series split (`UNTIL` + new series)  
 - [ ] Further heuristics (e.g. deeper multi-task optimization), analytics  
 
 ### Phase 5 — Advanced product (planned)
@@ -43,6 +44,8 @@ This reflects the **actual** codebase as of the last update (September 2026). Im
 - [x] Voice task creation (PWA mic → Groq Whisper → LLM parse → create / prefill / one clarifying question)  
 - [x] Installable PWA (manifest, icons, service worker, Add to Home Screen)  
 - [ ] Drag & drop on schedule / event calendars  
+- [ ] Habit tracker: daily yes/no check-in (e.g. exercise, no smoking), streaks, and simple points  
+- [ ] Choose which Google calendars are visible on the Calendar page  
 - [ ] Statistics and dashboard  
 - [ ] Integrations (Telegram, Notion, etc.)  
 - [ ] Mobile / desktop clients if needed  
@@ -59,7 +62,9 @@ This reflects the **actual** codebase as of the last update (September 2026). Im
 
 ## Recommended next steps
 
-1. Drag-and-drop and calendar polish.  
-2. Expand tests.  
-3. Optional: attach a custom subdomain (see [deploy](deploy.md)).  
-4. Update this file when scope changes.
+1. Habit tracker (daily check-in, streaks, points).  
+2. Calendar visibility: pick which Google calendars to show.  
+3. Drag-and-drop and calendar polish.  
+4. Expand tests.  
+5. Optional: attach a custom subdomain (see [deploy](deploy.md)).  
+6. Update this file when scope changes.

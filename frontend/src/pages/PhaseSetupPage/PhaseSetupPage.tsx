@@ -47,20 +47,29 @@ const PhaseSetupPage: React.FC = () => {
                 typeof err === 'object' &&
                 'data' in err &&
                 (err as { data?: { message?: string } }).data?.message;
-            showErrorToast(typeof msg === 'string' ? msg : 'Could not create phases.');
+            showErrorToast({
+                title: 'Could not create phases',
+                detail: typeof msg === 'string' ? msg : undefined,
+            });
         }
     };
 
     const handleSave = async () => {
         if (selectedDays.length === 0) {
-            showErrorToast('Select at least one day of the week');
+            showErrorToast({
+                title: 'Select weekdays',
+                detail: 'Choose at least one day of the week for your phases.',
+            });
             return;
         }
         try {
             await updateSettings({ wakeTime, sleepTime }).unwrap();
             await runBootstrap(selectedDays);
         } catch {
-            showErrorToast('Could not save settings.');
+            showErrorToast({
+                title: 'Could not save settings',
+                detail: 'Wake and sleep times were not saved. Try again.',
+            });
         }
     };
 

@@ -91,7 +91,7 @@ cd frontend && npm run build
 
 ```bash
 npm run lint    # all workspaces that define the script
-npm run test    # all workspaces
+npm run test    # all workspaces (backend Jest + frontend `*.spec.ts`, e.g. toast date copy)
 npm run clean   # remove node_modules / build / dist (see scripts/clean.js)
 ```
 

@@ -10,6 +10,7 @@ import type { TaskFormValues } from 'modules/tasks/task-wizard/schema';
 import { Modal } from '../../../ui/Modal';
 import { showErrorToast, showSuccessToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
+import { describeTaskToastDetail } from '../../../utils/formatDate';
 
 export type CreateTaskDefaults = {
   deadline?: string;
@@ -22,8 +23,8 @@ export function useEventEditor() {
   const [editingEvent, setEditingEvent] = useState<TaskDTO | null>(null);
   const [createDefaults, setCreateDefaults] = useState<CreateTaskDefaults | undefined>();
   const { data: phases = [] } = useGetAllPhasesQuery();
-  const [createEvent, createEventState] = useCreateEventMutation();
-  const [updateEvent, updateEventState] = useUpdateEventMutation();
+  const [createEvent] = useCreateEventMutation();
+  const [updateEvent] = useUpdateEventMutation();
 
   const close = () => {
     setOpen(false);
@@ -57,28 +58,36 @@ export function useEventEditor() {
     return cleanData;
   };
 
-  const submit = async (data: CreateTaskDTO | UpdateTaskDTO) => {
+  const submit = (data: CreateTaskDTO | UpdateTaskDTO) => {
     const cleanData = cleanPayload(data);
-    try {
-      if (editingEvent) {
-        await updateEvent({ id: editingEvent.id, body: cleanData as UpdateTaskDTO }).unwrap();
-        showSuccessToast('Task updated.');
-      } else {
-        await createEvent(cleanData as CreateTaskDTO).unwrap();
-        showSuccessToast('Task created.');
-      }
-      close();
-    } catch (err) {
-      showErrorToast(extractApiErrorMessage(err));
-    }
+    const editing = editingEvent;
+    close();
+    const request = editing
+      ? updateEvent({ id: editing.id, body: cleanData as UpdateTaskDTO }).unwrap()
+      : createEvent(cleanData as CreateTaskDTO).unwrap();
+    void request
+      .then(() => {
+        showSuccessToast({
+          title: editing ? 'Task updated' : 'Task created',
+          detail: describeTaskToastDetail(editing ? { ...editing, ...cleanData } : cleanData),
+        });
+      })
+      .catch((err) => {
+        showErrorToast({
+          title: editing ? 'Could not update task' : 'Could not create task',
+          detail: extractApiErrorMessage(err),
+        });
+      });
   };
 
   const createFromPayload = async (data: CreateTaskDTO) => {
-    await createEvent(cleanPayload(data) as CreateTaskDTO).unwrap();
-    showSuccessToast('Task created.');
+    const cleanData = cleanPayload(data) as CreateTaskDTO;
+    await createEvent(cleanData).unwrap();
+    showSuccessToast({
+      title: 'Task created',
+      detail: describeTaskToastDetail(cleanData),
+    });
   };
-
-  const isSaving = createEventState.isLoading || updateEventState.isLoading;
 
   const editorModal = (
     <Modal
@@ -100,7 +109,7 @@ export function useEventEditor() {
           createDefaults={createDefaults}
           phases={phases}
           onSubmit={submit}
-          isSubmitting={isSaving}
+          isSubmitting={false}
           onCancel={close}
           mode={editingEvent ? 'edit' : 'create'}
         />

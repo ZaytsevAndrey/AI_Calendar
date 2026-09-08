@@ -24,7 +24,7 @@ const TasksPage: React.FC = () => {
   });
 
   const { data: events = [], isLoading: isLoadingEvents } = useGetEventsQuery();
-  const [deleteEvent, deleteEventState] = useDeleteEventMutation();
+  const [deleteEvent] = useDeleteEventMutation();
   const { openCreate, openCreateFromPrefill, openEdit, createFromPayload, editorModal } = useEventEditor();
   const voice = useVoiceTask({
     onComplete: createFromPayload,
@@ -62,15 +62,25 @@ const TasksPage: React.FC = () => {
     setDeleteConfirm({ open: true, id, name: task?.name || 'this task' });
   };
 
-  const confirmDelete = async () => {
+  const confirmDelete = () => {
     if (!deleteConfirm.id) return;
-    try {
-      await deleteEvent(deleteConfirm.id).unwrap();
-      showSuccessToast('Task deleted.');
-      setDeleteConfirm({ open: false, id: null, name: '' });
-    } catch (err) {
-      showErrorToast(extractApiErrorMessage(err));
-    }
+    const id = deleteConfirm.id;
+    const name = deleteConfirm.name;
+    setDeleteConfirm({ open: false, id: null, name: '' });
+    void deleteEvent(id)
+      .unwrap()
+      .then(() => {
+        showSuccessToast({
+          title: 'Task deleted',
+          detail: name !== 'this task' ? name : undefined,
+        });
+      })
+      .catch((err) => {
+        showErrorToast({
+          title: 'Could not delete task',
+          detail: extractApiErrorMessage(err),
+        });
+      });
   };
 
   const filteredEvents = sortedEvents.filter((event) => {
@@ -141,7 +151,7 @@ const TasksPage: React.FC = () => {
           onEdit={openEdit}
           onDelete={requestDelete}
           onCreate={() => openCreate()}
-          isLoading={isLoadingEvents || deleteEventState.isLoading}
+          isLoading={isLoadingEvents}
         />
       </div>
 
@@ -154,7 +164,6 @@ const TasksPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setDeleteConfirm({ open: false, id: null, name: '' })}
-              disabled={deleteEventState.isLoading}
               className="ui-btn-secondary w-full sm:w-auto"
             >
               Cancel
@@ -162,10 +171,9 @@ const TasksPage: React.FC = () => {
             <button
               type="button"
               onClick={confirmDelete}
-              disabled={deleteEventState.isLoading}
               className="ui-btn-danger w-full sm:w-auto"
             >
-              {deleteEventState.isLoading ? 'Deleting…' : 'Delete'}
+              Delete
             </button>
           </>
         }

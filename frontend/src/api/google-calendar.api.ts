@@ -41,6 +41,8 @@ export interface GoogleCalendarEvent {
             minutes: number;
         }>;
     };
+    /** True when the event lives on this app's dedicated Google calendar. */
+    isAppGenerated?: boolean;
 }
 
 export interface GoogleCalendarEventsResponse {

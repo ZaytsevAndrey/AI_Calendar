@@ -18,6 +18,7 @@ import { CalendarDatePicker } from 'modules/calendar/components/CalendarDatePick
 import { EventType } from 'modules/calendar/types';
 import { useScheduleActions } from 'modules/schedule/hooks/useScheduleActions';
 import { GenerateAlertsBanner } from 'modules/schedule/components/GenerateAlertsBanner';
+import { GenerateProgressPanel } from 'modules/schedule/components/GenerateProgressPanel';
 import { ScheduleMenu } from 'modules/schedule/components/ScheduleMenu';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
 import { formValuesFromCreatePayload } from 'modules/tasks/task-wizard/buildPayload';
@@ -31,9 +32,11 @@ import { extractApiErrorMessage } from '../../utils/extractApiErrorMessage';
 import {
     endOfLocalDayIso,
     startOfLocalDayIso,
+    formatDateTimeRange,
     formatLongDate,
     formatMonthYear,
     formatWeekRange,
+    joinToastDetail,
 } from '../../utils/formatDate';
 
 type CalendarView = 'day' | 'week' | 'month';
@@ -118,9 +121,9 @@ const CalendarPage: React.FC = () => {
     };
 
     const getEventsQuery = queryMap[currentView];
-    const [updateEventTrigger, updateEventState] = useUpdateEvent();
-    const [deleteEventTrigger, deleteEventState] = useDeleteEvent();
-    const { isGenerating, isClearing, generate, clear, generateAlerts, dismissGenerateAlerts } =
+    const [updateEventTrigger] = useUpdateEvent();
+    const [deleteEventTrigger] = useDeleteEvent();
+    const { isGenerating, isClearing, generate, clear, generateAlerts, dismissGenerateAlerts, generateProgress } =
         useScheduleActions();
     const { openCreate, openCreateFromPrefill, createFromPayload, editorModal } = useEventEditor();
     const voice = useVoiceTask({
@@ -140,19 +143,26 @@ const CalendarPage: React.FC = () => {
         });
     };
 
-    const confirmDeleteEvent = async () => {
-        if (deleteConfirmDialog.eventId) {
-            try {
-                await deleteEventTrigger({
-                    eventId: deleteConfirmDialog.eventId,
-                    calendarId: deleteConfirmDialog.calendarId,
-                }).unwrap();
-                showSuccessToast('Event deleted.');
-                setDeleteConfirmDialog({ open: false, eventId: null, eventName: '' });
-            } catch (err) {
-                showErrorToast(extractApiErrorMessage(err));
-            }
-        }
+    const confirmDeleteEvent = () => {
+        if (!deleteConfirmDialog.eventId) return;
+        const eventId = deleteConfirmDialog.eventId;
+        const calendarId = deleteConfirmDialog.calendarId;
+        const eventName = deleteConfirmDialog.eventName;
+        setDeleteConfirmDialog({ open: false, eventId: null, eventName: '' });
+        void deleteEventTrigger({ eventId, calendarId })
+            .unwrap()
+            .then(() => {
+                showSuccessToast({
+                    title: 'Event deleted',
+                    detail: eventName || undefined,
+                });
+            })
+            .catch((err) => {
+                showErrorToast({
+                    title: 'Could not delete event',
+                    detail: extractApiErrorMessage(err),
+                });
+            });
     };
 
     const cancelDeleteEvent = () => {
@@ -166,20 +176,31 @@ const CalendarPage: React.FC = () => {
         }
     };
 
-    const handleEventFormSubmit = async (data: any) => {
-        try {
-            if (eventFormDialog.event) {
-                await updateEventTrigger({
-                    eventId: eventFormDialog.event.id,
-                    eventData: data,
-                    calendarId: eventFormDialog.event.calendarId,
-                }).unwrap();
-            }
-            showSuccessToast('Event updated.');
-            setEventFormDialog({ open: false, event: null });
-        } catch (err) {
-            showErrorToast(extractApiErrorMessage(err));
-        }
+    const handleEventFormSubmit = (data: any) => {
+        const event = eventFormDialog.event;
+        setEventFormDialog({ open: false, event: null });
+        if (!event) return;
+        void updateEventTrigger({
+            eventId: event.id,
+            eventData: data,
+            calendarId: event.calendarId,
+        })
+            .unwrap()
+            .then(() => {
+                showSuccessToast({
+                    title: 'Event updated',
+                    detail: joinToastDetail(
+                        data.summary,
+                        formatDateTimeRange(data.start?.dateTime, data.end?.dateTime),
+                    ),
+                });
+            })
+            .catch((err) => {
+                showErrorToast({
+                    title: 'Could not update event',
+                    detail: extractApiErrorMessage(err),
+                });
+            });
     };
 
     const closeEventForm = () => {
@@ -229,6 +250,7 @@ const CalendarPage: React.FC = () => {
                         />
                     </div>
                 </div>
+                {generateProgress ? <GenerateProgressPanel progress={generateProgress} /> : null}
                 {generateAlerts ? (
                     <GenerateAlertsBanner
                         alerts={generateAlerts}
@@ -319,12 +341,8 @@ const CalendarPage: React.FC = () => {
                 onClose={closeEventForm}
                 onSubmit={handleEventFormSubmit}
                 event={eventFormDialog.event}
-                isSubmitting={updateEventState.isLoading}
-                error={
-                    updateEventState.error instanceof Error
-                        ? updateEventState.error.message
-                        : undefined
-                }
+                isSubmitting={false}
+                error={undefined}
             />
 
             <Modal
@@ -336,7 +354,6 @@ const CalendarPage: React.FC = () => {
                         <button
                             type="button"
                             onClick={cancelDeleteEvent}
-                            disabled={deleteEventState.isLoading}
                             className="ui-btn-secondary w-full sm:w-auto"
                         >
                             Cancel
@@ -344,10 +361,9 @@ const CalendarPage: React.FC = () => {
                         <button
                             type="button"
                             onClick={confirmDeleteEvent}
-                            disabled={deleteEventState.isLoading}
                             className="ui-btn-danger w-full sm:w-auto"
                         >
-                            {deleteEventState.isLoading ? 'Deleting...' : 'Delete'}
+                            Delete
                         </button>
                     </>
                 }
@@ -387,7 +403,8 @@ const CalendarPage: React.FC = () => {
                 }
             >
                 <p className="text-ide-text">
-                    Clear all app-generated schedule blocks in the planning horizon? This cannot be undone.
+                    Clear upcoming app-generated schedule blocks in the planning horizon?
+                    Already finished blocks stay in the calendar. This cannot be undone.
                 </p>
             </Modal>
 

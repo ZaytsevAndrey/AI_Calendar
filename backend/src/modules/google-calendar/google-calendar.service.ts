@@ -24,6 +24,7 @@ import {
 } from './google-calendar-event.helpers';
 import { phaseHexToGoogleColorId } from './phase-hex-to-google-color-id.util';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
+import { setRruleUntil } from '../schedule/google-recurrence.util';
 
 type LoginTicket = {
   access_token: string;
@@ -657,6 +658,7 @@ export class GoogleCalendarService {
     maxResults: number = 250,
   ) {
     const calendarIds = await this.listDisplayCalendarIds(userId);
+    const appId = await this.getStoredAppCalendarId(userId);
     const seen = new Set<string>();
     const events: Array<{
       id?: string | null;
@@ -682,7 +684,11 @@ export class GoogleCalendarService {
             const key = `${calendarId}:${ev.id}`;
             if (seen.has(key)) continue;
             seen.add(key);
-            events.push({ ...ev, calendarId });
+            events.push({
+              ...ev,
+              calendarId,
+              isAppGenerated: Boolean(appId && calendarId === appId),
+            });
           }
           pageToken = page.nextPageToken ?? undefined;
         } while (pageToken);
@@ -802,6 +808,73 @@ export class GoogleCalendarService {
       );
       throw new Error(`Failed to fetch event: ${error.message}`);
     }
+  }
+
+  /**
+   * Keep past instances of a Google series: patch RRULE UNTIL, do not change DTSTART.
+   */
+  async capRecurringSeriesUntil(
+    userId: string,
+    eventId: string,
+    until: Date,
+    calendarId?: string,
+  ): Promise<void> {
+    const existing = await this.getEvent(userId, eventId, calendarId);
+    const recurrence = Array.isArray(existing?.recurrence)
+      ? [...existing.recurrence]
+      : [];
+    const rruleIdx = recurrence.findIndex((line) =>
+      String(line).toUpperCase().startsWith('RRULE:'),
+    );
+    if (rruleIdx < 0) {
+      this.logger.warn(
+        `Cannot cap series ${eventId}: no RRULE on the master event.`,
+      );
+      return;
+    }
+    recurrence[rruleIdx] = setRruleUntil(String(recurrence[rruleIdx]), until);
+
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: {
+        googleAccessToken: true,
+        googleRefreshToken: true,
+        googleTokenExpiry: true,
+      },
+    });
+    if (!user?.googleAccessToken) {
+      throw new Error('Google Calendar not connected');
+    }
+    if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
+      if (!user.googleRefreshToken) {
+        throw new Error('Google Calendar token expired');
+      }
+      this.oauth2Client.setCredentials({
+        refresh_token: user.googleRefreshToken,
+      });
+      const { credentials } = await this.oauth2Client.refreshAccessToken();
+      await this.userRepo.update(userId, {
+        googleAccessToken: credentials.access_token,
+        googleTokenExpiry: new Date(credentials.expiry_date),
+      });
+      user.googleAccessToken = credentials.access_token;
+    }
+    this.oauth2Client.setCredentials({
+      access_token: user.googleAccessToken,
+    });
+    const calendar = google.calendar({
+      version: 'v3',
+      auth: this.oauth2Client,
+    });
+    const calId =
+      calendarId && calendarId !== ''
+        ? calendarId
+        : (await this.getStoredAppCalendarId(userId)) ?? 'primary';
+    await calendar.events.patch({
+      calendarId: calId,
+      eventId,
+      requestBody: { recurrence },
+    });
   }
 
   async getCalendars(userId: string) {
@@ -1161,11 +1234,13 @@ export class GoogleCalendarService {
       if (id && !calendarIds.includes(id)) calendarIds.push(id);
     };
     pushId(calendarId);
-    pushId(storedApp);
-    if (!calendarIds.length) {
-      pushId(await this.ensureAppCalendarIdWithClient(calendar, userId));
+    if (!calendarId) {
+      pushId(storedApp);
+      if (!calendarIds.length) {
+        pushId(await this.ensureAppCalendarIdWithClient(calendar, userId));
+      }
+      pushId('primary');
     }
-    pushId('primary');
 
     let deleted = false;
     for (const calId of calendarIds) {

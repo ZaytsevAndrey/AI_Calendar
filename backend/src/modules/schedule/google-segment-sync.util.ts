@@ -3,6 +3,26 @@ export type GoogleEventRef = {
   calendarId: string;
 };
 
+/** Fully ended: end instant is at or before now. In-progress slots stay "open". */
+export function hasFullyEnded(end: Date | string, nowMs: number): boolean {
+  const t = typeof end === 'string' ? Date.parse(end) : end.getTime();
+  return Number.isFinite(t) && t <= nowMs;
+}
+
+export function partitionEnded<T>(
+  items: T[],
+  endOf: (item: T) => Date | string,
+  nowMs: number,
+): { ended: T[]; open: T[] } {
+  const ended: T[] = [];
+  const open: T[] = [];
+  for (const item of items) {
+    if (hasFullyEnded(endOf(item), nowMs)) ended.push(item);
+    else open.push(item);
+  }
+  return { ended, open };
+}
+
 export function uniqueGoogleEventRefs(
   refs: Array<GoogleEventRef | null | undefined>,
 ): GoogleEventRef[] {

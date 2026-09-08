@@ -34,7 +34,10 @@ const LoginFormContainer = () => {
             window.location.assign(url);
         } catch (error) {
             console.error('Google sign-in start failed:', error);
-            showErrorToast('Could not start Google sign-in.');
+            showErrorToast({
+                title: 'Sign-in failed',
+                detail: 'Could not start Google sign-in.',
+            });
             dispatch({
                 type: LOGIN.failure,
                 payload: 'Could not start Google sign-in.',

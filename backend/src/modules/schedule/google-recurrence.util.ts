@@ -8,6 +8,15 @@ export function toRruleUntilUtc(date: Date): string {
   );
 }
 
+/** Set or replace RRULE UNTIL without changing FREQ/BYDAY/INTERVAL. */
+export function setRruleUntil(rrule: string, until: Date): string {
+  const untilToken = `UNTIL=${toRruleUntilUtc(until)}`;
+  if (/UNTIL=/i.test(rrule)) {
+    return rrule.replace(/UNTIL=[^;]*/i, untilToken);
+  }
+  return `${rrule};${untilToken}`;
+}
+
 function byDayList(weekDays: number[]): string {
   return [...new Set(weekDays)]
     .sort((a, b) => a - b)

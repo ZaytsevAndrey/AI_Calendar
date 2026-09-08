@@ -71,6 +71,9 @@ export class ScheduleJobController {
       status: job.status,
       errorMessage: job.errorMessage,
       result,
+      progressStage: job.progressStage,
+      progressCurrent: job.progressCurrent,
+      progressTotal: job.progressTotal,
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
     };

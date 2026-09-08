@@ -190,12 +190,14 @@ export class GoogleCalendarController {
     @Req() req,
     @Param('eventId') eventId: string,
     @Body() event: any,
+    @Query('calendarId') calendarId?: string,
   ) {
     // event.phaseId may be present on the body
     return this.googleCalendarService.updateEvent(
       req.user.userId,
       eventId,
       event,
+      calendarId ? { calendarId } : undefined,
     );
   }
 

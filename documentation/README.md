@@ -15,4 +15,4 @@ Single source of truth for the project. Keep these files in sync with code chang
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** September 2026 (settings IANA time zone as source of truth for scheduling, From/Until, voice + PWA, Render + Neon).
+**Last documentation update:** September 2026 (informative type-colored toasts; settings IANA time zone; From/Until, voice + PWA, Render + Neon).

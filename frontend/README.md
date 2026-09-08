@@ -12,6 +12,7 @@ Project documentation (single source):
 npm install   # or from monorepo root: npm ci
 npm start
 npm run build
+npm test      # unit tests (toast date copy, etc.)
 ```
 
 Default dev server: **http://localhost:3000**. Set the API base URL for Axios with **`REACT_APP_API_BASE_URL`** (see `.env.example`).
