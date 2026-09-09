@@ -89,9 +89,10 @@ export function isSleepClockTime(time: string, sleep?: SleepWindow): boolean {
   const sleepEnd = clockToMinutes(hasCustom ? sleep!.wakeTime! : '06:00');
 
   if (sleepStart > sleepEnd) {
-    return timeMinutes >= sleepStart || timeMinutes <= sleepEnd;
+    // [sleep, wake) so the wake hour is the first visible slot.
+    return timeMinutes >= sleepStart || timeMinutes < sleepEnd;
   }
-  return timeMinutes >= sleepStart && timeMinutes <= sleepEnd;
+  return timeMinutes >= sleepStart && timeMinutes < sleepEnd;
 }
 
 function eventClockHm(event: GoogleCalendarEvent): string | null {

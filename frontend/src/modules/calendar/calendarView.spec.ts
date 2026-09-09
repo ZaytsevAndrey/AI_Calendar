@@ -202,16 +202,28 @@ describe('event times', () => {
 describe('day view', () => {
   it('shows waking hour labels and places each timed event in its hour', () => {
     const hours = wakingHourSlots();
-    expect(hours[0]).toBe('07:00');
+    expect(hours[0]).toBe('06:00');
     expect(hours[hours.length - 1]).toBe('22:00');
     expect(hours).not.toContain('23:00');
-    expect(hours).not.toContain('06:00');
+    expect(hours).not.toContain('05:00');
+    expect(hours).toContain('06:00');
 
     const dayEvents = eventsForDay(displayEvents, focusDay);
     expect(ids(eventsForHourSlot(dayEvents, 9))).toEqual(['standup']);
     expect(ids(eventsForHourSlot(dayEvents, 12))).toEqual(['lunch']);
     expect(eventsForHourSlot(dayEvents, 16)).toEqual([]);
     expect(eventsForHourSlot(dayEvents, 23)).toEqual([]);
+  });
+
+  it('keeps sleep hours hidden and shows the wake hour (Rest 02:00 / Morning 09:00)', () => {
+    const restUntilWake = { sleepTime: '02:00', wakeTime: '09:00' };
+    const hours = wakingHourSlots(restUntilWake);
+    expect(hours).toContain('00:00');
+    expect(hours).toContain('01:00');
+    expect(hours).toContain('09:00');
+    expect(hours).toContain('10:00');
+    expect(hours).not.toContain('02:00');
+    expect(hours).not.toContain('08:00');
   });
 
   it('shows every waking timed event that starts that day, with times', () => {
