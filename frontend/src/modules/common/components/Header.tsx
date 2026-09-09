@@ -4,6 +4,7 @@ import {
     CalendarDays,
     ListTodo,
     Layers,
+    Flame,
     Settings,
 } from 'lucide-react';
 
@@ -14,6 +15,7 @@ const navItems = [
     { to: '/', label: 'Calendar', icon: CalendarDays, match: (path: string) => path === '/' || path === '/calendar' },
     { to: '/tasks', label: 'Tasks', icon: ListTodo, match: (path: string) => path === '/tasks' || path === '/events' },
     { to: '/phases', label: 'Phases', icon: Layers, match: (path: string) => path === '/phases' },
+    { to: '/habits', label: 'Habits', icon: Flame, match: (path: string) => path === '/habits' },
     { to: '/settings', label: 'Settings', icon: Settings, match: (path: string) => path === '/settings' },
 ] as const;
 
@@ -36,7 +38,7 @@ const Header: React.FC = () => {
                     </Link>
                 </div>
                 <nav
-                    className="-mx-1 flex gap-1 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:pb-0"
+                    className="-mx-1 flex gap-1 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] sm:mx-0 sm:pb-0"
                     aria-label="Main"
                 >
                     {navItems.map(({ to, label, icon: Icon, match }) => (

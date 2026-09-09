@@ -17,6 +17,7 @@ import { eventTasksApi } from '../api/eventTasksApi';
 import { phasesApi } from '../api/phasesApi';
 import { eventsApi } from '../api/eventsApi';
 import { userSettingsApi } from '../api/userSettingsApi';
+import { habitsApi } from '../api/habitsApi';
 
 import logger from './middlewares/logger';
 
@@ -32,6 +33,7 @@ const rootReducer = combineReducers({
     [phasesApi.reducerPath]: phasesApi.reducer,
     [eventsApi.reducerPath]: eventsApi.reducer,
     [userSettingsApi.reducerPath]: userSettingsApi.reducer,
+    [habitsApi.reducerPath]: habitsApi.reducer,
 });
 
 const persistedReducer = persistReducer(persistConfig, rootReducer);
@@ -43,7 +45,15 @@ export const store = configureStore({
             serializableCheck: {
                 ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER],
             },
-        }).concat(thunk, logger, eventTasksApi.middleware, phasesApi.middleware, eventsApi.middleware, userSettingsApi.middleware),
+        }).concat(
+            thunk,
+            logger,
+            eventTasksApi.middleware,
+            phasesApi.middleware,
+            eventsApi.middleware,
+            userSettingsApi.middleware,
+            habitsApi.middleware,
+        ),
 });
 
 export const persistor = persistStore(store);

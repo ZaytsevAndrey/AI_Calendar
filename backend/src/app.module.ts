@@ -10,6 +10,7 @@ import { GoogleCalendarModule } from './modules/google-calendar/google-calendar.
 import { EventPhasesModule } from './modules/event-phases/event-phases.module';
 import { PhasesModule } from './modules/phases/phases.module';
 import { VoiceModule } from './modules/voice/voice.module';
+import { HabitsModule } from './modules/habits/habits.module';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { createTypeOrmOptions } from './database/typeorm.config';
 
@@ -38,6 +39,7 @@ import { createTypeOrmOptions } from './database/typeorm.config';
     EventPhasesModule,
     PhasesModule,
     VoiceModule,
+    HabitsModule,
   ],
 })
 export class AppModule implements NestModule {

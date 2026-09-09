@@ -44,7 +44,7 @@ This reflects the **actual** codebase as of the last update (September 2026). Im
 - [x] Voice task creation (PWA mic → Groq Whisper → LLM parse → create / prefill / one clarifying question)  
 - [x] Installable PWA (manifest, icons, service worker, Add to Home Screen)  
 - [ ] Drag & drop on schedule / event calendars  
-- [ ] Habit tracker: daily yes/no check-in (e.g. exercise, no smoking), streaks, and simple points  
+- [x] Habit tracker: daily yes/no check-in (e.g. exercise, no smoking), streaks, and simple points  
 - [ ] Phase lifestyle presets: apply a ready-made day-phase set instead of only default Sleep / Focus hours. First catalog: **working person**, **student / learner**, **unemployed**; more presets later  
 - [ ] Choose which Google calendars are visible on the Calendar page  
 - [ ] Statistics and dashboard  
@@ -63,10 +63,9 @@ This reflects the **actual** codebase as of the last update (September 2026). Im
 
 ## Recommended next steps
 
-1. Habit tracker (daily check-in, streaks, points).  
-2. Phase lifestyle presets (working person, student / learner, unemployed; catalog can grow).  
-3. Calendar visibility: pick which Google calendars to show.  
-4. Drag-and-drop and calendar polish.  
-5. Expand tests.  
-6. Optional: attach a custom subdomain (see [deploy](deploy.md)).  
-7. Update this file when scope changes.
+1. Phase lifestyle presets (working person, student / learner, unemployed; catalog can grow).  
+2. Calendar visibility: pick which Google calendars to show.  
+3. Drag-and-drop and calendar polish.  
+4. Expand tests.  
+5. Optional: attach a custom subdomain (see [deploy](deploy.md)).  
+6. Update this file when scope changes.

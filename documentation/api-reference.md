@@ -65,6 +65,21 @@ JWT. Free Groq backend (`GROQ_API_KEY`). Audio is **not** stored.
 
 `understanding`: `complete` (client creates immediately), `sufficient` (prefill form), `needs_clarification` (one follow-up question). After a clarification reply the API will not ask a second question. Calendar-day parsing uses **settings `timeZone`** when set, otherwise the request `timeZone`, otherwise `UTC`.
 
+## Habits — `/habits`
+
+JWT. Independent of scheduling and Google Calendar. Civil “today” / “yesterday” use **settings `timeZone`**.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/habits` | List habits plus `today`, `yesterday`, `timeZone`. Each habit includes streak, points, today/yesterday flags, and last 7 days |
+| POST | `/habits` | Create (`name`, optional `color` `#rrggbb`, optional `description`) |
+| PATCH | `/habits/:id` | Update name / color / description |
+| DELETE | `/habits/:id` | Delete the habit and its check-ins |
+| POST | `/habits/:id/check-ins` | Body `{ date: "YYYY-MM-DD" }` — mark done (today or yesterday only) |
+| DELETE | `/habits/:id/check-ins/:date` | Clear that day’s check-in (today or yesterday only) |
+
+Points: +1 per successful day, plus +1 whenever a consecutive run hits a multiple of 7. Streak counts consecutive days ending today, or yesterday if today is not yet checked.
+
 ## Tasks — `/tasks`
 
 Task CRUD (JWT). Bodies/responses include `phaseId`, **`phaseIds`** (max 1), **`eventType`** (`fixed` or `admin` on new writes), status, priority, deadline, **`earliestStartTime`**, **`eligibleWeekDays`**, estimated minutes, `allowSplit`, `isRecurring`, `recurrencePattern`, **`recurrenceWeekDays`**, optional `scheduledStartTime` / `scheduledEndTime`. `phaseIds` must belong to the current user.

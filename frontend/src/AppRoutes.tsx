@@ -8,6 +8,7 @@ import SettingsPage from 'pages/SettingsPage';
 import CalendarPage from 'pages/CalendarPage';
 import GoogleCallbackPage from 'modules/auth/pages/GoogleCallbackPage';
 import PhaseSetupPage from 'pages/PhaseSetupPage/PhaseSetupPage';
+import HabitsPage from 'pages/HabitsPage';
 
 import PublicRoute from 'modules/common/hocs/PublicRoute';
 import ProtectedRoute from 'modules/common/hocs/ProtectedRoute';
@@ -40,6 +41,14 @@ const AppRoutes = () => {
                 element={
                     <ProtectedRoute>
                         <PhasesPage />
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/habits"
+                element={
+                    <ProtectedRoute>
+                        <HabitsPage />
                     </ProtectedRoute>
                 }
             />
