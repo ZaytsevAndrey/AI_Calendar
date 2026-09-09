@@ -1,31 +1,26 @@
 import React from 'react';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
-import { formatEventTime, getEventColor } from '../hooks/useCalendar';
+import { getEventColor } from '../hooks/useCalendar';
 import { useTimePhasesForDate, getPhaseByTime } from '../../phases/hooks/usePhases';
 import { useGetUserSettingsQuery } from '../../../api/userSettingsApi';
-import { formatClock } from '../../../utils/formatDate';
+import {
+    CalendarView,
+    chipLabel,
+    clockToMinutes,
+    eventsForDay,
+    eventsForHourSlot,
+    getDaysInView,
+    gridEventsForDay,
+    tooltipText,
+    wakingHourSlots,
+} from '../calendarView';
 
 interface CalendarGridProps {
-    view: 'day' | 'week' | 'month';
+    view: CalendarView;
     date: Date;
     events: GoogleCalendarEvent[];
     onEditEvent?: (eventId: string) => void;
     onCreateForDate?: (day: Date) => void;
-}
-
-function chipLabel(event: GoogleCalendarEvent): string {
-    const title = event.summary || 'Event';
-    if (!event.start.dateTime) return title;
-    const start = new Date(event.start.dateTime);
-    if (Number.isNaN(start.getTime())) return title;
-    return `${formatClock(start)} ${title}`;
-}
-
-function tooltipText(event: GoogleCalendarEvent): string {
-    const parts = [event.summary || 'Event', formatEventTime(event)];
-    if (event.description) parts.push(event.description);
-    if (event.location) parts.push(`Location: ${event.location}`);
-    return parts.join('\n');
 }
 
 const CalendarGrid: React.FC<CalendarGridProps> = ({
@@ -38,62 +33,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     const { data: timePhases = [] } = useTimePhasesForDate(date);
     const { data: userSettings } = useGetUserSettingsQuery();
 
-    const getDaysInView = () => {
-        const days: Date[] = [];
-
-        switch (view) {
-            case 'day': {
-                const day = new Date(date);
-                days.push(day);
-                break;
-            }
-            case 'week': {
-                const startOfWeek = new Date(date);
-                const dayOfWeek = date.getDay();
-                const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-                startOfWeek.setDate(date.getDate() - daysToSubtract);
-
-                for (let i = 0; i < 7; i++) {
-                    const day = new Date(startOfWeek);
-                    day.setDate(startOfWeek.getDate() + i);
-                    days.push(day);
-                }
-                break;
-            }
-            case 'month': {
-                const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
-                const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-
-                const startOfWeek = new Date(startOfMonth);
-                const firstDayOfWeek = startOfMonth.getDay();
-                const daysToSubtract = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
-                startOfWeek.setDate(startOfMonth.getDate() - daysToSubtract);
-
-                const endOfWeek = new Date(endOfMonth);
-                const lastDayOfWeek = endOfMonth.getDay();
-                const daysToAdd = lastDayOfWeek === 0 ? 0 : 7 - lastDayOfWeek;
-                endOfWeek.setDate(endOfMonth.getDate() + daysToAdd);
-
-                const current = new Date(startOfWeek);
-                while (current <= endOfWeek) {
-                    days.push(new Date(current));
-                    current.setDate(current.getDate() + 1);
-                }
-                break;
-            }
-        }
-
-        return days;
-    };
-
-    const getEventsForDay = (day: Date) => {
-        return events.filter((event) => {
-            const eventDate = event.start.dateTime
-                ? new Date(event.start.dateTime)
-                : new Date(event.start.date!);
-
-            return eventDate.toDateString() === day.toDateString();
-        });
+    const sleepWindow = {
+        sleepTime: userSettings?.sleepTime,
+        wakeTime: userSettings?.wakeTime,
     };
 
     const isToday = (day: Date) => day.toDateString() === new Date().toDateString();
@@ -105,55 +47,22 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
         return getPhaseByTime(displayPhases, time);
     };
 
-    const isSleepTime = (time: string) => {
-        if (!userSettings?.sleepTime || !userSettings?.wakeTime) {
-            const timeMinutes = timeToMinutes(time);
-            const defaultSleepStart = 23 * 60;
-            const defaultSleepEnd = 6 * 60;
-
-            if (defaultSleepStart > defaultSleepEnd) {
-                return timeMinutes >= defaultSleepStart || timeMinutes <= defaultSleepEnd;
-            }
-            return timeMinutes >= defaultSleepStart && timeMinutes <= defaultSleepEnd;
-        }
-
-        const timeMinutes = timeToMinutes(time);
-        const sleepStart = timeToMinutes(userSettings.sleepTime);
-        const sleepEnd = timeToMinutes(userSettings.wakeTime);
-
-        if (sleepStart > sleepEnd) {
-            return timeMinutes >= sleepStart || timeMinutes <= sleepEnd;
-        }
-        return timeMinutes >= sleepStart && timeMinutes <= sleepEnd;
-    };
-
     const getDisplayPhases = () => {
         return timePhases
             .filter((phase: any) => phase.type !== 'sleep_time')
-            .sort((a: any, b: any) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+            .sort(
+                (a: any, b: any) => clockToMinutes(a.startTime) - clockToMinutes(b.startTime),
+            );
     };
 
-    const createTimeSlots = () => {
-        const slots: { time: string; phase: any }[] = [];
-        for (let hour = 0; hour < 24; hour++) {
-            const time = `${hour.toString().padStart(2, '0')}:00`;
-            if (isSleepTime(time)) continue;
-            const phase = getPhaseForTime(time);
-            slots.push({ time, phase });
-        }
-        return slots;
-    };
-
-    const timeToMinutes = (time: string): number => {
-        const [hours, minutes] = time.split(':').map(Number);
-        return hours * 60 + minutes;
-    };
-
-    const days = getDaysInView();
+    const days = getDaysInView(view, date);
 
     if (view === 'day') {
-        const dayEvents = getEventsForDay(days[0]);
-        const timeSlots = createTimeSlots();
+        const dayEvents = eventsForDay(events, days[0]);
+        const timeSlots = wakingHourSlots(sleepWindow).map((time) => ({
+            time,
+            phase: getPhaseForTime(time),
+        }));
 
         return (
             <div className="flex h-full min-h-0 flex-col rounded-lg border border-ide-border bg-ide-panel p-4">
@@ -182,17 +91,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
 
                 <div className="min-h-0 flex-1 overflow-y-auto">
                     {timeSlots.map((slot, index) => {
-                        const eventsInSlot = dayEvents.filter((event) => {
-                            if (!event.start.dateTime) return false;
-                            const eventHour = new Date(event.start.dateTime).getHours();
-                            const eventTime = new Date(event.start.dateTime).toLocaleTimeString('en-US', {
-                                hour12: false,
-                                hour: '2-digit',
-                                minute: '2-digit',
-                            });
-                            if (isSleepTime(eventTime)) return false;
-                            return eventHour === parseInt(slot.time.split(':')[0], 10);
-                        });
+                        const hour = parseInt(slot.time.split(':')[0], 10);
+                        const eventsInSlot = eventsForHourSlot(dayEvents, hour, sleepWindow);
 
                         return (
                             <div
@@ -310,7 +210,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                         className="grid min-h-[5.5rem] flex-1 grid-cols-7 border-b border-ide-border last:border-b-0"
                     >
                         {week.map((day, dayIndex) => {
-                            const dayEvents = getEventsForDay(day);
+                            const dayEvents = gridEventsForDay(events, day, sleepWindow);
                             const isCurrentDay = isToday(day);
                             const isInCurrentMonth = isCurrentMonth(day);
 
@@ -335,17 +235,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
 
                                     <div className="mt-1 min-h-0 flex-1 overflow-y-auto">
                                         {dayEvents
-                                            .filter((event) => {
-                                                if (!event.start?.dateTime) return true;
-                                                const eventTime = new Date(
-                                                    event.start.dateTime
-                                                ).toLocaleTimeString('en-US', {
-                                                    hour12: false,
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                });
-                                                return !isSleepTime(eventTime);
-                                            })
                                             .map((event) => {
                                                 let eventPhase = null;
                                                 if (event.start?.dateTime) {

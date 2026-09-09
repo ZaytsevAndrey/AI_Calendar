@@ -13,6 +13,13 @@ import {
 } from 'lucide-react';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 import { getEventColor, isEventToday, isPastAppEvent } from '../hooks/useCalendar';
+import {
+    eventEndDate,
+    eventStartDate,
+    formatEventListDate,
+    formatEventListTime,
+    isAllDayEvent,
+} from '../calendarView';
 import { Spinner } from '../../../ui/Spinner';
 
 interface CalendarEventsProps {
@@ -24,60 +31,10 @@ interface CalendarEventsProps {
     onDeleteEvent?: (eventId: string, eventName: string) => void;
 }
 
-function eventStart(event: GoogleCalendarEvent): Date | null {
-    if (event.start.dateTime) {
-        const d = new Date(event.start.dateTime);
-        return Number.isNaN(d.getTime()) ? null : d;
-    }
-    if (event.start.date) {
-        const d = new Date(`${event.start.date}T00:00:00`);
-        return Number.isNaN(d.getTime()) ? null : d;
-    }
-    return null;
-}
-
-function eventEnd(event: GoogleCalendarEvent): Date | null {
-    if (event.end.dateTime) {
-        const d = new Date(event.end.dateTime);
-        return Number.isNaN(d.getTime()) ? null : d;
-    }
-    if (event.end.date) {
-        const d = new Date(`${event.end.date}T00:00:00`);
-        return Number.isNaN(d.getTime()) ? null : d;
-    }
-    return null;
-}
-
-function isAllDay(event: GoogleCalendarEvent): boolean {
-    return !event.start.dateTime && !!event.start.date;
-}
-
-function formatDateLine(event: GoogleCalendarEvent): string {
-    const start = eventStart(event);
-    if (!start) return 'Time not set';
-    return start.toLocaleDateString('en-GB', {
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-    });
-}
-
-function formatTimeRange(event: GoogleCalendarEvent): string {
-    if (isAllDay(event)) return 'All day';
-    const start = eventStart(event);
-    const end = eventEnd(event);
-    if (!start) return 'Time not set';
-    const timeOpts: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: false };
-    const startLabel = start.toLocaleTimeString('en-GB', timeOpts);
-    if (!end) return startLabel;
-    return `${startLabel} – ${end.toLocaleTimeString('en-GB', timeOpts)}`;
-}
-
 function formatDuration(event: GoogleCalendarEvent): string | null {
-    if (isAllDay(event)) return null;
-    const start = eventStart(event);
-    const end = eventEnd(event);
+    if (isAllDayEvent(event)) return null;
+    const start = eventStartDate(event);
+    const end = eventEndDate(event);
     if (!start || !end) return null;
     const mins = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
     if (mins < 60) return `${mins} min`;
@@ -183,7 +140,7 @@ const CalendarEvents: React.FC<CalendarEventsProps> = ({
                                                 Today
                                             </span>
                                         ) : null}
-                                        {isAllDay(event) ? (
+                                        {isAllDayEvent(event) ? (
                                             <span className="inline-flex items-center gap-1 rounded border border-ide-border px-2 py-0.5 text-xs text-ide-muted">
                                                 All day
                                             </span>
@@ -249,14 +206,14 @@ const CalendarEvents: React.FC<CalendarEventsProps> = ({
                                     <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-ide-link" aria-hidden />
                                     <div>
                                         <dt className="sr-only">Date</dt>
-                                        <dd className="text-ide-text">{formatDateLine(event)}</dd>
+                                        <dd className="text-ide-text">{formatEventListDate(event)}</dd>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-2">
                                     <Clock className="mt-0.5 h-4 w-4 shrink-0 text-ide-link" aria-hidden />
                                     <div>
                                         <dt className="sr-only">Time</dt>
-                                        <dd className="text-ide-text">{formatTimeRange(event)}</dd>
+                                        <dd className="text-ide-text">{formatEventListTime(event)}</dd>
                                     </div>
                                 </div>
                                 {duration ? (

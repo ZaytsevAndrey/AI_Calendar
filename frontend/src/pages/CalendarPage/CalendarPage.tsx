@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { format } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
     useEventsForDay,
@@ -8,7 +7,6 @@ import {
     useUpdateEvent,
     useDeleteEvent,
     visibleGoogleEvents,
-    startOfWeekMonday,
 } from 'modules/calendar/hooks/useCalendar';
 import EventForm from 'modules/calendar/components/EventForm';
 import { GoogleCalendarEvent } from 'api/google-calendar.api';
@@ -29,61 +27,18 @@ import { Modal } from '../../ui/Modal';
 import { Spinner } from '../../ui/Spinner';
 import { showErrorToast, showSuccessToast } from '../../utils/toast';
 import { extractApiErrorMessage } from '../../utils/extractApiErrorMessage';
+import { formatDateTimeRange, joinToastDetail, startOfLocalDayIso, endOfLocalDayIso } from '../../utils/formatDate';
 import {
-    endOfLocalDayIso,
-    startOfLocalDayIso,
-    formatDateTimeRange,
-    formatLongDate,
-    formatMonthYear,
-    formatWeekRange,
-    joinToastDetail,
-} from '../../utils/formatDate';
-
-type CalendarView = 'day' | 'week' | 'month';
-
-function visibleRangeYmd(view: CalendarView, date: Date): { startDate: string; endDate: string } {
-    if (view === 'day') {
-        const day = format(date, 'yyyy-MM-dd');
-        return { startDate: day, endDate: day };
-    }
-    if (view === 'week') {
-        const start = startOfWeekMonday(date);
-        const end = new Date(start);
-        end.setDate(start.getDate() + 6);
-        return {
-            startDate: format(start, 'yyyy-MM-dd'),
-            endDate: format(end, 'yyyy-MM-dd'),
-        };
-    }
-    const start = new Date(date.getFullYear(), date.getMonth(), 1);
-    const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-    return {
-        startDate: format(start, 'yyyy-MM-dd'),
-        endDate: format(end, 'yyyy-MM-dd'),
-    };
-}
+    CalendarView,
+    periodLabel,
+    shiftPeriod,
+    visibleRangeYmd,
+} from 'modules/calendar/calendarView';
 
 const toggleBtn = (active: boolean) =>
     `min-h-[44px] rounded-md px-4 py-2 text-sm font-medium transition ${
         active ? 'bg-ide-selection text-ide-text' : 'text-ide-muted hover:bg-ide-surface'
     }`;
-
-function shiftPeriod(date: Date, view: CalendarView, delta: number): Date {
-    const next = new Date(date);
-    if (view === 'day') next.setDate(next.getDate() + delta);
-    else if (view === 'week') next.setDate(next.getDate() + delta * 7);
-    else next.setMonth(next.getMonth() + delta);
-    return next;
-}
-
-function periodLabel(date: Date, view: CalendarView): string {
-    if (view === 'day') return formatLongDate(date);
-    if (view === 'month') return formatMonthYear(date);
-    const start = startOfWeekMonday(date);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    return formatWeekRange(start, end);
-}
 
 const CalendarPage: React.FC = () => {
     const [currentView, setCurrentView] = useState<CalendarView>('week');
