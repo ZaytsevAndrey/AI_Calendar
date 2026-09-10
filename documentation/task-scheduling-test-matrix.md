@@ -354,7 +354,24 @@
 **Then**
 - That row is **not** deleted (`scheduledEndTime > now` filter).
 - It is treated as a busy anchor.
-- Covered by `intelligent-scheduling.engine.spec.ts` (`keeps completed auto segments as busy and only deletes still-open ones`).
+- Non-recurring remaining work is estimated minutes minus those ended minutes; if nothing remains, no new slot is created.
+- A TODO whose `deadline` is already past is skipped (no new slot, no “Cannot fit before deadline” error).
+- If status becomes `completed` while a replan is running, no new slot is written.
+- Covered by `intelligent-scheduling.engine.spec.ts` (`keeps completed auto segments as busy and only deletes still-open ones`, `places only remaining minutes when part of a split already ended`, `skips a TODO whose From/Until window already ended instead of erroring`, `does not write a slot if the task was completed during replan`).
+
+## T56 — Undo last Generate restores still-open slots only
+
+**Given**
+- A completed Calendar Generate job with `undoSnapshotJson`.
+
+**When**
+- `POST /schedule-jobs/undo`.
+
+**Then**
+- Still-open auto rows are replaced with the snapshot’s still-open rows.
+- Fully ended rows are not deleted or rewritten.
+- The snapshot cannot be undone twice.
+- Covered by `schedule-job.service.spec.ts` (`restores still-open snapshot segments and leaves ended ones alone`).
 
 ## T54 — Clear keeps finished blocks, including earlier today
 

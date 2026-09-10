@@ -111,3 +111,124 @@ describe('ScheduleJobService.wipeAppCalendarEventsInRange', () => {
     expect(googleCalendarService.getEvents).not.toHaveBeenCalled();
   });
 });
+
+describe('ScheduleJobService.undoLastGenerate', () => {
+  const userId = 'user-1';
+  const snapshot = {
+    version: 1,
+    tasks: [
+      {
+        id: 't1',
+        scheduledStartTime: '2026-04-21T09:00:00.000Z',
+        scheduledEndTime: '2026-04-21T10:00:00.000Z',
+        googleEventId: 'old-ev',
+        googleEventCalendarId: 'app',
+      },
+    ],
+    segments: [
+      {
+        id: 'past-seg',
+        taskId: 't1',
+        scheduledStartTime: '2026-04-20T09:00:00.000Z',
+        scheduledEndTime: '2026-04-20T10:00:00.000Z',
+        googleEventId: 'past-ev',
+        googleEventCalendarId: 'app',
+      },
+      {
+        id: 'open-seg',
+        taskId: 't1',
+        scheduledStartTime: '2026-04-21T09:00:00.000Z',
+        scheduledEndTime: '2026-04-21T10:00:00.000Z',
+        googleEventId: 'old-ev',
+        googleEventCalendarId: 'app',
+      },
+    ],
+  };
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('restores still-open snapshot segments and leaves ended ones alone', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-04-20T15:00:00.000Z'));
+
+    const job = {
+      id: 'job-1',
+      userId,
+      status: 'done',
+      payloadJson: JSON.stringify({ type: 'generate' }),
+      undoSnapshotJson: JSON.stringify(snapshot),
+      undoConsumedAt: null,
+      updatedAt: new Date(),
+    };
+    const task = {
+      id: 't1',
+      scheduledStartTime: new Date('2026-04-21T11:00:00.000Z'),
+      scheduledEndTime: new Date('2026-04-21T12:00:00.000Z'),
+      googleEventId: 'new-ev',
+      googleEventCalendarId: 'app',
+    };
+    const deleteQb = {
+      delete: jest.fn().mockReturnThis(),
+      from: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue({}),
+    };
+    const jobRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+      find: jest.fn().mockResolvedValue([job]),
+      save: jest.fn(async (row: unknown) => row),
+    };
+    const scheduledRepo = {
+      createQueryBuilder: jest.fn(() => deleteQb),
+      find: jest.fn().mockResolvedValue([]),
+      create: jest.fn((value: unknown) => value),
+      save: jest.fn(async (row: unknown) => row),
+    };
+    const taskRepo = {
+      find: jest.fn().mockResolvedValue([task]),
+      save: jest.fn(async (row: unknown) => row),
+    };
+    const service = new ScheduleJobService(
+      jobRepo as never,
+      taskRepo as never,
+      scheduledRepo as never,
+      {
+        captureAutoSegmentsSnapshot: jest.fn().mockResolvedValue([]),
+      } as never,
+      { checkConnection: jest.fn().mockResolvedValue({ connected: false }) } as never,
+    );
+
+    const result = await service.undoLastGenerate(userId);
+
+    expect(result).toEqual({ jobId: 'job-1', status: 'undone' });
+    expect(deleteQb.andWhere).toHaveBeenCalledWith(
+      'scheduledEndTime > :now',
+      expect.objectContaining({ now: expect.any(Date) }),
+    );
+    expect(scheduledRepo.save).toHaveBeenCalledTimes(1);
+    const restored = scheduledRepo.save.mock.calls[0][0] as { id: string };
+    expect(restored.id).toBe('open-seg');
+    expect(task.googleEventId).toBe('old-ev');
+    expect(job.undoConsumedAt).toBeInstanceOf(Date);
+  });
+
+  it('rejects when there is no generate snapshot', async () => {
+    const service = new ScheduleJobService(
+      {
+        findOne: jest.fn().mockResolvedValue(null),
+        find: jest.fn().mockResolvedValue([]),
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(service.undoLastGenerate(userId)).rejects.toThrow(
+      'Nothing to undo',
+    );
+  });
+});

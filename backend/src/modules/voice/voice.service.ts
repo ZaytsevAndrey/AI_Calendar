@@ -83,6 +83,7 @@ export class VoiceService {
       }),
     ]);
 
+    // Settings IANA first so "tomorrow" matches the calendar, not the browser.
     const timeZone = resolveIanaTimeZone(settings.timeZone || dto.timeZone);
     const nowIso = dto.clientNowIso?.trim() || new Date().toISOString();
     const alreadyClarified = Boolean(dto.clarificationAnswer?.trim());

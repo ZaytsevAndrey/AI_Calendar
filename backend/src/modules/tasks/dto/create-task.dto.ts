@@ -141,7 +141,8 @@ export class CreateTaskDto {
 
   @ApiProperty({
     example: 'Asia/Nicosia',
-    description: 'IANA time zone for From/Until calendar days. Optional; also stored on the task.',
+    description:
+      'IANA time zone for From/Until calendar days. Optional; defaults to the user Settings zone.',
     required: false,
   })
   @IsString()

@@ -16,4 +16,4 @@ Single source of truth for the project. Keep these files in sync with code chang
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** September 2026 (habit tracker; keep-past generate/clear, gray app events, async replan + generate timeline; settings IANA time zone; From/Until, voice + PWA).
+**Last documentation update:** September 2026 (voice create from name; past-deadline skip; Generate undo; Done vs silent replan; E2E parked on the backlog).

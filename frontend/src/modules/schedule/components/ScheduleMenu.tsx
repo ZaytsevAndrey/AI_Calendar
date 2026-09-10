@@ -5,11 +5,23 @@ type Props = {
     busy: boolean;
     isGenerating: boolean;
     isClearing: boolean;
+    isUndoing: boolean;
+    canUndo: boolean;
     onGenerate: () => void;
+    onUndo: () => void;
     onClear: () => void;
 };
 
-export function ScheduleMenu({ busy, isGenerating, isClearing, onGenerate, onClear }: Props) {
+export function ScheduleMenu({
+    busy,
+    isGenerating,
+    isClearing,
+    isUndoing,
+    canUndo,
+    onGenerate,
+    onUndo,
+    onClear,
+}: Props) {
     const [open, setOpen] = useState(false);
     const rootRef = useRef<HTMLDivElement>(null);
 
@@ -51,6 +63,18 @@ export function ScheduleMenu({ busy, isGenerating, isClearing, onGenerate, onCle
                         }}
                     >
                         {isGenerating ? 'Generating…' : 'Generate schedule'}
+                    </button>
+                    <button
+                        type="button"
+                        role="menuitem"
+                        className="flex min-h-[44px] w-full items-center px-3 text-left text-sm text-ide-text hover:bg-ide-surface disabled:opacity-50"
+                        disabled={busy || !canUndo}
+                        onClick={() => {
+                            setOpen(false);
+                            onUndo();
+                        }}
+                    >
+                        {isUndoing ? 'Undoing…' : 'Undo last generate'}
                     </button>
                     <button
                         type="button"

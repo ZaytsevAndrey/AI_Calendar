@@ -38,6 +38,7 @@ describe('ScheduleService.clearSchedule', () => {
       remove: jest.fn().mockResolvedValue(undefined),
     };
     const wipeAppCalendarEventsInRange = jest.fn().mockResolvedValue(1);
+    const invalidateGenerateUndo = jest.fn().mockResolvedValue(undefined);
     const service = new ScheduleService(
       scheduledTaskRepository as never,
       {} as never,
@@ -47,13 +48,14 @@ describe('ScheduleService.clearSchedule', () => {
           timeZone: 'UTC',
         }),
       } as never,
-      { wipeAppCalendarEventsInRange } as never,
+      { wipeAppCalendarEventsInRange, invalidateGenerateUndo } as never,
     );
 
     const result = await service.clearSchedule(userId);
 
     expect(scheduledTaskRepository.remove).toHaveBeenCalledWith([openRow]);
     expect(wipeAppCalendarEventsInRange).toHaveBeenCalledTimes(1);
+    expect(invalidateGenerateUndo).toHaveBeenCalledWith(userId);
     const [, start, , opts] = wipeAppCalendarEventsInRange.mock.calls[0];
     expect(start.toISOString()).toBe('2026-04-20T12:00:00.000Z');
     expect(opts.keepEventIds.has('keep-master')).toBe(true);

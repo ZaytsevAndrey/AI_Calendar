@@ -2,7 +2,7 @@
 
 ## Purpose
 
-**AI Calendar Assistant** is a web app for time planning with **day phases**, **tasks** (priority, deadline, fixed / flexible / recurring settings), personal **sleep/wake** settings, and **Google Calendar** integration. **Intelligent scheduling** places movable tasks into the selected phase window, respects anchors (manual slots, fixed blocks, external Google events), supports splitting and a **job queue** with **diff**. The **Calendar** page runs generation (with a live stage timeline) and can clear still-open app-generated slots; fully ended app events stay and show in gray.
+**AI Calendar Assistant** is a web app for time planning with **day phases**, **tasks** (priority, deadline, fixed / flexible / recurring settings), personal **sleep/wake** settings, and **Google Calendar** integration. **Intelligent scheduling** places movable tasks into the selected phase window, respects anchors (manual slots, fixed blocks, external Google events), supports splitting and a **job queue** with **diff**. The **Calendar** page runs generation (with a live stage timeline), can **undo the last Generate**, and can clear still-open app-generated slots; fully ended app events stay and show in gray.
 
 ## Monorepo layout
 
@@ -40,11 +40,11 @@ AI_Calendar/
 - Registration / login, refresh, password reset, email verification (see [integrations](integrations.md) and `auth` code)  
 - **User settings:** wake/sleep, weekends, Google Calendar flags, `allowSplitScheduling` / `minSplitMinutes`, IANA **`timeZone`** (filled once on first login, editable in Settings; source of truth for the scheduling engine)  
 - **Phases:** per-user CRUD (JWT), overlap validation, default **Sleep** + **Focus hours** from wake/sleep when the user has no phases, phase calendar UI  
-- **Tasks:** CRUD, statuses, priorities, optional From/Until window (`earliestStartTime` + `deadline` + `scheduleTimeZone`), one optional phase, split / recurring flags, optional `recurrenceWeekDays` / `eligibleWeekDays`; **fixed** blocks require scheduled start/end; movable tasks may set a preferred start. The create form is a single page with **Flexible / Fixed / Recurring** presets. Calendar day-click prefills that local day’s From/Until. Success/error **toasts** show the task name and scheduled time. **Voice:** mic on Tasks/Calendar records audio, Groq Whisper transcribes (uk/en/ru auto), an LLM maps speech to a task. High confidence creates immediately; medium prefills the form; gaps ask one follow-up question.  
+- **Tasks:** CRUD, statuses, priorities, optional From/Until window (`earliestStartTime` + `deadline` + `scheduleTimeZone`), one optional phase, split / recurring flags, optional `recurrenceWeekDays` / `eligibleWeekDays`; **fixed** blocks require scheduled start/end; movable tasks may set a preferred start. The create form is a single page with **Flexible / Fixed / Recurring** presets. Calendar day-click prefills that civil day’s From/Until in Settings IANA `timeZone`. Success/error **toasts** show the task name and scheduled time. **Voice:** mic on Tasks/Calendar records audio, Groq Whisper transcribes (uk/en/ru auto), an LLM maps speech to a task using Settings IANA `timeZone`. Immediate create when a name exists (defaults fill the rest); only an unintelligible / missing name asks one follow-up question.  
 - **Habits:** per-user yes/no daily check-ins (`/habits`), independent of the scheduling engine and Google Calendar. Check-in is allowed for **today** and **yesterday** in settings IANA `timeZone`. Current streak, +1 point per successful day, and +1 bonus every 7 consecutive days.  
 - **PWA:** installable (manifest + service worker + icons). Android Chrome shows an install prompt; iOS uses Share → Add to Home Screen.  
 - **Google Calendar:** OAuth, events, connect / disconnect; replan and **clear schedule** create/update/delete linked Google events when `googleEventId` is set  
-- **Schedule:** scheduled tasks, **POST `/schedule/generate`** (async job + poll + stage timeline), **DELETE `/schedule`** (still-open app-generated slots in the Settings horizon; finished blocks stay); **Calendar** page (`/calendar`) has Generate / Clear  
+- **Schedule:** scheduled tasks, **POST `/schedule/generate`** (async job + poll + stage timeline), **POST `/schedule-jobs/undo`**, **DELETE `/schedule`** (still-open app-generated slots in the Settings horizon; finished blocks stay); **Calendar** page (`/calendar`) has Generate / Undo last generate / Clear, plus a **Now / Next / Unscheduled** strip (today in Settings IANA `timeZone`) with one-tap Done on non-recurring app tasks and a compact habit check-in row. Unscheduled is today’s inbox without a timed slot. Done sets `completed` and must not create a calendar block; a silent replan after create will not place a task that is already completed.  
 
 Implementation notes:
 
@@ -55,11 +55,11 @@ Implementation notes:
 
 Core logic lives in `backend/src/modules/schedule/intelligent-scheduling.engine.ts` and runs inside **schedule jobs** (`ScheduleJobService` / processor). Summary:
 
-- Movable tasks: TODO, not fixed external, not `eventType` **fixed**; ordered by **priority** then **FIFO** (`createdAt` ascending).  
+- Movable tasks: TODO, not fixed external, not `eventType` **fixed**; ordered by **priority** then **FIFO** (`createdAt` ascending). Non-recurring remaining work = estimated minutes minus fully ended auto slots; if nothing remains, Generate does not place the task again. A From/Until or deadline that is already over is skipped (no error), not forced into a new day.  
 - **Time zone:** `user_settings.timeZone` (IANA). Wake/sleep, phases, weekdays, and the planning horizon are civil clocks in that zone. Empty/invalid → `UTC`. Changing the setting does not rewrite already stored UTC instants.  
 - **Phase window:** one optional phase, intersected with wake/sleep and weekend rules. Recurring days = task `recurrenceWeekDays` ∩ phase `weekDays`.  
 - **Anchors:** non-auto-generated scheduled rows, fixed tasks, in-progress auto segments, **fully ended** auto-generated slots (kept across replan/clear), and fixed-external tasks block time.  
-- **Replan / Clear:** only still-open auto slots (`end > now`) are removed or rewritten; finished app events stay and show gray on Calendar. Recurring Google series are split (`UNTIL` + new series). Task CRUD enqueues replan and returns without waiting for Google. Generate jobs expose `progressStage` for the Calendar timeline.  
+- **Replan / Clear / Undo:** only still-open auto slots (`end > now`) are removed or rewritten; finished app events stay and show gray on Calendar. Recurring Google series are split (`UNTIL` + new series). Task CRUD enqueues replan and returns without waiting for Google. Calendar **Generate** can be undone once (local + Google); Clear cannot. Generate jobs expose `progressStage` for the Calendar timeline.  
 - **Splitting** when the task and user settings allow it (`allowSplit` ∧ `allowSplitScheduling`, `minSplitMinutes`, horizon extensions, intra-priority displacement of splittable peers).  
 - Output: persisted `scheduled_tasks` (auto-generated), task-level scheduled range, job **diff** / warnings / errors.  
 

@@ -182,6 +182,26 @@ export const ScheduleApi = {
     return alertsFromJob(job, maxAgeHours);
   },
 
+  getUndoAvailability: async (): Promise<{
+    available: boolean;
+    jobId: string | null;
+    generatedAt: string | null;
+  }> => {
+    const { data } = await axios.get<{
+      available: boolean;
+      jobId: string | null;
+      generatedAt: string | null;
+    }>('/schedule-jobs/undo');
+    return data;
+  },
+
+  undoLastGenerate: async (): Promise<{ jobId: string; status: string }> => {
+    const { data } = await axios.post<{ jobId: string; status: string }>(
+      '/schedule-jobs/undo',
+    );
+    return data;
+  },
+
   clearSchedule: async (
     _startDate?: string,
     _endDate?: string,

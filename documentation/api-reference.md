@@ -63,7 +63,7 @@ JWT. Free Groq backend (`GROQ_API_KEY`). Audio is **not** stored.
 | POST | `/voice/transcribe` | Body `{ audioBase64, mimeType? }` → `{ transcript, language? }` (Whisper, auto language) |
 | POST | `/voice/parse-task` | Body `{ transcript, timeZone, clientNowIso?, previousTranscript?, clarificationAnswer? }` → `{ understanding, clarifyingQuestion, task }` |
 
-`understanding`: `complete` (client creates immediately), `sufficient` (prefill form), `needs_clarification` (one follow-up question). After a clarification reply the API will not ask a second question. Calendar-day parsing uses **settings `timeZone`** when set, otherwise the request `timeZone`, otherwise `UTC`.
+`understanding`: `complete` (client creates immediately when a name exists; defaults fill the rest), `sufficient` (treated as complete if a name exists), `needs_clarification` (no usable name — one follow-up question). After a clarification reply the API will not ask a second question. The client sends Settings IANA `timeZone`. Calendar-day parsing uses **settings `timeZone`** when set, otherwise the request `timeZone`, otherwise `UTC`.
 
 ## Habits — `/habits`
 
@@ -106,8 +106,8 @@ Protected with JWT (`JwtAuthGuard`).
 | POST | `/schedule` | Create a scheduled slot |
 | PATCH | `/schedule/:id` | Change times |
 | DELETE | `/schedule/:id` | Delete |
-| POST | `/schedule/generate` | Enqueues intelligent replan for range; returns `{ jobId, status, message }` — poll `GET /schedule-jobs/:id`, then refresh Google events on Calendar |
-| DELETE | `/schedule` | Clear still-open app-generated local slots through the Settings horizon, and leftover upcoming events on the app Google calendar. Fully ended blocks stay. Returns `{ deleted: number }`. |
+| POST | `/schedule/generate` | Enqueues Calendar generate (async); returns `{ jobId, status, message }` — poll `GET /schedule-jobs/:id`. Stores an undo snapshot. |
+| DELETE | `/schedule` | Clear still-open app-generated local slots through the Settings horizon, and leftover upcoming events on the app Google calendar. Fully ended blocks stay. Drops Generate undo. Returns `{ deleted: number }`. |
 
 ## Event phases — `/event-phases`
 
@@ -117,13 +117,15 @@ Links Google Calendar events to phases (separate from CRUD `/phases`). See `even
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/schedule-jobs/replan` | Enqueue full replan (same pipeline as after task changes) |
+| POST | `/schedule-jobs/replan` | Enqueue full replan (same pipeline as after task changes; no undo snapshot) |
+| GET | `/schedule-jobs/undo` | `{ available, jobId, generatedAt }` for the last Calendar Generate |
+| POST | `/schedule-jobs/undo` | Restore still-open slots + Google from that snapshot; finished blocks stay |
 | GET | `/schedule-jobs/latest/done` | Latest completed job + parsed `result` (diff / warnings / errors) |
 | GET | `/schedule-jobs/:id` | Poll job status until `done` or `failed`. While running, `progressStage` is `preparing` / `computing` / `syncing_google` (optional `progressCurrent` / `progressTotal` during Google sync). |
 
 `POST /schedule/generate` enqueues the same pipeline and returns `{ jobId, status, message }` (frontend polls `GET /schedule-jobs/:id`).
 
-Completed jobs expose a parsed `result` with `diff`, `warnings`, and `errors` (see [spec-intelligent-scheduling](spec-intelligent-scheduling.md)). Generate / Clear live on the **Calendar** page. Generate shows a stage timeline while the job runs. A dismissible **Last generate** notes panel lists warnings/errors; a colored toast (title + detail, green / yellow / red by outcome) summarizes the run. Past **app-generated** events stay after replan/clear and render in gray; other Google calendars keep their colors. Task and calendar edits return immediately; replan continues in the background.
+Completed jobs expose a parsed `result` with `diff`, `warnings`, and `errors` (see [spec-intelligent-scheduling](spec-intelligent-scheduling.md)). Generate / Clear live on the **Calendar** page. Generate shows a stage timeline while the job runs. **Undo last generate** restores the previous still-open app blocks (and Google). A dismissible **Last generate** notes panel lists warnings/errors; a colored toast (title + detail, green / yellow / red by outcome) summarizes the run. Past **app-generated** events stay after replan/clear/undo and render in gray; other Google calendars keep their colors. Task and calendar edits return immediately; replan continues in the background.
 
 ## Tasks (scheduling-related fields)
 

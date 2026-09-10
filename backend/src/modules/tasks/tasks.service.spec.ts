@@ -4,6 +4,7 @@ import { BadRequestException, Logger } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { Task } from './entities/task.entity';
 import { Phase } from '../phases/entities/phase.entity';
+import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { ScheduleJobService } from '../schedule/schedule-job.service';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { TaskEventType } from '../scheduling/event-type.enum';
@@ -30,6 +31,9 @@ describe('TasksService', () => {
     findBy: jest.fn(),
     findOne: jest.fn(),
   };
+  const userSettingsRepository = {
+    findOne: jest.fn().mockResolvedValue(null),
+  };
   const scheduleJobService = {
     enqueueReplan: jest.fn(),
     processNextPendingForUser: jest.fn(),
@@ -45,6 +49,7 @@ describe('TasksService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     lastSaved = null;
+    userSettingsRepository.findOne.mockResolvedValue(null);
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TasksService,
@@ -55,6 +60,10 @@ describe('TasksService', () => {
         {
           provide: getRepositoryToken(Phase),
           useValue: phasesRepository,
+        },
+        {
+          provide: getRepositoryToken(UserSettings),
+          useValue: userSettingsRepository,
         },
         {
           provide: ScheduleJobService,
@@ -174,32 +183,23 @@ describe('TasksService', () => {
       log.mockRestore();
     });
 
-    it('stores a form datetime-local From/Until the same way the client ISO-converts it', async () => {
-      const formFrom = '2026-09-08T00:00';
-      const formUntil = '2026-09-08T23:59';
-      const payload = {
+    it('stores a form From/Until encoded in the Settings IANA zone', async () => {
+      await service.create('user-1', {
         name: 'Помити машину',
         eventType: TaskEventType.ADMIN,
         estimatedTimeInMinutes: 30,
-        earliestStartTime: new Date(formFrom).toISOString(),
-        deadline: new Date(formUntil).toISOString(),
+        earliestStartTime: '2026-09-08T00:00:00+03:00',
+        deadline: '2026-09-08T23:59:00+03:00',
         timeZone: 'Asia/Nicosia',
-      };
-
-      // eslint-disable-next-line no-console
-      console.log('form datetime-local → create payload', {
-        formFrom,
-        formUntil,
-        earliestStartTime: payload.earliestStartTime,
-        deadline: payload.deadline,
-        hostTzOffsetMinutes: new Date().getTimezoneOffset(),
-      });
-
-      await service.create('user-1', payload as any);
+      } as any);
 
       const row = createdRow(tasksRepository);
-      expect(row.earliestStartTime).toEqual(new Date(payload.earliestStartTime));
-      expect(row.deadline).toEqual(new Date(payload.deadline));
+      expect((row.earliestStartTime as Date).toISOString()).toBe(
+        '2026-09-07T21:00:00.000Z',
+      );
+      expect((row.deadline as Date).toISOString()).toBe(
+        '2026-09-08T20:59:00.000Z',
+      );
       expect(row.scheduleTimeZone).toBe('Asia/Nicosia');
     });
 
@@ -233,6 +233,21 @@ describe('TasksService', () => {
         hostTzOffsetMinutes: new Date().getTimezoneOffset(),
       });
       expect(stored).toBe(new Date('2026-09-08T23:59').toISOString());
+    });
+
+    it('defaults omitted timeZone to the user Settings IANA zone', async () => {
+      userSettingsRepository.findOne.mockResolvedValue({
+        timeZone: 'Europe/Kyiv',
+      });
+
+      await service.create('user-1', {
+        name: 'Gym',
+        eventType: TaskEventType.ADMIN,
+        estimatedTimeInMinutes: 30,
+      } as any);
+
+      const row = createdRow(tasksRepository);
+      expect(row.scheduleTimeZone).toBe('Europe/Kyiv');
     });
 
     it('does not invent a From when the client omitted it', async () => {

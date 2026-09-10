@@ -229,48 +229,37 @@ export function normalizeVoiceParse(
     task.scheduledEndTime = null;
   }
 
-  const missingCritical: string[] = [];
-  if (!name) missingCritical.push('name');
-  if (eventType === 'fixed' && (!task.scheduledStartTime || !task.scheduledEndTime)) {
-    missingCritical.push('fixed_time');
+  if (
+    task.eventType === 'fixed' &&
+    (!task.scheduledStartTime || !task.scheduledEndTime)
+  ) {
+    task.eventType = 'admin';
+    task.allowSplit = asBool(taskRaw.allowSplit, true);
+    task.scheduledStartTime = null;
+    task.scheduledEndTime = null;
   }
-  if (isRecurring && !recurrencePattern) {
-    missingCritical.push('recurrence');
+
+  if (task.isRecurring && !task.recurrencePattern) {
+    task.isRecurring = false;
+    task.recurrencePattern = null;
+    task.recurrenceWeekDays = [];
   }
 
   let clarifyingQuestion = asNullableString(root.clarifyingQuestion);
 
-  if (ctx.alreadyClarified && understanding === 'needs_clarification') {
-    if (!name) {
-      name = fallbackNameFromTranscript(ctx.transcript);
-      task.name = name;
-    }
-    understanding = name ? 'sufficient' : 'needs_clarification';
-    if (understanding === 'sufficient') clarifyingQuestion = null;
+  if (!name && ctx.alreadyClarified) {
+    name = fallbackNameFromTranscript(ctx.transcript);
+    task.name = name;
   }
 
-  if (missingCritical.length && understanding === 'complete') {
-    understanding = missingCritical.includes('name')
-      ? 'needs_clarification'
-      : ctx.alreadyClarified
-        ? 'sufficient'
-        : 'needs_clarification';
-  }
-
-  if (understanding === 'complete' && !missingCritical.length) {
-    clarifyingQuestion = null;
-  }
-
-  if (understanding === 'needs_clarification' && !clarifyingQuestion) {
-    if (missingCritical.includes('name')) {
+  if (!name) {
+    understanding = 'needs_clarification';
+    if (!clarifyingQuestion) {
       clarifyingQuestion = 'What should I call this task?';
-    } else if (missingCritical.includes('fixed_time')) {
-      clarifyingQuestion = 'What time should this be scheduled?';
-    } else if (missingCritical.includes('recurrence')) {
-      clarifyingQuestion = 'How often should this repeat?';
-    } else {
-      clarifyingQuestion = 'Could you add the missing details for this task?';
     }
+  } else {
+    understanding = 'complete';
+    clarifyingQuestion = null;
   }
 
   if (understanding !== 'needs_clarification' && !task.name) {

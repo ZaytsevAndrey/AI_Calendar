@@ -74,7 +74,7 @@ export const taskFormSchema = z
     if (
       data.earliestStartTime?.trim() &&
       data.deadline?.trim() &&
-      new Date(data.deadline).getTime() <= new Date(data.earliestStartTime).getTime()
+      data.deadline.trim() <= data.earliestStartTime.trim()
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

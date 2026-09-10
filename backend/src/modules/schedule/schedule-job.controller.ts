@@ -30,6 +30,21 @@ export class ScheduleJobController {
     return { jobId: job.id, status: job.status };
   }
 
+  @Get('undo')
+  @ApiOperation({ summary: 'Whether the last Calendar Generate can be undone' })
+  async undoAvailability(@Request() req) {
+    return this.scheduleJobService.getUndoAvailability(req.user.userId);
+  }
+
+  @Post('undo')
+  @ApiOperation({
+    summary:
+      'Restore local slots and Google events from before the last Calendar Generate. Finished blocks stay.',
+  })
+  async undo(@Request() req) {
+    return this.scheduleJobService.undoLastGenerate(req.user.userId);
+  }
+
   @Get('latest/done')
   @ApiOperation({ summary: 'Latest completed job for current user' })
   async latestDone(@Request() req) {

@@ -10,6 +10,7 @@ import {
 } from 'modules/calendar/hooks/useCalendar';
 import EventForm from 'modules/calendar/components/EventForm';
 import { GoogleCalendarEvent } from 'api/google-calendar.api';
+import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import CalendarEvents from 'modules/calendar/components/CalendarEvents';
 import CalendarGrid from 'modules/calendar/components/CalendarGrid';
 import { CalendarDatePicker } from 'modules/calendar/components/CalendarDatePicker';
@@ -18,8 +19,9 @@ import { useScheduleActions } from 'modules/schedule/hooks/useScheduleActions';
 import { GenerateAlertsBanner } from 'modules/schedule/components/GenerateAlertsBanner';
 import { GenerateProgressPanel } from 'modules/schedule/components/GenerateProgressPanel';
 import { ScheduleMenu } from 'modules/schedule/components/ScheduleMenu';
+import { NowStrip } from 'modules/now/components/NowStrip';
+import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
-import { formValuesFromCreatePayload } from 'modules/tasks/task-wizard/buildPayload';
 import { VoiceTaskButton } from 'modules/voice/components/VoiceTaskButton';
 import { VoiceTaskSheet } from 'modules/voice/components/VoiceTaskSheet';
 import { useVoiceTask } from 'modules/voice/hooks/useVoiceTask';
@@ -27,7 +29,8 @@ import { Modal } from '../../ui/Modal';
 import { Spinner } from '../../ui/Spinner';
 import { showErrorToast, showSuccessToast } from '../../utils/toast';
 import { extractApiErrorMessage } from '../../utils/extractApiErrorMessage';
-import { formatDateTimeRange, joinToastDetail, startOfLocalDayIso, endOfLocalDayIso } from '../../utils/formatDate';
+import { formatDateTimeRange, joinToastDetail } from '../../utils/formatDate';
+import { civilDayStartEndIso, ymdFromLocalDate } from '../../utils/ianaDateTime';
 import {
     CalendarView,
     periodLabel,
@@ -54,6 +57,7 @@ const CalendarPage: React.FC = () => {
         eventName: '',
     });
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+    const [undoConfirmOpen, setUndoConfirmOpen] = useState(false);
     const [eventFormDialog, setEventFormDialog] = useState<{
         open: boolean;
         event: GoogleCalendarEvent | null;
@@ -78,14 +82,27 @@ const CalendarPage: React.FC = () => {
     const getEventsQuery = queryMap[currentView];
     const [updateEventTrigger] = useUpdateEvent();
     const [deleteEventTrigger] = useDeleteEvent();
-    const { isGenerating, isClearing, generate, clear, generateAlerts, dismissGenerateAlerts, generateProgress } =
+    const {
+        isGenerating,
+        isClearing,
+        isUndoing,
+        canUndo,
+        generate,
+        undo,
+        clear,
+        generateAlerts,
+        dismissGenerateAlerts,
+        generateProgress,
+    } =
         useScheduleActions();
+    const { data: userSettings } = useGetUserSettingsQuery();
+    const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
     const { openCreate, openCreateFromPrefill, createFromPayload, editorModal } = useEventEditor();
     const voice = useVoiceTask({
         onComplete: createFromPayload,
-        onSufficient: (task) => openCreateFromPrefill(formValuesFromCreatePayload(task)),
+        onSufficient: openCreateFromPrefill,
     });
-    const busy = isGenerating || isClearing;
+    const busy = isGenerating || isClearing || isUndoing;
     const displayEvents = visibleGoogleEvents(getEventsQuery.data?.events || []);
 
     const handleDeleteEvent = (eventId: string, eventName: string) => {
@@ -163,9 +180,10 @@ const CalendarPage: React.FC = () => {
     };
 
     const handleCreateForDate = (day: Date) => {
+        const { start, end } = civilDayStartEndIso(ymdFromLocalDate(day), timeZone);
         openCreate({
-            earliestStartTime: startOfLocalDayIso(day),
-            deadline: endOfLocalDayIso(day),
+            earliestStartTime: start,
+            deadline: end,
         });
     };
 
@@ -177,6 +195,11 @@ const CalendarPage: React.FC = () => {
     const confirmClear = async () => {
         setClearConfirmOpen(false);
         await clear();
+    };
+
+    const confirmUndo = async () => {
+        setUndoConfirmOpen(false);
+        await undo();
     };
 
     return (
@@ -200,11 +223,15 @@ const CalendarPage: React.FC = () => {
                             busy={busy}
                             isGenerating={isGenerating}
                             isClearing={isClearing}
+                            isUndoing={isUndoing}
+                            canUndo={canUndo}
                             onGenerate={runGenerate}
+                            onUndo={() => setUndoConfirmOpen(true)}
                             onClear={() => setClearConfirmOpen(true)}
                         />
                     </div>
                 </div>
+                <NowStrip />
                 {generateProgress ? <GenerateProgressPanel progress={generateProgress} /> : null}
                 {generateAlerts ? (
                     <GenerateAlertsBanner
@@ -360,6 +387,37 @@ const CalendarPage: React.FC = () => {
                 <p className="text-ide-text">
                     Clear upcoming app-generated schedule blocks in the planning horizon?
                     Already finished blocks stay in the calendar. This cannot be undone.
+                </p>
+            </Modal>
+
+            <Modal
+                open={undoConfirmOpen}
+                onClose={() => setUndoConfirmOpen(false)}
+                title="Undo last generate"
+                footer={
+                    <>
+                        <button
+                            type="button"
+                            onClick={() => setUndoConfirmOpen(false)}
+                            disabled={isUndoing}
+                            className="ui-btn-secondary w-full sm:w-auto"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => void confirmUndo()}
+                            disabled={isUndoing}
+                            className="ui-btn-primary w-full sm:w-auto"
+                        >
+                            {isUndoing ? 'Undoing…' : 'Undo generate'}
+                        </button>
+                    </>
+                }
+            >
+                <p className="text-ide-text">
+                    Restore upcoming app-generated blocks from before the last Generate?
+                    Already finished blocks stay. This only undoes Generate, not Clear.
                 </p>
             </Modal>
 

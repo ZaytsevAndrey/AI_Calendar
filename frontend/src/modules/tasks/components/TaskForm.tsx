@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import { CreateTaskDTO, TaskDTO, UpdateTaskDTO } from '../../../api/tasks.api';
 import { PhaseDTO } from '../../../api/phases.api';
+import { resolveIanaTimeZone } from '../../user-settings/ianaTimeZones';
 import { taskFormSchema, type TaskFormValues } from '../task-wizard/schema';
 import { buildTaskPayload, initialFormValues, windowSpansMultipleDays } from '../task-wizard/buildPayload';
 import {
@@ -43,9 +45,11 @@ const TaskForm: React.FC<TaskFormProps> = ({
   onCancel,
   mode,
 }) => {
+  const { data: userSettings } = useGetUserSettingsQuery();
+  const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
   const defaultValues = useMemo(
-    () => initialFormValues(initialData, createDefaults),
-    [initialData, createDefaults],
+    () => initialFormValues(initialData, createDefaults, timeZone),
+    [initialData, createDefaults, timeZone],
   );
   const [showDescription, setShowDescription] = useState(
     !!initialData?.description || !!createDefaults?.formPrefill?.description,
@@ -65,9 +69,9 @@ const TaskForm: React.FC<TaskFormProps> = ({
   });
 
   useEffect(() => {
-    reset(initialFormValues(initialData, createDefaults));
+    reset(initialFormValues(initialData, createDefaults, timeZone));
     setShowDescription(!!initialData?.description || !!createDefaults?.formPrefill?.description);
-  }, [initialData, createDefaults, reset]);
+  }, [initialData, createDefaults, reset, timeZone]);
 
   const isFixed = useWatch({ control, name: 'isFixed' });
   const isRecurring = useWatch({ control, name: 'isRecurring' });
@@ -81,12 +85,16 @@ const TaskForm: React.FC<TaskFormProps> = ({
   const showWindowDays =
     !isFixed && !isRecurring && windowSpansMultipleDays(earliestStartTime, deadline);
 
+  const wasFixed = useRef(!!isFixed);
   useEffect(() => {
     if (isFixed) {
       setValue('allowSplit', false);
       setValue('isRecurring', false);
       setValue('preferredStartTime', '');
+    } else if (wasFixed.current) {
+      setValue('allowSplit', true);
     }
+    wasFixed.current = !!isFixed;
   }, [isFixed, setValue]);
 
   useEffect(() => {
@@ -148,7 +156,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit((data) => onSubmit(buildTaskPayload(data)))} className="task-form">
+    <form onSubmit={handleSubmit((data) => onSubmit(buildTaskPayload(data, timeZone)))} className="task-form">
       <div className="space-y-3">
         <div className="inline-flex rounded-lg border border-ide-border p-0.5">
           {TASK_PRESETS.map((preset) => {
@@ -524,7 +532,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
               </div>
             </div>
             <p className="text-xs text-ide-muted">
-              Optional. One day, a range, or empty for any time.
+              Optional. One day, a range, or empty for any time. Times use {timeZone}.
             </p>
 
             {showWindowDays ? (
@@ -553,14 +561,19 @@ const TaskForm: React.FC<TaskFormProps> = ({
 
         {isFixed ? (
           <div>
-            <label htmlFor="task-form-deadline" className={lbl}>
+            <label htmlFor="task-form-fixed-deadline" className={lbl}>
               Deadline
             </label>
             <Controller
               name="deadline"
               control={control}
               render={({ field }) => (
-                <input {...field} id="task-form-deadline" type="datetime-local" className={inp} />
+                <input
+                  {...field}
+                  id="task-form-fixed-deadline"
+                  type="datetime-local"
+                  className={inp}
+                />
               )}
             />
           </div>

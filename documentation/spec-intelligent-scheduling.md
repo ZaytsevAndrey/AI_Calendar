@@ -98,7 +98,7 @@ Legacy `eventType` strings (`daily_routine`, `learning`, …) may still exist in
 
 Items are processed in **priority order** (highest first). For each item:
 
-1. Try to place the **full** duration in the **nearest** valid slot inside the 30-day horizon (respect phase window, anchors, wake/sleep).  
+1. Try to place the **remaining** duration (estimated minutes minus fully ended auto slots for non-recurring tasks) in the **nearest** valid slot inside the 30-day horizon (respect phase window, anchors, wake/sleep). If remaining work is below 5 minutes, skip — do not schedule the same past block again.  
 2. If not enough contiguous time and the item **allows split**: split into chunks ≥ `minSplitMinutes`, still prefer **earliest** completion inside the horizon.  
 3. If still no fit: within the **same priority band**, try to **split other already-placed items** that are **splittable/movable** to free space for this item (user-approved “combination”: priority first, then intra-priority splitting).  
 4. If still no fit inside the horizon: **schedule beyond the horizon** (earliest feasible slot after day 30) and surface a clear UI flag: “Placed outside your 30-day window—increase priority, free time, or adjust phases/deadline.”
@@ -108,7 +108,7 @@ Items are processed in **priority order** (highest first). For each item:
 ### 4.4 Deadline / schedule window
 
 - If `earliestStartTime` is set: hard constraint—do not start any segment before that **instant**. Day-only From (00:00 in **settings `timeZone`**) snaps to wake that local day so a `+03:00` midnight is not treated as “this evening” on a UTC host. Wake/sleep from Postgres (`HH:mm:ss`) are normalized to `HH:mm` before that snap. A clock From such as 00:01 is left as an instant and is not snapped.
-- If `deadline` is set: hard constraint—**all segments must end by deadline**. If impossible: **do not silently fail**—return structured error / UI message: e.g. “Cannot fit before deadline; raise priority, extend deadline, enable split, or remove other work.”
+- If `deadline` is set: hard constraint—**all segments must end by deadline**. If the deadline is **already in the past**, skip the task (no new slot, no error). If the deadline is still ahead and fit is impossible: **do not silently fail**—return structured error / UI message: e.g. “Cannot fit before deadline; raise priority, extend deadline, enable split, or remove other work.”
 - If `eligibleWeekDays` is set on a non-recurring task: only those weekdays inside the window are eligible.
 
 ### 4.5 Phase and preferred start
@@ -120,7 +120,7 @@ One optional phase. If a movable task has preferred start/end stored on the task
 ## 5. Triggers and UX
 
 - **On create** (and on relevant **update**): enqueue **replan job** and return immediately; processing continues in the background (HTTP does not wait for Google sync). The Calendar page shows a **stage timeline** while Generate runs (`preparing` → `computing` → `syncing_google`).  
-- **Generate / Clear** keep **fully ended** app-generated slots (`scheduledEndTime <= now`), including earlier today. Only still-open blocks are rewritten or cleared. Past app-calendar events render **gray** in the UI; other Google calendars keep their colors.  
+- **Generate / Clear / Undo** keep **fully ended** app-generated slots (`scheduledEndTime <= now`), including earlier today. Only still-open blocks are rewritten, cleared, or restored. Past app-calendar events render **gray** in the UI; other Google calendars keep their colors. Calendar **Undo last generate** reverses the last Generate snapshot.  
 - Optional later: manual **“Replan now”** button (same pipeline).
 
 ### 5.1 Diff
@@ -130,9 +130,9 @@ One optional phase. If a movable task has preferred start/end stored on the task
 
 ### 5.2 Undo
 
-- **Single-level undo** for MVP: last completed replan operation (optional stack later).  
-- Persist **snapshot** before apply: scheduled segments + Google event ids/times for affected **our** items.  
-- Undo restores **DB** and **pushes updates to Google** for those items (delete moved instances / restore previous times per integration rules).
+- **Single-level undo** of Calendar **Generate** only (not silent replan after task save, not Clear).  
+- Persist **snapshot** on the generate job before apply: scheduled segments + task Google ids/times. A new Generate or Clear consumes the previous snapshot.  
+- Undo restores **still-open** local slots and **pushes updates to Google**. Fully ended blocks stay.
 
 ---
 
@@ -170,6 +170,7 @@ One optional phase. If a movable task has preferred start/end stored on the task
 - `POST /items` (or extend `POST /tasks`) — creates item, enqueues job, returns `202` + `jobId` or sync wait with timeout (prefer async + poll `GET /schedule-jobs/:id`).  
 - `GET /schedule-jobs/:id` — status + `diff` when done.  
 - `DELETE /schedule` — clear still-open app-generated slots in the Settings planning horizon (`recurringScheduleHorizonDays`); fully ended blocks stay.  
+- `GET /schedule-jobs/undo` / `POST /schedule-jobs/undo` — last Calendar Generate snapshot.  
 - Deprecate or align legacy `POST /schedule/generate` with new pipeline (see §10).
 
 ---

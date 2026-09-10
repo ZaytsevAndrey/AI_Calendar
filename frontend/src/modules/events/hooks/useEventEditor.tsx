@@ -4,9 +4,11 @@ import {
   useUpdateEventMutation,
 } from 'api/eventTasksApi';
 import { useGetAllPhasesQuery } from 'api/phasesApi';
+import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import { CreateTaskDTO, TaskDTO, UpdateTaskDTO } from 'api/tasks.api';
 import TaskForm from 'modules/tasks/components/TaskForm';
-import type { TaskFormValues } from 'modules/tasks/task-wizard/schema';
+import { formValuesFromCreatePayload } from 'modules/tasks/task-wizard/buildPayload';
+import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { Modal } from '../../../ui/Modal';
 import { showErrorToast, showSuccessToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
@@ -15,14 +17,16 @@ import { describeTaskToastDetail } from '../../../utils/formatDate';
 export type CreateTaskDefaults = {
   deadline?: string;
   earliestStartTime?: string;
-  formPrefill?: TaskFormValues;
 };
 
 export function useEventEditor() {
   const [open, setOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<TaskDTO | null>(null);
   const [createDefaults, setCreateDefaults] = useState<CreateTaskDefaults | undefined>();
+  const [formPrefill, setFormPrefill] = useState<ReturnType<typeof formValuesFromCreatePayload> | undefined>();
   const { data: phases = [] } = useGetAllPhasesQuery();
+  const { data: userSettings } = useGetUserSettingsQuery();
+  const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
   const [createEvent] = useCreateEventMutation();
   const [updateEvent] = useUpdateEventMutation();
 
@@ -30,20 +34,27 @@ export function useEventEditor() {
     setOpen(false);
     setEditingEvent(null);
     setCreateDefaults(undefined);
+    setFormPrefill(undefined);
   };
 
   const openCreate = (defaults?: CreateTaskDefaults) => {
     setEditingEvent(null);
     setCreateDefaults(defaults);
+    setFormPrefill(undefined);
     setOpen(true);
   };
 
-  const openCreateFromPrefill = (formPrefill: TaskFormValues) => {
-    openCreate({ formPrefill });
+  const openCreateFromPrefill = (payload: CreateTaskDTO) => {
+    setEditingEvent(null);
+    setCreateDefaults(undefined);
+    setFormPrefill(formValuesFromCreatePayload(payload, timeZone));
+    setOpen(true);
   };
 
   const openEdit = (event: TaskDTO) => {
     setEditingEvent(event);
+    setCreateDefaults(undefined);
+    setFormPrefill(undefined);
     setOpen(true);
   };
 
@@ -53,7 +64,7 @@ export function useEventEditor() {
       delete (cleanData as { phaseId?: string }).phaseId;
     }
     if (!cleanData.timeZone) {
-      cleanData.timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      cleanData.timeZone = timeZone;
     }
     return cleanData;
   };
@@ -101,12 +112,16 @@ export function useEventEditor() {
         <TaskForm
           key={
             editingEvent?.id ??
-            createDefaults?.formPrefill?.name ??
+            formPrefill?.name ??
             createDefaults?.deadline ??
             'new'
           }
           initialData={editingEvent || undefined}
-          createDefaults={createDefaults}
+          createDefaults={
+            formPrefill
+              ? { formPrefill }
+              : createDefaults
+          }
           phases={phases}
           onSubmit={submit}
           isSubmitting={false}

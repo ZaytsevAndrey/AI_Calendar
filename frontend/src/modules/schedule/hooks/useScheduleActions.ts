@@ -8,6 +8,7 @@ import {
   SchedulingAlerts,
 } from 'api/schedule.api';
 import { eventsApi } from 'api/eventsApi';
+import { eventTasksApi } from 'api/eventTasksApi';
 import { showErrorToast, showInfoToast, showSuccessToast, showWarningToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
 
@@ -55,11 +56,24 @@ export function useScheduleActions() {
   const dispatch = useDispatch();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [isUndoing, setIsUndoing] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
   const [generateAlerts, setGenerateAlerts] = useState<SchedulingAlerts | null>(null);
   const [generateProgress, setGenerateProgress] = useState<GenerateProgress | null>(null);
 
   const refreshCalendarEvents = () => {
     dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+    dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));
+  };
+
+  const refreshUndoAvailability = () => {
+    ScheduleApi.getUndoAvailability()
+      .then((state) => {
+        setCanUndo(Boolean(state.available));
+      })
+      .catch(() => {
+        setCanUndo(false);
+      });
   };
 
   useEffect(() => {
@@ -75,6 +89,13 @@ export function useScheduleActions() {
       })
       .catch(() => {
         if (!cancelled) setGenerateAlerts(null);
+      });
+    ScheduleApi.getUndoAvailability()
+      .then((state) => {
+        if (!cancelled) setCanUndo(Boolean(state.available));
+      })
+      .catch(() => {
+        if (!cancelled) setCanUndo(false);
       });
     return () => {
       cancelled = true;
@@ -153,6 +174,27 @@ export function useScheduleActions() {
     } finally {
       setIsGenerating(false);
       setGenerateProgress(null);
+      refreshUndoAvailability();
+    }
+  };
+
+  const undo = async () => {
+    setIsUndoing(true);
+    try {
+      await ScheduleApi.undoLastGenerate();
+      showSuccessToast({
+        title: 'Last generate undone',
+        detail: 'Upcoming app blocks were restored. Finished blocks stayed.',
+      });
+      refreshCalendarEvents();
+    } catch (e) {
+      showErrorToast({
+        title: 'Could not undo generate',
+        detail: extractApiErrorMessage(e),
+      });
+    } finally {
+      setIsUndoing(false);
+      refreshUndoAvailability();
     }
   };
 
@@ -179,13 +221,17 @@ export function useScheduleActions() {
       });
     } finally {
       setIsClearing(false);
+      refreshUndoAvailability();
     }
   };
 
   return {
     isGenerating,
     isClearing,
+    isUndoing,
+    canUndo,
     generate,
+    undo,
     clear,
     generateAlerts,
     dismissGenerateAlerts,

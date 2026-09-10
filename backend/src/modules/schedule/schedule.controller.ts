@@ -124,7 +124,7 @@ export class ScheduleController {
     @Request() req,
     @Body() _generateDto: GenerateScheduleDto,
   ): Promise<{ jobId: string; status: string; message: string }> {
-    const job = await this.scheduleJobService.enqueueReplan(req.user.userId);
+    const job = await this.scheduleJobService.enqueueGenerate(req.user.userId);
     return {
       jobId: job.id,
       status: job.status,

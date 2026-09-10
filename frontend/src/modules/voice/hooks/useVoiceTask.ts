@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react';
 import { VoiceApi, type VoiceParsedTask } from 'api/voice.api';
+import { useGetUserSettingsQuery } from 'api/userSettingsApi';
+import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 import { useAudioRecorder } from './useAudioRecorder';
 
@@ -18,6 +20,9 @@ type UseVoiceTaskOptions = {
 
 export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) {
   const { start, stop, cancel, error: recorderError } = useAudioRecorder();
+  const { data: userSettings } = useGetUserSettingsQuery();
+  // Same IANA as the task form / engine, not the browser zone.
+  const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
   const [isOpen, setIsOpen] = useState(false);
   const [stage, setStage] = useState<VoiceStage>('idle');
   const [transcript, setTranscript] = useState('');
@@ -49,7 +54,7 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
       setStage('working');
       const result = await VoiceApi.parseTask({
         transcript: clarification?.answer ?? text,
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        timeZone,
         clientNowIso: new Date().toISOString(),
         previousTranscript: clarification?.previous,
         clarificationAnswer: clarification?.answer,
@@ -76,7 +81,7 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
       close();
       onSufficient(result.task);
     },
-    [close, onComplete, onSufficient],
+    [close, onComplete, onSufficient, timeZone],
   );
 
   const beginRecording = useCallback(async () => {

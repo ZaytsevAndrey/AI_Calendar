@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useGetEventsQuery, useDeleteEventMutation } from 'api/eventTasksApi';
 import EventList from 'modules/events/components/EventList';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
-import { formValuesFromCreatePayload } from 'modules/tasks/task-wizard/buildPayload';
 import { VoiceTaskButton } from 'modules/voice/components/VoiceTaskButton';
 import { VoiceTaskSheet } from 'modules/voice/components/VoiceTaskSheet';
 import { useVoiceTask } from 'modules/voice/hooks/useVoiceTask';
@@ -28,7 +27,7 @@ const TasksPage: React.FC = () => {
   const { openCreate, openCreateFromPrefill, openEdit, createFromPayload, editorModal } = useEventEditor();
   const voice = useVoiceTask({
     onComplete: createFromPayload,
-    onSufficient: (task) => openCreateFromPrefill(formValuesFromCreatePayload(task)),
+    onSufficient: openCreateFromPrefill,
   });
 
   const sortedEvents = [...events].sort((a, b) => {

@@ -50,7 +50,51 @@ describe('normalizeVoiceParse', () => {
     expect(result.clarifyingQuestion).toBeNull();
   });
 
-  it('downgrades complete fixed tasks without times', () => {
+  it('creates immediately from a name even when duration was not spoken', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'sufficient',
+        clarifyingQuestion: null,
+        task: {
+          name: 'Buy milk',
+          eventType: 'admin',
+          estimatedTimeInMinutes: 30,
+        },
+      },
+      { ...ctx, transcript: 'buy milk tomorrow' },
+    );
+    expect(result.understanding).toBe('complete');
+    expect(result.task?.estimatedTimeInMinutes).toBe(30);
+  });
+
+  it('keeps complete when they spoke a duration in Ukrainian', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: { name: 'Зал', eventType: 'admin', estimatedTimeInMinutes: 45 },
+      },
+      { ...ctx, transcript: 'завтра в зал на 45 хвилин' },
+    );
+    expect(result.understanding).toBe('complete');
+  });
+
+  it('keeps complete for a timed fixed event without a spoken duration', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'Dentist',
+          eventType: 'fixed',
+          scheduledStartTime: '2026-09-11T15:00:00+03:00',
+          scheduledEndTime: '2026-09-11T16:00:00+03:00',
+        },
+      },
+      { ...ctx, transcript: 'dentist tomorrow at 3pm' },
+    );
+    expect(result.understanding).toBe('complete');
+  });
+
+  it('creates a named fixed task without times as a flexible task', () => {
     const result = normalizeVoiceParse(
       {
         understanding: 'complete',
@@ -58,8 +102,9 @@ describe('normalizeVoiceParse', () => {
       },
       ctx,
     );
-    expect(result.understanding).toBe('needs_clarification');
-    expect(result.clarifyingQuestion).toMatch(/time/i);
+    expect(result.understanding).toBe('complete');
+    expect(result.task?.eventType).toBe('admin');
+    expect(result.clarifyingQuestion).toBeNull();
   });
 
   it('drops unknown phase ids', () => {
@@ -95,7 +140,7 @@ describe('normalizeVoiceParse', () => {
       },
       { ...ctx, alreadyClarified: true },
     );
-    expect(result.understanding).toBe('sufficient');
+    expect(result.understanding).toBe('complete');
     expect(result.clarifyingQuestion).toBeNull();
     expect(result.task?.name).toBe('Dentist');
   });
@@ -112,7 +157,7 @@ describe('normalizeVoiceParse', () => {
         transcript: 'call the bank about the card',
       },
     );
-    expect(result.understanding).toBe('sufficient');
+    expect(result.understanding).toBe('complete');
     expect(result.task?.name).toBe('call the bank about the card');
   });
 

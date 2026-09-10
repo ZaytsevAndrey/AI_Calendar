@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { timestampColumnType } from '../../../database/column-types';
 
 export type ScheduleJobStatus = 'pending' | 'running' | 'done' | 'failed';
 
@@ -36,6 +37,13 @@ export class ScheduleJob {
 
   @Column({ type: 'text', nullable: true })
   errorMessage: string | null;
+
+  /** Pre-generate local segments + task Google ids. Generate jobs only. */
+  @Column({ type: 'text', nullable: true })
+  undoSnapshotJson: string | null;
+
+  @Column({ type: timestampColumnType(), nullable: true })
+  undoConsumedAt: Date | null;
 
   @CreateDateColumn()
   createdAt: Date;

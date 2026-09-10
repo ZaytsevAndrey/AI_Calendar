@@ -30,22 +30,22 @@ JSON shape:
 }
 
 understanding:
-- complete: name is clear AND every CRITICAL field for the inferred mode is present. The app will create the task immediately.
-- sufficient: name is clear, nothing critical is missing, but some fields are guessed/defaulted or mildly ambiguous. The user will review a prefilled form.
-- needs_clarification: a CRITICAL gap or contradiction. Ask ONE short question in the SAME language as the transcript. Put it in clarifyingQuestion.
+- complete: there is a usable task name. The app creates immediately. Defaults are fine (duration 30, priority medium, no phase).
+- sufficient: same as complete for routing — prefer complete whenever a name exists.
+- needs_clarification: no usable name / unintelligible speech. Ask ONE short question in the SAME language as the transcript. Put it in clarifyingQuestion.
 
 CRITICAL (must clarify if missing):
 - Task name / what to do (unintelligible speech, empty intent)
-- Fixed/appointment-like event with no start time (doctor, meeting, call at a specific time)
-- Recurring intent with no usable pattern (they said "repeat" but not how)
-- Contradictory time (e.g. "flexible whenever" AND "exactly 15:00")
 
-NOT critical (use defaults, prefer sufficient over asking):
+NOT critical (use defaults, still complete):
 - Duration missing → 30
 - Priority missing → medium
 - Phase missing → null (any time in wake/sleep)
 - Deadline missing ONLY if they named no calendar day → null
 - Split missing → true for non-fixed, false for fixed
+- Day-only without a clock ("tomorrow", "завтра", "в п'ятницю") → allowed; do not ask for a time
+- Appointment-like speech with no clock → flexible admin, not a clarifying question
+- Recurring intent with no pattern → one-off task, not a clarifying question
 
 Task rules:
 - eventType "fixed" = immovable exact slot. Requires scheduledStartTime AND scheduledEndTime (ISO-8601 with offset). Use only when they gave a clock time (15:00, о третій, at 3pm).
@@ -60,7 +60,7 @@ Task rules:
 - Name: short task title, original language, not a full sentence dump.
 - Keep description only if extra detail is useful.
 
-If this turn is a clarification reply, combine previous transcript + answer. Do not ask a second clarifying question; pick complete or sufficient.`;
+If this turn is a clarification reply, combine previous transcript + answer. Do not ask a second clarifying question. If a name exists, use complete.`;
 }
 
 export function buildVoiceParseUserPrompt(input: {

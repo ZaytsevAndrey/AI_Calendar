@@ -4,12 +4,13 @@ import { TasksService } from './tasks.service';
 import { TasksController } from './tasks.controller';
 import { Task } from './entities/task.entity';
 import { Phase } from '../phases/entities/phase.entity';
+import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { ScheduleModule } from '../schedule/schedule.module';
 import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Task, Phase]),
+    TypeOrmModule.forFeature([Task, Phase, UserSettings]),
     forwardRef(() => ScheduleModule),
     GoogleCalendarModule,
   ],

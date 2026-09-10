@@ -8,10 +8,12 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { isValidIanaTimeZone } from '../../common/iana-time-zone';
 import { Task, TaskStatus } from './entities/task.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { Phase } from '../phases/entities/phase.entity';
+import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { TaskEventType, getEventTypeRules } from '../scheduling/event-type.enum';
 import { ScheduleJobService } from '../schedule/schedule-job.service';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
@@ -26,6 +28,8 @@ export class TasksService {
     private tasksRepository: Repository<Task>,
     @InjectRepository(Phase)
     private phasesRepository: Repository<Phase>,
+    @InjectRepository(UserSettings)
+    private userSettingsRepository: Repository<UserSettings>,
     @Inject(forwardRef(() => ScheduleJobService))
     private readonly scheduleJobService: ScheduleJobService,
     private readonly googleCalendarService: GoogleCalendarService,
@@ -115,6 +119,24 @@ export class TasksService {
     }
   }
 
+  private async resolveTaskTimeZone(
+    userId: string,
+    timeZone?: string,
+  ): Promise<string | undefined> {
+    const fromDto = timeZone?.trim();
+    if (fromDto && isValidIanaTimeZone(fromDto)) {
+      return fromDto;
+    }
+    const settings = await this.userSettingsRepository.findOne({
+      where: { userId },
+    });
+    const fromSettings = settings?.timeZone?.trim();
+    if (fromSettings && isValidIanaTimeZone(fromSettings)) {
+      return fromSettings;
+    }
+    return fromDto || undefined;
+  }
+
   private async loadPhasesForUser(
     userId: string,
     phaseIds: string[],
@@ -161,6 +183,8 @@ export class TasksService {
       throw new BadRequestException('Only one phase is supported per task');
     }
 
+    const scheduleTimeZone = await this.resolveTaskTimeZone(userId, timeZone);
+
     const task = this.tasksRepository.create({
       ...rest,
       userId,
@@ -170,7 +194,7 @@ export class TasksService {
       earliestStartTime: earliestStartTime
         ? new Date(earliestStartTime)
         : undefined,
-      scheduleTimeZone: timeZone?.trim() || undefined,
+      scheduleTimeZone,
       scheduledStartTime: scheduledStartTime
         ? new Date(scheduledStartTime)
         : undefined,
@@ -180,7 +204,7 @@ export class TasksService {
     });
 
     this.logger.log(
-      `create task "${createTaskDto.name}": incoming earliest=${earliestStartTime ?? 'null'} deadline=${deadline ?? 'null'} tz=${timeZone ?? 'null'} scheduledStart=${scheduledStartTime ?? 'null'} → stored earliest=${task.earliestStartTime?.toISOString() ?? 'null'} deadline=${task.deadline?.toISOString() ?? 'null'} scheduleTz=${task.scheduleTimeZone ?? 'null'}`,
+      `create task "${createTaskDto.name}": incoming earliest=${earliestStartTime ?? 'null'} deadline=${deadline ?? 'null'} tz=${timeZone ?? 'null'} resolvedTz=${scheduleTimeZone ?? 'null'} scheduledStart=${scheduledStartTime ?? 'null'} → stored earliest=${task.earliestStartTime?.toISOString() ?? 'null'} deadline=${task.deadline?.toISOString() ?? 'null'} scheduleTz=${task.scheduleTimeZone ?? 'null'}`,
     );
 
     if (phaseIds?.length) {
@@ -282,7 +306,8 @@ export class TasksService {
         : null;
     }
     if (timeZone !== undefined) {
-      task.scheduleTimeZone = timeZone?.trim() || null;
+      task.scheduleTimeZone =
+        (await this.resolveTaskTimeZone(userId, timeZone)) ?? null;
     }
     if (scheduledStartTime !== undefined) {
       task.scheduledStartTime = scheduledStartTime

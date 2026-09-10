@@ -237,6 +237,8 @@ export class ScheduleService {
       { now, keepEventIds, untilByEventId },
     );
 
+    await this.scheduleJobService.invalidateGenerateUndo(userId);
+
     return { deleted: googleDeleted || scheduledTasks.length };
   }
 }
