@@ -12,7 +12,8 @@ concurrency:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,7 +21,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version-file: .nvmrc
+          # Playwright 1.63 needs Node >= 20; .nvmrc stays 18.18 for Render.
+          node-version: 22
           cache: npm
 
       - name: Install
@@ -35,13 +37,13 @@ jobs:
           JWT_SECRET: e2e-ci-secret
           JWT_EXPIRES_IN: 1h
 
-      - name: Install Playwright Chromium
-        run: npx playwright install chromium --with-deps
-
-      - name: Playwright P0 UI smoke
-        run: npm run test:e2e:ui
-
       - name: Production build
         run: npm run build
         env:
           REACT_APP_API_BASE_URL: http://localhost:3001
+
+      - name: Install Playwright Chromium
+        run: npm run playwright:install
+
+      - name: Playwright P0 UI smoke
+        run: npm run test:e2e:ui -- p0
