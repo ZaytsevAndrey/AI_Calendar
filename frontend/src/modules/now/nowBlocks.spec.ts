@@ -143,4 +143,11 @@ describe('unscheduledTasksForToday', () => {
     );
     expect(list.map((item) => item.id)).toEqual(['h', 'l']);
   });
+
+  it('excludes inbox unscheduled tasks from the transitional strip', () => {
+    const waiting = task({ id: 'h', name: 'Write brief', priority: 'high' });
+    const inbox = task({ id: 'u', name: 'Buy milk', isUnscheduled: true, priority: 'urgent' });
+    const list = unscheduledTasksForToday([waiting, inbox], new Set(), TODAY, TZ);
+    expect(list.map((item) => item.id)).toEqual(['h']);
+  });
 });

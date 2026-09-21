@@ -82,8 +82,13 @@ export function describeTaskWhen(task: {
     deadline?: string | null;
     estimatedTimeInMinutes?: number | null;
     isRecurring?: boolean;
+    isUnscheduled?: boolean;
     recurrencePattern?: string | null;
 }): string | undefined {
+    if (task.isUnscheduled) {
+        const due = formatDateTime(task.deadline);
+        return joinToastDetail('Unscheduled', due ? `Due ${due}` : undefined);
+    }
     const slot = formatDateTimeRange(task.scheduledStartTime, task.scheduledEndTime);
     let when: string | undefined;
     if (slot) {
@@ -116,6 +121,7 @@ export function describeTaskToastDetail(task: {
     deadline?: string | null;
     estimatedTimeInMinutes?: number | null;
     isRecurring?: boolean;
+    isUnscheduled?: boolean;
     recurrencePattern?: string | null;
 }): string | undefined {
     return joinToastDetail(task.name, describeTaskWhen(task));

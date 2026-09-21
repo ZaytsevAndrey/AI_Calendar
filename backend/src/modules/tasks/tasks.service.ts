@@ -18,6 +18,7 @@ import { TaskEventType, getEventTypeRules } from '../scheduling/event-type.enum'
 import { ScheduleJobService } from '../schedule/schedule-job.service';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { phaseHexToGoogleColorId } from '../google-calendar/phase-hex-to-google-color-id.util';
+import { applyTaskGoogleEventFields } from '../google-calendar/task-google-event-fields.util';
 
 @Injectable()
 export class TasksService {
@@ -37,10 +38,41 @@ export class TasksService {
 
   private canSyncTaskToGoogle(task: Task): boolean {
     return (
+      !task.isUnscheduled &&
       task.eventType === TaskEventType.FIXED &&
       !!task.scheduledStartTime &&
       !!task.scheduledEndTime
     );
+  }
+
+  private shouldReplanAfterSave(
+    previous: { isUnscheduled: boolean } | null,
+    saved: Task,
+  ): boolean {
+    if (saved.isUnscheduled) {
+      return !!previous && !previous.isUnscheduled;
+    }
+    if (saved.eventType === TaskEventType.FIXED) {
+      return false;
+    }
+    return (
+      saved.status !== TaskStatus.COMPLETED &&
+      saved.status !== TaskStatus.CANCELED
+    );
+  }
+
+  private applyUnscheduledConstraints(task: Task): void {
+    if (!task.isUnscheduled) {
+      return;
+    }
+    if (task.eventType === TaskEventType.FIXED) {
+      throw new BadRequestException('Unscheduled tasks cannot be fixed');
+    }
+    task.eventType = TaskEventType.ADMIN;
+    task.isRecurring = false;
+    task.recurrencePattern = null;
+    task.scheduledStartTime = null;
+    task.scheduledEndTime = null;
   }
 
   private resolveTaskPhaseColorHex(task: Task): string | undefined {
@@ -49,7 +81,9 @@ export class TasksService {
   }
 
   private buildGoogleEventPayload(task: Task): Record<string, unknown> {
-    const colorId = phaseHexToGoogleColorId(this.resolveTaskPhaseColorHex(task));
+    const fallbackColorId = phaseHexToGoogleColorId(
+      this.resolveTaskPhaseColorHex(task),
+    );
     const payload: Record<string, unknown> = {
       summary: task.name,
       description: task.description || undefined,
@@ -62,10 +96,7 @@ export class TasksService {
         timeZone: task.scheduleTimeZone || 'UTC',
       },
     };
-    if (colorId) {
-      payload.colorId = colorId;
-    }
-    return payload;
+    return applyTaskGoogleEventFields(payload, task, fallbackColorId);
   }
 
   private async syncTaskWithGoogleCalendar(
@@ -154,9 +185,33 @@ export class TasksService {
     return phases;
   }
 
-  async create(userId: string, createTaskDto: CreateTaskDto): Promise<Task> {
-    const eventType = createTaskDto.eventType ?? TaskEventType.ADMIN;
+  private async attachReplanJob(
+    userId: string,
+    task: Task,
+    shouldReplan: boolean,
+  ): Promise<Task & { jobId: string | null }> {
+    let jobId: string | null = null;
+    if (shouldReplan) {
+      const job = await this.scheduleJobService.enqueueReplan(userId);
+      jobId = job.id;
+      void this.scheduleJobService.processNextPendingForUser(userId);
+    }
+    return Object.assign(task, { jobId });
+  }
+
+  async create(
+    userId: string,
+    createTaskDto: CreateTaskDto,
+  ): Promise<Task & { jobId: string | null }> {
+    const isUnscheduled = !!createTaskDto.isUnscheduled;
+    const eventType = isUnscheduled
+      ? TaskEventType.ADMIN
+      : (createTaskDto.eventType ?? TaskEventType.ADMIN);
     const rules = getEventTypeRules(eventType);
+
+    if (isUnscheduled && createTaskDto.eventType === TaskEventType.FIXED) {
+      throw new BadRequestException('Unscheduled tasks cannot be fixed');
+    }
 
     if (eventType === TaskEventType.FIXED) {
       if (!createTaskDto.scheduledStartTime || !createTaskDto.scheduledEndTime) {
@@ -189,6 +244,7 @@ export class TasksService {
       ...rest,
       userId,
       eventType,
+      isUnscheduled,
       estimatedTimeInMinutes,
       deadline: deadline ? new Date(deadline) : undefined,
       earliestStartTime: earliestStartTime
@@ -202,6 +258,7 @@ export class TasksService {
         ? new Date(scheduledEndTime)
         : undefined,
     });
+    this.applyUnscheduledConstraints(task);
 
     this.logger.log(
       `create task "${createTaskDto.name}": incoming earliest=${earliestStartTime ?? 'null'} deadline=${deadline ?? 'null'} tz=${timeZone ?? 'null'} resolvedTz=${scheduleTimeZone ?? 'null'} scheduledStart=${scheduledStartTime ?? 'null'} → stored earliest=${task.earliestStartTime?.toISOString() ?? 'null'} deadline=${task.deadline?.toISOString() ?? 'null'} scheduleTz=${task.scheduleTimeZone ?? 'null'}`,
@@ -225,12 +282,12 @@ export class TasksService {
     await this.syncTaskWithGoogleCalendar(userId, saved);
     await this.tasksRepository.save(saved);
 
-    if (eventType !== TaskEventType.FIXED) {
-      await this.scheduleJobService.enqueueReplan(userId);
-      void this.scheduleJobService.processNextPendingForUser(userId);
-    }
-
-    return this.findOne(saved.id, userId);
+    const row = await this.findOne(saved.id, userId);
+    return this.attachReplanJob(
+      userId,
+      row,
+      this.shouldReplanAfterSave(null, row),
+    );
   }
 
   async findAll(userId: string): Promise<Task[]> {
@@ -260,8 +317,9 @@ export class TasksService {
     id: string,
     userId: string,
     updateTaskDto: UpdateTaskDto,
-  ): Promise<Task> {
+  ): Promise<Task & { jobId: string | null }> {
     const task = await this.findOne(id, userId);
+    const wasUnscheduled = task.isUnscheduled;
 
     const dto = updateTaskDto as UpdateTaskDto & {
       phaseIds?: string[];
@@ -320,6 +378,8 @@ export class TasksService {
         : null;
     }
 
+    this.applyUnscheduledConstraints(task);
+
     if (task.eventType === TaskEventType.FIXED) {
       if (!task.scheduledStartTime || !task.scheduledEndTime) {
         throw new BadRequestException(
@@ -328,21 +388,31 @@ export class TasksService {
       }
     }
 
+    if (task.isUnscheduled && !wasUnscheduled && task.googleEventId) {
+      try {
+        await this.scheduleJobService.deleteSyncedGoogleEventsForTask(
+          userId,
+          task,
+        );
+      } catch (e: any) {
+        this.logger.warn(
+          `Failed to delete Google event for unscheduled task ${task.id}: ${e?.message ?? e}`,
+        );
+      }
+      task.googleEventId = null;
+      task.googleEventCalendarId = null;
+    }
+
     const saved = await this.tasksRepository.save(task);
     await this.syncTaskWithGoogleCalendar(userId, saved);
     await this.tasksRepository.save(saved);
 
-    const shouldReplanNonFixed =
-      saved.eventType !== TaskEventType.FIXED &&
-      (saved.status === TaskStatus.TODO ||
-        saved.status === TaskStatus.IN_PROGRESS);
-
-    if (shouldReplanNonFixed) {
-      await this.scheduleJobService.enqueueReplan(userId);
-      void this.scheduleJobService.processNextPendingForUser(userId);
-    }
-
-    return this.findOne(saved.id, userId);
+    const row = await this.findOne(saved.id, userId);
+    return this.attachReplanJob(
+      userId,
+      row,
+      this.shouldReplanAfterSave({ isUnscheduled: wasUnscheduled }, row),
+    );
   }
 
   async remove(id: string, userId: string): Promise<void> {
@@ -356,9 +426,12 @@ export class TasksService {
         );
       }
     }
+    const shouldReplan = !task.isUnscheduled;
     await this.tasksRepository.remove(task);
-    await this.scheduleJobService.enqueueReplan(userId);
-    void this.scheduleJobService.processNextPendingForUser(userId);
+    if (shouldReplan) {
+      await this.scheduleJobService.enqueueReplan(userId);
+      void this.scheduleJobService.processNextPendingForUser(userId);
+    }
   }
 
   async findByStatus(userId: string, status: TaskStatus): Promise<Task[]> {
@@ -389,10 +462,7 @@ export class TasksService {
     const task = await this.findOne(id, userId);
     task.status = status;
     const saved = await this.tasksRepository.save(task);
-    if (
-      saved.eventType !== TaskEventType.FIXED &&
-      saved.status === TaskStatus.TODO
-    ) {
+    if (this.shouldReplanAfterSave({ isUnscheduled: saved.isUnscheduled }, saved)) {
       await this.scheduleJobService.enqueueReplan(userId);
       void this.scheduleJobService.processNextPendingForUser(userId);
     }

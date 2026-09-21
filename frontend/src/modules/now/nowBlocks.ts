@@ -183,6 +183,7 @@ export function unscheduledTasksForToday(
 ): TaskDTO[] {
   return tasks
     .filter((task) => isCurrentTask(task))
+    .filter((task) => !task.isUnscheduled)
     .filter((task) => !occupiedTaskIds.has(task.id))
     .filter((task) => !taskTimedBounds(task))
     .filter((task) => todayWindowIncludesTask(task, todayYmd, timeZone))

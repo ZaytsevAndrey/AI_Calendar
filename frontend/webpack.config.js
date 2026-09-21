@@ -57,8 +57,9 @@ export default async (_env, argv) => {
         devServer: {
             static: path.join(__dirname, 'public'),
             historyApiFallback: true,
-            port: 3000,
-            open: true,
+            port: Number(process.env.WEBPACK_DEV_PORT || 3000),
+            host: process.env.PLAYWRIGHT === '1' ? '127.0.0.1' : undefined,
+            open: process.env.PLAYWRIGHT === '1' ? false : true,
             hot: true,
         },
         module: {

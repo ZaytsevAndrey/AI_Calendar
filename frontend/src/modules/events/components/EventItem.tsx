@@ -1,11 +1,15 @@
 import React from 'react';
 import { TaskDTO } from '../../../api/tasks.api';
 import { formatDateTime, formatMinutes } from '../../../utils/formatDate';
+import { deadlineTone, deadlineToneClass, deadlineToneLabel } from '../utils/deadlineTone';
 
 interface EventItemProps {
   event: TaskDTO;
   onEdit: (event: TaskDTO) => void;
   onDelete: (eventId: string) => void;
+  onDone?: (event: TaskDTO) => void;
+  onSchedule?: (event: TaskDTO) => void;
+  busyId?: string | null;
 }
 
 const priorityColors = {
@@ -29,10 +33,18 @@ const statusClass = {
   canceled: 'border-ide-muted text-ide-muted',
 };
 
-const EventItem: React.FC<EventItemProps> = ({ event, onEdit, onDelete }) => {
+const EventItem: React.FC<EventItemProps> = ({
+  event,
+  onEdit,
+  onDelete,
+  onDone,
+  onSchedule,
+  busyId,
+}) => {
   const deadline = formatDateTime(event.deadline);
   const from = formatDateTime(event.earliestStartTime);
-  const overdue = event.deadline ? new Date(event.deadline) < new Date() && event.status !== 'completed' : false;
+  const tone = event.status === 'completed' ? 'none' : deadlineTone(event.deadline);
+  const unscheduled = !!event.isUnscheduled;
 
   return (
     <div className="task-item">
@@ -58,20 +70,41 @@ const EventItem: React.FC<EventItemProps> = ({ event, onEdit, onDelete }) => {
               {statusLabels[event.status]}
             </span>
             <span className="capitalize">{event.priority}</span>
-            {from ? <span>From {from}</span> : null}
+            {unscheduled ? <span>Unscheduled</span> : null}
+            {!unscheduled && from ? <span>From {from}</span> : null}
             {deadline ? (
-              <span className={overdue ? 'font-medium text-ide-error' : ''}>
-                {overdue ? 'Overdue · ' : ''}
-                {from ? 'Until ' : ''}
+              <span className={deadlineToneClass(tone)}>
+                {deadlineToneLabel(tone)}
+                {!unscheduled && from ? 'Until ' : ''}
                 {deadline}
               </span>
             ) : (
               <span>No deadline</span>
             )}
-            <span>{formatMinutes(event.estimatedTimeInMinutes)}</span>
+            {!unscheduled ? <span>{formatMinutes(event.estimatedTimeInMinutes)}</span> : null}
           </div>
         </div>
         <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:justify-end">
+          {onDone ? (
+            <button
+              type="button"
+              onClick={() => onDone(event)}
+              className="ui-btn-secondary px-3 py-1.5 text-sm"
+              disabled={busyId === event.id}
+            >
+              Done
+            </button>
+          ) : null}
+          {onSchedule ? (
+            <button
+              type="button"
+              onClick={() => onSchedule(event)}
+              className="ui-btn-primary px-3 py-1.5 text-sm"
+              disabled={busyId === event.id}
+            >
+              Schedule
+            </button>
+          ) : null}
           <button type="button" onClick={() => onEdit(event)} className="edit-button">
             Edit
           </button>

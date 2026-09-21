@@ -137,6 +137,33 @@ export class Task {
   @Column({ default: false })
   isFixedExternal: boolean;
 
+  /**
+   * Inbox item: needs doing, no calendar slot. Not planned by Generate/replan
+   * and not synced to Google until the user schedules it.
+   */
+  @Column({ default: false })
+  isUnscheduled: boolean;
+
+  @Column({ nullable: true, type: 'varchar', length: 1024 })
+  location: string | null;
+
+  @Column({ nullable: true, type: 'varchar', length: 8 })
+  googleColorId: string | null;
+
+  /** Google Event.visibility: default | public | private | confidential */
+  @Column({ nullable: true, type: 'varchar', length: 32 })
+  googleVisibility: string | null;
+
+  /** Google Event.transparency: opaque | transparent */
+  @Column({ nullable: true, type: 'varchar', length: 32 })
+  googleTransparency: string | null;
+
+  @Column({ type: 'json', nullable: true })
+  googleReminders: {
+    useDefault: boolean;
+    overrides?: { method: 'email' | 'popup'; minutes: number }[];
+  } | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

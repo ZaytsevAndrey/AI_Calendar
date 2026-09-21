@@ -90,10 +90,13 @@ cd frontend && npm run build
 ## Other commands
 
 ```bash
-npm run lint    # all workspaces that define the script
-npm run test    # all workspaces (backend Jest + frontend `*.spec.ts`: toast copy, past app-event color)
-npm run clean   # remove node_modules / build / dist (see scripts/clean.js)
+npm run lint         # all workspaces that define the script
+npm run test         # all workspaces (backend Jest + frontend `*.spec.ts`: toast copy, past app-event color)
+npm run test:e2e:ui  # Playwright P0 against webpack :3100 + API :3101 (install Chromium once: npx playwright install chromium)
+npm run clean        # remove node_modules / build / dist (see scripts/clean.js)
 ```
+
+Playwright does not use your local `db.sqlite` or ports 3000/3001. The API boots with `E2E_BOOTSTRAP=1` and `E2E_STUB_EXTERNAL=1` (no Google/Groq). First run downloads the Chromium browser.
 
 ## Database
 

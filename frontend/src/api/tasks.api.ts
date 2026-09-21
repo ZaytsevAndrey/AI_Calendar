@@ -25,8 +25,19 @@ export interface TaskDTO {
   scheduledEndTime?: string;
   googleEventId?: string | null;
   isFixedExternal?: boolean;
+  isUnscheduled?: boolean;
+  location?: string | null;
+  googleColorId?: string | null;
+  googleVisibility?: string | null;
+  googleTransparency?: string | null;
+  googleReminders?: {
+    useDefault: boolean;
+    overrides?: { method: 'email' | 'popup'; minutes: number }[];
+  } | null;
   createdAt: string;
   updatedAt: string;
+  /** Present on create/update when a silent replan was enqueued. */
+  jobId?: string | null;
   phase?: {
     id: string;
     name: string;
@@ -52,6 +63,15 @@ export interface CreateTaskDTO {
   earliestStartTime?: string | null;
   eligibleWeekDays?: number[] | null;
   timeZone?: string;
+  isUnscheduled?: boolean;
+  location?: string | null;
+  googleColorId?: string | null;
+  googleVisibility?: string | null;
+  googleTransparency?: string | null;
+  googleReminders?: {
+    useDefault: boolean;
+    overrides?: { method: 'email' | 'popup'; minutes: number }[];
+  } | null;
 }
 
 export interface UpdateTaskDTO extends Partial<CreateTaskDTO> {

@@ -21,6 +21,7 @@ import {
   getPhaseSchedulingTimeBounds,
   mergeSavedPreferredStartIntoOptions,
 } from '../task-wizard/phaseSchedulingBounds';
+import { GoogleEventSettingsFields } from '../../calendar/components/GoogleEventSettingsFields';
 
 const inp =
   'w-full rounded border border-ide-border bg-ide-input px-2.5 py-1.5 text-sm text-ide-text focus:border-ide-link focus:outline-none focus:ring-1 focus:ring-ide-link';
@@ -28,7 +29,13 @@ const lbl = 'mb-0.5 block text-xs font-medium text-ide-text';
 
 interface TaskFormProps {
   initialData?: TaskDTO;
-  createDefaults?: { deadline?: string; earliestStartTime?: string; formPrefill?: TaskFormValues };
+  createDefaults?: {
+    deadline?: string;
+    earliestStartTime?: string;
+    formPrefill?: TaskFormValues;
+    unscheduled?: boolean;
+    scheduleIntent?: boolean;
+  };
   phases: PhaseDTO[];
   onSubmit: (data: CreateTaskDTO | UpdateTaskDTO) => void;
   isSubmitting: boolean;
@@ -54,6 +61,15 @@ const TaskForm: React.FC<TaskFormProps> = ({
   const [showDescription, setShowDescription] = useState(
     !!initialData?.description || !!createDefaults?.formPrefill?.description,
   );
+  const [showMore, setShowMore] = useState(
+    !!(
+      initialData?.location ||
+      initialData?.googleColorId ||
+      initialData?.googleVisibility ||
+      initialData?.googleTransparency ||
+      initialData?.googleReminders
+    ),
+  );
 
   const {
     control,
@@ -74,6 +90,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
   }, [initialData, createDefaults, reset, timeZone]);
 
   const isFixed = useWatch({ control, name: 'isFixed' });
+  const isUnscheduled = useWatch({ control, name: 'isUnscheduled' });
   const isRecurring = useWatch({ control, name: 'isRecurring' });
   const allowSplit = useWatch({ control, name: 'allowSplit' });
   const recurrencePattern = useWatch({ control, name: 'recurrencePattern' });
@@ -81,9 +98,15 @@ const TaskForm: React.FC<TaskFormProps> = ({
   const selectedDays = useWatch({ control, name: 'recurrenceWeekDays' }) ?? [];
   const earliestStartTime = useWatch({ control, name: 'earliestStartTime' });
   const deadline = useWatch({ control, name: 'deadline' });
+  const location = useWatch({ control, name: 'location' });
+  const googleColorId = useWatch({ control, name: 'googleColorId' });
+  const googleVisibility = useWatch({ control, name: 'googleVisibility' });
+  const googleTransparency = useWatch({ control, name: 'googleTransparency' });
+  const googleReminderUseDefault = useWatch({ control, name: 'googleReminderUseDefault' });
+  const googleReminderOverrides = useWatch({ control, name: 'googleReminderOverrides' });
   const selectedEligibleDays = useWatch({ control, name: 'eligibleWeekDays' }) ?? [];
   const showWindowDays =
-    !isFixed && !isRecurring && windowSpansMultipleDays(earliestStartTime, deadline);
+    !isUnscheduled && !isFixed && !isRecurring && windowSpansMultipleDays(earliestStartTime, deadline);
 
   const wasFixed = useRef(!!isFixed);
   useEffect(() => {
@@ -132,6 +155,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
 
   const activePreset = matchPreset({
     isFixed: !!isFixed,
+    isUnscheduled: !!isUnscheduled,
     isRecurring: !!isRecurring,
     allowSplit,
     recurrencePattern,
@@ -252,6 +276,8 @@ const TaskForm: React.FC<TaskFormProps> = ({
           </button>
         )}
 
+        {!isUnscheduled ? (
+        <>
         <div>
           <label htmlFor="task-form-phase" className={lbl}>
             Phase
@@ -578,6 +604,59 @@ const TaskForm: React.FC<TaskFormProps> = ({
             />
           </div>
         ) : null}
+        </>
+        ) : (
+          <div>
+            <label htmlFor="task-form-unscheduled-deadline" className={lbl}>
+              Deadline
+            </label>
+            <Controller
+              name="deadline"
+              control={control}
+              render={({ field }) => (
+                <input
+                  {...field}
+                  id="task-form-unscheduled-deadline"
+                  type="datetime-local"
+                  className={inp}
+                />
+              )}
+            />
+            <p className="mt-1 text-xs text-ide-muted">
+              Optional. Stays off the calendar until you schedule it. Times use {timeZone}.
+            </p>
+          </div>
+        )}
+
+        {showMore ? (
+          <GoogleEventSettingsFields
+            allowEmptyColor
+            value={{
+              location: location ?? '',
+              colorId: googleColorId ?? '',
+              visibility: googleVisibility ?? '',
+              transparency: googleTransparency ?? 'opaque',
+              keepDefaultReminders: googleReminderUseDefault !== false,
+              reminders: googleReminderOverrides ?? [{ method: 'popup', minutes: 10 }],
+            }}
+            onChange={(next) => {
+              setValue('location', next.location, { shouldDirty: true });
+              setValue('googleColorId', next.colorId, { shouldDirty: true });
+              setValue('googleVisibility', next.visibility, { shouldDirty: true });
+              setValue('googleTransparency', next.transparency, { shouldDirty: true });
+              setValue('googleReminderUseDefault', next.keepDefaultReminders, { shouldDirty: true });
+              setValue('googleReminderOverrides', next.reminders, { shouldDirty: true });
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            className="text-xs text-ide-link hover:underline"
+            onClick={() => setShowMore(true)}
+          >
+            + More options
+          </button>
+        )}
       </div>
 
       <div className="mt-4 flex flex-col-reverse gap-2 border-t border-ide-border pt-3 sm:flex-row sm:justify-end">

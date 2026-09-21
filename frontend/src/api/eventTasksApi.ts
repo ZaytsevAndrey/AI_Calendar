@@ -2,6 +2,22 @@ import { createApi } from '@reduxjs/toolkit/query/react';
 import { customBaseQuery } from './customBaseQuery';
 import { TaskDTO, CreateTaskDTO, UpdateTaskDTO } from './tasks.api';
 import { eventsApi } from './eventsApi';
+import { waitForScheduleJob } from './schedule.api';
+
+async function refreshAfterSilentReplan(
+  dispatch: (action: unknown) => unknown,
+  jobId?: string | null,
+) {
+  dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+  if (!jobId) return;
+  try {
+    await waitForScheduleJob(jobId);
+  } catch {
+    /* still refresh; the task itself already saved */
+  }
+  dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));
+  dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+}
 
 export const eventTasksApi = createApi({
   reducerPath: 'eventTasksApi',
@@ -27,8 +43,8 @@ export const eventTasksApi = createApi({
       invalidatesTags: [{ type: 'EventTask', id: 'LIST' }],
       async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
         try {
-          await queryFulfilled;
-          dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+          const { data } = await queryFulfilled;
+          await refreshAfterSilentReplan(dispatch, data.jobId);
         } catch {
           return;
         }
@@ -42,8 +58,8 @@ export const eventTasksApi = createApi({
       ],
       async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
         try {
-          await queryFulfilled;
-          dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+          const { data } = await queryFulfilled;
+          await refreshAfterSilentReplan(dispatch, data.jobId);
         } catch {
           return;
         }

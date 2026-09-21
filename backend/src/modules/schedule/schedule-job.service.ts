@@ -14,6 +14,7 @@ import { Task, TaskStatus } from '../tasks/entities/task.entity';
 import { TaskEventType } from '../scheduling/event-type.enum';
 import { ScheduledTask } from './schedule.entity';
 import { phaseHexToGoogleColorId } from '../google-calendar/phase-hex-to-google-color-id.util';
+import { applyTaskGoogleEventFields } from '../google-calendar/task-google-event-fields.util';
 import { effectiveRecurrenceWeekDays } from './recurrence-from-phases.util';
 import { buildGoogleRecurrenceRules } from './google-recurrence.util';
 import {
@@ -345,11 +346,8 @@ export class ScheduleJobService {
     };
     const phaseForColor =
       task.phases?.length && task.phases[0] ? task.phases[0] : task.phase;
-    const colorId = phaseHexToGoogleColorId(phaseForColor?.color);
-    if (colorId) {
-      payload.colorId = colorId;
-    }
-    return payload;
+    const fallbackColorId = phaseHexToGoogleColorId(phaseForColor?.color);
+    return applyTaskGoogleEventFields(payload, task, fallbackColorId);
   }
 
   private refsFromSnapshotAndTask(
@@ -437,7 +435,7 @@ export class ScheduleJobService {
     desiredRows: ScheduledTask[],
     existingRefs: GoogleEventRef[],
   ): Promise<void> {
-    if (task.eventType === TaskEventType.FIXED) return;
+    if (task.isUnscheduled || task.eventType === TaskEventType.FIXED) return;
 
     const desired = [...desiredRows].sort(
       (a, b) =>
@@ -722,6 +720,7 @@ export class ScheduleJobService {
     }
 
     const toSync = tasks.filter((task) => {
+      if (task.isUnscheduled) return false;
       if (task.eventType === TaskEventType.FIXED) return false;
       if (task.status !== TaskStatus.TODO) return false;
       const after = afterByTask.get(task.id) ?? [];

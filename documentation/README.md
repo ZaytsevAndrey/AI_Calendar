@@ -13,7 +13,8 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Roadmap](roadmap.md) | Done, in progress, planned |
 | [Spec: Intelligent scheduling](spec-intelligent-scheduling.md) | Unified items, settings, phases, queue, diff/undo, Google anchors |
 | [Task scheduling test matrix](task-scheduling-test-matrix.md) | Given/When/Then cases mapped to unit tests |
+| [E2E test coverage plan](e2e-test-coverage.md) | All live API/UI cases and edge cases, layers, P0 smoke, implementation waves |
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** September 2026 (voice create from name; past-deadline skip; Generate undo; Done vs silent replan; E2E parked on the backlog).
+**Last documentation update:** September 2026 (Playwright P0 UI smoke in CI; API E2E waves 0–2; voice create from name; past-deadline skip; Generate undo; Done vs silent replan).

@@ -1,6 +1,6 @@
 import type { TaskFormValues } from './schema';
 
-export type TaskPresetId = 'flexible' | 'fixed' | 'recurring';
+export type TaskPresetId = 'flexible' | 'fixed' | 'recurring' | 'unscheduled';
 
 export type TaskPreset = {
   id: TaskPresetId;
@@ -24,6 +24,11 @@ export const TASK_PRESETS: TaskPreset[] = [
     label: 'Recurring',
     hint: 'Repeats on a pattern. Planner may move occurrences.',
   },
+  {
+    id: 'unscheduled',
+    label: 'Unscheduled',
+    hint: 'A to-do with no calendar slot until you schedule it.',
+  },
 ];
 
 export const PRIORITY_OPTIONS = [
@@ -36,6 +41,7 @@ export const PRIORITY_OPTIONS = [
 const FLEXIBLE_DEFAULTS: Pick<
   TaskFormValues,
   | 'isFixed'
+  | 'isUnscheduled'
   | 'isRecurring'
   | 'allowSplit'
   | 'estimatedTimeInMinutes'
@@ -43,6 +49,7 @@ const FLEXIBLE_DEFAULTS: Pick<
   | 'recurrenceWeekDays'
 > = {
   isFixed: false,
+  isUnscheduled: false,
   isRecurring: false,
   allowSplit: true,
   estimatedTimeInMinutes: 30,
@@ -68,8 +75,22 @@ export const WEEKDAY_OPTIONS = [
 ] as const;
 
 export function presetPatch(id: TaskPresetId): Partial<TaskFormValues> {
+  if (id === 'unscheduled') {
+    return {
+      isUnscheduled: true,
+      isFixed: false,
+      isRecurring: false,
+      allowSplit: true,
+      preferredStartTime: '',
+      scheduledStartTime: '',
+      scheduledEndTime: '',
+      earliestStartTime: '',
+      eligibleWeekDays: [],
+    };
+  }
   if (id === 'fixed') {
     return {
+      isUnscheduled: false,
       isFixed: true,
       isRecurring: false,
       allowSplit: false,
@@ -80,6 +101,7 @@ export function presetPatch(id: TaskPresetId): Partial<TaskFormValues> {
   }
   if (id === 'recurring') {
     return {
+      isUnscheduled: false,
       isFixed: false,
       isRecurring: true,
       allowSplit: true,
@@ -98,7 +120,13 @@ export function presetPatch(id: TaskPresetId): Partial<TaskFormValues> {
 }
 
 /** Highlight a preset only while current flags still match it. */
-export function matchPreset(values: Pick<TaskFormValues, 'isFixed' | 'isRecurring' | 'allowSplit' | 'recurrencePattern'>): TaskPresetId | null {
+export function matchPreset(
+  values: Pick<
+    TaskFormValues,
+    'isFixed' | 'isUnscheduled' | 'isRecurring' | 'allowSplit' | 'recurrencePattern'
+  >,
+): TaskPresetId | null {
+  if (values.isUnscheduled) return 'unscheduled';
   if (values.isFixed && !values.isRecurring) return 'fixed';
   if (
     !values.isFixed &&

@@ -85,6 +85,25 @@ describe('describeTaskToastDetail', () => {
     expect(text).toMatch(/^Team standup · /);
     expect(text).toMatch(/09:00/);
   });
+
+  it('labels unscheduled tasks without inventing a slot', () => {
+    const text = describeTaskToastDetail({
+      name: 'Buy milk',
+      isUnscheduled: true,
+    });
+    expect(text).toMatch(/Buy milk/);
+    expect(text).toMatch(/Unscheduled/);
+  });
+
+  it('adds the deadline on an unscheduled toast when present', () => {
+    const text = describeTaskToastDetail({
+      name: 'Buy milk',
+      isUnscheduled: true,
+      deadline: localIso(2026, 8, 11, 23, 59),
+    });
+    expect(text).toMatch(/Unscheduled/);
+    expect(text).toMatch(/Due /);
+  });
 });
 
 describe('joinToastDetail', () => {

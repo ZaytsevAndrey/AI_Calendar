@@ -115,6 +115,13 @@ async function pollJobUntilDone(
   return last;
 }
 
+export async function waitForScheduleJob(
+  jobId: string,
+  timeoutMs = 120_000,
+): Promise<ScheduleJobStatusResponse> {
+  return pollJobUntilDone(jobId, timeoutMs);
+}
+
 export const ScheduleApi = {
   getScheduledTasks: async (params?: ScheduleQueryParams): Promise<ScheduledTaskDTO[]> => {
     const queryParams = new URLSearchParams();

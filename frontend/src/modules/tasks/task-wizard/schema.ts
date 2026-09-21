@@ -1,10 +1,16 @@
 import { z } from 'zod';
 
+const reminderOverrideSchema = z.object({
+  method: z.enum(['popup', 'email']),
+  minutes: z.number(),
+});
+
 export const taskFormSchema = z
   .object({
     name: z.string().min(1, 'Task name is required'),
     description: z.string().optional(),
     isFixed: z.boolean(),
+    isUnscheduled: z.boolean().optional(),
     phaseId: z.string().optional(),
     estimatedTimeInMinutes: z.number().optional(),
     isRecurring: z.boolean().optional(),
@@ -18,8 +24,18 @@ export const taskFormSchema = z
     scheduledStartTime: z.string().optional(),
     scheduledEndTime: z.string().optional(),
     preferredStartTime: z.string().optional(),
+    location: z.string().optional(),
+    googleColorId: z.string().optional(),
+    googleVisibility: z.string().optional(),
+    googleTransparency: z.string().optional(),
+    googleReminderUseDefault: z.boolean().optional(),
+    googleReminderOverrides: z.array(reminderOverrideSchema).optional(),
   })
   .superRefine((data, ctx) => {
+    if (data.isUnscheduled) {
+      return;
+    }
+
     if (data.isFixed) {
       if (!data.scheduledStartTime?.trim()) {
         ctx.addIssue({

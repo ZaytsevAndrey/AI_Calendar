@@ -41,6 +41,8 @@ export interface GoogleCalendarEvent {
             minutes: number;
         }>;
     };
+    visibility?: 'default' | 'public' | 'private' | 'confidential';
+    transparency?: 'opaque' | 'transparent';
     /** True when the event lives on this app's dedicated Google calendar. */
     isAppGenerated?: boolean;
 }
@@ -74,6 +76,9 @@ export interface CreateEventParams {
             minutes: number;
         }>;
     };
+    colorId?: string;
+    visibility?: 'default' | 'public' | 'private' | 'confidential';
+    transparency?: 'opaque' | 'transparent';
 }
 
 export interface UpdateEventParams extends Partial<CreateEventParams> {

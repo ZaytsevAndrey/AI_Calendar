@@ -8,6 +8,10 @@ interface EventListProps {
   onDelete: (eventId: string) => void;
   onCreate: () => void;
   isLoading: boolean;
+  onDone?: (event: TaskDTO) => void;
+  onSchedule?: (event: TaskDTO) => void;
+  busyId?: string | null;
+  emptyTitle?: string;
 }
 
 const EventList: React.FC<EventListProps> = ({
@@ -16,6 +20,10 @@ const EventList: React.FC<EventListProps> = ({
   onDelete,
   onCreate,
   isLoading,
+  onDone,
+  onSchedule,
+  busyId,
+  emptyTitle,
 }) => {
   if (isLoading) {
     return <div className="loading">Loading tasks…</div>;
@@ -24,7 +32,7 @@ const EventList: React.FC<EventListProps> = ({
   if (events.length === 0) {
     return (
       <div className="empty-list">
-        <p>No tasks found. Create one to get started.</p>
+        <p>{emptyTitle || 'No tasks found. Create one to get started.'}</p>
         <button type="button" onClick={onCreate} className="ui-btn-primary mt-4">
           Create task
         </button>
@@ -40,6 +48,9 @@ const EventList: React.FC<EventListProps> = ({
           event={event}
           onEdit={onEdit}
           onDelete={onDelete}
+          onDone={onDone}
+          onSchedule={onSchedule}
+          busyId={busyId}
         />
       ))}
     </div>

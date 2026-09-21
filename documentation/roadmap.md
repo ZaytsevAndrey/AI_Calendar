@@ -26,7 +26,8 @@ Two lists used to compete (`roadmap` vs `BUGS-AND-IMPROVEMENTS.md`). This file i
 
 ## Next — daily loop
 
-- [x] **Today / Now** (Sep 2026). Strip on Calendar (home stays `/`): current overlapping block, next start today, unscheduled inbox for today by priority. External Google events appear in Now/Next without Done. One-tap Done completes a non-recurring app task; recurring has no Done (skip occurrence is later). Compact habit Today/Yesterday check-ins; no habit CRUD here.
+- [x] **Today / Now** (Sep 2026). Strip on Calendar (home stays `/`): current overlapping block, next start today, unscheduled inbox for today by priority. External Google events appear in Now/Next without Done. One-tap Done completes a non-recurring app task; recurring has no Done (skip occurrence is later). Compact habit Today/Yesterday check-ins; no habit CRUD here. After create/update the client polls the silent-replan `jobId` and refreshes Now / calendar (no WebSockets).
+- [x] **Unscheduled inbox** (Sep 2026). First-class `isUnscheduled` tasks on the Tasks page: no Google sync, excluded from Generate/replan, Done or Schedule. Optional deadline highlighting. TaskForm expandable Google event options (location, color, visibility, show-as, reminders) persist and apply on later sync. App-generated calendar clicks open TaskForm; native Google events still use EventForm.
 - [x] **Undo last generate** (Sep 2026). Calendar **Generate** stores a single snapshot (local auto slots + Google ids). **Undo last generate** restores still-open blocks and Google; fully ended blocks stay. Silent replan after task save is not undoable. Clear still cannot be undone and drops the snapshot. Non-recurring Generate no longer re-places minutes that already finished.
 - [ ] **Skip / snooze this occurrence** — one slot or one recurring instance without deleting the series.
 - [ ] **Generate preview / overload warning** — show what will move and if the window cannot fit work *before* applying.
@@ -65,7 +66,7 @@ Polish parked from the chat dump (`BUGS-AND-IMPROVEMENTS.md`):
 
 Quality (ongoing, not a product slice):
 
-- [ ] **End-to-end tests** for critical flows (Playwright or similar): voice create → Unscheduled / Generate; Done must not create a calendar event; Generate + Undo; login. Unit tests stay for engine/voice; E2E is still missing.
+- [x] **End-to-end tests** — cases and waves: [e2e-test-coverage.md](e2e-test-coverage.md). Waves 0–7 (API E2E + Playwright P0–P2) are in CI. Unit tests stay for engine/voice.
 - [ ] Systematic unit/integration coverage increase as flows are touched.
 - [ ] Frontend bundle optimization (currently one large `bundle.js`) and API performance.
 - [ ] Optional: attach a custom subdomain (see [deploy](deploy.md)).

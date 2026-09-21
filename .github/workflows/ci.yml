@@ -29,6 +29,18 @@ jobs:
       - name: Backend tests
         run: npm test --workspace=backend
 
+      - name: Backend e2e
+        run: npm run test:e2e --workspace=backend
+        env:
+          JWT_SECRET: e2e-ci-secret
+          JWT_EXPIRES_IN: 1h
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Playwright P0 UI smoke
+        run: npm run test:e2e:ui
+
       - name: Production build
         run: npm run build
         env:

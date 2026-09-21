@@ -17,6 +17,8 @@ import { describeTaskToastDetail } from '../../../utils/formatDate';
 export type CreateTaskDefaults = {
   deadline?: string;
   earliestStartTime?: string;
+  unscheduled?: boolean;
+  scheduleIntent?: boolean;
 };
 
 export function useEventEditor() {
@@ -54,6 +56,13 @@ export function useEventEditor() {
   const openEdit = (event: TaskDTO) => {
     setEditingEvent(event);
     setCreateDefaults(undefined);
+    setFormPrefill(undefined);
+    setOpen(true);
+  };
+
+  const openSchedule = (event: TaskDTO) => {
+    setEditingEvent(event);
+    setCreateDefaults({ scheduleIntent: true });
     setFormPrefill(undefined);
     setOpen(true);
   };
@@ -104,17 +113,25 @@ export function useEventEditor() {
     <Modal
       open={open}
       onClose={close}
-      title={editingEvent ? 'Edit task' : 'Create task'}
+      title={
+        editingEvent
+          ? createDefaults?.scheduleIntent
+            ? 'Schedule task'
+            : 'Edit task'
+          : createDefaults?.unscheduled
+            ? 'Create unscheduled task'
+            : 'Create task'
+      }
       maxWidthClass="max-w-xl"
       footer={null}
     >
       <div>
         <TaskForm
           key={
-            editingEvent?.id ??
-            formPrefill?.name ??
-            createDefaults?.deadline ??
-            'new'
+            editingEvent
+              ? `${editingEvent.id}-${createDefaults?.scheduleIntent ? 'schedule' : 'edit'}`
+              : formPrefill?.name ??
+                `${createDefaults?.deadline ?? 'new'}-${createDefaults?.unscheduled ? 'unscheduled' : 'task'}`
           }
           initialData={editingEvent || undefined}
           createDefaults={
@@ -132,5 +149,5 @@ export function useEventEditor() {
     </Modal>
   );
 
-  return { openCreate, openCreateFromPrefill, openEdit, createFromPayload, editorModal };
+  return { openCreate, openCreateFromPrefill, openEdit, openSchedule, createFromPayload, editorModal };
 }

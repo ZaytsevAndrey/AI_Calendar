@@ -11,12 +11,13 @@
 | **Flexible** (дефолт) | не fixed, не recurring, split увімкнено, 30 хв |
 | **Fixed** | fixed time, split вимкнено, потрібні старт і кінець |
 | **Recurring** | не fixed, recurring Daily, split увімкнено, дні Mon–Fri |
+| **Unscheduled** | inbox: `isUnscheduled`, без слота, без replan/Google, опційний deadline |
 
 У API/БД для нових записів `eventType` лише **`fixed`** або **`admin`** (усі не-fixed). Старі значення на кшталт `learning` / `daily_routine` читаються як flexible.
 
 ## 2) Базові правила створення
 
-- Обов’язкові в UI: **назва**; для non-fixed — **тривалість**; для fixed — **старт і кінець** (end > start).
+- Обов’язкові в UI: **назва**; для non-fixed (не Unscheduled) — **тривалість**; для fixed — **старт і кінець** (end > start). **Unscheduled** — лише назва; опційний **deadline** (підсвітка, якщо близько / прострочено). Не синкається з Google і не потрапляє в Generate/replan, поки користувач не натисне **Schedule** (форма стає Flexible/Fixed) або не збереже без `isUnscheduled`.
 - День / проміжок без години (форма **From / Until** або голос: «завтра», «в п’ятницю», «з п’ятниці по неділю») — **`earliestStartTime`** 00:00 першого дня і **deadline** 23:59 останнього у **таймзоні з Settings**. Форма показує civil time в цій же зоні (не в зоні браузера). Планувальник ставить задачу лише в цьому **локальному** дні/діапазоні і **не затирає** `earliestStartTime` після replan. Кілька окремих днів («понеділок і середа») додатково ставлять `eligibleWeekDays`. Фіксований слот лише якщо є конкретний час.
 - `priority` у формі завжди є (дефолт medium); в API опційний.
 - Задача може мати **тільки одну фазу** (`phaseId` / `phaseIds` max 1). Порожня фаза = будь-який час у межах wake/sleep.
@@ -94,7 +95,7 @@
 ### 7.1 Коли виконується
 
 - Sync тригериться при будь-якому оновленні задачі (CRUD + статусні зміни), через поточний pipeline.
-- Для non-fixed після save **ставиться replan job** і HTTP одразу відповідає; `processNextPendingForUser` крутиться у фоні (UI не чекає Google). Поки слота немає, задача може бути в **Unscheduled**. **Done** лише ставить `completed` і не синкає flexible-задачу в Google. Replan перед записом слота ще раз читає статус: якщо вже `completed`, слот не пишеться (інакше гонка create→replan і Done ставила б подію в календар).
+- Для non-fixed після save **ставиться replan job** і HTTP одразу відповідає з `jobId`, **крім `isUnscheduled`**. Unscheduled задачі живуть у секції **Unscheduled** на Tasks: **Done** ховає їх (`completed`), **Schedule** відкриває ту саму форму вже як планувальну. Поки слота немає у flexible-задачі, вона може коротко бути в Calendar strip **Unscheduled** (це інший, перехідний інбокс). **Done** лише ставить `completed` і не синкає flexible-задачу в Google. Replan перед записом слота ще раз читає статус: якщо вже `completed`, слот не пишеться.
 - Generate на Calendar показує етапи джоби (`preparing` → `computing` → `syncing_google`).
 
 ### 7.2 Загальні правила

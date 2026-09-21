@@ -22,6 +22,8 @@ import { ScheduleMenu } from 'modules/schedule/components/ScheduleMenu';
 import { NowStrip } from 'modules/now/components/NowStrip';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
+import { findTaskForGoogleEvent } from 'modules/calendar/findTaskForGoogleEvent';
+import { useGetEventsQuery as useGetTasksQuery } from 'api/eventTasksApi';
 import { VoiceTaskButton } from 'modules/voice/components/VoiceTaskButton';
 import { VoiceTaskSheet } from 'modules/voice/components/VoiceTaskSheet';
 import { useVoiceTask } from 'modules/voice/hooks/useVoiceTask';
@@ -97,7 +99,8 @@ const CalendarPage: React.FC = () => {
         useScheduleActions();
     const { data: userSettings } = useGetUserSettingsQuery();
     const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
-    const { openCreate, openCreateFromPrefill, createFromPayload, editorModal } = useEventEditor();
+    const { openCreate, openCreateFromPrefill, openEdit, createFromPayload, editorModal } = useEventEditor();
+    const { data: tasks = [] } = useGetTasksQuery();
     const voice = useVoiceTask({
         onComplete: createFromPayload,
         onSufficient: openCreateFromPrefill,
@@ -143,9 +146,13 @@ const CalendarPage: React.FC = () => {
 
     const handleEditEvent = (eventId: string) => {
         const event = displayEvents.find((e: EventType) => e.id === eventId);
-        if (event) {
-            setEventFormDialog({ open: true, event });
+        if (!event) return;
+        const linkedTask = findTaskForGoogleEvent(tasks, event);
+        if (linkedTask) {
+            openEdit(linkedTask);
+            return;
         }
+        setEventFormDialog({ open: true, event });
     };
 
     const handleEventFormSubmit = (data: any) => {

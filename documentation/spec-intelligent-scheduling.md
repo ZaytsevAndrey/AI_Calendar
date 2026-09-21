@@ -36,6 +36,7 @@ One persisted entity (evolve current `Task` or merge with calendar event model�
 | `isRecurring` / `recurrencePattern` | `DAILY` / `WEEKLY` / `BIWEEKLY` / `MONTHLY` |
 | `recurrenceWeekDays` | Optional `0–6` (Sun–Sat); intersected with phase `weekDays` |
 | `allowSplit` | Effective value = user setting **and** per-task flag; never for `fixed` |
+| `isUnscheduled` | Inbox item: not placed by Generate/replan, not synced to Google until scheduled |
 | `minSplitMinutes` | From user settings when splitting allowed (e.g. ≥ 30) |
 | `scheduledSegments` | Zero or more `{ start, end }` (or link to `ScheduledTask`-like rows)—source of truth for “where it sits” |
 | `googleEventId` | If synced to Google |

@@ -55,7 +55,8 @@ export function buildTaskPayload(
   timeZone: string,
 ): CreateTaskDTO | UpdateTaskDTO {
   const zone = resolveIanaTimeZone(timeZone);
-  const isFixed = !!data.isFixed;
+  const isUnscheduled = !!data.isUnscheduled;
+  const isFixed = !isUnscheduled && !!data.isFixed;
   const estimatedTimeInMinutes =
     data.estimatedTimeInMinutes ??
     (isFixed ? minutesBetween(data.scheduledStartTime, data.scheduledEndTime, zone) : undefined) ??
@@ -68,25 +69,50 @@ export function buildTaskPayload(
     name: data.name,
     description: data.description || undefined,
     eventType: isFixed ? 'fixed' : 'admin',
+    isUnscheduled,
     estimatedTimeInMinutes,
-    isRecurring: !isFixed && !!data.isRecurring,
-    recurrencePattern: !isFixed && data.isRecurring ? data.recurrencePattern || undefined : undefined,
-    recurrenceWeekDays: !isFixed && data.isRecurring ? data.recurrenceWeekDays ?? [] : [],
-    allowSplit: isFixed ? false : !!data.allowSplit,
+    isRecurring: !isUnscheduled && !isFixed && !!data.isRecurring,
+    recurrencePattern:
+      !isUnscheduled && !isFixed && data.isRecurring ? data.recurrencePattern || undefined : undefined,
+    recurrenceWeekDays:
+      !isUnscheduled && !isFixed && data.isRecurring ? data.recurrenceWeekDays ?? [] : [],
+    allowSplit: isFixed || isUnscheduled ? false : !!data.allowSplit,
     priority: data.priority,
     deadline: dateTimeLocalToIso(data.deadline, zone),
-    earliestStartTime: isFixed ? null : dateTimeLocalToIso(data.earliestStartTime, zone),
+    earliestStartTime:
+      isFixed || isUnscheduled ? null : dateTimeLocalToIso(data.earliestStartTime, zone),
     timeZone: zone,
     eligibleWeekDays:
+      !isUnscheduled &&
       !isFixed &&
       !data.isRecurring &&
       windowSpansMultipleDays(data.earliestStartTime, data.deadline) &&
       data.eligibleWeekDays?.length
         ? data.eligibleWeekDays
         : null,
-    phaseIds,
-    phaseId: primaryPhaseId || undefined,
+    phaseIds: isUnscheduled ? [] : phaseIds,
+    phaseId: isUnscheduled ? undefined : primaryPhaseId || undefined,
+    location: data.location?.trim() || null,
+    googleColorId: data.googleColorId?.trim() || null,
+    googleVisibility: data.googleVisibility?.trim() || null,
+    googleTransparency: data.googleTransparency?.trim() || null,
+    googleReminders:
+      data.googleReminderUseDefault === false
+        ? {
+            useDefault: false,
+            overrides: (data.googleReminderOverrides ?? []).map((row) => ({
+              method: row.method,
+              minutes: row.minutes,
+            })),
+          }
+        : { useDefault: true },
   };
+
+  if (isUnscheduled) {
+    payload.scheduledStartTime = null;
+    payload.scheduledEndTime = null;
+    return payload;
+  }
 
   if (isFixed && data.scheduledStartTime && data.scheduledEndTime) {
     payload.scheduledStartTime = dateTimeLocalToIso(data.scheduledStartTime, zone);
@@ -107,6 +133,42 @@ export function buildTaskPayload(
   }
 
   return payload;
+}
+
+function googleFormFields(data?: Pick<
+  TaskDTO,
+  | 'location'
+  | 'googleColorId'
+  | 'googleVisibility'
+  | 'googleTransparency'
+  | 'googleReminders'
+  | 'isUnscheduled'
+>): Pick<
+  TaskFormValues,
+  | 'isUnscheduled'
+  | 'location'
+  | 'googleColorId'
+  | 'googleVisibility'
+  | 'googleTransparency'
+  | 'googleReminderUseDefault'
+  | 'googleReminderOverrides'
+> {
+  const reminders = data?.googleReminders;
+  const overrides = reminders?.overrides?.length
+    ? reminders.overrides.map((row) => ({
+        method: row.method,
+        minutes: row.minutes,
+      }))
+    : [{ method: 'popup' as const, minutes: 10 }];
+  return {
+    isUnscheduled: !!data?.isUnscheduled,
+    location: data?.location ?? '',
+    googleColorId: data?.googleColorId ?? '',
+    googleVisibility: data?.googleVisibility ?? '',
+    googleTransparency: data?.googleTransparency ?? 'opaque',
+    googleReminderUseDefault: reminders ? !!reminders.useDefault : true,
+    googleReminderOverrides: overrides,
+  };
 }
 
 export function formValuesFromCreatePayload(
@@ -132,6 +194,12 @@ export function formValuesFromCreatePayload(
       eligibleWeekDays: payload.eligibleWeekDays ?? [],
       scheduledStartTime: payload.scheduledStartTime ?? undefined,
       scheduledEndTime: payload.scheduledEndTime ?? undefined,
+      isUnscheduled: payload.isUnscheduled,
+      location: payload.location,
+      googleColorId: payload.googleColorId,
+      googleVisibility: payload.googleVisibility,
+      googleTransparency: payload.googleTransparency,
+      googleReminders: payload.googleReminders,
       status: 'todo',
       createdAt: '',
       updatedAt: '',
@@ -143,7 +211,13 @@ export function formValuesFromCreatePayload(
 
 export function initialFormValues(
   data?: TaskDTO,
-  defaults?: { deadline?: string; earliestStartTime?: string; formPrefill?: TaskFormValues },
+  defaults?: {
+    deadline?: string;
+    earliestStartTime?: string;
+    formPrefill?: TaskFormValues;
+    unscheduled?: boolean;
+    scheduleIntent?: boolean;
+  },
   timeZone: string = 'UTC',
 ): TaskFormValues {
   if (defaults?.formPrefill) {
@@ -167,9 +241,13 @@ export function initialFormValues(
       scheduledStartTime: '',
       scheduledEndTime: '',
       preferredStartTime: '',
+      ...googleFormFields(),
+      isUnscheduled: !!defaults?.unscheduled,
     };
   }
-  const isFixed = data.eventType === 'fixed';
+  const scheduleIntent = !!defaults?.scheduleIntent;
+  const isUnscheduled = scheduleIntent ? false : !!data.isUnscheduled;
+  const isFixed = !isUnscheduled && data.eventType === 'fixed';
   const phaseId = data.phaseId ?? (data.phases?.length ? data.phases[0].id : undefined) ?? '';
   return {
     name: data.name,
@@ -177,16 +255,18 @@ export function initialFormValues(
     isFixed,
     phaseId,
     estimatedTimeInMinutes: data.estimatedTimeInMinutes,
-    isRecurring: data.isRecurring,
+    isRecurring: isUnscheduled ? false : data.isRecurring,
     recurrencePattern: data.recurrencePattern ?? '',
     recurrenceWeekDays: data.recurrenceWeekDays ?? [],
-    allowSplit: data.allowSplit,
+    allowSplit: isUnscheduled ? true : data.allowSplit,
     priority: data.priority,
     deadline: isoToDateTimeLocal(data.deadline, zone),
-    earliestStartTime: isFixed ? '' : isoToDateTimeLocal(data.earliestStartTime, zone),
+    earliestStartTime: isFixed || isUnscheduled ? '' : isoToDateTimeLocal(data.earliestStartTime, zone),
     eligibleWeekDays: data.eligibleWeekDays ?? [],
     scheduledStartTime: isFixed ? isoToDateTimeLocal(data.scheduledStartTime, zone) : '',
     scheduledEndTime: isFixed ? isoToDateTimeLocal(data.scheduledEndTime, zone) : '',
-    preferredStartTime: isFixed ? '' : isoToHm(data.scheduledStartTime, zone),
+    preferredStartTime: isFixed || isUnscheduled ? '' : isoToHm(data.scheduledStartTime, zone),
+    ...googleFormFields(data),
+    isUnscheduled,
   };
 }

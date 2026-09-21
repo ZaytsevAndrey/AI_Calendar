@@ -8,6 +8,7 @@ import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { ScheduleJobService } from '../schedule/schedule-job.service';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { TaskEventType } from '../scheduling/event-type.enum';
+import { TaskStatus } from './entities/task.entity';
 
 function createdRow(repo: { create: jest.Mock }): Record<string, unknown> {
   return repo.create.mock.calls[0][0] as Record<string, unknown>;
@@ -24,7 +25,7 @@ describe('TasksService', () => {
     }),
     find: jest.fn(),
     findOne: jest.fn(async () => lastSaved),
-    merge: jest.fn(),
+    merge: jest.fn((entity, dto) => Object.assign(entity, dto)),
     remove: jest.fn(),
   };
   const phasesRepository = {
@@ -35,7 +36,7 @@ describe('TasksService', () => {
     findOne: jest.fn().mockResolvedValue(null),
   };
   const scheduleJobService = {
-    enqueueReplan: jest.fn(),
+    enqueueReplan: jest.fn().mockResolvedValue({ id: 'job-1' }),
     processNextPendingForUser: jest.fn(),
     deleteSyncedGoogleEventsForTask: jest.fn().mockResolvedValue(undefined),
   };
@@ -112,6 +113,26 @@ describe('TasksService', () => {
     );
   });
 
+  it('returns the replan jobId on create so the client can poll', async () => {
+    const created = await service.create('user-1', {
+      name: 'Task',
+      eventType: TaskEventType.ADMIN,
+      estimatedTimeInMinutes: 60,
+    } as any);
+    expect(created.jobId).toBe('job-1');
+  });
+
+  it('returns a null jobId for fixed create', async () => {
+    const created = await service.create('user-1', {
+      name: 'Fixed',
+      eventType: TaskEventType.FIXED,
+      scheduledStartTime: '2026-04-20T09:00:00.000Z',
+      scheduledEndTime: '2026-04-20T10:00:00.000Z',
+      estimatedTimeInMinutes: 60,
+    } as any);
+    expect(created.jobId).toBeNull();
+  });
+
   it('returns from create without waiting for replan to finish', async () => {
     let resolveProcess: (() => void) | undefined;
     const processGate = new Promise<void>((resolve) => {
@@ -131,6 +152,31 @@ describe('TasksService', () => {
 
     resolveProcess?.();
     await processGate;
+  });
+
+  it('does not enqueue replan for unscheduled inbox tasks', async () => {
+    const created = await service.create('user-1', {
+      name: 'Buy milk',
+      isUnscheduled: true,
+      estimatedTimeInMinutes: 15,
+    } as any);
+
+    expect(created.isUnscheduled).toBe(true);
+    expect(created.jobId).toBeNull();
+    expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+    expect(googleCalendarService.createEvent).not.toHaveBeenCalled();
+  });
+
+  it('rejects unscheduled + fixed', async () => {
+    await expect(
+      service.create('user-1', {
+        name: 'Invalid',
+        isUnscheduled: true,
+        eventType: TaskEventType.FIXED,
+        scheduledStartTime: '2026-04-20T09:00:00.000Z',
+        scheduledEndTime: '2026-04-20T10:00:00.000Z',
+      } as any),
+    ).rejects.toThrow(BadRequestException);
   });
 
   it('does not enqueue replan for fixed tasks', async () => {
@@ -274,6 +320,7 @@ describe('TasksService', () => {
       });
       scheduleJobService.enqueueReplan.mockImplementation(async () => {
         order.push('replan');
+        return { id: 'job-1' };
       });
 
       await service.create('user-1', {
@@ -288,6 +335,124 @@ describe('TasksService', () => {
       expect(order[0]).toBe('save');
       expect(order).toContain('replan');
       expect(order.indexOf('save')).toBeLessThan(order.indexOf('replan'));
+    });
+  });
+
+  describe('unscheduled inbox', () => {
+    it('clears any submitted slot and stores Google extras without syncing', async () => {
+      googleCalendarService.checkConnection.mockResolvedValue({ connected: true });
+
+      await service.create('user-1', {
+        name: 'Buy milk',
+        isUnscheduled: true,
+        scheduledStartTime: '2026-04-20T09:00:00.000Z',
+        scheduledEndTime: '2026-04-20T10:00:00.000Z',
+        location: 'Store',
+        googleColorId: '4',
+        googleVisibility: 'private',
+        googleTransparency: 'transparent',
+        googleReminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 5 }] },
+      } as any);
+
+      const row = createdRow(tasksRepository);
+      expect(row.isUnscheduled).toBe(true);
+      expect(row.eventType).toBe(TaskEventType.ADMIN);
+      expect(row.isRecurring).toBe(false);
+      expect(row.scheduledStartTime).toBeNull();
+      expect(row.scheduledEndTime).toBeNull();
+      expect(row.location).toBe('Store');
+      expect(row.googleColorId).toBe('4');
+      expect(googleCalendarService.createEvent).not.toHaveBeenCalled();
+      expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+    });
+
+    it('does not replan while an inbox task stays unscheduled', async () => {
+      lastSaved = {
+        id: 'task-1',
+        userId: 'user-1',
+        name: 'Buy milk',
+        isUnscheduled: true,
+        eventType: TaskEventType.ADMIN,
+        status: TaskStatus.TODO,
+      };
+
+      const updated = await service.update('task-1', 'user-1', {
+        name: 'Buy oat milk',
+        isUnscheduled: true,
+      } as any);
+
+      expect(updated.jobId).toBeNull();
+      expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+    });
+
+    it('replans when an inbox task is scheduled', async () => {
+      lastSaved = {
+        id: 'task-1',
+        userId: 'user-1',
+        name: 'Buy milk',
+        isUnscheduled: true,
+        eventType: TaskEventType.ADMIN,
+        status: TaskStatus.TODO,
+      };
+
+      const updated = await service.update('task-1', 'user-1', {
+        isUnscheduled: false,
+        estimatedTimeInMinutes: 30,
+      } as any);
+
+      expect(updated.isUnscheduled).toBe(false);
+      expect(updated.jobId).toBe('job-1');
+      expect(scheduleJobService.enqueueReplan).toHaveBeenCalledWith('user-1');
+    });
+
+    it('drops Google events and replans when a scheduled task moves to the inbox', async () => {
+      lastSaved = {
+        id: 'task-1',
+        userId: 'user-1',
+        name: 'Write brief',
+        isUnscheduled: false,
+        eventType: TaskEventType.ADMIN,
+        status: TaskStatus.TODO,
+        googleEventId: 'g-1',
+        googleEventCalendarId: 'cal-1',
+      };
+
+      const updated = await service.update('task-1', 'user-1', {
+        isUnscheduled: true,
+      } as any);
+
+      expect(
+        scheduleJobService.deleteSyncedGoogleEventsForTask,
+      ).toHaveBeenCalled();
+      expect(updated.googleEventId).toBeNull();
+      expect(updated.googleEventCalendarId).toBeNull();
+      expect(updated.isUnscheduled).toBe(true);
+      expect(scheduleJobService.enqueueReplan).toHaveBeenCalledWith('user-1');
+    });
+
+    it('does not replan after deleting or completing an inbox task', async () => {
+      lastSaved = {
+        id: 'task-1',
+        userId: 'user-1',
+        name: 'Buy milk',
+        isUnscheduled: true,
+        eventType: TaskEventType.ADMIN,
+        status: TaskStatus.TODO,
+      };
+
+      await service.remove('task-1', 'user-1');
+      expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+
+      lastSaved = {
+        id: 'task-2',
+        userId: 'user-1',
+        name: 'Buy milk',
+        isUnscheduled: true,
+        eventType: TaskEventType.ADMIN,
+        status: TaskStatus.TODO,
+      };
+      await service.updateStatus('task-2', 'user-1', TaskStatus.COMPLETED);
+      expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
     });
   });
 });

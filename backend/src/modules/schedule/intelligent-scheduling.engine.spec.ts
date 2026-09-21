@@ -18,7 +18,11 @@ type MockRepo = {
   create?: jest.Mock;
   createQueryBuilder?: jest.Mock;
   deleteQb?: {
+    delete: jest.Mock;
+    from: jest.Mock;
+    where: jest.Mock;
     andWhere: jest.Mock;
+    execute: jest.Mock;
   };
 };
 
@@ -527,6 +531,37 @@ describe('IntelligentSchedulingEngine', () => {
       atLocalTimeIso(1, 0),
       atLocalTimeIso(1, 2),
     ]);
+  });
+
+  it('does not place unscheduled inbox tasks', async () => {
+    const phase911 = makePhase('phase-911', '09:00', '11:00', [1, 2, 3, 4, 5]);
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'inbox',
+        name: 'Buy milk',
+        isUnscheduled: true,
+        estimatedTimeInMinutes: 60,
+        phases: [phase911],
+      }),
+      makeTask({
+        id: 'flex',
+        name: 'Write brief',
+        estimatedTimeInMinutes: 60,
+        phases: [phase911],
+      }),
+    ]);
+
+    await engine.run(userId);
+
+    const placedIds = [
+      ...new Set(
+        (scheduledRepo.save.mock.calls as Array<[any]>).map(([row]) => row.taskId),
+      ),
+    ];
+    expect(placedIds).toEqual(['flex']);
+    expect(scheduledRepo.deleteQb?.where).toHaveBeenCalledWith('taskId IN (:...ids)', {
+      ids: ['inbox'],
+    });
   });
 
   it('places non-recurring task outside horizon and emits warning', async () => {
@@ -1088,6 +1123,12 @@ function makeTask(partial: Partial<Task>): Task {
     googleEventCalendarId: (partial as { googleEventCalendarId?: string | null })
       .googleEventCalendarId ?? null,
     isFixedExternal: false,
+    isUnscheduled: partial.isUnscheduled ?? false,
+    location: partial.location ?? null,
+    googleColorId: partial.googleColorId ?? null,
+    googleVisibility: partial.googleVisibility ?? null,
+    googleTransparency: partial.googleTransparency ?? null,
+    googleReminders: partial.googleReminders ?? null,
     createdAt: partial.createdAt ?? new Date('2026-04-20T08:00:00.000Z'),
     updatedAt: new Date('2026-04-20T08:00:00.000Z'),
   };

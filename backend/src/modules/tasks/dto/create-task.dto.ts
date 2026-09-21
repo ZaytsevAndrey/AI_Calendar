@@ -171,4 +171,65 @@ export class CreateTaskDto {
   @IsDateString()
   @IsOptional()
   scheduledEndTime?: string | null;
+
+  @ApiProperty({
+    description:
+      'Inbox task: no slot, not planned by Generate/replan, not synced to Google until scheduled.',
+    required: false,
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  isUnscheduled?: boolean;
+
+  @ApiProperty({ required: false, nullable: true })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsString()
+  @MaxLength(1024)
+  @IsOptional()
+  location?: string | null;
+
+  @ApiProperty({
+    description: 'Google Calendar colorId (1–11). Empty uses the phase color.',
+    required: false,
+    nullable: true,
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsString()
+  @MaxLength(8)
+  @IsOptional()
+  googleColorId?: string | null;
+
+  @ApiProperty({
+    description: 'Google Event visibility',
+    required: false,
+    nullable: true,
+    enum: ['default', 'public', 'private', 'confidential'],
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsString()
+  @IsOptional()
+  googleVisibility?: string | null;
+
+  @ApiProperty({
+    description: 'Google Event transparency (busy/free)',
+    required: false,
+    nullable: true,
+    enum: ['opaque', 'transparent'],
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsString()
+  @IsOptional()
+  googleTransparency?: string | null;
+
+  @ApiProperty({
+    description: 'Google Event reminders payload',
+    required: false,
+    nullable: true,
+  })
+  @IsOptional()
+  googleReminders?: {
+    useDefault: boolean;
+    overrides?: { method: 'email' | 'popup'; minutes: number }[];
+  } | null;
 }

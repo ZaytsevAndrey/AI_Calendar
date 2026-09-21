@@ -32,6 +32,10 @@ type LoginTicket = {
   expiresAt: number;
 };
 
+function stubExternalApis(): boolean {
+  return process.env.E2E_STUB_EXTERNAL === '1';
+}
+
 function googleEventStartMs(event: {
   start?: { dateTime?: string | null; date?: string | null };
 }): number {
@@ -83,6 +87,9 @@ export class GoogleCalendarService {
   }
 
   getLoginAuthUrl() {
+    if (stubExternalApis()) {
+      return 'https://accounts.google.com/o/oauth2/v2/auth?e2e=1';
+    }
     const scopes = [
       'openid',
       'email',
@@ -354,6 +361,9 @@ export class GoogleCalendarService {
   }
 
   async checkConnection(userId: string) {
+    if (stubExternalApis()) {
+      return { connected: false };
+    }
     this.logger.log(`Checking connection for user: ${userId}`);
 
     const user = await this.userRepo.findOne({
@@ -567,6 +577,9 @@ export class GoogleCalendarService {
     pageToken?: string,
     calendarId?: string,
   ) {
+    if (stubExternalApis()) {
+      return { events: [], totalEvents: 0 };
+    }
     this.logger.log(
       `Fetching events for user ${userId} from ${timeMin} to ${timeMax}`,
     );
@@ -627,7 +640,7 @@ export class GoogleCalendarService {
         singleEvents: true,
         orderBy: 'startTime',
         fields:
-          'items(id,summary,description,start,end,location,attendees,recurringEventId,status,colorId,created,updated,htmlLink,organizer),nextPageToken',
+          'items(id,summary,description,start,end,location,attendees,recurringEventId,status,colorId,created,updated,htmlLink,organizer,reminders,visibility,transparency),nextPageToken',
       });
 
       this.logger.log(
@@ -657,6 +670,9 @@ export class GoogleCalendarService {
     timeMax: string,
     maxResults: number = 250,
   ) {
+    if (stubExternalApis()) {
+      return { events: [], totalEvents: 0 };
+    }
     const calendarIds = await this.listDisplayCalendarIds(userId);
     const appId = await this.getStoredAppCalendarId(userId);
     const seen = new Set<string>();

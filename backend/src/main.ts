@@ -67,6 +67,13 @@ async function bootstrap() {
   const fastify = app.getHttpAdapter().getInstance();
   fastify.get('/health', async () => ({ status: 'ok' }));
 
+  if (process.env.E2E_BOOTSTRAP === '1') {
+    const { bootstrapPlaywrightUsers } = await import(
+      './e2e/bootstrap-playwright-users'
+    );
+    await bootstrapPlaywrightUsers(app);
+  }
+
   const port = Number(process.env.PORT ?? 3001);
   await app.listen(port, '0.0.0.0');
 }

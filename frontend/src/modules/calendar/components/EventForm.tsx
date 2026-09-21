@@ -5,20 +5,7 @@ import { useGetUserSettingsQuery } from '../../../api/userSettingsApi';
 import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { Modal } from '../../../ui/Modal';
 import { toLocalDateTimeInput } from '../../../utils/formatDate';
-
-const GOOGLE_COLORS = [
-    { id: '1', color: '#7986cb' },
-    { id: '2', color: '#33b679' },
-    { id: '3', color: '#8e24aa' },
-    { id: '4', color: '#e67c73' },
-    { id: '5', color: '#f6c026' },
-    { id: '6', color: '#f5511d' },
-    { id: '7', color: '#039be5' },
-    { id: '8', color: '#616161' },
-    { id: '9', color: '#3f51b5' },
-    { id: '10', color: '#0b8043' },
-    { id: '11', color: '#d60000' },
-];
+import { GoogleEventSettingsFields } from './GoogleEventSettingsFields';
 
 const PRIORITIES = [
     { value: 'urgent', label: 'Urgent' },
@@ -101,6 +88,12 @@ const EventForm: React.FC<EventFormProps> = ({
     );
     const [keepDefaultReminders, setKeepDefaultReminders] = useState(
         !!event?.reminders?.useDefault && !event?.reminders?.overrides?.length,
+    );
+    const [visibility, setVisibility] = useState<CreateEventParams['visibility'] | ''>(
+        event?.visibility ?? '',
+    );
+    const [transparency, setTransparency] = useState<'opaque' | 'transparent'>(
+        event?.transparency === 'transparent' ? 'transparent' : 'opaque',
     );
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [showDescription, setShowDescription] = useState(!!event?.description);
@@ -236,6 +229,14 @@ const EventForm: React.FC<EventFormProps> = ({
                   }
                 : undefined,
             colorId,
+            visibility:
+                visibility === 'public' ||
+                visibility === 'private' ||
+                visibility === 'confidential' ||
+                visibility === 'default'
+                    ? visibility
+                    : undefined,
+            transparency,
             emoji,
             priority,
             status,
@@ -485,17 +486,36 @@ const EventForm: React.FC<EventFormProps> = ({
 
                     {showMore ? (
                         <>
-                            <div>
-                                <label htmlFor="ev-loc" className={lbl}>
-                                    Location
-                                </label>
-                                <input
-                                    id="ev-loc"
-                                    className={inp}
-                                    value={location}
-                                    onChange={(e) => setLocation(e.target.value)}
-                                />
-                            </div>
+                            <GoogleEventSettingsFields
+                                value={{
+                                    location,
+                                    colorId,
+                                    visibility: visibility || '',
+                                    transparency,
+                                    keepDefaultReminders,
+                                    reminders: reminders.map((r) => ({
+                                        method: r.method === 'email' ? 'email' : 'popup',
+                                        minutes: r.minutes,
+                                    })),
+                                }}
+                                onChange={(next) => {
+                                    setLocation(next.location);
+                                    setColorId(next.colorId || '1');
+                                    setVisibility(
+                                        next.visibility === 'public' ||
+                                            next.visibility === 'private' ||
+                                            next.visibility === 'confidential' ||
+                                            next.visibility === 'default'
+                                            ? next.visibility
+                                            : '',
+                                    );
+                                    setTransparency(
+                                        next.transparency === 'transparent' ? 'transparent' : 'opaque',
+                                    );
+                                    setKeepDefaultReminders(next.keepDefaultReminders);
+                                    setReminders(next.reminders);
+                                }}
+                            />
                             <div>
                                 <label htmlFor="ev-stat" className={lbl}>
                                     Status
@@ -512,26 +532,6 @@ const EventForm: React.FC<EventFormProps> = ({
                                         </option>
                                     ))}
                                 </select>
-                            </div>
-                            <div>
-                                <span className={lbl}>Color</span>
-                                <div className="flex flex-wrap gap-1.5">
-                                    {GOOGLE_COLORS.map((c) => (
-                                        <button
-                                            key={c.id}
-                                            type="button"
-                                            title={c.color}
-                                            aria-label={`Color ${c.color}`}
-                                            className={`h-7 w-7 rounded-full border ${
-                                                colorId === c.id
-                                                    ? 'border-ide-link ring-2 ring-ide-link'
-                                                    : 'border-ide-border'
-                                            }`}
-                                            style={{ backgroundColor: c.color }}
-                                            onClick={() => setColorId(c.id)}
-                                        />
-                                    ))}
-                                </div>
                             </div>
                             <div>
                                 <span className={lbl}>Icon</span>
@@ -555,61 +555,6 @@ const EventForm: React.FC<EventFormProps> = ({
                                         </div>
                                     ) : null}
                                 </div>
-                            </div>
-                            <div>
-                                <span className={lbl}>Reminders</span>
-                                {reminders.map((rem, idx) => (
-                                    <div key={idx} className="mb-2 flex flex-wrap items-center gap-2">
-                                        <select
-                                            className={`${inp} w-auto min-w-[100px]`}
-                                            value={rem.method}
-                                            onChange={(e) => {
-                                                setKeepDefaultReminders(false);
-                                                setReminders((r) =>
-                                                    r.map((x, i) =>
-                                                        i === idx ? { ...x, method: e.target.value } : x
-                                                    )
-                                                );
-                                            }}
-                                        >
-                                            <option value="popup">Popup</option>
-                                            <option value="email">Email</option>
-                                        </select>
-                                        <input
-                                            type="number"
-                                            className={`${inp} w-24`}
-                                            value={rem.minutes}
-                                            onChange={(e) => {
-                                                setKeepDefaultReminders(false);
-                                                setReminders((r) =>
-                                                    r.map((x, i) =>
-                                                        i === idx ? { ...x, minutes: Number(e.target.value) } : x
-                                                    )
-                                                );
-                                            }}
-                                        />
-                                        <button
-                                            type="button"
-                                            className="text-xs text-ide-error hover:underline"
-                                            onClick={() => {
-                                                setKeepDefaultReminders(false);
-                                                setReminders((r) => r.filter((_, i) => i !== idx));
-                                            }}
-                                        >
-                                            Delete
-                                        </button>
-                                    </div>
-                                ))}
-                                <button
-                                    type="button"
-                                    className="text-xs text-ide-link hover:underline"
-                                    onClick={() => {
-                                        setKeepDefaultReminders(false);
-                                        setReminders((r) => [...r, { method: 'popup', minutes: 10 }]);
-                                    }}
-                                >
-                                    + Reminder
-                                </button>
                             </div>
                         </>
                     ) : (

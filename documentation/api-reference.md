@@ -82,7 +82,7 @@ Points: +1 per successful day, plus +1 whenever a consecutive run hits a multipl
 
 ## Tasks — `/tasks`
 
-Task CRUD (JWT). Bodies/responses include `phaseId`, **`phaseIds`** (max 1), **`eventType`** (`fixed` or `admin` on new writes), status, priority, deadline, **`earliestStartTime`**, **`eligibleWeekDays`**, estimated minutes, `allowSplit`, `isRecurring`, `recurrencePattern`, **`recurrenceWeekDays`**, optional `scheduledStartTime` / `scheduledEndTime`. `phaseIds` must belong to the current user.
+Task CRUD (JWT). Bodies/responses include `phaseId`, **`phaseIds`** (max 1), **`eventType`** (`fixed` or `admin` on new writes), status, priority, deadline, **`earliestStartTime`**, **`eligibleWeekDays`**, estimated minutes, `allowSplit`, `isRecurring`, `recurrencePattern`, **`recurrenceWeekDays`**, optional `scheduledStartTime` / `scheduledEndTime`. `phaseIds` must belong to the current user. **POST/PATCH** also return `jobId` when a silent replan was enqueued (`null` for fixed / completed). The Calendar client polls `GET /schedule-jobs/:id` then refreshes tasks and Google events.
 
 ## Google Calendar — `/google-calendar`
 
@@ -132,6 +132,8 @@ Completed jobs expose a parsed `result` with `diff`, `warnings`, and `errors` (s
 Create/update body may include:
 
 - `eventType` — `fixed` (pinned, not moved) or `admin` (flexible / recurring). Optional; default `admin`. Legacy values may still exist on old rows.
+- `isUnscheduled` — inbox item with no slot. Skips silent replan, Generate, and Google sync until the user schedules it. Cannot be combined with `eventType=fixed`.
+- `location`, `googleColorId`, `googleVisibility`, `googleTransparency`, `googleReminders` — stored on the task and written to Google when a timed event is created.
 - `phaseIds` — at most one phase UUID (empty = full wake/sleep window)
 - `estimatedTimeInMinutes` — optional; default 30 for non-fixed, or derived from start/end for fixed
 - `scheduledStartTime` / `scheduledEndTime` — required when `eventType` is `fixed`. For movable tasks, optional preferred clock (end = start + duration). After replan these hold the placed slot. `null` clears them.
@@ -142,4 +144,4 @@ Create/update body may include:
 - `recurrenceWeekDays` — `0` = Sunday … `6` = Saturday. Empty / omitted / all seven = no extra weekday filter. Intersected with the phase `weekDays`.
 - `allowSplit` — per-task; engine also requires the user setting `allowSplitScheduling`
 
-Non-`fixed` tasks trigger an automatic replan job after create/update/delete/status change.
+Non-`fixed` tasks trigger an automatic replan job after create/update/delete/status change, except `isUnscheduled` inbox items (replan runs if a previously scheduled task is moved into the inbox, to free the slot).
