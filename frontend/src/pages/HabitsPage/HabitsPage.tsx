@@ -101,7 +101,8 @@ const HabitsPage: React.FC = () => {
           <h1 className="page-title">Habits</h1>
           <p className="page-lead">
             Check in any of the last 14 days. A daily time block, if you set one, stays free for
-            that habit when you generate a schedule.
+            that habit when you generate a schedule and is added to Google Calendar when it is
+            connected.
           </p>
         </div>
         <button type="button" onClick={openCreate} className="ui-btn-primary w-full sm:w-auto">

@@ -1,5 +1,5 @@
 import type { HabitDTO } from '../../api/habits.api';
-import { habitBlockChips } from './habitBlocks';
+import { habitBlockChips, isHabitGoogleEvent } from './habitBlocks';
 
 function habit(partial: Partial<HabitDTO>): HabitDTO {
   return {
@@ -14,6 +14,7 @@ function habit(partial: Partial<HabitDTO>): HabitDTO {
     checkInDates: [],
     blockStartTime: '09:00',
     blockMinutes: 30,
+    googleEventId: null,
     createdAt: '',
     updatedAt: '',
     ...partial,
@@ -29,6 +30,7 @@ describe('habitBlockChips', () => {
     expect(chips[0]).toMatchObject({
       id: 'h1:2026-04-20',
       ymd: '2026-04-20',
+      startMinutes: 9 * 60,
       done: false,
     });
     expect(chips[0].start.toISOString()).toBe('2026-04-20T09:00:00.000Z');
@@ -41,6 +43,22 @@ describe('habitBlockChips', () => {
       'UTC',
     );
     expect(chips[0].done).toBe(true);
+  });
+
+  it('treats a habit series and its instances as the same Google event', () => {
+    const ids = new Set(['series-1']);
+    expect(isHabitGoogleEvent(ids, { id: 'occ-1', recurringEventId: 'series-1' })).toBe(true);
+    expect(isHabitGoogleEvent(ids, { id: 'other' })).toBe(false);
+  });
+
+  it('still draws an in-app chip when the block is also on Google', () => {
+    const chips = habitBlockChips(
+      [habit({ googleEventId: 'series-1' })],
+      [day],
+      'UTC',
+    );
+    expect(chips).toHaveLength(1);
+    expect(chips[0].startMinutes).toBe(9 * 60);
   });
 
   it('skips check-in-only habits', () => {

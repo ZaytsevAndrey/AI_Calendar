@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { HabitsService } from './habits.service';
 import { Habit } from './entities/habit.entity';
 import { HabitCheckIn } from './entities/habit-check-in.entity';
@@ -30,6 +31,12 @@ describe('HabitsService', () => {
     findOne: jest.fn(),
   };
 
+  const googleCalendarMock = {
+    createEvent: jest.fn(),
+    updateEvent: jest.fn(),
+    deleteEvent: jest.fn(),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
@@ -50,6 +57,7 @@ describe('HabitsService', () => {
           provide: getRepositoryToken(UserSettings),
           useValue: userSettingsRepositoryMock,
         },
+        { provide: GoogleCalendarService, useValue: googleCalendarMock },
       ],
     }).compile();
 
@@ -87,6 +95,45 @@ describe('HabitsService', () => {
       points: 1,
       checkInDates: ['2026-09-08'],
     });
+  });
+
+  it('creates a missing Google series when listing linked habits', async () => {
+    userSettingsRepositoryMock.findOne.mockResolvedValue({
+      timeZone: 'UTC',
+      googleCalendarLinked: true,
+    });
+    googleCalendarMock.createEvent.mockResolvedValue({
+      id: 'evt-backfill',
+      appCalendarId: 'cal-app',
+    });
+    habitsRepositoryMock.find.mockResolvedValue([
+      {
+        id: 'habit-1',
+        name: 'Exercise',
+        color: '#22c55e',
+        description: null,
+        blockStartTime: '09:00',
+        blockMinutes: 30,
+        googleEventId: null,
+        googleEventCalendarId: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+    checkInsRepositoryMock.find.mockResolvedValue([]);
+
+    const result = await service.findAll('user-1');
+
+    expect(googleCalendarMock.createEvent).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        summary: 'Exercise',
+        recurrence: ['RRULE:FREQ=DAILY'],
+        start: { dateTime: '2026-09-08T09:00:00+00:00', timeZone: 'UTC' },
+      }),
+      { skipSleepWindowCheck: true },
+    );
+    expect(result.habits[0].googleEventId).toBe('evt-backfill');
   });
 
   it('uses the settings IANA zone for the civil day', async () => {
@@ -233,6 +280,335 @@ describe('HabitsService', () => {
     );
     expect(result.blockStartTime).toBe('07:30');
     expect(result.blockMinutes).toBe(45);
+    expect(googleCalendarMock.createEvent).not.toHaveBeenCalled();
+  });
+
+  it('creates a daily Google event when Calendar is linked', async () => {
+    userSettingsRepositoryMock.findOne.mockResolvedValue({
+      timeZone: 'UTC',
+      googleCalendarLinked: true,
+    });
+    googleCalendarMock.createEvent.mockResolvedValue({
+      id: 'evt-habit',
+      appCalendarId: 'cal-app',
+    });
+    habitsRepositoryMock.findOne.mockResolvedValue({
+      id: 'habit-1',
+      userId: 'user-1',
+      name: 'Exercise',
+      color: '#22c55e',
+      description: null,
+      blockStartTime: null,
+      blockMinutes: null,
+      googleEventId: null,
+      googleEventCalendarId: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    checkInsRepositoryMock.find.mockResolvedValue([]);
+
+    const result = await service.update('user-1', 'habit-1', {
+      blockStartTime: '07:30',
+      blockMinutes: 45,
+    });
+
+    expect(googleCalendarMock.createEvent).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        summary: 'Exercise',
+        description: 'Daily habit time block',
+        recurrence: ['RRULE:FREQ=DAILY'],
+        transparency: 'opaque',
+        start: { dateTime: '2026-09-08T07:30:00+00:00', timeZone: 'UTC' },
+        end: { dateTime: '2026-09-08T08:15:00.000Z', timeZone: 'UTC' },
+      }),
+      { skipSleepWindowCheck: true },
+    );
+    expect(result.googleEventId).toBe('evt-habit');
+    expect(result.blockStartTime).toBe('07:30');
+  });
+
+  it('replaces the Google series when the habit is renamed', async () => {
+    userSettingsRepositoryMock.findOne.mockResolvedValue({
+      timeZone: 'UTC',
+      googleCalendarLinked: true,
+    });
+    googleCalendarMock.createEvent.mockResolvedValue({
+      id: 'evt-2',
+      appCalendarId: 'cal-app',
+    });
+    habitsRepositoryMock.findOne.mockResolvedValue({
+      id: 'habit-1',
+      userId: 'user-1',
+      name: 'Exercise',
+      color: '#22c55e',
+      description: null,
+      blockStartTime: '07:30',
+      blockMinutes: 45,
+      googleEventId: 'evt-1',
+      googleEventCalendarId: 'cal-app',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    checkInsRepositoryMock.find.mockResolvedValue([]);
+
+    await service.update('user-1', 'habit-1', { name: 'Walk' });
+
+    expect(googleCalendarMock.deleteEvent).toHaveBeenCalledWith(
+      'user-1',
+      'evt-1',
+      'cal-app',
+    );
+    expect(googleCalendarMock.createEvent).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({ summary: 'Walk', recurrence: ['RRULE:FREQ=DAILY'] }),
+      { skipSleepWindowCheck: true },
+    );
+  });
+
+  it('deletes the Google series when the time block is cleared', async () => {
+    userSettingsRepositoryMock.findOne.mockResolvedValue({
+      timeZone: 'UTC',
+      googleCalendarLinked: true,
+    });
+    habitsRepositoryMock.findOne.mockResolvedValue({
+      id: 'habit-1',
+      userId: 'user-1',
+      name: 'Exercise',
+      color: '#22c55e',
+      description: null,
+      blockStartTime: '07:30',
+      blockMinutes: 45,
+      googleEventId: 'evt-1',
+      googleEventCalendarId: 'cal-app',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    checkInsRepositoryMock.find.mockResolvedValue([]);
+
+    const result = await service.update('user-1', 'habit-1', {
+      blockStartTime: null,
+      blockMinutes: null,
+    });
+
+    expect(googleCalendarMock.deleteEvent).toHaveBeenCalledWith(
+      'user-1',
+      'evt-1',
+      'cal-app',
+    );
+    expect(googleCalendarMock.createEvent).not.toHaveBeenCalled();
+    expect(result.blockStartTime).toBeNull();
+    expect(result.googleEventId).toBeNull();
+  });
+
+  it('keeps the local block when Google Calendar is not connected', async () => {
+    userSettingsRepositoryMock.findOne.mockResolvedValue({
+      timeZone: 'UTC',
+      googleCalendarLinked: true,
+    });
+    googleCalendarMock.createEvent.mockRejectedValue(
+      new BadRequestException('Google Calendar is not connected.'),
+    );
+    habitsRepositoryMock.findOne.mockResolvedValue({
+      id: 'habit-1',
+      userId: 'user-1',
+      name: 'Exercise',
+      color: '#22c55e',
+      description: null,
+      blockStartTime: null,
+      blockMinutes: null,
+      googleEventId: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    checkInsRepositoryMock.find.mockResolvedValue([]);
+
+    const result = await service.update('user-1', 'habit-1', {
+      blockStartTime: '07:30',
+      blockMinutes: 45,
+    });
+
+    expect(result.blockStartTime).toBe('07:30');
+    expect(result.blockMinutes).toBe(45);
+    expect(result.googleEventId).toBeNull();
+  });
+
+  it('creates the Google series when a linked habit is created with a block', async () => {
+    userSettingsRepositoryMock.findOne.mockResolvedValue({
+      timeZone: 'UTC',
+      googleCalendarLinked: true,
+    });
+    googleCalendarMock.createEvent.mockResolvedValue({
+      id: 'evt-created',
+      appCalendarId: 'cal-app',
+    });
+    checkInsRepositoryMock.find.mockResolvedValue([]);
+
+    const result = await service.create('user-1', {
+      name: 'Exercise',
+      blockStartTime: '07:30',
+      blockMinutes: 45,
+    });
+
+    expect(googleCalendarMock.createEvent).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        summary: 'Exercise',
+        recurrence: ['RRULE:FREQ=DAILY'],
+        start: { dateTime: '2026-09-08T07:30:00+00:00', timeZone: 'UTC' },
+        end: { dateTime: '2026-09-08T08:15:00.000Z', timeZone: 'UTC' },
+      }),
+      { skipSleepWindowCheck: true },
+    );
+    expect(result.googleEventId).toBe('evt-created');
+  });
+
+  it('replaces the Google series when the clock time changes', async () => {
+    userSettingsRepositoryMock.findOne.mockResolvedValue({
+      timeZone: 'UTC',
+      googleCalendarLinked: true,
+    });
+    googleCalendarMock.createEvent.mockResolvedValue({
+      id: 'evt-moved',
+      appCalendarId: 'cal-app',
+    });
+    habitsRepositoryMock.findOne.mockResolvedValue({
+      id: 'habit-1',
+      userId: 'user-1',
+      name: 'Exercise',
+      color: '#22c55e',
+      description: 'Morning',
+      blockStartTime: '07:30',
+      blockMinutes: 45,
+      googleEventId: 'evt-1',
+      googleEventCalendarId: 'cal-app',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    checkInsRepositoryMock.find.mockResolvedValue([]);
+
+    await service.update('user-1', 'habit-1', {
+      blockStartTime: '08:00',
+      blockMinutes: 30,
+    });
+
+    expect(googleCalendarMock.deleteEvent).toHaveBeenCalledWith(
+      'user-1',
+      'evt-1',
+      'cal-app',
+    );
+    expect(googleCalendarMock.createEvent).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        summary: 'Exercise',
+        description: 'Morning',
+        start: { dateTime: '2026-09-08T08:00:00+00:00', timeZone: 'UTC' },
+        end: { dateTime: '2026-09-08T08:30:00.000Z', timeZone: 'UTC' },
+      }),
+      { skipSleepWindowCheck: true },
+    );
+  });
+
+  it('does not call Google when a linked block is saved unchanged', async () => {
+    userSettingsRepositoryMock.findOne.mockResolvedValue({
+      timeZone: 'UTC',
+      googleCalendarLinked: true,
+    });
+    habitsRepositoryMock.findOne.mockResolvedValue({
+      id: 'habit-1',
+      userId: 'user-1',
+      name: 'Exercise',
+      color: '#22c55e',
+      description: null,
+      blockStartTime: '07:30',
+      blockMinutes: 45,
+      googleEventId: 'evt-1',
+      googleEventCalendarId: 'cal-app',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    checkInsRepositoryMock.find.mockResolvedValue([]);
+
+    await service.update('user-1', 'habit-1', { name: 'Exercise' });
+
+    expect(googleCalendarMock.createEvent).not.toHaveBeenCalled();
+    expect(googleCalendarMock.deleteEvent).not.toHaveBeenCalled();
+  });
+
+  it('deletes the Google series when the habit is deleted', async () => {
+    userSettingsRepositoryMock.findOne.mockResolvedValue({
+      timeZone: 'UTC',
+      googleCalendarLinked: true,
+    });
+    habitsRepositoryMock.findOne.mockResolvedValue({
+      id: 'habit-1',
+      userId: 'user-1',
+      name: 'Exercise',
+      color: '#22c55e',
+      description: null,
+      blockStartTime: '07:30',
+      blockMinutes: 45,
+      googleEventId: 'evt-1',
+      googleEventCalendarId: 'cal-app',
+    });
+
+    await service.remove('user-1', 'habit-1');
+
+    expect(googleCalendarMock.deleteEvent).toHaveBeenCalledWith(
+      'user-1',
+      'evt-1',
+      'cal-app',
+    );
+    expect(checkInsRepositoryMock.delete).toHaveBeenCalledWith({ habitId: 'habit-1' });
+    expect(habitsRepositoryMock.remove).toHaveBeenCalled();
+  });
+
+  it('still deletes the habit when Google Calendar is not connected', async () => {
+    habitsRepositoryMock.findOne.mockResolvedValue({
+      id: 'habit-1',
+      userId: 'user-1',
+      name: 'Exercise',
+      color: '#22c55e',
+      description: null,
+      googleEventId: 'evt-1',
+      googleEventCalendarId: 'cal-app',
+    });
+    googleCalendarMock.deleteEvent.mockRejectedValue(
+      new Error('Google Calendar not connected'),
+    );
+
+    await service.remove('user-1', 'habit-1');
+
+    expect(habitsRepositoryMock.remove).toHaveBeenCalled();
+  });
+
+  it('does not write to Google when a day is checked in', async () => {
+    userSettingsRepositoryMock.findOne.mockResolvedValue({
+      timeZone: 'UTC',
+      googleCalendarLinked: true,
+    });
+    habitsRepositoryMock.findOne.mockResolvedValue({
+      id: 'habit-1',
+      userId: 'user-1',
+      name: 'Exercise',
+      color: '#22c55e',
+      description: null,
+      blockStartTime: '07:30',
+      blockMinutes: 45,
+      googleEventId: 'evt-1',
+      googleEventCalendarId: 'cal-app',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    checkInsRepositoryMock.findOne.mockResolvedValue(null);
+    checkInsRepositoryMock.find.mockResolvedValue([
+      { habitId: 'habit-1', localDate: '2026-09-08' },
+    ]);
+
+    await service.setCheckIn('user-1', 'habit-1', '2026-09-08', true);
+
+    expect(googleCalendarMock.createEvent).not.toHaveBeenCalled();
+    expect(googleCalendarMock.deleteEvent).not.toHaveBeenCalled();
   });
 
   it('rejects a time block that has only a duration', async () => {

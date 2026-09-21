@@ -91,7 +91,7 @@ Legacy `eventType` strings (`daily_routine`, `learning`, …) may still exist in
 
 ### 4.2 Slot graph
 
-- Build **busy** intervals: anchors (Google fixed) + `FIXED` user items + in-progress auto segments + **fully ended** auto-generated slots kept from earlier plans.  
+- Build **busy** intervals: anchors (Google fixed) + `FIXED` user items + in-progress auto segments + **fully ended** auto-generated slots kept from earlier plans + optional **habit time blocks**. A habit’s own Google series is not counted again as external busy.  
 - Build **available** intervals = the task’s phase window (or wake/sleep if none) intersected with **weekend** rules from user settings.  
 - Respect **minimum split** when placing segments.
 
@@ -152,7 +152,8 @@ One optional phase. If a movable task has preferred start/end stored on the task
 - **Inbound:** events from Google → stored as **anchors** (`isFixedExternal=true` or separate table); never moved by scheduler.  
 - **Outbound:** our items with sync flag get **create/update/delete** when **still-open** segments change. Fully ended app events are left in place.  
 - **Recurring:** one RRULE master for open occurrences. On replan/clear, if ended instances exist, the old series is **capped** with `UNTIL` (DTSTART unchanged) and a **new** series is created for remaining future slots—two Google writes, not one event per day. User-skipped days are stored on the task and omitted from placement; Google sync adds `EXDATE` for those instants.  
-- **Undo:** reverse last Google writes for items in snapshot (implementation must track mapping segment ↔ event id).
+- **Undo:** reverse last Google writes for items in snapshot (implementation must track mapping segment ↔ event id).  
+- **Habits:** a daily time block is an open-ended `RRULE:FREQ=DAILY` event on the app calendar when Google is linked. Check-ins are not events. Generate still reserves the interval from the habit row.
 
 ---
 

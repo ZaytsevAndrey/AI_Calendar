@@ -49,6 +49,7 @@ test.describe('P1 habits UI', () => {
     const create = page.getByRole('dialog');
     await create.locator('#habit-name').fill(name);
     await create.getByRole('checkbox', { name: 'Reserve a daily time block' }).check();
+    await expect(create.getByText(/added there every day/)).toBeVisible();
     await create.locator('#habit-block-start').fill('09:15');
     await create.locator('#habit-block-minutes').fill('45');
     await create.getByRole('button', { name: 'Create habit' }).click();

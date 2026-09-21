@@ -179,6 +179,45 @@ describe('IntelligentSchedulingEngine', () => {
     ]);
   });
 
+  it('does not treat a habit Google series as extra busy beyond the habit block', async () => {
+    habitRepo.find.mockResolvedValue([
+      { blockStartTime: '09:00', blockMinutes: 60, googleEventId: 'habit-series-1' },
+    ]);
+    getSettingsMock.mockResolvedValue(
+      makeSettings({
+        ...baseSettings,
+        googleCalendarLinked: true,
+      }),
+    );
+    const googleSvc = (engine as any).googleCalendarService as { getEvents: jest.Mock };
+    googleSvc.getEvents.mockResolvedValue({
+      events: [
+        {
+          id: 'habit-series-1_20260420',
+          recurringEventId: 'habit-series-1',
+          status: 'confirmed',
+          start: { dateTime: '2026-04-20T09:00:00.000Z' },
+          end: { dateTime: '2026-04-20T12:00:00.000Z' },
+        },
+      ],
+    });
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'after-habit-series',
+        name: 'Write',
+        estimatedTimeInMinutes: 60,
+        phases: [phaseWorkday],
+      }),
+    ]);
+
+    const result = await engine.run(userId);
+
+    expect(result.errors).toHaveLength(0);
+    expect(
+      extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls).get('after-habit-series')?.[0],
+    ).toEqual([atLocalTimeIso(0, 10), atLocalTimeIso(0, 11)]);
+  });
+
   it('places recurring tasks by priority into exact target slots', async () => {
     const high = makeTask({
       id: 'r1',

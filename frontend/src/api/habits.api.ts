@@ -10,6 +10,7 @@ export type HabitDTO = {
   checkInDates: string[];
   blockStartTime: string | null;
   blockMinutes: number | null;
+  googleEventId: string | null;
   createdAt: string;
   updatedAt: string;
 };

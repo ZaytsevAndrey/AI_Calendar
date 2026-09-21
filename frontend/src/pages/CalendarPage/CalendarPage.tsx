@@ -24,6 +24,8 @@ import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
 import { findTaskForGoogleEvent } from 'modules/calendar/findTaskForGoogleEvent';
 import { useGetEventsQuery as useGetTasksQuery } from 'api/eventTasksApi';
+import { useGetHabitsQuery } from 'api/habitsApi';
+import { isHabitGoogleEvent } from 'modules/habits/habitBlocks';
 import { VoiceTaskButton } from 'modules/voice/components/VoiceTaskButton';
 import { VoiceTaskSheet } from 'modules/voice/components/VoiceTaskSheet';
 import { useVoiceTask } from 'modules/voice/hooks/useVoiceTask';
@@ -103,12 +105,20 @@ const CalendarPage: React.FC = () => {
     const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
     const { openCreate, openCreateFromPrefill, openEdit, createFromPayload, editorModal } = useEventEditor();
     const { data: tasks = [] } = useGetTasksQuery();
+    const { data: habitsData } = useGetHabitsQuery();
     const voice = useVoiceTask({
         onComplete: createFromPayload,
         onSufficient: openCreateFromPrefill,
     });
     const busy = isGenerating || isClearing || isUndoing;
-    const displayEvents = visibleGoogleEvents(getEventsQuery.data?.events || []);
+    const habitEventIds = new Set(
+        (habitsData?.habits ?? [])
+            .map((habit) => habit.googleEventId)
+            .filter((id): id is string => !!id),
+    );
+    const displayEvents = visibleGoogleEvents(getEventsQuery.data?.events || []).filter(
+        (event) => !isHabitGoogleEvent(habitEventIds, event),
+    );
 
     const handleDeleteEvent = (eventId: string, eventName: string) => {
         const event = displayEvents.find((item) => item.id === eventId);

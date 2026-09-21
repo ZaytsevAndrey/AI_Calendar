@@ -185,8 +185,11 @@ const HabitForm: React.FC<HabitFormProps> = ({
               ) : null}
             </div>
           </div>
+          <p className="ui-hint">
+            Generate will not place tasks on top of this time. When Google Calendar is connected,
+            the same block is added there every day.
+          </p>
         ) : null}
-        <p className="ui-hint">Generate will not place tasks on top of this time.</p>
       </div>
 
       <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

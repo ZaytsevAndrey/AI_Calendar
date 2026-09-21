@@ -67,18 +67,18 @@ JWT. Free Groq backend (`GROQ_API_KEY`). Audio is **not** stored.
 
 ## Habits — `/habits`
 
-JWT. Civil “today” uses **settings `timeZone`**. Check-ins can be added or removed for today and the previous 13 days. Check-ins are not tasks and are not written to Google Calendar. An optional daily time block is busy time for Generate and is drawn only on the in-app calendar.
+JWT. Civil “today” uses **settings `timeZone`**. Check-ins can be added or removed for today and the previous 13 days. Check-ins are not tasks and are not written to Google Calendar. An optional daily time block is busy time for Generate and is drawn on the in-app calendar. When Google Calendar is connected, that block is also a daily recurring event (`RRULE:FREQ=DAILY`) on the app calendar, starting today in the settings time zone. `GET /habits` creates the series for a block that does not have `googleEventId` yet. A missing or expired Google token keeps the local block and skips the Google write. Check-ins do not create or change the event.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/habits` | List habits plus `today`, `editableFrom`, `editableTo`, `timeZone`. Each habit includes streak, points, `checkedToday`, `checkInDates`, `blockStartTime`, `blockMinutes` (`null` when check-in only) |
+| GET | `/habits` | List habits plus `today`, `editableFrom`, `editableTo`, `timeZone`. Each habit includes streak, points, `checkedToday`, `checkInDates`, `blockStartTime`, `blockMinutes` (`null` when check-in only), and `googleEventId` when the block is on Google Calendar |
 | POST | `/habits` | Create (`name`, optional `color` `#rrggbb`, optional `description`, optional daily block `blockStartTime` `HH:mm` + `blockMinutes` 5–240) |
 | PATCH | `/habits/:id` | Update name / color / description / block. Block fields are a pair: both set, or both `null` to clear. One without the other is 400 |
 | DELETE | `/habits/:id` | Delete the habit and its check-ins |
 | POST | `/habits/:id/check-ins` | Body `{ date: "YYYY-MM-DD" }` — mark done (last 14 days, through today) |
 | DELETE | `/habits/:id/check-ins/:date` | Clear that day’s check-in (same window) |
 
-Points: +1 per successful day, plus +1 whenever a consecutive run hits a multiple of 7. Streak counts consecutive days ending today, or yesterday if today is not yet checked. A time block repeats every civil day in the settings zone, including weekends. `blockMinutes` is an integer from 5 to 240. Generate will not place a task on top of that interval. Marking the day done does not remove the block.
+Points: +1 per successful day, plus +1 whenever a consecutive run hits a multiple of 7. Streak counts consecutive days ending today, or yesterday if today is not yet checked. A time block repeats every civil day in the settings zone, including weekends. `blockMinutes` is an integer from 5 to 240. Generate will not place a task on top of that interval. Marking the day done does not remove the block. Changing the clock time or duration replaces the Google series. Clearing the block or deleting the habit deletes that series. The in-app calendar keeps its own chip and hides the matching Google event so the block is not drawn twice.
 
 ## Tasks — `/tasks`
 

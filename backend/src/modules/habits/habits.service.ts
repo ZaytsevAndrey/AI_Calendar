@@ -1,12 +1,15 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
-import { localYmd, normalizeClockHm } from '../voice/voice-local-date.util';
+import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { phaseHexToGoogleColorId } from '../google-calendar/phase-hex-to-google-color-id.util';
+import { localDateTimeIso, localYmd, normalizeClockHm } from '../voice/voice-local-date.util';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { CreateHabitDto } from './dto/create-habit.dto';
 import { UpdateHabitDto } from './dto/update-habit.dto';
@@ -35,8 +38,17 @@ export type HabitSummary = {
   checkInDates: string[];
   blockStartTime: string | null;
   blockMinutes: number | null;
+  googleEventId: string | null;
   createdAt: Date;
   updatedAt: Date;
+};
+
+type GoogleBlockSnapshot = {
+  name: string;
+  color: string;
+  description: string | null;
+  blockStartTime: string | null;
+  blockMinutes: number | null;
 };
 
 export type HabitsListResponse = {
@@ -49,6 +61,8 @@ export type HabitsListResponse = {
 
 @Injectable()
 export class HabitsService {
+  private readonly logger = new Logger(HabitsService.name);
+
   constructor(
     @InjectRepository(Habit)
     private readonly habitsRepository: Repository<Habit>,
@@ -56,6 +70,7 @@ export class HabitsService {
     private readonly checkInsRepository: Repository<HabitCheckIn>,
     @InjectRepository(UserSettings)
     private readonly userSettingsRepository: Repository<UserSettings>,
+    private readonly googleCalendar: GoogleCalendarService,
   ) {}
 
   async findAll(userId: string): Promise<HabitsListResponse> {
@@ -64,6 +79,7 @@ export class HabitsService {
       where: { userId },
       order: { createdAt: 'ASC' },
     });
+    await this.backfillMissingGoogleBlocks(userId, habits);
     const summaries = await this.summariesFor(habits, today);
     return {
       today,
@@ -85,7 +101,14 @@ export class HabitsService {
       blockMinutes: block.blockMinutes,
     });
     const saved = await this.habitsRepository.save(habit);
-    return this.summaryFor(saved, userId);
+    const synced = await this.syncGoogleBlock(userId, saved, {
+      name: '',
+      color: '',
+      description: null,
+      blockStartTime: null,
+      blockMinutes: null,
+    });
+    return this.summaryFor(synced, userId);
   }
 
   async update(
@@ -94,6 +117,7 @@ export class HabitsService {
     dto: UpdateHabitDto,
   ): Promise<HabitSummary> {
     const habit = await this.requireHabit(userId, id);
+    const previous = this.googleSnapshot(habit);
     if (dto.name !== undefined) habit.name = this.requireName(dto.name);
     if (dto.color !== undefined) habit.color = this.normalizeColor(dto.color);
     if (dto.description !== undefined) {
@@ -108,11 +132,22 @@ export class HabitsService {
       habit.blockMinutes = block.blockMinutes;
     }
     const saved = await this.habitsRepository.save(habit);
-    return this.summaryFor(saved, userId);
+    const synced = await this.syncGoogleBlock(userId, saved, previous);
+    return this.summaryFor(synced, userId);
   }
 
   async remove(userId: string, id: string): Promise<void> {
     const habit = await this.requireHabit(userId, id);
+    try {
+      await this.deleteGoogleBlock(userId, habit);
+    } catch (err) {
+      if (!this.isGoogleDisconnected(err)) throw err;
+      this.logger.warn(
+        `Habit ${habit.id} was deleted locally; its Google event was left in place: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
     await this.checkInsRepository.delete({ habitId: habit.id });
     await this.habitsRepository.remove(habit);
   }
@@ -184,6 +219,7 @@ export class HabitsService {
         checkInDates: [...done].filter(isValidYmd).sort(),
         blockStartTime: habit.blockStartTime ?? null,
         blockMinutes: habit.blockMinutes ?? null,
+        googleEventId: habit.googleEventId ?? null,
         createdAt: habit.createdAt,
         updatedAt: habit.updatedAt,
       };
@@ -275,5 +311,144 @@ export class HabitsService {
       throw new BadRequestException('blockMinutes must be an integer from 5 to 240');
     }
     return { blockStartTime: hm, blockMinutes: mins };
+  }
+
+  private googleSnapshot(habit: Habit): GoogleBlockSnapshot {
+    return {
+      name: habit.name,
+      color: habit.color,
+      description: habit.description ?? null,
+      blockStartTime: habit.blockStartTime ?? null,
+      blockMinutes: habit.blockMinutes ?? null,
+    };
+  }
+
+  private googleFacingChanged(previous: GoogleBlockSnapshot, habit: Habit): boolean {
+    const next = this.googleSnapshot(habit);
+    return (
+      previous.name !== next.name ||
+      previous.color !== next.color ||
+      previous.description !== next.description ||
+      previous.blockStartTime !== next.blockStartTime ||
+      previous.blockMinutes !== next.blockMinutes
+    );
+  }
+
+  /** Creates the Google series for blocks saved before Calendar was linked. */
+  private async backfillMissingGoogleBlocks(userId: string, habits: Habit[]): Promise<void> {
+    const missing = habits.filter(
+      (habit) => habit.blockStartTime && habit.blockMinutes && !habit.googleEventId,
+    );
+    for (const habit of missing) {
+      try {
+        const synced = await this.syncGoogleBlock(userId, habit, {
+          name: '',
+          color: '',
+          description: null,
+          blockStartTime: null,
+          blockMinutes: null,
+        });
+        habit.googleEventId = synced.googleEventId ?? null;
+        habit.googleEventCalendarId = synced.googleEventCalendarId ?? null;
+      } catch (err) {
+        this.logger.warn(
+          `Habit ${habit.id} time block was not written to Google Calendar: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Writes the daily block as an open-ended Google series when Calendar is linked.
+   * A missing token keeps the local block and skips the write.
+   * Clock or duration changes replace the series so the start stays on the chosen time.
+   */
+  private async syncGoogleBlock(
+    userId: string,
+    habit: Habit,
+    previous: GoogleBlockSnapshot,
+  ): Promise<Habit> {
+    const settings = await this.userSettingsRepository.findOne({ where: { userId } });
+    if (!settings?.googleCalendarLinked) return habit;
+
+    const hasBlock = Boolean(habit.blockStartTime && habit.blockMinutes);
+    try {
+      if (!hasBlock) {
+        if (!habit.googleEventId) return habit;
+        await this.deleteGoogleBlock(userId, habit);
+        habit.googleEventId = null;
+        habit.googleEventCalendarId = null;
+        return this.habitsRepository.save(habit);
+      }
+
+      if (habit.googleEventId && !this.googleFacingChanged(previous, habit)) {
+        return habit;
+      }
+
+      if (habit.googleEventId) {
+        await this.deleteGoogleBlock(userId, habit);
+        habit.googleEventId = null;
+        habit.googleEventCalendarId = null;
+      }
+
+      const timeZone = resolveIanaTimeZone(settings.timeZone);
+      const today = localYmd(new Date().toISOString(), timeZone);
+      const created = await this.googleCalendar.createEvent(
+        userId,
+        this.googleBlockPayload(habit, timeZone, today),
+        { skipSleepWindowCheck: true },
+      );
+      habit.googleEventId = typeof created.id === 'string' ? created.id : null;
+      habit.googleEventCalendarId =
+        typeof created.appCalendarId === 'string' ? created.appCalendarId : null;
+      return this.habitsRepository.save(habit);
+    } catch (err) {
+      if (this.isGoogleDisconnected(err)) {
+        this.logger.warn(
+          `Habit ${habit.id} time block was not written to Google Calendar: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+        return this.habitsRepository.save(habit);
+      }
+      throw err;
+    }
+  }
+
+  private googleBlockPayload(
+    habit: Habit,
+    timeZone: string,
+    today: string,
+  ): Record<string, unknown> {
+    const startIso = localDateTimeIso(today, habit.blockStartTime as string, timeZone);
+    const endIso = new Date(
+      new Date(startIso).getTime() + (habit.blockMinutes as number) * 60_000,
+    ).toISOString();
+    const colorId = phaseHexToGoogleColorId(habit.color);
+    return {
+      summary: habit.name,
+      description: habit.description?.trim() || 'Daily habit time block',
+      start: { dateTime: startIso, timeZone },
+      end: { dateTime: endIso, timeZone },
+      recurrence: ['RRULE:FREQ=DAILY'],
+      transparency: 'opaque',
+      ...(colorId ? { colorId } : {}),
+    };
+  }
+
+  private async deleteGoogleBlock(userId: string, habit: Habit): Promise<void> {
+    if (!habit.googleEventId) return;
+    await this.googleCalendar.deleteEvent(
+      userId,
+      habit.googleEventId,
+      habit.googleEventCalendarId ?? undefined,
+    );
+  }
+
+  private isGoogleDisconnected(err: unknown): boolean {
+    const message = err instanceof Error ? err.message : String(err);
+    return /not connected|token expired/i.test(message);
   }
 }

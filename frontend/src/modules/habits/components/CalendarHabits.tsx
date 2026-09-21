@@ -19,10 +19,18 @@ function lockMessage(date: string, today: string): string {
   return 'You can change check-ins for the last 14 days.';
 }
 
-export function HabitDayChecklist({ date }: { date: string }) {
+export function HabitDayChecklist({
+  date,
+  omitTimed = false,
+}: {
+  date: string;
+  omitTimed?: boolean;
+}) {
   const { data } = useGetHabitsQuery();
   const { toggle, busy } = useToggleHabit();
-  const habits = data?.habits ?? [];
+  const habits = (data?.habits ?? []).filter(
+    (habit) => !omitTimed || !habit.blockStartTime || !habit.blockMinutes,
+  );
   if (!data || habits.length === 0) return null;
 
   const editable = isYmdInRange(date, data.editableFrom, data.editableTo);
@@ -62,7 +70,10 @@ export function HabitDayChecklist({ date }: { date: string }) {
 
 export function HabitDaySection({ date }: { date: string }) {
   const { data } = useGetHabitsQuery();
-  if (!data?.habits.length) return null;
+  const checkInOnly = (data?.habits ?? []).filter(
+    (habit) => !habit.blockStartTime || !habit.blockMinutes,
+  );
+  if (!data || checkInOnly.length === 0) return null;
   const editable = isYmdInRange(date, data.editableFrom, data.editableTo);
 
   return (
@@ -73,7 +84,7 @@ export function HabitDaySection({ date }: { date: string }) {
           <p className="text-xs text-ide-muted">{lockMessage(date, data.today)}</p>
         )}
       </div>
-      <HabitDayChecklist date={date} />
+      <HabitDayChecklist date={date} omitTimed />
     </div>
   );
 }

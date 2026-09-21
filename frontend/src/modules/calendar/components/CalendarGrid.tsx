@@ -16,8 +16,15 @@ import {
     wakingHourSlots,
 } from '../calendarView';
 import { HabitBlockButton, HabitDayDialog, HabitDayDots, HabitDaySection } from '../../habits/components/CalendarHabits';
-import { habitBlockChips } from '../../habits/habitBlocks';
+import { habitBlockChips, isHabitGoogleEvent } from '../../habits/habitBlocks';
 import { ymdFromLocalDate } from '../../../utils/ianaDateTime';
+
+function eventStartMinutes(event: GoogleCalendarEvent): number {
+    if (!event.start.dateTime) return -1;
+    const start = new Date(event.start.dateTime);
+    if (Number.isNaN(start.getTime())) return 0;
+    return start.getHours() * 60 + start.getMinutes();
+}
 
 interface CalendarGridProps {
     view: CalendarView;
@@ -61,6 +68,12 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     };
 
     const days = getDaysInView(view, date);
+    const habitEventIds = new Set(
+        (habitsData?.habits ?? [])
+            .map((habit) => habit.googleEventId)
+            .filter((id): id is string => !!id),
+    );
+    const visibleEvents = events.filter((event) => !isHabitGoogleEvent(habitEventIds, event));
     const habitBlocks = habitBlockChips(
         habitsData?.habits ?? [],
         days,
@@ -71,8 +84,55 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
         <HabitDayDialog date={habitDate} onClose={() => setHabitDate(null)} />
     );
 
+    const renderGridEvent = (event: GoogleCalendarEvent) => {
+        let eventPhase = null;
+        if (event.start?.dateTime) {
+            const eventTime = new Date(event.start.dateTime).toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+            });
+            eventPhase = getPhaseForTime(eventTime);
+        }
+
+        return (
+            <div
+                key={event.id}
+                title={tooltipText(event)}
+                role="button"
+                tabIndex={0}
+                className="relative mb-1 cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded px-1.5 py-1 text-xs text-white"
+                style={{
+                    backgroundColor: getEventColor(event),
+                    border: eventPhase
+                        ? `2px solid ${eventPhase.color}`
+                        : '1px solid rgba(255,255,255,0.3)',
+                }}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onEditEvent?.(event.id);
+                }}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onEditEvent?.(event.id);
+                    }
+                }}
+            >
+                {chipLabel(event)}
+                {eventPhase && (
+                    <span
+                        className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-white"
+                        style={{ backgroundColor: eventPhase.color }}
+                    />
+                )}
+            </div>
+        );
+    };
+
     if (view === 'day') {
-        const dayEvents = eventsForDay(events, days[0]);
+        const dayEvents = eventsForDay(visibleEvents, days[0]);
         const timeSlots = wakingHourSlots(sleepWindow).map((time) => ({
             time,
             phase: getPhaseForTime(time),
@@ -105,17 +165,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                 )}
 
                 <HabitDaySection date={ymdFromLocalDate(days[0])} />
-                {habitBlocks
-                    .filter((block) => block.ymd === ymdFromLocalDate(days[0]))
-                    .filter((block) => !timeSlots.some((slot) => parseInt(slot.time, 10) === block.start.getHours()))
-                    .map((block) => (
-                        <HabitBlockButton
-                            key={block.id}
-                            block={block}
-                            showTime
-                            onOpen={setHabitDate}
-                        />
-                    ))}
 
                 <div className="min-h-0 flex-1 overflow-y-auto">
                     {timeSlots.map((slot, index) => {
@@ -160,7 +209,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                         .filter(
                                             (block) =>
                                                 block.ymd === ymdFromLocalDate(days[0]) &&
-                                                block.start.getHours() === hour,
+                                                Math.floor(block.startMinutes / 60) === hour,
                                         )
                                         .map((block) => (
                                             <HabitBlockButton
@@ -255,7 +304,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                         className="grid min-h-[5.5rem] flex-1 grid-cols-7 border-b border-ide-border last:border-b-0"
                     >
                         {week.map((day, dayIndex) => {
-                            const dayEvents = gridEventsForDay(events, day, sleepWindow);
+                            const dayEvents = gridEventsForDay(visibleEvents, day, sleepWindow);
                             const isCurrentDay = isToday(day);
                             const isInCurrentMonth = isCurrentMonth(day);
 
@@ -280,65 +329,38 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                     <HabitDayDots day={day} onOpen={setHabitDate} />
 
                                     <div className="mt-1 min-h-0 flex-1 overflow-y-auto">
-                                        {habitBlocks
-                                            .filter((block) => block.ymd === ymdFromLocalDate(day))
-                                            .map((block) => (
-                                                <HabitBlockButton
-                                                    key={block.id}
-                                                    block={block}
-                                                    showTime
-                                                    onOpen={setHabitDate}
-                                                />
-                                            ))}
                                         {dayEvents
-                                            .map((event) => {
-                                                let eventPhase = null;
-                                                if (event.start?.dateTime) {
-                                                    const eventTime = new Date(
-                                                        event.start.dateTime
-                                                    ).toLocaleTimeString('en-US', {
-                                                        hour12: false,
-                                                        hour: '2-digit',
-                                                        minute: '2-digit',
-                                                    });
-                                                    eventPhase = getPhaseForTime(eventTime);
-                                                }
-
-                                                return (
-                                                    <div
-                                                        key={event.id}
-                                                        title={tooltipText(event)}
-                                                        role="button"
-                                                        tabIndex={0}
-                                                        className="relative mb-1 cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded px-1.5 py-1 text-xs text-white"
-                                                        style={{
-                                                            backgroundColor: getEventColor(event),
-                                                            border: eventPhase
-                                                                ? `2px solid ${eventPhase.color}`
-                                                                : '1px solid rgba(255,255,255,0.3)',
-                                                        }}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            onEditEvent?.(event.id);
-                                                        }}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Enter' || e.key === ' ') {
-                                                                e.preventDefault();
-                                                                e.stopPropagation();
-                                                                onEditEvent?.(event.id);
-                                                            }
-                                                        }}
-                                                    >
-                                                        {chipLabel(event)}
-                                                        {eventPhase && (
-                                                            <span
-                                                                className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-white"
-                                                                style={{ backgroundColor: eventPhase.color }}
-                                                            />
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
+                                            .filter((event) => !event.start?.dateTime)
+                                            .map((event) => renderGridEvent(event))}
+                                        {[
+                                            ...habitBlocks
+                                                .filter((block) => block.ymd === ymdFromLocalDate(day))
+                                                .map((block) => ({
+                                                    kind: 'habit' as const,
+                                                    block,
+                                                    sort: block.startMinutes,
+                                                })),
+                                            ...dayEvents
+                                                .filter((event) => event.start?.dateTime)
+                                                .map((event) => ({
+                                                    kind: 'event' as const,
+                                                    event,
+                                                    sort: eventStartMinutes(event),
+                                                })),
+                                        ]
+                                            .sort((a, b) => a.sort - b.sort)
+                                            .map((item) =>
+                                                item.kind === 'habit' ? (
+                                                    <HabitBlockButton
+                                                        key={item.block.id}
+                                                        block={item.block}
+                                                        showTime
+                                                        onOpen={setHabitDate}
+                                                    />
+                                                ) : (
+                                                    renderGridEvent(item.event)
+                                                ),
+                                            )}
                                     </div>
                                 </div>
                             );

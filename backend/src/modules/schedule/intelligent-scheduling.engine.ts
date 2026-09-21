@@ -515,6 +515,13 @@ export class IntelligentSchedulingEngine {
     for (const row of autoBefore) {
       if (row.googleEventId) ourGoogleEventIds.add(row.googleEventId);
     }
+    const habitBusy = await this.collectHabitBlockBusy(
+      userId,
+      startYmd,
+      localYmd(extendedEnd.toISOString(), timeZone),
+      timeZone,
+      ourGoogleEventIds,
+    );
     if (settings.googleCalendarLinked) {
       try {
         googleBusy = await this.collectGoogleBusyIntervals(
@@ -532,13 +539,6 @@ export class IntelligentSchedulingEngine {
         });
       }
     }
-
-    const habitBusy = await this.collectHabitBlockBusy(
-      userId,
-      startYmd,
-      localYmd(extendedEnd.toISOString(), timeZone),
-      timeZone,
-    );
 
     const anchorBusy = await this.buildAnchorBusyIntervals(
       allTasks,
@@ -1214,11 +1214,15 @@ export class IntelligentSchedulingEngine {
     startYmd: string,
     endYmdExclusive: string,
     timeZone: string,
+    ourGoogleEventIds: Set<string>,
   ): Promise<MsInterval[]> {
     const habits = await this.habitRepo.find({
       where: { userId },
-      select: ['blockStartTime', 'blockMinutes'],
+      select: ['blockStartTime', 'blockMinutes', 'googleEventId'],
     });
+    for (const habit of habits) {
+      if (habit.googleEventId) ourGoogleEventIds.add(habit.googleEventId);
+    }
     return habitBlockIntervals(habits, startYmd, endYmdExclusive, timeZone);
   }
 

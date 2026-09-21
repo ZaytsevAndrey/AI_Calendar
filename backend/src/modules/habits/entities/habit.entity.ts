@@ -33,6 +33,13 @@ export class Habit {
   @Column({ type: 'int', nullable: true })
   blockMinutes: number | null;
 
+  /** Recurring Google event for the daily block. Null when Calendar is not connected. */
+  @Column({ type: 'varchar', nullable: true })
+  googleEventId: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  googleEventCalendarId: string | null;
+
   @OneToMany(() => HabitCheckIn, (checkIn) => checkIn.habit)
   checkIns: HabitCheckIn[];
 
