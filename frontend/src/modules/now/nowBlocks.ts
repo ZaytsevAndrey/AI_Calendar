@@ -205,10 +205,12 @@ export function unscheduledTasksForToday(
 ): TaskDTO[] {
   return tasks
     .filter((task) => isCurrentTask(task))
-    .filter((task) => !task.isUnscheduled)
     .filter((task) => !occupiedTaskIds.has(task.id))
     .filter((task) => !taskTimedBounds(task))
-    .filter((task) => todayWindowIncludesTask(task, todayYmd, timeZone))
+    .filter(
+      (task) =>
+        !!task.isUnscheduled || todayWindowIncludesTask(task, todayYmd, timeZone),
+    )
     .sort((a, b) => {
       const rank = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
       if (rank !== 0) return rank;

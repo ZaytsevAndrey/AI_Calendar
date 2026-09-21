@@ -215,10 +215,34 @@ describe('unscheduledTasksForToday', () => {
     expect(list.map((item) => item.id)).toEqual(['h', 'l']);
   });
 
-  it('excludes inbox unscheduled tasks from the transitional strip', () => {
+  it('lists inbox unscheduled tasks with flexible tasks still waiting for a slot', () => {
     const waiting = task({ id: 'h', name: 'Write brief', priority: 'high' });
     const inbox = task({ id: 'u', name: 'Buy milk', isUnscheduled: true, priority: 'urgent' });
-    const list = unscheduledTasksForToday([waiting, inbox], new Set(), TODAY, TZ);
-    expect(list.map((item) => item.id)).toEqual(['h']);
+    const later = task({
+      id: 'later',
+      name: 'Next month',
+      isUnscheduled: true,
+      deadline: '2026-10-01T12:00:00+03:00',
+    });
+    const overdue = task({
+      id: 'over',
+      name: 'Yesterday',
+      isUnscheduled: true,
+      priority: 'low',
+      deadline: '2026-09-09T12:00:00+03:00',
+    });
+    const done = task({
+      id: 'done',
+      name: 'Finished',
+      isUnscheduled: true,
+      status: 'completed',
+    });
+    const list = unscheduledTasksForToday(
+      [waiting, inbox, later, overdue, done],
+      new Set(),
+      TODAY,
+      TZ,
+    );
+    expect(list.map((item) => item.id)).toEqual(['u', 'h', 'later', 'over']);
   });
 });
