@@ -83,6 +83,7 @@ describe('IntelligentSchedulingEngine', () => {
   let engine: IntelligentSchedulingEngine;
   let taskRepo: MockRepo;
   let scheduledRepo: MockRepo;
+  let habitRepo: { find: jest.Mock };
   let getSettingsMock: jest.Mock;
 
   const userId = 'user-1';
@@ -134,6 +135,9 @@ describe('IntelligentSchedulingEngine', () => {
     };
 
     getSettingsMock = jest.fn().mockResolvedValue(baseSettings);
+    habitRepo = {
+      find: jest.fn().mockResolvedValue([]),
+    };
 
     engine = new IntelligentSchedulingEngine(
       taskRepo as never,
@@ -145,11 +149,34 @@ describe('IntelligentSchedulingEngine', () => {
         getEvents: jest.fn(),
         getStoredAppCalendarId: jest.fn().mockResolvedValue(undefined),
       } as never,
+      habitRepo as never,
     );
   });
 
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  it('places a task after a habit time block instead of on top of it', async () => {
+    habitRepo.find.mockResolvedValue([
+      { blockStartTime: '09:00', blockMinutes: 60 },
+    ]);
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'after-habit',
+        name: 'Write',
+        estimatedTimeInMinutes: 60,
+        phases: [phaseWorkday],
+      }),
+    ]);
+
+    const result = await engine.run(userId);
+
+    expect(result.errors).toHaveLength(0);
+    expect(extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls).get('after-habit')?.[0]).toEqual([
+      atLocalTimeIso(0, 10),
+      atLocalTimeIso(0, 11),
+    ]);
   });
 
   it('places recurring tasks by priority into exact target slots', async () => {

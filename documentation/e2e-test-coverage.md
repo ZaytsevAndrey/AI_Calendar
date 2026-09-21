@@ -385,11 +385,11 @@ Generate body `{ startDate, endDate }` is **ignored**. Horizon = today → `recu
 
 ## 16. Cases — habits
 
-Civil today/yesterday from **settings `timeZone`**. Check-in only those two dates. Points: +1/day +1 every 7 consecutive in history. Streak: consecutive ending today, or yesterday if today unchecked.
+Civil today from **settings `timeZone`**. Check-in for today and the previous 13 days. Older dates stay on `checkInDates` but return 400 if edited. Points: +1/day +1 every 7 consecutive in history. Streak: consecutive ending today, or yesterday if today unchecked. Optional daily block is both `blockStartTime` and `blockMinutes`, or neither. Generate treats that window as busy (engine unit test). The block is not a Google event.
 
 | ID | Layer | P | Given | When | Then |
 |----|-------|---|-------|------|------|
-| A-HAB-001 | A | P0 | Empty | `GET /habits` | `{ today, yesterday, timeZone, habits: [] }` |
+| A-HAB-001 | A | P0 | Empty | `GET /habits` | `{ today, editableFrom, editableTo, timeZone, habits: [] }` |
 | A-HAB-002 | A | P0 | Valid name | `POST /habits` | 201; default color if omitted |
 | A-HAB-003 | A | P1 | Empty name | POST | 400 (service `requireName`) |
 | A-HAB-004 | A | P1 | Name > 80 | POST | 400 |
@@ -400,8 +400,8 @@ Civil today/yesterday from **settings `timeZone`**. Check-in only those two date
 | A-HAB-009 | A | P0 | Unknown id | PATCH/DELETE/check-in | 404 |
 | A-HAB-010 | A | P0 | DELETE | DELETE | Gone; check-ins cascaded |
 | A-HAB-011 | A | P0 | `date=today` | POST check-in | `checkedToday=true`; streak/points update |
-| A-HAB-012 | A | P0 | `date=yesterday` | check-in | `checkedYesterday=true` |
-| A-HAB-013 | A | P0 | Day before yesterday | check-in | 400 only today or yesterday |
+| A-HAB-012 | A | P0 | `date=yesterday` | check-in | Date is in `checkInDates` |
+| A-HAB-013 | A | P0 | 14 days before today | check-in | 400 outside the window |
 | A-HAB-014 | A | P1 | Invalid YMD `2026-13-40` | check-in | 400 |
 | A-HAB-015 | A | P1 | Idempotent today twice | check-in | Still one row; stats unchanged |
 | A-HAB-016 | A | P0 | Uncheck today | `DELETE .../check-ins/:today` | Flag false; streak may fall back to yesterday |
@@ -410,10 +410,14 @@ Civil today/yesterday from **settings `timeZone`**. Check-in only those two date
 | A-HAB-019 | A | P1 | Today unchecked, yesterday checked | GET | streak counts from yesterday |
 | A-HAB-020 | A | P1 | TZ `Pacific/Auckland` near midnight UTC | GET today | Civil date in that TZ, not UTC |
 | U-HAB-001 | U | P0 | `/habits` | CRUD modal | Create/edit/delete; list updates |
-| U-HAB-002 | U | P0 | Today / yesterday buttons | Toggle | Matches API flags; 7-day dots |
+| U-HAB-002 | U | P0 | 14-day grid | Toggle today and an earlier day | `aria-pressed` matches |
 | U-HAB-003 | U | P1 | Summary bar | Streak/points | Matches GET |
-| U-HAB-004 | U | P0 | Calendar Now habit chips | Toggle today/yesterday | Same rules; link to `/habits` |
+| U-HAB-004 | U | P0 | Calendar Now habit chips | Toggle today | One tap per habit; link to `/habits` |
 | U-HAB-005 | U | P2 | Empty habits | Page | Empty state |
+| U-HAB-006 | U | P1 | Calendar week, today cell | Habit dots | Day dialog toggles that habit |
+| U-HAB-007 | U | P1 | New habit | Reserve a daily block | Row shows start and minutes |
+| A-HAB-021 | A | P1 | Start + minutes | PATCH | Stored as `HH:mm` and minutes (`habits.service.spec`) |
+| A-HAB-022 | A | P1 | Minutes without a start | PATCH | 400 (`habits.service.spec`) |
 
 ---
 

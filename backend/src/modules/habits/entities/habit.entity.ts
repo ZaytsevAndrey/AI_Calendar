@@ -25,6 +25,14 @@ export class Habit {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
+  /** Daily reservation start in settings IANA time, `HH:mm`. Null when check-in only. */
+  @Column({ type: 'varchar', length: 5, nullable: true })
+  blockStartTime: string | null;
+
+  /** Daily reservation length. Set together with `blockStartTime`. */
+  @Column({ type: 'int', nullable: true })
+  blockMinutes: number | null;
+
   @OneToMany(() => HabitCheckIn, (checkIn) => checkIn.habit)
   checkIns: HabitCheckIn[];
 

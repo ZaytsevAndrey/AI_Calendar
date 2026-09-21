@@ -29,7 +29,7 @@ export class HabitsController {
   constructor(private readonly habitsService: HabitsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List habits with streaks, points, and today/yesterday status' })
+  @ApiOperation({ summary: 'List habits with streaks, points, and check-in dates' })
   @ApiResponse({ status: 200, description: 'Habits for the current user.' })
   findAll(@Request() req) {
     return this.habitsService.findAll(req.user.userId);
@@ -59,9 +59,9 @@ export class HabitsController {
   }
 
   @Post(':id/check-ins')
-  @ApiOperation({ summary: 'Mark today or yesterday as done' })
+  @ApiOperation({ summary: 'Mark a day in the last 14 days as done' })
   @ApiResponse({ status: 201, description: 'Check-in saved.' })
-  @ApiResponse({ status: 400, description: 'Date is not today or yesterday.' })
+  @ApiResponse({ status: 400, description: 'Date is outside the 14-day window or in the future.' })
   checkIn(
     @Request() req,
     @Param('id') id: string,
@@ -71,7 +71,7 @@ export class HabitsController {
   }
 
   @Delete(':id/check-ins/:date')
-  @ApiOperation({ summary: 'Clear a today or yesterday check-in' })
+  @ApiOperation({ summary: 'Clear a check-in in the last 14 days' })
   @ApiResponse({ status: 200, description: 'Check-in removed.' })
   uncheck(
     @Request() req,

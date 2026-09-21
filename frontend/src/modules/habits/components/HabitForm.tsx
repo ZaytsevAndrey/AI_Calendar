@@ -4,11 +4,36 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import type { CreateHabitDTO, HabitDTO, UpdateHabitDTO } from 'api/habits.api';
 
-const habitSchema = z.object({
-  name: z.string().trim().min(1, 'Name is required').max(80, 'Keep it under 80 characters'),
-  color: z.string().regex(/^#([A-Fa-f0-9]{6})$/, 'Use a hex color like #22c55e'),
-  description: z.string().max(500, 'Keep it under 500 characters').optional(),
-});
+const habitSchema = z
+  .object({
+    name: z.string().trim().min(1, 'Name is required').max(80, 'Keep it under 80 characters'),
+    color: z.string().regex(/^#([A-Fa-f0-9]{6})$/, 'Use a hex color like #22c55e'),
+    description: z.string().max(500, 'Keep it under 500 characters').optional(),
+    reserveBlock: z.boolean(),
+    blockStartTime: z.string(),
+    blockMinutes: z.coerce.number(),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.reserveBlock) return;
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value.blockStartTime)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['blockStartTime'],
+        message: 'Use a time like 07:30',
+      });
+    }
+    if (
+      !Number.isInteger(value.blockMinutes) ||
+      value.blockMinutes < 5 ||
+      value.blockMinutes > 240
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['blockMinutes'],
+        message: 'Use 5–240 minutes',
+      });
+    }
+  });
 
 type HabitFormData = z.infer<typeof habitSchema>;
 
@@ -45,13 +70,28 @@ const HabitForm: React.FC<HabitFormProps> = ({
       name: initialData?.name ?? '',
       color: initialData?.color ?? randomColor(),
       description: initialData?.description ?? '',
+      reserveBlock: Boolean(initialData?.blockStartTime && initialData?.blockMinutes),
+      blockStartTime: initialData?.blockStartTime ?? '07:00',
+      blockMinutes: initialData?.blockMinutes ?? 30,
     },
   });
 
   const colorValue = watch('color');
+  const reserveBlock = watch('reserveBlock');
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-1">
+        <form
+          onSubmit={handleSubmit((values) =>
+            onSubmit({
+              name: values.name,
+              color: values.color,
+              description: values.description,
+              blockStartTime: values.reserveBlock ? values.blockStartTime : null,
+              blockMinutes: values.reserveBlock ? values.blockMinutes : null,
+            }),
+          )}
+          className="space-y-1"
+        >
       <div className="ui-field">
         <label htmlFor="habit-name" className="ui-label">
           Name
@@ -104,6 +144,49 @@ const HabitForm: React.FC<HabitFormProps> = ({
         ) : (
           <p className="ui-hint">Tap = a successful day. The name carries the meaning.</p>
         )}
+      </div>
+
+      <div className="ui-field">
+        <label className="flex items-center gap-2 text-sm text-ide-text">
+          <input type="checkbox" {...register('reserveBlock')} className="h-4 w-4" />
+          Reserve a daily time block
+        </label>
+        {reserveBlock ? (
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <div>
+              <label htmlFor="habit-block-start" className="ui-label">
+                Starts
+              </label>
+              <input
+                id="habit-block-start"
+                type="time"
+                {...register('blockStartTime')}
+                className={`ui-input ${errors.blockStartTime ? 'ui-input-error' : ''}`}
+              />
+              {errors.blockStartTime ? (
+                <span className="ui-error">{errors.blockStartTime.message}</span>
+              ) : null}
+            </div>
+            <div>
+              <label htmlFor="habit-block-minutes" className="ui-label">
+                Minutes
+              </label>
+              <input
+                id="habit-block-minutes"
+                type="number"
+                min={5}
+                max={240}
+                step={5}
+                {...register('blockMinutes')}
+                className={`ui-input ${errors.blockMinutes ? 'ui-input-error' : ''}`}
+              />
+              {errors.blockMinutes ? (
+                <span className="ui-error">{errors.blockMinutes.message}</span>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+        <p className="ui-hint">Generate will not place tasks on top of this time.</p>
       </div>
 
       <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

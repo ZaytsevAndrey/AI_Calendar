@@ -6,23 +6,22 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
-import { addDaysToYmd, localYmd } from '../voice/voice-local-date.util';
+import { localYmd, normalizeClockHm } from '../voice/voice-local-date.util';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { CreateHabitDto } from './dto/create-habit.dto';
 import { UpdateHabitDto } from './dto/update-habit.dto';
 import { HabitCheckIn } from './entities/habit-check-in.entity';
 import { Habit } from './entities/habit.entity';
 import {
+  CHECK_IN_WINDOW_DAYS,
+  checkInEditableFrom,
   computeHabitStats,
+  isCheckInDateAllowed,
   isValidYmd,
-  lastNDays,
 } from './habit-stats.util';
 
 const DEFAULT_COLOR = '#3b82f6';
 const HEX_COLOR = /^#([A-Fa-f0-9]{6})$/;
-const WEEK_DAYS = 7;
-
-export type HabitDayMarker = { date: string; done: boolean };
 
 export type HabitSummary = {
   id: string;
@@ -30,18 +29,20 @@ export type HabitSummary = {
   color: string;
   description: string | null;
   checkedToday: boolean;
-  checkedYesterday: boolean;
   currentStreak: number;
   points: number;
   totalCheckIns: number;
-  last7Days: HabitDayMarker[];
+  checkInDates: string[];
+  blockStartTime: string | null;
+  blockMinutes: number | null;
   createdAt: Date;
   updatedAt: Date;
 };
 
 export type HabitsListResponse = {
   today: string;
-  yesterday: string;
+  editableFrom: string;
+  editableTo: string;
   timeZone: string;
   habits: HabitSummary[];
 };
@@ -58,21 +59,30 @@ export class HabitsService {
   ) {}
 
   async findAll(userId: string): Promise<HabitsListResponse> {
-    const { today, yesterday, timeZone } = await this.civilWindow(userId);
+    const { today, timeZone } = await this.civilToday(userId);
     const habits = await this.habitsRepository.find({
       where: { userId },
       order: { createdAt: 'ASC' },
     });
-    const summaries = await this.summariesFor(habits, today, yesterday);
-    return { today, yesterday, timeZone, habits: summaries };
+    const summaries = await this.summariesFor(habits, today);
+    return {
+      today,
+      editableFrom: checkInEditableFrom(today),
+      editableTo: today,
+      timeZone,
+      habits: summaries,
+    };
   }
 
   async create(userId: string, dto: CreateHabitDto): Promise<HabitSummary> {
+    const block = this.normalizeBlock(dto.blockStartTime, dto.blockMinutes);
     const habit = this.habitsRepository.create({
       userId,
       name: this.requireName(dto.name),
       color: this.normalizeColor(dto.color),
       description: this.normalizeDescription(dto.description),
+      blockStartTime: block.blockStartTime,
+      blockMinutes: block.blockMinutes,
     });
     const saved = await this.habitsRepository.save(habit);
     return this.summaryFor(saved, userId);
@@ -88,6 +98,14 @@ export class HabitsService {
     if (dto.color !== undefined) habit.color = this.normalizeColor(dto.color);
     if (dto.description !== undefined) {
       habit.description = this.normalizeDescription(dto.description);
+    }
+    if (dto.blockStartTime !== undefined || dto.blockMinutes !== undefined) {
+      const block = this.normalizeBlock(
+        dto.blockStartTime !== undefined ? dto.blockStartTime : habit.blockStartTime,
+        dto.blockMinutes !== undefined ? dto.blockMinutes : habit.blockMinutes,
+      );
+      habit.blockStartTime = block.blockStartTime;
+      habit.blockMinutes = block.blockMinutes;
     }
     const saved = await this.habitsRepository.save(habit);
     return this.summaryFor(saved, userId);
@@ -106,8 +124,8 @@ export class HabitsService {
     done: boolean,
   ): Promise<HabitSummary> {
     const habit = await this.requireHabit(userId, habitId);
-    const { today, yesterday } = await this.civilWindow(userId);
-    const localDate = this.requireAllowedDate(date, today, yesterday);
+    const { today } = await this.civilToday(userId);
+    const localDate = this.requireAllowedDate(date, today);
 
     const existing = await this.checkInsRepository.findOne({
       where: { habitId: habit.id, localDate },
@@ -125,20 +143,19 @@ export class HabitsService {
       await this.checkInsRepository.remove(existing);
     }
 
-    const [summary] = await this.summariesFor([habit], today, yesterday);
+    const [summary] = await this.summariesFor([habit], today);
     return summary;
   }
 
   private async summaryFor(habit: Habit, userId: string): Promise<HabitSummary> {
-    const { today, yesterday } = await this.civilWindow(userId);
-    const [summary] = await this.summariesFor([habit], today, yesterday);
+    const { today } = await this.civilToday(userId);
+    const [summary] = await this.summariesFor([habit], today);
     return summary;
   }
 
   private async summariesFor(
     habits: Habit[],
     today: string,
-    yesterday: string,
   ): Promise<HabitSummary[]> {
     if (habits.length === 0) return [];
     const rows = await this.checkInsRepository.find({
@@ -161,11 +178,12 @@ export class HabitsService {
         color: habit.color,
         description: habit.description,
         checkedToday: done.has(today),
-        checkedYesterday: done.has(yesterday),
         currentStreak: stats.currentStreak,
         points: stats.points,
         totalCheckIns: stats.totalCheckIns,
-        last7Days: lastNDays(today, WEEK_DAYS, done),
+        checkInDates: [...done].filter(isValidYmd).sort(),
+        blockStartTime: habit.blockStartTime ?? null,
+        blockMinutes: habit.blockMinutes ?? null,
         createdAt: habit.createdAt,
         updatedAt: habit.updatedAt,
       };
@@ -180,9 +198,8 @@ export class HabitsService {
     return habit;
   }
 
-  private async civilWindow(userId: string): Promise<{
+  private async civilToday(userId: string): Promise<{
     today: string;
-    yesterday: string;
     timeZone: string;
   }> {
     const settings = await this.userSettingsRepository.findOne({
@@ -190,20 +207,16 @@ export class HabitsService {
     });
     const timeZone = resolveIanaTimeZone(settings?.timeZone);
     const today = localYmd(new Date().toISOString(), timeZone);
-    return { today, yesterday: addDaysToYmd(today, -1), timeZone };
+    return { today, timeZone };
   }
 
-  private requireAllowedDate(
-    date: string,
-    today: string,
-    yesterday: string,
-  ): string {
+  private requireAllowedDate(date: string, today: string): string {
     if (!isValidYmd(date)) {
       throw new BadRequestException('date must be a valid YYYY-MM-DD');
     }
-    if (date !== today && date !== yesterday) {
+    if (!isCheckInDateAllowed(date, today)) {
       throw new BadRequestException(
-        'Check-ins are only allowed for today or yesterday',
+        `Check-ins are only allowed for the last ${CHECK_IN_WINDOW_DAYS} days, through today`,
       );
     }
     return date;
@@ -237,5 +250,30 @@ export class HabitsService {
       );
     }
     return trimmed || null;
+  }
+
+  private normalizeBlock(
+    start: string | null | undefined,
+    minutes: number | null | undefined,
+  ): { blockStartTime: string | null; blockMinutes: number | null } {
+    const startEmpty = start == null || String(start).trim() === '';
+    const minutesEmpty = minutes == null;
+    if (startEmpty && minutesEmpty) {
+      return { blockStartTime: null, blockMinutes: null };
+    }
+    if (startEmpty || minutesEmpty) {
+      throw new BadRequestException(
+        'A time block needs both a start time and a duration',
+      );
+    }
+    const hm = normalizeClockHm(String(start));
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hm)) {
+      throw new BadRequestException('blockStartTime must be HH:mm');
+    }
+    const mins = Number(minutes);
+    if (!Number.isInteger(mins) || mins < 5 || mins > 240) {
+      throw new BadRequestException('blockMinutes must be an integer from 5 to 240');
+    }
+    return { blockStartTime: hm, blockMinutes: mins };
   }
 }

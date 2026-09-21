@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 import { getEventColor } from '../hooks/useCalendar';
 import { useTimePhasesForDate, getPhaseByTime } from '../../phases/hooks/usePhases';
 import { useGetUserSettingsQuery } from '../../../api/userSettingsApi';
+import { useGetHabitsQuery } from '../../../api/habitsApi';
 import {
     CalendarView,
     chipLabel,
@@ -14,6 +15,9 @@ import {
     tooltipText,
     wakingHourSlots,
 } from '../calendarView';
+import { HabitBlockButton, HabitDayDialog, HabitDayDots, HabitDaySection } from '../../habits/components/CalendarHabits';
+import { habitBlockChips } from '../../habits/habitBlocks';
+import { ymdFromLocalDate } from '../../../utils/ianaDateTime';
 
 interface CalendarGridProps {
     view: CalendarView;
@@ -32,6 +36,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
 }) => {
     const { data: timePhases = [] } = useTimePhasesForDate(date);
     const { data: userSettings } = useGetUserSettingsQuery();
+    const { data: habitsData } = useGetHabitsQuery();
 
     const sleepWindow = {
         sleepTime: userSettings?.sleepTime,
@@ -56,6 +61,15 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     };
 
     const days = getDaysInView(view, date);
+    const habitBlocks = habitBlockChips(
+        habitsData?.habits ?? [],
+        days,
+        habitsData?.timeZone ?? 'UTC',
+    );
+    const [habitDate, setHabitDate] = useState<string | null>(null);
+    const habitDialog = (
+        <HabitDayDialog date={habitDate} onClose={() => setHabitDate(null)} />
+    );
 
     if (view === 'day') {
         const dayEvents = eventsForDay(events, days[0]);
@@ -65,6 +79,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
         }));
 
         return (
+            <>
             <div className="flex h-full min-h-0 flex-col rounded-lg border border-ide-border bg-ide-panel p-4">
                 {getDisplayPhases().length > 0 && (
                     <div className="mb-4 flex shrink-0 flex-wrap gap-2">
@@ -88,6 +103,19 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                         ))}
                     </div>
                 )}
+
+                <HabitDaySection date={ymdFromLocalDate(days[0])} />
+                {habitBlocks
+                    .filter((block) => block.ymd === ymdFromLocalDate(days[0]))
+                    .filter((block) => !timeSlots.some((slot) => parseInt(slot.time, 10) === block.start.getHours()))
+                    .map((block) => (
+                        <HabitBlockButton
+                            key={block.id}
+                            block={block}
+                            showTime
+                            onOpen={setHabitDate}
+                        />
+                    ))}
 
                 <div className="min-h-0 flex-1 overflow-y-auto">
                     {timeSlots.map((slot, index) => {
@@ -128,6 +156,20 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                     )}
                                 </div>
                                 <div className="flex flex-1 flex-col gap-1 p-2">
+                                    {habitBlocks
+                                        .filter(
+                                            (block) =>
+                                                block.ymd === ymdFromLocalDate(days[0]) &&
+                                                block.start.getHours() === hour,
+                                        )
+                                        .map((block) => (
+                                            <HabitBlockButton
+                                                key={block.id}
+                                                block={block}
+                                                showTime={false}
+                                                onOpen={setHabitDate}
+                                            />
+                                        ))}
                                     {eventsInSlot.map((event) => (
                                         <div
                                             key={event.id}
@@ -157,6 +199,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                     })}
                 </div>
             </div>
+            {habitDialog}
+            </>
         );
     }
 
@@ -171,6 +215,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     const weeks = createWeeks(days);
 
     return (
+        <>
         <div className="flex h-full min-h-0 w-full flex-col">
             {getDisplayPhases().length > 0 && (
                 <div className="mb-4 flex shrink-0 flex-wrap gap-2">
@@ -232,8 +277,19 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                     >
                                         {day.getDate()}
                                     </span>
+                                    <HabitDayDots day={day} onOpen={setHabitDate} />
 
                                     <div className="mt-1 min-h-0 flex-1 overflow-y-auto">
+                                        {habitBlocks
+                                            .filter((block) => block.ymd === ymdFromLocalDate(day))
+                                            .map((block) => (
+                                                <HabitBlockButton
+                                                    key={block.id}
+                                                    block={block}
+                                                    showTime
+                                                    onOpen={setHabitDate}
+                                                />
+                                            ))}
                                         {dayEvents
                                             .map((event) => {
                                                 let eventPhase = null;
@@ -291,6 +347,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                 ))}
             </div>
         </div>
+        {habitDialog}
+        </>
     );
 };
 

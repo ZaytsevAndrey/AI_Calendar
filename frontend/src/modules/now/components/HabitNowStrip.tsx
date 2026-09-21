@@ -1,76 +1,13 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import type { HabitDTO } from 'api/habits.api';
-import {
-  useCheckInHabitMutation,
-  useGetHabitsQuery,
-  useUncheckHabitMutation,
-} from 'api/habitsApi';
-import { showErrorToast } from 'utils/toast';
-import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
-
-function HabitChip({
-  habit,
-  today,
-  yesterday,
-}: {
-  habit: HabitDTO;
-  today: string;
-  yesterday: string;
-}) {
-  const [checkIn, { isLoading: checking }] = useCheckInHabitMutation();
-  const [uncheck, { isLoading: unchecking }] = useUncheckHabitMutation();
-  const busy = checking || unchecking;
-
-  const toggle = async (date: string, currentlyDone: boolean) => {
-    try {
-      if (currentlyDone) {
-        await uncheck({ id: habit.id, date }).unwrap();
-      } else {
-        await checkIn({ id: habit.id, date }).unwrap();
-      }
-    } catch (err) {
-      showErrorToast({
-        title: currentlyDone ? 'Could not clear check-in' : 'Could not check in',
-        detail: extractApiErrorMessage(err),
-      });
-    }
-  };
-
-  return (
-    <div className="flex min-w-[12rem] flex-1 items-center gap-2 rounded-md border border-ide-border bg-ide-surface px-2.5 py-2">
-      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: habit.color }} />
-      <span className="min-w-0 flex-1 truncate text-sm text-ide-text">{habit.name}</span>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => void toggle(yesterday, habit.checkedYesterday)}
-        className={`shrink-0 rounded px-2 py-1 text-xs ${
-          habit.checkedYesterday ? 'bg-ide-link/20 text-ide-text' : 'text-ide-muted hover:text-ide-text'
-        }`}
-        aria-pressed={habit.checkedYesterday}
-      >
-        Yday
-      </button>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => void toggle(today, habit.checkedToday)}
-        className={`shrink-0 rounded px-2 py-1 text-xs ${
-          habit.checkedToday ? 'bg-ide-link text-white' : 'text-ide-muted hover:text-ide-text'
-        }`}
-        aria-pressed={habit.checkedToday}
-      >
-        Today
-      </button>
-    </div>
-  );
-}
+import { useGetHabitsQuery } from 'api/habitsApi';
+import { useToggleHabit } from 'modules/habits/useToggleHabit';
 
 export function HabitNowStrip() {
   const { data } = useGetHabitsQuery();
+  const { toggle, busy } = useToggleHabit();
   const habits = data?.habits ?? [];
-  if (!habits.length) return null;
+  if (!habits.length || !data) return null;
 
   return (
     <div className="space-y-2">
@@ -82,7 +19,27 @@ export function HabitNowStrip() {
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
         {habits.map((habit) => (
-          <HabitChip key={habit.id} habit={habit} today={data!.today} yesterday={data!.yesterday} />
+          <button
+            key={habit.id}
+            type="button"
+            disabled={busy}
+            aria-pressed={habit.checkedToday}
+            onClick={() => void toggle(habit.id, data.today, habit.checkedToday)}
+            className="flex min-w-[8rem] flex-1 items-center gap-2 rounded-md border border-ide-border bg-ide-surface px-2.5 py-2 text-left text-sm"
+            style={
+              habit.checkedToday
+                ? { backgroundColor: habit.color, borderColor: habit.color, color: '#fff' }
+                : undefined
+            }
+          >
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: habit.checkedToday ? '#fff' : habit.color }}
+            />
+            <span className={`min-w-0 flex-1 truncate ${habit.checkedToday ? '' : 'text-ide-text'}`}>
+              {habit.name}
+            </span>
+          </button>
         ))}
       </div>
     </div>

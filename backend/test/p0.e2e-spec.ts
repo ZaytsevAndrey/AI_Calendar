@@ -5,6 +5,7 @@ import { seedOnboardedUser, seedUser } from './helpers/auth';
 import { api, jsonBody } from './helpers/http';
 import { ScheduledTask } from '../src/modules/schedule/schedule.entity';
 import { Task } from '../src/modules/tasks/entities/task.entity';
+import { addDaysToYmd } from '../src/modules/voice/voice-local-date.util';
 
 describe('P0 API e2e', () => {
   let ctx: E2eApp;
@@ -243,7 +244,7 @@ describe('P0 API e2e', () => {
   });
 
   describe('A-HAB habits', () => {
-    it('A-HAB-002 / A-HAB-011 / A-HAB-013 create, today check-in, reject older date', async () => {
+    it('A-HAB-002 / A-HAB-011 / A-HAB-013 create, today check-in, reject date outside the window', async () => {
       const { token } = await seedOnboardedUser(ctx.app);
       const created = await api(ctx.app, 'POST', '/habits', {
         token,
@@ -255,7 +256,8 @@ describe('P0 API e2e', () => {
 
       const listed = await api(ctx.app, 'GET', '/habits', { token });
       const today = String(jsonBody(listed).today);
-      const yesterday = String(jsonBody(listed).yesterday);
+      expect(jsonBody(listed).editableTo).toBe(today);
+      expect(jsonBody(listed).editableFrom).toBe(addDaysToYmd(today, -13));
 
       const checkIn = await api(ctx.app, 'POST', `/habits/${habitId}/check-ins`, {
         token,
@@ -264,13 +266,11 @@ describe('P0 API e2e', () => {
       expect(checkIn.statusCode).toBe(201);
       expect(jsonBody(checkIn).checkedToday).toBe(true);
 
-      const [y, m, d] = yesterday.split('-').map(Number);
-      const older = new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
       const rejected = await api(
         ctx.app,
         'POST',
         `/habits/${habitId}/check-ins`,
-        { token, payload: { date: older } },
+        { token, payload: { date: addDaysToYmd(today, -14) } },
       );
       expect(rejected.statusCode).toBe(400);
     });

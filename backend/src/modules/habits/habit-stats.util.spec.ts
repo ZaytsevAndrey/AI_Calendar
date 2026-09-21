@@ -1,5 +1,10 @@
 import { addDaysToYmd } from '../voice/voice-local-date.util';
-import { computeHabitStats, isValidYmd, lastNDays } from './habit-stats.util';
+import {
+  checkInEditableFrom,
+  computeHabitStats,
+  isCheckInDateAllowed,
+  isValidYmd,
+} from './habit-stats.util';
 
 const TODAY = '2026-09-08';
 
@@ -74,15 +79,12 @@ describe('habit-stats', () => {
     });
   });
 
-  it('builds last-7-day markers oldest-first', () => {
-    expect(lastNDays(TODAY, 7, new Set(['2026-09-08', '2026-09-06']))).toEqual([
-      { date: '2026-09-02', done: false },
-      { date: '2026-09-03', done: false },
-      { date: '2026-09-04', done: false },
-      { date: '2026-09-05', done: false },
-      { date: '2026-09-06', done: true },
-      { date: '2026-09-07', done: false },
-      { date: '2026-09-08', done: true },
-    ]);
+  it('allows today through the previous 13 days', () => {
+    expect(checkInEditableFrom(TODAY)).toBe('2026-08-26');
+    expect(isCheckInDateAllowed(TODAY, TODAY)).toBe(true);
+    expect(isCheckInDateAllowed('2026-08-26', TODAY)).toBe(true);
+    expect(isCheckInDateAllowed('2026-08-25', TODAY)).toBe(false);
+    expect(isCheckInDateAllowed('2026-09-09', TODAY)).toBe(false);
+    expect(isCheckInDateAllowed('2026-02-30', TODAY)).toBe(false);
   });
 });

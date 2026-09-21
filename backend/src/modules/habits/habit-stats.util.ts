@@ -1,5 +1,8 @@
 import { addDaysToYmd } from '../voice/voice-local-date.util';
 
+/** Inclusive window ending today. Older check-ins stay visible but are not editable. */
+export const CHECK_IN_WINDOW_DAYS = 14;
+
 export type HabitStats = {
   currentStreak: number;
   points: number;
@@ -54,15 +57,11 @@ export function computeHabitStats(
   };
 }
 
-export function lastNDays(
-  todayYmd: string,
-  n: number,
-  done: Set<string>,
-): { date: string; done: boolean }[] {
-  const days: { date: string; done: boolean }[] = [];
-  for (let offset = n - 1; offset >= 0; offset -= 1) {
-    const date = addDaysToYmd(todayYmd, -offset);
-    days.push({ date, done: done.has(date) });
-  }
-  return days;
+export function checkInEditableFrom(todayYmd: string): string {
+  return addDaysToYmd(todayYmd, 1 - CHECK_IN_WINDOW_DAYS);
+}
+
+export function isCheckInDateAllowed(date: string, todayYmd: string): boolean {
+  if (!isValidYmd(date) || !isValidYmd(todayYmd)) return false;
+  return date >= checkInEditableFrom(todayYmd) && date <= todayYmd;
 }

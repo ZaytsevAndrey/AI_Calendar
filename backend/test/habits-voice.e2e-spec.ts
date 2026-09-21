@@ -110,14 +110,23 @@ describe('Habits and voice API e2e', () => {
     const id = jsonBody(created).id;
     const listed = await api(ctx.app, 'GET', '/habits', { token });
     const today = String(jsonBody(listed).today);
-    const yesterday = String(jsonBody(listed).yesterday);
+    const yesterday = addDaysYmd(today, -1);
+    const oldest = addDaysYmd(today, -13);
+    const tooOld = addDaysYmd(today, -14);
 
     const y = await api(ctx.app, 'POST', `/habits/${id}/check-ins`, {
       token,
       payload: { date: yesterday },
     });
     expect(y.statusCode).toBe(201);
-    expect(jsonBody(y).checkedYesterday).toBe(true);
+    expect(jsonBody(y).checkInDates).toContain(yesterday);
+
+    const edge = await api(ctx.app, 'POST', `/habits/${id}/check-ins`, {
+      token,
+      payload: { date: oldest },
+    });
+    expect(edge.statusCode).toBe(201);
+    expect(jsonBody(edge).checkInDates).toContain(oldest);
 
     const t1 = await api(ctx.app, 'POST', `/habits/${id}/check-ins`, {
       token,
@@ -146,7 +155,7 @@ describe('Habits and voice API e2e', () => {
 
     expect(
       (
-        await api(ctx.app, 'DELETE', `/habits/${id}/check-ins/${addDaysYmd(yesterday, -1)}`, {
+        await api(ctx.app, 'DELETE', `/habits/${id}/check-ins/${tooOld}`, {
           token,
         })
       ).statusCode,

@@ -26,7 +26,8 @@ Two lists used to compete (`roadmap` vs `BUGS-AND-IMPROVEMENTS.md`). This file i
 
 ## Next — daily loop
 
-- [x] **Today / Now** (Sep 2026). Strip on Calendar (home stays `/`): current overlapping block, next start today, unscheduled inbox for today by priority. External Google events appear in Now/Next without Done. One-tap Done completes a non-recurring app task; Skip drops one still-open slot or recurring instance. Compact habit Today/Yesterday check-ins; no habit CRUD here. After create/update the client polls the silent-replan `jobId` and refreshes Now / calendar (no WebSockets).
+- [x] **Today / Now** (Sep 2026). Strip on Calendar (home stays `/`): current overlapping block, next start today, unscheduled inbox for today by priority. External Google events appear in Now/Next without Done. One-tap Done completes a non-recurring app task; Skip drops one still-open slot or recurring instance. After create/update the client polls the silent-replan `jobId` and refreshes Now / calendar (no WebSockets).
+- [x] **Habit check-ins** (Sep 2026). Last 14 days can be marked or cleared. Habits page is a day grid. Month and week show dots; day view and a day dialog toggle that day. Now strip is today only. Optional daily time block keeps that clock time free in Generate and is drawn on the calendar (not a task, not a Google event).
 - [x] **Unscheduled inbox** (Sep 2026). First-class `isUnscheduled` tasks on the Tasks page: no Google sync, excluded from Generate/replan, Done or Schedule. Optional deadline highlighting. TaskForm expandable Google event options (location, color, visibility, show-as, reminders) persist and apply on later sync. App-generated calendar clicks open TaskForm; native Google events still use EventForm.
 - [x] **Undo last generate** (Sep 2026). Calendar **Generate** stores a single snapshot (local auto slots + Google ids). **Undo last generate** restores still-open blocks and Google; fully ended blocks stay. Silent replan after task save is not undoable. Clear still cannot be undone and drops the snapshot. Non-recurring Generate no longer re-places minutes that already finished.
 - [x] **Skip this occurrence** (Sep 2026). One still-open slot or recurring instance without completing the task or deleting the series. Recurring skips persist (Generate will not recreate that civil day). One-off skip drops the placement; the next Generate can place remaining work. Snooze is later. UI: Now/Next Skip plus Skip on TaskForm when opened from a calendar instance.
@@ -46,7 +47,6 @@ Product extras (ship only if the loop above is trustworthy):
 - [ ] AI schedule recommendations: LLM analyzes the user's schedule (tasks, phases, calendar load) and suggests concrete improvements (overload, gaps, phase mismatch, deadline risk). Reuse Groq like voice parse; suggestions only — no auto-apply until a later iteration.
 - [ ] **PWA reminders** — upcoming block + daily habit check-in (Web Push; no native app required).
 - [ ] **Voice beyond create** — complete, skip, or reschedule the current / named task by voice.
-- [ ] **Habit time blocks** — optional scheduled slot for a habit (today habits are check-ins only, off the engine).
 - [ ] **Search / filters on tasks** — name, status, phase, fixed vs flexible, overdue.
 - [ ] **Soft buffers** between fixed events (travel / reset minutes the engine must not fill).
 - [ ] **Daily briefing** — morning summary in-app (later Telegram): today, risks, overdue.

@@ -11,6 +11,7 @@ import { ScheduleJobController } from './schedule-job.controller';
 import { TasksModule } from '../tasks/tasks.module';
 import { UserSettingsModule } from '../user-settings/user-settings.module';
 import { Task } from '../tasks/entities/task.entity';
+import { Habit } from '../habits/entities/habit.entity';
 import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
 
 @Module({
@@ -19,6 +20,7 @@ import { GoogleCalendarModule } from '../google-calendar/google-calendar.module'
       ScheduledTask,
       ScheduleJob,
       Task,
+      Habit,
     ]),
     forwardRef(() => TasksModule),
     UserSettingsModule,

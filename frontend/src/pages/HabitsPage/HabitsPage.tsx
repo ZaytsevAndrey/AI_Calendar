@@ -6,7 +6,7 @@ import {
   useUpdateHabitMutation,
 } from 'api/habitsApi';
 import type { CreateHabitDTO, HabitDTO, UpdateHabitDTO } from 'api/habits.api';
-import HabitCard from 'modules/habits/components/HabitCard';
+import HabitGrid from 'modules/habits/components/HabitGrid';
 import HabitForm from 'modules/habits/components/HabitForm';
 import { Modal } from '../../ui/Modal';
 import { showErrorToast, showSuccessToast } from 'utils/toast';
@@ -100,8 +100,8 @@ const HabitsPage: React.FC = () => {
         <div>
           <h1 className="page-title">Habits</h1>
           <p className="page-lead">
-            Daily yes/no check-ins. Today and yesterday only. Streaks and points stay here — they
-            do not affect your calendar.
+            Check in any of the last 14 days. A daily time block, if you set one, stays free for
+            that habit when you generate a schedule.
           </p>
         </div>
         <button type="button" onClick={openCreate} className="ui-btn-primary w-full sm:w-auto">
@@ -126,17 +126,13 @@ const HabitsPage: React.FC = () => {
             No habits yet. Add one — for example Exercise or No smoking.
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {habits.map((habit) => (
-              <HabitCard
-                key={habit.id}
-                habit={habit}
-                today={data?.today ?? ''}
-                yesterday={data?.yesterday ?? ''}
-                onEdit={openEdit}
-              />
-            ))}
-          </div>
+          <HabitGrid
+            habits={habits}
+            today={data?.today ?? ''}
+            editableFrom={data?.editableFrom ?? ''}
+            editableTo={data?.editableTo ?? ''}
+            onEdit={openEdit}
+          />
         )}
       </div>
 

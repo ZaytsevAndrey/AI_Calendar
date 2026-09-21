@@ -4,7 +4,7 @@ import { IsString, Matches } from 'class-validator';
 export class UpsertHabitCheckInDto {
   @ApiProperty({
     example: '2026-09-08',
-    description: 'Civil date in the user settings time zone (today or yesterday)',
+    description: 'Civil date in the user settings time zone (today or one of the previous 13 days)',
   })
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'date must be YYYY-MM-DD' })

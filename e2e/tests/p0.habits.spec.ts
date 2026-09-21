@@ -31,7 +31,7 @@ test.describe('P0 habits UI', () => {
     await expect(page.getByRole('heading', { name: renamed })).toHaveCount(0);
   });
 
-  test('U-HAB-002 today and yesterday toggles and 7-day dots', async ({ page, auth }) => {
+  test('U-HAB-002 toggles today and an earlier day in the grid', async ({ page, auth }) => {
     const name = uniqueName('E2E checkin');
     await openAs(page, auth.onboarded, '/habits');
     await page.getByRole('button', { name: 'Add habit' }).click();
@@ -40,17 +40,18 @@ test.describe('P0 habits UI', () => {
     await create.getByRole('button', { name: 'Create habit' }).click();
     await expect(page.getByRole('heading', { name })).toBeVisible();
 
-    const card = page.locator('article').filter({ hasText: name });
-    await expect(card.getByLabel('Last 7 days')).toBeVisible();
-    await expect(card.getByRole('button', { name: /^Today/ })).toHaveAttribute('aria-pressed', 'false');
+    const row = page.getByRole('row').filter({ hasText: name });
+    const todayCell = row.getByRole('button', { name: `${name} today` });
+    await expect(todayCell).toHaveAttribute('aria-pressed', 'false');
 
-    await card.getByRole('button', { name: /^Today/ }).click();
-    await expect(card.getByRole('button', { name: /^Today/ })).toHaveAttribute('aria-pressed', 'true');
+    await todayCell.click();
+    await expect(todayCell).toHaveAttribute('aria-pressed', 'true');
 
-    await card.getByRole('button', { name: /^Yesterday/ }).click();
-    await expect(card.getByRole('button', { name: /^Yesterday/ })).toHaveAttribute('aria-pressed', 'true');
+    const earlier = row.getByRole('button', { name: `${name} on ` }).first();
+    await earlier.click();
+    await expect(earlier).toHaveAttribute('aria-pressed', 'true');
 
-    await card.getByRole('button', { name: /^Today/ }).click();
-    await expect(card.getByRole('button', { name: /^Today/ })).toHaveAttribute('aria-pressed', 'false');
+    await todayCell.click();
+    await expect(todayCell).toHaveAttribute('aria-pressed', 'false');
   });
 });

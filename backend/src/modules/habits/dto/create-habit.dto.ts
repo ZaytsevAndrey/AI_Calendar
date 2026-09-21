@@ -1,5 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 export class CreateHabitDto {
   @ApiProperty({ example: 'Exercise' })
@@ -19,4 +28,29 @@ export class CreateHabitDto {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  @ApiProperty({
+    example: '07:30',
+    required: false,
+    nullable: true,
+    description: 'Daily block start (HH:mm). Required together with blockMinutes.',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, {
+    message: 'blockStartTime must be HH:mm',
+  })
+  blockStartTime?: string | null;
+
+  @ApiProperty({
+    example: 30,
+    required: false,
+    nullable: true,
+    description: 'Daily block length in minutes (5–240). Required together with blockStartTime.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(5)
+  @Max(240)
+  blockMinutes?: number | null;
 }

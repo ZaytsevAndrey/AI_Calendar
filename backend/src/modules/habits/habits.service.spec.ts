@@ -78,13 +78,14 @@ describe('HabitsService', () => {
     const result = await service.findAll('user-1');
 
     expect(result.today).toBe('2026-09-08');
-    expect(result.yesterday).toBe('2026-09-07');
+    expect(result.editableFrom).toBe('2026-08-26');
+    expect(result.editableTo).toBe('2026-09-08');
     expect(result.timeZone).toBe('UTC');
     expect(result.habits[0]).toMatchObject({
       checkedToday: true,
-      checkedYesterday: false,
       currentStreak: 1,
       points: 1,
+      checkInDates: ['2026-09-08'],
     });
   });
 
@@ -99,11 +100,12 @@ describe('HabitsService', () => {
     const result = await service.findAll('user-1');
 
     expect(result.today).toBe('2026-09-09');
-    expect(result.yesterday).toBe('2026-09-08');
+    expect(result.editableFrom).toBe('2026-08-27');
+    expect(result.editableTo).toBe('2026-09-09');
     expect(result.timeZone).toBe('Europe/Kyiv');
   });
 
-  it('rejects check-ins that are not today or yesterday', async () => {
+  it('rejects check-ins outside the 14-day window', async () => {
     habitsRepositoryMock.findOne.mockResolvedValue({
       id: 'habit-1',
       userId: 'user-1',
@@ -113,9 +115,39 @@ describe('HabitsService', () => {
     });
 
     await expect(
-      service.setCheckIn('user-1', 'habit-1', '2026-09-01', true),
+      service.setCheckIn('user-1', 'habit-1', '2026-08-25', true),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.setCheckIn('user-1', 'habit-1', '2026-09-09', true),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(checkInsRepositoryMock.save).not.toHaveBeenCalled();
+  });
+
+  it('saves a check-in on the oldest allowed day', async () => {
+    habitsRepositoryMock.findOne.mockResolvedValue({
+      id: 'habit-1',
+      userId: 'user-1',
+      name: 'Exercise',
+      color: '#22c55e',
+      description: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    checkInsRepositoryMock.findOne.mockResolvedValue(null);
+    checkInsRepositoryMock.find.mockResolvedValue([
+      { habitId: 'habit-1', localDate: '2026-08-26' },
+    ]);
+
+    const result = await service.setCheckIn(
+      'user-1',
+      'habit-1',
+      '2026-08-26',
+      true,
+    );
+
+    expect(checkInsRepositoryMock.save).toHaveBeenCalled();
+    expect(result.checkedToday).toBe(false);
+    expect(result.checkInDates).toEqual(['2026-08-26']);
   });
 
   it('is idempotent when checking in a day that is already done', async () => {
@@ -175,5 +207,48 @@ describe('HabitsService', () => {
     expect(checkInsRepositoryMock.save).toHaveBeenCalled();
     expect(result.checkedToday).toBe(true);
     expect(result.currentStreak).toBe(1);
+  });
+
+  it('stores a daily time block when start and duration are both set', async () => {
+    habitsRepositoryMock.findOne.mockResolvedValue({
+      id: 'habit-1',
+      userId: 'user-1',
+      name: 'Exercise',
+      color: '#22c55e',
+      description: null,
+      blockStartTime: null,
+      blockMinutes: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    checkInsRepositoryMock.find.mockResolvedValue([]);
+
+    const result = await service.update('user-1', 'habit-1', {
+      blockStartTime: '7:30',
+      blockMinutes: 45,
+    });
+
+    expect(habitsRepositoryMock.save).toHaveBeenCalledWith(
+      expect.objectContaining({ blockStartTime: '07:30', blockMinutes: 45 }),
+    );
+    expect(result.blockStartTime).toBe('07:30');
+    expect(result.blockMinutes).toBe(45);
+  });
+
+  it('rejects a time block that has only a duration', async () => {
+    habitsRepositoryMock.findOne.mockResolvedValue({
+      id: 'habit-1',
+      userId: 'user-1',
+      name: 'Exercise',
+      color: '#22c55e',
+      description: null,
+      blockStartTime: null,
+      blockMinutes: null,
+    });
+
+    await expect(
+      service.update('user-1', 'habit-1', { blockMinutes: 30 }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(habitsRepositoryMock.save).not.toHaveBeenCalled();
   });
 });

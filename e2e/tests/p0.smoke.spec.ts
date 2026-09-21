@@ -87,14 +87,10 @@ test.describe('P0 UI smoke', () => {
     expect(created.status).toBeLessThan(300);
 
     await openAs(page, auth.onboarded);
-    const chip = page
-      .locator('.rounded-md.border')
-      .filter({ has: page.getByText(name, { exact: true }) })
-      .filter({ has: page.getByRole('button', { name: 'Yday' }) });
-    await expect(chip.getByRole('button', { name: 'Today' })).toBeVisible();
-    await expect(chip.getByRole('button', { name: 'Today' })).toHaveAttribute('aria-pressed', 'false');
-    await chip.getByRole('button', { name: 'Today' }).click();
-    await expect(chip.getByRole('button', { name: 'Today' })).toHaveAttribute('aria-pressed', 'true');
+    const chip = page.getByRole('button', { name, exact: true });
+    await expect(chip).toHaveAttribute('aria-pressed', 'false');
+    await chip.click();
+    await expect(chip).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByRole('link', { name: 'All habits' })).toBeVisible();
   });
 });
