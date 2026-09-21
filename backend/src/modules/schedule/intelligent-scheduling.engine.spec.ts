@@ -186,6 +186,26 @@ describe('IntelligentSchedulingEngine', () => {
     ]);
   });
 
+  it('does not place a user-skipped recurring occurrence', async () => {
+    const gym = makeTask({
+      id: 'skip-r',
+      name: 'Gym',
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      phases: [phaseWorkday],
+      skippedOccurrenceYmds: ['2026-04-21'],
+    });
+    taskRepo.find.mockResolvedValue([gym]);
+
+    await engine.run(userId);
+
+    const [slots] = extractTaskSegments(scheduledRepo.save.mock.calls);
+    expect(slots).toEqual([
+      [atLocalTimeIso(0, 9), atLocalTimeIso(0, 10)],
+      [atLocalTimeIso(2, 9), atLocalTimeIso(2, 10)],
+    ]);
+  });
+
   it('uses FIFO for same priority recurring conflicts', async () => {
     const first = makeTask({
       id: 'fifo-1',
@@ -874,6 +894,32 @@ describe('IntelligentSchedulingEngine', () => {
     ).toBeUndefined();
   });
 
+  it('does not write a slot if the task was skipped during replan', async () => {
+    const placed = makeTask({
+      id: 'skip-during-replan',
+      name: 'Write brief',
+      estimatedTimeInMinutes: 30,
+      scheduledStartTime: new Date(atLocalTimeIso(0, 9)),
+      scheduledEndTime: new Date(atLocalTimeIso(0, 10)),
+      phases: [phaseWorkday],
+    });
+    taskRepo.find.mockResolvedValue([placed]);
+    taskRepo.findOne!.mockResolvedValue({
+      ...placed,
+      scheduledStartTime: null,
+      scheduledEndTime: null,
+    });
+
+    await engine.run(userId);
+
+    expect(taskRepo.update).not.toHaveBeenCalled();
+    expect(
+      extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls).get(
+        'skip-during-replan',
+      ),
+    ).toBeUndefined();
+  });
+
   it('does not place a flexible task before its earliestStartTime day', async () => {
     taskRepo.find.mockResolvedValue([
       makeTask({
@@ -1129,6 +1175,7 @@ function makeTask(partial: Partial<Task>): Task {
     googleVisibility: partial.googleVisibility ?? null,
     googleTransparency: partial.googleTransparency ?? null,
     googleReminders: partial.googleReminders ?? null,
+    skippedOccurrenceYmds: partial.skippedOccurrenceYmds ?? null,
     createdAt: partial.createdAt ?? new Date('2026-04-20T08:00:00.000Z'),
     updatedAt: new Date('2026-04-20T08:00:00.000Z'),
   };

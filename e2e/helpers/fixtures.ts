@@ -93,3 +93,23 @@ export function stripBlock(page: Page, name: string) {
   return page.locator('li, .rounded-md.border').filter({ hasText: name });
 }
 
+export function skippableStripCard(page: Page, name: string) {
+  return page
+    .locator('div.rounded-md.border')
+    .filter({ hasText: name })
+    .filter({ has: page.getByRole('button', { name: 'Skip' }) });
+}
+
+export async function waitForScheduleJob(
+  request: APIRequestContext,
+  token: string,
+  jobId?: string | null,
+): Promise<void> {
+  if (!jobId) return;
+  for (let i = 0; i < 40; i++) {
+    const job = await apiJson(request, token, 'get', `/schedule-jobs/${jobId}`);
+    if (job.body?.status === 'done' || job.body?.status === 'failed') return;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+

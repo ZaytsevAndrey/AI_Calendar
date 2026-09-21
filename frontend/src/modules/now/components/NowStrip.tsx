@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useGetEventsQuery } from 'api/eventsApi';
-import { useGetEventsQuery as useGetTasksQuery, useUpdateEventMutation } from 'api/eventTasksApi';
+import { useGetEventsQuery as useGetTasksQuery, useSkipOccurrenceMutation, useUpdateEventMutation } from 'api/eventTasksApi';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import type { TaskDTO } from 'api/tasks.api';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
@@ -10,6 +10,7 @@ import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
 import {
   buildNowBlocks,
   canCompleteNowBlock,
+  canSkipNowBlock,
   pickNowAndNext,
   todayNowContext,
   unscheduledTasksForToday,
@@ -39,6 +40,7 @@ function BlockRow({
   timeZone,
   empty,
   onDone,
+  onSkip,
   busyId,
 }: {
   label: string;
@@ -46,8 +48,11 @@ function BlockRow({
   timeZone: string;
   empty: string;
   onDone: (task: TaskDTO) => void;
+  onSkip: (block: NowBlock) => void;
   busyId: string | null;
 }) {
+  const showDone = !!(block && canCompleteNowBlock(block) && block.task);
+  const showSkip = !!(block && canSkipNowBlock(block) && block.task);
   return (
     <div className="min-w-0 rounded-md border border-ide-border bg-ide-surface px-3 py-2.5">
       <p className="text-xs font-medium uppercase tracking-wide text-ide-muted">{label}</p>
@@ -57,15 +62,29 @@ function BlockRow({
             <p className="truncate text-sm font-medium text-ide-text">{block.title}</p>
             <p className="text-xs text-ide-muted">{formatRange(block, timeZone)}</p>
           </div>
-          {canCompleteNowBlock(block) && block.task ? (
-            <button
-              type="button"
-              className="ui-btn-secondary shrink-0 px-2.5 py-1 text-xs"
-              disabled={busyId === block.task.id}
-              onClick={() => onDone(block.task!)}
-            >
-              Done
-            </button>
+          {showDone || showSkip ? (
+            <div className="flex shrink-0 flex-wrap justify-end gap-1">
+              {showSkip && block.task ? (
+                <button
+                  type="button"
+                  className="ui-btn-secondary px-2.5 py-1 text-xs"
+                  disabled={busyId === block.task.id}
+                  onClick={() => onSkip(block)}
+                >
+                  Skip
+                </button>
+              ) : null}
+              {showDone && block.task ? (
+                <button
+                  type="button"
+                  className="ui-btn-secondary px-2.5 py-1 text-xs"
+                  disabled={busyId === block.task.id}
+                  onClick={() => onDone(block.task!)}
+                >
+                  Done
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : (
@@ -89,6 +108,7 @@ export function NowStrip() {
   });
   const { data: tasks = [] } = useGetTasksQuery();
   const [updateTask] = useUpdateEventMutation();
+  const [skipOccurrence] = useSkipOccurrenceMutation();
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const blocks = useMemo(
@@ -96,8 +116,14 @@ export function NowStrip() {
     [todayEvents?.events, tasks, ctx.todayYmd, ctx.timeZone],
   );
   const { now, next } = useMemo(
-    () => pickNowAndNext(blocks, nowMs, ctx.todayEndMs),
-    [blocks, nowMs, ctx.todayEndMs],
+    () =>
+      pickNowAndNext(
+        blocks,
+        nowMs,
+        ctx.todayEndMs,
+        new Date(ctx.fetchTimeMin).getTime(),
+      ),
+    [blocks, nowMs, ctx.todayEndMs, ctx.fetchTimeMin],
   );
   const occupied = useMemo(() => {
     const ids = new Set<string>();
@@ -125,6 +151,30 @@ export function NowStrip() {
     }
   };
 
+  const markSkip = async (block: NowBlock) => {
+    const task = block.task;
+    if (!task) return;
+    setBusyId(task.id);
+    try {
+      await skipOccurrence({
+        id: task.id,
+        body: {
+          occurrenceStart: new Date(block.startMs).toISOString(),
+          googleEventId: block.event?.id,
+          googleEventCalendarId: block.event?.calendarId,
+        },
+      }).unwrap();
+      showSuccessToast({ title: 'Occurrence skipped', detail: task.name });
+    } catch (err) {
+      showErrorToast({
+        title: 'Could not skip occurrence',
+        detail: extractApiErrorMessage(err),
+      });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const emptyClock = !now && !next && inbox.length === 0;
 
   return (
@@ -136,6 +186,7 @@ export function NowStrip() {
           timeZone={ctx.timeZone}
           empty="Nothing in progress"
           onDone={markDone}
+          onSkip={markSkip}
           busyId={busyId}
         />
         <BlockRow
@@ -144,6 +195,7 @@ export function NowStrip() {
           timeZone={ctx.timeZone}
           empty="Nothing else today"
           onDone={markDone}
+          onSkip={markSkip}
           busyId={busyId}
         />
         <div className="min-w-0 rounded-md border border-ide-border bg-ide-surface px-3 py-2.5">

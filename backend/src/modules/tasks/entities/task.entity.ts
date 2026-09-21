@@ -144,6 +144,13 @@ export class Task {
   @Column({ default: false })
   isUnscheduled: boolean;
 
+  /**
+   * Recurring only: civil days (YYYY-MM-DD in settings IANA) the user skipped.
+   * Generate/replan must not place those occurrences again.
+   */
+  @Column({ type: 'json', nullable: true })
+  skippedOccurrenceYmds: string[] | null;
+
   @Column({ nullable: true, type: 'varchar', length: 1024 })
   location: string | null;
 

@@ -7,6 +7,7 @@ import { Phase } from '../phases/entities/phase.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { ScheduleJobService } from '../schedule/schedule-job.service';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { ScheduledTask } from '../schedule/schedule.entity';
 import { TaskEventType } from '../scheduling/event-type.enum';
 import { TaskStatus } from './entities/task.entity';
 
@@ -35,6 +36,10 @@ describe('TasksService', () => {
   const userSettingsRepository = {
     findOne: jest.fn().mockResolvedValue(null),
   };
+  const scheduledTaskRepository = {
+    find: jest.fn().mockResolvedValue([]),
+    remove: jest.fn(),
+  };
   const scheduleJobService = {
     enqueueReplan: jest.fn().mockResolvedValue({ id: 'job-1' }),
     processNextPendingForUser: jest.fn(),
@@ -51,6 +56,7 @@ describe('TasksService', () => {
     jest.clearAllMocks();
     lastSaved = null;
     userSettingsRepository.findOne.mockResolvedValue(null);
+    scheduledTaskRepository.find.mockResolvedValue([]);
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TasksService,
@@ -65,6 +71,10 @@ describe('TasksService', () => {
         {
           provide: getRepositoryToken(UserSettings),
           useValue: userSettingsRepository,
+        },
+        {
+          provide: getRepositoryToken(ScheduledTask),
+          useValue: scheduledTaskRepository,
         },
         {
           provide: ScheduleJobService,
@@ -453,6 +463,141 @@ describe('TasksService', () => {
       };
       await service.updateStatus('task-2', 'user-1', TaskStatus.COMPLETED);
       expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('skipOccurrence', () => {
+    const futureStart = new Date('2026-09-22T10:00:00.000Z');
+    const futureEnd = new Date('2026-09-22T10:30:00.000Z');
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-09-21T08:00:00.000Z'));
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('removes a one-off slot without completing or replanning', async () => {
+      lastSaved = {
+        id: 'task-1',
+        userId: 'user-1',
+        name: 'Write brief',
+        isUnscheduled: false,
+        isRecurring: false,
+        isFixedExternal: false,
+        eventType: TaskEventType.ADMIN,
+        status: TaskStatus.TODO,
+        scheduledStartTime: futureStart,
+        scheduledEndTime: futureEnd,
+        googleEventId: 'g-1',
+        googleEventCalendarId: 'cal-1',
+        skippedOccurrenceYmds: null,
+      };
+      const slot = {
+        id: 'slot-1',
+        taskId: 'task-1',
+        scheduledStartTime: futureStart,
+        scheduledEndTime: futureEnd,
+        googleEventId: 'g-1',
+        googleEventCalendarId: 'cal-1',
+      };
+      let rows = [slot];
+      scheduledTaskRepository.find.mockImplementation(async () => rows);
+      scheduledTaskRepository.remove.mockImplementation(async (row: { id: string }) => {
+        rows = rows.filter((item) => item.id !== row.id);
+      });
+      googleCalendarService.checkConnection.mockResolvedValue({ connected: true });
+
+      const result = await service.skipOccurrence('task-1', 'user-1', {
+        occurrenceStart: futureStart.toISOString(),
+        googleEventId: 'g-1',
+        googleEventCalendarId: 'cal-1',
+      });
+
+      expect(scheduledTaskRepository.remove).toHaveBeenCalled();
+      expect(result.scheduledStartTime).toBeNull();
+      expect(result.jobId).toBeNull();
+      expect(result.status).toBe(TaskStatus.TODO);
+      expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+      expect(googleCalendarService.deleteEvent).toHaveBeenCalledWith(
+        'user-1',
+        'g-1',
+        'cal-1',
+      );
+    });
+
+    it('records a recurring skip so Generate will not recreate that day', async () => {
+      lastSaved = {
+        id: 'task-1',
+        userId: 'user-1',
+        name: 'Gym',
+        isUnscheduled: false,
+        isRecurring: true,
+        isFixedExternal: false,
+        eventType: TaskEventType.ADMIN,
+        status: TaskStatus.TODO,
+        googleEventId: 'series-1',
+        skippedOccurrenceYmds: null,
+      };
+      const slot = {
+        id: 'slot-1',
+        taskId: 'task-1',
+        scheduledStartTime: futureStart,
+        scheduledEndTime: futureEnd,
+        googleEventId: 'series-1',
+      };
+      scheduledTaskRepository.find
+        .mockResolvedValueOnce([slot])
+        .mockResolvedValueOnce([]);
+      googleCalendarService.checkConnection.mockResolvedValue({ connected: false });
+
+      const result = await service.skipOccurrence('task-1', 'user-1', {
+        occurrenceStart: futureStart.toISOString(),
+      });
+
+      expect(result.skippedOccurrenceYmds).toEqual(['2026-09-22']);
+      expect(result.jobId).toBeNull();
+      expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+      expect(googleCalendarService.deleteEvent).not.toHaveBeenCalled();
+    });
+
+    it('does not delete an already ended local slot but still removes the Google instance', async () => {
+      lastSaved = {
+        id: 'task-1',
+        userId: 'user-1',
+        name: 'Write brief',
+        isUnscheduled: false,
+        isRecurring: false,
+        isFixedExternal: false,
+        eventType: TaskEventType.ADMIN,
+        status: TaskStatus.TODO,
+        googleEventId: 'g-old',
+      };
+      scheduledTaskRepository.find.mockResolvedValue([
+        {
+          id: 'slot-1',
+          taskId: 'task-1',
+          scheduledStartTime: new Date('2026-09-21T07:00:00.000Z'),
+          scheduledEndTime: new Date('2026-09-21T07:30:00.000Z'),
+          googleEventId: 'g-old',
+        },
+      ]);
+      googleCalendarService.checkConnection.mockResolvedValue({ connected: true });
+
+      const result = await service.skipOccurrence('task-1', 'user-1', {
+        occurrenceStart: '2026-09-21T07:00:00.000Z',
+        googleEventId: 'g-old',
+      });
+
+      expect(scheduledTaskRepository.remove).not.toHaveBeenCalled();
+      expect(googleCalendarService.deleteEvent).toHaveBeenCalledWith(
+        'user-1',
+        'g-old',
+        undefined,
+      );
+      expect(result.jobId).toBeNull();
     });
   });
 });

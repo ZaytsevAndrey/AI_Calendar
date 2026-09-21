@@ -362,4 +362,46 @@ describe('Tasks API e2e', () => {
     });
     expect([201, 400]).toContain(res.statusCode);
   });
+
+  it('skips a still-open one-off slot without completing the task', async () => {
+    const { token } = await seedOnboardedUser(ctx.app);
+    const created = await createFlexible(ctx, token, 'Skip me');
+    const start = '2026-12-01T10:00:00.000Z';
+    const end = '2026-12-01T10:30:00.000Z';
+    const slot = await api(ctx.app, 'POST', '/schedule', {
+      token,
+      payload: {
+        taskId: created.body.id,
+        scheduledStartTime: start,
+        scheduledEndTime: end,
+      },
+    });
+    expect(slot.statusCode).toBe(201);
+    const slotId = jsonBody(slot).id;
+
+    const skipped = await api(ctx.app, 'POST', `/tasks/${created.body.id}/skip-occurrence`, {
+      token,
+      payload: { occurrenceStart: start },
+    });
+    expect(skipped.statusCode).toBe(200);
+    const body = jsonBody(skipped);
+    expect(body.status).toBe('todo');
+    expect(body.jobId).toBeNull();
+
+    const gone = await api(ctx.app, 'GET', `/schedule/${slotId}`, { token });
+    expect(gone.statusCode).toBe(404);
+  });
+
+  it('rejects skip on an unscheduled inbox task', async () => {
+    const { token } = await seedOnboardedUser(ctx.app);
+    const created = await api(ctx.app, 'POST', '/tasks', {
+      token,
+      payload: { name: 'Inbox', isUnscheduled: true, estimatedTimeInMinutes: 15 },
+    });
+    const skipped = await api(ctx.app, 'POST', `/tasks/${jsonBody(created).id}/skip-occurrence`, {
+      token,
+      payload: { occurrenceStart: '2026-12-01T10:00:00.000Z' },
+    });
+    expect(skipped.statusCode).toBe(400);
+  });
 });

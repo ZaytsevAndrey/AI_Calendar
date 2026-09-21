@@ -18,6 +18,12 @@ import { applyTaskGoogleEventFields } from '../google-calendar/task-google-event
 import { effectiveRecurrenceWeekDays } from './recurrence-from-phases.util';
 import { buildGoogleRecurrenceRules } from './google-recurrence.util';
 import {
+  excludeStartsForSkippedYmds,
+  isOccurrenceYmdSkipped,
+} from '../tasks/skipped-occurrence.util';
+import { localYmd } from '../voice/voice-local-date.util';
+import { resolveIanaTimeZone } from '../../common/iana-time-zone';
+import {
   GoogleEventRef,
   hasFullyEnded,
   partitionEnded,
@@ -197,7 +203,15 @@ export class ScheduleJobService {
 
     for (const seg of snapshot.segments) {
       if (hasFullyEnded(seg.scheduledEndTime, nowMs)) continue;
-      if (!taskById.has(seg.taskId)) continue;
+      const snapTask = taskById.get(seg.taskId);
+      if (!snapTask) continue;
+      if (snapTask.isRecurring) {
+        const tz = resolveIanaTimeZone(snapTask.scheduleTimeZone);
+        const ymd = localYmd(seg.scheduledStartTime, tz);
+        if (isOccurrenceYmdSkipped(snapTask.skippedOccurrenceYmds, ymd)) {
+          continue;
+        }
+      }
       if (keptIds.has(seg.id)) continue;
       await this.scheduledRepo.save(
         this.scheduledRepo.create({
@@ -559,6 +573,10 @@ export class ScheduleJobService {
     const last = futureDesired[futureDesired.length - 1];
     const phases =
       task.phases?.length ? task.phases : task.phase ? [task.phase] : [];
+    const timeZone = resolveIanaTimeZone(task.scheduleTimeZone);
+    const placedYmds = futureDesired.map((seg) =>
+      localYmd(seg.scheduledStartTime.toISOString(), timeZone),
+    );
     const payload = {
       ...this.buildFlexibleSegmentPayload(
         task,
@@ -570,6 +588,13 @@ export class ScheduleJobService {
         firstStart: first.scheduledStartTime,
         lastStart: last.scheduledStartTime,
         weekDays: effectiveRecurrenceWeekDays(task.recurrenceWeekDays, phases),
+        excludeStarts: excludeStartsForSkippedYmds({
+          skippedYmds: task.skippedOccurrenceYmds,
+          firstStart: first.scheduledStartTime,
+          lastStart: last.scheduledStartTime,
+          timeZone,
+          placedYmds,
+        }),
       }),
     };
 

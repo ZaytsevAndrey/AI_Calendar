@@ -9,6 +9,7 @@ import {
   UseGuards,
   Request,
   Query,
+  HttpCode,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -20,6 +21,7 @@ import {
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { SkipOccurrenceDto } from './dto/skip-occurrence.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TaskStatus } from './entities/task.entity';
 
@@ -79,6 +81,22 @@ export class TasksController {
     @Request() req,
   ) {
     return this.tasksService.update(id, req.user.userId, updateTaskDto);
+  }
+
+  @Post(':id/skip-occurrence')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Skip one still-open slot or recurring instance without completing the task',
+  })
+  @ApiResponse({ status: 200, description: 'Occurrence skipped.' })
+  @ApiResponse({ status: 400, description: 'Nothing to skip or occurrence already ended.' })
+  @ApiResponse({ status: 404, description: 'Task not found.' })
+  skipOccurrence(
+    @Param('id') id: string,
+    @Body() dto: SkipOccurrenceDto,
+    @Request() req,
+  ) {
+    return this.tasksService.skipOccurrence(id, req.user.userId, dto);
   }
 
   @Delete(':id')

@@ -1,6 +1,6 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { customBaseQuery } from './customBaseQuery';
-import { TaskDTO, CreateTaskDTO, UpdateTaskDTO } from './tasks.api';
+import { TaskDTO, CreateTaskDTO, UpdateTaskDTO, SkipOccurrenceDTO } from './tasks.api';
 import { eventsApi } from './eventsApi';
 import { waitForScheduleJob } from './schedule.api';
 
@@ -85,6 +85,60 @@ export const eventTasksApi = createApi({
         }
       },
     }),
+    skipOccurrence: builder.mutation<
+      TaskDTO,
+      { id: string; body: SkipOccurrenceDTO }
+    >({
+      query: ({ id, body }) => ({
+        url: `/tasks/${id}/skip-occurrence`,
+        method: 'POST',
+        data: body,
+      }),
+      invalidatesTags: (_r, _e, { id }) => [
+        { type: 'EventTask', id: 'LIST' },
+        { type: 'EventTask', id },
+      ],
+      async onQueryStarted({ id, body }, { dispatch, getState, queryFulfilled }) {
+        const eventId = body.googleEventId;
+        const eventPatches = eventId
+          ? eventsApi.util.selectCachedArgsForQuery(getState() as never, 'getEvents').map((args) =>
+              dispatch(
+                eventsApi.util.updateQueryData('getEvents', args, (draft) => {
+                  if (!Array.isArray(draft?.events)) return;
+                  draft.events = draft.events.filter((event) => event.id !== eventId);
+                  draft.totalEvents = draft.events.length;
+                }),
+              ),
+            )
+          : [];
+        const taskPatch = dispatch(
+          eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) => {
+            const task = draft.find((item) => item.id === id);
+            if (!task || task.isRecurring) return;
+            task.scheduledStartTime = undefined;
+            task.scheduledEndTime = undefined;
+          }),
+        );
+        try {
+          const { data } = await queryFulfilled;
+          dispatch(
+            eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) => {
+              const index = draft.findIndex((item) => item.id === id);
+              if (index < 0) return;
+              draft[index] = { ...draft[index], ...data };
+              if (!draft[index].isRecurring) {
+                draft[index].scheduledStartTime = undefined;
+                draft[index].scheduledEndTime = undefined;
+              }
+            }),
+          );
+          dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+        } catch {
+          taskPatch.undo();
+          eventPatches.forEach((patch) => patch.undo());
+        }
+      },
+    }),
   }),
 });
 
@@ -94,4 +148,5 @@ export const {
   useCreateEventMutation,
   useUpdateEventMutation,
   useDeleteEventMutation,
+  useSkipOccurrenceMutation,
 } = eventTasksApi;

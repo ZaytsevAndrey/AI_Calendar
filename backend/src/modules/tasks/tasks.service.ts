@@ -8,17 +8,26 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { isValidIanaTimeZone } from '../../common/iana-time-zone';
+import { isValidIanaTimeZone, resolveIanaTimeZone } from '../../common/iana-time-zone';
 import { Task, TaskStatus } from './entities/task.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { SkipOccurrenceDto } from './dto/skip-occurrence.dto';
 import { Phase } from '../phases/entities/phase.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { TaskEventType, getEventTypeRules } from '../scheduling/event-type.enum';
 import { ScheduleJobService } from '../schedule/schedule-job.service';
+import { ScheduledTask } from '../schedule/schedule.entity';
+import { hasFullyEnded } from '../schedule/google-segment-sync.util';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { phaseHexToGoogleColorId } from '../google-calendar/phase-hex-to-google-color-id.util';
 import { applyTaskGoogleEventFields } from '../google-calendar/task-google-event-fields.util';
+import { localYmd } from '../voice/voice-local-date.util';
+import {
+  addSkippedOccurrenceYmd,
+  googleRecurringInstanceId,
+  matchScheduledSlotIndex,
+} from './skipped-occurrence.util';
 
 @Injectable()
 export class TasksService {
@@ -31,6 +40,8 @@ export class TasksService {
     private phasesRepository: Repository<Phase>,
     @InjectRepository(UserSettings)
     private userSettingsRepository: Repository<UserSettings>,
+    @InjectRepository(ScheduledTask)
+    private scheduledTaskRepository: Repository<ScheduledTask>,
     @Inject(forwardRef(() => ScheduleJobService))
     private readonly scheduleJobService: ScheduleJobService,
     private readonly googleCalendarService: GoogleCalendarService,
@@ -452,6 +463,175 @@ export class TasksService {
         createdAt: 'DESC',
       },
     });
+  }
+
+  async skipOccurrence(
+    id: string,
+    userId: string,
+    dto: SkipOccurrenceDto,
+  ): Promise<Task & { jobId: string | null }> {
+    const task = await this.findOne(id, userId);
+    if (task.isUnscheduled) {
+      throw new BadRequestException('Unscheduled tasks have no occurrence to skip');
+    }
+    if (task.isFixedExternal || task.eventType === TaskEventType.FIXED) {
+      throw new BadRequestException('Fixed events cannot be skipped');
+    }
+    if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.CANCELED) {
+      throw new BadRequestException('Completed or canceled tasks cannot be skipped');
+    }
+
+    const occurrenceStart = new Date(dto.occurrenceStart);
+    if (Number.isNaN(occurrenceStart.getTime())) {
+      throw new BadRequestException('occurrenceStart must be a valid ISO date');
+    }
+
+    const settings = await this.userSettingsRepository.findOne({
+      where: { userId },
+    });
+    const timeZone = resolveIanaTimeZone(
+      settings?.timeZone || task.scheduleTimeZone,
+    );
+    const nowMs = Date.now();
+    const occurrenceYmd = localYmd(occurrenceStart.toISOString(), timeZone);
+    const rows = await this.scheduledTaskRepository.find({
+      where: { taskId: task.id },
+    });
+    const slot = this.pickSkipSlot(
+      rows,
+      occurrenceStart,
+      occurrenceYmd,
+      timeZone,
+      nowMs,
+    );
+    const openSlot =
+      slot && hasFullyEnded(slot.scheduledEndTime, nowMs) ? null : slot;
+    if (!openSlot && !task.isRecurring && !dto.googleEventId) {
+      throw new BadRequestException('No matching scheduled slot to skip');
+    }
+
+    if (task.isRecurring) {
+      task.skippedOccurrenceYmds = addSkippedOccurrenceYmd(
+        task.skippedOccurrenceYmds,
+        occurrenceYmd,
+      );
+    }
+
+    if (openSlot) {
+      await this.scheduledTaskRepository.remove(openSlot);
+    }
+
+    const remaining = (await this.scheduledTaskRepository.find({
+      where: { taskId: task.id },
+    })).sort(
+      (a, b) =>
+        new Date(a.scheduledStartTime).getTime() -
+        new Date(b.scheduledStartTime).getTime(),
+    );
+    this.refreshTaskScheduleAfterSkip(task, remaining);
+
+    const googleEventId = this.googleEventIdToSkip(
+      task,
+      dto.googleEventId,
+      openSlot ?? slot,
+      occurrenceStart,
+    );
+    if (googleEventId) {
+      await this.deleteSkippedGoogleEvent(
+        userId,
+        googleEventId,
+        dto.googleEventCalendarId ||
+          slot?.googleEventCalendarId ||
+          task.googleEventCalendarId,
+      );
+      if (!task.isRecurring && googleEventId === task.googleEventId) {
+        const leftover = remaining.find((row) => row.googleEventId);
+        task.googleEventId = leftover?.googleEventId ?? null;
+        task.googleEventCalendarId =
+          leftover?.googleEventCalendarId ?? null;
+      }
+    }
+
+    const saved = await this.tasksRepository.save(task);
+    const row = await this.findOne(saved.id, userId);
+    return Object.assign(row, { jobId: null });
+  }
+
+  private pickSkipSlot(
+    rows: ScheduledTask[],
+    occurrenceStart: Date,
+    occurrenceYmd: string,
+    timeZone: string,
+    nowMs: number,
+  ): ScheduledTask | null {
+    const byStart = matchScheduledSlotIndex(rows, occurrenceStart);
+    if (byStart >= 0) return rows[byStart];
+    const sameDay = rows.filter(
+      (row) =>
+        localYmd(new Date(row.scheduledStartTime).toISOString(), timeZone) ===
+        occurrenceYmd,
+    );
+    if (!sameDay.length) return null;
+    const open = sameDay.filter(
+      (row) => !hasFullyEnded(row.scheduledEndTime, nowMs),
+    );
+    return (open[0] ?? sameDay[0]) ?? null;
+  }
+
+  private refreshTaskScheduleAfterSkip(
+    task: Task,
+    remaining: ScheduledTask[],
+  ): void {
+    if (task.isRecurring) return;
+    if (!remaining.length) {
+      task.scheduledStartTime = null;
+      task.scheduledEndTime = null;
+      return;
+    }
+    task.scheduledStartTime = new Date(remaining[0].scheduledStartTime);
+    task.scheduledEndTime = new Date(
+      remaining[remaining.length - 1].scheduledEndTime,
+    );
+  }
+
+  private googleEventIdToSkip(
+    task: Task,
+    requestedId: string | undefined,
+    slot: ScheduledTask | null,
+    occurrenceStart: Date,
+  ): string | null {
+    const master = task.googleEventId;
+    if (task.isRecurring) {
+      if (requestedId && requestedId !== master) return requestedId;
+      const start = slot
+        ? new Date(slot.scheduledStartTime)
+        : occurrenceStart;
+      if (master && !Number.isNaN(start.getTime())) {
+        return googleRecurringInstanceId(master, start);
+      }
+      return null;
+    }
+    return requestedId || slot?.googleEventId || master || null;
+  }
+
+  private async deleteSkippedGoogleEvent(
+    userId: string,
+    eventId: string,
+    calendarId?: string | null,
+  ): Promise<void> {
+    try {
+      const conn = await this.googleCalendarService.checkConnection(userId);
+      if (!conn.connected) return;
+      await this.googleCalendarService.deleteEvent(
+        userId,
+        eventId,
+        calendarId ?? undefined,
+      );
+    } catch (e: any) {
+      this.logger.warn(
+        `Failed to delete skipped Google event ${eventId}: ${e?.message ?? e}`,
+      );
+    }
   }
 
   async updateStatus(

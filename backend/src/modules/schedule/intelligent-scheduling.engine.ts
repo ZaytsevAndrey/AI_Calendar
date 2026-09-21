@@ -12,6 +12,7 @@ import {
 } from '../scheduling/event-type.enum';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { effectiveRecurrenceWeekDays } from './recurrence-from-phases.util';
+import { isOccurrenceYmdSkipped } from '../tasks/skipped-occurrence.util';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import {
   addDaysToYmd,
@@ -599,6 +600,15 @@ export class IntelligentSchedulingEngine {
         newSegments.delete(task.id);
         continue;
       }
+      const skippedWhileRunning =
+        !task.isRecurring &&
+        !!(task.scheduledStartTime || task.scheduledEndTime) &&
+        !live.scheduledStartTime &&
+        !live.scheduledEndTime;
+      if (skippedWhileRunning) {
+        newSegments.delete(task.id);
+        continue;
+      }
       const first = segs[0];
       const last = segs[segs.length - 1];
       if (task.isRecurring) {
@@ -879,6 +889,10 @@ export class IntelligentSchedulingEngine {
     }
 
     while (occurrenceYmd < horizonEndYmd) {
+      if (isOccurrenceYmdSkipped(task.skippedOccurrenceYmds, occurrenceYmd)) {
+        occurrenceYmd = advanceYmd(occurrenceYmd, stepPattern);
+        continue;
+      }
       if (
         restrictedWeekDays?.length &&
         !restrictedWeekDays.includes(weekdayIndex(occurrenceYmd))

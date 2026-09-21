@@ -1,4 +1,4 @@
-import { test, expect, openAs, apiJson, expectOk, uniqueName, completeOpenTasks, stripBlock, deleteUnusedTimePhases } from '../helpers/fixtures';
+import { test, expect, openAs, apiJson, expectOk, uniqueName, completeOpenTasks, stripBlock, skippableStripCard, waitForScheduleJob, deleteUnusedTimePhases } from '../helpers/fixtures';
 
 async function generateSchedule(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: 'Schedule' }).click();
@@ -183,5 +183,76 @@ test.describe('P0 calendar UI', () => {
     const externalBlock = stripBlock(page, 'External dentist');
     await expect(externalBlock).toBeVisible();
     await expect(externalBlock.getByRole('button', { name: 'Done' })).toHaveCount(0);
+    await expect(externalBlock.getByRole('button', { name: 'Skip' })).toHaveCount(0);
+  });
+
+  test('U-CAL-019 Now Skip drops a movable timed slot without completing', async ({
+    page,
+    auth,
+    request,
+  }) => {
+    await completeOpenTasks(request, auth.onboarded.access_token);
+    const name = uniqueName('E2E skip now');
+    const start = new Date(Date.now() - 5 * 60_000).toISOString();
+    const end = new Date(Date.now() + 25 * 60_000).toISOString();
+    const created = await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
+      name,
+      eventType: 'admin',
+      estimatedTimeInMinutes: 30,
+      scheduledStartTime: start,
+      scheduledEndTime: end,
+      timeZone: 'Europe/Kyiv',
+    });
+    expectOk(created);
+    await waitForScheduleJob(request, auth.onboarded.access_token, created.body.jobId);
+    const placed = await apiJson(request, auth.onboarded.access_token, 'get', `/tasks/${created.body.id}`);
+    expectOk(placed);
+    if (!placed.body.scheduledStartTime || !placed.body.scheduledEndTime) {
+      expectOk(
+        await apiJson(request, auth.onboarded.access_token, 'post', '/schedule', {
+          taskId: created.body.id,
+          scheduledStartTime: start,
+          scheduledEndTime: end,
+        }),
+      );
+    }
+
+    await openAs(page, auth.onboarded);
+    const skipCard = skippableStripCard(page, name);
+    await expect(skipCard).toBeVisible();
+    await skipCard.getByRole('button', { name: 'Skip' }).click();
+    await expect(page.getByText('Occurrence skipped')).toBeVisible();
+    await expect(skipCard).toHaveCount(0);
+
+    const listed = await apiJson(request, auth.onboarded.access_token, 'get', `/tasks/${created.body.id}`);
+    expectOk(listed);
+    expect(listed.body.status).toBe('todo');
+    expect(listed.body.scheduledStartTime == null).toBeTruthy();
+  });
+
+  test('U-CAL-020 recurring Now block has Skip and no Done', async ({ page, auth, request }) => {
+    await completeOpenTasks(request, auth.onboarded.access_token);
+    const name = uniqueName('E2E skip series');
+    const start = new Date(Date.now() - 5 * 60_000).toISOString();
+    const end = new Date(Date.now() + 25 * 60_000).toISOString();
+    expectOk(
+      await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
+        name,
+        eventType: 'admin',
+        isRecurring: true,
+        recurrencePattern: 'DAILY',
+        recurrenceWeekDays: [0, 1, 2, 3, 4, 5, 6],
+        estimatedTimeInMinutes: 30,
+        scheduledStartTime: start,
+        scheduledEndTime: end,
+        timeZone: 'Europe/Kyiv',
+      }),
+    );
+
+    await openAs(page, auth.onboarded);
+    const nowCard = stripBlock(page, name);
+    await expect(nowCard).toBeVisible();
+    await expect(nowCard.getByRole('button', { name: 'Done' })).toHaveCount(0);
+    await expect(nowCard.getByRole('button', { name: 'Skip' })).toHaveCount(1);
   });
 });

@@ -79,6 +79,12 @@ export interface UpdateTaskDTO extends Partial<CreateTaskDTO> {
   phaseIds?: string[];
 }
 
+export interface SkipOccurrenceDTO {
+  occurrenceStart: string;
+  googleEventId?: string;
+  googleEventCalendarId?: string;
+}
+
 export const TasksApi = {
   getAllTasks: async (): Promise<TaskDTO[]> => {
     const response = await apiCall({ method: 'GET', url: '/tasks' });
@@ -124,5 +130,15 @@ export const TasksApi = {
 
   deleteTask: async (id: string): Promise<void> => {
     await apiCall({ method: 'DELETE', url: `/tasks/${id}` });
-  }
+  },
+
+  skipOccurrence: async (id: string, body: SkipOccurrenceDTO): Promise<TaskDTO> => {
+    const response = await apiCall({
+      method: 'POST',
+      url: `/tasks/${id}/skip-occurrence`,
+      data: body,
+    });
+    if (!response) throw new Error('No response from server');
+    return response.data as TaskDTO;
+  },
 }; 

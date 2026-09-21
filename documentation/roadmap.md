@@ -26,10 +26,10 @@ Two lists used to compete (`roadmap` vs `BUGS-AND-IMPROVEMENTS.md`). This file i
 
 ## Next — daily loop
 
-- [x] **Today / Now** (Sep 2026). Strip on Calendar (home stays `/`): current overlapping block, next start today, unscheduled inbox for today by priority. External Google events appear in Now/Next without Done. One-tap Done completes a non-recurring app task; recurring has no Done (skip occurrence is later). Compact habit Today/Yesterday check-ins; no habit CRUD here. After create/update the client polls the silent-replan `jobId` and refreshes Now / calendar (no WebSockets).
+- [x] **Today / Now** (Sep 2026). Strip on Calendar (home stays `/`): current overlapping block, next start today, unscheduled inbox for today by priority. External Google events appear in Now/Next without Done. One-tap Done completes a non-recurring app task; Skip drops one still-open slot or recurring instance. Compact habit Today/Yesterday check-ins; no habit CRUD here. After create/update the client polls the silent-replan `jobId` and refreshes Now / calendar (no WebSockets).
 - [x] **Unscheduled inbox** (Sep 2026). First-class `isUnscheduled` tasks on the Tasks page: no Google sync, excluded from Generate/replan, Done or Schedule. Optional deadline highlighting. TaskForm expandable Google event options (location, color, visibility, show-as, reminders) persist and apply on later sync. App-generated calendar clicks open TaskForm; native Google events still use EventForm.
 - [x] **Undo last generate** (Sep 2026). Calendar **Generate** stores a single snapshot (local auto slots + Google ids). **Undo last generate** restores still-open blocks and Google; fully ended blocks stay. Silent replan after task save is not undoable. Clear still cannot be undone and drops the snapshot. Non-recurring Generate no longer re-places minutes that already finished.
-- [ ] **Skip / snooze this occurrence** — one slot or one recurring instance without deleting the series.
+- [x] **Skip this occurrence** (Sep 2026). One still-open slot or recurring instance without completing the task or deleting the series. Recurring skips persist (Generate will not recreate that civil day). One-off skip drops the placement; the next Generate can place remaining work. Snooze is later. UI: Now/Next Skip plus Skip on TaskForm when opened from a calendar instance.
 - [ ] **Generate preview / overload warning** — show what will move and if the window cannot fit work *before* applying.
 
 ## Then — setup & control
@@ -121,7 +121,7 @@ Open Phase 5 items live in **Now / Next / Then / Later** above.
 
 ## Recommended next steps
 
-1. Skip / snooze this occurrence; then generate preview.
+1. Generate preview / overload warning.
 2. Phase lifestyle presets; text add; Google calendar visibility; drag-and-drop.
 3. Later extras (AI recommendations, reminders, stats, integrations, parked polish).
 4. Add Playwright (or similar) **E2E** for voice create, Done vs calendar, Generate/Undo; expand unit tests as you touch flows; optional custom subdomain (see [deploy](deploy.md)).

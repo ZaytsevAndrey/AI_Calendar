@@ -38,6 +38,8 @@ import {
     periodLabel,
     shiftPeriod,
     visibleRangeYmd,
+    eventStartDate,
+    eventEndDate,
 } from 'modules/calendar/calendarView';
 
 const toggleBtn = (active: boolean) =>
@@ -149,7 +151,18 @@ const CalendarPage: React.FC = () => {
         if (!event) return;
         const linkedTask = findTaskForGoogleEvent(tasks, event);
         if (linkedTask) {
-            openEdit(linkedTask);
+            const start = eventStartDate(event);
+            openEdit(
+                linkedTask,
+                start
+                    ? {
+                          startIso: start.toISOString(),
+                          endIso: eventEndDate(event)?.toISOString(),
+                          googleEventId: event.id,
+                          calendarId: event.calendarId,
+                      }
+                    : undefined,
+            );
             return;
         }
         setEventFormDialog({ open: true, event });

@@ -25,35 +25,55 @@ function byDayList(weekDays: number[]): string {
     .join(',');
 }
 
+function withExdates(rrules: string[], excludeStarts?: Date[] | null): string[] {
+  if (!excludeStarts?.length) return rrules;
+  const stamps = [
+    ...new Set(excludeStarts.map((start) => toRruleUntilUtc(start))),
+  ].sort();
+  if (!stamps.length) return rrules;
+  return [...rrules, `EXDATE:${stamps.join(',')}`];
+}
+
 /**
  * One Google RRULE for a recurring task. UNTIL is the last scheduled start (inclusive).
  * DAILY + phase weekdays becomes WEEKLY+BYDAY so weekends/off-days are not invented.
+ * Optional EXDATE covers user-skipped occurrences inside that window.
  */
 export function buildGoogleRecurrenceRules(opts: {
   pattern?: string | null;
   firstStart: Date;
   lastStart: Date;
   weekDays?: number[] | null;
+  excludeStarts?: Date[] | null;
 }): string[] {
   const until = toRruleUntilUtc(opts.lastStart);
   const pattern = (opts.pattern || 'DAILY').toUpperCase();
   const weekdayFallback = [opts.firstStart.getDay()];
   const fromPhase = opts.weekDays?.length ? opts.weekDays : null;
+  const ex = opts.excludeStarts;
 
   if (pattern === 'WEEKLY') {
     const by = byDayList(fromPhase ?? weekdayFallback);
-    return [`RRULE:FREQ=WEEKLY;BYDAY=${by};UNTIL=${until}`];
+    return withExdates([`RRULE:FREQ=WEEKLY;BYDAY=${by};UNTIL=${until}`], ex);
   }
   if (pattern === 'BIWEEKLY') {
     const by = byDayList(fromPhase ?? weekdayFallback);
-    return [`RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=${by};UNTIL=${until}`];
+    return withExdates(
+      [`RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=${by};UNTIL=${until}`],
+      ex,
+    );
   }
   if (pattern === 'MONTHLY') {
-    return [`RRULE:FREQ=MONTHLY;UNTIL=${until}`];
+    return withExdates([`RRULE:FREQ=MONTHLY;UNTIL=${until}`], ex);
   }
   if (fromPhase?.length) {
     const by = byDayList(fromPhase);
-    if (by) return [`RRULE:FREQ=WEEKLY;BYDAY=${by};UNTIL=${until}`];
+    if (by) {
+      return withExdates(
+        [`RRULE:FREQ=WEEKLY;BYDAY=${by};UNTIL=${until}`],
+        ex,
+      );
+    }
   }
-  return [`RRULE:FREQ=DAILY;UNTIL=${until}`];
+  return withExdates([`RRULE:FREQ=DAILY;UNTIL=${until}`], ex);
 }

@@ -80,4 +80,21 @@ describe('google-recurrence.util', () => {
       setRruleUntil('RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20260101T000000Z', until),
     ).toBe(`RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=${toRruleUntilUtc(until)}`);
   });
+
+  it('appends EXDATE for skipped occurrence starts', () => {
+    const first = new Date('2026-09-21T06:00:00.000Z');
+    const last = new Date('2026-09-25T06:00:00.000Z');
+    const skipped = new Date('2026-09-23T06:00:00.000Z');
+    expect(
+      buildGoogleRecurrenceRules({
+        pattern: 'DAILY',
+        firstStart: first,
+        lastStart: last,
+        excludeStarts: [skipped],
+      }),
+    ).toEqual([
+      `RRULE:FREQ=DAILY;UNTIL=${toRruleUntilUtc(last)}`,
+      `EXDATE:${toRruleUntilUtc(skipped)}`,
+    ]);
+  });
 });

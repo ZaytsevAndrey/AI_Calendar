@@ -42,6 +42,16 @@ export function canCompleteNowBlock(block: NowBlock): boolean {
   return true;
 }
 
+export function canSkipNowBlock(block: NowBlock): boolean {
+  const task = block.task;
+  if (!task) return false;
+  if (block.allDay) return false;
+  if (task.isFixedExternal || task.isUnscheduled) return false;
+  if (task.eventType === 'fixed') return false;
+  if (task.status === 'completed' || task.status === 'canceled') return false;
+  return true;
+}
+
 export function matchTaskToEvent(tasks: TaskDTO[], event: GoogleCalendarEvent): TaskDTO | undefined {
   const ids = [event.id, event.recurringEventId].filter(Boolean) as string[];
   if (!ids.length) return undefined;
@@ -108,6 +118,7 @@ export function buildNowBlocks(
   const { timeMin, timeMax } = civilDayQueryRange(todayYmd, zone);
   const dayStart = new Date(timeMin).getTime();
   const dayEnd = new Date(timeMax).getTime();
+  const yesterdayYmd = addDaysToYmd(todayYmd, -1);
   const activeTasks = tasks.filter((task) => isCurrentTask(task));
   const usedTaskIds = new Set<string>();
   const blocks: NowBlock[] = [];
@@ -117,6 +128,10 @@ export function buildNowBlocks(
     if (!bounds) continue;
     const overlapsToday = bounds.startMs < dayEnd && bounds.endMs > dayStart;
     if (!overlapsToday) continue;
+    if (!bounds.allDay) {
+      const startYmd = localYmd(new Date(bounds.startMs).toISOString(), zone);
+      if (startYmd < yesterdayYmd) continue;
+    }
     const task = matchTaskToEvent(activeTasks, event) ?? null;
     if (task?.status === 'completed' || task?.status === 'canceled') continue;
     if (task) usedTaskIds.add(task.id);
@@ -136,6 +151,10 @@ export function buildNowBlocks(
     const bounds = taskTimedBounds(task);
     if (!bounds) continue;
     if (!(bounds.startMs < dayEnd && bounds.endMs > dayStart)) continue;
+    const startYmd = localYmd(new Date(bounds.startMs).toISOString(), zone);
+    // Split / series rows store first→last; that span is not a Now block.
+    if (startYmd < yesterdayYmd) continue;
+    if (bounds.endMs - bounds.startMs > 36 * 60 * 60 * 1000) continue;
     blocks.push({
       key: `task:${task.id}`,
       title: task.name,
@@ -160,10 +179,13 @@ export function pickNowAndNext(
   blocks: NowBlock[],
   nowMs: number,
   todayEndMs: number,
+  notBeforeMs?: number,
 ): { now: NowBlock | null; next: NowBlock | null } {
   const current = blocks.filter((block) => block.startMs <= nowMs && nowMs < block.endMs);
   const timedCurrent = current.filter((block) => !block.allDay);
-  const nowPool = timedCurrent.length ? timedCurrent : current;
+  const freshEnough = (block: NowBlock) =>
+    block.allDay || notBeforeMs == null || block.startMs >= notBeforeMs;
+  const nowPool = (timedCurrent.length ? timedCurrent : current).filter(freshEnough);
   nowPool.sort((a, b) => currentScore(b, nowMs) - currentScore(a, nowMs));
   const now = nowPool[0] ?? null;
 

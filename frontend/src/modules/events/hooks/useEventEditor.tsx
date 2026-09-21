@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   useCreateEventMutation,
+  useSkipOccurrenceMutation,
   useUpdateEventMutation,
 } from 'api/eventTasksApi';
 import { useGetAllPhasesQuery } from 'api/phasesApi';
@@ -14,6 +15,13 @@ import { showErrorToast, showSuccessToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 import { describeTaskToastDetail } from '../../../utils/formatDate';
 
+export type TaskOccurrenceContext = {
+  startIso: string;
+  endIso?: string;
+  googleEventId?: string;
+  calendarId?: string;
+};
+
 export type CreateTaskDefaults = {
   deadline?: string;
   earliestStartTime?: string;
@@ -24,6 +32,7 @@ export type CreateTaskDefaults = {
 export function useEventEditor() {
   const [open, setOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<TaskDTO | null>(null);
+  const [occurrence, setOccurrence] = useState<TaskOccurrenceContext | null>(null);
   const [createDefaults, setCreateDefaults] = useState<CreateTaskDefaults | undefined>();
   const [formPrefill, setFormPrefill] = useState<ReturnType<typeof formValuesFromCreatePayload> | undefined>();
   const { data: phases = [] } = useGetAllPhasesQuery();
@@ -31,16 +40,19 @@ export function useEventEditor() {
   const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
   const [createEvent] = useCreateEventMutation();
   const [updateEvent] = useUpdateEventMutation();
+  const [skipOccurrence] = useSkipOccurrenceMutation();
 
   const close = () => {
     setOpen(false);
     setEditingEvent(null);
+    setOccurrence(null);
     setCreateDefaults(undefined);
     setFormPrefill(undefined);
   };
 
   const openCreate = (defaults?: CreateTaskDefaults) => {
     setEditingEvent(null);
+    setOccurrence(null);
     setCreateDefaults(defaults);
     setFormPrefill(undefined);
     setOpen(true);
@@ -48,13 +60,15 @@ export function useEventEditor() {
 
   const openCreateFromPrefill = (payload: CreateTaskDTO) => {
     setEditingEvent(null);
+    setOccurrence(null);
     setCreateDefaults(undefined);
     setFormPrefill(formValuesFromCreatePayload(payload, timeZone));
     setOpen(true);
   };
 
-  const openEdit = (event: TaskDTO) => {
+  const openEdit = (event: TaskDTO, nextOccurrence?: TaskOccurrenceContext) => {
     setEditingEvent(event);
+    setOccurrence(nextOccurrence ?? null);
     setCreateDefaults(undefined);
     setFormPrefill(undefined);
     setOpen(true);
@@ -62,6 +76,7 @@ export function useEventEditor() {
 
   const openSchedule = (event: TaskDTO) => {
     setEditingEvent(event);
+    setOccurrence(null);
     setCreateDefaults({ scheduleIntent: true });
     setFormPrefill(undefined);
     setOpen(true);
@@ -109,6 +124,44 @@ export function useEventEditor() {
     });
   };
 
+  const canSkipOccurrence = ((): boolean => {
+    if (!editingEvent || !occurrence?.startIso) return false;
+    if (editingEvent.isFixedExternal || editingEvent.isUnscheduled) return false;
+    if (editingEvent.eventType === 'fixed') return false;
+    if (editingEvent.status === 'completed' || editingEvent.status === 'canceled') {
+      return false;
+    }
+    if (occurrence.endIso && new Date(occurrence.endIso).getTime() <= Date.now()) {
+      return false;
+    }
+    return true;
+  })();
+
+  const handleSkipOccurrence = () => {
+    const task = editingEvent;
+    const slot = occurrence;
+    if (!task || !slot) return;
+    close();
+    void skipOccurrence({
+      id: task.id,
+      body: {
+        occurrenceStart: slot.startIso,
+        googleEventId: slot.googleEventId,
+        googleEventCalendarId: slot.calendarId,
+      },
+    })
+      .unwrap()
+      .then(() => {
+        showSuccessToast({ title: 'Occurrence skipped', detail: task.name });
+      })
+      .catch((err) => {
+        showErrorToast({
+          title: 'Could not skip occurrence',
+          detail: extractApiErrorMessage(err),
+        });
+      });
+  };
+
   const editorModal = (
     <Modal
       open={open}
@@ -143,6 +196,7 @@ export function useEventEditor() {
           onSubmit={submit}
           isSubmitting={false}
           onCancel={close}
+          onSkipOccurrence={canSkipOccurrence ? handleSkipOccurrence : undefined}
           mode={editingEvent ? 'edit' : 'create'}
         />
       </div>

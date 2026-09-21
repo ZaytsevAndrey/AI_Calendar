@@ -3,6 +3,7 @@ import type { TaskDTO } from '../../api/tasks.api';
 import {
   buildNowBlocks,
   canCompleteNowBlock,
+  canSkipNowBlock,
   pickNowAndNext,
   todayNowContext,
   unscheduledTasksForToday,
@@ -55,6 +56,7 @@ describe('todayNowContext', () => {
 describe('pickNowAndNext', () => {
   const nowMs = new Date('2026-09-10T10:15:00+03:00').getTime();
   const todayEndMs = new Date('2026-09-11T00:00:00+03:00').getTime();
+  const yesterdayStartMs = new Date('2026-09-09T00:00:00+03:00').getTime();
 
   it('picks the overlapping timed block as now and the next start as next', () => {
     const blocks = buildNowBlocks(
@@ -69,6 +71,52 @@ describe('pickNowAndNext', () => {
     const { now, next } = pickNowAndNext(blocks, nowMs, todayEndMs);
     expect(now?.title).toBe('Standup');
     expect(next?.title).toBe('Review');
+  });
+
+  it('does not treat a week-old spanning event as Now', () => {
+    const blocks = buildNowBlocks(
+      [
+        timed(
+          'stale',
+          'Old series',
+          '2026-09-01T08:00:00+03:00',
+          '2026-09-20T18:00:00+03:00',
+        ),
+        timed('fresh', 'Focus', '2026-09-10T10:00:00+03:00', '2026-09-10T10:45:00+03:00'),
+      ],
+      [],
+      TODAY,
+      TZ,
+    );
+    const { now } = pickNowAndNext(blocks, nowMs, todayEndMs, yesterdayStartMs);
+    expect(now?.title).toBe('Focus');
+  });
+
+  it('does not use a recurring task first-occurrence span as Now', () => {
+    const gym = task({
+      id: 'r1',
+      name: 'Gym',
+      isRecurring: true,
+      scheduledStartTime: '2026-09-01T10:00:00+03:00',
+      scheduledEndTime: '2026-09-30T10:45:00+03:00',
+    });
+    const blocks = buildNowBlocks([], [gym], TODAY, TZ);
+    const { now } = pickNowAndNext(blocks, nowMs, todayEndMs, yesterdayStartMs);
+    expect(now).toBeNull();
+  });
+
+  it('shows a same-day recurring occurrence from task times', () => {
+    const gym = task({
+      id: 'r1',
+      name: 'Gym',
+      isRecurring: true,
+      scheduledStartTime: '2026-09-10T10:00:00+03:00',
+      scheduledEndTime: '2026-09-10T10:45:00+03:00',
+    });
+    const blocks = buildNowBlocks([], [gym], TODAY, TZ);
+    const { now } = pickNowAndNext(blocks, nowMs, todayEndMs, yesterdayStartMs);
+    expect(now?.title).toBe('Gym');
+    expect(canSkipNowBlock(now!)).toBe(true);
   });
 
   it('prefers a timed overlap over an all-day event', () => {
@@ -114,8 +162,31 @@ describe('pickNowAndNext', () => {
     const { now, next } = pickNowAndNext(blocks, nowMs, todayEndMs);
     expect(now?.task?.id).toBe('r1');
     expect(canCompleteNowBlock(now!)).toBe(false);
+    expect(canSkipNowBlock(now!)).toBe(true);
     expect(next?.title).toBe('Doctor');
     expect(canCompleteNowBlock(next!)).toBe(false);
+    expect(canSkipNowBlock(next!)).toBe(false);
+  });
+
+  it('offers Skip and Done on a movable one-off app block', () => {
+    const oneOff = task({
+      id: 't1',
+      name: 'Write brief',
+      googleEventId: 'ev-1',
+    });
+    const blocks = buildNowBlocks(
+      [
+        timed('ev-1', 'Write brief', '2026-09-10T10:00:00+03:00', '2026-09-10T10:45:00+03:00', {
+          isAppGenerated: true,
+        }),
+      ],
+      [oneOff],
+      TODAY,
+      TZ,
+    );
+    const { now } = pickNowAndNext(blocks, nowMs, todayEndMs);
+    expect(canCompleteNowBlock(now!)).toBe(true);
+    expect(canSkipNowBlock(now!)).toBe(true);
   });
 });
 

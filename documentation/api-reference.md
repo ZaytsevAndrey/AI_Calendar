@@ -82,7 +82,7 @@ Points: +1 per successful day, plus +1 whenever a consecutive run hits a multipl
 
 ## Tasks — `/tasks`
 
-Task CRUD (JWT). Bodies/responses include `phaseId`, **`phaseIds`** (max 1), **`eventType`** (`fixed` or `admin` on new writes), status, priority, deadline, **`earliestStartTime`**, **`eligibleWeekDays`**, estimated minutes, `allowSplit`, `isRecurring`, `recurrencePattern`, **`recurrenceWeekDays`**, optional `scheduledStartTime` / `scheduledEndTime`. `phaseIds` must belong to the current user. **POST/PATCH** also return `jobId` when a silent replan was enqueued (`null` for fixed / completed). The Calendar client polls `GET /schedule-jobs/:id` then refreshes tasks and Google events.
+Task CRUD (JWT). Bodies/responses include `phaseId`, **`phaseIds`** (max 1), **`eventType`** (`fixed` or `admin` on new writes), status, priority, deadline, **`earliestStartTime`**, **`eligibleWeekDays`**, estimated minutes, `allowSplit`, `isRecurring`, `recurrencePattern`, **`recurrenceWeekDays`**, optional `scheduledStartTime` / `scheduledEndTime`. `phaseIds` must belong to the current user. **POST/PATCH** also return `jobId` when a silent replan was enqueued (`null` for fixed / completed). **POST `/tasks/:id/skip-occurrence`** skips one still-open slot or recurring instance (`{ occurrenceStart, googleEventId?, googleEventCalendarId? }`); it does not complete the task, does not enqueue replan, and returns `jobId: null`. Recurring skips are stored as civil days so later Generate will not recreate that occurrence. The Calendar client polls `GET /schedule-jobs/:id` then refreshes tasks and Google events.
 
 ## Google Calendar — `/google-calendar`
 

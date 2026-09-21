@@ -10,7 +10,7 @@ Related docs: [task-scheduling-test-matrix.md](task-scheduling-test-matrix.md) (
 
 Protect the daily loop: **sign in → settings/phases gate → capture a task → Generate / Undo / Clear → Now/Done → habits**. Every live HTTP route and every user-facing screen has named cases. Engine placement math stays in unit tests; E2E asserts the HTTP/UI contract around that math.
 
-Out of scope until a later cycle: Skip/snooze, generate preview, phase lifestyle presets, text-add, drag-and-drop, in-app guide, real Google OAuth in CI, real Groq in CI.
+Out of scope until a later cycle: snooze, generate preview, phase lifestyle presets, text-add, drag-and-drop, in-app guide, real Google OAuth in CI, real Groq in CI.
 
 ---
 
@@ -255,6 +255,8 @@ Silent replan: `jobId` on create/update when `shouldReplanAfterSave`. Unschedule
 | A-TSK-034 | A | P1 | `eligibleWeekDays` | POST | Persisted; generate respects (see N-SCH / T matrix) |
 | A-TSK-035 | A | P1 | `allowSplit` false vs settings true | POST + generate | No split for that task |
 | A-TSK-036 | A | P2 | `estimatedTimeInMinutes` 0 | POST non-fixed | **Record actual** (client blocks 1–1440; API may default) |
+| A-TSK-037 | A | P0 | `POST /tasks/:id/skip-occurrence` still-open slot | Skip | 200; task stays `todo`; `jobId` null; local slot gone |
+| A-TSK-038 | A | P0 | Skip unscheduled inbox | POST skip-occurrence | 400 |
 
 ---
 
@@ -448,11 +450,13 @@ No first-class UI. Covered via API and Google create with `phaseId`.
 | U-CAL-011 | U | P0 | Next start later today | Strip | Next shown |
 | U-CAL-012 | U | P0 | Flexible waiting for slot **today** | Strip Unscheduled | Transitional inbox (not `isUnscheduled` Tasks inbox) |
 | U-CAL-013 | U | P0 | Now **Done** on non-recurring app task | Click | `completed`; block leaves Now; **no** new Google event |
-| U-CAL-014 | U | P0 | Recurring / external Google in Now | Strip | **No** Done |
+| U-CAL-014 | U | P0 | Recurring / external Google in Now | Strip | **No** Done; Skip on recurring; no Skip on external |
 | U-CAL-015 | U | P1 | All-day event today | Now | Eligible for Now if no timed current |
 | U-CAL-016 | U | P1 | Voice on Calendar | Same as U-VOI-\* | |
 | U-CAL-017 | U | P1 | Generate / Clear / Undo while busy | Menu | Actions disabled |
 | U-CAL-018 | U | P2 | Clear with deleted=0 | Confirm | Info toast nothing cleared |
+| U-CAL-019 | U | P0 | Now **Skip** on movable timed app task | Click | Slot gone; task stays `todo`; block leaves Now |
+| U-CAL-020 | U | P0 | Recurring overlapping Now | Strip | Skip; **no** Done |
 
 `canCompleteNowBlock`: has linked task, not recurring, not `isFixedExternal`, not completed/canceled.
 
@@ -547,7 +551,8 @@ UI (wave 3):
 3. U-TSK-002 create flexible  
 4. U-CAL-004 generate  
 5. U-CAL-013 Now Done  
-6. U-HAB-004 habit chip  
+6. U-CAL-019 Now Skip  
+7. U-HAB-004 habit chip  
 
 ---
 

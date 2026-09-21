@@ -40,6 +40,7 @@ interface TaskFormProps {
   onSubmit: (data: CreateTaskDTO | UpdateTaskDTO) => void;
   isSubmitting: boolean;
   onCancel: () => void;
+  onSkipOccurrence?: () => void;
   mode: 'create' | 'edit';
 }
 
@@ -50,6 +51,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
   onSubmit,
   isSubmitting,
   onCancel,
+  onSkipOccurrence,
   mode,
 }) => {
   const { data: userSettings } = useGetUserSettingsQuery();
@@ -659,7 +661,17 @@ const TaskForm: React.FC<TaskFormProps> = ({
         )}
       </div>
 
-      <div className="mt-4 flex flex-col-reverse gap-2 border-t border-ide-border pt-3 sm:flex-row sm:justify-end">
+      <div className="mt-4 flex flex-col-reverse gap-2 border-t border-ide-border pt-3 sm:flex-row sm:items-center sm:justify-end">
+        {onSkipOccurrence ? (
+          <button
+            type="button"
+            onClick={onSkipOccurrence}
+            className="ui-btn-secondary w-full sm:mr-auto sm:w-auto"
+            disabled={isSubmitting}
+          >
+            Skip this occurrence
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={onCancel}
