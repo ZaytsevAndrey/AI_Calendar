@@ -3,16 +3,16 @@ name: new-feature-workflow
 description: >-
   Guides end-to-end development of a new product feature: plan, surface open
   questions and get answers before coding, implement with minimal scope creep,
-  remove obsolete code after behavior changes, then simplify using best
-  practices. Use when the user starts or discusses a new feature, greenfield
-  work, or asks for a structured feature delivery flow.
+  remove obsolete code after behavior changes, simplify using best practices,
+  then cover the feature with tests. Use when the user starts or discusses a
+  new feature, greenfield work, or asks for a structured feature delivery flow.
 ---
 
 # New feature workflow
 
 ## Role
 
-Act as a **workflow orchestrator**. Follow the phases in order. Do not skip **Planning** or **Question gate** unless the user explicitly says requirements are already frozen and complete.
+Act as a **workflow orchestrator**. Follow the phases in order. Do not skip **Planning**, **Question gate**, or **Tests** unless the user explicitly says requirements are already frozen and complete (planning) or explicitly waives tests.
 
 ## Architecture (how this scales)
 
@@ -28,7 +28,8 @@ Act as a **workflow orchestrator**. Follow the phases in order. Do not skip **Pl
 | 2. Implementation | After all blocking questions are answered |
 | 3. Dead code & leftovers | After implementation compiles and behavior matches intent |
 | 4. Simplify & best practices | After cleanup |
-| 5. Wrap-up | Before handoff / PR |
+| 5. Tests | After simplification; before handoff |
+| 6. Wrap-up | Before handoff / PR |
 
 Detailed steps:
 
@@ -36,7 +37,8 @@ Detailed steps:
 2. **Implementation** — [implementation.md](implementation.md)
 3. **Dead code & leftovers** — [dead-code-cleanup.md](dead-code-cleanup.md)
 4. **Simplify & best practices** — [simplification.md](simplification.md)
-5. **Wrap-up** — [wrap-up.md](wrap-up.md)
+5. **Tests** — [testing.md](testing.md)
+6. **Wrap-up** — [wrap-up.md](wrap-up.md)
 
 ## Master checklist (copy into chat when starting)
 
@@ -46,7 +48,8 @@ New feature — progress
 - [ ] Phase 2: Implemented minimal change set; English in code; root build passes
 - [ ] Phase 3: Removed unused / obsolete code paths
 - [ ] Phase 4: Simplified; aligned with project conventions
-- [ ] Phase 5: Wrap-up (tests, risk notes, summary; build re-checked if needed)
+- [ ] Phase 5: Tests covering new/changed behavior; relevant test commands pass
+- [ ] Phase 6: Wrap-up (risk notes, summary; build re-checked if needed)
 ```
 
 ## Reuse in other projects

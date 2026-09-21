@@ -1,15 +1,15 @@
-# Phase 5 — Wrap-up
+# Phase 6 — Wrap-up
 
 ## Before handoff
 
-1. **Summarize** for the user: user-visible behavior, config/env changes, migrations.
-2. **Test matrix** (even if short): happy path, permission edge, failure mode.
+1. **Confirm Phase 5** — new/changed behavior is covered by tests and the relevant commands passed (or the user explicitly waived tests).
+2. **Summarize** for the user: user-visible behavior, config/env changes, migrations.
 3. **Rollback / feature flag** notes if applicable.
-4. **Follow-ups** as an explicit list (deferred questions, tech debt).
+4. **Follow-ups** as an explicit list (deferred questions, tech debt, untested gaps).
 
 ## PR / commit hygiene (if the user uses Git)
 
-- Commits tell a **story**: implement → cleanup → simplify (or separate commits with clear messages).
+- Commits tell a **story**: implement → cleanup → simplify → tests (or separate commits with clear messages).
 - PR description links **decisions** from Phase 1 when non-obvious.
 
 ## Done criteria
@@ -17,4 +17,5 @@
 - No known **blocking** bugs for the agreed scope
 - No obvious **unused** code left from the change
 - **Simplification** pass completed or explicitly skipped with reason
+- **Tests** for the feature exist and pass (Phase 5), unless explicitly waived
 - **Build** still succeeds from the project root (or standard CI build)—re-run if there were late edits after Phase 2

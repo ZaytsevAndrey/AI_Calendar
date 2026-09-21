@@ -18,8 +18,9 @@
 3. **Instrument for debuggability** only where the project already does (logging, metrics)—do not add noise.
 4. **Verify locally** before treating Phase 2 as done:
    - typecheck / lint (if used in the repo),
-   - unit tests (if present),
+   - existing unit tests still pass (if present),
    - **full project build** from the **repository root** (e.g. `npm run build` or the documented equivalent) and fix **all** compilation/bundling errors—do not hand off with a failing build.
+   - **New tests** for this feature belong in **Phase 5**, after cleanup and simplification—not skipped here as a substitute for that phase.
 5. If scope creep appears, **stop** and ask whether to extend the feature or split follow-up work.
 
 ## When stuck
