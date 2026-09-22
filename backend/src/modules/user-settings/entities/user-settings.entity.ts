@@ -81,6 +81,10 @@ export class UserSettings {
   @Column({ type: 'varchar', length: 64, nullable: true })
   timeZone: string | null;
 
+  /** Browser push for upcoming blocks and habit check-ins. Off until the user opts in. */
+  @Column({ default: false })
+  remindersEnabled: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

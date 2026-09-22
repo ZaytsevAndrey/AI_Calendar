@@ -52,6 +52,8 @@ export class UserSettingsService {
           defaults.recurringScheduleHorizonDays;
       if (!userSettings.appGoogleCalendarName)
         userSettings.appGoogleCalendarName = defaults.appGoogleCalendarName;
+      if (userSettings.remindersEnabled === undefined || userSettings.remindersEnabled === null)
+        userSettings.remindersEnabled = false;
 
       // Save updated settings if any defaults were applied
       await this.userSettingsRepository.save(userSettings);
@@ -125,6 +127,7 @@ export class UserSettingsService {
       maxSplitMinutes: 30,
       recurringScheduleHorizonDays: 30,
       appGoogleCalendarName: 'AI Calendar Assistant',
+      remindersEnabled: false,
     };
   }
 
@@ -143,6 +146,7 @@ export class UserSettingsService {
       maxSplitMinutes: 30,
       recurringScheduleHorizonDays: 30,
       appGoogleCalendarName: 'AI Calendar Assistant',
+      remindersEnabled: false,
     });
 
     return this.userSettingsRepository.save(defaultSettings);

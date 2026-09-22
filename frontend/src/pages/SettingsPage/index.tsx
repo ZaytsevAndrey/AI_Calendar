@@ -57,7 +57,7 @@ const SettingsPage: React.FC = () => {
             <header className="page-head shrink-0">
                 <div>
                     <h1 className="page-title">Settings</h1>
-                    <p className="page-lead">Time zone, wake/sleep times, Google Calendar, and account.</p>
+                    <p className="page-lead">Time zone, wake and sleep, reminders, Google Calendar, and account.</p>
                 </div>
             </header>
 

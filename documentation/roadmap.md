@@ -44,7 +44,7 @@ Two lists used to compete (`roadmap` vs `BUGS-AND-IMPROVEMENTS.md`). This file i
 Product extras (ship only if the loop above is trustworthy):
 
 - [x] **AI schedule recommendations** (Sep 2026). Calendar → Schedule → **Suggestions** asks Groq for up to five notes on the next 7 days (overload, gap, phase mismatch, deadline risk). Nothing is saved or applied. An empty calendar skips the model. A Google outage still returns suggestions from local tasks.
-- [ ] **PWA reminders** — upcoming block + daily habit check-in (Web Push; no native app required).
+- [x] **PWA reminders** (Sep 2026). Settings opt-in (off by default). Web Push once in the half hour before each timed Now/Next block, the same window for a habit with a clock time, and one wake-time note for habits without a block. Already checked habits stay quiet. `POST /reminders/tick` about every 30 minutes wakes the free API and lets it sleep between calls. A start that already passed is not sent. iPhone needs Add to Home Screen.
 - [ ] **Voice beyond create** — complete, skip, or reschedule the current / named task by voice.
 - [ ] **Search / filters on tasks** — name, status, phase, fixed vs flexible, overdue.
 - [ ] **Soft buffers** between fixed events (travel / reset minutes the engine must not fill).
@@ -120,7 +120,7 @@ Open Phase 5 items live in **Now / Next / Then / Later** above.
 
 ## Recommended next steps
 
-1. Later extras (PWA reminders, voice beyond create, search/filters, stats, integrations, parked polish).
+1. Later extras (voice beyond create, search/filters, stats, integrations, parked polish).
 2. Add Playwright (or similar) **E2E** for voice create, Done vs calendar, Generate/Undo; expand unit tests as you touch flows; optional custom subdomain (see [deploy](deploy.md)).
 3. **Last:** in-app product guide, once the app is ready.
 4. Update this file when scope changes.

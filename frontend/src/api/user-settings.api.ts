@@ -20,6 +20,7 @@ export interface UserSettingsDTO {
   maxSplitMinutes: number;
   recurringScheduleHorizonDays: number;
   timeZone?: string | null;
+  remindersEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -44,6 +45,7 @@ export interface UpdateUserSettingsDTO {
   maxSplitMinutes?: number;
   recurringScheduleHorizonDays?: number;
   timeZone?: string;
+  remindersEnabled?: boolean;
 }
 
 export const UserSettingsApi = {

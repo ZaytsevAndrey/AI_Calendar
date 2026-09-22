@@ -15,6 +15,7 @@ import { JwtExceptionFilter } from '../../src/modules/auth/jwt-exception.filter'
 import { GoogleCalendarService } from '../../src/modules/google-calendar/google-calendar.service';
 import { GroqClient } from '../../src/modules/voice/groq.client';
 import { ScheduleJobProcessor } from '../../src/modules/schedule/schedule-job.processor';
+import { ReminderTickProcessor } from '../../src/modules/reminders/reminder-tick.processor';
 import { ScheduleJobService } from '../../src/modules/schedule/schedule-job.service';
 import { ScheduleJob } from '../../src/modules/schedule/entities/schedule-job.entity';
 import { createGoogleCalendarStub, GoogleCalendarStub } from './google.stub';
@@ -46,6 +47,11 @@ export async function createTestApp(): Promise<E2eApp> {
     .overrideProvider(GroqClient)
     .useValue(groq)
     .overrideProvider(ScheduleJobProcessor)
+    .useValue({
+      onModuleInit: () => undefined,
+      onModuleDestroy: () => undefined,
+    })
+    .overrideProvider(ReminderTickProcessor)
     .useValue({
       onModuleInit: () => undefined,
       onModuleDestroy: () => undefined,

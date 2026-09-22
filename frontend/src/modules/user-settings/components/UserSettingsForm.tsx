@@ -5,6 +5,7 @@ import { useUpdateUserSettingsMutation } from '../../../api/userSettingsApi';
 import { googleCalendarAPI } from '../../../api/google-calendar.api';
 import { Spinner } from '../../../ui/Spinner';
 import { timeZoneSelectOptions } from '../ianaTimeZones';
+import { ReminderSettingsSection } from '../../pwa/ReminderSettingsSection';
 import { showErrorToast, showSuccessToast } from '../../../utils/toast';
 
 interface UserSettingsFormProps {
@@ -403,6 +404,8 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                     </p>
                 )}
             </section>
+
+            <ReminderSettingsSection remindersEnabled={!!initialData.remindersEnabled} />
         </div>
     );
 };

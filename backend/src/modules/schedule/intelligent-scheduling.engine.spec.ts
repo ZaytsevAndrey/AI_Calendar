@@ -1251,10 +1251,11 @@ function makeSettings(partial: Partial<UserSettings>): UserSettings {
     maxSplitMinutes: 60,
     recurringScheduleHorizonDays: 3,
     timeZone: 'UTC',
+    remindersEnabled: false,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...partial,
-  };
+  } as UserSettings;
 }
 
 function makeTask(partial: Partial<Task>): Task {

@@ -65,6 +65,8 @@ Set on the **API** service (Blueprint prompts the secrets):
 | `APP_URL` | From the API service |
 | `GOOGLE_*` | OAuth — redirect URI must match Google Console |
 | `GROQ_API_KEY` | Voice STT + parse (set in the Render dashboard; Blueprint `sync: false`) |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push. Generate once with `npx web-push generate-vapid-keys`. Subject is a `mailto:` URL |
+| `REMINDER_CRON_SECRET` | Shared secret for `POST /reminders/tick` (`x-reminder-cron-secret`). Point a free external cron at that URL about every 30 minutes. Each wake keeps the free instance up for ~15 minutes, then it sleeps. Render Cron Jobs stay unused (paid) |
 | `TYPEORM_SYNC` | `true` on first empty database; schema is applied automatically |
 
 Frontend **build-time** variable:

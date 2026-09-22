@@ -192,4 +192,13 @@ export class UpdateUserSettingsDto {
   @MaxLength(64)
   @Validate(IsIanaTimeZoneConstraint)
   timeZone?: string;
+
+  @ApiProperty({
+    example: false,
+    description: 'Send browser push reminders for upcoming blocks and habits',
+    required: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  remindersEnabled?: boolean;
 }

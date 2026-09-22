@@ -170,6 +170,10 @@ Email/password (`POST /auth/register`, `/login`, forgot/reset) **do not exist**.
 | A-SET-012 | A | P2 | PATCH `appGoogleCalendarName` | Google stub rename fails | Settings still 200 (warn-only) |
 | A-SET-013 | A | P2 | PATCH fields with no Settings UI (`weekendWorkEnabled`, `allowSplitScheduling`, lunch defaults) | API | Persisted; engine reads them (covered by unit + A-SCH generate) |
 | A-SET-014 | A | P1 | PATCH `hiddenGoogleCalendarIds` | Trim, dedupe, drop app calendar id; non-array | 200 with the cleaned list; non-array is 400 |
+| A-REM-001 | A | P1 | VAPID keys unset | `GET /reminders/vapid-public-key` | 503 |
+| A-REM-002 | A | P1 | Cron secret set, VAPID unset | `POST /reminders/tick` | 401 without/with a bad secret; 200 `{ users: 0, sent: 0 }` with the secret |
+| A-REM-003 | A | P1 | Settings | PATCH `remindersEnabled: true` | 200 and the flag persists |
+| A-REM-004 | A | P1 | Two users | POST/DELETE subscription | https stored; other user cannot delete it; owner delete removes the row |
 | U-SET-001 | U | P1 | Settings page | Change wake/sleep/TZ/horizon | Debounced auto-save (~1s), toast |
 | U-SET-002 | U | P1 | Empty TZ on first login | App loads | Client PATCHes browser IANA **once** |
 | U-SET-003 | U | P1 | TZ already set | Reload | No overwrite |

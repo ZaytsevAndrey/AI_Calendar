@@ -28,6 +28,8 @@ Additional routes may exist in `auth.controller.ts` (email verification, etc.).
 
 Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWorkEnabled`, `allowSplitScheduling`, `minSplitMinutes`, **`timeZone`** (IANA, e.g. `Asia/Nicosia` / `Europe/Kyiv`). Empty `timeZone` is filled **once** from the browser on first login; the user can change it in Settings. Invalid IANA names are rejected. Postgres stores `wakeTime` / `sleepTime` as `time` (`HH:mm:ss`); the engine normalizes them to `HH:mm` and interprets those clocks **in `timeZone`** (fallback `UTC`).
 
+**`remindersEnabled`** (default false) turns on Web Push. See [Reminders](#reminders--reminders).
+
 **`hiddenGoogleCalendarIds`** (string array) hides those Google calendars on the Calendar page. Empty means primary, the app calendar, and calendars selected in Google. The stored app calendar id is dropped if sent. A non-array is 400. This does not change which calendars Generate treats as busy.
 
 ## Phases (day phases) — `/phases`
@@ -83,6 +85,19 @@ JWT. Civil “today” uses **settings `timeZone`**. Check-ins can be added or r
 | DELETE | `/habits/:id/check-ins/:date` | Clear that day’s check-in (same window) |
 
 Points: +1 per successful day, plus +1 whenever a consecutive run hits a multiple of 7. Streak counts consecutive days ending today, or yesterday if today is not yet checked. A time block repeats every civil day in the settings zone, including weekends. `blockMinutes` is an integer from 5 to 240. Generate will not place a task on top of that interval. Marking the day done does not remove the block. Changing the clock time or duration replaces the Google series. Clearing the block or deleting the habit deletes that series. The in-app calendar keeps its own chip and hides the matching Google event so the block is not drawn twice.
+
+## Reminders — `/reminders`
+
+Web Push for the signed-in user. Off until Settings turns `remindersEnabled` on and this browser subscribes. The API also checks about once a minute while it is awake.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/reminders/vapid-public-key` | JWT. `{ publicKey }` for `pushManager.subscribe`. 503 when `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` are unset |
+| POST | `/reminders/subscriptions` | JWT. Body `{ endpoint, p256dh, auth }`. `endpoint` must be `https`. Reassigns the endpoint if another session saved it |
+| DELETE | `/reminders/subscriptions` | JWT. Body `{ endpoint }`. Removes only the current user's row. 204 |
+| POST | `/reminders/tick` | No JWT. Header `x-reminder-cron-secret` must match `REMINDER_CRON_SECRET`. 503 if that secret is unset, 401 if it does not match. Sends one reminder when a start is still ahead and at most 30 minutes away. A start that already passed is skipped. Returns `{ users, sent }` |
+
+A timed block (visible Google event, or a local task slot when that event is not in the list) is included once when it starts within the next 30 minutes. All-day events are skipped. Each habit with `blockStartTime` uses that clock the same way if today is not checked in. Habits without a block share one notification in the 30 minutes before `wakeTime` when any of them is still open. A free external cron should call tick about every 30 minutes so Render can sleep between wakes. Push messages are kept for 30 minutes. A 404/410 from the push service deletes that subscription.
 
 ## Tasks — `/tasks`
 

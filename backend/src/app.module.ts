@@ -11,6 +11,7 @@ import { EventPhasesModule } from './modules/event-phases/event-phases.module';
 import { PhasesModule } from './modules/phases/phases.module';
 import { VoiceModule } from './modules/voice/voice.module';
 import { HabitsModule } from './modules/habits/habits.module';
+import { RemindersModule } from './modules/reminders/reminders.module';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { createTypeOrmOptions } from './database/typeorm.config';
 
@@ -40,6 +41,7 @@ import { createTypeOrmOptions } from './database/typeorm.config';
     PhasesModule,
     VoiceModule,
     HabitsModule,
+    RemindersModule,
   ],
 })
 export class AppModule implements NestModule {

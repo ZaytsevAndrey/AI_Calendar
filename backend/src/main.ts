@@ -53,6 +53,7 @@ async function bootstrap() {
     .addTag('google-calendar', 'Google Calendar integration endpoints')
     .addTag('voice', 'Voice transcription and task parsing')
     .addTag('habits', 'Daily habit check-ins, streaks, and points')
+    .addTag('reminders', 'Web Push reminders for upcoming blocks and habits')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
