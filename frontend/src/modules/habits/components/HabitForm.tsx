@@ -152,43 +152,45 @@ const HabitForm: React.FC<HabitFormProps> = ({
           Reserve a daily time block
         </label>
         {reserveBlock ? (
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <div>
-              <label htmlFor="habit-block-start" className="ui-label">
-                Starts
-              </label>
-              <input
-                id="habit-block-start"
-                type="time"
-                {...register('blockStartTime')}
-                className={`ui-input ${errors.blockStartTime ? 'ui-input-error' : ''}`}
-              />
-              {errors.blockStartTime ? (
-                <span className="ui-error">{errors.blockStartTime.message}</span>
-              ) : null}
+          <>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <div>
+                <label htmlFor="habit-block-start" className="ui-label">
+                  Starts
+                </label>
+                <input
+                  id="habit-block-start"
+                  type="time"
+                  {...register('blockStartTime')}
+                  className={`ui-input ${errors.blockStartTime ? 'ui-input-error' : ''}`}
+                />
+                {errors.blockStartTime ? (
+                  <span className="ui-error">{errors.blockStartTime.message}</span>
+                ) : null}
+              </div>
+              <div>
+                <label htmlFor="habit-block-minutes" className="ui-label">
+                  Minutes
+                </label>
+                <input
+                  id="habit-block-minutes"
+                  type="number"
+                  min={5}
+                  max={240}
+                  step={5}
+                  {...register('blockMinutes')}
+                  className={`ui-input ${errors.blockMinutes ? 'ui-input-error' : ''}`}
+                />
+                {errors.blockMinutes ? (
+                  <span className="ui-error">{errors.blockMinutes.message}</span>
+                ) : null}
+              </div>
             </div>
-            <div>
-              <label htmlFor="habit-block-minutes" className="ui-label">
-                Minutes
-              </label>
-              <input
-                id="habit-block-minutes"
-                type="number"
-                min={5}
-                max={240}
-                step={5}
-                {...register('blockMinutes')}
-                className={`ui-input ${errors.blockMinutes ? 'ui-input-error' : ''}`}
-              />
-              {errors.blockMinutes ? (
-                <span className="ui-error">{errors.blockMinutes.message}</span>
-              ) : null}
-            </div>
-          </div>
-          <p className="ui-hint">
-            Generate will not place tasks on top of this time. When Google Calendar is connected,
-            the same block is added there every day.
-          </p>
+            <p className="ui-hint">
+              Generate will not place tasks on top of this time. When Google Calendar is connected,
+              the same block is added there every day.
+            </p>
+          </>
         ) : null}
       </div>
 
