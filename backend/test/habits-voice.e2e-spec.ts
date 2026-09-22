@@ -318,4 +318,34 @@ describe('Habits and voice API e2e', () => {
     });
     expect(bad.statusCode).toBe(400);
   });
+
+  it('A-VOI-013 complete command resolves a named task and does not create one', async () => {
+    const { token } = await seedOnboardedUser(ctx.app);
+    const created = await api(ctx.app, 'POST', '/tasks', {
+      token,
+      payload: {
+        name: 'Report',
+        eventType: 'admin',
+        estimatedTimeInMinutes: 30,
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = jsonBody(created).id;
+    ctx.groq.completeJson.mockResolvedValueOnce(
+      JSON.stringify({
+        intent: 'complete',
+        understanding: 'complete',
+        command: { target: 'named', taskName: 'Report', start: null, end: null },
+        task: null,
+      }),
+    );
+    const parsed = await api(ctx.app, 'POST', '/voice/parse-task', {
+      token,
+      payload: { transcript: 'done with the report', timeZone: 'Europe/Kyiv' },
+    });
+    expect(parsed.statusCode).toBe(201);
+    const body = jsonBody(parsed);
+    expect(body.task).toBeNull();
+    expect(body.command).toMatchObject({ kind: 'complete', taskId: id, taskName: 'Report' });
+  });
 });

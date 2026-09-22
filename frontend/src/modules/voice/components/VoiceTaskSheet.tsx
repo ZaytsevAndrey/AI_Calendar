@@ -13,19 +13,23 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
     stage,
     transcript,
     clarifyingQuestion,
+    pendingSummary,
     error,
     busyLabel,
     beginRecording,
     finishRecording,
+    confirmCommand,
     isRecording,
     isWorking,
   } = voice;
 
   const primaryLabel = isRecording
     ? 'Stop'
-    : stage === 'clarifying'
-      ? 'Answer'
-      : 'Start speaking';
+    : stage === 'confirm'
+      ? 'Confirm'
+      : stage === 'clarifying'
+        ? 'Answer'
+        : 'Start speaking';
 
   return (
     <Modal
@@ -40,6 +44,15 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
           </button>
           {isRecording ? (
             <button type="button" className="ui-btn-danger" onClick={() => void finishRecording()}>
+              {primaryLabel}
+            </button>
+          ) : stage === 'confirm' ? (
+            <button
+              type="button"
+              className="ui-btn-primary"
+              onClick={confirmCommand}
+              disabled={isWorking}
+            >
               {primaryLabel}
             </button>
           ) : (
@@ -69,14 +82,16 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
             {busyLabel}
           </p>
         ) : null}
-        {clarifyingQuestion && (stage === 'clarifying' || stage === 'recording_clarification') ? (
+        {pendingSummary && stage === 'confirm' ? (
+          <p className="rounded-lg border border-ide-border bg-ide-surface px-3 py-2">{pendingSummary}</p>
+        ) : clarifyingQuestion && (stage === 'clarifying' || stage === 'recording_clarification') ? (
           <p className="rounded-lg border border-ide-border bg-ide-surface px-3 py-2">
             {clarifyingQuestion}
           </p>
         ) : (
           <p className="text-ide-muted">
-            Speak in Ukrainian, English, or Russian. Example: “Tomorrow at 3pm dentist for 40
-            minutes”.
+            Speak in Ukrainian, English, or Russian. Add a task, or say done, skip, or move it to a
+            new time.
           </p>
         )}
         {transcript ? (

@@ -201,4 +201,14 @@ export class UpdateUserSettingsDto {
   @IsBoolean()
   @IsOptional()
   remindersEnabled?: boolean;
+
+  @ApiProperty({
+    example: false,
+    description:
+      'Ask before a voice command completes, skips, or moves a task. Off runs the command immediately. Does not affect voice create.',
+    required: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  confirmVoiceCommands?: boolean;
 }

@@ -1,8 +1,11 @@
 import { useCallback, useState } from 'react';
-import { VoiceApi, type VoiceParsedTask } from 'api/voice.api';
+import { useDispatch } from 'react-redux';
+import { useSkipOccurrenceMutation, useUpdateEventMutation } from 'api/eventTasksApi';
+import { VoiceApi, type VoiceCommandAction, type VoiceParsedTask } from 'api/voice.api';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
+import { executeVoiceCommand } from '../executeVoiceCommand';
 import { useAudioRecorder } from './useAudioRecorder';
 
 export type VoiceStage =
@@ -11,6 +14,7 @@ export type VoiceStage =
   | 'working'
   | 'clarifying'
   | 'recording_clarification'
+  | 'confirm'
   | 'error';
 
 type UseVoiceTaskOptions = {
@@ -21,6 +25,10 @@ type UseVoiceTaskOptions = {
 export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) {
   const { start, stop, cancel, error: recorderError } = useAudioRecorder();
   const { data: userSettings } = useGetUserSettingsQuery();
+  const confirmCommands = !!userSettings?.confirmVoiceCommands;
+  const [updateTask] = useUpdateEventMutation();
+  const [skipOccurrence] = useSkipOccurrenceMutation();
+  const dispatch = useDispatch();
   // Same IANA as the task form / engine, not the browser zone.
   const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
   const [isOpen, setIsOpen] = useState(false);
@@ -29,12 +37,14 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
   const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyLabel, setBusyLabel] = useState('Working…');
+  const [pendingCommand, setPendingCommand] = useState<VoiceCommandAction | null>(null);
 
   const reset = useCallback(() => {
     cancel();
     setStage('idle');
     setTranscript('');
     setClarifyingQuestion(null);
+    setPendingCommand(null);
     setError(null);
   }, [cancel]);
 
@@ -48,6 +58,21 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
     setIsOpen(true);
   }, [reset]);
 
+  const runCommand = useCallback(
+    async (command: VoiceCommandAction) => {
+      setBusyLabel('Saving…');
+      setStage('working');
+      try {
+        await executeVoiceCommand(command, { updateTask, skipOccurrence, dispatch });
+        close();
+      } catch (err) {
+        setError(extractApiErrorMessage(err));
+        setStage('error');
+      }
+    },
+    [close, dispatch, skipOccurrence, updateTask],
+  );
+
   const parseAndRoute = useCallback(
     async (text: string, clarification?: { previous: string; answer: string }) => {
       setBusyLabel('Understanding…');
@@ -59,6 +84,21 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
         previousTranscript: clarification?.previous,
         clarificationAnswer: clarification?.answer,
       });
+
+      if (result.command) {
+        if (result.command.kind === 'refuse') {
+          setError(result.command.message);
+          setStage('error');
+          return;
+        }
+        if (confirmCommands) {
+          setPendingCommand(result.command);
+          setStage('confirm');
+          return;
+        }
+        await runCommand(result.command);
+        return;
+      }
 
       if (result.understanding === 'needs_clarification') {
         setClarifyingQuestion(result.clarifyingQuestion || 'Could you add a bit more detail?');
@@ -81,7 +121,7 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
       close();
       onSufficient(result.task);
     },
-    [close, onComplete, onSufficient, timeZone],
+    [close, confirmCommands, onComplete, onSufficient, runCommand, timeZone],
   );
 
   const beginRecording = useCallback(async () => {
@@ -130,10 +170,14 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
     stage,
     transcript,
     clarifyingQuestion,
+    pendingSummary: pendingCommand?.summary ?? null,
     error: error || recorderError,
     busyLabel,
     beginRecording,
     finishRecording,
+    confirmCommand: () => {
+      if (pendingCommand) void runCommand(pendingCommand);
+    },
     isRecording: stage === 'recording' || stage === 'recording_clarification',
     isWorking: stage === 'working',
   };

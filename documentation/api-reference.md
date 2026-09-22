@@ -28,6 +28,8 @@ Additional routes may exist in `auth.controller.ts` (email verification, etc.).
 
 Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWorkEnabled`, `allowSplitScheduling`, `minSplitMinutes`, **`timeZone`** (IANA, e.g. `Asia/Nicosia` / `Europe/Kyiv`). Empty `timeZone` is filled **once** from the browser on first login; the user can change it in Settings. Invalid IANA names are rejected. Postgres stores `wakeTime` / `sleepTime` as `time` (`HH:mm:ss`); the engine normalizes them to `HH:mm` and interprets those clocks **in `timeZone`** (fallback `UTC`).
 
+**`confirmVoiceCommands`** (default false) asks before a voice command completes, skips, or moves a task. Voice create is not affected.
+
 **`remindersEnabled`** (default false) turns on Web Push. See [Reminders](#reminders--reminders).
 
 **`hiddenGoogleCalendarIds`** (string array) hides those Google calendars on the Calendar page. Empty means primary, the app calendar, and calendars selected in Google. The stored app calendar id is dropped if sent. A non-array is 400. This does not change which calendars Generate treats as busy.
@@ -67,9 +69,11 @@ JWT. Free Groq backend (`GROQ_API_KEY`). Audio is **not** stored.
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/voice/transcribe` | Body `{ audioBase64, mimeType? }` → `{ transcript, language? }` (Whisper, auto language) |
-| POST | `/voice/parse-task` | Body `{ transcript, timeZone, clientNowIso?, previousTranscript?, clarificationAnswer? }` → `{ understanding, clarifyingQuestion, task }` |
+| POST | `/voice/parse-task` | Body `{ transcript, timeZone, clientNowIso?, previousTranscript?, clarificationAnswer? }` → `{ understanding, clarifyingQuestion, task, command }` |
 
 `understanding`: `complete` (client creates immediately when a name exists; defaults fill the rest), `sufficient` (treated as complete if a name exists), `needs_clarification` (no usable name — one follow-up question). After a clarification reply the API will not ask a second question. The client sends Settings IANA `timeZone`. Calendar-day parsing uses **settings `timeZone`** when set, otherwise the request `timeZone`, otherwise `UTC`.
+
+`command` is `null` for create. For complete, skip, or reschedule it is a resolved action (`complete`, `skip`, `move`, `shift`, `window`) or `{ kind: "refuse", message }`. The client writes through the existing task, skip, and move APIs. **Now / this** is the app task whose open slot overlaps now. A named match is among incomplete tasks. Done on a recurring task skips today's open occurrence. An open slot is moved like a calendar drag; a task with no open slot gets a new From/Until window and a silent replan. One clarifying question, then a refusal. When `confirmVoiceCommands` is on, the sheet asks before that write.
 
 ## Habits — `/habits`
 

@@ -9,7 +9,56 @@ export type VoiceParseResult = {
   understanding: VoiceUnderstanding;
   clarifyingQuestion: string | null;
   task: VoiceParsedTask | null;
+  command?: VoiceCommand | null;
 };
+
+export type VoiceCommand =
+  | { kind: 'refuse'; message: string }
+  | { kind: 'complete'; taskId: string; taskName: string; summary: string }
+  | {
+      kind: 'skip';
+      taskId: string;
+      taskName: string;
+      summary: string;
+      occurrenceStart: string;
+      googleEventId: string | null;
+      googleEventCalendarId: string | null;
+    }
+  | {
+      kind: 'move';
+      taskId: string;
+      taskName: string;
+      summary: string;
+      googleEventId: string;
+      calendarId: string | null;
+      recurringEventId: string | null;
+      originalStart: string;
+      originalEnd: string;
+      start: string;
+      end: string;
+    }
+  | {
+      kind: 'shift';
+      taskId: string;
+      taskName: string;
+      summary: string;
+      slotId: string;
+      start: string;
+      end: string;
+    }
+  | {
+      kind: 'window';
+      taskId: string;
+      taskName: string;
+      summary: string;
+      earliestStartTime: string | null;
+      deadline: string | null;
+      scheduledStartTime: string | null;
+      scheduledEndTime: string | null;
+      clearUnscheduled: boolean;
+    };
+
+export type VoiceCommandAction = Exclude<VoiceCommand, { kind: 'refuse' }>;
 
 export type TranscribeVoiceResult = {
   transcript: string;

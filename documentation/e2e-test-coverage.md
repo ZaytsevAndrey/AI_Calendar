@@ -317,6 +317,8 @@ Do **not** hit real Groq. Stub transcribe + parse.
 | U-VOI-003 | U | P1 | Stub `needs_clarification` | Answer once | Completes; no second question UI |
 | U-VOI-004 | U | P2 | Mic permission denied | Start | Error in sheet, no crash |
 | U-VOI-005 | U | P2 | `GROQ` stub missing | Transcribe | **Current:** error text in the voice sheet (`Could not transcribe audio`), not a toast |
+| A-VOI-013 | A | P1 | Named incomplete task, intent complete | `POST /voice/parse-task` | `command.kind=complete`, that task id, `task` null |
+| U-VOI-006 | U | P1 | Stub `command.complete` | Setting off, then on | Off completes immediately. On shows Confirm, then completes. Setting is restored off |
 
 ---
 

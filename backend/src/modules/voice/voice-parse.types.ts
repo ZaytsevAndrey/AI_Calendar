@@ -22,8 +22,12 @@ export type VoiceParsedTask = {
   phaseIds?: string[];
 };
 
+import type { VoiceCommand } from './voice-command.types';
+
 export type VoiceParseResult = {
   understanding: VoiceUnderstanding;
   clarifyingQuestion: string | null;
   task: VoiceParsedTask | null;
+  /** Set when the utterance is complete, skip, or reschedule. Null for create. */
+  command?: VoiceCommand | null;
 };

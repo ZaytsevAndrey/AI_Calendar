@@ -21,6 +21,8 @@ export interface UserSettingsDTO {
   recurringScheduleHorizonDays: number;
   timeZone?: string | null;
   remindersEnabled?: boolean;
+  /** When true, voice complete / skip / move asks before writing. */
+  confirmVoiceCommands?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -46,6 +48,7 @@ export interface UpdateUserSettingsDTO {
   recurringScheduleHorizonDays?: number;
   timeZone?: string;
   remindersEnabled?: boolean;
+  confirmVoiceCommands?: boolean;
 }
 
 export const UserSettingsApi = {

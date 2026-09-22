@@ -6,6 +6,7 @@ import { googleCalendarAPI } from '../../../api/google-calendar.api';
 import { Spinner } from '../../../ui/Spinner';
 import { timeZoneSelectOptions } from '../ianaTimeZones';
 import { ReminderSettingsSection } from '../../pwa/ReminderSettingsSection';
+import { VoiceSettingsSection } from '../../voice/components/VoiceSettingsSection';
 import { showErrorToast, showSuccessToast } from '../../../utils/toast';
 
 interface UserSettingsFormProps {
@@ -406,6 +407,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             </section>
 
             <ReminderSettingsSection remindersEnabled={!!initialData.remindersEnabled} />
+            <VoiceSettingsSection confirmVoiceCommands={!!initialData.confirmVoiceCommands} />
         </div>
     );
 };

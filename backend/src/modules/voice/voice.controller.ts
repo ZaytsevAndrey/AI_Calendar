@@ -26,7 +26,8 @@ export class VoiceController {
 
   @Post('parse-task')
   @ApiOperation({
-    summary: 'Turn a transcript into a structured create-task payload',
+    summary:
+      'Turn a transcript into a create-task payload or a complete, skip, or reschedule command',
   })
   @ApiResponse({ status: 201, description: 'Parse result with understanding' })
   parseTask(@Request() req, @Body() dto: ParseVoiceTaskDto) {

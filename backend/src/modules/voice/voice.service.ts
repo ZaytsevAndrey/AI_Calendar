@@ -2,10 +2,19 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Phase } from '../phases/entities/phase.entity';
+import { ScheduledTask } from '../schedule/schedule.entity';
+import { Task, TaskStatus } from '../tasks/entities/task.entity';
 import { UserSettingsService } from '../user-settings/user-settings.service';
 import { GroqClient } from './groq.client';
 import { ParseVoiceTaskDto } from './dto/parse-voice-task.dto';
 import { TranscribeVoiceDto } from './dto/transcribe-voice.dto';
+import {
+  commandDraftFromRaw,
+  readVoiceIntent,
+  resolveVoiceCommand,
+  sniffCommandIntent,
+} from './voice-command.resolve';
+import type { VoiceCommandSlot, VoiceCommandTask } from './voice-command.types';
 import {
   buildVoiceParseSystemPrompt,
   buildVoiceParseUserPrompt,
@@ -34,6 +43,10 @@ export class VoiceService {
     private readonly userSettingsService: UserSettingsService,
     @InjectRepository(Phase)
     private readonly phasesRepository: Repository<Phase>,
+    @InjectRepository(Task)
+    private readonly tasksRepository: Repository<Task>,
+    @InjectRepository(ScheduledTask)
+    private readonly scheduledRepository: Repository<ScheduledTask>,
   ) {}
 
   async transcribe(
@@ -75,18 +88,31 @@ export class VoiceService {
       throw new BadRequestException('transcript is required');
     }
 
-    const [settings, phases] = await Promise.all([
+    const [settings, phases, tasks, slots] = await Promise.all([
       this.userSettingsService.getSettings(userId),
       this.phasesRepository.find({
         where: { userId },
         order: { name: 'ASC' },
       }),
+      this.tasksRepository.find({ where: { userId } }),
+      this.scheduledRepository
+        .createQueryBuilder('slot')
+        .innerJoin('slot.task', 'task')
+        .where('task.userId = :userId', { userId })
+        .getMany(),
     ]);
 
     // Settings IANA first so "tomorrow" matches the calendar, not the browser.
     const timeZone = resolveIanaTimeZone(settings.timeZone || dto.timeZone);
     const nowIso = dto.clientNowIso?.trim() || new Date().toISOString();
     const alreadyClarified = Boolean(dto.clarificationAnswer?.trim());
+    const openTaskNames = tasks
+      .filter(
+        (task) =>
+          task.status !== TaskStatus.COMPLETED && task.status !== TaskStatus.CANCELED,
+      )
+      .map((task) => task.name)
+      .slice(0, 40);
     const content = await this.groq.completeJson(
       buildVoiceParseSystemPrompt(),
       buildVoiceParseUserPrompt({
@@ -97,6 +123,7 @@ export class VoiceService {
         settings,
         previousTranscript: dto.previousTranscript,
         clarificationAnswer: dto.clarificationAnswer,
+        openTaskNames,
       }),
     );
 
@@ -107,16 +134,97 @@ export class VoiceService {
       throw new BadRequestException('Could not parse the voice request into a task');
     }
 
-    return normalizeVoiceParse(parsed, {
-      validPhaseIds: new Set(phases.map((phase) => phase.id)),
-      alreadyClarified,
+    const speech = alreadyClarified
+      ? `${dto.previousTranscript || ''} ${dto.clarificationAnswer || ''} ${transcript}`.trim()
+      : transcript;
+    const sniffed = sniffCommandIntent(speech) ?? sniffCommandIntent(transcript);
+    let intent = readVoiceIntent(parsed);
+    if (sniffed && (intent === 'create' || intent === 'needs_clarification')) {
+      intent = sniffed;
+    }
+
+    if (intent === 'create') {
+      return {
+        ...normalizeVoiceParse(parsed, {
+          validPhaseIds: new Set(phases.map((phase) => phase.id)),
+          alreadyClarified,
+          timeZone,
+          nowIso,
+          transcript: speech,
+        }),
+        command: null,
+      };
+    }
+
+    if (intent === 'needs_clarification') {
+      return {
+        ...normalizeVoiceParse(parsed, {
+          validPhaseIds: new Set(phases.map((phase) => phase.id)),
+          alreadyClarified,
+          timeZone,
+          nowIso,
+          transcript: speech,
+        }),
+        command: null,
+      };
+    }
+
+    const resolved = resolveVoiceCommand({
+      draft: commandDraftFromRaw(parsed, intent),
+      transcript: speech,
       timeZone,
       nowIso,
-      transcript: alreadyClarified
-        ? `${dto.previousTranscript || ''} ${dto.clarificationAnswer || ''} ${transcript}`
-        : transcript,
+      alreadyClarified,
+      tasks: tasks.map(toCommandTask),
+      slots: slots.map(toCommandSlot),
     });
+    if (resolved.type === 'clarify') {
+      return {
+        understanding: 'needs_clarification',
+        clarifyingQuestion: resolved.question,
+        task: null,
+        command: null,
+      };
+    }
+    return {
+      understanding: 'complete',
+      clarifyingQuestion: null,
+      task: null,
+      command: resolved.command,
+    };
   }
+}
+
+function toCommandTask(task: Task): VoiceCommandTask {
+  return {
+    id: task.id,
+    name: task.name,
+    status: task.status,
+    isRecurring: task.isRecurring,
+    isUnscheduled: task.isUnscheduled,
+    isFixedExternal: task.isFixedExternal,
+    eventType: task.eventType,
+    googleEventId: task.googleEventId,
+    googleEventCalendarId: task.googleEventCalendarId,
+    scheduledStartTime: task.scheduledStartTime
+      ? new Date(task.scheduledStartTime).toISOString()
+      : null,
+    scheduledEndTime: task.scheduledEndTime
+      ? new Date(task.scheduledEndTime).toISOString()
+      : null,
+  };
+}
+
+function toCommandSlot(slot: ScheduledTask): VoiceCommandSlot {
+  return {
+    id: slot.id,
+    taskId: slot.taskId,
+    startIso: new Date(slot.scheduledStartTime).toISOString(),
+    endIso: new Date(slot.scheduledEndTime).toISOString(),
+    googleEventId: slot.googleEventId,
+    googleEventCalendarId: slot.googleEventCalendarId,
+    synthetic: false,
+  };
 }
 
 function stripDataUrl(value: string): string {

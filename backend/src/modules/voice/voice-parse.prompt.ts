@@ -3,13 +3,27 @@ import type { UserSettings } from '../user-settings/entities/user-settings.entit
 import { buildLocalCalendarContext } from './voice-local-date.util';
 
 export function buildVoiceParseSystemPrompt(): string {
-  return `You extract a calendar task from a spoken transcript (Ukrainian, English, or Russian).
+  return `You interpret a spoken calendar utterance (Ukrainian, English, or Russian).
 Reply with a single JSON object only. No markdown.
+
+First set "intent":
+- "create": they want a new task.
+- "complete": mark an existing task done (done, finished, закінчив, зробив, готово).
+- "skip": skip one occurrence (skip, пропусти).
+- "reschedule": move an existing task (move, reschedule, перенеси).
+- "needs_clarification": only when a command has no target and no time you can guess. Prefer a concrete intent.
 
 JSON shape:
 {
+  "intent": "create" | "complete" | "skip" | "reschedule" | "needs_clarification",
   "understanding": "complete" | "sufficient" | "needs_clarification",
   "clarifyingQuestion": string | null,
+  "command": {
+    "target": "current" | "named",
+    "taskName": string | null,
+    "start": string | null,
+    "end": string | null
+  } | null,
   "task": {
     "name": string,
     "description": string | null,
@@ -29,10 +43,19 @@ JSON shape:
   }
 }
 
-understanding:
+Command rules (intent is not "create"):
+- command is required. task may be null.
+- target "current" when they mean the block in progress (this, now, цю, зараз, поточну) and do not name a different task.
+- target "named" when they name a task. taskName is a short title copied from the open-task list when one matches, otherwise the words they used. Do not include the time phrase in taskName.
+- "done" / "закінчив" on a repeating task still uses intent "complete". The app skips today's occurrence.
+- reschedule: put the new start in command.start as ISO-8601 with offset. command.end only when they gave a clock range. A day with no clock ("tomorrow", "завтра") is start at 00:00 and end at 23:59 of that local day.
+- Habits and native Google meetings are not tasks. Use needs_clarification and ask which app task, in the same language.
+- Do not invent a new task when they are finishing, skipping, or moving one.
+
+understanding (intent "create" only):
 - complete: there is a usable task name. The app creates immediately. Defaults are fine (duration 30, priority medium, no phase).
 - sufficient: same as complete for routing — prefer complete whenever a name exists.
-- needs_clarification: no usable name / unintelligible speech. Ask ONE short question in the SAME language as the transcript. Put it in clarifyingQuestion.
+- needs_clarification: no usable name / unintelligible speech. Ask ONE short question in the SAME language as the transcript. Put it in clarifyingQuestion. For a command, leave clarifyingQuestion null unless the target task cannot be guessed.
 
 CRITICAL (must clarify if missing):
 - Task name / what to do (unintelligible speech, empty intent)
@@ -60,7 +83,7 @@ Task rules:
 - Name: short task title, original language, not a full sentence dump.
 - Keep description only if extra detail is useful.
 
-If this turn is a clarification reply, combine previous transcript + answer. Do not ask a second clarifying question. If a name exists, use complete.`;
+If this turn is a clarification reply, combine previous transcript + answer and keep the same intent (do not turn a command into a new task). Do not ask a second clarifying question. For create, if a name exists, use understanding complete.`;
 }
 
 export function buildVoiceParseUserPrompt(input: {
@@ -71,6 +94,7 @@ export function buildVoiceParseUserPrompt(input: {
   settings: Pick<UserSettings, 'wakeTime' | 'sleepTime' | 'weekendWorkEnabled'>;
   previousTranscript?: string;
   clarificationAnswer?: string;
+  openTaskNames?: string[];
 }): string {
   const phaseLines = input.phases.length
     ? input.phases
@@ -95,6 +119,13 @@ Weekend work: ${input.settings.weekendWorkEnabled ? 'yes' : 'no'}
 
 Phases:
 ${phaseLines}
+
+Open tasks (incomplete):
+${
+  input.openTaskNames?.length
+    ? input.openTaskNames.map((name) => `- ${JSON.stringify(name)}`).join('\n')
+    : '(none)'
+}
 
 Transcript: ${JSON.stringify(input.transcript)}${clarification}`;
 }

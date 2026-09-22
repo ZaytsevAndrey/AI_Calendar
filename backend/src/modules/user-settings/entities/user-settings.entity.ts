@@ -85,6 +85,13 @@ export class UserSettings {
   @Column({ default: false })
   remindersEnabled: boolean;
 
+  /**
+   * When true, voice complete / skip / reschedule waits for a confirmation.
+   * Creating a task by voice is never gated by this flag.
+   */
+  @Column({ default: false })
+  confirmVoiceCommands: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

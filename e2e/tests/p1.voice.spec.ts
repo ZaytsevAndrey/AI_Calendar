@@ -1,4 +1,4 @@
-import { test, expect, openAs } from '../helpers/fixtures';
+import { test, expect, openAs, apiJson, expectOk, uniqueName } from '../helpers/fixtures';
 import { mockVoiceCapture, stubVoiceApis, recordOnce } from '../helpers/voice';
 
 test.describe('P1 voice UI', () => {
@@ -72,5 +72,74 @@ test.describe('P1 voice UI', () => {
     await expect(page.getByText('Task created')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Clarified walk' })).toBeVisible();
     await expect(page.getByText('What should I call this task?')).toHaveCount(0);
+  });
+
+  test('U-VOI-006 voice complete follows the confirmation setting', async ({ page, auth, request }) => {
+    const token = auth.onboarded.access_token;
+    const turnedOff = await apiJson(request, token, 'patch', '/user-settings', {
+      confirmVoiceCommands: false,
+    });
+    expectOk(turnedOff);
+
+    const immediateName = uniqueName('Voice done');
+    const immediate = await apiJson(request, token, 'post', '/tasks', {
+      name: immediateName,
+      eventType: 'admin',
+      estimatedTimeInMinutes: 30,
+      priority: 'medium',
+    });
+    expectOk(immediate);
+
+    const confirmedName = uniqueName('Voice confirm');
+    const confirmed = await apiJson(request, token, 'post', '/tasks', {
+      name: confirmedName,
+      eventType: 'admin',
+      estimatedTimeInMinutes: 30,
+      priority: 'medium',
+    });
+    expectOk(confirmed);
+
+    let command = {
+      taskId: immediate.body.id as string,
+      taskName: immediateName,
+    };
+    await mockVoiceCapture(page);
+    await stubVoiceApis(
+      page,
+      () => ({
+        understanding: 'complete',
+        clarifyingQuestion: null,
+        task: null,
+        command: {
+          kind: 'complete',
+          taskId: command.taskId,
+          taskName: command.taskName,
+          summary: `Mark "${command.taskName}" done?`,
+        },
+      }),
+      'done',
+    );
+    await openAs(page, auth.onboarded, '/tasks');
+    await page.getByRole('button', { name: 'Add task by voice' }).click();
+    await recordOnce(page);
+    await expect(page.getByText('Task completed')).toBeVisible();
+
+    const turnedOn = await apiJson(request, token, 'patch', '/user-settings', {
+      confirmVoiceCommands: true,
+    });
+    expectOk(turnedOn);
+    command = { taskId: confirmed.body.id as string, taskName: confirmedName };
+    await page.reload();
+    await page.getByRole('button', { name: 'Add task by voice' }).click();
+    await recordOnce(page);
+    const sheet = page.getByRole('dialog');
+    await expect(sheet.getByText(`Mark "${confirmedName}" done?`)).toBeVisible();
+    await sheet.getByRole('button', { name: 'Confirm' }).click();
+    await expect(page.getByText('Task completed')).toBeVisible();
+
+    const restored = await apiJson(request, token, 'patch', '/user-settings', {
+      confirmVoiceCommands: false,
+    });
+    expectOk(restored);
   });
 });

@@ -54,6 +54,12 @@ export class UserSettingsService {
         userSettings.appGoogleCalendarName = defaults.appGoogleCalendarName;
       if (userSettings.remindersEnabled === undefined || userSettings.remindersEnabled === null)
         userSettings.remindersEnabled = false;
+      if (
+        userSettings.confirmVoiceCommands === undefined ||
+        userSettings.confirmVoiceCommands === null
+      ) {
+        userSettings.confirmVoiceCommands = false;
+      }
 
       // Save updated settings if any defaults were applied
       await this.userSettingsRepository.save(userSettings);
@@ -128,6 +134,7 @@ export class UserSettingsService {
       recurringScheduleHorizonDays: 30,
       appGoogleCalendarName: 'AI Calendar Assistant',
       remindersEnabled: false,
+      confirmVoiceCommands: false,
     };
   }
 
@@ -147,6 +154,7 @@ export class UserSettingsService {
       recurringScheduleHorizonDays: 30,
       appGoogleCalendarName: 'AI Calendar Assistant',
       remindersEnabled: false,
+      confirmVoiceCommands: false,
     });
 
     return this.userSettingsRepository.save(defaultSettings);
