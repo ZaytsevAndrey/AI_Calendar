@@ -19,7 +19,7 @@
 4. **Verify locally** before treating Phase 2 as done:
    - typecheck / lint (if used in the repo),
    - existing unit tests still pass (if present),
-   - **full project build** from the **repository root** (e.g. `npm run build` or the documented equivalent) and fix **all** compilation/bundling errors—do not hand off with a failing build.
+   - **full project build** from the **repository root** (e.g. `npm run build` or the documented equivalent) and fix **all** compilation/bundling errors—do not hand off with a failing build. Run the build alone; do not start it beside Jest or Playwright ([machine load](testing.md#machine-load)).
    - **New tests** for this feature belong in **Phase 5**, after cleanup and simplification—not skipped here as a substitute for that phase.
 5. If scope creep appears, **stop** and ask whether to extend the feature or split follow-up work.
 

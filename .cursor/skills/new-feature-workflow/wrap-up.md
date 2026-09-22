@@ -27,10 +27,10 @@
 - **Simplification** pass completed or explicitly skipped with reason
 - **Tests** for the feature exist and pass (Phase 5), unless explicitly waived
 - **`documentation/`** matches the shipped behavior (roadmap, overview, and any API/spec/e2e files the feature changed)
-- **Build** still succeeds from the project root (or standard CI build)—re-run if there were late edits after Phase 2
+- **Build** still succeeds from the project root (or standard CI build)—re-run if there were late edits after Phase 2. Run that build alone, after tests have exited ([machine load](testing.md#machine-load)).
 
 ## Push
 
-When the feature is done, the root build succeeds, **all tests passed**, and the **end-to-end** suite passed too, commit the feature and **push the current branch immediately**. Do not wait for a separate push request.
+When the feature is done, the root build succeeds, **all tests passed**, and the **end-to-end** suite passed too, commit the feature and **push the current branch immediately**. Do not wait for a separate push request. Run the full suite (`--maxWorkers=2`), e2e, and the root build one after another, never at the same time.
 
 Do not push when tests were skipped, end-to-end was not run, or end-to-end failed. Leave unrelated uncommitted work out of the commit.

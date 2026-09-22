@@ -24,11 +24,22 @@ Write tests for the **agreed scope**, not unrelated modules.
 - **English** in test names, describe blocks, and comments (same as Phase 2).
 - If a test would need heavy UI browser automation, still add the closest automated substitute (unit/hook/util) rather than skipping coverage.
 
+## Machine load
+
+A full Jest run and a production build together freeze this machine. Backend `npm test` is Jest with no worker cap (about one process per CPU core, each compiling TypeScript). Root `npm run build` is a production Webpack build plus `nest build`.
+
+- Do not start the full test suite and `npm run build` in parallel. Do not stack either on a running `npm start`.
+- While iterating, run only the specs for the files you changed.
+- Run the full backend suite on its own, after those specs pass: from `backend`, `npm test -- --maxWorkers=2`.
+- API e2e is already one worker (`npm run test:e2e`, `--runInBand`). Start it only after the unit run has exited.
+- Playwright (`npm run test:e2e:ui`) launches Chromium. Run it alone, after the other commands have exited.
+- Run the root build alone, and only when a compile check is still required.
+
 ## Steps
 
 1. List behaviors from the plan that need assertions (short bullet list).
 2. Add or update specs beside the changed files; reuse existing test helpers.
-3. Run the relevant workspace tests, then root `npm test` (or the documented equivalent) if the change spans workspaces.
+3. Run the specs for the changed files first. Then, one command at a time and within the [machine-load](#machine-load) limits, run the full backend suite (`--maxWorkers=2`), API e2e, and Playwright when this feature is on an HTTP or UI path.
 4. Fix failures caused by the feature. Do not weaken or delete unrelated failing tests without asking.
 
 ## Done criteria
