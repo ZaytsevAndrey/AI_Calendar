@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UserSettingsService } from './user-settings.service';
@@ -75,5 +76,47 @@ describe('UserSettingsService', () => {
     });
     expect(saved.timeZone).toBe('Asia/Nicosia');
     expect(repo.save).toHaveBeenCalled();
+  });
+
+  it('stores hidden calendar ids and drops the app calendar', async () => {
+    const existing = {
+      userId: 'user-1',
+      wakeTime: '07:00',
+      sleepTime: '22:00',
+      minSplitMinutes: 30,
+      maxSplitMinutes: 30,
+      appGoogleCalendarName: 'AI Calendar Assistant',
+      appGoogleCalendarId: 'app@group.calendar.google.com',
+    };
+    repo.findOne.mockResolvedValue(existing);
+    repo.save.mockImplementation(async (entity) => entity);
+    repo.merge.mockImplementation((entity, dto) => Object.assign(entity, dto));
+
+    const saved = await service.updateSettings('user-1', {
+      hiddenGoogleCalendarIds: [
+        ' holidays@group.v.calendar.google.com ',
+        'app@group.calendar.google.com',
+      ],
+    });
+    expect(saved.hiddenGoogleCalendarIds).toEqual([
+      'holidays@group.v.calendar.google.com',
+    ]);
+  });
+
+  it('rejects a non-array hidden calendar list', async () => {
+    repo.findOne.mockResolvedValue({
+      userId: 'user-1',
+      wakeTime: '07:00',
+      sleepTime: '22:00',
+      minSplitMinutes: 30,
+      maxSplitMinutes: 30,
+      appGoogleCalendarName: 'AI Calendar Assistant',
+    });
+
+    await expect(
+      service.updateSettings('user-1', {
+        hiddenGoogleCalendarIds: 'primary' as unknown as string[],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

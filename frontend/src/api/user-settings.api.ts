@@ -13,6 +13,9 @@ export interface UserSettingsDTO {
   googleCalendarLinked: boolean;
   /** Name of the dedicated Google calendar used for app-created events */
   appGoogleCalendarName?: string;
+  appGoogleCalendarId?: string | null;
+  /** Google calendar ids hidden on the Calendar page. */
+  hiddenGoogleCalendarIds?: string[] | null;
   minSplitMinutes: number;
   maxSplitMinutes: number;
   recurringScheduleHorizonDays: number;
@@ -36,6 +39,7 @@ export interface UpdateUserSettingsDTO {
   weekendWorkEnabled?: boolean;
   googleCalendarLinked?: boolean;
   appGoogleCalendarName?: string;
+  hiddenGoogleCalendarIds?: string[];
   minSplitMinutes?: number;
   maxSplitMinutes?: number;
   recurringScheduleHorizonDays?: number;

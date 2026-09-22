@@ -4,6 +4,8 @@ import {
   IsOptional,
   IsInt,
   IsBoolean,
+  IsArray,
+  ArrayMaxSize,
   Min,
   Max,
   Matches,
@@ -123,6 +125,20 @@ export class UpdateUserSettingsDto {
   @IsOptional()
   @MaxLength(200)
   appGoogleCalendarName?: string;
+
+  @ApiProperty({
+    example: ['en.usa#holiday@group.v.calendar.google.com'],
+    description:
+      'Google calendar ids to hide on the Calendar page. The app calendar cannot be hidden. Empty shows primary, the app calendar, and calendars selected in Google.',
+    required: false,
+    type: [String],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(50)
+  @MaxLength(255, { each: true })
+  @IsOptional()
+  hiddenGoogleCalendarIds?: string[];
 
   @ApiProperty({
     example: true,

@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserSettings } from './entities/user-settings.entity';
 import { UpdateUserSettingsDto } from './dto/update-user-settings.dto';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { normalizeHiddenCalendarIds } from './hidden-google-calendars.util';
 
 @Injectable()
 export class UserSettingsService {
@@ -71,6 +72,18 @@ export class UserSettingsService {
       updateUserSettingsDto.maxSplitMinutes ?? userSettings.maxSplitMinutes;
     if (nextMin > nextMax) {
       updateUserSettingsDto.maxSplitMinutes = nextMin;
+    }
+
+    if (updateUserSettingsDto.hiddenGoogleCalendarIds !== undefined) {
+      if (!Array.isArray(updateUserSettingsDto.hiddenGoogleCalendarIds)) {
+        throw new BadRequestException(
+          'hiddenGoogleCalendarIds must be an array of calendar ids',
+        );
+      }
+      updateUserSettingsDto.hiddenGoogleCalendarIds = normalizeHiddenCalendarIds(
+        updateUserSettingsDto.hiddenGoogleCalendarIds,
+        userSettings.appGoogleCalendarId,
+      );
     }
 
     const updatedSettings = this.userSettingsRepository.merge(

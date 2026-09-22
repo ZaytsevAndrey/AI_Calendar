@@ -319,6 +319,56 @@ describe('GoogleCalendarService', () => {
     expect(result.totalEvents).toBe(2);
   });
 
+  it('should skip hidden calendars and keep the app calendar on display', async () => {
+    const userId = '123';
+    const user = {
+      googleAccessToken: 'valid-token',
+      googleRefreshToken: 'refresh-token',
+      googleTokenExpiry: new Date(Date.now() + 10000),
+    };
+
+    jest.spyOn(userRepo, 'findOne').mockResolvedValue(user as User);
+    jest.spyOn(userSettingsRepo, 'findOne').mockResolvedValue({
+      appGoogleCalendarId: 'app-cal@test.google.com',
+      hiddenGoogleCalendarIds: [
+        'user@gmail.com',
+        'holidays@group.v.calendar.google.com',
+        'app-cal@test.google.com',
+      ],
+    } as UserSettings);
+    g().calendarListList.mockResolvedValue({
+      data: {
+        items: [
+          { id: 'user@gmail.com', primary: true, selected: true, accessRole: 'owner' },
+          {
+            id: 'holidays@group.v.calendar.google.com',
+            summary: 'Holidays',
+            selected: true,
+            accessRole: 'reader',
+          },
+          {
+            id: 'app-cal@test.google.com',
+            summary: 'App',
+            selected: true,
+            accessRole: 'owner',
+          },
+        ],
+      },
+    });
+    g().eventsList.mockResolvedValue({
+      data: {
+        items: [{ id: 'a1', summary: 'App task', start: { dateTime: '2024-01-03T10:00:00Z' } }],
+      },
+    });
+
+    await service.getDisplayEvents(userId, '2024-01-01T00:00:00Z', '2024-01-31T23:59:59Z');
+
+    const calendarIds = g().eventsList.mock.calls.map(
+      (call) => (call[0] as { calendarId?: string }).calendarId,
+    );
+    expect(calendarIds).toEqual(['app-cal@test.google.com']);
+  });
+
   it('should create event', async () => {
     const userId = '123';
     const event = { summary: 'Test Event' };

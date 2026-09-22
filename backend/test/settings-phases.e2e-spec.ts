@@ -114,6 +114,45 @@ describe('Settings and phases API e2e', () => {
     expect(jsonBody(required).hasPhases).toBe(true);
   });
 
+  it('A-SET-014 hidden Google calendars persist and the app calendar cannot be hidden', async () => {
+    const { token, user } = await seedUser(ctx.app);
+    await api(ctx.app, 'GET', '/user-settings', { token });
+    const repo = ctx.app.get<Repository<UserSettings>>(
+      getRepositoryToken(UserSettings),
+    );
+    await repo.update(
+      { userId: user.id },
+      { appGoogleCalendarId: 'app@group.calendar.google.com' },
+    );
+
+    const bad = await api(ctx.app, 'PATCH', '/user-settings', {
+      token,
+      payload: { hiddenGoogleCalendarIds: 'primary' },
+    });
+    expect(bad.statusCode).toBe(400);
+
+    const res = await api(ctx.app, 'PATCH', '/user-settings', {
+      token,
+      payload: {
+        hiddenGoogleCalendarIds: [
+          ' holidays@group.v.calendar.google.com ',
+          'holidays@group.v.calendar.google.com',
+          'app@group.calendar.google.com',
+          '',
+        ],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(jsonBody(res).hiddenGoogleCalendarIds).toEqual([
+      'holidays@group.v.calendar.google.com',
+    ]);
+
+    const again = await api(ctx.app, 'GET', '/user-settings', { token });
+    expect(jsonBody(again).hiddenGoogleCalendarIds).toEqual([
+      'holidays@group.v.calendar.google.com',
+    ]);
+  });
+
   it('A-SET-012 calendar rename failure still saves settings', async () => {
     const { token } = await seedOnboardedUser(ctx.app);
     ctx.google.updateAppCalendarSummaryIfLinked.mockRejectedValueOnce(

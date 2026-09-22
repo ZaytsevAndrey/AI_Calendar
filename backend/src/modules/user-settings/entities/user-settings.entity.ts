@@ -53,6 +53,14 @@ export class UserSettings {
   @Column({ type: 'varchar', length: 255, nullable: true })
   appGoogleCalendarId: string | null;
 
+  /**
+   * Google calendar ids hidden on the Calendar page.
+   * Empty means show primary, the app calendar, and calendars selected in Google.
+   * The app calendar id is ignored if present.
+   */
+  @Column({ type: 'simple-json', nullable: true })
+  hiddenGoogleCalendarIds: string[] | null;
+
   /** When true (default), types that allow split may be split using `minSplitMinutes`. */
   @Column({ default: true })
   allowSplitScheduling: boolean;

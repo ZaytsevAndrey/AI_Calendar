@@ -36,8 +36,7 @@ Two lists used to compete (`roadmap` vs `BUGS-AND-IMPROVEMENTS.md`). This file i
 ## Then — setup & control
 
 - [x] Phase lifestyle presets (Sep 2026). On first setup and later from Phases: **working person**, **student / learner**, **open day**. Hours are offsets from wake/sleep; blocks shorter than 30 minutes are dropped. Replaces every phase, including Sleep and hidden Focus. Refuses while any phase has tasks. Skip on setup still creates Sleep + Focus only.
-- [ ] **Text add (same parser as voice)** — type “gym tomorrow 45 min” without the mic; reuse Groq parse + the same create/prefill/clarify routing.
-- [ ] Choose which Google calendars are visible on the Calendar page.
+- [x] Choose which Google calendars are visible on the Calendar page (Sep 2026). **Calendars** on Calendar hides Google calendars from the grid and Now. Default stays primary + app calendar + calendars selected in Google. The app calendar stays visible. Generate busy time is unchanged (primary + app calendar).
 - [ ] Drag & drop on schedule / event calendars.
 
 ## Later
@@ -121,7 +120,7 @@ Open Phase 5 items live in **Now / Next / Then / Later** above.
 
 ## Recommended next steps
 
-1. Text add; Google calendar visibility; drag-and-drop.
+1. Drag-and-drop on schedule / event calendars.
 2. Later extras (AI recommendations, reminders, stats, integrations, parked polish).
 3. Add Playwright (or similar) **E2E** for voice create, Done vs calendar, Generate/Undo; expand unit tests as you touch flows; optional custom subdomain (see [deploy](deploy.md)).
 4. **Last:** in-app product guide, once the app is ready.

@@ -256,4 +256,42 @@ test.describe('P1 calendar UI', () => {
     await expect(dialog).toHaveCount(0);
     expect(generatePosts).toBe(0);
   });
+
+  test('U-CAL-022 calendars menu hides a Google calendar on this page', async ({ page, auth, request }) => {
+    await page.route('**/google-calendar/calendars', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          { id: 'user@gmail.com', summary: 'Primary', primary: true, selected: true, accessRole: 'owner' },
+          {
+            id: 'holidays@group.v.calendar.google.com',
+            summary: 'Holidays',
+            selected: true,
+            accessRole: 'reader',
+          },
+        ]),
+      });
+    });
+
+    await openAs(page, auth.onboarded);
+    await page.getByRole('button', { name: 'Calendars' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Visible calendars' });
+    await expect(dialog.getByText('Holidays')).toBeVisible();
+    await dialog.getByRole('checkbox', { name: 'Holidays' }).click();
+    await expect(dialog.getByRole('checkbox', { name: 'Holidays' })).not.toBeChecked();
+
+    await expect.poll(async () => {
+      const saved = await apiJson(request, auth.onboarded.access_token, 'get', '/user-settings');
+      return saved.body.hiddenGoogleCalendarIds;
+    }).toEqual(['holidays@group.v.calendar.google.com']);
+
+    await apiJson(request, auth.onboarded.access_token, 'patch', '/user-settings', {
+      hiddenGoogleCalendarIds: [],
+    });
+  });
 });

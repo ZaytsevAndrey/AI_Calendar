@@ -14,6 +14,7 @@ import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import CalendarEvents from 'modules/calendar/components/CalendarEvents';
 import CalendarGrid from 'modules/calendar/components/CalendarGrid';
 import { CalendarDatePicker } from 'modules/calendar/components/CalendarDatePicker';
+import { CalendarVisibilityMenu } from 'modules/calendar/components/CalendarVisibilityMenu';
 import { EventType } from 'modules/calendar/types';
 import { ScheduleApi, ScheduleJobResultPayload } from 'api/schedule.api';
 import { useScheduleActions } from 'modules/schedule/hooks/useScheduleActions';
@@ -348,6 +349,7 @@ const CalendarPage: React.FC = () => {
                         <button type="button" className="ui-btn-secondary px-4" onClick={() => setCurrentDate(new Date())}>
                             Today
                         </button>
+                        <CalendarVisibilityMenu />
                     </div>
                 </div>
             </header>

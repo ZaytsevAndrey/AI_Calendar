@@ -22,6 +22,7 @@ import {
   stripAppManagedEventProperties,
   wallClockMinutesInTimeZone,
 } from './google-calendar-event.helpers';
+import { displayCalendarIds } from './display-calendar-ids.util';
 import { phaseHexToGoogleColorId } from './phase-hex-to-google-color-id.util';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import { setRruleUntil } from '../schedule/google-recurrence.util';
@@ -725,27 +726,30 @@ export class GoogleCalendarService {
   }
 
   private async listDisplayCalendarIds(userId: string): Promise<string[]> {
-    const ids = new Set<string>(['primary']);
-    const appId = await this.getStoredAppCalendarId(userId);
-    if (appId) ids.add(appId);
+    const settings = await this.userSettingsRepo.findOne({
+      where: { userId },
+    });
+    const hiddenIds = Array.isArray(settings?.hiddenGoogleCalendarIds)
+      ? settings.hiddenGoogleCalendarIds
+      : [];
+    const appCalendarId = settings?.appGoogleCalendarId ?? null;
 
     try {
       const items = await this.getCalendars(userId);
-      for (const item of items) {
-        if (!item?.id || item.primary || item.selected === false) continue;
-        const role = item.accessRole;
-        if (role && !['owner', 'writer', 'reader'].includes(role)) continue;
-        ids.add(item.id);
-      }
+      return displayCalendarIds({ items, hiddenIds, appCalendarId });
     } catch (error) {
       this.logger.warn(
         `Could not list Google calendars for display; using primary/app only: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
+      return displayCalendarIds({
+        items: [],
+        hiddenIds,
+        appCalendarId,
+        listFailed: true,
+      });
     }
-
-    return [...ids];
   }
 
   async getEvent(

@@ -3,6 +3,7 @@ import { customBaseQuery } from './customBaseQuery';
 import {
   GoogleCalendarEvent,
   GoogleCalendarEventsResponse,
+  GoogleCalendarListItem,
   CreateEventParams,
   UpdateEventParams,
 } from './google-calendar.api';
@@ -33,7 +34,7 @@ function patchCachedEventLists(
 export const eventsApi = createApi({
   reducerPath: 'eventsApi',
   baseQuery: customBaseQuery,
-  tagTypes: ['Event'],
+  tagTypes: ['Event', 'CalendarList'],
   endpoints: (builder) => ({
     getEvents: builder.query<GoogleCalendarEventsResponse, any>({
       query: (params) => {
@@ -99,6 +100,10 @@ export const eventsApi = createApi({
         }
       },
     }),
+    getCalendars: builder.query<GoogleCalendarListItem[], void>({
+      query: () => ({ url: '/google-calendar/calendars', method: 'GET' }),
+      providesTags: ['CalendarList'],
+    }),
     deleteEvent: builder.mutation<void, { eventId: string; calendarId?: string }>({
       query: ({ eventId, calendarId }) => ({
         url:
@@ -128,6 +133,7 @@ export const eventsApi = createApi({
 export const {
   useGetEventsQuery,
   useGetEventQuery,
+  useLazyGetCalendarsQuery,
   useCreateEventMutation,
   useUpdateEventMutation,
   useDeleteEventMutation,

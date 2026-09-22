@@ -169,6 +169,7 @@ Email/password (`POST /auth/register`, `/login`, forgot/reset) **do not exist**.
 | A-SET-011 | A | P1 | After setup-defaults | required | `hasPhases: true` |
 | A-SET-012 | A | P2 | PATCH `appGoogleCalendarName` | Google stub rename fails | Settings still 200 (warn-only) |
 | A-SET-013 | A | P2 | PATCH fields with no Settings UI (`weekendWorkEnabled`, `allowSplitScheduling`, lunch defaults) | API | Persisted; engine reads them (covered by unit + A-SCH generate) |
+| A-SET-014 | A | P1 | PATCH `hiddenGoogleCalendarIds` | Trim, dedupe, drop app calendar id; non-array | 200 with the cleaned list; non-array is 400 |
 | U-SET-001 | U | P1 | Settings page | Change wake/sleep/TZ/horizon | Debounced auto-save (~1s), toast |
 | U-SET-002 | U | P1 | Empty TZ on first login | App loads | Client PATCHes browser IANA **once** |
 | U-SET-003 | U | P1 | TZ already set | Reload | No overwrite |
@@ -473,6 +474,7 @@ No first-class UI. Covered via API and Google create with `phaseId`.
 | U-CAL-019 | U | P0 | Now **Skip** on movable timed app task | Click | Slot gone; task stays `todo`; block leaves Now |
 | U-CAL-020 | U | P0 | Recurring overlapping Now | Strip | Skip; **no** Done |
 | U-CAL-021 | U | P1 | Generate preview | Cancel | Moves and fit messages shown; Generate is not posted |
+| U-CAL-022 | U | P1 | Calendars menu | Uncheck a selected Google calendar | `hiddenGoogleCalendarIds` stores that id |
 
 `canCompleteNowBlock`: has linked task, not recurring, not `isFixedExternal`, not completed/canceled.
 

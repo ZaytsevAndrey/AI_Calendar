@@ -1245,6 +1245,7 @@ function makeSettings(partial: Partial<UserSettings>): UserSettings {
     googleCalendarLinked: false,
     appGoogleCalendarName: 'AI Calendar Assistant',
     appGoogleCalendarId: null,
+    hiddenGoogleCalendarIds: null,
     allowSplitScheduling: true,
     minSplitMinutes: 30,
     maxSplitMinutes: 60,

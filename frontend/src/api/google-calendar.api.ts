@@ -47,6 +47,14 @@ export interface GoogleCalendarEvent {
     isAppGenerated?: boolean;
 }
 
+export interface GoogleCalendarListItem {
+    id?: string | null;
+    summary?: string | null;
+    primary?: boolean | null;
+    selected?: boolean | null;
+    accessRole?: string | null;
+}
+
 export interface GoogleCalendarEventsResponse {
     events: GoogleCalendarEvent[];
     nextPageToken?: string;
