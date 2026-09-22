@@ -29,7 +29,7 @@ export class GroqClient {
     const key = this.config.get<string>('GROQ_API_KEY')?.trim();
     if (!key) {
       throw new ServiceUnavailableException(
-        'Voice features are not configured. Set GROQ_API_KEY on the API service.',
+        'AI features are not configured. Set GROQ_API_KEY on the API service.',
       );
     }
     return key;

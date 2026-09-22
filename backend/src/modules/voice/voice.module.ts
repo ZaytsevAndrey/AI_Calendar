@@ -10,5 +10,6 @@ import { VoiceService } from './voice.service';
   imports: [TypeOrmModule.forFeature([Phase]), UserSettingsModule],
   controllers: [VoiceController],
   providers: [VoiceService, GroqClient],
+  exports: [GroqClient],
 })
 export class VoiceModule {}

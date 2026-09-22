@@ -23,6 +23,7 @@ import { GeneratePreviewDialog } from 'modules/schedule/components/GeneratePrevi
 import { GenerateAlertsBanner } from 'modules/schedule/components/GenerateAlertsBanner';
 import { GenerateProgressPanel } from 'modules/schedule/components/GenerateProgressPanel';
 import { ScheduleMenu } from 'modules/schedule/components/ScheduleMenu';
+import { ScheduleSuggestionsDialog } from 'modules/schedule/components/ScheduleSuggestionsDialog';
 import { NowStrip } from 'modules/now/components/NowStrip';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
@@ -70,6 +71,7 @@ const CalendarPage: React.FC = () => {
     });
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
     const [undoConfirmOpen, setUndoConfirmOpen] = useState(false);
+    const [suggestionsOpen, setSuggestionsOpen] = useState(false);
     const [previewOpen, setPreviewOpen] = useState(false);
     const [previewLoading, setPreviewLoading] = useState(false);
     const [previewError, setPreviewError] = useState<string | null>(null);
@@ -334,6 +336,7 @@ const CalendarPage: React.FC = () => {
                             isUndoing={isUndoing}
                             canUndo={canUndo}
                             onGenerate={runGenerate}
+                            onSuggest={() => setSuggestionsOpen(true)}
                             onUndo={() => setUndoConfirmOpen(true)}
                             onClear={() => setClearConfirmOpen(true)}
                         />
@@ -468,6 +471,11 @@ const CalendarPage: React.FC = () => {
                     Calendar.
                 </p>
             </Modal>
+
+            <ScheduleSuggestionsDialog
+                open={suggestionsOpen}
+                onClose={() => setSuggestionsOpen(false)}
+            />
 
             <GeneratePreviewDialog
                 open={previewOpen}

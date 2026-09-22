@@ -21,6 +21,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ScheduleService } from './schedule.service';
 import { ScheduleJobService } from './schedule-job.service';
 import { DisplayedEventMoveService } from './displayed-event-move.service';
+import { ScheduleRecommendationsService } from './schedule-recommendations.service';
+import { ScheduleRecommendations } from './schedule-recommendations.util';
 import {
   CreateScheduleDto,
   UpdateScheduleDto,
@@ -43,6 +45,7 @@ export class ScheduleController {
     private readonly scheduleService: ScheduleService,
     private readonly scheduleJobService: ScheduleJobService,
     private readonly displayedEventMoveService: DisplayedEventMoveService,
+    private readonly scheduleRecommendationsService: ScheduleRecommendationsService,
   ) {}
 
   @Post()
@@ -134,6 +137,17 @@ export class ScheduleController {
     @Body() dto: MoveDisplayedEventDto,
   ): Promise<{ kind: 'fixed' | 'slot' | 'google' }> {
     return this.displayedEventMoveService.move(req.user.userId, dto);
+  }
+
+  @Post('recommendations')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Suggest schedule improvements for the next 7 days. Does not change tasks, slots, or Google.',
+  })
+  @ApiResponse({ status: 200, description: 'Suggestions only' })
+  async recommendations(@Request() req): Promise<ScheduleRecommendations> {
+    return this.scheduleRecommendationsService.recommend(req.user.userId);
   }
 
   @Post('preview')

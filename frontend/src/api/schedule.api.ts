@@ -43,6 +43,24 @@ export interface ScheduleJobStatusResponse {
   updatedAt?: string;
 }
 
+export type ScheduleRecommendationKind =
+  | 'overload'
+  | 'gap'
+  | 'phase_mismatch'
+  | 'deadline_risk';
+
+export interface ScheduleRecommendation {
+  kind: ScheduleRecommendationKind;
+  title: string;
+  detail: string;
+  taskId: string | null;
+}
+
+export interface ScheduleRecommendations {
+  summary: string;
+  suggestions: ScheduleRecommendation[];
+}
+
 export interface SchedulingAlerts {
   jobId: string | null;
   errors: string[];
@@ -184,6 +202,17 @@ export const ScheduleApi = {
     const list = await axios.get<ScheduledTaskDTO[]>(`/schedule?${queryParams.toString()}`);
 
     return { tasks: list.data, job };
+  },
+
+  recommendSchedule: async (): Promise<ScheduleRecommendations> => {
+    const { data } = await axios.post<ScheduleRecommendations>(
+      '/schedule/recommendations',
+      {},
+    );
+    return {
+      summary: data.summary ?? '',
+      suggestions: data.suggestions ?? [],
+    };
   },
 
   previewSchedule: async (): Promise<ScheduleJobResultPayload> => {

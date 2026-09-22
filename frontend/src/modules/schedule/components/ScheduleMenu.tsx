@@ -8,6 +8,7 @@ type Props = {
     isUndoing: boolean;
     canUndo: boolean;
     onGenerate: () => void;
+    onSuggest: () => void;
     onUndo: () => void;
     onClear: () => void;
 };
@@ -19,6 +20,7 @@ export function ScheduleMenu({
     isUndoing,
     canUndo,
     onGenerate,
+    onSuggest,
     onUndo,
     onClear,
 }: Props) {
@@ -63,6 +65,18 @@ export function ScheduleMenu({
                         }}
                     >
                         {isGenerating ? 'Generating…' : 'Generate schedule'}
+                    </button>
+                    <button
+                        type="button"
+                        role="menuitem"
+                        className="flex min-h-[44px] w-full items-center px-3 text-left text-sm text-ide-text hover:bg-ide-surface disabled:opacity-50"
+                        disabled={busy}
+                        onClick={() => {
+                            setOpen(false);
+                            onSuggest();
+                        }}
+                    >
+                        Suggestions
                     </button>
                     <button
                         type="button"

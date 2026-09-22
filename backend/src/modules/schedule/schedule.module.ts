@@ -9,11 +9,14 @@ import { ScheduleJobService } from './schedule-job.service';
 import { ScheduleJobProcessor } from './schedule-job.processor';
 import { ScheduleJobController } from './schedule-job.controller';
 import { DisplayedEventMoveService } from './displayed-event-move.service';
+import { ScheduleRecommendationsService } from './schedule-recommendations.service';
 import { TasksModule } from '../tasks/tasks.module';
 import { UserSettingsModule } from '../user-settings/user-settings.module';
 import { Task } from '../tasks/entities/task.entity';
 import { Habit } from '../habits/entities/habit.entity';
 import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
+import { PhasesModule } from '../phases/phases.module';
+import { VoiceModule } from '../voice/voice.module';
 
 @Module({
   imports: [
@@ -26,6 +29,8 @@ import { GoogleCalendarModule } from '../google-calendar/google-calendar.module'
     forwardRef(() => TasksModule),
     UserSettingsModule,
     GoogleCalendarModule,
+    PhasesModule,
+    VoiceModule,
   ],
   controllers: [ScheduleController, ScheduleJobController],
   providers: [
@@ -34,6 +39,7 @@ import { GoogleCalendarModule } from '../google-calendar/google-calendar.module'
     ScheduleJobService,
     ScheduleJobProcessor,
     DisplayedEventMoveService,
+    ScheduleRecommendationsService,
   ],
   exports: [ScheduleService, ScheduleJobService],
 })

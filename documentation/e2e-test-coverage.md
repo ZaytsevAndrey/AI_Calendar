@@ -353,6 +353,7 @@ Generate body `{ startDate, endDate }` is **ignored**. Horizon = today → `recu
 | A-SCH-029 | A | P1 | Recurring Google series (stub) | replan | Old series `UNTIL` + new series recorded on stub |
 | A-SCH-030 | A | P2 | Job poll timeout on UI (120s) | Hang stub | UI error toast — UI case U-CAL-007 |
 | A-SCH-031 | A | P1 | Movable TODO, replan not drained | `POST /schedule/preview` | `diff` places the task; `/schedule` stays empty; undo stays unavailable |
+| A-SCH-032 | A | P1 | Groq stub | `POST /schedule/recommendations` | 401 without JWT. Empty user skips Groq and returns no suggestions. A task returns only suggestions whose `taskId` exists. `/schedule` stays empty |
 
 ---
 
@@ -462,6 +463,7 @@ No first-class UI. Covered via API and Google create with `phaseId`.
 | U-CAL-007 | U | P1 | Generate job hang | Timeout | Error toast; not infinite spinner |
 | U-CAL-008 | U | P1 | Last generate warnings | Banner | Dismiss stores `scheduleGenerateAlertsDismissedJobId`; stays dismissed on reload |
 | U-CAL-009 | U | P1 | Alerts older than 24h | Load | Banner not shown |
+| U-CAL-016 | U | P1 | No open tasks, schedule cleared | Schedule → Suggestions | Dialog shows the empty review message and Close dismisses it |
 | U-CAL-010 | U | P0 | Now overlapping block | Strip | Now title; Done if `canCompleteNowBlock` |
 | U-CAL-011 | U | P0 | Next start later today | Strip | Next shown |
 | U-CAL-012 | U | P0 | Flexible waiting for slot **today** | Strip Unscheduled | Transitional inbox (not `isUnscheduled` Tasks inbox) |

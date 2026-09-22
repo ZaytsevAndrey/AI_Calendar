@@ -329,4 +329,68 @@ describe('Schedule API e2e', () => {
     const undo = await api(ctx.app, 'GET', '/schedule-jobs/undo', { token });
     expect(jsonBody(undo).available).toBe(false);
   });
+
+  it('A-SCH-032 recommendations suggest without writing', async () => {
+    const anon = await api(ctx.app, 'POST', '/schedule/recommendations', {
+      payload: {},
+    });
+    expect(anon.statusCode).toBe(401);
+
+    const emptyUser = await seedOnboardedUser(ctx.app);
+    ctx.groq.completeJson.mockClear();
+    const empty = await api(ctx.app, 'POST', '/schedule/recommendations', {
+      token: emptyUser.token,
+      payload: {},
+    });
+    expect(empty.statusCode).toBe(200);
+    expect(jsonBody(empty).suggestions).toEqual([]);
+    expect(ctx.groq.completeJson).not.toHaveBeenCalled();
+
+    const { token } = await seedOnboardedUser(ctx.app);
+    const created = await api(ctx.app, 'POST', '/tasks', {
+      token,
+      payload: { name: 'Suggest me', estimatedTimeInMinutes: 30 },
+    });
+    const taskId = String(jsonBody(created).id);
+    ctx.groq.completeJson.mockResolvedValueOnce(
+      JSON.stringify({
+        summary: 'Schedule Suggest me.',
+        suggestions: [
+          {
+            kind: 'deadline_risk',
+            title: 'Soon',
+            detail: 'Suggest me has no slot.',
+            taskId,
+          },
+          {
+            kind: 'overload',
+            title: 'Fake',
+            detail: 'Unknown task.',
+            taskId: 'not-real',
+          },
+        ],
+      }),
+    );
+    const res = await api(ctx.app, 'POST', '/schedule/recommendations', {
+      token,
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+    const body = jsonBody(res) as {
+      summary: string;
+      suggestions: Array<{ taskId: string | null; kind: string }>;
+    };
+    expect(body.summary).toBe('Schedule Suggest me.');
+    expect(body.suggestions).toEqual([
+      {
+        kind: 'deadline_risk',
+        title: 'Soon',
+        detail: 'Suggest me has no slot.',
+        taskId,
+      },
+    ]);
+
+    const schedule = await api(ctx.app, 'GET', '/schedule', { token });
+    expect(schedule.json()).toEqual([]);
+  });
 });
