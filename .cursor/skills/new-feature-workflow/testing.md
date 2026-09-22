@@ -34,8 +34,9 @@ Write tests for the **agreed scope**, not unrelated modules.
 ## Done criteria
 
 - New/changed behavior has automated tests
-- Relevant test command(s) pass
+- Relevant test command(s) pass, including the end-to-end suite when this feature is on an HTTP or UI path
 - No skipped/`it.skip` / `xit` left for this feature unless the user agreed to defer a case
+- Passing all tests and end-to-end unlocks the wrap-up push in [wrap-up.md](wrap-up.md); do not push if end-to-end was skipped or failed
 
 ## Output
 

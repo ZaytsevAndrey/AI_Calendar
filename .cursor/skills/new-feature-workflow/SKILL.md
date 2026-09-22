@@ -49,7 +49,7 @@ New feature — progress
 - [ ] Phase 3: Removed unused / obsolete code paths
 - [ ] Phase 4: Simplified; aligned with project conventions
 - [ ] Phase 5: Tests covering new/changed behavior; relevant test commands pass
-- [ ] Phase 6: Wrap-up (risk notes, summary; build re-checked if needed)
+- [ ] Phase 6: Wrap-up (risk notes, summary; build re-checked if needed). If the build, all tests, and end-to-end passed, commit and push immediately
 ```
 
 ## Reuse in other projects
