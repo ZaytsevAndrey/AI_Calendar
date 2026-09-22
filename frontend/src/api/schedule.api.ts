@@ -173,6 +173,15 @@ export const ScheduleApi = {
     return { tasks: list.data, job };
   },
 
+  previewSchedule: async (): Promise<ScheduleJobResultPayload> => {
+    const { data } = await axios.post<ScheduleJobResultPayload>('/schedule/preview', {});
+    return {
+      diff: data.diff ?? [],
+      warnings: data.warnings ?? [],
+      errors: data.errors ?? [],
+    };
+  },
+
   getLatestDoneJob: async (): Promise<{
     job: ScheduleJobStatusResponse | null;
   }> => {

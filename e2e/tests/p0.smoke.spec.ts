@@ -46,6 +46,9 @@ test.describe('P0 UI smoke', () => {
     await openAs(page, auth.onboarded);
     await page.getByRole('button', { name: 'Schedule' }).click();
     await page.getByRole('menuitem', { name: 'Generate schedule' }).click();
+    const preview = page.getByRole('dialog').filter({ hasText: 'Generate preview' });
+    await expect(preview).toBeVisible({ timeout: 60_000 });
+    await preview.getByRole('button', { name: 'Apply generate' }).click();
     await page
       .getByLabel('Schedule generation progress')
       .waitFor({ state: 'visible', timeout: 10_000 })

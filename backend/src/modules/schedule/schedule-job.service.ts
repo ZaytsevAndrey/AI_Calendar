@@ -8,7 +8,12 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { ScheduleJob } from './entities/schedule-job.entity';
-import { IntelligentSchedulingEngine, SegmentSnapshot } from './intelligent-scheduling.engine';
+import {
+  DiffItem,
+  IntelligentSchedulingEngine,
+  SchedulingWarning,
+  SegmentSnapshot,
+} from './intelligent-scheduling.engine';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { Task, TaskStatus } from '../tasks/entities/task.entity';
 import { TaskEventType } from '../scheduling/event-type.enum';
@@ -72,6 +77,15 @@ export class ScheduleJobService {
 
   async enqueueGenerate(userId: string): Promise<ScheduleJob> {
     return this.enqueueJob(userId, 'generate');
+  }
+
+  /** Same placement as Generate, without writing slots, tasks, Google, or undo. */
+  async preview(userId: string): Promise<{
+    diff: DiffItem[];
+    warnings: SchedulingWarning[];
+    errors: { taskId: string; message: string }[];
+  }> {
+    return this.engine.run(userId, { persist: false });
   }
 
   private async enqueueJob(

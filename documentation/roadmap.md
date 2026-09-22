@@ -31,7 +31,7 @@ Two lists used to compete (`roadmap` vs `BUGS-AND-IMPROVEMENTS.md`). This file i
 - [x] **Unscheduled inbox** (Sep 2026). First-class `isUnscheduled` tasks on the Tasks page: no Google sync, excluded from Generate/replan, Done or Schedule. Optional deadline highlighting. TaskForm expandable Google event options (location, color, visibility, show-as, reminders) persist and apply on later sync. App-generated calendar clicks open TaskForm; native Google events still use EventForm.
 - [x] **Undo last generate** (Sep 2026). Calendar **Generate** stores a single snapshot (local auto slots + Google ids). **Undo last generate** restores still-open blocks and Google; fully ended blocks stay. Silent replan after task save is not undoable. Clear still cannot be undone and drops the snapshot. Non-recurring Generate no longer re-places minutes that already finished.
 - [x] **Skip this occurrence** (Sep 2026). One still-open slot or recurring instance without completing the task or deleting the series. Recurring skips persist (Generate will not recreate that civil day). One-off skip drops the placement; the next Generate can place remaining work. Snooze is later. UI: Now/Next Skip plus Skip on TaskForm when opened from a calendar instance.
-- [ ] **Generate preview / overload warning** — show what will move and if the window cannot fit work *before* applying.
+- [x] **Generate preview / overload warning** (Sep 2026). Schedule → Generate opens a dialog first: tasks that would move, engine errors when work cannot fit, and horizon warnings. Apply runs Generate. Cancel writes nothing. Silent replan after a task save stays immediate.
 
 ## Then — setup & control
 
@@ -121,9 +121,8 @@ Open Phase 5 items live in **Now / Next / Then / Later** above.
 
 ## Recommended next steps
 
-1. Generate preview / overload warning.
-2. Text add; Google calendar visibility; drag-and-drop.
-3. Later extras (AI recommendations, reminders, stats, integrations, parked polish).
-4. Add Playwright (or similar) **E2E** for voice create, Done vs calendar, Generate/Undo; expand unit tests as you touch flows; optional custom subdomain (see [deploy](deploy.md)).
-5. **Last:** in-app product guide, once the app is ready.
-6. Update this file when scope changes.
+1. Text add; Google calendar visibility; drag-and-drop.
+2. Later extras (AI recommendations, reminders, stats, integrations, parked polish).
+3. Add Playwright (or similar) **E2E** for voice create, Done vs calendar, Generate/Undo; expand unit tests as you touch flows; optional custom subdomain (see [deploy](deploy.md)).
+4. **Last:** in-app product guide, once the app is ready.
+5. Update this file when scope changes.

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
     useEventsForDay,
@@ -15,7 +15,9 @@ import CalendarEvents from 'modules/calendar/components/CalendarEvents';
 import CalendarGrid from 'modules/calendar/components/CalendarGrid';
 import { CalendarDatePicker } from 'modules/calendar/components/CalendarDatePicker';
 import { EventType } from 'modules/calendar/types';
+import { ScheduleApi, ScheduleJobResultPayload } from 'api/schedule.api';
 import { useScheduleActions } from 'modules/schedule/hooks/useScheduleActions';
+import { GeneratePreviewDialog } from 'modules/schedule/components/GeneratePreviewDialog';
 import { GenerateAlertsBanner } from 'modules/schedule/components/GenerateAlertsBanner';
 import { GenerateProgressPanel } from 'modules/schedule/components/GenerateProgressPanel';
 import { ScheduleMenu } from 'modules/schedule/components/ScheduleMenu';
@@ -64,6 +66,11 @@ const CalendarPage: React.FC = () => {
     });
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
     const [undoConfirmOpen, setUndoConfirmOpen] = useState(false);
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const [previewLoading, setPreviewLoading] = useState(false);
+    const [previewError, setPreviewError] = useState<string | null>(null);
+    const [previewResult, setPreviewResult] = useState<ScheduleJobResultPayload | null>(null);
+    const previewRequest = useRef(0);
     const [eventFormDialog, setEventFormDialog] = useState<{
         open: boolean;
         event: GoogleCalendarEvent | null;
@@ -110,7 +117,7 @@ const CalendarPage: React.FC = () => {
         onComplete: createFromPayload,
         onSufficient: openCreateFromPrefill,
     });
-    const busy = isGenerating || isClearing || isUndoing;
+    const busy = isGenerating || isClearing || isUndoing || previewLoading || previewOpen;
     const habitEventIds = new Set(
         (habitsData?.habits ?? [])
             .map((habit) => habit.googleEventId)
@@ -217,8 +224,40 @@ const CalendarPage: React.FC = () => {
         });
     };
 
+    const closePreview = () => {
+        if (isGenerating) return;
+        previewRequest.current += 1;
+        setPreviewOpen(false);
+        setPreviewLoading(false);
+        setPreviewError(null);
+        setPreviewResult(null);
+    };
+
     const runGenerate = () => {
+        const requestId = ++previewRequest.current;
+        setPreviewOpen(true);
+        setPreviewLoading(true);
+        setPreviewError(null);
+        setPreviewResult(null);
+        void ScheduleApi.previewSchedule()
+            .then((result) => {
+                if (previewRequest.current !== requestId) return;
+                setPreviewResult(result);
+            })
+            .catch((err) => {
+                if (previewRequest.current !== requestId) return;
+                setPreviewError(extractApiErrorMessage(err));
+            })
+            .finally(() => {
+                if (previewRequest.current !== requestId) return;
+                setPreviewLoading(false);
+            });
+    };
+
+    const applyGenerate = () => {
         const { startDate, endDate } = visibleRangeYmd(currentView, currentDate);
+        setPreviewOpen(false);
+        setPreviewResult(null);
         void generate(startDate, endDate);
     };
 
@@ -388,6 +427,15 @@ const CalendarPage: React.FC = () => {
                     Calendar.
                 </p>
             </Modal>
+
+            <GeneratePreviewDialog
+                open={previewOpen}
+                loading={previewLoading}
+                error={previewError}
+                result={previewResult}
+                onCancel={closePreview}
+                onApply={applyGenerate}
+            />
 
             <Modal
                 open={clearConfirmOpen}

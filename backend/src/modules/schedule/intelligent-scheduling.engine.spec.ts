@@ -1154,6 +1154,55 @@ describe('IntelligentSchedulingEngine', () => {
       '2026-04-20T07:00:00.000Z',
     ]);
   });
+
+  it('preview returns the same placement without writing', async () => {
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'preview-task',
+        name: 'Preview',
+        estimatedTimeInMinutes: 60,
+        phases: [phaseWorkday],
+      }),
+    ]);
+
+    const preview = await engine.run(userId, { persist: false });
+
+    expect(scheduledRepo.save).not.toHaveBeenCalled();
+    expect(scheduledRepo.deleteQb?.execute).not.toHaveBeenCalled();
+    expect(taskRepo.update).not.toHaveBeenCalled();
+    expect(preview.errors).toHaveLength(0);
+    expect(preview.diff.find((item) => item.taskId === 'preview-task')?.after[0]).toMatchObject({
+      start: atLocalTimeIso(0, 9),
+      end: atLocalTimeIso(0, 10),
+    });
+
+    const applied = await engine.run(userId);
+    expect(applied.errors).toHaveLength(0);
+    expect(extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls).get('preview-task')?.[0]).toEqual([
+      atLocalTimeIso(0, 9),
+      atLocalTimeIso(0, 10),
+    ]);
+  });
+
+  it('preview reports a task that cannot fit without writing', async () => {
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'tight',
+        name: 'Tight',
+        estimatedTimeInMinutes: 60,
+        deadline: new Date(atLocalTimeWithMinutesIso(0, 9, 30)),
+        phases: [phaseWorkday],
+      }),
+    ]);
+
+    const preview = await engine.run(userId, { persist: false });
+
+    expect(scheduledRepo.save).not.toHaveBeenCalled();
+    expect(preview.errors.some((error) => error.taskId === 'tight')).toBe(true);
+    expect(preview.warnings.some((warning) => warning.code === SchedulingWarningCode.OUTSIDE_HORIZON)).toBe(
+      false,
+    );
+  });
 });
 
 let taskCounter = 0;

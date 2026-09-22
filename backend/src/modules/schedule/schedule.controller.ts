@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Body,
+  HttpCode,
   Patch,
   Param,
   Delete,
@@ -26,6 +27,10 @@ import {
   GenerateScheduleDto,
 } from './dto';
 import { ScheduledTask } from './schedule.entity';
+import {
+  DiffItem,
+  SchedulingWarning,
+} from './intelligent-scheduling.engine';
 
 @ApiTags('schedule')
 @ApiBearerAuth()
@@ -112,6 +117,21 @@ export class ScheduleController {
   @ApiResponse({ status: 404, description: 'Not found' })
   async remove(@Request() req, @Param('id') id: string): Promise<void> {
     return this.scheduleService.remove(id, req.user.userId);
+  }
+
+  @Post('preview')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Dry-run the same placement as Generate. Does not write slots, Google, or undo.',
+  })
+  @ApiResponse({ status: 200, description: 'Projected diff, warnings, and errors' })
+  async previewSchedule(@Request() req): Promise<{
+    diff: DiffItem[];
+    warnings: SchedulingWarning[];
+    errors: { taskId: string; message: string }[];
+  }> {
+    return this.scheduleJobService.preview(req.user.userId);
   }
 
   @Post('generate')

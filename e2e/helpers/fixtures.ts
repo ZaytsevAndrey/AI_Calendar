@@ -42,7 +42,7 @@ export function uniqueName(prefix: string): string {
 }
 
 export async function openCreateTaskDialog(page: Page) {
-  await page.getByRole('button', { name: 'Create task' }).click();
+  await page.locator('header').getByRole('button', { name: 'Create task' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   return dialog;

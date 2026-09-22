@@ -3,6 +3,9 @@ import { test, expect, openAs, apiJson, expectOk, uniqueName, completeOpenTasks,
 async function generateSchedule(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: 'Schedule' }).click();
   await page.getByRole('menuitem', { name: 'Generate schedule' }).click();
+  const preview = page.getByRole('dialog').filter({ hasText: 'Generate preview' });
+  await expect(preview).toBeVisible({ timeout: 60_000 });
+  await preview.getByRole('button', { name: 'Apply generate' }).click();
   await page
     .getByLabel('Schedule generation progress')
     .waitFor({ state: 'visible', timeout: 10_000 })
@@ -18,7 +21,15 @@ test.describe('P0 calendar UI', () => {
       await deleteUnusedTimePhases(request, auth.onboarded.access_token);
       await openAs(page, auth.onboarded);
       await page.getByRole('button', { name: 'Day', exact: true }).click();
-      await page.locator('[role="button"]', { hasText: '08:00' }).first().click({ force: true });
+      await expect(page.getByRole('button', { name: 'Day', exact: true })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      const slot = page.getByRole('button', { name: '08:00', exact: true });
+      await slot.evaluate((node) => {
+        node.scrollIntoView({ block: 'center', inline: 'nearest' });
+        (node as HTMLElement).click();
+      });
       const dialog = page.getByRole('dialog');
       await expect(dialog).toBeVisible();
 

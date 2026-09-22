@@ -297,4 +297,36 @@ describe('Schedule API e2e', () => {
     const still = await slots.findOne({ where: { id: ended.id } });
     expect(still).toBeTruthy();
   });
+
+  it('A-SCH-031 preview reports placement without writing slots or undo', async () => {
+    const { token } = await seedOnboardedUser(ctx.app);
+    const created = await api(ctx.app, 'POST', '/tasks', {
+      token,
+      payload: { name: 'Preview me', estimatedTimeInMinutes: 30 },
+    });
+    expect(created.statusCode).toBe(201);
+    const taskId = String(jsonBody(created).id);
+
+    const preview = await api(ctx.app, 'POST', '/schedule/preview', {
+      token,
+      payload: {},
+    });
+    expect(preview.statusCode).toBe(200);
+    const body = jsonBody(preview) as {
+      diff: Array<{ taskId: string; after: unknown[] }>;
+      warnings: unknown[];
+      errors: unknown[];
+    };
+    expect(Array.isArray(body.warnings)).toBe(true);
+    expect(Array.isArray(body.errors)).toBe(true);
+    expect(
+      body.diff.some((item) => item.taskId === taskId && item.after.length > 0),
+    ).toBe(true);
+
+    const schedule = await api(ctx.app, 'GET', '/schedule', { token });
+    expect(schedule.json()).toEqual([]);
+
+    const undo = await api(ctx.app, 'GET', '/schedule-jobs/undo', { token });
+    expect(jsonBody(undo).available).toBe(false);
+  });
 });

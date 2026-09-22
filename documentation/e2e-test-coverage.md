@@ -10,7 +10,7 @@ Related docs: [task-scheduling-test-matrix.md](task-scheduling-test-matrix.md) (
 
 Protect the daily loop: **sign in → settings/phases gate → capture a task → Generate / Undo / Clear → Now/Done → habits**. Every live HTTP route and every user-facing screen has named cases. Engine placement math stays in unit tests; E2E asserts the HTTP/UI contract around that math.
 
-Out of scope until a later cycle: snooze, generate preview, text-add, drag-and-drop, in-app guide, real Google OAuth in CI, real Groq in CI.
+Out of scope until a later cycle: snooze, text-add, drag-and-drop, in-app guide, real Google OAuth in CI, real Groq in CI.
 
 ---
 
@@ -351,6 +351,7 @@ Generate body `{ startDate, endDate }` is **ignored**. Horizon = today → `recu
 | A-SCH-028 | A | P1 | Fully ended auto slot | generate | Kept as busy; remaining minutes only |
 | A-SCH-029 | A | P1 | Recurring Google series (stub) | replan | Old series `UNTIL` + new series recorded on stub |
 | A-SCH-030 | A | P2 | Job poll timeout on UI (120s) | Hang stub | UI error toast — UI case U-CAL-007 |
+| A-SCH-031 | A | P1 | Movable TODO, replan not drained | `POST /schedule/preview` | `diff` places the task; `/schedule` stays empty; undo stays unavailable |
 
 ---
 
@@ -454,7 +455,7 @@ No first-class UI. Covered via API and Google create with `phaseId`.
 | U-CAL-001 | U | P0 | Authenticated onboarded | Open `/` | Calendar + NowStrip + Generate menu |
 | U-CAL-002 | U | P1 | Day / week / month | Switch views + date picker + prev/next | Range changes; events reload |
 | U-CAL-003 | U | P0 | Click empty civil day | Create | From/Until = that day in **Settings** TZ (not browser TZ) |
-| U-CAL-004 | U | P0 | Generate | Confirm | Progress panel stages; toast by outcome; events refresh |
+| U-CAL-004 | U | P0 | Generate | Preview, then Apply | Progress panel stages; toast by outcome; events refresh |
 | U-CAL-005 | U | P0 | After generate | Undo confirm | Slots restored; toast |
 | U-CAL-006 | U | P0 | Clear confirm | Confirm | Upcoming app blocks gone; finished stay gray |
 | U-CAL-007 | U | P1 | Generate job hang | Timeout | Error toast; not infinite spinner |
@@ -471,6 +472,7 @@ No first-class UI. Covered via API and Google create with `phaseId`.
 | U-CAL-018 | U | P2 | Clear with deleted=0 | Confirm | Info toast nothing cleared |
 | U-CAL-019 | U | P0 | Now **Skip** on movable timed app task | Click | Slot gone; task stays `todo`; block leaves Now |
 | U-CAL-020 | U | P0 | Recurring overlapping Now | Strip | Skip; **no** Done |
+| U-CAL-021 | U | P1 | Generate preview | Cancel | Moves and fit messages shown; Generate is not posted |
 
 `canCompleteNowBlock`: has linked task, not recurring, not `isFixedExternal`, not completed/canceled.
 

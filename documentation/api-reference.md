@@ -108,6 +108,7 @@ Protected with JWT (`JwtAuthGuard`).
 | POST | `/schedule` | Create a scheduled slot |
 | PATCH | `/schedule/:id` | Change times |
 | DELETE | `/schedule/:id` | Delete |
+| POST | `/schedule/preview` | Dry-run of Calendar Generate. Returns `{ diff, warnings, errors }` and does not write slots, Google, or undo. |
 | POST | `/schedule/generate` | Enqueues Calendar generate (async); returns `{ jobId, status, message }` — poll `GET /schedule-jobs/:id`. Stores an undo snapshot. |
 | DELETE | `/schedule` | Clear still-open app-generated local slots through the Settings horizon, and leftover upcoming events on the app Google calendar. Fully ended blocks stay. Drops Generate undo. Returns `{ deleted: number }`. |
 
@@ -127,7 +128,7 @@ Links Google Calendar events to phases (separate from CRUD `/phases`). See `even
 
 `POST /schedule/generate` enqueues the same pipeline and returns `{ jobId, status, message }` (frontend polls `GET /schedule-jobs/:id`).
 
-Completed jobs expose a parsed `result` with `diff`, `warnings`, and `errors` (see [spec-intelligent-scheduling](spec-intelligent-scheduling.md)). Generate / Clear live on the **Calendar** page. Generate shows a stage timeline while the job runs. **Undo last generate** restores the previous still-open app blocks (and Google). A dismissible **Last generate** notes panel lists warnings/errors; a colored toast (title + detail, green / yellow / red by outcome) summarizes the run. Past **app-generated** events stay after replan/clear/undo and render in gray; other Google calendars keep their colors. Task and calendar edits return immediately; replan continues in the background.
+Completed jobs expose a parsed `result` with `diff`, `warnings`, and `errors` (see [spec-intelligent-scheduling](spec-intelligent-scheduling.md)). Generate / Clear live on the **Calendar** page. Generate opens a preview (`POST /schedule/preview`) and applies only after confirmation; the job then shows a stage timeline. **Undo last generate** restores the previous still-open app blocks (and Google). A dismissible **Last generate** notes panel lists warnings/errors; a colored toast (title + detail, green / yellow / red by outcome) summarizes the run. Past **app-generated** events stay after replan/clear/undo and render in gray; other Google calendars keep their colors. Task and calendar edits return immediately; replan continues in the background.
 
 ## Tasks (scheduling-related fields)
 

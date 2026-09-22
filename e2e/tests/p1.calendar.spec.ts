@@ -78,6 +78,9 @@ test.describe('P1 calendar UI', () => {
     await openAs(page, auth.onboarded);
     await page.getByRole('button', { name: 'Schedule' }).click();
     await page.getByRole('menuitem', { name: 'Generate schedule' }).click();
+    const preview = page.getByRole('dialog').filter({ hasText: 'Generate preview' });
+    await expect(preview).toBeVisible({ timeout: 60_000 });
+    await preview.getByRole('button', { name: 'Apply generate' }).click();
     await expect(page.getByRole('button', { name: 'Schedule' })).toBeDisabled();
     await expect(page.getByText(/Schedule generated/)).toBeVisible({ timeout: 60_000 });
   });
@@ -121,6 +124,9 @@ test.describe('P1 calendar UI', () => {
     );
     await page.getByRole('button', { name: 'Schedule' }).click();
     await page.getByRole('menuitem', { name: 'Generate schedule' }).click();
+    const preview = page.getByRole('dialog').filter({ hasText: 'Generate preview' });
+    await expect(preview).toBeVisible({ timeout: 60_000 });
+    await preview.getByRole('button', { name: 'Apply generate' }).click();
     await expect(page.getByLabel('Schedule generation progress')).toBeVisible();
     await polled;
     await page.evaluate(() => {
@@ -198,5 +204,56 @@ test.describe('P1 calendar UI', () => {
     await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible();
     await expect(page.getByText('Stale overload warning')).toHaveCount(0);
     await expect(page.getByLabel('Last generate notes')).toHaveCount(0);
+  });
+
+  test('U-CAL-021 generate preview lists moves and cancel does not apply', async ({ page, auth }) => {
+    let generatePosts = 0;
+    await page.route('**/schedule/preview', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          diff: [
+            {
+              taskId: 't1',
+              taskName: 'Preview task',
+              before: [],
+              after: [
+                {
+                  start: '2026-04-20T09:00:00.000Z',
+                  end: '2026-04-20T10:00:00.000Z',
+                },
+              ],
+            },
+          ],
+          warnings: [
+            {
+              code: 'SCHEDULING_HORIZON_EXCEEDED',
+              message: 'Task "Preview task" was placed outside the 30-day window.',
+            },
+          ],
+          errors: [{ taskId: 't2', message: 'Cannot fit "Overflow" in the available window.' }],
+        }),
+      });
+    });
+    await page.route('**/schedule/generate', async (route) => {
+      if (route.request().method() === 'POST') generatePosts += 1;
+      await route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
+    });
+
+    await openAs(page, auth.onboarded);
+    await page.getByRole('button', { name: 'Schedule' }).click();
+    await page.getByRole('menuitem', { name: 'Generate schedule' }).click();
+    const dialog = page.getByRole('dialog').filter({ hasText: 'Generate preview' });
+    await expect(dialog.getByText('Preview task', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('Cannot fit "Overflow" in the available window.')).toBeVisible();
+    await expect(dialog.getByText(/outside the 30-day window/)).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(generatePosts).toBe(0);
   });
 });
