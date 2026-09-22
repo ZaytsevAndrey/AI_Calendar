@@ -4,8 +4,9 @@ description: >-
   Guides end-to-end development of a new product feature: plan, surface open
   questions and get answers before coding, implement with minimal scope creep,
   remove obsolete code after behavior changes, simplify using best practices,
-  then cover the feature with tests. Use when the user starts or discusses a
-  new feature, greenfield work, or asks for a structured feature delivery flow.
+  cover the feature with tests, then update documentation/ when the feature
+  ships. Use when the user starts or discusses a new feature, greenfield work,
+  or asks for a structured feature delivery flow.
 ---
 
 # New feature workflow
@@ -49,7 +50,7 @@ New feature — progress
 - [ ] Phase 3: Removed unused / obsolete code paths
 - [ ] Phase 4: Simplified; aligned with project conventions
 - [ ] Phase 5: Tests covering new/changed behavior; relevant test commands pass
-- [ ] Phase 6: Wrap-up (risk notes, summary; build re-checked if needed). If the build, all tests, and end-to-end passed, commit and push immediately
+- [ ] Phase 6: Wrap-up (risk notes, summary; documentation/ updated for shipped behavior; build re-checked if needed). If the build, all tests, and end-to-end passed, commit and push immediately
 ```
 
 ## Reuse in other projects

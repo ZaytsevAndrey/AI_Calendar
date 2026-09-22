@@ -3,9 +3,17 @@
 ## Before handoff
 
 1. **Confirm Phase 5** — new/changed behavior is covered by tests and the relevant commands passed (or the user explicitly waived tests).
-2. **Summarize** for the user: user-visible behavior, config/env changes, migrations.
-3. **Rollback / feature flag** notes if applicable.
-4. **Follow-ups** as an explicit list (deferred questions, tech debt, untested gaps).
+2. **Update product documentation** in `documentation/` so it matches what shipped. Do this in the same change as the feature, before the commit. Touch only files the feature actually changed:
+   - `roadmap.md` — mark the item done with a short behavior note; point **Recommended next steps** at the new queue head.
+   - `overview.md` — user-visible behavior in **Features**.
+   - `api-reference.md` — only when routes or payload fields changed.
+   - `e2e-test-coverage.md` — add cases for the new behavior; drop the item from “out of scope” once it exists.
+   - Spec files (`spec-intelligent-scheduling.md`, `task-creation-rules.md`, `task-scheduling-test-matrix.md`) only when that contract changed.
+   - `README.md` — refresh the **Last documentation update** line.
+   Write in English. Do not rewrite unrelated sections.
+3. **Summarize** for the user: user-visible behavior, config/env changes, migrations, and which docs were updated.
+4. **Rollback / feature flag** notes if applicable.
+5. **Follow-ups** as an explicit list (deferred questions, tech debt, untested gaps).
 
 ## PR / commit hygiene (if the user uses Git)
 
@@ -18,6 +26,7 @@
 - No obvious **unused** code left from the change
 - **Simplification** pass completed or explicitly skipped with reason
 - **Tests** for the feature exist and pass (Phase 5), unless explicitly waived
+- **`documentation/`** matches the shipped behavior (roadmap, overview, and any API/spec/e2e files the feature changed)
 - **Build** still succeeds from the project root (or standard CI build)—re-run if there were late edits after Phase 2
 
 ## Push

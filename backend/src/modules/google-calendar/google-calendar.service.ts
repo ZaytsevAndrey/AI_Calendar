@@ -1193,6 +1193,79 @@ export class GoogleCalendarService {
     };
   }
 
+  /** Change only start/end so a drag does not replace the rest of the event. */
+  async patchEventTimes(
+    userId: string,
+    eventId: string,
+    startIso: string,
+    endIso: string,
+    calendarId?: string,
+  ): Promise<void> {
+    const body = {
+      start: { dateTime: startIso },
+      end: { dateTime: endIso },
+    };
+    await this.assertCalendarWritePayload(userId, body, {
+      skipSleepWindowCheck: true,
+    });
+
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: {
+        googleAccessToken: true,
+        googleRefreshToken: true,
+        googleTokenExpiry: true,
+      },
+    });
+
+    if (!user?.googleAccessToken) {
+      throw new BadRequestException('Google Calendar is not connected.');
+    }
+
+    if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
+      if (user.googleRefreshToken) {
+        this.oauth2Client.setCredentials({
+          refresh_token: user.googleRefreshToken,
+        });
+        const { credentials } = await this.oauth2Client.refreshAccessToken();
+        await this.userRepo.update(userId, {
+          googleAccessToken: credentials.access_token,
+          googleTokenExpiry: new Date(credentials.expiry_date),
+        });
+        user.googleAccessToken = credentials.access_token;
+      } else {
+        throw new BadRequestException('Google Calendar token expired.');
+      }
+    }
+
+    this.oauth2Client.setCredentials({
+      access_token: user.googleAccessToken,
+    });
+
+    const calendar = google.calendar({
+      version: 'v3',
+      auth: this.oauth2Client,
+    });
+    const writableCalendarId =
+      calendarId != null && calendarId !== ''
+        ? calendarId
+        : await this.ensureAppCalendarIdWithClient(calendar, userId);
+
+    try {
+      await calendar.events.patch({
+        calendarId: writableCalendarId,
+        eventId,
+        requestBody: body,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Google Calendar time patch failed: ${msg}`);
+      throw new ServiceUnavailableException(
+        'Google Calendar could not update the event.',
+      );
+    }
+  }
+
   private isGoogleNotFound(err: unknown): boolean {
     if (!err || typeof err !== 'object') return false;
     const e = err as {

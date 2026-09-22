@@ -143,6 +143,19 @@ export const ScheduleApi = {
     return response.data as ScheduledTaskDTO[];
   },
 
+  moveDisplayedEvent: async (body: {
+    googleEventId: string;
+    calendarId?: string;
+    recurringEventId?: string;
+    originalStart: string;
+    originalEnd: string;
+    start: string;
+    end: string;
+  }): Promise<{ kind: 'fixed' | 'slot' | 'google' }> => {
+    const response = await axios.post('/schedule/move-event', body);
+    return response.data as { kind: 'fixed' | 'slot' | 'google' };
+  },
+
   rescheduleTask: async (id: string, startTime: string, endTime: string): Promise<ScheduledTaskDTO> => {
     const response = await axios.patch(`/schedule/${id}`, {
       scheduledStartTime: startTime,

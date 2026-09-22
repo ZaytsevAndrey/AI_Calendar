@@ -20,11 +20,13 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ScheduleService } from './schedule.service';
 import { ScheduleJobService } from './schedule-job.service';
+import { DisplayedEventMoveService } from './displayed-event-move.service';
 import {
   CreateScheduleDto,
   UpdateScheduleDto,
   ScheduleQueryDto,
   GenerateScheduleDto,
+  MoveDisplayedEventDto,
 } from './dto';
 import { ScheduledTask } from './schedule.entity';
 import {
@@ -40,6 +42,7 @@ export class ScheduleController {
   constructor(
     private readonly scheduleService: ScheduleService,
     private readonly scheduleJobService: ScheduleJobService,
+    private readonly displayedEventMoveService: DisplayedEventMoveService,
   ) {}
 
   @Post()
@@ -117,6 +120,20 @@ export class ScheduleController {
   @ApiResponse({ status: 404, description: 'Not found' })
   async remove(@Request() req, @Param('id') id: string): Promise<void> {
     return this.scheduleService.remove(id, req.user.userId);
+  }
+
+  @Post('move-event')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Move or resize one displayed calendar block. Does not enqueue replan. A flexible slot can move again on the next Generate.',
+  })
+  @ApiResponse({ status: 200, description: 'Occurrence and Google event updated' })
+  async moveDisplayedEvent(
+    @Request() req,
+    @Body() dto: MoveDisplayedEventDto,
+  ): Promise<{ kind: 'fixed' | 'slot' | 'google' }> {
+    return this.displayedEventMoveService.move(req.user.userId, dto);
   }
 
   @Post('preview')

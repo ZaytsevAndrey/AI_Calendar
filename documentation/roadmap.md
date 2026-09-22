@@ -37,7 +37,7 @@ Two lists used to compete (`roadmap` vs `BUGS-AND-IMPROVEMENTS.md`). This file i
 
 - [x] Phase lifestyle presets (Sep 2026). On first setup and later from Phases: **working person**, **student / learner**, **open day**. Hours are offsets from wake/sleep; blocks shorter than 30 minutes are dropped. Replaces every phase, including Sleep and hidden Focus. Refuses while any phase has tasks. Skip on setup still creates Sleep + Focus only.
 - [x] Choose which Google calendars are visible on the Calendar page (Sep 2026). **Calendars** on Calendar hides Google calendars from the grid and Now. Default stays primary + app calendar + calendars selected in Google. The app calendar stays visible. Generate busy time is unchanged (primary + app calendar).
-- [ ] Drag & drop on schedule / event calendars.
+- [x] Drag & drop on the Calendar day and week time grids (Sep 2026). Drag the block to move it, or its top/bottom edge to resize, in 15-minute steps. The new time is saved on that occurrence and in Google. Month stays click-to-open. Habit blocks are not draggable. A flexible slot can be placed again by the next Generate.
 
 ## Later
 
@@ -120,8 +120,7 @@ Open Phase 5 items live in **Now / Next / Then / Later** above.
 
 ## Recommended next steps
 
-1. Drag-and-drop on schedule / event calendars.
-2. Later extras (AI recommendations, reminders, stats, integrations, parked polish).
-3. Add Playwright (or similar) **E2E** for voice create, Done vs calendar, Generate/Undo; expand unit tests as you touch flows; optional custom subdomain (see [deploy](deploy.md)).
-4. **Last:** in-app product guide, once the app is ready.
-5. Update this file when scope changes.
+1. Later extras (AI recommendations, reminders, stats, integrations, parked polish).
+2. Add Playwright (or similar) **E2E** for voice create, Done vs calendar, Generate/Undo; expand unit tests as you touch flows; optional custom subdomain (see [deploy](deploy.md)).
+3. **Last:** in-app product guide, once the app is ready.
+4. Update this file when scope changes.

@@ -10,7 +10,7 @@ Related docs: [task-scheduling-test-matrix.md](task-scheduling-test-matrix.md) (
 
 Protect the daily loop: **sign in → settings/phases gate → capture a task → Generate / Undo / Clear → Now/Done → habits**. Every live HTTP route and every user-facing screen has named cases. Engine placement math stays in unit tests; E2E asserts the HTTP/UI contract around that math.
 
-Out of scope until a later cycle: snooze, text-add, drag-and-drop, in-app guide, real Google OAuth in CI, real Groq in CI.
+Out of scope until a later cycle: snooze, text-add, in-app guide, real Google OAuth in CI, real Groq in CI. Day/week drag-and-drop math and the move plan are unit-tested (`eventDrag.spec.ts`, `move-displayed-event.util.spec.ts`, `displayed-event-move.service.spec.ts`). A browser drag needs a live Google event, which CI does not have.
 
 ---
 

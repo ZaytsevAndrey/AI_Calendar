@@ -110,6 +110,7 @@ Protected with JWT (`JwtAuthGuard`).
 | POST | `/schedule` | Create a scheduled slot |
 | PATCH | `/schedule/:id` | Change times |
 | DELETE | `/schedule/:id` | Delete |
+| POST | `/schedule/move-event` | Move or resize one displayed block. Body: `googleEventId`, `originalStart`, `originalEnd`, `start`, `end`, optional `calendarId` and `recurringEventId`. Updates that occurrence and Google. Does not enqueue replan. Returns `{ kind: "fixed" \| "slot" \| "google" }`. A habit block is 400. |
 | POST | `/schedule/preview` | Dry-run of Calendar Generate. Returns `{ diff, warnings, errors }` and does not write slots, Google, or undo. |
 | POST | `/schedule/generate` | Enqueues Calendar generate (async); returns `{ jobId, status, message }` — poll `GET /schedule-jobs/:id`. Stores an undo snapshot. |
 | DELETE | `/schedule` | Clear still-open app-generated local slots through the Settings horizon, and leftover upcoming events on the app Google calendar. Fully ended blocks stay. Drops Generate undo. Returns `{ deleted: number }`. |

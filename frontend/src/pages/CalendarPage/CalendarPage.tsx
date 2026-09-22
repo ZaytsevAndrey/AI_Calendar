@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { useDispatch } from 'react-redux';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
     useEventsForDay,
@@ -26,7 +27,8 @@ import { NowStrip } from 'modules/now/components/NowStrip';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
 import { findTaskForGoogleEvent } from 'modules/calendar/findTaskForGoogleEvent';
-import { useGetEventsQuery as useGetTasksQuery } from 'api/eventTasksApi';
+import { eventTasksApi, useGetEventsQuery as useGetTasksQuery } from 'api/eventTasksApi';
+import { eventsApi } from 'api/eventsApi';
 import { useGetHabitsQuery } from 'api/habitsApi';
 import { isHabitGoogleEvent } from 'modules/habits/habitBlocks';
 import { VoiceTaskButton } from 'modules/voice/components/VoiceTaskButton';
@@ -53,6 +55,7 @@ const toggleBtn = (active: boolean) =>
     }`;
 
 const CalendarPage: React.FC = () => {
+    const dispatch = useDispatch();
     const [currentView, setCurrentView] = useState<CalendarView>('week');
     const [currentDate, setCurrentDate] = useState(new Date());
     const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
@@ -217,6 +220,41 @@ const CalendarPage: React.FC = () => {
         setEventFormDialog({ open: false, event: null });
     };
 
+    const handleEventTimeChange = async (
+        event: GoogleCalendarEvent,
+        start: Date,
+        end: Date,
+    ) => {
+        const originalStart = eventStartDate(event);
+        const originalEnd = eventEndDate(event);
+        if (!originalStart || !originalEnd) {
+            throw new Error('Event has no time range');
+        }
+        try {
+            await ScheduleApi.moveDisplayedEvent({
+                googleEventId: event.id,
+                calendarId: event.calendarId,
+                recurringEventId: event.recurringEventId,
+                originalStart: originalStart.toISOString(),
+                originalEnd: originalEnd.toISOString(),
+                start: start.toISOString(),
+                end: end.toISOString(),
+            });
+            dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+            dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));
+            showSuccessToast({
+                title: 'Event moved',
+                detail: formatDateTimeRange(start.toISOString(), end.toISOString()),
+            });
+        } catch (err) {
+            showErrorToast({
+                title: 'Could not move event',
+                detail: extractApiErrorMessage(err),
+            });
+            throw err;
+        }
+    };
+
     const handleCreateForDate = (day: Date) => {
         const { start, end } = civilDayStartEndIso(ymdFromLocalDate(day), timeZone);
         openCreate({
@@ -374,6 +412,7 @@ const CalendarPage: React.FC = () => {
                             events={displayEvents}
                             onEditEvent={handleEditEvent}
                             onCreateForDate={handleCreateForDate}
+                            onEventTimeChange={handleEventTimeChange}
                         />
                     </div>
                     <div className="flex h-[min(18rem,38vh)] min-h-0 w-full shrink-0 flex-col overflow-hidden xl:h-auto xl:w-[24rem]">

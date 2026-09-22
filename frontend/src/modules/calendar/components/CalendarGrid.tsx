@@ -4,14 +4,15 @@ import { getEventColor } from '../hooks/useCalendar';
 import { useTimePhasesForDate, getPhaseByTime } from '../../phases/hooks/usePhases';
 import { useGetUserSettingsQuery } from '../../../api/userSettingsApi';
 import { useGetHabitsQuery } from '../../../api/habitsApi';
+import CalendarTimeGrid from './CalendarTimeGrid';
 import {
     CalendarView,
     chipLabel,
     clockToMinutes,
-    eventsForDay,
-    eventsForHourSlot,
     getDaysInView,
     gridEventsForDay,
+    isAllDayEvent,
+    isEventInSleepHours,
     tooltipText,
     wakingHourSlots,
 } from '../calendarView';
@@ -32,6 +33,11 @@ interface CalendarGridProps {
     events: GoogleCalendarEvent[];
     onEditEvent?: (eventId: string) => void;
     onCreateForDate?: (day: Date) => void;
+    onEventTimeChange?: (
+        event: GoogleCalendarEvent,
+        start: Date,
+        end: Date,
+    ) => Promise<void>;
 }
 
 const CalendarGrid: React.FC<CalendarGridProps> = ({
@@ -40,6 +46,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     events,
     onEditEvent,
     onCreateForDate,
+    onEventTimeChange,
 }) => {
     const { data: timePhases = [] } = useTimePhasesForDate(date);
     const { data: userSettings } = useGetUserSettingsQuery();
@@ -131,12 +138,24 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
         );
     };
 
-    if (view === 'day') {
-        const dayEvents = eventsForDay(visibleEvents, days[0]);
-        const timeSlots = wakingHourSlots(sleepWindow).map((time) => ({
-            time,
-            phase: getPhaseForTime(time),
+    if (view !== 'month') {
+        const slots = wakingHourSlots(sleepWindow);
+        const dayStartMin = slots.length ? clockToMinutes(slots[0]) : 7 * 60;
+        const dayEndMin =
+            (slots.length ? clockToMinutes(slots[slots.length - 1]) : 22 * 60) + 60;
+        const hourBands = slots.map((time) => ({
+            minutes: clockToMinutes(time),
+            label: time,
+            color: getPhaseForTime(time)?.color,
         }));
+        const timed = visibleEvents.filter(
+            (event) => !!event.start?.dateTime && !isEventInSleepHours(event, sleepWindow),
+        );
+        const allDay = visibleEvents.filter((event) => isAllDayEvent(event));
+        const habits = habitBlocks.map((block) => {
+            const habit = (habitsData?.habits ?? []).find((item) => item.id === block.habitId);
+            return { ...block, durationMinutes: habit?.blockMinutes ?? 30 };
+        });
 
         return (
             <>
@@ -164,89 +183,28 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                     </div>
                 )}
 
-                <HabitDaySection date={ymdFromLocalDate(days[0])} />
-
-                <div className="min-h-0 flex-1 overflow-y-auto">
-                    {timeSlots.map((slot, index) => {
-                        const hour = parseInt(slot.time.split(':')[0], 10);
-                        const eventsInSlot = eventsForHourSlot(dayEvents, hour, sleepWindow);
-
-                        return (
-                            <div
-                                key={index}
-                                role={eventsInSlot.length === 0 ? 'button' : undefined}
-                                tabIndex={eventsInSlot.length === 0 ? 0 : undefined}
-                                className="relative flex min-h-[44px] border-b border-ide-border transition-colors hover:bg-white/[0.03]"
-                                style={{
-                                    backgroundColor: slot.phase ? `${slot.phase.color}14` : undefined,
-                                }}
-                                onClick={() => {
-                                    if (eventsInSlot.length === 0) onCreateForDate?.(days[0]);
-                                }}
-                                onKeyDown={(e) => {
-                                    if (eventsInSlot.length === 0 && (e.key === 'Enter' || e.key === ' ')) {
-                                        e.preventDefault();
-                                        onCreateForDate?.(days[0]);
-                                    }
-                                }}
-                            >
-                                <div className="flex w-[60px] shrink-0 items-center justify-center border-r border-ide-border bg-ide-surface p-2">
-                                    <span className="text-xs text-ide-muted">{slot.time}</span>
-                                </div>
-                                <div className="flex w-[120px] shrink-0 items-center border-r border-ide-border bg-ide-surface p-2">
-                                    {slot.phase && (
-                                        <div className="flex items-center gap-1">
-                                            <span
-                                                className="h-2 w-2 shrink-0 rounded-full border border-ide-border"
-                                                style={{ backgroundColor: slot.phase.color }}
-                                            />
-                                            <span className="text-xs text-ide-muted">{slot.phase.name}</span>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="flex flex-1 flex-col gap-1 p-2">
-                                    {habitBlocks
-                                        .filter(
-                                            (block) =>
-                                                block.ymd === ymdFromLocalDate(days[0]) &&
-                                                Math.floor(block.startMinutes / 60) === hour,
-                                        )
-                                        .map((block) => (
-                                            <HabitBlockButton
-                                                key={block.id}
-                                                block={block}
-                                                showTime={false}
-                                                onOpen={setHabitDate}
-                                            />
-                                        ))}
-                                    {eventsInSlot.map((event) => (
-                                        <div
-                                            key={event.id}
-                                            title={tooltipText(event)}
-                                            role="button"
-                                            tabIndex={0}
-                                            className="cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded border border-white/30 px-1.5 py-1 text-xs text-white"
-                                            style={{ backgroundColor: getEventColor(event) }}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onEditEvent?.(event.id);
-                                            }}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' || e.key === ' ') {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    onEditEvent?.(event.id);
-                                                }
-                                            }}
-                                        >
-                                            {chipLabel(event)}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
+                {view === 'day' ? <HabitDaySection date={ymdFromLocalDate(days[0])} /> : null}
+                <p className="mb-2 shrink-0 text-xs text-ide-muted">
+                    Drag a block or its top/bottom edge. Step: 15 min. Click the center to edit.
+                </p>
+                <CalendarTimeGrid
+                    days={days}
+                    events={timed}
+                    allDayEvents={allDay}
+                    habits={habits}
+                    dayStartMin={dayStartMin}
+                    dayEndMin={dayEndMin}
+                    hourBands={hourBands}
+                    onEditEvent={onEditEvent}
+                    onCreateForDate={onCreateForDate}
+                    onEventTimeChange={onEventTimeChange}
+                    onOpenHabit={setHabitDate}
+                    renderDayExtra={
+                        view === 'week'
+                            ? (day) => <HabitDayDots day={day} onOpen={setHabitDate} />
+                            : undefined
+                    }
+                />
             </div>
             {habitDialog}
             </>
