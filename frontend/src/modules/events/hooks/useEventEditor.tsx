@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import {
   useCreateEventMutation,
   useSkipOccurrenceMutation,
@@ -7,13 +7,16 @@ import {
 import { useGetAllPhasesQuery } from 'api/phasesApi';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import { CreateTaskDTO, TaskDTO, UpdateTaskDTO } from 'api/tasks.api';
-import TaskForm from 'modules/tasks/components/TaskForm';
 import { formValuesFromCreatePayload } from 'modules/tasks/task-wizard/buildPayload';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { Modal } from '../../../ui/Modal';
 import { showErrorToast, showSuccessToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 import { describeTaskToastDetail } from '../../../utils/formatDate';
+
+const TaskForm = lazy(
+  () => import(/* webpackChunkName: "task-form" */ 'modules/tasks/components/TaskForm'),
+);
 
 export type TaskOccurrenceContext = {
   startIso: string;
@@ -178,7 +181,7 @@ export function useEventEditor() {
       maxWidthClass="max-w-xl"
       footer={null}
     >
-      <div>
+      <Suspense fallback={<div className="px-1 py-6 text-sm text-ide-muted">Loading…</div>}>
         <TaskForm
           key={
             editingEvent
@@ -199,7 +202,7 @@ export function useEventEditor() {
           onSkipOccurrence={canSkipOccurrence ? handleSkipOccurrence : undefined}
           mode={editingEvent ? 'edit' : 'create'}
         />
-      </div>
+      </Suspense>
     </Modal>
   );
 

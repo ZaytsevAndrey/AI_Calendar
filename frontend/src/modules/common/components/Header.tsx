@@ -7,6 +7,7 @@ import {
     Flame,
     Settings,
 } from 'lucide-react';
+import { prefetchRoute } from 'routeChunks';
 
 const linkBase =
     'whitespace-nowrap rounded-lg px-3 py-2.5 text-sm font-medium text-ide-text transition min-h-[44px] inline-flex items-center gap-2';
@@ -46,6 +47,8 @@ const Header: React.FC = () => {
                             key={to}
                             to={to}
                             className={`${linkBase} ${active(match(location.pathname))}`}
+                            onMouseEnter={() => prefetchRoute(to)}
+                            onFocus={() => prefetchRoute(to)}
                         >
                             <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
                             {label}

@@ -1,87 +1,82 @@
-import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Suspense, useEffect } from 'react';
+import { useSelector } from 'react-redux';
+import { Navigate, Route, Routes } from 'react-router-dom';
 
-import LoginPage from 'pages/LoginPage';
-import EventsPage from 'pages/EventsPage';
-import PhasesPage from 'pages/PhasesPage/PhasesPage';
-import SettingsPage from 'pages/SettingsPage';
-import CalendarPage from 'pages/CalendarPage';
-import GoogleCallbackPage from 'modules/auth/pages/GoogleCallbackPage';
-import PhaseSetupPage from 'pages/PhaseSetupPage/PhaseSetupPage';
-import HabitsPage from 'pages/HabitsPage';
-
-import PublicRoute from 'modules/common/hocs/PublicRoute';
 import ProtectedRoute from 'modules/common/hocs/ProtectedRoute';
+import PublicRoute from 'modules/common/hocs/PublicRoute';
+import type { RootState } from 'store';
+import { routeChunks, type RouteChunk } from './routeChunks';
+
+function PageLoading() {
+    return (
+        <div className="page-shell-fill">
+            <div className="flex flex-1 items-center justify-center text-sm text-ide-muted">
+                Loading…
+            </div>
+        </div>
+    );
+}
+
+function LazyRoute({
+    chunk,
+    access,
+}: {
+    chunk: RouteChunk;
+    access: 'protected' | 'public' | 'open';
+}) {
+    const accessToken = useSelector((state: RootState) => state.auth?.accessToken);
+
+    // Start the chunk while the settings gate is still resolving.
+    useEffect(() => {
+        if (access === 'protected' && !accessToken) {
+            return;
+        }
+        void chunk.load();
+    }, [access, accessToken, chunk]);
+
+    const page = (
+        <Suspense fallback={<PageLoading />}>
+            <chunk.Component />
+        </Suspense>
+    );
+
+    if (access === 'protected') {
+        return <ProtectedRoute>{page}</ProtectedRoute>;
+    }
+
+    if (access === 'public') {
+        return <PublicRoute>{page}</PublicRoute>;
+    }
+
+    return page;
+}
 
 const AppRoutes = () => {
     return (
         <div className="flex h-full min-h-0 flex-col">
-        <Routes>
-            <Route
-                path="/"
-                element={
-                    <ProtectedRoute>
-                        <CalendarPage />
-                    </ProtectedRoute>
-                }
-            />
-            <Route
-                path="/tasks"
-                element={
-                    <ProtectedRoute>
-                        <EventsPage />
-                    </ProtectedRoute>
-                }
-            />
-            <Route path="/events" element={<Navigate to="/tasks" replace />} />
-            <Route path="/schedule" element={<Navigate to="/" replace />} />
-            <Route path="/calendar" element={<Navigate to="/" replace />} />
-            <Route
-                path="/phases"
-                element={
-                    <ProtectedRoute>
-                        <PhasesPage />
-                    </ProtectedRoute>
-                }
-            />
-            <Route
-                path="/habits"
-                element={
-                    <ProtectedRoute>
-                        <HabitsPage />
-                    </ProtectedRoute>
-                }
-            />
-            <Route
-                path="/settings"
-                element={
-                    <ProtectedRoute>
-                        <SettingsPage />
-                    </ProtectedRoute>
-                }
-            />
-            <Route
-                path="/setup/phases"
-                element={
-                    <ProtectedRoute>
-                        <PhaseSetupPage />
-                    </ProtectedRoute>
-                }
-            />
-            <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
-            <Route
-                path="/login"
-                element={
-                    <PublicRoute>
-                        <LoginPage />
-                    </PublicRoute>
-                }
-            />
-            <Route path="/register" element={<Navigate to="/login" replace />} />
-            <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
-            <Route path="/reset-password" element={<Navigate to="/login" replace />} />
-            <Route path="*" element={ <Navigate to="/" /> } />
-        </Routes>
+            <Routes>
+                <Route path="/" element={<LazyRoute chunk={routeChunks.calendar} access="protected" />} />
+                <Route path="/tasks" element={<LazyRoute chunk={routeChunks.tasks} access="protected" />} />
+                <Route path="/events" element={<Navigate to="/tasks" replace />} />
+                <Route path="/schedule" element={<Navigate to="/" replace />} />
+                <Route path="/calendar" element={<Navigate to="/" replace />} />
+                <Route path="/phases" element={<LazyRoute chunk={routeChunks.phases} access="protected" />} />
+                <Route path="/habits" element={<LazyRoute chunk={routeChunks.habits} access="protected" />} />
+                <Route path="/settings" element={<LazyRoute chunk={routeChunks.settings} access="protected" />} />
+                <Route
+                    path="/setup/phases"
+                    element={<LazyRoute chunk={routeChunks.phaseSetup} access="protected" />}
+                />
+                <Route
+                    path="/auth/google/callback"
+                    element={<LazyRoute chunk={routeChunks.googleCallback} access="open" />}
+                />
+                <Route path="/login" element={<LazyRoute chunk={routeChunks.login} access="public" />} />
+                <Route path="/register" element={<Navigate to="/login" replace />} />
+                <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
+                <Route path="/reset-password" element={<Navigate to="/login" replace />} />
+                <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
         </div>
     );
 };

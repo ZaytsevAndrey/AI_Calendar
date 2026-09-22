@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useState } from 'react';
 import { GoogleCalendarEvent, CreateEventParams, UpdateEventParams } from '../../../api/google-calendar.api';
 import { useTimePhases, getPhaseByTime, useSleepTimePhases } from '../../phases/hooks/usePhases';
 import { useGetUserSettingsQuery } from '../../../api/userSettingsApi';
-import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { Modal } from '../../../ui/Modal';
 import { toLocalDateTimeInput } from '../../../utils/formatDate';
 import { GoogleEventSettingsFields } from './GoogleEventSettingsFields';
+
+const EmojiPickerPanel = lazy(
+    () => import(/* webpackChunkName: "emoji-picker" */ './EmojiPickerPanel'),
+);
 
 const PRIORITIES = [
     { value: 'urgent', label: 'Urgent' },
@@ -545,13 +548,18 @@ const EventForm: React.FC<EventFormProps> = ({
                                     </button>
                                     {showEmojiPicker ? (
                                         <div className="w-full">
-                                            <EmojiPicker
-                                                theme={Theme.DARK}
-                                                onEmojiClick={(ev: { emoji: string }) => {
-                                                    setEmoji(ev.emoji);
-                                                    setShowEmojiPicker(false);
-                                                }}
-                                            />
+                                            <Suspense
+                                                fallback={
+                                                    <span className="text-xs text-ide-muted">Loading…</span>
+                                                }
+                                            >
+                                                <EmojiPickerPanel
+                                                    onPick={(next) => {
+                                                        setEmoji(next);
+                                                        setShowEmojiPicker(false);
+                                                    }}
+                                                />
+                                            </Suspense>
                                         </div>
                                     ) : null}
                                 </div>

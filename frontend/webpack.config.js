@@ -46,9 +46,16 @@ export default async (_env, argv) => {
         devtool: isProd ? false : 'source-map',
         output: {
             path: path.resolve(__dirname, 'dist'),
-            filename: 'bundle.js',
+            filename: isProd ? '[name].[contenthash:8].js' : '[name].js',
+            chunkFilename: isProd ? '[name].[contenthash:8].js' : '[name].js',
             publicPath: '/',
             clean: true,
+        },
+        optimization: {
+            runtimeChunk: 'single',
+            splitChunks: {
+                chunks: 'all',
+            },
         },
         resolve: {
             extensions: ['.tsx', '.ts', '.js'],

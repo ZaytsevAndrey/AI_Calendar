@@ -1,10 +1,13 @@
 import { useGetAllPhasesQuery, useCreatePhaseMutation, useUpdatePhaseMutation, useDeletePhaseMutation } from 'api/phasesApi';
-import React, { useCallback, useState } from 'react';
-import PhaseForm from 'modules/phases/components/PhaseForm';
+import React, { lazy, Suspense, useCallback, useState } from 'react';
 import type { PhaseDTO } from 'api/phases.api';
 import PhasesCalendar from 'modules/phases/components/PhasesCalendar';
 import { showErrorToast } from 'utils/toast';
 import { Modal } from '../../ui/Modal';
+
+const PhaseForm = lazy(
+    () => import(/* webpackChunkName: "phase-form" */ 'modules/phases/components/PhaseForm'),
+);
 
 const PhasesPage: React.FC = () => {
     const { data: phases = [], isLoading, error } = useGetAllPhasesQuery();
@@ -102,14 +105,18 @@ const PhasesPage: React.FC = () => {
                 title={editingPhase ? 'Edit Phase' : 'Create Phase'}
                 maxWidthClass="max-w-lg"
             >
-                <PhaseForm
-                    initialData={editingPhase}
-                    onSubmit={handleFormSubmit}
-                    isSubmitting={isCreating || isUpdating}
-                    onCancel={() => setShowForm(false)}
-                    onDelete={editingPhase ? handleDeleteFromModal : undefined}
-                    isDeleting={isDeleting}
-                />
+                <Suspense
+                    fallback={<div className="px-1 py-6 text-sm text-ide-muted">Loading…</div>}
+                >
+                    <PhaseForm
+                        initialData={editingPhase}
+                        onSubmit={handleFormSubmit}
+                        isSubmitting={isCreating || isUpdating}
+                        onCancel={() => setShowForm(false)}
+                        onDelete={editingPhase ? handleDeleteFromModal : undefined}
+                        isDeleting={isDeleting}
+                    />
+                </Suspense>
             </Modal>
 
             <div className="min-h-0 flex-1 overflow-y-auto">

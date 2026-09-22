@@ -1,10 +1,18 @@
 import axios from 'api/axios';
-import { store } from 'store';
 
 import { refreshToken } from 'modules/auth/actions/refreshToken';
 import { clientLogout } from 'modules/auth/actions/logoutActions';
 
 let refreshInFlight: Promise<void> | null = null;
+
+type AppStore = {
+    dispatch: (action: unknown) => Promise<unknown> | unknown;
+};
+
+function loadStore(): Promise<AppStore> {
+    // Imported on use so API slices can register on the store without a startup cycle.
+    return import('store').then((mod) => mod.store as AppStore);
+}
 
 function isAuthBootstrapRequest(url: string): boolean {
     return (
@@ -17,8 +25,8 @@ function isAuthBootstrapRequest(url: string): boolean {
 
 async function ensureFreshSession(): Promise<void> {
     if (!refreshInFlight) {
-        refreshInFlight = store
-            .dispatch<any>(refreshToken())
+        refreshInFlight = loadStore()
+            .then((store) => store.dispatch(refreshToken()))
             .then(() => undefined)
             .finally(() => {
                 refreshInFlight = null;
@@ -48,7 +56,8 @@ export default async function apiCall(config: any) {
                 };
                 return await axios(nextConfig);
             } catch {
-                store.dispatch<any>(clientLogout(true));
+                const store = await loadStore();
+                store.dispatch(clientLogout(true));
                 throw error;
             }
         }
