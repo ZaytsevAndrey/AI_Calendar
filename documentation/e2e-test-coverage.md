@@ -287,6 +287,7 @@ Silent replan: `jobId` on create/update when `shouldReplanAfterSave`. Unschedule
 | U-TSK-013 | U | P1 | Expand Google options | location/color/visibility/reminders | Persisted |
 | U-TSK-014 | U | P1 | Filter active / todo / in_progress / completed / canceled / all | Change filter | List matches |
 | U-TSK-015 | U | P1 | Sort name / priority / deadline / duration | Change sort | Order matches |
+| U-TSK-020 | U | P1 | Search inside Unscheduled or Scheduled | Type in one box | The other section is unchanged |
 | U-TSK-016 | U | P1 | Delete confirm | Cancel | Still there |
 | U-TSK-017 | U | P1 | Delete confirm | Confirm | Toast `Task deleted`; gone |
 | U-TSK-018 | U | P1 | API error on save | Fail POST | Toast `Could not create task` + API detail |

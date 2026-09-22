@@ -235,4 +235,38 @@ test.describe('P1 tasks UI', () => {
     expect(task?.googleVisibility).toBe('private');
     expect(task?.googleReminders?.useDefault).toBe(false);
   });
+
+  test('U-TSK-020 search in one section leaves the other list alone', async ({ page, auth, request }) => {
+    await completeOpenTasks(request, auth.onboarded.access_token);
+    const stamp = Date.now();
+    const inboxName = `P1 ${stamp} inbox milk`;
+    const scheduledName = `P1 ${stamp} plan milk`;
+    expectOk(
+      await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
+        name: inboxName,
+        isUnscheduled: true,
+      }),
+    );
+    expectOk(
+      await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
+        name: scheduledName,
+        eventType: 'admin',
+        estimatedTimeInMinutes: 30,
+      }),
+    );
+
+    await openAs(page, auth.onboarded, '/tasks');
+    const unscheduled = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Unscheduled' }) });
+    const scheduled = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Scheduled' }) });
+
+    await page.getByLabel('Search unscheduled').fill('inbox');
+    await expect(unscheduled.getByRole('heading', { name: inboxName })).toBeVisible();
+    await expect(scheduled.getByRole('heading', { name: scheduledName })).toBeVisible();
+
+    await page.getByLabel('Search scheduled').fill('plan');
+    await expect(scheduled.getByRole('heading', { name: scheduledName })).toBeVisible();
+    await page.getByLabel('Search scheduled').fill('inbox');
+    await expect(scheduled.getByRole('heading', { name: scheduledName })).toHaveCount(0);
+    await expect(unscheduled.getByRole('heading', { name: inboxName })).toBeVisible();
+  });
 });

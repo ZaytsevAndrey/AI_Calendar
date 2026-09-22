@@ -46,7 +46,7 @@ Product extras (ship only if the loop above is trustworthy):
 - [x] **AI schedule recommendations** (Sep 2026). Calendar → Schedule → **Suggestions** asks Groq for up to five notes on the next 7 days (overload, gap, phase mismatch, deadline risk). Nothing is saved or applied. An empty calendar skips the model. A Google outage still returns suggestions from local tasks.
 - [x] **PWA reminders** (Sep 2026). Settings opt-in (off by default). Web Push once in the half hour before each timed Now/Next block, the same window for a habit with a clock time, and one wake-time note for habits without a block. Already checked habits stay quiet. `POST /reminders/tick` about every 30 minutes wakes the free API and lets it sleep between calls. A start that already passed is not sent. iPhone needs Add to Home Screen.
 - [x] **Voice beyond create** (Sep 2026). The same mic completes, skips, or reschedules the current or named task (uk/en/ru). Done on a series skips today's occurrence. An open slot moves like a drag; no slot updates the window and replans. One question, then a refusal. Settings **Ask before voice commands** (off by default) confirms first. Create stays immediate.
-- [ ] **Search / filters on tasks** — name, status, phase, fixed vs flexible, overdue.
+- [x] **Search / filters on tasks** (Sep 2026). Tasks page only, client-side, and the two sections do not share controls. **Unscheduled:** name search, status, overdue. **Scheduled:** name search, status, phase (any / one phase / no phase), schedule type (fixed / flexible / recurring), overdue, and the existing sort. Filters combine. Overdue means a past deadline on a task that is not completed or canceled. Empty search and “any” hide nothing.
 - [ ] **Soft buffers** between fixed events (travel / reset minutes the engine must not fill).
 - [ ] **Daily briefing** — morning summary in-app (later Telegram): today, risks, overdue.
 - [ ] **UI language (uk / en)** — voice already understands uk/en/ru; the chrome is English-only.
@@ -120,7 +120,7 @@ Open Phase 5 items live in **Now / Next / Then / Later** above.
 
 ## Recommended next steps
 
-1. Later extras (search/filters, soft buffers, daily briefing, stats, integrations, parked polish).
+1. Later extras (soft buffers, daily briefing, stats, integrations, parked polish).
 2. Add Playwright (or similar) **E2E** for voice create, Done vs calendar, Generate/Undo; expand unit tests as you touch flows; optional custom subdomain (see [deploy](deploy.md)).
 3. **Last:** in-app product guide, once the app is ready.
 4. Update this file when scope changes.

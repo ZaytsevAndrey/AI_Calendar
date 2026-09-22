@@ -1,12 +1,19 @@
 import React, { useState } from 'react';
 import { useGetEventsQuery, useDeleteEventMutation, useUpdateEventMutation } from 'api/eventTasksApi';
+import { useGetAllPhasesQuery } from 'api/phasesApi';
 import EventList from 'modules/events/components/EventList';
+import TaskSectionFilters from 'modules/events/components/TaskSectionFilters';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
 import { VoiceTaskButton } from 'modules/voice/components/VoiceTaskButton';
 import { VoiceTaskSheet } from 'modules/voice/components/VoiceTaskSheet';
 import { useVoiceTask } from 'modules/voice/hooks/useVoiceTask';
-import { hasTaskAlreadyEnded, isCurrentTask } from 'modules/events/utils/isCurrentTask';
 import { deadlineTone } from 'modules/events/utils/deadlineTone';
+import {
+  filterScheduledTasks,
+  filterUnscheduledTasks,
+  type ScheduleModeFilter,
+  type TaskStatusFilter,
+} from 'modules/events/utils/taskListFilters';
 import { Modal } from '../../ui/Modal';
 import { showErrorToast, showSuccessToast } from '../../utils/toast';
 import { extractApiErrorMessage } from '../../utils/extractApiErrorMessage';
@@ -61,7 +68,14 @@ function sortUnscheduled(list: TaskDTO[]): TaskDTO[] {
 
 const TasksPage: React.FC = () => {
   const [sortField, setSortField] = useState<SortField>('deadline');
-  const [filterStatus, setFilterStatus] = useState<string>('active');
+  const [filterStatus, setFilterStatus] = useState<TaskStatusFilter>('active');
+  const [scheduledQuery, setScheduledQuery] = useState('');
+  const [phaseId, setPhaseId] = useState('any');
+  const [scheduleMode, setScheduleMode] = useState<ScheduleModeFilter>('any');
+  const [scheduledOverdue, setScheduledOverdue] = useState(false);
+  const [inboxQuery, setInboxQuery] = useState('');
+  const [inboxStatus, setInboxStatus] = useState<TaskStatusFilter>('active');
+  const [inboxOverdue, setInboxOverdue] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string | null; name: string }>({
     open: false,
     id: null,
@@ -69,6 +83,7 @@ const TasksPage: React.FC = () => {
   });
 
   const { data: events = [], isLoading: isLoadingEvents } = useGetEventsQuery();
+  const { data: phases = [] } = useGetAllPhasesQuery();
   const [deleteEvent] = useDeleteEventMutation();
   const [updateEvent] = useUpdateEventMutation();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -79,8 +94,19 @@ const TasksPage: React.FC = () => {
     onSufficient: openCreateFromPrefill,
   });
 
-  const scheduledTasks = events.filter((event) => !event.isUnscheduled);
-  const sortedEvents = sortTasks(scheduledTasks, sortField);
+  const scheduledFilters = {
+    query: scheduledQuery,
+    status: filterStatus,
+    overdueOnly: scheduledOverdue,
+    phaseId,
+    mode: scheduleMode,
+  };
+  const inboxFilters = {
+    query: inboxQuery,
+    status: inboxStatus,
+    overdueOnly: inboxOverdue,
+  };
+  const sortedEvents = sortTasks(filterScheduledTasks(events, scheduledFilters), sortField);
 
   const markDone = (task: TaskDTO) => {
     setBusyId(task.id);
@@ -124,19 +150,9 @@ const TasksPage: React.FC = () => {
       });
   };
 
-  const unscheduledInbox = sortUnscheduled(
-    events.filter((event) => event.isUnscheduled && isCurrentTask(event)),
-  );
-
-  const filteredEvents = sortedEvents.filter((event) => {
-    if (filterStatus === 'all') return true;
-    if (filterStatus === 'active') return isCurrentTask(event);
-    if (event.status !== filterStatus) return false;
-    if (filterStatus === 'todo' || filterStatus === 'in_progress') {
-      return !hasTaskAlreadyEnded(event);
-    }
-    return true;
-  });
+  const unscheduledInbox = sortUnscheduled(filterUnscheduledTasks(events, inboxFilters));
+  const inboxFiltersNarrow =
+    inboxQuery.trim() !== '' || inboxStatus !== 'active' || inboxOverdue;
 
   return (
     <div className="page-shell-fill">
@@ -163,55 +179,30 @@ const TasksPage: React.FC = () => {
         </div>
       </header>
 
-      <div className="filter-bar shrink-0">
-        <div className="w-full sm:max-w-xs">
-          <label htmlFor="statusFilter" className="ui-label">
-            Status
-          </label>
-          <select
-            id="statusFilter"
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="ui-select"
-          >
-            <option value="active">Active</option>
-            <option value="todo">To Do</option>
-            <option value="in_progress">In Progress</option>
-            <option value="completed">Completed</option>
-            <option value="canceled">Canceled</option>
-            <option value="all">All (including past)</option>
-          </select>
-        </div>
-        <div className="w-full sm:max-w-xs">
-          <label htmlFor="sortField" className="ui-label">
-            Sort by
-          </label>
-          <select
-            id="sortField"
-            value={sortField}
-            onChange={(e) => setSortField(e.target.value as SortField)}
-            className="ui-select"
-          >
-            <option value="deadline">Deadline</option>
-            <option value="priority">Priority</option>
-            <option value="name">Name</option>
-            <option value="estimatedTimeInMinutes">Duration</option>
-          </select>
-        </div>
-      </div>
-
       <div className="page-scroll space-y-6">
         <section>
-          <div className="mb-3 flex items-end justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-medium uppercase tracking-wide text-ide-muted">Unscheduled</h2>
-              <p className="text-xs text-ide-muted">No time slot. Mark done or schedule when you know when.</p>
-            </div>
+          <div className="mb-3">
+            <h2 className="text-sm font-medium uppercase tracking-wide text-ide-muted">Unscheduled</h2>
+            <p className="text-xs text-ide-muted">No time slot. Mark done or schedule when you know when.</p>
           </div>
+          <TaskSectionFilters
+            idPrefix="inbox"
+            query={inboxQuery}
+            onQueryChange={setInboxQuery}
+            status={inboxStatus}
+            onStatusChange={setInboxStatus}
+            overdueOnly={inboxOverdue}
+            onOverdueOnlyChange={setInboxOverdue}
+            searchAriaLabel="Search unscheduled"
+            statusAriaLabel="Unscheduled tasks"
+            overdueAriaLabel="Overdue unscheduled"
+          />
           {isLoadingEvents ? (
             <div className="loading">Loading tasks…</div>
           ) : unscheduledInbox.length === 0 ? (
-            <p className="text-sm text-ide-muted">No unscheduled tasks.</p>
+            <p className="text-sm text-ide-muted">
+              {inboxFiltersNarrow ? 'No unscheduled tasks match these filters.' : 'No unscheduled tasks.'}
+            </p>
           ) : (
             <EventList
               events={unscheduledInbox}
@@ -228,8 +219,26 @@ const TasksPage: React.FC = () => {
 
         <section>
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-ide-muted">Scheduled</h2>
+          <TaskSectionFilters
+            idPrefix="scheduled"
+            query={scheduledQuery}
+            onQueryChange={setScheduledQuery}
+            status={filterStatus}
+            onStatusChange={setFilterStatus}
+            overdueOnly={scheduledOverdue}
+            onOverdueOnlyChange={setScheduledOverdue}
+            searchAriaLabel="Search scheduled"
+            overdueAriaLabel="Overdue scheduled"
+            phases={phases}
+            phaseId={phaseId}
+            onPhaseIdChange={setPhaseId}
+            mode={scheduleMode}
+            onModeChange={setScheduleMode}
+            sortField={sortField}
+            onSortFieldChange={setSortField}
+          />
           <EventList
-            events={filteredEvents}
+            events={sortedEvents}
             onEdit={openEdit}
             onDelete={requestDelete}
             onCreate={() => openCreate()}
