@@ -260,4 +260,94 @@ describe('Settings and phases API e2e', () => {
     });
     expect(removed.statusCode).toBe(200);
   });
+
+  it('A-PH-018 apply-preset creates lifestyle blocks and hides Focus', async () => {
+    const { token } = await seedUser(ctx.app);
+    await api(ctx.app, 'GET', '/user-settings', { token });
+    await api(ctx.app, 'PATCH', '/user-settings', {
+      token,
+      payload: { wakeTime: '08:00', sleepTime: '23:00' },
+    });
+    const created = await api(ctx.app, 'POST', '/phases/apply-preset', {
+      token,
+      payload: { presetId: 'working', weekDays: [1, 2, 3, 4, 5] },
+    });
+    expect([200, 201]).toContain(created.statusCode);
+    const phases = created.json() as Array<{
+      name: string;
+      type: string;
+      startTime: string;
+      endTime: string;
+      weekDays: number[] | null;
+    }>;
+    expect(phases.some((phase) => phase.name === 'Focus hours')).toBe(false);
+    const deep = phases.find((phase) => phase.name === 'Deep work');
+    const admin = phases.find((phase) => phase.name === 'Life admin');
+    expect(deep).toMatchObject({
+      type: 'time_phase',
+      startTime: expect.stringMatching(/^08:00/),
+      endTime: expect.stringMatching(/^11:00/),
+    });
+    expect(deep?.weekDays).toEqual([1, 2, 3, 4, 5]);
+    expect(admin).toMatchObject({
+      startTime: expect.stringMatching(/^21:00/),
+      endTime: expect.stringMatching(/^23:00/),
+    });
+    expect(phases.some((phase) => phase.name === 'Sleep' && phase.type === 'sleep_time')).toBe(
+      true,
+    );
+  });
+
+  it('A-PH-019 apply-preset replaces existing phases and refuses when a phase has tasks', async () => {
+    const { token } = await seedOnboardedUser(ctx.app);
+    await api(ctx.app, 'PATCH', '/user-settings', {
+      token,
+      payload: { wakeTime: '08:00', sleepTime: '23:00' },
+    });
+    const replaced = await api(ctx.app, 'POST', '/phases/apply-preset', {
+      token,
+      payload: { presetId: 'student', weekDays: [1, 2, 3, 4, 5] },
+    });
+    expect([200, 201]).toContain(replaced.statusCode);
+    const phases = replaced.json() as Array<{ id: string; name: string }>;
+    expect(phases.some((phase) => phase.name === 'Classes')).toBe(true);
+    expect(phases.some((phase) => phase.name === 'Deep work')).toBe(false);
+
+    const classes = phases.find((phase) => phase.name === 'Classes');
+    await api(ctx.app, 'POST', '/tasks', {
+      token,
+      payload: {
+        name: 'Lecture notes',
+        estimatedTimeInMinutes: 30,
+        phaseIds: [classes?.id],
+      },
+    });
+    await ctx.drainJobs();
+
+    const blocked = await api(ctx.app, 'POST', '/phases/apply-preset', {
+      token,
+      payload: { presetId: 'open', weekDays: [1, 2, 3, 4, 5] },
+    });
+    expect(blocked.statusCode).toBe(400);
+    const still = await api(ctx.app, 'GET', '/phases', { token });
+    const names = (still.json() as Array<{ name: string }>).map((phase) => phase.name);
+    expect(names).toContain('Classes');
+    expect(names).not.toContain('Morning focus');
+  });
+
+  it('A-PH-020 apply-preset without settings or an unknown id is 400', async () => {
+    const { token } = await seedUser(ctx.app);
+    const missingSettings = await api(ctx.app, 'POST', '/phases/apply-preset', {
+      token,
+      payload: { presetId: 'working' },
+    });
+    expect(missingSettings.statusCode).toBe(400);
+
+    await api(ctx.app, 'GET', '/user-settings', { token });
+    const unknown = await api(ctx.app, 'POST', '/phases/apply-preset', {
+      token,
+      payload: { presetId: 'nope' },
+    });
+    expect(unknown.statusCode).toBe(400);
+  });
 });

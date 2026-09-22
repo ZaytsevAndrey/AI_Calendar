@@ -5,8 +5,13 @@ import {
     useUpdateUserSettingsMutation,
     useCheckRequiredSettingsQuery,
 } from 'api/userSettingsApi';
-import { useSetupDefaultPhasesMutation } from 'api/phasesApi';
+import { useApplyPhasePresetMutation, useSetupDefaultPhasesMutation } from 'api/phasesApi';
 import { WeekDaysSelector } from 'modules/phases/components/WeekDaysSelector';
+import {
+    PhasePresetPicker,
+    messageFromApiError,
+    type PhasePresetChoice,
+} from 'modules/phases/components/PhasePresetPicker';
 import { showErrorToast } from 'utils/toast';
 
 const PhaseSetupPage: React.FC = () => {
@@ -22,10 +27,12 @@ const PhaseSetupPage: React.FC = () => {
 
     const [updateSettings, { isLoading: savingSettings }] = useUpdateUserSettingsMutation();
     const [setupDefaults, { isLoading: bootstrapping }] = useSetupDefaultPhasesMutation();
+    const [applyPreset, { isLoading: applyingPreset }] = useApplyPhasePresetMutation();
 
     const [wakeTime, setWakeTime] = useState('08:00');
     const [sleepTime, setSleepTime] = useState('23:00');
     const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]);
+    const [presetChoice, setPresetChoice] = useState<PhasePresetChoice>('defaults');
 
     useEffect(() => {
         if (settings?.wakeTime) setWakeTime(settings.wakeTime);
@@ -64,11 +71,27 @@ const PhaseSetupPage: React.FC = () => {
         }
         try {
             await updateSettings({ wakeTime, sleepTime }).unwrap();
-            await runBootstrap(selectedDays);
         } catch {
             showErrorToast({
                 title: 'Could not save settings',
                 detail: 'Wake and sleep times were not saved. Try again.',
+            });
+            return;
+        }
+        if (presetChoice === 'defaults') {
+            await runBootstrap(selectedDays);
+            return;
+        }
+        try {
+            await applyPreset({
+                presetId: presetChoice,
+                weekDays: selectedDays,
+            }).unwrap();
+            navigate('/', { replace: true });
+        } catch (err: unknown) {
+            showErrorToast({
+                title: 'Could not create phases',
+                detail: messageFromApiError(err),
             });
         }
     };
@@ -77,7 +100,7 @@ const PhaseSetupPage: React.FC = () => {
         await runBootstrap(undefined);
     };
 
-    const busy = savingSettings || bootstrapping;
+    const busy = savingSettings || bootstrapping || applyingPreset;
 
     return (
         <div className="page-shell-fill">
@@ -86,7 +109,7 @@ const PhaseSetupPage: React.FC = () => {
                     <div className="rounded-xl border border-ide-border bg-ide-panel p-5 shadow-ide-md sm:p-8">
                         <h1 className="page-title mb-2">Set up your phases</h1>
                         <p className="page-lead mb-8">
-                            Wake and sleep times define the day. Pick weekdays for default phases (e.g. Mon–Fri).
+                            Wake and sleep times define the day. Pick weekdays, then a day shape.
                         </p>
 
                         <div className="space-y-6">
@@ -119,6 +142,15 @@ const PhaseSetupPage: React.FC = () => {
                                 setSelectedDays={setSelectedDays}
                                 errors={errors}
                             />
+                            <div>
+                                <p className="ui-label mb-2">Day shape</p>
+                                <PhasePresetPicker
+                                    includeDefaults
+                                    value={presetChoice}
+                                    onChange={setPresetChoice}
+                                    disabled={busy}
+                                />
+                            </div>
                         </div>
 
                         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">

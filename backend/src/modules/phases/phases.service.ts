@@ -10,6 +10,13 @@ import { Phase } from './entities/phase.entity';
 import { CreatePhaseDto } from './dto/create-phase.dto';
 import { UpdatePhaseDto } from './dto/update-phase.dto';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
+import { Task } from '../tasks/entities/task.entity';
+import { EventPhase } from '../event-phases/event-phase.entity';
+import {
+  buildLifestylePresetBlocks,
+  PHASE_PRESET_IDS,
+  PhasePresetId,
+} from './lifestyle-presets';
 
 @Injectable()
 export class PhasesService {
@@ -36,6 +43,36 @@ export class PhasesService {
     );
   }
 
+  private basePhaseRows(
+    userId: string,
+    wakeTime: string,
+    sleepTime: string,
+    weekDays: number[] | null,
+  ) {
+    return [
+      {
+        userId,
+        name: 'Sleep',
+        color: '#34495e',
+        description: 'Rest (from your sleep → wake settings)',
+        startTime: sleepTime,
+        endTime: wakeTime,
+        type: 'sleep_time',
+        weekDays,
+      },
+      {
+        userId,
+        name: 'Focus hours',
+        color: '#2980b9',
+        description: 'Main working window (wake → sleep from settings)',
+        startTime: wakeTime,
+        endTime: sleepTime,
+        type: 'main_phase',
+        weekDays,
+      },
+    ];
+  }
+
   /**
    * Internal: creates Sleep + Focus when no phases exist yet. Called from `setupDefaultPhases`.
    */
@@ -48,29 +85,88 @@ export class PhasesService {
     const n = await this.phasesRepository.count({ where: { userId } });
     if (n > 0) return;
 
-    const wd = this.normalizeWeekDays(weekDays);
+    const rows = this.basePhaseRows(
+      userId,
+      wakeTime,
+      sleepTime,
+      this.normalizeWeekDays(weekDays),
+    );
+    await this.phasesRepository.save(
+      rows.map((row) => this.phasesRepository.create(row)),
+    );
+  }
 
-    const sleep = this.phasesRepository.create({
-      userId,
-      name: 'Sleep',
-      color: '#34495e',
-      description: 'Rest (from your sleep → wake settings)',
-      startTime: sleepTime,
-      endTime: wakeTime,
-      type: 'sleep_time',
-      weekDays: wd,
+  /**
+   * Replace every phase with Sleep, hidden Focus, and a lifestyle preset.
+   * Refuses when any phase still has tasks (direct `phaseId` or `task_phases`).
+   */
+  async applyPreset(
+    userId: string,
+    presetId: PhasePresetId,
+    weekDays?: number[] | null,
+  ): Promise<Phase[]> {
+    const settings = await this.userSettingsRepository.findOne({
+      where: { userId },
     });
-    const focus = this.phasesRepository.create({
-      userId,
-      name: 'Focus hours',
-      color: '#2980b9',
-      description: 'Main working window (wake → sleep from settings)',
-      startTime: wakeTime,
-      endTime: sleepTime,
-      type: 'main_phase',
-      weekDays: wd,
+    if (!settings) {
+      throw new BadRequestException('User settings not found');
+    }
+    if (!(PHASE_PRESET_IDS as readonly string[]).includes(presetId)) {
+      throw new BadRequestException('Unknown phase preset');
+    }
+
+    const wd = this.normalizeWeekDays(weekDays);
+    const blocks = buildLifestylePresetBlocks(
+      presetId,
+      settings.wakeTime,
+      settings.sleepTime,
+    );
+
+    await this.phasesRepository.manager.transaction(async (manager) => {
+      const phaseRepo = manager.getRepository(Phase);
+      const existing = await phaseRepo.find({
+        where: { userId },
+        select: ['id'],
+      });
+      if (existing.length > 0) {
+        const ids = existing.map((phase) => phase.id);
+        const assigned = await manager
+          .getRepository(Task)
+          .createQueryBuilder('task')
+          .leftJoin('task.phases', 'linkedPhase')
+          .where('task.userId = :userId', { userId })
+          .andWhere(
+            '(task.phaseId IN (:...ids) OR linkedPhase.id IN (:...ids))',
+            { ids },
+          )
+          .getCount();
+        if (assigned > 0) {
+          throw new BadRequestException(
+            'Cannot apply a preset while a phase has tasks. Move or delete those tasks first.',
+          );
+        }
+        await manager.delete(EventPhase, { userId });
+        await phaseRepo.update({ userId }, { parentPhaseId: null });
+        await phaseRepo.delete({ userId });
+      }
+
+      const rows = [
+        ...this.basePhaseRows(userId, settings.wakeTime, settings.sleepTime, wd),
+        ...blocks.map((block) => ({
+          userId,
+          name: block.name,
+          color: block.color,
+          description: block.description,
+          startTime: block.startTime,
+          endTime: block.endTime,
+          type: 'time_phase',
+          weekDays: wd,
+        })),
+      ];
+      await phaseRepo.save(rows.map((row) => phaseRepo.create(row)));
     });
-    await this.phasesRepository.save([sleep, focus]);
+
+    return this.findAll(userId);
   }
 
   /** Creates Sleep + Focus from user settings when the user has no phases (first-time setup). */

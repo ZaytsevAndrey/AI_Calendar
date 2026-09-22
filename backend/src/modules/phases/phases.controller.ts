@@ -19,6 +19,7 @@ import { PhasesService } from './phases.service';
 import { CreatePhaseDto } from './dto/create-phase.dto';
 import { UpdatePhaseDto } from './dto/update-phase.dto';
 import { SetupDefaultPhasesDto } from './dto/setup-default-phases.dto';
+import { ApplyPhasePresetDto } from './dto/apply-phase-preset.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('phases')
@@ -45,6 +46,24 @@ export class PhasesController {
   setupDefaults(@Request() req, @Body() dto: SetupDefaultPhasesDto) {
     return this.phasesService.setupDefaultPhases(
       req.user.userId,
+      dto.weekDays ?? null,
+    );
+  }
+
+  @Post('apply-preset')
+  @ApiOperation({
+    summary:
+      'Replace phases with Sleep, Focus, and a lifestyle preset (blocked if any phase has tasks)',
+  })
+  @ApiResponse({ status: 201, description: 'Preset phases created.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Settings missing, or a phase still has tasks.',
+  })
+  applyPreset(@Request() req, @Body() dto: ApplyPhasePresetDto) {
+    return this.phasesService.applyPreset(
+      req.user.userId,
+      dto.presetId,
       dto.weekDays ?? null,
     );
   }

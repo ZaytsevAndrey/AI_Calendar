@@ -45,6 +45,8 @@ Defaults are created on first **`GET /phases`** (using stored settings, or `07:0
 |--------|------|-------------|
 | GET | `/phases` | All phases for current user |
 | POST | `/phases` | Create (overlap rules apply within the user’s phases) |
+| POST | `/phases/setup-defaults` | Sleep + hidden Focus when the user has no phases yet |
+| POST | `/phases/apply-preset` | Replace all phases with Sleep, hidden Focus, and a lifestyle preset (`working`, `student`, or `open`). Hours are offsets from wake/sleep (blocks under 30 minutes are dropped). 400 if settings are missing, the preset id is unknown, or any phase still has tasks |
 | GET | `/phases/time-phases` | `time_phase` only |
 | GET | `/phases/time-phases/date/:date` | Time phases applicable on that date |
 | GET | `/phases/sleep-time` | `sleep_time` only |

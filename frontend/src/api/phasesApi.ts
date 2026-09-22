@@ -1,6 +1,8 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import apiCall from '../modules/common/utils/apiCall';
 import { PhaseDTO, CreatePhaseDTO, UpdatePhaseDTO } from './phases.api';
+
+export type PhasePresetId = 'working' | 'student' | 'open';
 import { userSettingsApi } from './userSettingsApi';
 
 export const phasesApi = createApi({
@@ -48,6 +50,21 @@ export const phasesApi = createApi({
         }
       },
     }),
+    applyPhasePreset: builder.mutation<
+      PhaseDTO[],
+      { presetId: PhasePresetId; weekDays?: number[] }
+    >({
+      query: (data) => ({ url: '/phases/apply-preset', method: 'POST', data }),
+      invalidatesTags: [{ type: 'Phases', id: 'LIST' }],
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        try {
+          await queryFulfilled;
+          dispatch(userSettingsApi.util.invalidateTags(['UserSettingsRequired']));
+        } catch {
+          /* noop */
+        }
+      },
+    }),
     updatePhase: builder.mutation<PhaseDTO, { id: string; phase: UpdatePhaseDTO }>({
       query: ({ id, phase }) => ({ url: `/phases/${id}`, method: 'PATCH', data: phase }),
       invalidatesTags: (_result, _error, { id }) => [
@@ -79,6 +96,7 @@ export const {
   useGetPhaseQuery,
   useCreatePhaseMutation,
   useSetupDefaultPhasesMutation,
+  useApplyPhasePresetMutation,
   useUpdatePhaseMutation,
   useDeletePhaseMutation,
   useGetTimePhasesQuery,

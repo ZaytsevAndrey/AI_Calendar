@@ -1,9 +1,21 @@
-import { useGetAllPhasesQuery, useCreatePhaseMutation, useUpdatePhaseMutation, useDeletePhaseMutation } from 'api/phasesApi';
+import { useGetAllPhasesQuery, useCreatePhaseMutation, useUpdatePhaseMutation, useDeletePhaseMutation, useApplyPhasePresetMutation } from 'api/phasesApi';
+import type { PhasePresetId } from 'api/phasesApi';
 import React, { lazy, Suspense, useCallback, useState } from 'react';
 import type { PhaseDTO } from 'api/phases.api';
 import PhasesCalendar from 'modules/phases/components/PhasesCalendar';
+import { PhasePresetPicker, messageFromApiError } from 'modules/phases/components/PhasePresetPicker';
+import { WeekDaysSelector } from 'modules/phases/components/WeekDaysSelector';
 import { showErrorToast } from 'utils/toast';
 import { Modal } from '../../ui/Modal';
+
+function weekDaysForPreset(phases: PhaseDTO[]): number[] {
+    const named = phases.filter((phase) => phase.type !== 'sleep_time' && phase.type !== 'main_phase');
+    if (named.length === 0) return [1, 2, 3, 4, 5];
+    if (named.some((phase) => !phase.weekDays?.length)) return [0, 1, 2, 3, 4, 5, 6];
+    const days = new Set<number>();
+    named.forEach((phase) => phase.weekDays?.forEach((day) => days.add(day)));
+    return [...days].sort((a, b) => a - b);
+}
 
 const PhaseForm = lazy(
     () => import(/* webpackChunkName: "phase-form" */ 'modules/phases/components/PhaseForm'),
@@ -15,12 +27,43 @@ const PhasesPage: React.FC = () => {
     const [createPhase, { isLoading: isCreating }] = useCreatePhaseMutation();
     const [updatePhase, { isLoading: isUpdating }] = useUpdatePhaseMutation();
     const [deletePhase, { isLoading: isDeleting }] = useDeletePhaseMutation();
+    const [applyPreset, { isLoading: isApplyingPreset }] = useApplyPhasePresetMutation();
     const [showForm, setShowForm] = useState(false);
     const [editingPhase, setEditingPhase] = useState<any | null>(null);
+    const [showPreset, setShowPreset] = useState(false);
+    const [presetId, setPresetId] = useState<PhasePresetId>('working');
+    const [presetDays, setPresetDays] = useState<number[]>([1, 2, 3, 4, 5]);
 
     const handleAdd = () => {
         setEditingPhase(null);
         setShowForm(true);
+    };
+
+    const openPreset = () => {
+        setPresetId('working');
+        setPresetDays(weekDaysForPreset(visiblePhases));
+        setShowPreset(true);
+    };
+
+    const handleApplyPreset = async () => {
+        if (presetDays.length === 0) {
+            showErrorToast({
+                title: 'Select weekdays',
+                detail: 'Choose at least one day of the week for the preset.',
+            });
+            return;
+        }
+        try {
+            await applyPreset({ presetId, weekDays: presetDays }).unwrap();
+            setShowPreset(false);
+        } catch (err: unknown) {
+            showErrorToast({
+                title: 'Could not apply preset',
+                detail:
+                    messageFromApiError(err) ??
+                    'Phases were not replaced. If a phase still has tasks, move or delete them first.',
+            });
+        }
     };
 
     const handleEdit = (phase: any) => {
@@ -94,9 +137,14 @@ const PhasesPage: React.FC = () => {
                     <h1 className="page-title">Phases</h1>
                     <p className="page-lead">Time windows for scheduling and the weekly template.</p>
                 </div>
-                <button type="button" onClick={handleAdd} className="ui-btn-primary w-full sm:w-auto">
-                    Add Phase
-                </button>
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                    <button type="button" onClick={openPreset} className="ui-btn-secondary w-full sm:w-auto">
+                        Use a preset
+                    </button>
+                    <button type="button" onClick={handleAdd} className="ui-btn-primary w-full sm:w-auto">
+                        Add Phase
+                    </button>
+                </div>
             </header>
 
             <Modal
@@ -117,6 +165,54 @@ const PhasesPage: React.FC = () => {
                         isDeleting={isDeleting}
                     />
                 </Suspense>
+            </Modal>
+
+            <Modal
+                open={showPreset}
+                onClose={() => setShowPreset(false)}
+                title="Use a phase preset"
+                maxWidthClass="max-w-lg"
+            >
+                <p className="mb-4 text-sm text-ide-muted">
+                    Replaces Sleep and every other phase. Times follow your wake and sleep settings.
+                    This is blocked while any phase still has tasks.
+                </p>
+                <PhasePresetPicker
+                    value={presetId}
+                    onChange={(choice) => {
+                        if (choice !== 'defaults') setPresetId(choice);
+                    }}
+                    disabled={isApplyingPreset}
+                />
+                <div className="mt-4">
+                    <WeekDaysSelector
+                        selectedDays={presetDays}
+                        setSelectedDays={setPresetDays}
+                        errors={
+                            presetDays.length === 0
+                                ? { weekDays: { message: 'Select at least one day' } }
+                                : {}
+                        }
+                    />
+                </div>
+                <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                    <button
+                        type="button"
+                        className="ui-btn-secondary w-full sm:w-auto"
+                        onClick={() => setShowPreset(false)}
+                        disabled={isApplyingPreset}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        className="ui-btn-primary w-full sm:w-auto"
+                        onClick={handleApplyPreset}
+                        disabled={isApplyingPreset || presetDays.length === 0}
+                    >
+                        Replace phases
+                    </button>
+                </div>
             </Modal>
 
             <div className="min-h-0 flex-1 overflow-y-auto">

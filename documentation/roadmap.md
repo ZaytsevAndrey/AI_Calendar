@@ -35,7 +35,7 @@ Two lists used to compete (`roadmap` vs `BUGS-AND-IMPROVEMENTS.md`). This file i
 
 ## Then — setup & control
 
-- [ ] Phase lifestyle presets: apply a ready-made day-phase set instead of only default Sleep / Focus hours. First catalog: **working person**, **student / learner**, **unemployed**; more presets later.
+- [x] Phase lifestyle presets (Sep 2026). On first setup and later from Phases: **working person**, **student / learner**, **open day**. Hours are offsets from wake/sleep; blocks shorter than 30 minutes are dropped. Replaces every phase, including Sleep and hidden Focus. Refuses while any phase has tasks. Skip on setup still creates Sleep + Focus only.
 - [ ] **Text add (same parser as voice)** — type “gym tomorrow 45 min” without the mic; reuse Groq parse + the same create/prefill/clarify routing.
 - [ ] Choose which Google calendars are visible on the Calendar page.
 - [ ] Drag & drop on schedule / event calendars.
@@ -122,7 +122,7 @@ Open Phase 5 items live in **Now / Next / Then / Later** above.
 ## Recommended next steps
 
 1. Generate preview / overload warning.
-2. Phase lifestyle presets; text add; Google calendar visibility; drag-and-drop.
+2. Text add; Google calendar visibility; drag-and-drop.
 3. Later extras (AI recommendations, reminders, stats, integrations, parked polish).
 4. Add Playwright (or similar) **E2E** for voice create, Done vs calendar, Generate/Undo; expand unit tests as you touch flows; optional custom subdomain (see [deploy](deploy.md)).
 5. **Last:** in-app product guide, once the app is ready.

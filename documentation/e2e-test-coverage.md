@@ -10,7 +10,7 @@ Related docs: [task-scheduling-test-matrix.md](task-scheduling-test-matrix.md) (
 
 Protect the daily loop: **sign in → settings/phases gate → capture a task → Generate / Undo / Clear → Now/Done → habits**. Every live HTTP route and every user-facing screen has named cases. Engine placement math stays in unit tests; E2E asserts the HTTP/UI contract around that math.
 
-Out of scope until a later cycle: snooze, generate preview, phase lifestyle presets, text-add, drag-and-drop, in-app guide, real Google OAuth in CI, real Groq in CI.
+Out of scope until a later cycle: snooze, generate preview, text-add, drag-and-drop, in-app guide, real Google OAuth in CI, real Groq in CI.
 
 ---
 
@@ -204,6 +204,9 @@ Backend **does not** reject overlapping phases. Frontend `usePhaseValidation` bl
 | A-PH-015 | A | P0 | Phase with assigned task | `DELETE /phases/:id` | **409** |
 | A-PH-016 | A | P0 | Phase with no tasks | DELETE | 200; gone from list |
 | A-PH-017 | A | P1 | `weekDays` with duplicates | POST | Deduped sorted |
+| A-PH-018 | A | P1 | Settings, no phases | `POST /phases/apply-preset` `working` | 201; Deep work / Meetings / Life admin; Focus hidden |
+| A-PH-019 | A | P1 | Phases exist, then a task on one | apply `student`, then apply again | First replace succeeds; second is 400 and phases stay |
+| A-PH-020 | A | P1 | No settings, or unknown preset id | `POST /phases/apply-preset` | 400 |
 | U-PH-001 | U | P1 | `/phases` | List + weekly grid | Sleep/custom visible; Focus hours hidden |
 | U-PH-002 | U | P1 | Add modal | Valid create | Appears on grid; toast |
 | U-PH-003 | U | P1 | Phase outside wake–sleep | Submit | **Client** validation blocks |
