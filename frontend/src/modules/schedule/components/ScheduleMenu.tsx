@@ -40,7 +40,7 @@ export function ScheduleMenu({
         <div className="relative" ref={rootRef}>
             <button
                 type="button"
-                className="ui-btn-secondary w-full sm:w-auto"
+                className="ui-btn-secondary min-w-[9rem] flex-1 sm:w-auto sm:flex-none"
                 disabled={busy}
                 aria-expanded={open}
                 aria-haspopup="menu"

@@ -11,7 +11,7 @@ export function VoiceTaskButton({ onClick, className = '' }: VoiceTaskButtonProp
     <button
       type="button"
       onClick={onClick}
-      className={`ui-btn-secondary w-full sm:w-auto ${className}`}
+      className={`ui-btn-secondary min-w-[9rem] flex-1 sm:w-auto sm:flex-none ${className}`}
       aria-label="Add task by voice"
     >
       <Mic className="h-4 w-4" aria-hidden />

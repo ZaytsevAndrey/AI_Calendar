@@ -10,7 +10,7 @@ const BuildFooter: React.FC = () => {
     const label = BUILD_TIME ? `${BUILD_SHA} · ${BUILD_TIME}` : BUILD_SHA;
 
     return (
-        <footer className="shrink-0 border-t border-ide-border bg-ide-panel px-3 py-1 text-center text-[11px] leading-4 text-ide-muted">
+        <footer className="shrink-0 border-t border-ide-border bg-ide-panel px-3 pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-1 text-center text-[11px] leading-4 text-ide-muted">
             <span title="Git SHA baked into this frontend bundle">Build {label}</span>
         </footer>
     );

@@ -11,13 +11,9 @@ const App: React.FC = () => {
     useSyncClientTimeZone(isAuthenticated);
 
     return (
-        <div className="flex h-[100dvh] flex-col overflow-hidden bg-ide-bg">
+        <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-ide-bg">
             {isAuthenticated && <Header />}
-            <main
-                className={`min-h-0 flex-1 overflow-x-hidden bg-ide-bg ${
-                    isAuthenticated ? 'overflow-hidden pt-[5.75rem] sm:pt-16' : 'overflow-y-auto'
-                }`}
-            >
+            <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain bg-ide-bg lg:overflow-hidden">
                 <AppRoutes />
             </main>
             {isAuthenticated ? <PwaInstallBanner /> : null}

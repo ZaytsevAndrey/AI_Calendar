@@ -121,7 +121,7 @@ const HabitsPage: React.FC = () => {
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="page-scroll">
         {habits.length === 0 ? (
           <div className="empty-list">
             No habits yet. Add one — for example Exercise or No smoking.

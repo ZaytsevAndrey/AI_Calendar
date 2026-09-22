@@ -53,7 +53,7 @@ function LazyRoute({
 
 const AppRoutes = () => {
     return (
-        <div className="flex h-full min-h-0 flex-col">
+        <div className="flex min-h-full flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
             <Routes>
                 <Route path="/" element={<LazyRoute chunk={routeChunks.calendar} access="protected" />} />
                 <Route path="/tasks" element={<LazyRoute chunk={routeChunks.tasks} access="protected" />} />

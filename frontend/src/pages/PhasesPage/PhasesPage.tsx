@@ -215,7 +215,7 @@ const PhasesPage: React.FC = () => {
                 </div>
             </Modal>
 
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="page-scroll">
                 <div className="mb-8 overflow-x-auto">
                     <PhasesCalendar
                         phases={visiblePhases}

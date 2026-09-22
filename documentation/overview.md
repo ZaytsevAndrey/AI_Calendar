@@ -2,7 +2,7 @@
 
 ## Purpose
 
-**AI Calendar Assistant** is a web app for time planning with **day phases**, **tasks** (priority, deadline, fixed / flexible / recurring settings), personal **sleep/wake** settings, and **Google Calendar** integration. **Intelligent scheduling** places movable tasks into the selected phase window, respects anchors (manual slots, fixed blocks, external Google events), supports splitting and a **job queue** with **diff**. The **Calendar** page runs generation (with a live stage timeline), can **undo the last Generate**, can ask for **Suggestions** (Groq notes for the next 7 days; nothing is applied), and can clear still-open app-generated slots; fully ended app events stay and show in gray.
+**AI Calendar Assistant** is a web app for time planning with **day phases**, **tasks** (priority, deadline, fixed / flexible / recurring settings), personal **sleep/wake** settings, and **Google Calendar** integration. **Intelligent scheduling** places movable tasks into the selected phase window, respects anchors (manual slots, fixed blocks, external Google events), supports splitting and a **job queue** with **diff**. The **Calendar** page runs generation (with a live stage timeline), can **undo the last Generate**, can ask for **Suggestions** (Groq notes for the next 7 days; nothing is applied), and can clear still-open app-generated slots; fully ended app events stay and show in gray. On a narrow screen the page scrolls and a week grid scrolls sideways; a wide window keeps the calendar inside the screen.
 
 ## Monorepo layout
 

@@ -159,7 +159,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
 
         return (
             <>
-            <div className="flex h-full min-h-0 flex-col rounded-lg border border-ide-border bg-ide-panel p-4">
+            <div className="flex flex-col rounded-lg border border-ide-border bg-ide-panel p-3 sm:p-4 lg:h-full lg:min-h-0">
                 {getDisplayPhases().length > 0 && (
                     <div className="mb-4 flex shrink-0 flex-wrap gap-2">
                         {getDisplayPhases().map((phase: any) => (
@@ -223,7 +223,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
 
     return (
         <>
-        <div className="flex h-full min-h-0 w-full flex-col">
+        <div className="flex w-full flex-col lg:h-full lg:min-h-0">
             {getDisplayPhases().length > 0 && (
                 <div className="mb-4 flex shrink-0 flex-wrap gap-2">
                     {getDisplayPhases().map((phase: any) => (
@@ -255,7 +255,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                 ))}
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+            <div className="flex flex-col lg:min-h-0 lg:flex-1 lg:overflow-auto">
                 {weeks.map((week, weekIndex) => (
                     <div
                         key={weekIndex}
@@ -269,7 +269,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                             return (
                                 <div
                                     key={dayIndex}
-                                    className={`relative flex h-full min-w-0 flex-col overflow-hidden border-r border-ide-border p-2 last:border-r-0 ${
+                                    className={`relative flex h-full min-w-0 flex-col overflow-hidden border-r border-ide-border p-1 last:border-r-0 sm:p-2 ${
                                         view === 'month' && !isInCurrentMonth ? 'opacity-50' : ''
                                     } ${
                                         isCurrentDay

@@ -74,7 +74,14 @@
     }
 
     .page-shell-fill {
-        @apply page-shell flex h-full min-h-0 flex-1 flex-col overflow-hidden;
+        @apply page-shell flex w-full flex-1 flex-col;
+        @apply lg:min-h-0 lg:overflow-hidden;
+    }
+
+    /* Grows with the page on a phone. From lg it fills leftover height and scrolls inside. */
+    .page-scroll {
+        @apply w-full;
+        @apply lg:min-h-0 lg:flex-1 lg:overflow-y-auto;
     }
 
     .page-head {

@@ -227,7 +227,10 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
   });
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto" data-testid="calendar-time-grid">
+    <div
+      className="w-full max-w-full overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch] lg:min-h-0 lg:flex-1 lg:overflow-auto"
+      data-testid="calendar-time-grid"
+    >
       {allDayEvents.length > 0 && (
         <div
           className="mb-2 grid gap-1"
@@ -259,9 +262,10 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
       )}
 
       <div
-        className="grid min-w-[520px]"
+        className="grid"
         style={{
-          gridTemplateColumns: `56px repeat(${days.length}, minmax(88px, 1fr))`,
+          gridTemplateColumns: `56px repeat(${days.length}, minmax(${days.length > 1 ? '88px' : '0px'}, 1fr))`,
+          minWidth: days.length > 1 ? 56 + days.length * 88 : undefined,
         }}
       >
         <div />

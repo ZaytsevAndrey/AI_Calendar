@@ -61,7 +61,7 @@ const SettingsPage: React.FC = () => {
                 </div>
             </header>
 
-            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto">
+            <div className="page-scroll space-y-6">
                 <div className="settings-card">
                     <div className="mb-8 border-b border-ide-border pb-8">
                         <h2 className="mb-2 text-xl font-semibold text-ide-text">Time management</h2>

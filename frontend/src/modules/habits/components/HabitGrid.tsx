@@ -28,7 +28,7 @@ const HabitGrid: React.FC<HabitGridProps> = ({
   const dates = datesInclusive(editableFrom, editableTo);
 
   return (
-    <div className="overflow-auto rounded-xl border border-ide-border bg-ide-panel">
+    <div className="max-w-full overflow-auto overscroll-x-contain rounded-xl border border-ide-border bg-ide-panel [-webkit-overflow-scrolling:touch]">
       <table className="w-max min-w-full border-collapse text-sm">
         <caption className="sr-only">Habit check-ins for the last 14 days</caption>
         <thead>

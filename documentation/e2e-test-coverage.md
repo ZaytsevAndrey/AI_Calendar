@@ -464,6 +464,7 @@ No first-class UI. Covered via API and Google create with `phaseId`.
 | U-CAL-008 | U | P1 | Last generate warnings | Banner | Dismiss stores `scheduleGenerateAlertsDismissedJobId`; stays dismissed on reload |
 | U-CAL-009 | U | P1 | Alerts older than 24h | Load | Banner not shown |
 | U-CAL-016 | U | P1 | No open tasks, schedule cleared | Schedule → Suggestions | Dialog shows the empty review message and Close dismisses it |
+| U-CAL-017 | U | P1 | Phone viewport 390×844 | Calendar day, week, Tasks | Header does not cover the grid. Day fits the width. Week scrolls sideways. Tasks heading is on screen |
 | U-CAL-010 | U | P0 | Now overlapping block | Strip | Now title; Done if `canCompleteNowBlock` |
 | U-CAL-011 | U | P0 | Next start later today | Strip | Next shown |
 | U-CAL-012 | U | P0 | Flexible waiting for slot **today** | Strip Unscheduled | Transitional inbox (not `isUnscheduled` Tasks inbox) |

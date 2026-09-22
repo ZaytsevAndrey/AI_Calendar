@@ -104,7 +104,7 @@ const PhaseSetupPage: React.FC = () => {
 
     return (
         <div className="page-shell-fill">
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="page-scroll">
                 <div className="mx-auto w-full max-w-2xl">
                     <div className="rounded-xl border border-ide-border bg-ide-panel p-5 shadow-ide-md sm:p-8">
                         <h1 className="page-title mb-2">Set up your phases</h1>

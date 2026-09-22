@@ -320,11 +320,11 @@ const CalendarPage: React.FC = () => {
                         <h1 className="page-title">Calendar</h1>
                         <p className="page-lead">{periodLabel(currentDate, currentView)}</p>
                     </div>
-                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
+                    <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap sm:justify-end">
                         <button
                             type="button"
                             onClick={() => openCreate()}
-                            className="ui-btn-primary w-full sm:w-auto"
+                            className="ui-btn-primary min-w-[9rem] flex-1 sm:w-auto sm:flex-none"
                         >
                             Create task
                         </button>
@@ -407,8 +407,8 @@ const CalendarPage: React.FC = () => {
                     Failed to load calendar events. Please check your Google Calendar connection.
                 </div>
             ) : (
-                <div className="flex min-h-0 flex-1 flex-col gap-4 xl:flex-row">
-                    <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+                <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 xl:flex-row">
+                    <div className="min-w-0 w-full lg:min-h-0 lg:flex-1 lg:overflow-hidden">
                         <CalendarGrid
                             view={currentView}
                             date={currentDate}
@@ -418,7 +418,7 @@ const CalendarPage: React.FC = () => {
                             onEventTimeChange={handleEventTimeChange}
                         />
                     </div>
-                    <div className="flex h-[min(18rem,38vh)] min-h-0 w-full shrink-0 flex-col overflow-hidden xl:h-auto xl:w-[24rem]">
+                    <div className="flex h-80 w-full shrink-0 flex-col overflow-hidden lg:h-[min(18rem,38vh)] xl:h-auto xl:min-h-0 xl:w-[24rem]">
                         <CalendarEvents
                             events={displayEvents}
                             isLoading={getEventsQuery.isLoading}

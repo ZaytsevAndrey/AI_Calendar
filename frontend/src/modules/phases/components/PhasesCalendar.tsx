@@ -265,7 +265,7 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
   };
 
   return (
-    <div className="mt-2 overflow-auto rounded-lg border border-ide-border bg-ide-panel p-4 shadow-ide">
+    <div className="mt-2 max-w-full overflow-auto overscroll-x-contain rounded-lg border border-ide-border bg-ide-panel p-3 shadow-ide [-webkit-overflow-scrolling:touch] sm:p-4">
       <h2 className="mb-1 text-lg font-semibold text-ide-text">Weekly phase template</h2>
       <p className="mb-4 block text-xs text-ide-muted">
         Drag a block or its top/bottom edge. Step: {SNAP_MIN} min. Click the center to edit.

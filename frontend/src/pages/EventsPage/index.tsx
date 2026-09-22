@@ -148,15 +148,15 @@ const TasksPage: React.FC = () => {
             until you schedule them.
           </p>
         </div>
-        <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
+        <div className="flex w-full shrink-0 flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
           <button
             type="button"
             onClick={() => openCreate({ unscheduled: true })}
-            className="ui-btn-secondary w-full sm:w-auto"
+            className="ui-btn-secondary min-w-[9rem] flex-1 sm:flex-none"
           >
             Add unscheduled
           </button>
-          <button type="button" onClick={() => openCreate()} className="ui-btn-primary w-full sm:w-auto">
+          <button type="button" onClick={() => openCreate()} className="ui-btn-primary min-w-[9rem] flex-1 sm:flex-none">
             Create task
           </button>
           <VoiceTaskButton onClick={voice.open} />
@@ -200,7 +200,7 @@ const TasksPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto space-y-6">
+      <div className="page-scroll space-y-6">
         <section>
           <div className="mb-3 flex items-end justify-between gap-2">
             <div>
