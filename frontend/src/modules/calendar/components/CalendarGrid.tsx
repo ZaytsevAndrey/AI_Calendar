@@ -161,7 +161,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
             <>
             <div className="flex flex-col rounded-lg border border-ide-border bg-ide-panel p-3 sm:p-4 lg:h-full lg:min-h-0">
                 {getDisplayPhases().length > 0 && (
-                    <div className="mb-4 flex shrink-0 flex-wrap gap-2">
+                    <div className="mb-4 flex max-h-24 shrink-0 flex-wrap gap-2 overflow-y-auto">
                         {getDisplayPhases().map((phase: any) => (
                             <div
                                 key={phase.id}

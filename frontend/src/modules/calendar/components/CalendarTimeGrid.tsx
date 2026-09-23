@@ -226,11 +226,15 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
     return { day, dayIndex, items, lanes };
   });
 
+  const columns = `56px repeat(${days.length}, minmax(${days.length > 1 ? '88px' : '0px'}, 1fr))`;
+  const gridMinWidth = days.length > 1 ? 56 + days.length * 88 : undefined;
+
   return (
     <div
-      className="w-full max-w-full overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch] lg:min-h-0 lg:flex-1 lg:overflow-auto"
+      className="flex w-full max-w-full min-h-0 flex-1 flex-col overflow-x-auto overflow-y-hidden overscroll-x-contain [-webkit-overflow-scrolling:touch] lg:min-h-0 lg:flex-1"
       data-testid="calendar-time-grid"
     >
+      <div className="flex min-h-0 w-full flex-1 flex-col" style={{ minWidth: gridMinWidth }}>
       {allDayEvents.length > 0 && (
         <div
           className="mb-2 grid gap-1"
@@ -261,20 +265,14 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
         </div>
       )}
 
-      <div
-        className="grid"
-        style={{
-          gridTemplateColumns: `56px repeat(${days.length}, minmax(${days.length > 1 ? '88px' : '0px'}, 1fr))`,
-          minWidth: days.length > 1 ? 56 + days.length * 88 : undefined,
-        }}
-      >
+      <div className="grid shrink-0" style={{ gridTemplateColumns: columns, minWidth: gridMinWidth }}>
         <div />
         {days.map((day) => {
           const today = day.toDateString() === new Date().toDateString();
           return (
             <div
               key={`head-${day.toDateString()}`}
-              className={`border-b border-l border-ide-border px-1 py-1 text-center text-xs ${
+              className={`border-b border-l border-ide-border bg-ide-panel px-1 py-1 text-center text-xs ${
                 today
                   ? 'font-bold text-ide-link ring-1 ring-inset ring-ide-link'
                   : 'text-ide-text'
@@ -285,7 +283,9 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
             </div>
           );
         })}
-
+      </div>
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <div className="grid" style={{ gridTemplateColumns: columns, minWidth: gridMinWidth }}>
         <div className="relative border-r border-ide-border" style={{ height: gridHeightPx }}>
           {hourBands.map((band) => {
             const top = ((band.minutes - dayStartMin) / daySpanMin) * gridHeightPx;
@@ -429,6 +429,8 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
             })}
           </div>
         ))}
+      </div>
+      </div>
       </div>
     </div>
   );
