@@ -4,6 +4,8 @@ import {
   planningHorizonRange,
   remainingFlexibleMinutes,
   isFlexibleDeadlinePast,
+  normalizeFixedEventBufferMinutes,
+  expandIntervalsBothSides,
 } from './intelligent-scheduling.engine';
 import { Task, TaskPriority, TaskStatus } from '../tasks/entities/task.entity';
 import { TaskEventType } from '../scheduling/event-type.enum';
@@ -76,6 +78,43 @@ describe('isFlexibleDeadlinePast', () => {
     expect(isFlexibleDeadlinePast('2026-09-10T23:59:00+03:00', now)).toBe(true);
     expect(isFlexibleDeadlinePast('2026-09-11T23:59:00+03:00', now)).toBe(false);
     expect(isFlexibleDeadlinePast(null, now)).toBe(false);
+  });
+});
+
+describe('fixed event buffers', () => {
+  it('treats 0 and invalid values as off and clamps the rest', () => {
+    expect(normalizeFixedEventBufferMinutes(0)).toBe(0);
+    expect(normalizeFixedEventBufferMinutes(-5)).toBe(0);
+    expect(normalizeFixedEventBufferMinutes(Number.NaN)).toBe(0);
+    expect(normalizeFixedEventBufferMinutes(15.9)).toBe(15);
+    expect(normalizeFixedEventBufferMinutes(500)).toBe(180);
+  });
+
+  it('pads both sides and merges overlapping gaps', () => {
+    const start = Date.parse('2026-04-20T10:00:00.000Z');
+    const end = Date.parse('2026-04-20T10:30:00.000Z');
+    expect(expandIntervalsBothSides([{ start, end }], 15 * 60_000)).toEqual([
+      {
+        start: Date.parse('2026-04-20T09:45:00.000Z'),
+        end: Date.parse('2026-04-20T10:45:00.000Z'),
+      },
+    ]);
+    const secondStart = Date.parse('2026-04-20T10:50:00.000Z');
+    const secondEnd = Date.parse('2026-04-20T11:00:00.000Z');
+    expect(
+      expandIntervalsBothSides(
+        [
+          { start, end },
+          { start: secondStart, end: secondEnd },
+        ],
+        15 * 60_000,
+      ),
+    ).toEqual([
+      {
+        start: Date.parse('2026-04-20T09:45:00.000Z'),
+        end: Date.parse('2026-04-20T11:15:00.000Z'),
+      },
+    ]);
   });
 });
 
@@ -544,6 +583,128 @@ describe('IntelligentSchedulingEngine', () => {
     expect(recurringSlots[0]).toEqual([
       atLocalTimeIso(0, 10),
       atLocalTimeIso(0, 11),
+    ]);
+  });
+
+  it('keeps a gap before and after a fixed task when the work still fits', async () => {
+    getSettingsMock.mockResolvedValue(
+      makeSettings({ ...baseSettings, fixedEventBufferMinutes: 15 }),
+    );
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'fixed-gap',
+        name: 'Meeting',
+        eventType: TaskEventType.FIXED,
+        scheduledStartTime: new Date(atLocalTimeIso(0, 10)),
+        scheduledEndTime: new Date(atLocalTimeWithMinutesIso(0, 10, 30)),
+      }),
+      makeTask({
+        id: 'after-buffer',
+        name: 'Write',
+        estimatedTimeInMinutes: 60,
+        phases: [phaseWorkday],
+      }),
+    ]);
+
+    const result = await engine.run(userId);
+
+    expect(result.errors).toHaveLength(0);
+    expect(extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls).get('after-buffer')?.[0]).toEqual([
+      atLocalTimeWithMinutesIso(0, 10, 45),
+      atLocalTimeWithMinutesIso(0, 11, 45),
+    ]);
+  });
+
+  it('uses the buffer gap when the task would not fit otherwise', async () => {
+    const phaseUntilEleven = makePhase('phase-11', '09:00', '11:00', [1, 2, 3, 4, 5]);
+    getSettingsMock.mockResolvedValue(
+      makeSettings({
+        ...baseSettings,
+        sleepTime: '11:00',
+        fixedEventBufferMinutes: 15,
+      }),
+    );
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'fixed-tight',
+        name: 'Meeting',
+        eventType: TaskEventType.FIXED,
+        scheduledStartTime: new Date(atLocalTimeIso(0, 10)),
+        scheduledEndTime: new Date(atLocalTimeWithMinutesIso(0, 10, 30)),
+      }),
+      makeTask({
+        id: 'fills-buffer',
+        name: 'Write',
+        estimatedTimeInMinutes: 60,
+        deadline: new Date(atLocalTimeIso(0, 11)),
+        phases: [phaseUntilEleven],
+      }),
+    ]);
+
+    const result = await engine.run(userId);
+
+    expect(result.errors).toHaveLength(0);
+    expect(extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls).get('fills-buffer')?.[0]).toEqual([
+      atLocalTimeIso(0, 9),
+      atLocalTimeIso(0, 10),
+    ]);
+  });
+
+  it('pads external Google events and leaves habit blocks unpadded', async () => {
+    getSettingsMock.mockResolvedValue(
+      makeSettings({
+        ...baseSettings,
+        googleCalendarLinked: true,
+        fixedEventBufferMinutes: 15,
+      }),
+    );
+    const googleSvc = (engine as any).googleCalendarService as { getEvents: jest.Mock };
+    googleSvc.getEvents.mockResolvedValue({
+      events: [
+        {
+          id: 'gcal-1',
+          status: 'confirmed',
+          start: { dateTime: '2026-04-20T10:00:00.000Z' },
+          end: { dateTime: '2026-04-20T10:30:00.000Z' },
+        },
+      ],
+    });
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'after-google',
+        name: 'Write',
+        estimatedTimeInMinutes: 60,
+        phases: [phaseWorkday],
+      }),
+    ]);
+
+    const googleResult = await engine.run(userId);
+    expect(googleResult.errors).toHaveLength(0);
+    expect(extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls).get('after-google')?.[0]).toEqual([
+      atLocalTimeWithMinutesIso(0, 10, 45),
+      atLocalTimeWithMinutesIso(0, 11, 45),
+    ]);
+
+    scheduledRepo.save.mockClear();
+    googleSvc.getEvents.mockResolvedValue({ events: [] });
+    getSettingsMock.mockResolvedValue(
+      makeSettings({ ...baseSettings, fixedEventBufferMinutes: 15 }),
+    );
+    habitRepo.find.mockResolvedValue([{ blockStartTime: '10:00', blockMinutes: 30 }]);
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'against-habit',
+        name: 'Write',
+        estimatedTimeInMinutes: 60,
+        phases: [phaseWorkday],
+      }),
+    ]);
+
+    const habitResult = await engine.run(userId);
+    expect(habitResult.errors).toHaveLength(0);
+    expect(extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls).get('against-habit')?.[0]).toEqual([
+      atLocalTimeIso(0, 9),
+      atLocalTimeIso(0, 10),
     ]);
   });
 

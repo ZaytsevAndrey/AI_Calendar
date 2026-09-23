@@ -205,7 +205,7 @@ function phaseWindowOnYmd(
 function mergeIntervals(intervals: MsInterval[]): MsInterval[] {
   if (!intervals.length) return [];
   const sorted = [...intervals].sort((a, b) => a.start - b.start);
-  const out: MsInterval[] = [sorted[0]];
+  const out: MsInterval[] = [{ ...sorted[0] }];
   for (let i = 1; i < sorted.length; i++) {
     const cur = sorted[i];
     const last = out[out.length - 1];
@@ -213,6 +213,27 @@ function mergeIntervals(intervals: MsInterval[]): MsInterval[] {
     else out.push({ ...cur });
   }
   return out;
+}
+
+const MAX_FIXED_EVENT_BUFFER_MINUTES = 180;
+
+/** 0 disables the gap. Non-positive and non-finite values are off. */
+export function normalizeFixedEventBufferMinutes(value?: number | null): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 0;
+  return Math.min(MAX_FIXED_EVENT_BUFFER_MINUTES, Math.floor(value));
+}
+
+/** Pad each interval on both sides, then merge overlaps. */
+export function expandIntervalsBothSides(
+  intervals: MsInterval[],
+  bufferMs: number,
+): MsInterval[] {
+  if (bufferMs <= 0 || !intervals.length) return [];
+  return mergeIntervals(
+    intervals
+      .filter((iv) => iv.end > iv.start)
+      .map((iv) => ({ start: iv.start - bufferMs, end: iv.end + bufferMs })),
+  );
 }
 
 function subtractInterval(free: MsInterval[], busy: MsInterval): MsInterval[] {
@@ -557,6 +578,16 @@ export class IntelligentSchedulingEngine {
       [...googleBusy, ...habitBusy],
       nowMs,
     );
+    const bufferMinutes = normalizeFixedEventBufferMinutes(
+      settings.fixedEventBufferMinutes,
+    );
+    const bufferZones =
+      bufferMinutes > 0
+        ? expandIntervalsBothSides(
+            this.bufferSourceIntervals(allTasks, googleBusy),
+            bufferMinutes * 60_000,
+          )
+        : [];
 
     const errors: { taskId: string; message: string }[] = [];
     const newSegments = new Map<string, { start: Date; end: Date }[]>();
@@ -571,6 +602,7 @@ export class IntelligentSchedulingEngine {
           tierStack,
           newSegments,
           anchorBusy,
+          bufferZones,
           settings,
           startDay,
           horizonEnd,
@@ -744,6 +776,7 @@ export class IntelligentSchedulingEngine {
     startDay: Date,
     newSegments: Map<string, { start: Date; end: Date }[]>,
     anchorBusy: MsInterval[],
+    bufferZones: MsInterval[],
     nowMs: number,
     endedMinutesByTask: Map<string, number>,
   ): {
@@ -764,6 +797,7 @@ export class IntelligentSchedulingEngine {
         startDay,
         newSegments,
         anchorBusy,
+        bufferZones,
         nowMs,
         recurrencePattern,
       );
@@ -818,7 +852,7 @@ export class IntelligentSchedulingEngine {
       ? task.eligibleWeekDays
       : null;
 
-    let result = this.placeTaskGreedy(
+    let result = this.placeGreedySoftBuffer(
       durationMin,
       minChunk,
       maxChunk,
@@ -827,17 +861,15 @@ export class IntelligentSchedulingEngine {
       searchStart,
       horizonEnd,
       deadlineMs,
-      settings.wakeTime,
-      settings.sleepTime,
-      settings.weekendWorkEnabled,
+      settings,
       placedBusy,
+      bufferZones,
       nowMs,
       weekDays,
-      timeZone,
     );
     let beyondHorizon = false;
     if (!result.ok) {
-      result = this.placeTaskGreedy(
+      result = this.placeGreedySoftBuffer(
         durationMin,
         minChunk,
         maxChunk,
@@ -846,13 +878,11 @@ export class IntelligentSchedulingEngine {
         searchStart,
         extendedEnd,
         deadlineMs,
-        settings.wakeTime,
-        settings.sleepTime,
-        settings.weekendWorkEnabled,
+        settings,
         placedBusy,
+        bufferZones,
         nowMs,
         weekDays,
-        timeZone,
       );
       beyondHorizon = result.ok;
     }
@@ -873,6 +903,7 @@ export class IntelligentSchedulingEngine {
     startDay: Date,
     newSegments: Map<string, { start: Date; end: Date }[]>,
     anchorBusy: MsInterval[],
+    bufferZones: MsInterval[],
     nowMs: number,
     recurrencePattern: RecurrencePattern,
   ): {
@@ -964,32 +995,43 @@ export class IntelligentSchedulingEngine {
           ? taskPreferredIntervalOnYmd(task, occurrenceYmd, timeZone)
           : null;
       if (preferredInterval) {
-        const eligible = subtractMany(
-          this.eligibleIntervalsForDay(
-            occurrenceYmd,
-            phases,
-            settings.wakeTime,
-            settings.sleepTime,
-            settings.weekendWorkEnabled,
-            timeZone,
-          ),
-          mergedBusy,
+        const dayEligible = this.eligibleIntervalsForDay(
+          occurrenceYmd,
+          phases,
+          settings.wakeTime,
+          settings.sleepTime,
+          settings.weekendWorkEnabled,
+          timeZone,
         );
-
-        const fitsEligible = eligible.some(
-          (slot) =>
-            preferredInterval.start >= slot.start &&
-            preferredInterval.end <= slot.end,
-        );
-        const durationMin = (preferredInterval.end - preferredInterval.start) / 60000;
-        const canPlaceByNow = preferredInterval.start >= nowMs;
+        const hardEligible = subtractMany(dayEligible, mergedBusy);
+        const softEligible = bufferZones.length
+          ? subtractMany(
+              dayEligible,
+              mergeIntervals([...mergedBusy, ...bufferZones]),
+            )
+          : hardEligible;
+        const preferredMs: MsInterval = {
+          start: preferredInterval.start,
+          end: preferredInterval.end,
+        };
+        const fits = (slots: MsInterval[]) =>
+          slots.some(
+            (slot) => preferredMs.start >= slot.start && preferredMs.end <= slot.end,
+          );
+        const durationFromPreferred = (preferredMs.end - preferredMs.start) / 60000;
+        const canPlaceByNow = preferredMs.start >= nowMs;
         const canPlaceByDeadline =
-          deadlineMs == null || preferredInterval.end <= deadlineMs;
+          deadlineMs == null || preferredMs.end <= deadlineMs;
 
-        if (fitsEligible && canPlaceByNow && canPlaceByDeadline && durationMin > 0) {
+        if (
+          fits(softEligible) &&
+          canPlaceByNow &&
+          canPlaceByDeadline &&
+          durationFromPreferred > 0
+        ) {
           segments.push({
-            start: new Date(preferredInterval.start),
-            end: new Date(preferredInterval.end),
+            start: new Date(preferredMs.start),
+            end: new Date(preferredMs.end),
           });
           occurrenceYmd = nextYmd;
           continue;
@@ -1004,10 +1046,60 @@ export class IntelligentSchedulingEngine {
           occurrenceYmd = nextYmd;
           continue;
         }
-        // Preferred clock time is busy: fall through to earliest remaining slot today.
+
+        const placeOnDay = (busy: MsInterval[]) =>
+          this.placeTaskGreedy(
+            durationMin,
+            minChunk,
+            maxChunk,
+            effectiveSplittable,
+            phases,
+            occurrenceStart,
+            occurrenceEnd,
+            deadlineMs,
+            settings.wakeTime,
+            settings.sleepTime,
+            settings.weekendWorkEnabled,
+            busy,
+            nowMs,
+            null,
+            timeZone,
+          );
+        const softBusy = bufferZones.length
+          ? mergeIntervals([...mergedBusy, ...bufferZones])
+          : mergedBusy;
+        const avoided = placeOnDay(softBusy);
+        if (avoided.ok) {
+          segments.push(...avoided.segments);
+          occurrenceYmd = nextYmd;
+          continue;
+        }
+        if (bufferZones.length && fits(hardEligible) && durationFromPreferred > 0) {
+          segments.push({
+            start: new Date(preferredMs.start),
+            end: new Date(preferredMs.end),
+          });
+          occurrenceYmd = nextYmd;
+          continue;
+        }
+        const filled = bufferZones.length ? placeOnDay(mergedBusy) : avoided;
+        if (!filled.ok) {
+          const anyTimeLeftToday = dayEligible.some((slot) => slot.end > nowMs);
+          recordSkip(
+            skipped,
+            occurrenceYmd,
+            anyTimeLeftToday ? 'no_slot' : 'already_passed',
+            timeZone,
+          );
+          occurrenceYmd = nextYmd;
+          continue;
+        }
+        segments.push(...filled.segments);
+        occurrenceYmd = nextYmd;
+        continue;
       }
 
-      let result = this.placeTaskGreedy(
+      const result = this.placeGreedySoftBuffer(
         durationMin,
         minChunk,
         maxChunk,
@@ -1016,13 +1108,11 @@ export class IntelligentSchedulingEngine {
         occurrenceStart,
         occurrenceEnd,
         deadlineMs,
-        settings.wakeTime,
-        settings.sleepTime,
-        settings.weekendWorkEnabled,
+        settings,
         mergedBusy,
+        bufferZones,
         nowMs,
         null,
-        timeZone,
       );
 
       if (!result.ok) {
@@ -1067,6 +1157,7 @@ export class IntelligentSchedulingEngine {
     tierStack: Task[],
     newSegments: Map<string, { start: Date; end: Date }[]>,
     anchorBusy: MsInterval[],
+    bufferZones: MsInterval[],
     settings: UserSettings,
     startDay: Date,
     horizonEnd: Date,
@@ -1082,6 +1173,7 @@ export class IntelligentSchedulingEngine {
       startDay,
       newSegments,
       anchorBusy,
+      bufferZones,
       nowMs,
       endedMinutesByTask,
     );
@@ -1122,6 +1214,7 @@ export class IntelligentSchedulingEngine {
         startDay,
         newSegments,
         anchorBusy,
+        bufferZones,
         nowMs,
         endedMinutesByTask,
       );
@@ -1141,6 +1234,7 @@ export class IntelligentSchedulingEngine {
             startDay,
             newSegments,
             anchorBusy,
+            bufferZones,
             nowMs,
             endedMinutesByTask,
           );
@@ -1189,6 +1283,67 @@ export class IntelligentSchedulingEngine {
     if (task.phases?.length) return task.phases;
     if (task.phase) return [task.phase];
     return [];
+  }
+
+  /**
+   * Prefer slots outside the buffer. If the task still does not fit, place it
+   * in the gap around the fixed event.
+   */
+  private placeGreedySoftBuffer(
+    durationMin: number,
+    minChunk: number,
+    maxChunk: number,
+    splittable: boolean,
+    phases: Phase[],
+    rangeStart: Date,
+    rangeEnd: Date,
+    deadlineMs: number | null,
+    settings: UserSettings,
+    hardBusy: MsInterval[],
+    bufferZones: MsInterval[],
+    nowMs: number,
+    eligibleWeekDays: number[] | null,
+  ): { ok: boolean; segments: { start: Date; end: Date }[] } {
+    const timeZone = settingsTimeZone(settings);
+    const place = (busy: MsInterval[]) =>
+      this.placeTaskGreedy(
+        durationMin,
+        minChunk,
+        maxChunk,
+        splittable,
+        phases,
+        rangeStart,
+        rangeEnd,
+        deadlineMs,
+        settings.wakeTime,
+        settings.sleepTime,
+        settings.weekendWorkEnabled,
+        busy,
+        nowMs,
+        eligibleWeekDays,
+        timeZone,
+      );
+    if (bufferZones.length > 0) {
+      const avoided = place(mergeIntervals([...hardBusy, ...bufferZones]));
+      if (avoided.ok) return avoided;
+    }
+    return place(hardBusy);
+  }
+
+  /** Fixed tasks and external Google events. Habits and ended flexible slots are not included. */
+  private bufferSourceIntervals(
+    tasks: Task[],
+    googleBusy: MsInterval[],
+  ): MsInterval[] {
+    const sources: MsInterval[] = googleBusy.map((iv) => ({ ...iv }));
+    for (const task of tasks) {
+      if (task.eventType !== TaskEventType.FIXED && !task.isFixedExternal) continue;
+      if (!task.scheduledStartTime || !task.scheduledEndTime) continue;
+      const start = new Date(task.scheduledStartTime).getTime();
+      const end = new Date(task.scheduledEndTime).getTime();
+      if (end > start) sources.push({ start, end });
+    }
+    return sources;
   }
 
   private async buildAnchorBusyIntervals(

@@ -150,6 +150,18 @@ export class UpdateUserSettingsDto {
   allowSplitScheduling?: boolean;
 
   @ApiProperty({
+    example: 0,
+    description:
+      'Minutes kept free before and after each fixed task and external Google event. 0 disables the gap. Generate may use it when the task would not fit otherwise.',
+    required: false,
+  })
+  @IsInt()
+  @Min(0)
+  @Max(180)
+  @IsOptional()
+  fixedEventBufferMinutes?: number;
+
+  @ApiProperty({
     example: 30,
     description: 'Minimum chunk length when splitting (minutes)',
     required: false,

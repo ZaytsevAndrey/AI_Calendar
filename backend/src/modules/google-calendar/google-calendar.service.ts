@@ -294,6 +294,7 @@ export class GoogleCalendarService {
         preferredLunchTime: '12:00',
         weekendWorkEnabled: false,
         allowSplitScheduling: true,
+        fixedEventBufferMinutes: 0,
         minSplitMinutes: 30,
         maxSplitMinutes: 30,
         recurringScheduleHorizonDays: 30,

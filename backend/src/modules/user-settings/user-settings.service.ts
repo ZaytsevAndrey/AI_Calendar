@@ -43,6 +43,12 @@ export class UserSettingsService {
         userSettings.weekendWorkEnabled = defaults.weekendWorkEnabled;
       if (userSettings.allowSplitScheduling === undefined)
         userSettings.allowSplitScheduling = defaults.allowSplitScheduling;
+      if (
+        userSettings.fixedEventBufferMinutes === undefined ||
+        userSettings.fixedEventBufferMinutes === null
+      ) {
+        userSettings.fixedEventBufferMinutes = defaults.fixedEventBufferMinutes;
+      }
       if (userSettings.minSplitMinutes === undefined)
         userSettings.minSplitMinutes = defaults.minSplitMinutes;
       if (userSettings.maxSplitMinutes === undefined)
@@ -129,6 +135,7 @@ export class UserSettingsService {
       preferredLunchTime: '12:00',
       weekendWorkEnabled: false,
       allowSplitScheduling: true,
+      fixedEventBufferMinutes: 0,
       minSplitMinutes: 30,
       maxSplitMinutes: 30,
       recurringScheduleHorizonDays: 30,
@@ -149,6 +156,7 @@ export class UserSettingsService {
       preferredLunchTime: '12:00',
       weekendWorkEnabled: false,
       allowSplitScheduling: true,
+      fixedEventBufferMinutes: 0,
       minSplitMinutes: 30,
       maxSplitMinutes: 30,
       recurringScheduleHorizonDays: 30,

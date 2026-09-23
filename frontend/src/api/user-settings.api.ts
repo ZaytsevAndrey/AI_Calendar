@@ -16,6 +16,8 @@ export interface UserSettingsDTO {
   appGoogleCalendarId?: string | null;
   /** Google calendar ids hidden on the Calendar page. */
   hiddenGoogleCalendarIds?: string[] | null;
+  /** Minutes kept free around fixed tasks and external Google events. 0 is off. */
+  fixedEventBufferMinutes?: number;
   minSplitMinutes: number;
   maxSplitMinutes: number;
   recurringScheduleHorizonDays: number;
@@ -43,6 +45,7 @@ export interface UpdateUserSettingsDTO {
   googleCalendarLinked?: boolean;
   appGoogleCalendarName?: string;
   hiddenGoogleCalendarIds?: string[];
+  fixedEventBufferMinutes?: number;
   minSplitMinutes?: number;
   maxSplitMinutes?: number;
   recurringScheduleHorizonDays?: number;

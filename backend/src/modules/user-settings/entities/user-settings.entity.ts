@@ -65,6 +65,14 @@ export class UserSettings {
   @Column({ default: true })
   allowSplitScheduling: boolean;
 
+  /**
+   * Minutes Generate keeps free before and after each fixed task and external
+   * Google event. 0 disables the gap. The engine may still use it when the
+   * task would not fit otherwise.
+   */
+  @Column({ type: 'int', default: 0 })
+  fixedEventBufferMinutes: number;
+
   /** Minimum chunk length when splitting (minutes). */
   @Column({ type: 'int', default: 30 })
   minSplitMinutes: number;

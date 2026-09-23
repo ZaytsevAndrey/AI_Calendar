@@ -174,7 +174,7 @@ Email/password (`POST /auth/register`, `/login`, forgot/reset) **do not exist**.
 | A-REM-002 | A | P1 | Cron secret set, VAPID unset | `POST /reminders/tick` | 401 without/with a bad secret; 200 `{ users: 0, sent: 0 }` with the secret |
 | A-REM-003 | A | P1 | Settings | PATCH `remindersEnabled: true` | 200 and the flag persists |
 | A-REM-004 | A | P1 | Two users | POST/DELETE subscription | https stored; other user cannot delete it; owner delete removes the row |
-| U-SET-001 | U | P1 | Settings page | Change wake/sleep/TZ/horizon | Debounced auto-save (~1s), toast |
+| U-SET-001 | U | P1 | Settings page | Change wake/sleep/TZ/horizon/fixed-event buffer | Debounced auto-save (~1s), toast |
 | U-SET-002 | U | P1 | Empty TZ on first login | App loads | Client PATCHes browser IANA **once** |
 | U-SET-003 | U | P1 | TZ already set | Reload | No overwrite |
 | U-SET-004 | U | P1 | Google status | Settings | Shows connected from `check-connection` (no disconnect button — feature missing) |
@@ -535,6 +535,7 @@ Keep these in Jest as in [task-scheduling-test-matrix.md](task-scheduling-test-m
 | N-SCH-T40–T41 | Overnight phase, weekend vs phase |
 | N-SCH-T50–T56 | Pipeline, Google skip, completed events, undo, clear, gray UI |
 | N-SCH-W01–W04 | Settings TZ vs host UTC, day-only 00:00, wake `HH:mm:ss` |
+| N-SCH-B01 | Fixed-event buffer: both sides of fixed tasks and external Google events; habits unpadded; gap filled only when the task would not fit |
 
 Frontend unit (keep, do not E2E): `taskFormSchema`, `buildPayload`, `nowBlocks`, `eventAppearance`, `deadlineTone`, `usePhases`, `formatDate`, `ianaDateTime`.
 

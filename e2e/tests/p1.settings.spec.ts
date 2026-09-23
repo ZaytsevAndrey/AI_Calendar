@@ -21,6 +21,7 @@ test.describe('P1 settings UI', () => {
       wakeTime: '08:00',
       sleepTime: '23:00',
       timeZone: 'Europe/Kyiv',
+      fixedEventBufferMinutes: 0,
     });
   });
   test('U-SET-001 changing horizon auto-saves after debounce', async ({ page, auth, request }) => {
@@ -34,6 +35,17 @@ test.describe('P1 settings UI', () => {
     const saved = await apiJson(request, auth.onboarded.access_token, 'get', '/user-settings');
     expectOk(saved);
     expect(saved.body.recurringScheduleHorizonDays).toBe(next);
+
+    const buffer = page.getByLabel('Buffer around fixed events (minutes)');
+    await expect(buffer).toBeVisible();
+    await buffer.fill('15');
+    await expect
+      .poll(async () => {
+        const withBuffer = await apiJson(request, auth.onboarded.access_token, 'get', '/user-settings');
+        expectOk(withBuffer);
+        return withBuffer.body.fixedEventBufferMinutes;
+      })
+      .toBe(15);
   });
 
   test.describe('U-SET-002 empty TZ', () => {

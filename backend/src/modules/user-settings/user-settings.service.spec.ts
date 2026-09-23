@@ -78,6 +78,27 @@ describe('UserSettingsService', () => {
     expect(repo.save).toHaveBeenCalled();
   });
 
+  it('persists the fixed-event buffer', async () => {
+    const existing = {
+      userId: 'user-1',
+      wakeTime: '07:00',
+      sleepTime: '22:00',
+      timeZone: null,
+      minSplitMinutes: 30,
+      maxSplitMinutes: 30,
+      appGoogleCalendarName: 'AI Calendar Assistant',
+      fixedEventBufferMinutes: 0,
+    };
+    repo.findOne.mockResolvedValue(existing);
+    repo.save.mockImplementation(async (entity) => entity);
+    repo.merge.mockImplementation((entity, dto) => Object.assign(entity, dto));
+
+    const saved = await service.updateSettings('user-1', {
+      fixedEventBufferMinutes: 15,
+    });
+    expect(saved.fixedEventBufferMinutes).toBe(15);
+  });
+
   it('stores hidden calendar ids and drops the app calendar', async () => {
     const existing = {
       userId: 'user-1',

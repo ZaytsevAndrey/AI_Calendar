@@ -34,6 +34,8 @@ Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWor
 
 **`hiddenGoogleCalendarIds`** (string array) hides those Google calendars on the Calendar page. Empty means primary, the app calendar, and calendars selected in Google. The stored app calendar id is dropped if sent. A non-array is 400. This does not change which calendars Generate treats as busy.
 
+**`fixedEventBufferMinutes`** (integer, default 0, max 180) is the gap Generate keeps before and after each fixed task and external Google event. 0 turns it off. Generate may place work in that gap when the task would not fit otherwise. Habits are not padded. Dragging a block is not blocked by the gap.
+
 ## Phases (day phases) — `/phases`
 
 **Bearer JWT required** for all routes in this controller.

@@ -17,4 +17,4 @@ Single source of truth for the project. Keep these files in sync with code chang
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** September 2026 (voice commands: complete, skip, reschedule, optional confirmation).
+**Last documentation update:** September 2026 (fixed-event buffer around fixed tasks and external Google events).

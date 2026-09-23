@@ -460,6 +460,23 @@
 - Horizon midnight in `Asia/Nicosia` is covered by `planningHorizonRange`.
 - PATCH `timeZone` validation: `update-user-settings.dto.spec.ts`. Empty zone is not overwritten on GET: `user-settings.service.spec.ts`.
 
+## B01 — Buffer around fixed events
+
+**Given**
+- Settings `fixedEventBufferMinutes` = 15.
+- Fixed task (or an external Google event) `10:00`–`10:30`.
+- Flexible 60-minute task, phase `09:00`–`12:00`.
+
+**When**
+- Generate.
+
+**Then**
+- The flexible task is `10:45`–`11:45` (gap on both sides).
+- The same 60 minutes beside a habit block `10:00`–`10:30` stays `09:00`–`10:00` (habits are not padded).
+- If the only way to finish before a same-day deadline is to use the gap, Generate places into the gap (`09:00`–`10:00` when sleep and the deadline are `11:00`).
+- `0` leaves placement unchanged. Drag is not rejected.
+- Covered by `intelligent-scheduling.engine.spec.ts`.
+
 ---
 
 ## Мінімальний smoke-набір для CI (швидкий прогін)
