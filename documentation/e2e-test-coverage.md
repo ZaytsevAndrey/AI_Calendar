@@ -459,6 +459,8 @@ No first-class UI. Covered via API and Google create with `phaseId`.
 
 ## 18. Cases — Calendar UI (beyond Google)
 
+Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day, sleep and hours outside schedulable phases hidden) is covered by `frontend/src/modules/calendar/calendarView.spec.ts`, not a Playwright case.
+
 | ID | Layer | P | Given | When | Then |
 |----|-------|---|-------|------|------|
 | U-CAL-001 | U | P0 | Authenticated onboarded | Open `/` | Calendar + NowStrip + Generate menu |

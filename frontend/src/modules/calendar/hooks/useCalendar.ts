@@ -4,7 +4,8 @@ import {
   useDeleteEventMutation,
 } from '../../../api/eventsApi';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
-import { eventStartDate, eventsQueryRange, sameLocalDay } from '../calendarView';
+import { useGetUserSettingsQuery } from '../../../api/userSettingsApi';
+import { eventStartDate, eventsQueryRange, sameLocalDay, SleepWindow } from '../calendarView';
 
 export {
   PAST_APP_EVENT_COLOR,
@@ -23,8 +24,17 @@ export {
 export const useUpdateEvent = useUpdateEventMutation;
 export const useDeleteEvent = useDeleteEventMutation;
 
+function useSleepWindow(): SleepWindow {
+  const { data: settings } = useGetUserSettingsQuery();
+  return {
+    sleepTime: settings?.sleepTime,
+    wakeTime: settings?.wakeTime,
+  };
+}
+
 export const useEventsForDay = (date: Date, calendarId?: string) => {
-  const { timeMin, timeMax } = eventsQueryRange('day', date);
+  const sleep = useSleepWindow();
+  const { timeMin, timeMax } = eventsQueryRange('day', date, sleep);
   return useGetEventsQuery({
     timeMin,
     timeMax,
@@ -33,7 +43,8 @@ export const useEventsForDay = (date: Date, calendarId?: string) => {
 };
 
 export const useEventsForWeek = (dateInWeek: Date, calendarId?: string) => {
-  const { timeMin, timeMax } = eventsQueryRange('week', dateInWeek);
+  const sleep = useSleepWindow();
+  const { timeMin, timeMax } = eventsQueryRange('week', dateInWeek, sleep);
   return useGetEventsQuery({
     timeMin,
     timeMax,
@@ -42,9 +53,11 @@ export const useEventsForWeek = (dateInWeek: Date, calendarId?: string) => {
 };
 
 export const useEventsForMonth = (year: number, month: number, calendarId?: string) => {
+  const sleep = useSleepWindow();
   const { timeMin, timeMax } = eventsQueryRange(
     'month',
     new Date(year, month - 1, 1),
+    sleep,
   );
   return useGetEventsQuery({
     timeMin,

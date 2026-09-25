@@ -1,6 +1,10 @@
 import { GoogleCalendarEvent } from '../../api/google-calendar.api';
+import { dateOnDayAtMinutes } from './eventDrag';
 import {
+  buildCalendarAxis,
   chipLabel,
+  displayToPersonal,
+  eventDisplayRange,
   eventsForDay,
   eventsForHourSlot,
   eventsQueryRange,
@@ -10,10 +14,12 @@ import {
   formatEventTime,
   getDaysInView,
   gridEventsForDay,
+  habitDisplayOnColumn,
   periodLabel,
   shiftPeriod,
   startOfWeekMonday,
   visibleGoogleEvents,
+  visibleHourBands,
   visibleRangeYmd,
   wakingHourSlots,
 } from './calendarView';
@@ -218,8 +224,10 @@ describe('day view', () => {
   it('keeps sleep hours hidden and shows the wake hour (Rest 02:00 / Morning 09:00)', () => {
     const restUntilWake = { sleepTime: '02:00', wakeTime: '09:00' };
     const hours = wakingHourSlots(restUntilWake);
-    expect(hours).toContain('00:00');
-    expect(hours).toContain('01:00');
+    expect(hours[0]).toBe('09:00');
+    expect(hours[hours.length - 1]).toBe('01:00');
+    expect(hours.indexOf('23:00')).toBeLessThan(hours.indexOf('00:00'));
+    expect(hours.indexOf('00:00')).toBeLessThan(hours.indexOf('01:00'));
     expect(hours).toContain('09:00');
     expect(hours).toContain('10:00');
     expect(hours).not.toContain('02:00');
@@ -230,6 +238,114 @@ describe('day view', () => {
     const visible = eventsVisibleInView('day', focusDay, displayEvents);
     expect(ids(visible)).toEqual(['lunch', 'standup']);
     expect(visible.map(chipLabel)).toEqual(['09:00 Standup', '12:00 Lunch']);
+  });
+});
+
+describe('personal day', () => {
+  const nightOwl = { sleepTime: '02:00', wakeTime: '09:00' };
+  const phases = [
+    { startTime: '09:00', endTime: '12:00', name: 'Morning' },
+    { startTime: '22:00', endTime: '02:00', name: 'Rest' },
+  ];
+  const wednesday = localDate(2026, 8, 9, 12, 0);
+
+  it('puts 00:00–02:00 at the end of the waking day and hides the sleep gap', () => {
+    const hours = wakingHourSlots(nightOwl, phases);
+    expect(hours).toEqual(['09:00', '10:00', '11:00', '22:00', '23:00', '00:00', '01:00']);
+    expect(hours).not.toContain('02:00');
+    expect(hours).not.toContain('08:00');
+    expect(hours).not.toContain('14:00');
+  });
+
+  it('packs the after-midnight hours directly after 23:00', () => {
+    const bands = visibleHourBands(buildCalendarAxis(nightOwl, phases));
+    const at = (label: string) => bands.find((band) => band.label === label);
+    expect(at('00:00')!.displayMin).toBe(at('23:00')!.displayMin + 60);
+    expect(at('01:00')!.displayMin).toBe(at('00:00')!.displayMin + 60);
+    expect(at('22:00')!.displayMin).toBe(at('11:00')!.displayMin + 60);
+    expect(at('09:00')!.displayMin).toBe(0);
+  });
+
+  it('maps a drop on the later phase, not into the hidden gap', () => {
+    const axis = buildCalendarAxis(nightOwl, phases);
+    const evening = visibleHourBands(axis).find((band) => band.label === '22:00')!;
+    expect(displayToPersonal(axis, evening.displayMin)).toBe(22 * 60);
+    expect(displayToPersonal(axis, 0)).toBe(9 * 60);
+  });
+
+  it('keeps 00:00–02:00 on the personal day that is still awake, not on the next civil morning', () => {
+    const axis = buildCalendarAxis(nightOwl, phases);
+    const thisMorning = timedEvent(
+      'this-morning',
+      'This morning',
+      localDate(2026, 8, 9, 1, 0),
+      localDate(2026, 8, 9, 1, 30),
+    );
+    const afterMidnight = timedEvent(
+      'after-midnight',
+      'After midnight',
+      localDate(2026, 8, 10, 1, 0),
+      localDate(2026, 8, 10, 1, 30),
+    );
+    const duringSleep = timedEvent(
+      'asleep',
+      'Asleep',
+      localDate(2026, 8, 9, 3, 0),
+      localDate(2026, 8, 9, 4, 0),
+    );
+
+    expect(eventDisplayRange(thisMorning, wednesday, axis)).toBeNull();
+    expect(eventDisplayRange(duringSleep, wednesday, axis)).toBeNull();
+    expect(eventDisplayRange(afterMidnight, wednesday, axis)).toEqual({
+      startMin: 6 * 60,
+      endMin: 6 * 60 + 30,
+    });
+    const saved = dateOnDayAtMinutes(
+      wednesday,
+      displayToPersonal(axis, 6 * 60),
+    );
+    expect(ymd(saved)).toBe('2026-09-10');
+    expect(saved.getHours()).toBe(1);
+    expect(saved.getMinutes()).toBe(0);
+
+    const restThroughMidnight = timedEvent(
+      'wind-down',
+      'Wind down',
+      localDate(2026, 8, 9, 22, 0),
+      localDate(2026, 8, 10, 1, 30),
+    );
+    expect(eventDisplayRange(restThroughMidnight, wednesday, axis)).toEqual({
+      startMin: 3 * 60,
+      endMin: 6 * 60 + 30,
+    });
+    expect(ids(gridEventsForDay([thisMorning, afterMidnight, duringSleep], wednesday, nightOwl, phases))).toEqual([
+      'after-midnight',
+    ]);
+    expect(ids(gridEventsForDay([thisMorning, afterMidnight], wednesday, nightOwl))).toEqual([
+      'after-midnight',
+    ]);
+    expect(
+      ids(gridEventsForDay([thisMorning], localDate(2026, 8, 8, 12, 0), nightOwl, phases)),
+    ).toEqual(['this-morning']);
+  });
+
+  it('draws a habit after midnight on the personal day that started the evening before', () => {
+    const axis = buildCalendarAxis(nightOwl, phases);
+    const onWednesday = habitDisplayOnColumn('2026-09-09', 1 * 60, 30, wednesday, axis);
+    const onThursdayMorning = habitDisplayOnColumn('2026-09-10', 1 * 60, 30, wednesday, axis);
+    expect(onWednesday).toBeNull();
+    expect(onThursdayMorning).toEqual({ displayStart: 6 * 60, displayDuration: 30 });
+  });
+
+  it('fetches the next civil morning when sleep is after midnight', () => {
+    const day = eventsQueryRange('day', wednesday, nightOwl);
+    expect(ymd(new Date(day.timeMax))).toBe('2026-09-10');
+    expect(new Date(day.timeMax).getHours()).toBe(2);
+    expect(new Date(day.timeMax).getMinutes()).toBe(0);
+
+    const week = eventsQueryRange('week', wednesday, nightOwl);
+    expect(ymd(new Date(week.timeMax))).toBe('2026-09-14');
+    expect(new Date(week.timeMax).getHours()).toBe(2);
   });
 });
 

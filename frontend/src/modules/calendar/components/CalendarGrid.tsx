@@ -1,21 +1,28 @@
 import React, { useState } from 'react';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 import { getEventColor } from '../hooks/useCalendar';
-import { useTimePhasesForDate, getPhaseByTime } from '../../phases/hooks/usePhases';
+import { useTimePhases, useTimePhasesForDate, getPhaseByTime } from '../../phases/hooks/usePhases';
 import { useGetUserSettingsQuery } from '../../../api/userSettingsApi';
 import { useGetHabitsQuery } from '../../../api/habitsApi';
 import CalendarTimeGrid from './CalendarTimeGrid';
 import {
     CalendarView,
+    buildCalendarAxis,
     chipLabel,
     clockToMinutes,
+    displayToPersonal,
+    eventDisplayRange,
     getDaysInView,
     gridEventsForDay,
+    habitDisplayOnColumn,
+    visibleHourBands,
     isAllDayEvent,
     isEventInSleepHours,
+    personalDayWindow,
+    phasesForDays,
     tooltipText,
-    wakingHourSlots,
 } from '../calendarView';
+import { dateOnDayAtMinutes } from '../eventDrag';
 import { HabitBlockButton, HabitDayDialog, HabitDayDots, HabitDaySection } from '../../habits/components/CalendarHabits';
 import { habitBlockChips, isHabitGoogleEvent } from '../../habits/habitBlocks';
 import { ymdFromLocalDate } from '../../../utils/ianaDateTime';
@@ -49,6 +56,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     onEventTimeChange,
 }) => {
     const { data: timePhases = [] } = useTimePhasesForDate(date);
+    const { data: allTimePhases = [] } = useTimePhases();
     const { data: userSettings } = useGetUserSettingsQuery();
     const { data: habitsData } = useGetHabitsQuery();
 
@@ -66,11 +74,17 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
         return getPhaseByTime(displayPhases, time);
     };
 
+    const phaseOrder = personalDayWindow(sleepWindow);
+    const personalStart = (time: string) => {
+        const minutes = clockToMinutes(time);
+        return minutes < phaseOrder.start ? minutes + 24 * 60 : minutes;
+    };
+
     const getDisplayPhases = () => {
         return timePhases
             .filter((phase: any) => phase.type !== 'sleep_time')
             .sort(
-                (a: any, b: any) => clockToMinutes(a.startTime) - clockToMinutes(b.startTime),
+                (a: any, b: any) => personalStart(a.startTime) - personalStart(b.startTime),
             );
     };
 
@@ -139,22 +153,57 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     };
 
     if (view !== 'month') {
-        const slots = wakingHourSlots(sleepWindow);
-        const dayStartMin = slots.length ? clockToMinutes(slots[0]) : 7 * 60;
-        const dayEndMin =
-            (slots.length ? clockToMinutes(slots[slots.length - 1]) : 22 * 60) + 60;
-        const hourBands = slots.map((time) => ({
-            minutes: clockToMinutes(time),
-            label: time,
-            color: getPhaseForTime(time)?.color,
+        const axis = buildCalendarAxis(sleepWindow, phasesForDays(allTimePhases, days));
+        const dayStartMin = 0;
+        const dayEndMin = axis.spanMin;
+        const hourBands = visibleHourBands(axis).map((band) => ({
+            minutes: band.displayMin,
+            label: band.label,
+            durationMin: band.durationMin,
+            color: getPhaseForTime(band.label)?.color,
         }));
         const timed = visibleEvents.filter(
             (event) => !!event.start?.dateTime && !isEventInSleepHours(event, sleepWindow),
         );
         const allDay = visibleEvents.filter((event) => isAllDayEvent(event));
-        const habits = habitBlocks.map((block) => {
+        const habitSourceDays =
+            axis.endMin > 24 * 60 && days.length
+                ? [
+                      ...days,
+                      new Date(
+                          days[days.length - 1].getFullYear(),
+                          days[days.length - 1].getMonth(),
+                          days[days.length - 1].getDate() + 1,
+                      ),
+                  ]
+                : days;
+        const habitSource = habitBlockChips(
+            habitsData?.habits ?? [],
+            habitSourceDays,
+            habitsData?.timeZone ?? 'UTC',
+        );
+        const habits = habitSource.flatMap((block) => {
             const habit = (habitsData?.habits ?? []).find((item) => item.id === block.habitId);
-            return { ...block, durationMinutes: habit?.blockMinutes ?? 30 };
+            const durationMinutes = habit?.blockMinutes ?? 30;
+            for (const day of days) {
+                const placed = habitDisplayOnColumn(
+                    block.ymd,
+                    block.startMinutes,
+                    durationMinutes,
+                    day,
+                    axis,
+                );
+                if (!placed) continue;
+                return [
+                    {
+                        ...block,
+                        durationMinutes: placed.displayDuration,
+                        displayStartMin: placed.displayStart,
+                        gridYmd: ymdFromLocalDate(day),
+                    },
+                ];
+            }
+            return [];
         });
 
         return (
@@ -197,6 +246,10 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                     hourBands={hourBands}
                     onEditEvent={onEditEvent}
                     onCreateForDate={onCreateForDate}
+                    eventRange={(event, day) => eventDisplayRange(event, day, axis)}
+                    minutesToDate={(day, minutes) =>
+                        dateOnDayAtMinutes(day, displayToPersonal(axis, minutes))
+                    }
                     onEventTimeChange={onEventTimeChange}
                     onOpenHabit={setHabitDate}
                     renderDayExtra={

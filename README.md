@@ -12,6 +12,7 @@ All up-to-date docs live under **[documentation/](documentation/README.md)**:
 - [Google OAuth / Calendar](documentation/integrations.md)  
 - [Deploy (Render + Neon)](documentation/deploy.md)  
 - [Roadmap](documentation/roadmap.md)  
+- [Roadmap archive](documentation/roadmap-archive.md)  
 
 After starting the backend, interactive API docs: `http://localhost:3001/api` (Swagger).
 

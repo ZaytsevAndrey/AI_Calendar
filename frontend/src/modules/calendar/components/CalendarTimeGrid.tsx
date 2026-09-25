@@ -29,7 +29,13 @@ type Placement = {
   endMin: number;
 };
 
-type TimedHabit = HabitBlockChip & { durationMinutes: number };
+type TimedHabit = HabitBlockChip & {
+  durationMinutes: number;
+  /** Column this block is drawn on when it continues past midnight. */
+  gridYmd?: string;
+  /** Top of the block on the packed visible axis. */
+  displayStartMin?: number;
+};
 
 interface CalendarTimeGridProps {
   days: Date[];
@@ -38,7 +44,12 @@ interface CalendarTimeGridProps {
   habits: TimedHabit[];
   dayStartMin: number;
   dayEndMin: number;
-  hourBands: { minutes: number; label: string; color?: string }[];
+  hourBands: { minutes: number; label: string; color?: string; durationMin?: number }[];
+  eventRange?: (
+    event: GoogleCalendarEvent,
+    day: Date,
+  ) => { startMin: number; endMin: number } | null;
+  minutesToDate?: (day: Date, minutes: number) => Date;
   onEditEvent?: (eventId: string) => void;
   onCreateForDate?: (day: Date) => void;
   onEventTimeChange?: (
@@ -73,6 +84,8 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
   dayStartMin,
   dayEndMin,
   hourBands,
+  eventRange,
+  minutesToDate,
   onEditEvent,
   onCreateForDate,
   onEventTimeChange,
@@ -88,13 +101,25 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
   const [live, setLive] = useState<(Placement & { eventId: string }) | null>(null);
   const [pending, setPending] = useState<Record<string, Placement>>({});
 
+  const rangeOnDay = (
+    event: GoogleCalendarEvent,
+    day: Date,
+    dayIndex: number,
+  ): { startMin: number; endMin: number } | null => {
+    if (eventRange) return eventRange(event, day);
+    if (dayIndex < 0) return null;
+    return eventMinutes(event, dayEndMin);
+  };
+
   const placementFor = (event: GoogleCalendarEvent, naturalDay: number): Placement | null => {
     if (live?.eventId === event.id) {
       return { dayIndex: live.dayIndex, startMin: live.startMin, endMin: live.endMin };
     }
     if (pending[event.id]) return pending[event.id];
-    const range = eventMinutes(event, dayEndMin);
-    if (!range || naturalDay < 0) return null;
+    const day = days[naturalDay];
+    if (!day || naturalDay < 0) return null;
+    const range = rangeOnDay(event, day, naturalDay);
+    if (!range) return null;
     return { dayIndex: naturalDay, ...range };
   };
 
@@ -155,8 +180,9 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
       if (current.endMin - current.startMin < 15) return;
       const day = days[current.dayIndex];
       if (!day) return;
-      const start = dateOnDayAtMinutes(day, current.startMin);
-      const end = dateOnDayAtMinutes(day, current.endMin);
+      const toDate = minutesToDate ?? dateOnDayAtMinutes;
+      const start = toDate(day, current.startMin);
+      const end = toDate(day, current.endMin);
       if (!(end > start)) return;
       skipClickRef.current = true;
       const placed = current;
@@ -210,7 +236,11 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
     const items = events
       .map((event) => {
         const start = eventStartDate(event);
-        const naturalDay = start ? days.findIndex((item) => sameLocalDay(item, start)) : -1;
+        const naturalDay = eventRange
+          ? days.findIndex((item) => !!eventRange(event, item))
+          : start
+            ? days.findIndex((item) => sameLocalDay(item, start))
+            : -1;
         const place = placementFor(event, naturalDay);
         if (!place || place.dayIndex !== dayIndex) return null;
         return { event, place };
@@ -325,7 +355,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
           >
             {hourBands.map((band) => {
               const top = ((band.minutes - dayStartMin) / daySpanMin) * gridHeightPx;
-              const height = (60 / daySpanMin) * gridHeightPx;
+              const height = ((band.durationMin ?? 60) / daySpanMin) * gridHeightPx;
               return (
                 <div
                   key={band.label}
@@ -340,13 +370,11 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
               );
             })}
             {habits
-              .filter((habit) => habit.ymd === ymdFromLocalDate(day))
+              .filter((habit) => (habit.gridYmd ?? habit.ymd) === ymdFromLocalDate(day))
               .map((habit) => {
-                const startMin = Math.max(habit.startMinutes, dayStartMin);
-                const endMin = Math.min(
-                  habit.startMinutes + habit.durationMinutes,
-                  dayEndMin,
-                );
+                const origin = habit.displayStartMin ?? habit.startMinutes;
+                const startMin = Math.max(origin, dayStartMin);
+                const endMin = Math.min(origin + habit.durationMinutes, dayEndMin);
                 if (endMin <= startMin) return null;
                 const top = ((startMin - dayStartMin) / daySpanMin) * gridHeightPx;
                 const height = ((endMin - startMin) / daySpanMin) * gridHeightPx;

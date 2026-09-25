@@ -10,11 +10,12 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Integrations](integrations.md) | Google OAuth / Calendar, Groq voice, common errors (`redirect_uri_mismatch`) |
 | [Deploy](deploy.md) | Free hosting on Render + Neon, GitHub Actions CI, `master` auto-deploy |
 | [Task creation rules](task-creation-rules.md) | Presets vs settings, validation, phase, recurrence weekdays, Google sync |
-| [Roadmap](roadmap.md) | Done, in progress, planned |
+| [Roadmap](roadmap.md) | Live queue |
+| [Roadmap archive](roadmap-archive.md) | Shipped work |
 | [Spec: Intelligent scheduling](spec-intelligent-scheduling.md) | Unified items, settings, phases, queue, diff/undo, Google anchors |
 | [Task scheduling test matrix](task-scheduling-test-matrix.md) | Given/When/Then cases mapped to unit tests |
 | [E2E test coverage plan](e2e-test-coverage.md) | All live API/UI cases and edge cases, layers, P0 smoke, implementation waves |
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** September 2026 (daily briefing and Telegram dropped from the roadmap).
+**Last documentation update:** September 2026 (calendar personal day: wake until sleep, after-midnight hours stay on that day).

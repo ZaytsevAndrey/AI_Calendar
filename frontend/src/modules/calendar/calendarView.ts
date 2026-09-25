@@ -1,5 +1,10 @@
 import { format } from 'date-fns';
 import { GoogleCalendarEvent } from '../../api/google-calendar.api';
+import {
+  minutesToTime,
+  resolveActiveWindow,
+  resolvePhaseRangeInActiveWindow,
+} from '../phases/utils/phasesTimeUtils';
 import { formatClock, formatLongDate, formatMonthYear, formatWeekRange } from '../../utils/formatDate';
 
 export type CalendarView = 'day' | 'week' | 'month';
@@ -114,14 +119,282 @@ export function isEventInSleepHours(
   return hm ? isSleepClockTime(hm, sleep) : false;
 }
 
-/** Hour labels shown on the day grid (sleep hours omitted). */
-export function wakingHourSlots(sleep?: SleepWindow): string[] {
-  const slots: string[] = [];
-  for (let hour = 0; hour < 24; hour++) {
-    const time = `${hour.toString().padStart(2, '0')}:00`;
-    if (!isSleepClockTime(time, sleep)) slots.push(time);
+const MINUTES_PER_DAY = 24 * 60;
+
+export type ClockPhase = {
+  startTime: string;
+  endTime: string;
+  type?: string | null;
+  name?: string | null;
+  weekDays?: number[] | null;
+};
+
+/** Personal-day minutes. `end` may be past 24:00 when sleep is after midnight. */
+export type CalendarAxis = {
+  startMin: number;
+  endMin: number;
+  /** Visible stretches inside the personal day. Gaps between phases are omitted. */
+  segments: { start: number; end: number }[];
+  spanMin: number;
+};
+
+export type VisibleHourBand = {
+  label: string;
+  /** Offset from the top of the visible axis, in minutes. */
+  displayMin: number;
+  durationMin: number;
+  personalMin: number;
+};
+
+function clockHm(value: string): string {
+  const match = value.trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return value.trim();
+  return `${match[1].padStart(2, '0')}:${match[2]}`;
+}
+
+function wakeSleepClocks(sleep?: SleepWindow): { wake: string; sleep: string } {
+  const hasCustom =
+    Boolean(sleep?.sleepTime?.trim()) && Boolean(sleep?.wakeTime?.trim());
+  return {
+    wake: clockHm(hasCustom ? sleep!.wakeTime! : '06:00'),
+    sleep: clockHm(hasCustom ? sleep!.sleepTime! : '23:00'),
+  };
+}
+
+function addLocalDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function isSchedulablePhase(phase: ClockPhase): boolean {
+  return phase.type !== 'sleep_time' && phase.type !== 'main_phase' && phase.name !== 'Focus hours';
+}
+
+function mergeSegments(
+  ranges: { start: number; end: number }[],
+): { start: number; end: number }[] {
+  const sorted = ranges
+    .filter((range) => range.end > range.start)
+    .sort((a, b) => a.start - b.start);
+  const merged: { start: number; end: number }[] = [];
+  for (const range of sorted) {
+    const last = merged[merged.length - 1];
+    if (!last || range.start > last.end) merged.push({ ...range });
+    else last.end = Math.max(last.end, range.end);
   }
-  return slots;
+  return merged;
+}
+
+/** Wake until sleep. After-midnight hours before sleep belong to this personal day. */
+export function personalDayWindow(sleep?: SleepWindow): {
+  start: number;
+  end: number;
+  spansNextDay: boolean;
+} {
+  const clocks = wakeSleepClocks(sleep);
+  return resolveActiveWindow(clocks.wake, clocks.sleep);
+}
+
+export function phasesForDays(phases: ClockPhase[], days: Date[]): ClockPhase[] {
+  if (!days.length) return phases.filter(isSchedulablePhase);
+  return phases.filter((phase) => {
+    if (!isSchedulablePhase(phase)) return false;
+    if (!phase.weekDays?.length) return true;
+    return days.some((day) => phase.weekDays!.includes(day.getDay()));
+  });
+}
+
+/**
+ * Visible clock for one personal day.
+ * Sleep is omitted. Hours no schedulable phase covers are omitted too.
+ * With no phases, the whole wake-to-sleep window stays visible.
+ * 00:00 until sleep is the end of the day, not a strip at the top.
+ */
+export function buildCalendarAxis(sleep?: SleepWindow, phases?: ClockPhase[]): CalendarAxis {
+  const window = personalDayWindow(sleep);
+  const schedulable = (phases ?? []).filter(isSchedulablePhase);
+  let segments = schedulable.length
+    ? mergeSegments(
+        schedulable.map((phase) => {
+          const range = resolvePhaseRangeInActiveWindow(
+            phase.startTime,
+            phase.endTime,
+            window,
+          );
+          return {
+            start: Math.max(range.start, window.start),
+            end: Math.min(range.end, window.end),
+          };
+        }),
+      )
+    : [];
+  if (!segments.length) {
+    segments = [{ start: window.start, end: window.end }];
+  }
+  const spanMin = segments.reduce((total, segment) => total + (segment.end - segment.start), 0);
+  return {
+    startMin: window.start,
+    endMin: window.end,
+    segments,
+    spanMin: Math.max(spanMin, 60),
+  };
+}
+
+/** Map a personal-day minute onto the packed visible axis. Gap minutes return null. */
+export function personalToDisplay(axis: CalendarAxis, personalMin: number): number | null {
+  let offset = 0;
+  for (const segment of axis.segments) {
+    if (personalMin < segment.start) return null;
+    if (personalMin <= segment.end) return offset + (personalMin - segment.start);
+    offset += segment.end - segment.start;
+  }
+  return null;
+}
+
+/**
+ * Inverse of `personalToDisplay`. A shared boundary between two visible
+ * stretches belongs to the later stretch, so a drop lands on the next phase
+ * rather than inside the hidden gap.
+ */
+export function displayToPersonal(axis: CalendarAxis, displayMin: number): number {
+  const clamped = Math.max(0, Math.min(axis.spanMin, displayMin));
+  let offset = 0;
+  for (let index = 0; index < axis.segments.length; index += 1) {
+    const segment = axis.segments[index];
+    const length = segment.end - segment.start;
+    const isLast = index === axis.segments.length - 1;
+    if (clamped < offset + length || (isLast && clamped <= offset + length)) {
+      return segment.start + (clamped - offset);
+    }
+    offset += length;
+  }
+  const last = axis.segments[axis.segments.length - 1];
+  return last ? last.end : axis.startMin;
+}
+
+export function visibleHourBands(axis: CalendarAxis): VisibleHourBand[] {
+  const bands: VisibleHourBand[] = [];
+  for (const segment of axis.segments) {
+    const firstHour = Math.floor(segment.start / 60);
+    const lastHour = Math.ceil(segment.end / 60);
+    for (let hour = firstHour; hour < lastHour; hour += 1) {
+      const hourStart = hour * 60;
+      const overlapStart = Math.max(hourStart, segment.start);
+      const overlapEnd = Math.min(hourStart + 60, segment.end);
+      if (overlapEnd <= overlapStart) continue;
+      const displayMin = personalToDisplay(axis, overlapStart);
+      if (displayMin == null) continue;
+      bands.push({
+        label: minutesToTime(overlapStart),
+        displayMin,
+        durationMin: overlapEnd - overlapStart,
+        personalMin: overlapStart,
+      });
+    }
+  }
+  return bands;
+}
+
+/** Hour labels on the personal day, wake through the last hour before sleep. */
+export function wakingHourSlots(sleep?: SleepWindow, phases?: ClockPhase[]): string[] {
+  return visibleHourBands(buildCalendarAxis(sleep, phases)).map((band) => band.label);
+}
+
+function instantPersonalMinutes(
+  instant: Date,
+  columnDay: Date,
+  axis: CalendarAxis,
+  inclusiveEnd: boolean,
+): number | null {
+  const clock = instant.getHours() * 60 + instant.getMinutes();
+  const column = startOfLocalDay(columnDay);
+  const instantDay = startOfLocalDay(instant);
+  const fits = (personal: number) =>
+    personal >= axis.startMin &&
+    (inclusiveEnd ? personal <= axis.endMin : personal < axis.endMin);
+
+  if (sameLocalDay(instantDay, column)) {
+    return fits(clock) ? clock : null;
+  }
+  if (axis.endMin > MINUTES_PER_DAY && sameLocalDay(instantDay, addLocalDays(column, 1))) {
+    const wrapped = clock + MINUTES_PER_DAY;
+    return fits(wrapped) ? wrapped : null;
+  }
+  return null;
+}
+
+function clipPersonalToDisplay(
+  startMin: number,
+  endMin: number,
+  axis: CalendarAxis,
+): { startMin: number; endMin: number } | null {
+  let displayStart: number | null = null;
+  let displayEnd: number | null = null;
+  for (const segment of axis.segments) {
+    const start = Math.max(startMin, segment.start);
+    const end = Math.min(endMin, segment.end);
+    if (end <= start) continue;
+    const mappedStart = personalToDisplay(axis, start);
+    const mappedEnd = personalToDisplay(axis, end);
+    if (mappedStart == null || mappedEnd == null) continue;
+    displayStart = displayStart == null ? mappedStart : Math.min(displayStart, mappedStart);
+    displayEnd = displayEnd == null ? mappedEnd : Math.max(displayEnd, mappedEnd);
+  }
+  if (displayStart == null || displayEnd == null || displayEnd <= displayStart) return null;
+  return { startMin: displayStart, endMin: displayEnd };
+}
+
+/** Timed event drawn on this personal-day column, in packed display minutes. */
+export function eventDisplayRange(
+  event: GoogleCalendarEvent,
+  columnDay: Date,
+  axis: CalendarAxis,
+): { startMin: number; endMin: number } | null {
+  if (!event.start.dateTime) return null;
+  const start = eventStartDate(event);
+  if (!start) return null;
+  const end = eventEndDate(event) ?? new Date(start.getTime() + 15 * 60 * 1000);
+  const personalStart = instantPersonalMinutes(start, columnDay, axis, false);
+  if (personalStart == null) return null;
+  let personalEnd = instantPersonalMinutes(end, columnDay, axis, true);
+  if (personalEnd == null || personalEnd <= personalStart) {
+    if (end.getTime() <= start.getTime()) return null;
+    personalEnd = axis.endMin;
+  }
+  return clipPersonalToDisplay(personalStart, Math.min(personalEnd, axis.endMin), axis);
+}
+
+export function habitDisplayOnColumn(
+  chipYmd: string,
+  clockMin: number,
+  durationMin: number,
+  columnDay: Date,
+  axis: CalendarAxis,
+): { displayStart: number; displayDuration: number } | null {
+  const columnYmd = format(startOfLocalDay(columnDay), 'yyyy-MM-dd');
+  const nextYmd = format(addLocalDays(startOfLocalDay(columnDay), 1), 'yyyy-MM-dd');
+  let personalStart: number | null = null;
+  if (
+    chipYmd === columnYmd &&
+    clockMin >= axis.startMin &&
+    clockMin < Math.min(axis.endMin, MINUTES_PER_DAY)
+  ) {
+    personalStart = clockMin;
+  } else if (
+    axis.endMin > MINUTES_PER_DAY &&
+    chipYmd === nextYmd &&
+    clockMin + MINUTES_PER_DAY < axis.endMin
+  ) {
+    personalStart = clockMin + MINUTES_PER_DAY;
+  }
+  if (personalStart == null) return null;
+  const clipped = clipPersonalToDisplay(personalStart, personalStart + Math.max(durationMin, 1), axis);
+  if (!clipped) return null;
+  return {
+    displayStart: clipped.startMin,
+    displayDuration: clipped.endMin - clipped.startMin,
+  };
 }
 
 export function eventsForHourSlot(
@@ -138,15 +411,25 @@ export function eventsForHourSlot(
   });
 }
 
-/** Week/month chips: all-day stays visible; timed events in sleep hours are hidden. */
+/**
+ * Chips for one personal day. All-day stays on the civil date.
+ * A timed block after midnight and before sleep belongs to the previous personal day.
+ * Blocks during sleep, or outside every schedulable phase, are omitted.
+ */
 export function gridEventsForDay(
   events: GoogleCalendarEvent[],
   day: Date,
   sleep?: SleepWindow,
+  phases?: ClockPhase[],
 ): GoogleCalendarEvent[] {
-  return eventsForDay(events, day).filter(
-    (event) => !event.start.dateTime || !isEventInSleepHours(event, sleep),
-  );
+  const axis = buildCalendarAxis(sleep, phases);
+  return events.filter((event) => {
+    if (!event.start.dateTime) {
+      const start = eventStartDate(event);
+      return start ? sameLocalDay(start, day) : false;
+    }
+    return eventDisplayRange(event, day, axis) != null;
+  });
 }
 
 export function getDaysInView(view: CalendarView, date: Date): Date[] {
@@ -196,18 +479,15 @@ export function eventsVisibleInView(
   date: Date,
   events: GoogleCalendarEvent[],
   sleep?: SleepWindow,
+  phases?: ClockPhase[],
 ): GoogleCalendarEvent[] {
   const days = getDaysInView(view, date);
   const seen = new Set<string>();
   const visible: GoogleCalendarEvent[] = [];
   for (const day of days) {
-    const dayEvents =
-      view === 'day'
-        ? eventsForDay(events, day).filter((event) => {
-            if (!event.start.dateTime) return false;
-            return !isEventInSleepHours(event, sleep);
-          })
-        : gridEventsForDay(events, day, sleep);
+    const dayEvents = gridEventsForDay(events, day, sleep, phases).filter((event) =>
+      view === 'day' ? !!event.start.dateTime : true,
+    );
     for (const event of dayEvents) {
       if (seen.has(event.id)) continue;
       seen.add(event.id);
@@ -280,42 +560,44 @@ export function tooltipText(event: GoogleCalendarEvent): string {
   return parts.join('\n');
 }
 
+/** End of the last personal day. After-midnight sleep extends into the next civil morning. */
+function personalDayQueryEnd(lastDay: Date, sleep?: SleepWindow): Date {
+  const window = personalDayWindow(sleep);
+  if (!window.spansNextDay) return endOfLocalDay(lastDay);
+  const end = addLocalDays(startOfLocalDay(lastDay), 1);
+  const tail = window.end - MINUTES_PER_DAY;
+  end.setHours(Math.floor(tail / 60), tail % 60, 0, 0);
+  return end;
+}
+
 export function eventsQueryRange(
   view: CalendarView,
   date: Date,
+  sleep?: SleepWindow,
 ): { timeMin: string; timeMax: string } {
   if (view === 'day') {
     return {
       timeMin: startOfLocalDay(date).toISOString(),
-      timeMax: endOfLocalDay(date).toISOString(),
+      timeMax: personalDayQueryEnd(date, sleep).toISOString(),
     };
   }
   if (view === 'week') {
     const startOfWeek = startOfWeekMonday(date);
+    const lastDay = new Date(
+      startOfWeek.getFullYear(),
+      startOfWeek.getMonth(),
+      startOfWeek.getDate() + 6,
+    );
     return {
       timeMin: startOfWeek.toISOString(),
-      timeMax: endOfLocalDay(
-        new Date(
-          startOfWeek.getFullYear(),
-          startOfWeek.getMonth(),
-          startOfWeek.getDate() + 6,
-        ),
-      ).toISOString(),
+      timeMax: personalDayQueryEnd(lastDay, sleep).toISOString(),
     };
   }
   const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
-  const endOfMonth = new Date(
-    date.getFullYear(),
-    date.getMonth() + 1,
-    0,
-    23,
-    59,
-    59,
-    999,
-  );
+  const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0);
   return {
     timeMin: startOfMonth.toISOString(),
-    timeMax: endOfMonth.toISOString(),
+    timeMax: personalDayQueryEnd(endOfMonth, sleep).toISOString(),
   };
 }
 
