@@ -4,7 +4,8 @@
 
 1. **Confirm Phase 5** — new/changed behavior is covered by tests and the relevant commands passed (or the user explicitly waived tests).
 2. **Update product documentation** in `documentation/` so it matches what shipped. Do this in the same change as the feature, before the commit. Touch only files the feature actually changed:
-   - `roadmap.md` — mark the item done with a short behavior note; point **Recommended next steps** at the new queue head.
+   - `roadmap.md` — remove the shipped item from the live queue; point **Recommended next steps** at what is still open.
+   - `roadmap-archive.md` — add the done item with a short behavior note.
    - `overview.md` — user-visible behavior in **Features**.
    - `api-reference.md` — only when routes or payload fields changed.
    - `e2e-test-coverage.md` — add cases for the new behavior; drop the item from “out of scope” once it exists.
