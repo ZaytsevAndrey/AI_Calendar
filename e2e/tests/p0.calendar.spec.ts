@@ -1,4 +1,133 @@
 import { test, expect, openAs, apiJson, expectOk, uniqueName, completeOpenTasks, stripBlock, skippableStripCard, waitForScheduleJob, deleteUnusedTimePhases } from '../helpers/fixtures';
+import type { APIRequestContext } from '@playwright/test';
+
+const KYIV = 'Europe/Kyiv';
+
+function zonedParts(ms: number, timeZone: string): Record<string, string> {
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  });
+  const bag: Record<string, string> = {};
+  for (const part of fmt.formatToParts(new Date(ms))) {
+    if (part.type !== 'literal') bag[part.type] = part.value;
+  }
+  return bag;
+}
+
+function kyivDayEndMs(ms: number): number {
+  const p = zonedParts(ms, KYIV);
+  const y = Number(p.year);
+  const m = Number(p.month);
+  const d = Number(p.day);
+  const next = new Date(Date.UTC(y, m - 1, d + 1));
+  const ymd = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}-${String(next.getUTCDate()).padStart(2, '0')}`;
+  return zonedClockToUtc(ymd, 0, 0, KYIV);
+}
+
+function zonedClockToUtc(ymd: string, hour: number, minute: number, timeZone: string): number {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const utcGuess = Date.UTC(y, m - 1, d, hour, minute, 0);
+  const p = zonedParts(utcGuess, timeZone);
+  let gotHour = Number(p.hour);
+  let gotDay = Number(p.day);
+  if (gotHour === 24) {
+    gotHour = 0;
+    gotDay += 1;
+  }
+  const asUtc = Date.UTC(Number(p.year), Number(p.month) - 1, gotDay, gotHour, Number(p.minute), Number(p.second));
+  return utcGuess - (asUtc - utcGuess);
+}
+
+function clockMinutes(ms: number): number {
+  const p = zonedParts(ms, KYIV);
+  let hour = Number(p.hour);
+  if (hour === 24) hour = 0;
+  return hour * 60 + Number(p.minute);
+}
+
+function formatHm(mins: number): string {
+  const m = ((mins % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+
+/** Wake/sleep that contains now and the next 45 minutes, including across midnight. */
+function awakeWindowAround(nowMs: number): { wakeTime: string; sleepTime: string } {
+  const nowMin = clockMinutes(nowMs);
+  const start = nowMin - 5;
+  const end = nowMin + 45;
+  if (start >= 0 && end < 1440) {
+    return { wakeTime: formatHm(start), sleepTime: formatHm(end) };
+  }
+  if (start < 0) {
+    return { wakeTime: '00:00', sleepTime: formatHm(Math.max(end, 45)) };
+  }
+  return { wakeTime: formatHm(start), sleepTime: formatHm(end) };
+}
+
+async function releaseCompletedFixedBlocks(request: APIRequestContext, token: string): Promise<void> {
+  const listed = await apiJson(request, token, 'get', '/tasks');
+  expectOk(listed);
+  const tasks = Array.isArray(listed.body) ? listed.body : [];
+  for (const task of tasks) {
+    if (!task?.id || task.eventType !== 'fixed') continue;
+    if (task.status !== 'completed' && task.status !== 'canceled') continue;
+    if (!task.scheduledStartTime && !task.scheduledEndTime) continue;
+    expectOk(
+      await apiJson(request, token, 'patch', `/tasks/${task.id}`, {
+        eventType: 'admin',
+        scheduledStartTime: null,
+        scheduledEndTime: null,
+      }),
+    );
+  }
+}
+
+async function pinAwakeAroundNow(
+  request: APIRequestContext,
+  token: string,
+  nowMs: number,
+): Promise<() => Promise<void>> {
+  const settings = await apiJson(request, token, 'get', '/user-settings');
+  expectOk(settings);
+  const phases = await apiJson(request, token, 'get', '/phases');
+  expectOk(phases);
+  const list = Array.isArray(phases.body) ? phases.body : [];
+  const focus = list.find((phase) => phase?.name === 'Focus hours');
+  const window = awakeWindowAround(nowMs);
+  expectOk(
+    await apiJson(request, token, 'patch', '/user-settings', {
+      wakeTime: window.wakeTime,
+      sleepTime: window.sleepTime,
+    }),
+  );
+  if (focus?.id) {
+    expectOk(
+      await apiJson(request, token, 'patch', `/phases/${focus.id}`, {
+        startTime: window.wakeTime,
+        endTime: window.sleepTime,
+      }),
+    );
+  }
+  return async () => {
+    await apiJson(request, token, 'patch', '/user-settings', {
+      wakeTime: settings.body.wakeTime,
+      sleepTime: settings.body.sleepTime,
+    });
+    if (focus?.id) {
+      await apiJson(request, token, 'patch', `/phases/${focus.id}`, {
+        startTime: focus.startTime,
+        endTime: focus.endTime,
+      });
+    }
+  };
+}
 
 async function generateSchedule(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: 'Schedule' }).click();
@@ -91,6 +220,13 @@ test.describe('P0 calendar UI', () => {
     const nowName = uniqueName('E2E now');
     const nextName = uniqueName('E2E next');
     const now = Date.now();
+    const dayEnd = kyivDayEndMs(now);
+    let nextStart = now + 45 * 60_000;
+    let nextEnd = now + 75 * 60_000;
+    if (nextStart >= dayEnd) {
+      nextStart = Math.min(now + 60_000, dayEnd - 1000);
+      nextEnd = nextStart + 15 * 60_000;
+    }
     expectOk(
       await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
         name: nowName,
@@ -106,8 +242,8 @@ test.describe('P0 calendar UI', () => {
         name: nextName,
         eventType: 'fixed',
         estimatedTimeInMinutes: 30,
-        scheduledStartTime: new Date(now + 45 * 60_000).toISOString(),
-        scheduledEndTime: new Date(now + 75 * 60_000).toISOString(),
+        scheduledStartTime: new Date(nextStart).toISOString(),
+        scheduledEndTime: new Date(nextEnd).toISOString(),
         timeZone: 'Europe/Kyiv',
       }),
     );
@@ -151,17 +287,25 @@ test.describe('P0 calendar UI', () => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const recurringName = uniqueName('E2E series');
     const now = Date.now();
-    expectOk(
-      await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
-        name: recurringName,
-        eventType: 'admin',
-        isRecurring: true,
-        recurrencePattern: 'DAILY',
-        recurrenceWeekDays: [0, 1, 2, 3, 4, 5, 6],
-        estimatedTimeInMinutes: 30,
-        timeZone: 'Europe/Kyiv',
-      }),
-    );
+    const dayEnd = kyivDayEndMs(now);
+    let seriesStart = now + 20 * 60_000;
+    if (seriesStart >= dayEnd) seriesStart = Math.min(now + 2 * 60_000, dayEnd - 1000);
+    if (seriesStart <= now) seriesStart = now + 1000;
+    const seriesEnd = seriesStart + 15 * 60_000;
+    const dentistEnd = Math.min(now + 8 * 60_000, seriesStart - 1000);
+    const created = await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
+      name: recurringName,
+      eventType: 'admin',
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      recurrenceWeekDays: [0, 1, 2, 3, 4, 5, 6],
+      estimatedTimeInMinutes: 30,
+      scheduledStartTime: new Date(seriesStart).toISOString(),
+      scheduledEndTime: new Date(seriesEnd).toISOString(),
+      timeZone: 'Europe/Kyiv',
+    });
+    expectOk(created);
+    await waitForScheduleJob(request, auth.onboarded.access_token, created.body.jobId);
 
     await page.route('**/google-calendar/events**', async (route) => {
       if (route.request().method() !== 'GET') {
@@ -177,7 +321,7 @@ test.describe('P0 calendar UI', () => {
               id: 'ext-google-dentist',
               summary: 'External dentist',
               start: { dateTime: new Date(now - 5 * 60_000).toISOString() },
-              end: { dateTime: new Date(now + 20 * 60_000).toISOString() },
+              end: { dateTime: new Date(dentistEnd).toISOString() },
               isAppGenerated: false,
             },
           ],
@@ -202,43 +346,41 @@ test.describe('P0 calendar UI', () => {
     auth,
     request,
   }) => {
-    await completeOpenTasks(request, auth.onboarded.access_token);
+    const token = auth.onboarded.access_token;
+    await completeOpenTasks(request, token);
+    await releaseCompletedFixedBlocks(request, token);
+    const nowMs = Date.now();
+    const restoreAwake = await pinAwakeAroundNow(request, token, nowMs);
     const name = uniqueName('E2E skip now');
-    const start = new Date(Date.now() - 5 * 60_000).toISOString();
-    const end = new Date(Date.now() + 25 * 60_000).toISOString();
-    const created = await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
-      name,
-      eventType: 'admin',
-      estimatedTimeInMinutes: 30,
-      scheduledStartTime: start,
-      scheduledEndTime: end,
-      timeZone: 'Europe/Kyiv',
-    });
-    expectOk(created);
-    await waitForScheduleJob(request, auth.onboarded.access_token, created.body.jobId);
-    const placed = await apiJson(request, auth.onboarded.access_token, 'get', `/tasks/${created.body.id}`);
-    expectOk(placed);
-    if (!placed.body.scheduledStartTime || !placed.body.scheduledEndTime) {
-      expectOk(
-        await apiJson(request, auth.onboarded.access_token, 'post', '/schedule', {
-          taskId: created.body.id,
-          scheduledStartTime: start,
-          scheduledEndTime: end,
-        }),
-      );
+    try {
+      const created = await apiJson(request, token, 'post', '/tasks', {
+        name,
+        eventType: 'admin',
+        estimatedTimeInMinutes: 30,
+        allowSplit: false,
+        timeZone: 'Europe/Kyiv',
+      });
+      expectOk(created);
+      await waitForScheduleJob(request, token, created.body.jobId);
+      const placed = await apiJson(request, token, 'get', `/tasks/${created.body.id}`);
+      expectOk(placed);
+      expect(new Date(placed.body.scheduledStartTime).getTime()).toBeLessThanOrEqual(Date.now());
+      expect(new Date(placed.body.scheduledEndTime).getTime()).toBeGreaterThan(Date.now());
+
+      await openAs(page, auth.onboarded);
+      const skipCard = skippableStripCard(page, name);
+      await expect(skipCard).toBeVisible();
+      await skipCard.getByRole('button', { name: 'Skip' }).click();
+      await expect(page.getByText('Occurrence skipped')).toBeVisible();
+      await expect(skipCard).toHaveCount(0);
+
+      const listed = await apiJson(request, token, 'get', `/tasks/${created.body.id}`);
+      expectOk(listed);
+      expect(listed.body.status).toBe('todo');
+      expect(listed.body.scheduledStartTime == null).toBeTruthy();
+    } finally {
+      await restoreAwake();
     }
-
-    await openAs(page, auth.onboarded);
-    const skipCard = skippableStripCard(page, name);
-    await expect(skipCard).toBeVisible();
-    await skipCard.getByRole('button', { name: 'Skip' }).click();
-    await expect(page.getByText('Occurrence skipped')).toBeVisible();
-    await expect(skipCard).toHaveCount(0);
-
-    const listed = await apiJson(request, auth.onboarded.access_token, 'get', `/tasks/${created.body.id}`);
-    expectOk(listed);
-    expect(listed.body.status).toBe('todo');
-    expect(listed.body.scheduledStartTime == null).toBeTruthy();
   });
 
   test('U-CAL-020 recurring Now block has Skip and no Done', async ({ page, auth, request }) => {
