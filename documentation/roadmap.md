@@ -48,10 +48,9 @@ Product extras (ship only if the loop above is trustworthy):
 - [x] **Voice beyond create** (Sep 2026). The same mic completes, skips, or reschedules the current or named task (uk/en/ru). Done on a series skips today's occurrence. An open slot moves like a drag; no slot updates the window and replans. One question, then a refusal. Settings **Ask before voice commands** (off by default) confirms first. Create stays immediate.
 - [x] **Search / filters on tasks** (Sep 2026). Tasks page only, client-side, and the two sections do not share controls. **Unscheduled:** name search, status, overdue. **Scheduled:** name search, status, phase (any / one phase / no phase), schedule type (fixed / flexible / recurring), overdue, and the existing sort. Filters combine. Overdue means a past deadline on a task that is not completed or canceled. Empty search and “any” hide nothing.
 - [x] **Soft buffers** (Sep 2026). Settings **Buffer around fixed events** (0–180 minutes, default 0). Generate keeps that gap before and after each fixed task and external Google event. Habits and ended flexible slots are not padded. The gap is used only when the task would not fit otherwise. Dragging a block can still land in it. Nothing is written to the calendar for the gap itself.
-- [ ] **Daily briefing** — morning summary in-app (later Telegram): today, risks, overdue.
 - [ ] **UI language (uk / en)** — voice already understands uk/en/ru; the chrome is English-only.
 - [ ] Statistics and dashboard.
-- [ ] Integrations (Telegram, Notion, etc.).
+- [ ] Integrations (Notion and others).
 - [ ] Mobile / desktop clients if needed.
 - [ ] Optional: auto-sync default Sleep/Focus phase times when only wake/sleep settings change.
 - [ ] Further scheduling heuristics (e.g. deeper multi-task optimization), analytics.
@@ -120,7 +119,7 @@ Open Phase 5 items live in **Now / Next / Then / Later** above.
 
 ## Recommended next steps
 
-1. Later extras (daily briefing, stats, integrations, parked polish).
+1. Later extras (UI language, stats, integrations, parked polish).
 2. Add Playwright (or similar) **E2E** for voice create, Done vs calendar, Generate/Undo; expand unit tests as you touch flows; optional custom subdomain (see [deploy](deploy.md)).
 3. **Last:** in-app product guide, once the app is ready.
 4. Update this file when scope changes.
