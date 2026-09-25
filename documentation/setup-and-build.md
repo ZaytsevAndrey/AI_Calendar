@@ -91,12 +91,14 @@ cd frontend && npm run build
 
 ```bash
 npm run lint         # all workspaces that define the script
-npm run test         # all workspaces (backend Jest + frontend `*.spec.ts`: toast copy, past app-event color)
-npm run test:e2e:ui  # Playwright P0 against webpack :3100 + API :3101 (install Chromium once: npx playwright install chromium)
+npm run test         # backend Jest, then frontend Jest
+npm run test:e2e:ui  # Playwright against webpack :3100 + API :3101 (install Chromium once: npx playwright install chromium)
 npm run clean        # remove node_modules / build / dist (see scripts/clean.js)
 ```
 
-Playwright does not use your local `db.sqlite` or ports 3000/3001. The API boots with `E2E_BOOTSTRAP=1` and `E2E_STUB_EXTERNAL=1` (no Google/Groq). First run downloads the Chromium browser.
+Tests run **one after another**. Jest uses `--runInBand` (one process; the next file starts only after the previous file’s tests finish). From the repo root, `npm test` runs the backend suite and then the frontend suite. Backend API e2e (`npm run test:e2e` in `backend`) is also `--runInBand`. Playwright uses a single worker.
+
+Playwright does not use your local `db.sqlite` or ports 3000/3001. The API boots with `E2E_BOOTSTRAP=1` and `E2E_STUB_EXTERNAL=1` (no Google/Groq). First run downloads the Chromium browser. The default window is Desktop Chrome **1280×720**. One UI case (`U-CAL-017`) uses a phone window **390×844**.
 
 ## Database
 

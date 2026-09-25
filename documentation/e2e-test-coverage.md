@@ -41,7 +41,7 @@ Default: **API E2E first**. UI E2E only for glue that unit/API cannot see. Do no
 
 ### Harness (UI)
 
-- Playwright: start frontend + backend (`e2e/playwright.config.ts`, ports **3100** / **3101**, isolated SQLite).
+- Playwright: start frontend + backend (`e2e/playwright.config.ts`, ports **3100** / **3101**, isolated SQLite). **One worker**; each test starts after the previous one finishes. Default viewport is Desktop Chrome **1280×720**. `U-CAL-017` is the phone case (**390×844**). The iOS install hint changes the user agent only.
 - Seed JWT into Redux persist / `localStorage` (`auth` slice + `access_token`). Skip the real Google redirect. Backend `E2E_BOOTSTRAP=1` writes `e2e/.tmp/auth.json` (onboarded / needs-settings / needs-phases users).
 - Stub Google on the API with `E2E_STUB_EXTERNAL=1` (`checkConnection` false, empty event lists). No real Groq in P0 smoke.
 - One headed debug run is optional; CI is headless (`npm run test:e2e:ui`).

@@ -31,6 +31,6 @@
 
 ## Push
 
-When the feature is done, the root build succeeds, **all tests passed**, and the **end-to-end** suite passed too, commit the feature and **push the current branch immediately**. Do not wait for a separate push request. Run the full suite (`--maxWorkers=2`), e2e, and the root build one after another, never at the same time.
+When the feature is done, the root build succeeds, **all tests passed**, and the **end-to-end** suite passed too, commit the feature and **push the current branch immediately**. Do not wait for a separate push request. Run the full suite, e2e, and the root build one after another, never at the same time. Jest is already `--runInBand`.
 
 Do not push when tests were skipped, end-to-end was not run, or end-to-end failed. Leave unrelated uncommitted work out of the commit.
