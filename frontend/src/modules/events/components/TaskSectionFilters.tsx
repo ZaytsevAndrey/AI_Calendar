@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { ListFilter, Search, X } from 'lucide-react';
 import type { ScheduleModeFilter, TaskStatusFilter } from '../utils/taskListFilters';
 
 type SortField = 'name' | 'priority' | 'deadline' | 'estimatedTimeInMinutes';
@@ -9,8 +10,28 @@ const STATUS_OPTIONS: { value: TaskStatusFilter; label: string }[] = [
   { value: 'in_progress', label: 'In Progress' },
   { value: 'completed', label: 'Completed' },
   { value: 'canceled', label: 'Canceled' },
-  { value: 'all', label: 'All (including past)' },
+  { value: 'all', label: 'All' },
 ];
+
+const MODE_LABEL: Record<Exclude<ScheduleModeFilter, 'any'>, string> = {
+  fixed: 'Fixed',
+  flexible: 'Flexible',
+  recurring: 'Recurring',
+};
+
+const SORT_LABEL: Record<SortField, string> = {
+  deadline: 'Deadline',
+  priority: 'Priority',
+  name: 'Name',
+  estimatedTimeInMinutes: 'Duration',
+};
+
+function specificMode(
+  mode: ScheduleModeFilter | undefined,
+): Exclude<ScheduleModeFilter, 'any'> | null {
+  if (!mode || mode === 'any') return null;
+  return mode;
+}
 
 interface TaskSectionFiltersProps {
   idPrefix: string;
@@ -54,26 +75,83 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
 }) => {
   const searchId = `${idPrefix}Search`;
   const statusId = idPrefix === 'scheduled' ? 'statusFilter' : `${idPrefix}Status`;
-  const overdueId = `${idPrefix}Overdue`;
+  const panelId = useId();
+  const moreRef = useRef<HTMLDivElement>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  const showPhase = Boolean(onPhaseIdChange && phaseId !== undefined);
+  const showMode = Boolean(onModeChange && mode !== undefined);
+  const showSort = Boolean(onSortFieldChange && sortField !== undefined);
+  const hasMore = showPhase || showMode || showSort;
+
+  const phaseActive = showPhase && phaseId !== 'any';
+  const activeMode = specificMode(mode);
+  const modeActive = showMode && activeMode !== null;
+  const sortActive = showSort && sortField !== 'deadline';
+  const moreCount = [phaseActive, modeActive, sortActive].filter(Boolean).length;
+  const narrowed =
+    query.trim() !== '' || status !== 'active' || overdueOnly || moreCount > 0;
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onDoc = (event: MouseEvent) => {
+      if (!moreRef.current?.contains(event.target as Node)) setMoreOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMoreOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [moreOpen]);
+
+  const reset = () => {
+    onQueryChange('');
+    onStatusChange('active');
+    onOverdueOnlyChange(false);
+    onPhaseIdChange?.('any');
+    onModeChange?.('any');
+    onSortFieldChange?.('deadline');
+  };
+
+  const phaseName =
+    phaseId === 'none'
+      ? 'No phase'
+      : (phases ?? []).find((phase) => phase.id === phaseId)?.name ?? 'Phase';
 
   return (
-    <div className="filter-bar">
-      <div className="w-full sm:max-w-xs">
-        <label htmlFor={searchId} className="ui-label">
-          Search
-        </label>
-        <input
-          id={searchId}
-          type="search"
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="Task name"
-          aria-label={searchAriaLabel}
-          className="ui-input"
-        />
-      </div>
-      <div className="w-full sm:max-w-xs">
-        <label htmlFor={statusId} className="ui-label">
+    <div className="mb-3 space-y-2">
+      <div className="filter-bar mb-0">
+        <div className="relative min-w-[10rem] flex-1 basis-full sm:basis-auto sm:max-w-sm">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ide-muted"
+            aria-hidden
+          />
+          <input
+            id={searchId}
+            type="search"
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder="Search"
+            aria-label={searchAriaLabel}
+            className={`filter-search ${query ? 'pr-8' : ''}`}
+          />
+          {query ? (
+            <button
+              type="button"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-ide-muted hover:text-ide-text"
+              aria-label={`Clear ${searchAriaLabel}`}
+              onClick={() => onQueryChange('')}
+            >
+              <X className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          ) : null}
+        </div>
+
+        <label htmlFor={statusId} className="sr-only">
           Status
         </label>
         <select
@@ -81,7 +159,7 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
           value={status}
           aria-label={statusAriaLabel}
           onChange={(event) => onStatusChange(event.target.value as TaskStatusFilter)}
-          className="ui-select"
+          className="filter-select"
         >
           {STATUS_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
@@ -89,74 +167,137 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
             </option>
           ))}
         </select>
-      </div>
-      {onPhaseIdChange && phaseId !== undefined ? (
-        <div className="w-full sm:max-w-xs">
-          <label htmlFor={`${idPrefix}Phase`} className="ui-label">
-            Phase
-          </label>
-          <select
-            id={`${idPrefix}Phase`}
-            value={phaseId}
-            onChange={(event) => onPhaseIdChange(event.target.value)}
-            className="ui-select"
-          >
-            <option value="any">Any phase</option>
-            <option value="none">No phase</option>
-            {(phases ?? []).map((phase) => (
-              <option key={phase.id} value={phase.id}>
-                {phase.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : null}
-      {onModeChange && mode !== undefined ? (
-        <div className="w-full sm:max-w-xs">
-          <label htmlFor={`${idPrefix}Mode`} className="ui-label">
-            Schedule type
-          </label>
-          <select
-            id={`${idPrefix}Mode`}
-            value={mode}
-            onChange={(event) => onModeChange(event.target.value as ScheduleModeFilter)}
-            className="ui-select"
-          >
-            <option value="any">Any</option>
-            <option value="fixed">Fixed</option>
-            <option value="flexible">Flexible</option>
-            <option value="recurring">Recurring</option>
-          </select>
-        </div>
-      ) : null}
-      <div className="w-full sm:w-auto sm:self-end">
-        <label htmlFor={overdueId} className="flex min-h-[42px] items-center gap-2 text-sm text-ide-text">
-          <input
-            id={overdueId}
-            type="checkbox"
-            checked={overdueOnly}
-            aria-label={overdueAriaLabel}
-            onChange={(event) => onOverdueOnlyChange(event.target.checked)}
-          />
+
+        <button
+          type="button"
+          aria-pressed={overdueOnly}
+          aria-label={overdueAriaLabel}
+          onClick={() => onOverdueOnlyChange(!overdueOnly)}
+          className={`filter-chip ${overdueOnly ? 'border-ide-error bg-ide-error/15 text-white' : ''}`}
+        >
           Overdue
-        </label>
+        </button>
+
+        {hasMore ? (
+          <div className="relative" ref={moreRef}>
+            <button
+              type="button"
+              className={`filter-chip ${moreCount > 0 || moreOpen ? 'filter-chip-on' : ''}`}
+              aria-expanded={moreOpen}
+              aria-controls={panelId}
+              onClick={() => setMoreOpen((open) => !open)}
+            >
+              <ListFilter className="h-4 w-4" aria-hidden />
+              Filters
+              {moreCount > 0 ? (
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-ide-link px-1 text-xs font-semibold text-white">
+                  {moreCount}
+                </span>
+              ) : null}
+            </button>
+            {moreOpen ? (
+              <div
+                id={panelId}
+                role="dialog"
+                aria-label="More filters"
+                className="absolute left-0 z-20 mt-1 w-[min(18rem,calc(100vw-2rem))] space-y-3 rounded-lg border border-ide-border bg-ide-panel p-3 shadow-ide-md sm:left-auto sm:right-0"
+              >
+                {showPhase && onPhaseIdChange && phaseId !== undefined ? (
+                  <div>
+                    <label htmlFor={`${idPrefix}Phase`} className="mb-1 block text-xs text-ide-muted">
+                      Phase
+                    </label>
+                    <select
+                      id={`${idPrefix}Phase`}
+                      value={phaseId}
+                      onChange={(event) => onPhaseIdChange(event.target.value)}
+                      className="ui-select h-9 py-1"
+                    >
+                      <option value="any">Any phase</option>
+                      <option value="none">No phase</option>
+                      {(phases ?? []).map((phase) => (
+                        <option key={phase.id} value={phase.id}>
+                          {phase.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+                {showMode && onModeChange && mode !== undefined ? (
+                  <div>
+                    <label htmlFor={`${idPrefix}Mode`} className="mb-1 block text-xs text-ide-muted">
+                      Schedule type
+                    </label>
+                    <select
+                      id={`${idPrefix}Mode`}
+                      value={mode}
+                      onChange={(event) => onModeChange(event.target.value as ScheduleModeFilter)}
+                      className="ui-select h-9 py-1"
+                    >
+                      <option value="any">Any</option>
+                      <option value="fixed">Fixed</option>
+                      <option value="flexible">Flexible</option>
+                      <option value="recurring">Recurring</option>
+                    </select>
+                  </div>
+                ) : null}
+                {showSort && onSortFieldChange && sortField !== undefined ? (
+                  <div>
+                    <label htmlFor={`${idPrefix}Sort`} className="mb-1 block text-xs text-ide-muted">
+                      Sort by
+                    </label>
+                    <select
+                      id={`${idPrefix}Sort`}
+                      value={sortField}
+                      onChange={(event) => onSortFieldChange(event.target.value as SortField)}
+                      className="ui-select h-9 py-1"
+                    >
+                      <option value="deadline">Deadline</option>
+                      <option value="priority">Priority</option>
+                      <option value="name">Name</option>
+                      <option value="estimatedTimeInMinutes">Duration</option>
+                    </select>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {narrowed ? (
+          <button type="button" onClick={reset} className="filter-chip border-transparent bg-transparent text-ide-muted hover:text-ide-text">
+            Clear
+          </button>
+        ) : null}
       </div>
-      {onSortFieldChange && sortField !== undefined ? (
-        <div className="w-full sm:max-w-xs">
-          <label htmlFor="sortField" className="ui-label">
-            Sort by
-          </label>
-          <select
-            id="sortField"
-            value={sortField}
-            onChange={(event) => onSortFieldChange(event.target.value as SortField)}
-            className="ui-select"
-          >
-            <option value="deadline">Deadline</option>
-            <option value="priority">Priority</option>
-            <option value="name">Name</option>
-            <option value="estimatedTimeInMinutes">Duration</option>
-          </select>
+
+      {moreCount > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {phaseActive && onPhaseIdChange ? (
+            <button type="button" className="filter-chip h-7 px-2 text-xs" onClick={() => onPhaseIdChange('any')}>
+              {phaseName}
+              <X className="h-3 w-3" aria-hidden />
+              <span className="sr-only">Remove phase filter</span>
+            </button>
+          ) : null}
+          {modeActive && onModeChange && activeMode ? (
+            <button type="button" className="filter-chip h-7 px-2 text-xs" onClick={() => onModeChange('any')}>
+              {MODE_LABEL[activeMode]}
+              <X className="h-3 w-3" aria-hidden />
+              <span className="sr-only">Remove schedule type filter</span>
+            </button>
+          ) : null}
+          {sortActive && onSortFieldChange && sortField ? (
+            <button
+              type="button"
+              className="filter-chip h-7 px-2 text-xs"
+              onClick={() => onSortFieldChange('deadline')}
+            >
+              Sort: {SORT_LABEL[sortField]}
+              <X className="h-3 w-3" aria-hidden />
+              <span className="sr-only">Reset sort</span>
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

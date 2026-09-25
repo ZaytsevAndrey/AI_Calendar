@@ -442,9 +442,31 @@
         @apply pt-4 text-center text-sm text-ide-muted;
     }
 
-    /* Сторінка задач: фільтр */
+    /* Сторінка задач: компактна панель фільтрів */
     .filter-bar {
-        @apply mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end;
+        @apply mb-3 flex flex-wrap items-center gap-2;
+    }
+
+    .filter-search {
+        @apply ui-input h-9 py-1 pl-8 pr-3;
+    }
+
+    .filter-search::-webkit-search-cancel-button {
+        -webkit-appearance: none;
+        appearance: none;
+    }
+
+    .filter-select {
+        @apply ui-select h-9 w-auto py-1 pl-2.5 pr-8;
+    }
+
+    .filter-chip {
+        @apply inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-ide-border bg-ide-surface px-2.5 text-sm font-medium text-ide-text transition hover:bg-ide-elevated;
+        @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link;
+    }
+
+    .filter-chip-on {
+        @apply border-ide-link bg-ide-selection;
     }
 
     .form-container {
