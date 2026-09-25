@@ -284,7 +284,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
           );
         })}
       </div>
-      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto" data-testid="calendar-hour-scroll">
       <div className="grid" style={{ gridTemplateColumns: columns, minWidth: gridMinWidth }}>
         <div className="relative border-r border-ide-border" style={{ height: gridHeightPx }}>
           {hourBands.map((band) => {

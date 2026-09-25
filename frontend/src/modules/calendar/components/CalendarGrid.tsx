@@ -255,7 +255,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                 ))}
             </div>
 
-            <div className="flex flex-col lg:min-h-0 lg:flex-1 lg:overflow-auto">
+            <div className="flex flex-col xl:min-h-0 xl:flex-1 xl:overflow-auto" data-testid="calendar-month-grid">
                 {weeks.map((week, weekIndex) => (
                     <div
                         key={weekIndex}

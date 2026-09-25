@@ -41,7 +41,7 @@ Default: **API E2E first**. UI E2E only for glue that unit/API cannot see. Do no
 
 ### Harness (UI)
 
-- Playwright: start frontend + backend (`e2e/playwright.config.ts`, ports **3100** / **3101**, isolated SQLite). **One worker**; each test starts after the previous one finishes. Default viewport is Desktop Chrome **1280×720**. `U-CAL-017` is the phone case (**390×844**). The iOS install hint changes the user agent only.
+- Playwright: start frontend + backend (`e2e/playwright.config.ts`, ports **3100** / **3101**, isolated SQLite). **One worker**; each test starts after the previous one finishes. Default viewport is Desktop Chrome **1280×720**. `U-CAL-017` is the phone case (**390×844**). `U-CAL-023` checks **1024×700**, **1100×800**, and **1279×768**, the widths where the calendar used to collapse. The iOS install hint changes the user agent only.
 - Seed JWT into Redux persist / `localStorage` (`auth` slice + `access_token`). Skip the real Google redirect. Backend `E2E_BOOTSTRAP=1` writes `e2e/.tmp/auth.json` (onboarded / needs-settings / needs-phases users).
 - Stub Google on the API with `E2E_STUB_EXTERNAL=1` (`checkConnection` false, empty event lists). No real Groq in P0 smoke.
 - One headed debug run is optional; CI is headless (`npm run test:e2e:ui`).
@@ -485,6 +485,7 @@ No first-class UI. Covered via API and Google create with `phaseId`.
 | U-CAL-020 | U | P0 | Recurring overlapping Now | Strip | Skip; **no** Done |
 | U-CAL-021 | U | P1 | Generate preview | Cancel | Moves and fit messages shown; Generate is not posted |
 | U-CAL-022 | U | P1 | Calendars menu | Uncheck a selected Google calendar | `hiddenGoogleCalendarIds` stores that id |
+| U-CAL-023 | U | P1 | Viewports 1024×700, 1100×800, 1279×768, then 1280×720 | Week, day, month | Hour grid stays on screen, including 08:00 and 20:00. Month grid has height. Event list can be scrolled into view. Desktop hour grid still has height |
 
 `canCompleteNowBlock`: has linked task, not recurring, not `isFixedExternal`, not completed/canceled.
 

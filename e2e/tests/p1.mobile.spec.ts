@@ -1,4 +1,28 @@
+import type { Locator, Page } from '@playwright/test';
 import { test, expect, openAs } from '../helpers/fixtures';
+
+async function painted(locator: Locator) {
+  return locator.evaluate((el) => {
+    const rect = el.getBoundingClientRect();
+    const visible = Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0);
+    return { height: rect.height, visible: Math.max(0, visible) };
+  });
+}
+
+async function expectHoursOnScreen(page: Page, label: string) {
+  const hours = page.getByTestId('calendar-hour-scroll');
+  await expect(hours).toBeVisible();
+  const box = await painted(hours);
+  expect(box.height, label).toBeGreaterThan(120);
+  const slot = hours.getByText('08:00', { exact: true });
+  await slot.scrollIntoViewIfNeeded();
+  const slotBox = await painted(slot);
+  expect(slotBox.visible, `${label} 08:00`).toBeGreaterThan(4);
+  const later = hours.getByText('20:00', { exact: true });
+  await later.scrollIntoViewIfNeeded();
+  const laterBox = await painted(later);
+  expect(laterBox.visible, `${label} 20:00`).toBeGreaterThan(4);
+}
 
 test.describe('phone layout', () => {
   test.use({ viewport: { width: 390, height: 844 } });
@@ -63,5 +87,48 @@ test.describe('phone layout', () => {
     });
     expect(tasks!.titleTop).toBeGreaterThanOrEqual(tasks!.headerBottom - 1);
     expect(tasks!.overflowY).toBe('auto');
+  });
+});
+
+test.describe('widths between the phone and desktop layouts', () => {
+  test('U-CAL-023 calendar stays visible from 1024px through 1279px', async ({ page, auth }) => {
+    await openAs(page, auth.onboarded);
+    const sizes = [
+      { width: 1024, height: 700 },
+      { width: 1100, height: 800 },
+      { width: 1279, height: 768 },
+    ];
+
+    for (const viewport of sizes) {
+      await page.setViewportSize(viewport);
+      const label = `${viewport.width}x${viewport.height} week`;
+      await expectHoursOnScreen(page, label);
+    }
+
+    await page.setViewportSize({ width: 1024, height: 700 });
+    const events = page.getByText(/Week events|No events found for this period/);
+    await events.scrollIntoViewIfNeeded();
+    const eventsBox = await painted(events);
+    expect(eventsBox.visible).toBeGreaterThan(8);
+
+    await page.getByRole('button', { name: 'Day', exact: true }).click();
+    await expectHoursOnScreen(page, '1024x700 day');
+
+    await page.setViewportSize({ width: 1100, height: 800 });
+    await page.getByRole('button', { name: 'Month', exact: true }).click();
+    const month = page.getByTestId('calendar-month-grid');
+    await month.scrollIntoViewIfNeeded();
+    await expect(month).toBeVisible();
+    const monthBox = await painted(month);
+    expect(monthBox.height).toBeGreaterThan(120);
+    expect(monthBox.visible).toBeGreaterThan(40);
+
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.getByRole('button', { name: 'Week', exact: true }).click();
+    const hours = page.getByTestId('calendar-hour-scroll');
+    await hours.scrollIntoViewIfNeeded();
+    const desktop = await painted(hours);
+    expect(desktop.height).toBeGreaterThan(40);
+    expect(desktop.visible).toBeGreaterThan(40);
   });
 });

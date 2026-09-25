@@ -407,8 +407,8 @@ const CalendarPage: React.FC = () => {
                     Failed to load calendar events. Please check your Google Calendar connection.
                 </div>
             ) : (
-                <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 xl:flex-row">
-                    <div className="min-w-0 w-full lg:min-h-0 lg:flex-1 lg:overflow-hidden">
+                <div className="flex flex-col gap-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto xl:flex-row xl:overflow-hidden">
+                    <div className="min-w-0 w-full xl:min-h-0 xl:flex-1 xl:overflow-hidden">
                         <CalendarGrid
                             view={currentView}
                             date={currentDate}
