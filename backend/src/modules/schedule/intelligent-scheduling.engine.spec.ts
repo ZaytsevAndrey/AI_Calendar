@@ -813,6 +813,37 @@ describe('IntelligentSchedulingEngine', () => {
     });
   });
 
+  it('does not place problematic inbox tasks', async () => {
+    const phase911 = makePhase('phase-911b', '09:00', '11:00', [1, 2, 3, 4, 5]);
+    taskRepo.find.mockResolvedValue([
+      makeTask({
+        id: 'stuck',
+        name: 'Stuck',
+        isProblematic: true,
+        estimatedTimeInMinutes: 60,
+        phases: [phase911],
+      }),
+      makeTask({
+        id: 'flex',
+        name: 'Write brief',
+        estimatedTimeInMinutes: 60,
+        phases: [phase911],
+      }),
+    ]);
+
+    await engine.run(userId);
+
+    const placedIds = [
+      ...new Set(
+        (scheduledRepo.save.mock.calls as Array<[any]>).map(([row]) => row.taskId),
+      ),
+    ];
+    expect(placedIds).toEqual(['flex']);
+    expect(scheduledRepo.deleteQb?.where).toHaveBeenCalledWith('taskId IN (:...ids)', {
+      ids: ['stuck'],
+    });
+  });
+
   it('places non-recurring task outside horizon and emits warning', async () => {
     const settings = makeSettings({
       wakeTime: '09:00',
@@ -1730,6 +1761,7 @@ function makeTask(partial: Partial<Task>): Task {
       .googleEventCalendarId ?? null,
     isFixedExternal: false,
     isUnscheduled: partial.isUnscheduled ?? false,
+    isProblematic: partial.isProblematic ?? false,
     location: partial.location ?? null,
     googleColorId: partial.googleColorId ?? null,
     googleVisibility: partial.googleVisibility ?? null,

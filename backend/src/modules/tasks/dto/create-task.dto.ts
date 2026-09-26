@@ -182,6 +182,16 @@ export class CreateTaskDto {
   @IsOptional()
   isUnscheduled?: boolean;
 
+  @ApiProperty({
+    description:
+      'Fell out of schedule after Generate/conflict overflow. Distinct from isUnscheduled.',
+    required: false,
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  isProblematic?: boolean;
+
   @ApiProperty({ required: false, nullable: true })
   @ValidateIf((_, value) => value !== null && value !== undefined)
   @IsString()

@@ -163,6 +163,7 @@ Create/update body may include:
 
 - `eventType` — `fixed` (pinned, not moved) or `admin` (flexible / recurring). Optional; default `admin`. Legacy values may still exist on old rows.
 - `isUnscheduled` — inbox item with no slot. Skips silent replan, Generate, and Google sync until the user schedules it. Cannot be combined with `eventType=fixed`.
+- `isProblematic` — fell out of schedule (overflow / unanswered conflict). Distinct from `isUnscheduled`. Parked from Generate until Resolve / Skip / the user edits. Mutually exclusive with `isUnscheduled` (setting one clears the other).
 - `location`, `googleColorId`, `googleVisibility`, `googleTransparency`, `googleReminders` — stored on the task and written to Google when a timed event is created.
 - `phaseIds` — at most one phase UUID (empty = full wake/sleep window)
 - `estimatedTimeInMinutes` — optional; default 30 for non-fixed, or derived from start/end for fixed
@@ -174,4 +175,4 @@ Create/update body may include:
 - `recurrenceWeekDays` — `0` = Sunday … `6` = Saturday. Empty / omitted / all seven = no extra weekday filter. Intersected with the phase `weekDays`.
 - `allowSplit` — per-task; engine also requires the user setting `allowSplitScheduling`
 
-Non-`fixed` tasks trigger an automatic replan job after create/update/delete/status change, except `isUnscheduled` inbox items (replan runs if a previously scheduled task is moved into the inbox, to free the slot).
+Non-`fixed` tasks trigger an automatic replan job after create/update/delete/status change, except parked inbox items (`isUnscheduled` or `isProblematic`). Replan still runs when a previously scheduled task is moved into either inbox (to free the slot), and when Problematic is cleared so placement can retry.

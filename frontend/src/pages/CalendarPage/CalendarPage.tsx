@@ -22,6 +22,8 @@ import { ScheduleApi, ScheduleJobResultPayload } from 'api/schedule.api';
 import { useScheduleActions } from 'modules/schedule/hooks/useScheduleActions';
 import { GeneratePreviewDialog } from 'modules/schedule/components/GeneratePreviewDialog';
 import { GenerateAlertsBanner } from 'modules/schedule/components/GenerateAlertsBanner';
+import { ProblematicInboxBanner } from 'modules/schedule/components/ProblematicInboxBanner';
+import { ProblematicInboxSheet } from 'modules/schedule/components/ProblematicInboxSheet';
 import { GenerateProgressPanel } from 'modules/schedule/components/GenerateProgressPanel';
 import { ScheduleMenu } from 'modules/schedule/components/ScheduleMenu';
 import { ScheduleSuggestionsDialog } from 'modules/schedule/components/ScheduleSuggestionsDialog';
@@ -118,6 +120,7 @@ const CalendarPage: React.FC = () => {
     const [suggestionsOpen, setSuggestionsOpen] = useState(false);
     const [previewOpen, setPreviewOpen] = useState(false);
     const [previewLoading, setPreviewLoading] = useState(false);
+    const [problematicOpen, setProblematicOpen] = useState(false);
     const [previewError, setPreviewError] = useState<string | null>(null);
     const [previewResult, setPreviewResult] = useState<ScheduleJobResultPayload | null>(null);
     const previewRequest = useRef(0);
@@ -162,6 +165,12 @@ const CalendarPage: React.FC = () => {
     const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
     const { openCreate, openCreateFromPrefill, openEdit, createFromPayload, editorModal } = useEventEditor();
     const { data: tasks = [] } = useGetTasksQuery();
+    const problematicTasks = tasks.filter(
+        (task) =>
+            !!task.isProblematic &&
+            task.status !== 'completed' &&
+            task.status !== 'canceled',
+    );
     const { data: habitsData } = useGetHabitsQuery();
     const voice = useVoiceTask({
         onComplete: createFromPayload,
@@ -458,6 +467,12 @@ const CalendarPage: React.FC = () => {
                     </>
                 )}
                 <NowStrip />
+                {problematicTasks.length > 0 ? (
+                    <ProblematicInboxBanner
+                        count={problematicTasks.length}
+                        onOpen={() => setProblematicOpen(true)}
+                    />
+                ) : null}
                 {generateProgress ? <GenerateProgressPanel progress={generateProgress} /> : null}
                 {generateAlerts ? (
                     <GenerateAlertsBanner
@@ -704,6 +719,12 @@ const CalendarPage: React.FC = () => {
             </Modal>
 
             {editorModal}
+            <ProblematicInboxSheet
+                open={problematicOpen}
+                tasks={problematicTasks}
+                onClose={() => setProblematicOpen(false)}
+                onOpenTask={(task) => openEdit(task)}
+            />
             <VoiceTaskSheet voice={voice} />
 
             <Modal

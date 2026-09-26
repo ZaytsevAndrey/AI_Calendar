@@ -113,7 +113,8 @@ Further ids may be added later; these are the baseline contract.
 | | **Unscheduled** | **Problematic** |
 |--|-----------------|-----------------|
 | Meaning | Intentional “don’t forget / decide later” | Fell out of schedule after create, drag, replan, or unanswered conflict |
-| Flag / model | Existing `isUnscheduled` | Distinct from `isUnscheduled` (roadmap §3) |
+| Flag / model | Existing `isUnscheduled` | `isProblematic` (distinct boolean; Calendar banner/sheet) |
+
 | Typical entry | User creates without scheduling; deadline window with no fit | Overflow; dismiss conflict; recurring won’t fit |
 | Actions (product) | Done / Skip / Do now / Open (roadmap §7) | Open task; move / skip / resolve (roadmap §3–4) |
 | UI default | Tasks page inbox | Calendar banner/chip + sheet (placement flexible until §3) |
@@ -132,4 +133,4 @@ Further ids may be added later; these are the baseline contract.
 
 ## 9. Implementation note
 
-Roadmap **§2** shipped type + preferred placement in `IntelligentSchedulingEngine` (priority ignored; conflict/overflow structured outcomes). Problematic inbox UI/API is **§3**; shared conflict sheet is **§4**. Do not add new priority-displacement behavior.
+Roadmap **§2** shipped type + preferred placement. **§3** shipped `isProblematic` (Calendar banner/sheet; job persists overflow/conflict). Shared conflict sheet is **§4**. Do not add new priority-displacement behavior.

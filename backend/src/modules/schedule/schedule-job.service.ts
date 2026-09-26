@@ -11,6 +11,7 @@ import { ScheduleJob } from './entities/schedule-job.entity';
 import {
   DiffItem,
   IntelligentSchedulingEngine,
+  SchedulingConflict,
   SchedulingWarning,
   SegmentSnapshot,
 } from './intelligent-scheduling.engine';
@@ -41,6 +42,7 @@ import {
   parseUndoSnapshot,
   UndoSnapshot,
 } from './schedule-undo.util';
+import { collectProblematicTaskIds } from './problematic-from-warnings.util';
 
 function googleListedEventEndMs(ev: {
   end?: { dateTime?: string | null; date?: string | null };
@@ -298,6 +300,28 @@ export class ScheduleJobService {
     await this.jobRepo.save(job);
   }
 
+  /**
+   * Persist Problematic inbox from engine overflow / unanswered-conflict hooks.
+   * Does not set isUnscheduled (deadline-no-fit stays separate).
+   */
+  private async applyProblematicFromWarnings(
+    userId: string,
+    warnings: SchedulingWarning[],
+    conflicts: SchedulingConflict[],
+  ): Promise<void> {
+    const ids = collectProblematicTaskIds(warnings, conflicts);
+    if (!ids.size) return;
+
+    await this.taskRepo
+      .createQueryBuilder()
+      .update(Task)
+      .set({ isProblematic: true, isUnscheduled: false })
+      .where('userId = :userId', { userId })
+      .andWhere('id IN (:...ids)', { ids: [...ids] })
+      .andWhere('status = :status', { status: TaskStatus.TODO })
+      .execute();
+  }
+
   private async runPendingJob(job: ScheduleJob): Promise<void> {
     job.status = 'running';
     job.progressStage = 'preparing';
@@ -324,6 +348,12 @@ export class ScheduleJobService {
           await this.setJobProgress(job, 'syncing_google', current, total);
         },
       );
+      // After sync so this run's placements still reach Google / Now strip.
+      await this.applyProblematicFromWarnings(
+        job.userId,
+        result.warnings,
+        result.conflicts,
+      );
 
       job.status = 'done';
       job.progressStage = 'done';
@@ -331,6 +361,7 @@ export class ScheduleJobService {
         diff: result.diff,
         warnings: result.warnings,
         errors: result.errors,
+        conflicts: result.conflicts,
       });
       job.errorMessage = null;
       if (isGenerateJobPayload(job.payloadJson)) {
@@ -463,7 +494,13 @@ export class ScheduleJobService {
     desiredRows: ScheduledTask[],
     existingRefs: GoogleEventRef[],
   ): Promise<void> {
-    if (task.isUnscheduled || task.eventType === TaskEventType.FIXED) return;
+    if (
+      task.isUnscheduled ||
+      task.isProblematic ||
+      task.eventType === TaskEventType.FIXED
+    ) {
+      return;
+    }
 
     const desired = [...desiredRows].sort(
       (a, b) =>
@@ -759,7 +796,7 @@ export class ScheduleJobService {
     }
 
     const toSync = tasks.filter((task) => {
-      if (task.isUnscheduled) return false;
+      if (task.isUnscheduled || task.isProblematic) return false;
       if (task.eventType === TaskEventType.FIXED) return false;
       if (task.status !== TaskStatus.TODO) return false;
       const after = afterByTask.get(task.id) ?? [];

@@ -57,11 +57,14 @@ export class TasksService {
   }
 
   private shouldReplanAfterSave(
-    previous: { isUnscheduled: boolean } | null,
+    previous: { isUnscheduled: boolean; isProblematic?: boolean } | null,
     saved: Task,
   ): boolean {
     if (saved.isUnscheduled) {
       return !!previous && !previous.isUnscheduled;
+    }
+    if (saved.isProblematic) {
+      return !!previous && !previous.isProblematic;
     }
     if (saved.eventType === TaskEventType.FIXED) {
       return false;
@@ -73,6 +76,10 @@ export class TasksService {
   }
 
   private applyUnscheduledConstraints(task: Task): void {
+    if (task.isUnscheduled && task.isProblematic) {
+      // Unscheduled (intentional inbox) wins when both arrive set.
+      task.isProblematic = false;
+    }
     if (!task.isUnscheduled) {
       return;
     }
@@ -84,6 +91,15 @@ export class TasksService {
     task.recurrencePattern = null;
     task.scheduledStartTime = null;
     task.scheduledEndTime = null;
+  }
+
+  private applyProblematicConstraints(task: Task): void {
+    if (!task.isProblematic) {
+      return;
+    }
+    if (task.isUnscheduled) {
+      task.isUnscheduled = false;
+    }
   }
 
   private resolveTaskPhaseColorHex(task: Task): string | undefined {
@@ -215,6 +231,7 @@ export class TasksService {
     createTaskDto: CreateTaskDto,
   ): Promise<Task & { jobId: string | null }> {
     const isUnscheduled = !!createTaskDto.isUnscheduled;
+    const isProblematic = !!createTaskDto.isProblematic && !isUnscheduled;
     const eventType = isUnscheduled
       ? TaskEventType.ADMIN
       : (createTaskDto.eventType ?? TaskEventType.ADMIN);
@@ -256,6 +273,7 @@ export class TasksService {
       userId,
       eventType,
       isUnscheduled,
+      isProblematic,
       estimatedTimeInMinutes,
       deadline: deadline ? new Date(deadline) : undefined,
       earliestStartTime: earliestStartTime
@@ -270,6 +288,7 @@ export class TasksService {
         : undefined,
     });
     this.applyUnscheduledConstraints(task);
+    this.applyProblematicConstraints(task);
 
     this.logger.log(
       `create task "${createTaskDto.name}": incoming earliest=${earliestStartTime ?? 'null'} deadline=${deadline ?? 'null'} tz=${timeZone ?? 'null'} resolvedTz=${scheduleTimeZone ?? 'null'} scheduledStart=${scheduledStartTime ?? 'null'} → stored earliest=${task.earliestStartTime?.toISOString() ?? 'null'} deadline=${task.deadline?.toISOString() ?? 'null'} scheduleTz=${task.scheduleTimeZone ?? 'null'}`,
@@ -331,6 +350,7 @@ export class TasksService {
   ): Promise<Task & { jobId: string | null }> {
     const task = await this.findOne(id, userId);
     const wasUnscheduled = task.isUnscheduled;
+    const wasProblematic = task.isProblematic;
 
     const dto = updateTaskDto as UpdateTaskDto & {
       phaseIds?: string[];
@@ -390,6 +410,7 @@ export class TasksService {
     }
 
     this.applyUnscheduledConstraints(task);
+    this.applyProblematicConstraints(task);
 
     if (task.eventType === TaskEventType.FIXED) {
       if (!task.scheduledStartTime || !task.scheduledEndTime) {
@@ -422,7 +443,10 @@ export class TasksService {
     return this.attachReplanJob(
       userId,
       row,
-      this.shouldReplanAfterSave({ isUnscheduled: wasUnscheduled }, row),
+      this.shouldReplanAfterSave(
+        { isUnscheduled: wasUnscheduled, isProblematic: wasProblematic },
+        row,
+      ),
     );
   }
 
@@ -642,7 +666,15 @@ export class TasksService {
     const task = await this.findOne(id, userId);
     task.status = status;
     const saved = await this.tasksRepository.save(task);
-    if (this.shouldReplanAfterSave({ isUnscheduled: saved.isUnscheduled }, saved)) {
+    if (
+      this.shouldReplanAfterSave(
+        {
+          isUnscheduled: saved.isUnscheduled,
+          isProblematic: saved.isProblematic,
+        },
+        saved,
+      )
+    ) {
       await this.scheduleJobService.enqueueReplan(userId);
       void this.scheduleJobService.processNextPendingForUser(userId);
     }

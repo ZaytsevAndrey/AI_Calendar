@@ -26,9 +26,9 @@ Do in order unless you explicitly skip ahead.
 
 ### 3. Problematic inbox
 
-- [ ] Model/API distinct from `isUnscheduled` (fell out of schedule).
-- [ ] Calendar banner/chip + sheet: open task, move / skip / resolve actions.
-- [ ] No-answer / overflow after conflict lands here.
+- [x] Model/API distinct from `isUnscheduled` (fell out of schedule).
+- [x] Calendar banner/chip + sheet: open task, move / skip / resolve actions.
+- [x] No-answer / overflow after conflict lands here.
 
 ### 4. Shared conflict options + sheet
 
@@ -90,5 +90,5 @@ Do in order unless you explicitly skip ahead.
 
 ## Recommended next steps
 
-1. Start at **§3 Problematic inbox**.
+1. Start at **§4 Shared conflict options + sheet**.
 2. After each feature ships: tick above, archive a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

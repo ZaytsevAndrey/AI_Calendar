@@ -26,6 +26,7 @@ export interface TaskDTO {
   googleEventId?: string | null;
   isFixedExternal?: boolean;
   isUnscheduled?: boolean;
+  isProblematic?: boolean;
   location?: string | null;
   googleColorId?: string | null;
   googleVisibility?: string | null;
@@ -64,6 +65,7 @@ export interface CreateTaskDTO {
   eligibleWeekDays?: number[] | null;
   timeZone?: string;
   isUnscheduled?: boolean;
+  isProblematic?: boolean;
   location?: string | null;
   googleColorId?: string | null;
   googleVisibility?: string | null;

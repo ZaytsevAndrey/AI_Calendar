@@ -145,6 +145,13 @@ export class Task {
   isUnscheduled: boolean;
 
   /**
+   * Fell out of schedule (overflow, unanswered conflict). Distinct from
+   * `isUnscheduled`. Parked until the user opens / moves / resolves it.
+   */
+  @Column({ default: false })
+  isProblematic: boolean;
+
+  /**
    * Recurring only: civil days (YYYY-MM-DD in settings IANA) the user skipped.
    * Generate/replan must not place those occurrences again.
    */
