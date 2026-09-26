@@ -86,6 +86,7 @@ export class ScheduleJobService {
     diff: DiffItem[];
     warnings: SchedulingWarning[];
     errors: { taskId: string; message: string }[];
+    conflicts: SchedulingConflict[];
   }> {
     return this.engine.run(userId, { persist: false });
   }

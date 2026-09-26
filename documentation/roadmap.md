@@ -32,9 +32,9 @@ Do in order unless you explicitly skip ahead.
 
 ### 4. Shared conflict options + sheet
 
-- [ ] Structured option ids from the engine (`move_other`, `move_new`, `skip_occurrence`, …).
-- [ ] One UI sheet for form create and later Voice/drag.
-- [ ] Groq only phrases options; applying uses existing APIs.
+- [x] Structured option ids from the engine (`move_other`, `move_new`, `skip_occurrence`, …).
+- [x] One UI sheet for form create and later Voice/drag.
+- [x] Groq only phrases options; applying uses existing APIs.
 
 ### 5. Voice on the same decision layer
 
@@ -90,5 +90,5 @@ Do in order unless you explicitly skip ahead.
 
 ## Recommended next steps
 
-1. Start at **§4 Shared conflict options + sheet**.
+1. Start at **§5 Voice on the same decision layer**.
 2. After each feature ships: tick above, archive a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

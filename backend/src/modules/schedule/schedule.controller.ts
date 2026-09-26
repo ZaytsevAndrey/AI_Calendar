@@ -22,7 +22,9 @@ import { ScheduleService } from './schedule.service';
 import { ScheduleJobService } from './schedule-job.service';
 import { DisplayedEventMoveService } from './displayed-event-move.service';
 import { ScheduleRecommendationsService } from './schedule-recommendations.service';
+import { ConflictOptionPhrasesService } from './conflict-option-phrases.service';
 import { ScheduleRecommendations } from './schedule-recommendations.util';
+import { ConflictOptionPhrase } from './conflict-option-phrases.util';
 import {
   CreateScheduleDto,
   UpdateScheduleDto,
@@ -30,9 +32,11 @@ import {
   GenerateScheduleDto,
   MoveDisplayedEventDto,
 } from './dto';
+import { PhraseConflictOptionsDto } from './dto/phrase-conflict-options.dto';
 import { ScheduledTask } from './schedule.entity';
 import {
   DiffItem,
+  SchedulingConflict,
   SchedulingWarning,
 } from './intelligent-scheduling.engine';
 
@@ -46,6 +50,7 @@ export class ScheduleController {
     private readonly scheduleJobService: ScheduleJobService,
     private readonly displayedEventMoveService: DisplayedEventMoveService,
     private readonly scheduleRecommendationsService: ScheduleRecommendationsService,
+    private readonly conflictOptionPhrasesService: ConflictOptionPhrasesService,
   ) {}
 
   @Post()
@@ -150,6 +155,27 @@ export class ScheduleController {
     return this.scheduleRecommendationsService.recommend(req.user.userId);
   }
 
+  @Post('conflict-option-phrases')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Phrase structured conflict option ids for the shared choice sheet. Groq only phrases; applying uses PATCH/skip.',
+  })
+  @ApiResponse({ status: 200, description: 'Phrased options (templates if Groq is down)' })
+  async phraseConflictOptions(
+    @Body() body: PhraseConflictOptionsDto,
+  ): Promise<{ options: ConflictOptionPhrase[] }> {
+    const conflict: SchedulingConflict = {
+      taskId: body.taskId,
+      taskName: body.taskName,
+      reason: body.reason,
+      options: body.options,
+      meta: body.meta,
+    };
+    const options = await this.conflictOptionPhrasesService.phrase(conflict);
+    return { options };
+  }
+
   @Post('preview')
   @HttpCode(200)
   @ApiOperation({
@@ -161,6 +187,7 @@ export class ScheduleController {
     diff: DiffItem[];
     warnings: SchedulingWarning[];
     errors: { taskId: string; message: string }[];
+    conflicts: SchedulingConflict[];
   }> {
     return this.scheduleJobService.preview(req.user.userId);
   }

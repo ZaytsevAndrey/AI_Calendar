@@ -5,6 +5,7 @@ import BottomNav from './modules/common/components/BottomNav';
 import BuildFooter from './modules/common/components/BuildFooter';
 import AppRoutes from './AppRoutes';
 import { PwaInstallBanner } from './modules/pwa/PwaInstallBanner';
+import { ConflictChoiceHost } from './modules/schedule/components/ConflictChoiceHost';
 import { useSyncClientTimeZone } from './modules/user-settings/hooks/useSyncClientTimeZone';
 import { useSyncAppLanguage } from './modules/user-settings/hooks/useSyncAppLanguage';
 
@@ -21,6 +22,7 @@ const App: React.FC = () => {
             </main>
             {isAuthenticated ? <PwaInstallBanner /> : null}
             {isAuthenticated ? <BottomNav /> : null}
+            {isAuthenticated ? <ConflictChoiceHost /> : null}
             <BuildFooter />
         </div>
     );

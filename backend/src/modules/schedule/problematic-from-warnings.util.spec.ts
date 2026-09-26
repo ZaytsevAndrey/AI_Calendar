@@ -6,7 +6,7 @@ import {
 } from './intelligent-scheduling.engine';
 
 describe('collectProblematicTaskIds', () => {
-  it('collects warning taskIds with readyForProblematic and conflict ids', () => {
+  it('parks overflow warnings but not conflict-choice ids', () => {
     const warnings: SchedulingWarning[] = [
       {
         code: SchedulingWarningCode.OCCURRENCE_SKIPPED,
@@ -36,10 +36,6 @@ describe('collectProblematicTaskIds', () => {
       },
     ];
 
-    expect([...collectProblematicTaskIds(warnings, conflicts)].sort()).toEqual([
-      'a',
-      'c',
-      'd',
-    ]);
+    expect([...collectProblematicTaskIds(warnings, conflicts)]).toEqual(['a']);
   });
 });

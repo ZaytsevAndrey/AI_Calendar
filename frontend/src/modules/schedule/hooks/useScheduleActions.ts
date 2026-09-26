@@ -9,6 +9,7 @@ import {
 } from 'api/schedule.api';
 import { eventsApi } from 'api/eventsApi';
 import { eventTasksApi } from 'api/eventTasksApi';
+import { emitScheduleConflicts } from 'modules/schedule/conflictChoiceBus';
 import { showErrorToast, showInfoToast, showSuccessToast, showWarningToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
 import i18n from 'i18n';
@@ -33,6 +34,9 @@ function parseJobResult(result: unknown): ScheduleJobResultPayload | null {
       : [],
     errors: Array.isArray(o.errors)
       ? (o.errors as ScheduleJobResultPayload['errors'])
+      : [],
+    conflicts: Array.isArray(o.conflicts)
+      ? (o.conflicts as ScheduleJobResultPayload['conflicts'])
       : [],
   };
 }
@@ -134,6 +138,9 @@ export function useScheduleActions() {
       const parsed = parseJobResult(job.result);
       const alerts = alertsFromJob(job);
       setGenerateAlerts(alerts.issueCount > 0 ? alerts : null);
+      if (parsed?.conflicts?.length) {
+        emitScheduleConflicts(parsed.conflicts);
+      }
 
       const errorCount = parsed?.errors?.length ?? 0;
       const warningCount = parsed?.warnings?.length ?? 0;

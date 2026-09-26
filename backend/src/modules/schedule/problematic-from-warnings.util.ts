@@ -1,25 +1,29 @@
-import type {
+import {
   SchedulingConflict,
   SchedulingWarning,
+  SchedulingWarningCode,
 } from './intelligent-scheduling.engine';
 
-/** Task ids that should land in the Problematic inbox after a schedule job. */
+/**
+ * Task ids that should land in the Problematic inbox after a schedule job.
+ * Conflict choices (`NEEDS_CONFLICT_CHOICE` / conflicts[]) wait for the shared
+ * options sheet — they are not parked until leave_problematic / dismiss.
+ */
 export function collectProblematicTaskIds(
   warnings: SchedulingWarning[],
-  conflicts: SchedulingConflict[],
+  _conflicts: SchedulingConflict[] = [],
 ): Set<string> {
   const ids = new Set<string>();
   for (const warning of warnings) {
     if (
-      warning.taskId &&
-      warning.meta &&
-      warning.meta.readyForProblematic === true
+      warning.code === SchedulingWarningCode.NEEDS_CONFLICT_CHOICE ||
+      !warning.taskId ||
+      !warning.meta ||
+      warning.meta.readyForProblematic !== true
     ) {
-      ids.add(warning.taskId);
+      continue;
     }
-  }
-  for (const conflict of conflicts) {
-    if (conflict.taskId) ids.add(conflict.taskId);
+    ids.add(warning.taskId);
   }
   return ids;
 }

@@ -286,6 +286,29 @@
     "problematicResolved": "Marked resolved — scheduling will retry",
     "problematicSkipped": "Occurrence skipped and flag cleared",
     "problematicActionFailed": "Could not update problematic task",
+    "conflictTitle": "Schedule conflict",
+    "conflictIntro": "Choose how to resolve this preferred-time conflict.",
+    "conflictDismiss": "Park as problematic",
+    "conflictApplied": "Conflict choice applied",
+    "conflictApplyFailed": "Could not apply conflict choice",
+    "conflictOption": {
+      "move_other": {
+        "title": "Keep this time; move the other task",
+        "detail": "Leave your preferred slot and shift the other movable work."
+      },
+      "move_new": {
+        "title": "Place this task elsewhere",
+        "detail": "Keep the other block; find the next free slot for this task."
+      },
+      "skip_occurrence": {
+        "title": "Skip this occurrence",
+        "detail": "Skip this day for the series and keep the preferred clock."
+      },
+      "leave_problematic": {
+        "title": "Park as problematic",
+        "detail": "Leave it out of the schedule until you resolve it later."
+      }
+    },
     "clearConfirmBody": "Clear upcoming app-generated schedule blocks in the planning horizon? Already finished blocks stay in the calendar. This cannot be undone.",
     "undoConfirmBody": "Restore upcoming app-generated blocks from before the last Generate? Already finished blocks stay. This only undoes Generate, not Clear.",
     "undoGenerate": "Undo generate",

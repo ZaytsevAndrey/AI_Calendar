@@ -133,4 +133,4 @@ Further ids may be added later; these are the baseline contract.
 
 ## 9. Implementation note
 
-Roadmap **§2** shipped type + preferred placement. **§3** shipped `isProblematic` (Calendar banner/sheet; job persists overflow/conflict). Shared conflict sheet is **§4**. Do not add new priority-displacement behavior.
+Roadmap **§2–§4** shipped: type + preferred placement, `isProblematic` inbox, and the shared conflict options sheet (Groq phrases; apply via existing APIs). Voice/drag entry points are **§5–§6**. Do not add new priority-displacement behavior.

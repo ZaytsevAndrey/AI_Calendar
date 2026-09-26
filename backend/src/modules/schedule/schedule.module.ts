@@ -10,6 +10,7 @@ import { ScheduleJobProcessor } from './schedule-job.processor';
 import { ScheduleJobController } from './schedule-job.controller';
 import { DisplayedEventMoveService } from './displayed-event-move.service';
 import { ScheduleRecommendationsService } from './schedule-recommendations.service';
+import { ConflictOptionPhrasesService } from './conflict-option-phrases.service';
 import { TasksModule } from '../tasks/tasks.module';
 import { UserSettingsModule } from '../user-settings/user-settings.module';
 import { Task } from '../tasks/entities/task.entity';
@@ -40,6 +41,7 @@ import { VoiceModule } from '../voice/voice.module';
     ScheduleJobProcessor,
     DisplayedEventMoveService,
     ScheduleRecommendationsService,
+    ConflictOptionPhrasesService,
   ],
   exports: [ScheduleService, ScheduleJobService],
 })

@@ -14,7 +14,9 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ### Scheduling redesign (engine)
 
-- [x] **Problematic inbox.** Distinct `isProblematic` flag (not `isUnscheduled`). Generate/replan parks overflow and conflict targets; Calendar shows a banner + sheet (Open / Move / Skip / Resolve). Shared conflict option picker stays in §4.
+- [x] **Shared conflict options sheet.** Job `conflicts[]` opens one Modal (create replan + Generate); Groq phrases option ids via `POST /schedule/conflict-option-phrases` with i18n fallback; apply uses PATCH / skip. Dismiss → Problematic. Voice/drag reuse `openConflictChoice` (§5–6).
+
+- [x] **Problematic inbox.** Distinct `isProblematic` flag (not `isUnscheduled`). Generate/replan parks capacity overflow; Calendar banner + sheet (Open / Move / Skip / Resolve). Conflict choice no longer auto-parks until dismiss / leave_problematic (§4).
 
 - [x] **Engine: type + preferred, no priority.** `IntelligentSchedulingEngine` places by createdAt FIFO + preferred-first; priority ignored. Seated flexible keeps its slot; preferred on fixed/Google returns `NEEDS_CONFLICT_CHOICE` + option ids; recurring off-preferred emits `RECURRING_MOVED`; capacity overflow warnings carry `readyForProblematic` (inbox lands in §3).
 

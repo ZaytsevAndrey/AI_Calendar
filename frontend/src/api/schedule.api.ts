@@ -1,5 +1,6 @@
 import axios from './axios';
 import { TaskDTO } from './tasks.api';
+import type { SchedulingConflictDTO } from 'modules/schedule/conflictChoiceBus';
 
 export interface ScheduledTaskDTO extends TaskDTO {
   scheduledStartTime: string;
@@ -29,6 +30,7 @@ export interface ScheduleJobResultPayload {
     meta?: Record<string, unknown>;
   }[];
   errors: { taskId: string; message: string }[];
+  conflicts?: SchedulingConflictDTO[];
 }
 
 export interface ScheduleJobStatusResponse {
