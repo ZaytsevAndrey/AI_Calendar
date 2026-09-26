@@ -98,7 +98,7 @@ npm run clean        # remove node_modules / build / dist (see scripts/clean.js)
 
 Tests run **one after another**. Jest uses `--runInBand` (one process; the next file starts only after the previous file’s tests finish). From the repo root, `npm test` runs the backend suite and then the frontend suite. Backend API e2e (`npm run test:e2e` in `backend`) is also `--runInBand`. Playwright uses a single worker.
 
-Playwright does not use your local `db.sqlite` or ports 3000/3001. The API boots with `E2E_BOOTSTRAP=1` and `E2E_STUB_EXTERNAL=1` (no Google/Groq). First run downloads the Chromium browser. The default window is Desktop Chrome **1280×720**. `U-CAL-017` uses a phone window **390×844**. `U-CAL-023` uses **1024×700**, **1100×800**, and **1279×768**.
+Playwright does not use your local `db.sqlite` or ports 3000/3001. The API boots with `E2E_BOOTSTRAP=1` and `E2E_STUB_EXTERNAL=1` (no Google/Groq). First run downloads the Chromium browser. The default window is Desktop Chrome **1280×720**. `U-CAL-017` and `U-CAL-024` use the phone window **390×844**; `U-CAL-017` also checks **320×568**. Week columns are checked at **768×1024**. `U-CAL-023` uses **1024×700**, **1100×800**, and **1279×768**.
 
 ## Database
 

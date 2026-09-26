@@ -1,6 +1,7 @@
 import { useGetAllPhasesQuery, useCreatePhaseMutation, useUpdatePhaseMutation, useDeletePhaseMutation, useApplyPhasePresetMutation } from 'api/phasesApi';
 import type { PhasePresetId } from 'api/phasesApi';
 import React, { lazy, Suspense, useCallback, useState } from 'react';
+import { LayoutTemplate, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { PhaseDTO } from 'api/phases.api';
 import PhasesCalendar from 'modules/phases/components/PhasesCalendar';
 import { PhasePresetPicker, messageFromApiError } from 'modules/phases/components/PhasePresetPicker';
@@ -137,11 +138,21 @@ const PhasesPage: React.FC = () => {
                     <h1 className="page-title">Phases</h1>
                     <p className="page-lead">Time windows for scheduling and the weekly template.</p>
                 </div>
-                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                    <button type="button" onClick={openPreset} className="ui-btn-secondary w-full sm:w-auto">
+                <div className="flex gap-1 md:hidden">
+                    <button type="button" onClick={openPreset} className="ui-icon-btn border border-ide-border">
+                        <LayoutTemplate className="h-4 w-4" aria-hidden />
+                        <span className="sr-only">Use a preset</span>
+                    </button>
+                    <button type="button" onClick={handleAdd} className="ui-icon-btn text-ide-link">
+                        <Plus className="h-4 w-4" aria-hidden />
+                        <span className="sr-only">Add Phase</span>
+                    </button>
+                </div>
+                <div className="hidden gap-2 md:flex">
+                    <button type="button" onClick={openPreset} className="ui-btn-secondary">
                         Use a preset
                     </button>
-                    <button type="button" onClick={handleAdd} className="ui-btn-primary w-full sm:w-auto">
+                    <button type="button" onClick={handleAdd} className="ui-btn-primary">
                         Add Phase
                     </button>
                 </div>
@@ -248,7 +259,8 @@ const PhasesPage: React.FC = () => {
                                         className="edit-button"
                                         onClick={() => handleEdit(phase)}
                                     >
-                                        Edit
+                                        <Pencil className="h-4 w-4 md:hidden" aria-hidden />
+                                        <span className="max-md:sr-only">Edit</span>
                                     </button>
                                     <button
                                         type="button"
@@ -256,7 +268,8 @@ const PhasesPage: React.FC = () => {
                                         onClick={() => handleDelete(phase.id)}
                                         disabled={isDeleting}
                                     >
-                                        Delete
+                                        <Trash2 className="h-4 w-4 md:hidden" aria-hidden />
+                                        <span className="max-md:sr-only">Delete</span>
                                     </button>
                                 </div>
                             </article>

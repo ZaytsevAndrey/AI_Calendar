@@ -44,7 +44,7 @@ const HabitGrid: React.FC<HabitGridProps> = ({
                 key={date}
                 scope="col"
                 aria-current={date === today ? 'date' : undefined}
-                className={`w-11 px-1 py-2 text-center text-[10px] font-medium uppercase tracking-wide ${
+                className={`w-14 px-1 py-2 text-center text-[10px] font-medium uppercase tracking-wide ${
                   date === today ? 'text-ide-link' : 'text-ide-muted'
                 }`}
               >
@@ -100,7 +100,7 @@ const HabitGrid: React.FC<HabitGridProps> = ({
                         date === today ? `${habit.name} today` : `${habit.name} on ${date}`
                       }
                       onClick={() => void toggle(habit.id, date, done)}
-                      className={`mx-auto flex h-9 w-9 items-center justify-center rounded-md border text-sm text-white ${
+                      className={`mx-auto flex h-11 w-11 items-center justify-center rounded-md border text-sm text-white ${
                         done ? '' : 'border-ide-border'
                       }`}
                       style={

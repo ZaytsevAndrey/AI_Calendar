@@ -265,12 +265,52 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
   };
 
   return (
-    <div className="mt-2 max-w-full overflow-auto overscroll-x-contain rounded-lg border border-ide-border bg-ide-panel p-3 shadow-ide [-webkit-overflow-scrolling:touch] sm:p-4">
+    <div className="mt-2 max-w-full rounded-lg border border-ide-border bg-ide-panel p-3 shadow-ide sm:p-4">
       <h2 className="mb-1 text-lg font-semibold text-ide-text">Weekly phase template</h2>
-      <p className="mb-4 block text-xs text-ide-muted">
+      <p className="mb-4 hidden text-xs text-ide-muted md:block">
         Drag a block or its top/bottom edge. Step: {SNAP_MIN} min. Click the center to edit.
       </p>
+      <p className="mb-4 text-xs text-ide-muted md:hidden">
+        Tap a phase to edit it. Times follow your wake and sleep window.
+      </p>
 
+      <ul className="space-y-3 md:hidden">
+        {COLUMNS.map(({ dow, label }) => {
+          const colPhases = displayPhases.filter((phase) => phaseAppliesOnDay(phase, dow));
+          return (
+            <li key={dow} className="rounded-lg border border-ide-border bg-ide-surface p-3">
+              <h3 className="text-sm font-semibold text-ide-text">{label}</h3>
+              {colPhases.length === 0 ? (
+                <p className="mt-2 text-sm text-ide-muted">No phases</p>
+              ) : (
+                <ul className="mt-2 space-y-2">
+                  {colPhases.map((phase) => (
+                    <li key={phase.id}>
+                      <button
+                        type="button"
+                        className="flex min-h-[44px] w-full items-center gap-2 rounded-md border border-ide-border px-3 text-left"
+                        onClick={() => onEditPhase?.(phase)}
+                      >
+                        <span
+                          className="h-3 w-3 shrink-0 rounded-full"
+                          style={{ backgroundColor: phase.color }}
+                          aria-hidden
+                        />
+                        <span className="min-w-0 flex-1 truncate text-sm text-ide-text">{phase.name}</span>
+                        <span className="shrink-0 text-xs text-ide-muted">
+                          {phase.startTime}–{phase.endTime}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="hidden max-w-full overflow-auto overscroll-x-contain md:block [-webkit-overflow-scrolling:touch]">
       <div
         className="grid min-w-[520px] gap-0 rounded border border-ide-border"
         style={{
@@ -370,9 +410,10 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
           );
         })}
       </div>
+      </div>
 
       {displayPhases.length > 0 && (
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4 hidden flex-wrap gap-2 md:flex">
           <span className="w-full text-sm font-semibold text-ide-text">Legend</span>
           {[...displayPhases]
             .sort((a, b) => {

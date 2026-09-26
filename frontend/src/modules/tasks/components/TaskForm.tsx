@@ -185,7 +185,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
     <form onSubmit={handleSubmit((data) => onSubmit(buildTaskPayload(data, timeZone)))} className="task-form">
       <div className="space-y-3">
         <div className="inline-flex rounded-lg border border-ide-border p-0.5">
-          {TASK_PRESETS.map((preset) => {
+          {TASK_PRESETS.filter((preset) => preset.id !== 'unscheduled').map((preset) => {
             const active = preset.id === activePreset;
             return (
               <button

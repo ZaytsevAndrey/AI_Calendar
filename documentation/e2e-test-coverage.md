@@ -41,7 +41,7 @@ Default: **API E2E first**. UI E2E only for glue that unit/API cannot see. Do no
 
 ### Harness (UI)
 
-- Playwright: start frontend + backend (`e2e/playwright.config.ts`, ports **3100** / **3101**, isolated SQLite). **One worker**; each test starts after the previous one finishes. Default viewport is Desktop Chrome **1280×720**. `U-CAL-017` is the phone case (**390×844**). `U-CAL-023` checks **1024×700**, **1100×800**, and **1279×768**, the widths where the calendar used to collapse. The iOS install hint changes the user agent only.
+- Playwright: start frontend + backend (`e2e/playwright.config.ts`, ports **3100** / **3101**, isolated SQLite). **One worker**; each test starts after the previous one finishes. Default viewport is Desktop Chrome **1280×720**. `U-CAL-017` is the phone case (**390×844**, plus a **320×568** overflow check). `U-CAL-024` checks that create, voice, and Generate are one tap on that phone, and that a task card shows status pills with search and Filters on one row. `U-CAL-023` checks **1024×700**, **1100×800**, and **1279×768**, the widths where the calendar used to collapse. Week columns are also checked at **768×1024**. The iOS install hint changes the user agent only.
 - Seed JWT into Redux persist / `localStorage` (`auth` slice + `access_token`). Skip the real Google redirect. Backend `E2E_BOOTSTRAP=1` writes `e2e/.tmp/auth.json` (onboarded / needs-settings / needs-phases users).
 - Stub Google on the API with `E2E_STUB_EXTERNAL=1` (`checkConnection` false, empty event lists). No real Groq in P0 smoke.
 - One headed debug run is optional; CI is headless (`npm run test:e2e:ui`).
@@ -473,7 +473,8 @@ Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day,
 | U-CAL-008 | U | P1 | Last generate warnings | Banner | Dismiss stores `scheduleGenerateAlertsDismissedJobId`; stays dismissed on reload |
 | U-CAL-009 | U | P1 | Alerts older than 24h | Load | Banner not shown |
 | U-CAL-016 | U | P1 | No open tasks, schedule cleared | Schedule → Suggestions | Dialog shows the empty review message and Close dismisses it |
-| U-CAL-017 | U | P1 | Phone viewport 390×844 | Calendar day, week, Tasks | Header does not cover the grid. Day fits the width. Week scrolls sideways. Tasks heading is on screen |
+| U-CAL-017 | U | P1 | Phone viewport 390×844 and 320×568 | Calendar day, week strip, month, events sheet, Tasks, Settings | Day is the default. Hour grid is on screen without scrolling the page. Week is one column. Month tap opens that day. Sign out sits above the tab bar |
+| U-CAL-024 | U | P1 | Phone 390×844 | Calendar action bar, then Tasks | Create task, voice, and Generate preview each open in one tap. More schedule actions still has Suggestions. Task card shows To Do and Medium pills. Search and Filters share a row |
 | U-CAL-010 | U | P0 | Now overlapping block | Strip | Now title; Done if `canCompleteNowBlock` |
 | U-CAL-011 | U | P0 | Next start later today | Strip | Next shown |
 | U-CAL-012 | U | P0 | Flexible waiting for slot **today** | Strip Unscheduled | Transitional inbox (not `isUnscheduled` Tasks inbox) |

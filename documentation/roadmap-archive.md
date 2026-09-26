@@ -12,6 +12,10 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ## Shipped (Sep 2026)
 
+### Phone shell
+
+- [x] **Adaptive phone layout.** Below 768px: bottom tab bar, day-first calendar, week as a day strip, month as day dots, events as a sheet, compact task cards with pills, and one-tap Create / Voice / Generate above the tabs. From 768px the desktop chrome is unchanged.
+
 ### Capture
 
 - [x] **Audit task create/edit.** Form create/edit uses Settings IANA for From/Until, preferred start, and fixed slots; payload no longer writes the browser zone. Edit can clear phase (`phaseIds: []`) and deadline (`null`). Calendar day-click prefills that civil day in Settings TZ. Unchecking Fixed restores Allow split.

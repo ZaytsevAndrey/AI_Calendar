@@ -56,7 +56,7 @@ export function PwaInstallBanner() {
   if (hidden) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[1400] flex justify-center p-3 sm:p-4">
+    <div className="pointer-events-none fixed inset-x-0 bottom-[var(--phone-tab-offset)] z-[1400] flex justify-center p-3 sm:p-4">
       <div className="pointer-events-auto flex w-full max-w-lg items-start gap-3 rounded-2xl border border-ide-border bg-ide-panel px-4 py-3 shadow-ide-md">
         <div className="min-w-0 flex-1 text-sm text-ide-text">
           {deferred ? (

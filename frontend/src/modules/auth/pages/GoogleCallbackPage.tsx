@@ -75,7 +75,7 @@ const GoogleCallbackPage: React.FC = () => {
     }, [dispatch, navigate, searchParams]);
 
     return (
-        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-ide-bg text-ide-text">
+        <div className="flex h-full min-h-0 flex-1 flex-col items-center justify-center gap-4 bg-ide-bg px-4 text-ide-text">
             <Spinner className="h-10 w-10" />
             <p className="text-lg font-medium text-ide-text">Signing you in…</p>
         </div>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Mic, Plus } from 'lucide-react';
 import { useGetEventsQuery, useDeleteEventMutation, useUpdateEventMutation } from 'api/eventTasksApi';
 import { useGetAllPhasesQuery } from 'api/phasesApi';
 import EventList from 'modules/events/components/EventList';
@@ -8,6 +9,7 @@ import { VoiceTaskButton } from 'modules/voice/components/VoiceTaskButton';
 import { VoiceTaskSheet } from 'modules/voice/components/VoiceTaskSheet';
 import { useVoiceTask } from 'modules/voice/hooks/useVoiceTask';
 import { deadlineTone } from 'modules/events/utils/deadlineTone';
+import { usePhoneLayout } from 'modules/common/hooks/useMediaQuery';
 import {
   filterScheduledTasks,
   filterUnscheduledTasks,
@@ -81,6 +83,7 @@ const TasksPage: React.FC = () => {
     id: null,
     name: '',
   });
+  const phone = usePhoneLayout();
 
   const { data: events = [], isLoading: isLoadingEvents } = useGetEventsQuery();
   const { data: phases = [] } = useGetAllPhasesQuery();
@@ -159,27 +162,22 @@ const TasksPage: React.FC = () => {
       <header className="page-head shrink-0">
         <div>
           <h1 className="page-title">Tasks</h1>
-          <p className="page-lead">
+          <p className="page-lead max-md:hidden">
             Inbox for things to do later, plus scheduled tasks. Unscheduled items stay off Google Calendar
             until you schedule them.
           </p>
         </div>
-        <div className="flex w-full shrink-0 flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
-          <button
-            type="button"
-            onClick={() => openCreate({ unscheduled: true })}
-            className="ui-btn-secondary min-w-[9rem] flex-1 sm:flex-none"
-          >
-            Add unscheduled
-          </button>
-          <button type="button" onClick={() => openCreate()} className="ui-btn-primary min-w-[9rem] flex-1 sm:flex-none">
-            Create task
-          </button>
-          <VoiceTaskButton onClick={voice.open} />
-        </div>
+        {phone ? null : (
+          <div className="flex w-full shrink-0 flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
+            <button type="button" onClick={() => openCreate()} className="ui-btn-primary min-w-[9rem] flex-1 sm:flex-none">
+              Create task
+            </button>
+            <VoiceTaskButton onClick={voice.open} />
+          </div>
+        )}
       </header>
 
-      <div className="page-scroll space-y-6">
+      <div className="page-scroll space-y-6 max-md:pb-28">
         <section>
           <div className="mb-3">
             <h2 className="text-sm font-medium uppercase tracking-wide text-ide-muted">Unscheduled</h2>
@@ -278,6 +276,29 @@ const TasksPage: React.FC = () => {
 
       {editorModal}
       <VoiceTaskSheet voice={voice} />
+      {phone ? (
+        <div
+          className="fixed z-[1250] flex items-center gap-2 md:hidden"
+          style={{ right: '1rem', bottom: 'calc(var(--phone-tab-offset) + 0.75rem)' }}
+        >
+          <button
+            type="button"
+            className="flex h-12 w-12 items-center justify-center rounded-full border border-ide-border bg-ide-panel text-ide-text shadow-ide-md"
+            aria-label="Add task by voice"
+            onClick={() => voice.open()}
+          >
+            <Mic className="h-5 w-5" aria-hidden />
+          </button>
+          <button
+            type="button"
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-ide-accentBlue text-white shadow-ide-md"
+            aria-label="Create task"
+            onClick={() => openCreate()}
+          >
+            <Plus className="h-7 w-7" aria-hidden />
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 };

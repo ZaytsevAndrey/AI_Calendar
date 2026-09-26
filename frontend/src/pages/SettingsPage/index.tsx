@@ -4,6 +4,7 @@ import { LogOut } from 'lucide-react';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import UserSettingsForm from 'modules/user-settings/components/UserSettingsForm';
 import { logout } from 'modules/auth/actions/logoutActions';
+import { buildLabel } from 'modules/common/buildInfo';
 
 const SettingsPage: React.FC = () => {
     const dispatch = useDispatch<any>();
@@ -91,11 +92,14 @@ const SettingsPage: React.FC = () => {
                     <button
                         type="button"
                         onClick={() => dispatch(logout(true))}
-                        className="ui-btn-secondary inline-flex items-center gap-2 border-ide-error text-ide-error hover:bg-ide-error/10"
+                        className="ui-btn-secondary inline-flex items-center gap-2 border-ide-error text-ide-error hover:bg-ide-error/10 max-md:h-8 max-md:min-h-0 max-md:px-3 max-md:py-0"
                     >
                         <LogOut className="h-4 w-4" aria-hidden />
                         Sign out
                     </button>
+                    <p className="mt-4 text-center text-[11px] leading-4 text-ide-muted md:hidden">
+                        Build {buildLabel()}
+                    </p>
                 </section>
             </div>
         </div>

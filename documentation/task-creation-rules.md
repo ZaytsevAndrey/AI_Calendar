@@ -4,14 +4,14 @@
 
 ## 1) Модель: налаштування, не типи
 
-Поведінку задають **прапорці та поля**. У UI «Flexible / Fixed / Recurring» — лише **пресети**, які заповнюють ці налаштування; після вибору все можна змінити вручну.
+Поведінку задають **прапорці та поля**. У UI «Flexible / Fixed / Recurring» — лише **пресети**, які заповнюють ці налаштування; після вибору все можна змінити вручну. Окремої кнопки **Unscheduled** у формі немає. Інбокс лишається секцією на Tasks; порожній інбокс і далі створює задачу без слота.
 
 | Режим (пресет) | Що сетиться |
 |----------------|-------------|
 | **Flexible** (дефолт) | не fixed, не recurring, split увімкнено, 30 хв |
 | **Fixed** | fixed time, split вимкнено, потрібні старт і кінець |
 | **Recurring** | не fixed, recurring Daily, split увімкнено, дні Mon–Fri |
-| **Unscheduled** | inbox: `isUnscheduled`, без слота, без replan/Google, опційний deadline |
+| **Unscheduled** | inbox: `isUnscheduled`, без слота, без replan/Google, опційний deadline. У формі пресету Unscheduled на кнопках більше немає; inbox лишається на сторінці Tasks |
 
 У API/БД для нових записів `eventType` лише **`fixed`** або **`admin`** (усі не-fixed). Старі значення на кшталт `learning` / `daily_routine` читаються як flexible.
 

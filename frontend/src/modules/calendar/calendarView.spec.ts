@@ -15,6 +15,7 @@ import {
   getDaysInView,
   gridEventsForDay,
   habitDisplayOnColumn,
+  compactPeriodLabel,
   periodLabel,
   shiftPeriod,
   startOfWeekMonday,
@@ -447,6 +448,9 @@ describe('query ranges', () => {
     });
     expect(periodLabel(focusDay, 'week')).toMatch(/7/);
     expect(periodLabel(focusDay, 'week')).toMatch(/13/);
+    expect(compactPeriodLabel(focusDay, 'day')).toBe('Wed 9 Sep');
+    expect(compactPeriodLabel(focusDay, 'week')).toBe('7–13 Sep');
+    expect(compactPeriodLabel(focusDay, 'month')).toBe('Sep 2026');
     expect(ymd(shiftPeriod(focusDay, 'week', 1))).toBe('2026-09-16');
   });
 });

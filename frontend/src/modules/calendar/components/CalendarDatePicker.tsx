@@ -23,7 +23,10 @@ const MONTHS = [
 type Props = {
     value: Date;
     label: string;
+    /** Visible text when it should be shorter than `label`. The accessible name still uses `label`. */
+    caption?: string;
     onChange: (date: Date) => void;
+    compact?: boolean;
 };
 
 function startOfMonth(date: Date): Date {
@@ -50,7 +53,7 @@ function monthCells(cursor: Date): Date[] {
     });
 }
 
-export function CalendarDatePicker({ value, label, onChange }: Props) {
+export function CalendarDatePicker({ value, label, caption, onChange, compact = false }: Props) {
     const [open, setOpen] = useState(false);
     const [cursor, setCursor] = useState(() => startOfMonth(value));
     const [pos, setPos] = useState({ top: 0, left: 0 });
@@ -79,7 +82,7 @@ export function CalendarDatePicker({ value, label, onChange }: Props) {
         const place = () => {
             const rect = buttonRef.current?.getBoundingClientRect();
             if (!rect) return;
-            const width = 300;
+            const width = Math.min(300, window.innerWidth - 16);
             const height = panelRef.current?.offsetHeight ?? 340;
             let left = rect.right - width;
             if (left < 8) left = 8;
@@ -136,14 +139,18 @@ export function CalendarDatePicker({ value, label, onChange }: Props) {
             <button
                 ref={buttonRef}
                 type="button"
-                className="ui-btn-secondary min-w-0 max-w-[16rem] px-3 sm:max-w-xs"
+                className={
+                    compact
+                        ? 'inline-flex h-7 w-full min-h-0 min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-md border border-ide-border bg-ide-surface px-2 text-xs text-ide-text'
+                        : 'ui-btn-secondary min-w-0 max-w-[16rem] px-3 sm:max-w-xs'
+                }
                 aria-haspopup="dialog"
                 aria-expanded={open}
                 aria-label={`Go to date, currently ${label}`}
                 onClick={() => setOpen((prev) => !prev)}
             >
                 <CalendarDays className="h-4 w-4 shrink-0" aria-hidden />
-                <span className="truncate">{label}</span>
+                <span className="truncate">{caption ?? label}</span>
                 <ChevronDown className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
             </button>
             {open && typeof document !== 'undefined'
@@ -152,7 +159,7 @@ export function CalendarDatePicker({ value, label, onChange }: Props) {
                           ref={panelRef}
                           role="dialog"
                           aria-label="Choose date"
-                          className="fixed z-[1400] w-[300px] rounded-xl border border-ide-border bg-ide-panel p-3 shadow-ide-md"
+                          className="fixed z-[1400] w-[min(300px,calc(100vw-1rem))] rounded-xl border border-ide-border bg-ide-panel p-3 shadow-ide-md"
                           style={{ top: pos.top, left: pos.left }}
                       >
                           <div className="mb-3 flex items-center gap-2">

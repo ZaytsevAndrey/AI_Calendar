@@ -21,6 +21,16 @@
         @apply flex min-h-[100dvh] w-full flex-col bg-ide-bg;
     }
 
+    :root {
+        --phone-tab-offset: 0px;
+    }
+
+    @media (max-width: 767px) {
+        :root {
+            --phone-tab-offset: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+        }
+    }
+
     a {
         @apply text-ide-link no-underline;
     }
@@ -74,13 +84,15 @@
     }
 
     .page-shell-fill {
-        @apply page-shell flex w-full flex-1 flex-col;
+        @apply page-shell flex min-w-0 w-full flex-1 flex-col;
+        @apply max-md:min-h-0 max-md:overflow-hidden;
         @apply lg:min-h-0 lg:overflow-hidden;
     }
 
-    /* Grows with the page on a phone. From lg it fills leftover height and scrolls inside. */
+    /* Phone and lg lock the page to the viewport and scroll inside. Between md and lg the page still grows and main scrolls. */
     .page-scroll {
-        @apply w-full;
+        @apply min-w-0 w-full;
+        @apply max-md:min-h-0 max-md:flex-1 max-md:overflow-y-auto;
         @apply lg:min-h-0 lg:flex-1 lg:overflow-y-auto;
     }
 
@@ -123,6 +135,17 @@
     .ui-btn-danger {
         @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-ide-error px-4 py-2.5 text-sm font-medium text-white transition hover:brightness-110;
         @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-error;
+        @apply disabled:pointer-events-none disabled:opacity-50;
+    }
+
+    .ui-icon-btn {
+        @apply inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md p-0 text-ide-text transition hover:bg-white/5;
+        @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link;
+        @apply disabled:pointer-events-none disabled:opacity-50;
+    }
+
+    .ui-menu-row {
+        @apply flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-ide-text transition hover:bg-ide-surface;
         @apply disabled:pointer-events-none disabled:opacity-50;
     }
 
@@ -394,10 +417,12 @@
 
     .task-item .edit-button {
         @apply ui-btn-secondary flex-1 sm:flex-none;
+        @apply max-md:h-8 max-md:w-8 max-md:min-h-0 max-md:flex-none max-md:px-0 max-md:py-0;
     }
 
     .task-item .delete-button {
         @apply ui-btn-danger flex-1 sm:flex-none;
+        @apply max-md:h-8 max-md:w-8 max-md:min-h-0 max-md:flex-none max-md:px-0 max-md:py-0;
     }
 
     .loading,
@@ -508,10 +533,12 @@
 
     .phase-card .edit-button {
         @apply ui-btn-secondary flex-1 sm:flex-none;
+        @apply max-md:h-8 max-md:w-8 max-md:min-h-0 max-md:flex-none max-md:px-0 max-md:py-0;
     }
 
     .phase-card .delete-button {
         @apply ui-btn-danger flex-1 sm:flex-none;
+        @apply max-md:h-8 max-md:w-8 max-md:min-h-0 max-md:flex-none max-md:px-0 max-md:py-0;
     }
 
     /* Settings */

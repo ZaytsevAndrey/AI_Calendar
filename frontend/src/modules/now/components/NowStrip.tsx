@@ -16,6 +16,7 @@ import {
   unscheduledTasksForToday,
   type NowBlock,
 } from '../nowBlocks';
+import { usePhoneLayout } from 'modules/common/hooks/useMediaQuery';
 import { HabitNowStrip } from './HabitNowStrip';
 
 function useNowMs(intervalMs = 30_000): number {
@@ -135,6 +136,8 @@ export function NowStrip() {
     () => unscheduledTasksForToday(tasks, occupied, ctx.todayYmd, ctx.timeZone),
     [tasks, occupied, ctx.todayYmd, ctx.timeZone],
   );
+  const phone = usePhoneLayout();
+  const [expanded, setExpanded] = useState(false);
 
   const markDone = async (task: TaskDTO) => {
     setBusyId(task.id);
@@ -176,9 +179,25 @@ export function NowStrip() {
   };
 
   const emptyClock = !now && !next && inbox.length === 0;
+  const nowSummary = now
+    ? `${now.title} · ${formatRange(now, ctx.timeZone)}`
+    : 'Nothing in progress';
 
   return (
-    <section className="space-y-3 rounded-lg border border-ide-border bg-ide-panel p-3">
+    <section className="space-y-3 rounded-lg border border-ide-border bg-ide-panel p-3 max-md:space-y-2 max-md:p-2">
+      {phone ? (
+        <button
+          type="button"
+          className="flex min-h-0 w-full items-center gap-2 py-0.5 text-left"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((open) => !open)}
+        >
+          <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-ide-muted">Now</span>
+          <span className="min-w-0 flex-1 truncate text-sm text-ide-text">{nowSummary}</span>
+        </button>
+      ) : null}
+      {phone && !expanded ? null : (
+        <>
       <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
         <BlockRow
           label="Now"
@@ -229,7 +248,9 @@ export function NowStrip() {
           <span>Generate a schedule or add a task.</span>
         </p>
       ) : null}
-      <HabitNowStrip />
+      {phone ? null : <HabitNowStrip />}
+        </>
+      )}
     </section>
   );
 }

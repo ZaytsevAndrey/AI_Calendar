@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import { enGB } from 'date-fns/locale';
 import { GoogleCalendarEvent } from '../../api/google-calendar.api';
 import {
   minutesToTime,
@@ -641,4 +642,18 @@ export function periodLabel(date: Date, view: CalendarView): string {
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
   return formatWeekRange(start, end);
+}
+
+/** Short label for the phone date control. The full periodLabel stays in the accessible name. */
+export function compactPeriodLabel(date: Date, view: CalendarView): string {
+  const loc = { locale: enGB };
+  if (view === 'day') return format(date, 'EEE d MMM', loc);
+  if (view === 'month') return format(date, 'MMM yyyy', loc);
+  const start = startOfWeekMonday(date);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
+    return `${format(start, 'd', loc)}–${format(end, 'd MMM', loc)}`;
+  }
+  return `${format(start, 'd MMM', loc)}–${format(end, 'd MMM', loc)}`;
 }

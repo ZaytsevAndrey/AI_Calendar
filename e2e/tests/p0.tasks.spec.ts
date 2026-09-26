@@ -48,6 +48,9 @@ test.describe('P0 tasks UI', () => {
     await dialog.getByRole('button', { name: 'Create task' }).click();
     await expect(page.getByText('Task created')).toBeVisible();
     await expect(page.getByRole('heading', { name })).toBeVisible();
+    const card = page.locator('.task-item').filter({ hasText: name });
+    await expect(card.getByText('To Do', { exact: true })).toBeVisible();
+    await expect(card.getByText('Medium', { exact: true })).toBeVisible();
   });
 
   test('U-TSK-005/006 recurring Daily Mon–Fri creates; empty pattern is auto-filled', async ({
@@ -69,18 +72,24 @@ test.describe('P0 tasks UI', () => {
     await expect(page.getByRole('heading', { name })).toBeVisible();
   });
 
-  test('U-TSK-007 unscheduled name-only lands in inbox', async ({ page, auth }) => {
-    await openAs(page, auth.onboarded, '/tasks');
-    const dialog = await openCreateTaskDialog(page);
-    await dialog.getByRole('button', { name: 'Unscheduled' }).click();
+  test('U-TSK-007 unscheduled name-only lands in inbox', async ({ page, auth, request }) => {
     const name = uniqueName('E2E inbox');
-    await dialog.getByRole('textbox', { name: /Name/ }).fill(name);
-    await dialog.getByRole('button', { name: 'Create task' }).click();
-    await expect(page.getByText('Task created')).toBeVisible();
+    expectOk(
+      await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
+        name,
+        isUnscheduled: true,
+      }),
+    );
+    await openAs(page, auth.onboarded, '/tasks');
+    await expect(page.getByRole('button', { name: 'Add unscheduled' })).toHaveCount(0);
 
     const inbox = page.locator('section').filter({ hasText: 'Unscheduled' }).first();
-    await expect(inbox.getByRole('heading', { name })).toBeVisible();
-    await expect(inbox.locator('span').filter({ hasText: /^Unscheduled$/ })).toBeVisible();
+    const row = inbox.locator('.task-item').filter({ hasText: name });
+    await expect(row.getByRole('heading', { name })).toBeVisible();
+    await expect(row.getByText('Unscheduled', { exact: true })).toBeVisible();
+
+    const dialog = await openCreateTaskDialog(page);
+    await expect(dialog.getByRole('button', { name: 'Unscheduled', exact: true })).toHaveCount(0);
   });
 
   test('U-TSK-009 inbox Schedule saves without isUnscheduled', async ({ page, auth, request }) => {

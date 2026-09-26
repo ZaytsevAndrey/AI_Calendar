@@ -100,6 +100,7 @@ test.describe('P1 tasks UI', () => {
     }
 
     await openAs(page, auth.onboarded, '/tasks');
+    await page.getByRole('button', { name: 'Filters' }).click();
     await page.getByLabel('Sort by').selectOption('name');
     const scheduled = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Scheduled' }) });
     await expect(scheduled.getByRole('heading', { level: 3 })).toHaveText([alpha, bravo, charlie]);

@@ -46,7 +46,7 @@ export const Modal: React.FC<ModalProps> = ({
                 ) : null}
                 <div className="min-h-0 flex-1 overflow-y-auto p-4 text-ide-text sm:p-5">{children}</div>
                 {footer ? (
-                    <div className="flex flex-shrink-0 flex-col-reverse gap-2 border-t border-ide-border p-4 sm:flex-row sm:justify-end sm:p-4">
+                    <div className="flex flex-shrink-0 flex-row flex-wrap justify-end gap-2 border-t border-ide-border p-3 max-md:[&>button]:!h-8 max-md:[&>button]:!min-h-0 max-md:[&>button]:!w-auto max-md:[&>button]:!flex-none max-md:[&>button]:!px-3 sm:p-4">
                         {footer}
                     </div>
                 ) : null}

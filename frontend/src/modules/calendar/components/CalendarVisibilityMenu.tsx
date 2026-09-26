@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import type { AppDispatch } from '../../../store';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Eye } from 'lucide-react';
 import { eventsApi, useLazyGetCalendarsQuery } from '../../../api/eventsApi';
 import {
   useGetUserSettingsQuery,
@@ -13,13 +13,14 @@ import {
   nextHiddenCalendarIds,
 } from '../calendarVisibility';
 
-export function CalendarVisibilityMenu() {
+export function CalendarVisibilityMenu({ compact = false }: { compact?: boolean }) {
   const { data: settings } = useGetUserSettingsQuery();
   const [updateSettings, { isLoading: isSaving }] = useUpdateUserSettingsMutation();
   const [loadCalendars, calendarsQuery] = useLazyGetCalendarsQuery();
   const dispatch = useDispatch<AppDispatch>();
   const [open, setOpen] = useState(false);
   const [pendingHidden, setPendingHidden] = useState<string[] | null>(null);
+  const [panelTop, setPanelTop] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,12 +37,15 @@ export function CalendarVisibilityMenu() {
   useEffect(() => {
     if (!open) return;
     void loadCalendars();
+    if (compact && rootRef.current) {
+      setPanelTop(rootRef.current.getBoundingClientRect().bottom + 6);
+    }
     const onDoc = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
-  }, [open, loadCalendars]);
+  }, [open, loadCalendars, compact]);
 
   if (!settings?.googleCalendarLinked) return null;
 
@@ -74,19 +78,35 @@ export function CalendarVisibilityMenu() {
     <div className="relative" ref={rootRef}>
       <button
         type="button"
-        className="ui-btn-secondary px-4"
+        className={
+          compact
+            ? 'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ide-text hover:bg-white/5'
+            : 'ui-btn-secondary px-4'
+        }
         aria-expanded={open}
         aria-haspopup="dialog"
+        aria-label="Calendars"
         onClick={() => setOpen((value) => !value)}
       >
-        Calendars
-        <ChevronDown className="h-4 w-4" aria-hidden />
+        {compact ? (
+          <Eye className="h-4 w-4" aria-hidden />
+        ) : (
+          <>
+            Calendars
+            <ChevronDown className="h-4 w-4" aria-hidden />
+          </>
+        )}
       </button>
       {open ? (
         <div
           role="dialog"
           aria-label="Visible calendars"
-          className="absolute right-0 z-20 mt-1 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-ide-border bg-ide-panel p-2"
+          className={
+            compact
+              ? 'fixed z-[1400] w-[min(20rem,calc(100vw-1rem))] rounded-lg border border-ide-border bg-ide-panel p-2'
+              : 'absolute right-0 z-20 mt-1 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-ide-border bg-ide-panel p-2'
+          }
+          style={compact ? { top: panelTop, left: 8 } : undefined}
         >
           {calendarsQuery.isLoading || calendarsQuery.isUninitialized ? (
             <p className="px-2 py-2 text-sm text-ide-muted">Loading calendars…</p>

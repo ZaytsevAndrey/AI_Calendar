@@ -1,6 +1,8 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { ListFilter, Search, X } from 'lucide-react';
 import type { ScheduleModeFilter, TaskStatusFilter } from '../utils/taskListFilters';
+import { usePhoneLayout } from 'modules/common/hooks/useMediaQuery';
+import { Modal } from '../../../ui/Modal';
 
 type SortField = 'name' | 'priority' | 'deadline' | 'estimatedTimeInMinutes';
 
@@ -78,6 +80,8 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
   const panelId = useId();
   const moreRef = useRef<HTMLDivElement>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const phone = usePhoneLayout();
 
   const showPhase = Boolean(onPhaseIdChange && phaseId !== undefined);
   const showMode = Boolean(onModeChange && mode !== undefined);
@@ -125,7 +129,8 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
   return (
     <div className="mb-3 space-y-2">
       <div className="filter-bar mb-0">
-        <div className="relative min-w-[10rem] flex-1 basis-full sm:basis-auto sm:max-w-sm">
+        <div className="flex w-full min-w-0 items-center gap-2 md:contents">
+        <div className="relative min-w-0 flex-1 basis-0 sm:max-w-sm">
           <Search
             className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ide-muted"
             aria-hidden
@@ -143,15 +148,27 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
             <button
               type="button"
               className="absolute right-2 top-1/2 -translate-y-1/2 text-ide-muted hover:text-ide-text"
-              aria-label={`Clear ${searchAriaLabel}`}
+              aria-label={`Clear ${idPrefix} search`}
               onClick={() => onQueryChange('')}
             >
               <X className="h-3.5 w-3.5" aria-hidden />
             </button>
           ) : null}
         </div>
+        <button
+          type="button"
+          className="ui-icon-btn relative !h-9 !w-9 shrink-0 border border-ide-border md:hidden"
+          onClick={() => setSheetOpen(true)}
+        >
+          <ListFilter className="h-4 w-4" aria-hidden />
+          <span className="sr-only">Filters</span>
+          {narrowed ? (
+            <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-ide-link" aria-hidden />
+          ) : null}
+        </button>
+        </div>
 
-        <label htmlFor={statusId} className="sr-only">
+        <label htmlFor={statusId} className="sr-only max-md:hidden">
           Status
         </label>
         <select
@@ -159,7 +176,7 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
           value={status}
           aria-label={statusAriaLabel}
           onChange={(event) => onStatusChange(event.target.value as TaskStatusFilter)}
-          className="filter-select"
+          className="filter-select max-md:hidden"
         >
           {STATUS_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
@@ -173,13 +190,13 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
           aria-pressed={overdueOnly}
           aria-label={overdueAriaLabel}
           onClick={() => onOverdueOnlyChange(!overdueOnly)}
-          className={`filter-chip ${overdueOnly ? 'border-ide-error bg-ide-error/15 text-white' : ''}`}
+          className={`filter-chip max-md:hidden ${overdueOnly ? 'border-ide-error bg-ide-error/15 text-white' : ''}`}
         >
           Overdue
         </button>
 
         {hasMore ? (
-          <div className="relative" ref={moreRef}>
+          <div className="relative max-md:hidden" ref={moreRef}>
             <button
               type="button"
               className={`filter-chip ${moreCount > 0 || moreOpen ? 'filter-chip-on' : ''}`}
@@ -299,6 +316,107 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
             </button>
           ) : null}
         </div>
+      ) : null}
+
+      {phone ? (
+        <Modal open={sheetOpen} onClose={() => setSheetOpen(false)} title="Filters">
+          <div className="space-y-3">
+            <div>
+              <label htmlFor={`${idPrefix}SheetStatus`} className="mb-1 block text-xs text-ide-muted">
+                Status
+              </label>
+              <select
+                id={`${idPrefix}SheetStatus`}
+                value={status}
+                aria-label={statusAriaLabel}
+                onChange={(event) => onStatusChange(event.target.value as TaskStatusFilter)}
+                className="ui-select w-full"
+              >
+                {STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              aria-pressed={overdueOnly}
+              aria-label={overdueAriaLabel}
+              onClick={() => onOverdueOnlyChange(!overdueOnly)}
+              className={`filter-chip ${overdueOnly ? 'border-ide-error bg-ide-error/15 text-white' : ''}`}
+            >
+              Overdue
+            </button>
+            {showPhase && onPhaseIdChange && phaseId !== undefined ? (
+              <div>
+                <label htmlFor={`${idPrefix}SheetPhase`} className="mb-1 block text-xs text-ide-muted">
+                  Phase
+                </label>
+                <select
+                  id={`${idPrefix}SheetPhase`}
+                  value={phaseId}
+                  onChange={(event) => onPhaseIdChange(event.target.value)}
+                  className="ui-select w-full"
+                >
+                  <option value="any">Any phase</option>
+                  <option value="none">No phase</option>
+                  {(phases ?? []).map((phase) => (
+                    <option key={phase.id} value={phase.id}>
+                      {phase.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+            {showMode && onModeChange && mode !== undefined ? (
+              <div>
+                <label htmlFor={`${idPrefix}SheetMode`} className="mb-1 block text-xs text-ide-muted">
+                  Schedule type
+                </label>
+                <select
+                  id={`${idPrefix}SheetMode`}
+                  value={mode}
+                  onChange={(event) => onModeChange(event.target.value as ScheduleModeFilter)}
+                  className="ui-select w-full"
+                >
+                  <option value="any">Any</option>
+                  <option value="fixed">Fixed</option>
+                  <option value="flexible">Flexible</option>
+                  <option value="recurring">Recurring</option>
+                </select>
+              </div>
+            ) : null}
+            {showSort && onSortFieldChange && sortField !== undefined ? (
+              <div>
+                <label htmlFor={`${idPrefix}SheetSort`} className="mb-1 block text-xs text-ide-muted">
+                  Sort by
+                </label>
+                <select
+                  id={`${idPrefix}SheetSort`}
+                  value={sortField}
+                  onChange={(event) => onSortFieldChange(event.target.value as SortField)}
+                  className="ui-select w-full"
+                >
+                  <option value="deadline">Deadline</option>
+                  <option value="priority">Priority</option>
+                  <option value="name">Name</option>
+                  <option value="estimatedTimeInMinutes">Duration</option>
+                </select>
+              </div>
+            ) : null}
+            <div className="flex justify-end gap-2 pt-2">
+              {narrowed ? (
+                <button type="button" className="h-8 rounded-md px-3 text-sm text-ide-muted" onClick={reset}>
+                  Clear
+                </button>
+              ) : null}
+              <button type="button" className="h-8 rounded-md bg-ide-accentBlue px-3 text-sm text-white" onClick={() => setSheetOpen(false)}>
+                Done
+              </button>
+            </div>
+          </div>
+        </Modal>
       ) : null}
     </div>
   );

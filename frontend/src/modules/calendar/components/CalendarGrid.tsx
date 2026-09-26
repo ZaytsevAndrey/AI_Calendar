@@ -45,6 +45,9 @@ interface CalendarGridProps {
         start: Date,
         end: Date,
     ) => Promise<void>;
+    /** Phone month: day number and a dot, tap opens that day. */
+    phoneMonth?: boolean;
+    onPickDay?: (day: Date) => void;
 }
 
 const CalendarGrid: React.FC<CalendarGridProps> = ({
@@ -54,6 +57,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     onEditEvent,
     onCreateForDate,
     onEventTimeChange,
+    phoneMonth = false,
+    onPickDay,
 }) => {
     const { data: timePhases = [] } = useTimePhasesForDate(date);
     const { data: allTimePhases = [] } = useTimePhases();
@@ -104,6 +109,68 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     const habitDialog = (
         <HabitDayDialog date={habitDate} onClose={() => setHabitDate(null)} />
     );
+
+    if (view === 'month' && phoneMonth) {
+        return (
+            <>
+                <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-lg border border-ide-border bg-ide-panel">
+                    <div className="grid shrink-0 grid-cols-7 border-b border-ide-border">
+                        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((dayName) => (
+                            <div
+                                key={dayName}
+                                className="py-2 text-center text-[11px] font-medium text-ide-muted"
+                            >
+                                {dayName.slice(0, 1)}
+                            </div>
+                        ))}
+                    </div>
+                    <div
+                        className="grid min-h-0 flex-1 auto-rows-fr grid-cols-7 overflow-y-auto"
+                        data-testid="calendar-month-grid"
+                    >
+                        {days.map((day) => {
+                            const dayEvents = gridEventsForDay(visibleEvents, day, sleepWindow);
+                            const ymd = ymdFromLocalDate(day);
+                            const marked =
+                                dayEvents.length > 0 ||
+                                habitBlocks.some((block) => block.ymd === ymd);
+                            const isCurrentDay = isToday(day);
+                            const isInCurrentMonth = isCurrentMonth(day);
+                            const label = day.toLocaleDateString('en-GB', {
+                                weekday: 'long',
+                                day: 'numeric',
+                                month: 'long',
+                            });
+                            return (
+                                <button
+                                    key={ymd}
+                                    type="button"
+                                    aria-label={`Show ${label}`}
+                                    className={`flex min-h-[44px] flex-col items-center justify-center border-b border-r border-ide-border text-sm ${
+                                        !isInCurrentMonth ? 'opacity-50' : ''
+                                    } ${
+                                        isCurrentDay
+                                            ? 'bg-ide-selection/30 font-bold text-ide-link'
+                                            : 'text-ide-text'
+                                    }`}
+                                    onClick={() => onPickDay?.(day)}
+                                >
+                                    <span>{day.getDate()}</span>
+                                    <span
+                                        className={`mt-1 h-1.5 w-1.5 rounded-full ${
+                                            marked ? 'bg-ide-link' : 'bg-transparent'
+                                        }`}
+                                        aria-hidden
+                                    />
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+                {habitDialog}
+            </>
+        );
+    }
 
     const renderGridEvent = (event: GoogleCalendarEvent) => {
         let eventPhase = null;
@@ -208,9 +275,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
 
         return (
             <>
-            <div className="flex flex-col rounded-lg border border-ide-border bg-ide-panel p-3 sm:p-4 lg:h-full lg:min-h-0">
+            <div className="flex flex-col rounded-lg border border-ide-border bg-ide-panel p-2 sm:p-4 max-md:!p-1.5 max-md:h-full max-md:min-h-0 max-md:flex-1 max-md:overflow-hidden lg:h-full lg:min-h-0">
                 {getDisplayPhases().length > 0 && (
-                    <div className="mb-4 flex max-h-24 shrink-0 flex-wrap gap-2 overflow-y-auto">
+                    <div className="mb-4 hidden max-h-24 shrink-0 flex-wrap gap-2 overflow-y-auto md:flex">
                         {getDisplayPhases().map((phase: any) => (
                             <div
                                 key={phase.id}
@@ -233,9 +300,11 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                 )}
 
                 {view === 'day' ? <HabitDaySection date={ymdFromLocalDate(days[0])} /> : null}
-                <p className="mb-2 shrink-0 text-xs text-ide-muted">
-                    Drag a block or its top/bottom edge. Step: 15 min. Click the center to edit.
-                </p>
+                {onEventTimeChange ? (
+                    <p className="mb-2 hidden shrink-0 text-xs text-ide-muted md:block">
+                        Drag a block or its top/bottom edge. Step: 15 min. Click the center to edit.
+                    </p>
+                ) : null}
                 <CalendarTimeGrid
                     days={days}
                     events={timed}
@@ -277,7 +346,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     return (
         <>
         <div className="flex w-full flex-col lg:h-full lg:min-h-0">
-            {getDisplayPhases().length > 0 && (
+            {getDisplayPhases().length > 0 && !phoneMonth && (
                 <div className="mb-4 flex shrink-0 flex-wrap gap-2">
                     {getDisplayPhases().map((phase: any) => (
                         <div

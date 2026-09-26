@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { test, expect, openAs } from '../helpers/fixtures';
+import { test, expect, openAs, apiJson, expectOk, uniqueName, completeOpenTasks } from '../helpers/fixtures';
 
 async function painted(locator: Locator) {
   return locator.evaluate((el) => {
@@ -27,71 +27,172 @@ async function expectHoursOnScreen(page: Page, label: string) {
 test.describe('phone layout', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('U-CAL-017 day fits, week scrolls sideways, tasks stay reachable', async ({ page, auth }) => {
+  test('U-CAL-017 day fills the screen, week stays one column, tasks stay reachable', async ({ page, auth }) => {
     await openAs(page, auth.onboarded);
-    await page.getByRole('button', { name: 'Day', exact: true }).click();
-    const grid = page.getByTestId('calendar-time-grid');
-    await expect(grid).toBeAttached();
+    await expect(page.getByRole('button', { name: 'Day', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    const hours = page.getByTestId('calendar-hour-scroll');
+    await expect(hours).toBeVisible();
 
     const day = await page.evaluate(() => {
       const main = document.querySelector('main');
-      const header = document.querySelector('header');
-      const node = document.querySelector('[data-testid="calendar-time-grid"]');
-      if (!main || !header || !(node instanceof HTMLElement)) return null;
-      const delta = node.getBoundingClientRect().top - main.getBoundingClientRect().top;
-      main.scrollTop += delta;
+      const node = document.querySelector('[data-testid="calendar-hour-scroll"]');
+      if (!main || !(node instanceof HTMLElement)) return null;
       const mainBox = main.getBoundingClientRect();
-      const headerBox = header.getBoundingClientRect();
       const box = node.getBoundingClientRect();
+      const visible = Math.min(box.bottom, mainBox.bottom) - Math.max(box.top, mainBox.top);
       return {
-        overflowY: getComputedStyle(main).overflowY,
-        headerPosition: getComputedStyle(header).position,
-        mainScrolls: main.scrollHeight > main.clientHeight + 8,
-        headerAboveMain: headerBox.bottom <= mainBox.top + 1,
-        gridAligned: Math.abs(box.top - mainBox.top) <= 2,
-        gridFitsWidth: node.scrollWidth <= node.clientWidth + 2,
+        mainScroll: main.scrollTop,
+        visible,
         pageWider: document.documentElement.scrollWidth > window.innerWidth + 2,
       };
     });
     expect(day).toBeTruthy();
-    expect(day!.overflowY).toBe('auto');
-    expect(day!.headerPosition).not.toBe('fixed');
-    expect(day!.mainScrolls).toBe(true);
-    expect(day!.headerAboveMain).toBe(true);
-    expect(day!.gridAligned).toBe(true);
-    expect(day!.gridFitsWidth).toBe(true);
+    expect(day!.mainScroll).toBe(0);
+    expect(day!.visible).toBeGreaterThan(160);
     expect(day!.pageWider).toBe(false);
 
     await page.getByRole('button', { name: 'Week', exact: true }).click();
+    const grid = page.getByTestId('calendar-time-grid');
     await expect(grid).toBeVisible();
-    const weekWider = await grid.evaluate((node) => node.scrollWidth > node.clientWidth + 8);
-    expect(weekWider).toBe(true);
-    await grid.evaluate((node) => {
-      node.scrollLeft = node.scrollWidth;
-    });
-    const scrolled = await grid.evaluate((node) => node.scrollLeft > 8);
-    expect(scrolled).toBe(true);
+    const weekFits = await grid.evaluate((node) => node.scrollWidth <= node.clientWidth + 2);
+    expect(weekFits).toBe(true);
+
+    await page.getByRole('button', { name: 'Month', exact: true }).click();
+    await page.getByRole('button', { name: /^Show / }).first().click();
+    await expect(page.getByRole('button', { name: 'Day', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(hours).toBeVisible();
+
+    await page.getByRole('button', { name: 'Events', exact: true }).click();
+    const eventsDialog = page.getByRole('dialog').filter({ hasText: /events|No events found/i });
+    await expect(eventsDialog).toBeVisible();
+    await page.getByRole('button', { name: 'Close modal' }).click();
 
     await page.getByRole('link', { name: 'Tasks' }).click();
     await expect(page.getByRole('heading', { name: 'Tasks' })).toBeVisible();
-    const tasks = await page.evaluate(() => {
+
+    await page.getByRole('link', { name: 'Settings' }).click();
+    const signOut = page.getByRole('button', { name: 'Sign out' });
+    await signOut.scrollIntoViewIfNeeded();
+    const signBox = await signOut.boundingBox();
+    const navBox = await page.getByRole('navigation', { name: 'Main' }).boundingBox();
+    expect(signBox).toBeTruthy();
+    expect(navBox).toBeTruthy();
+    expect(signBox!.y + signBox!.height).toBeLessThanOrEqual(navBox!.y + 2);
+    const build = page.getByRole('main').getByText(/^Build /);
+    await build.scrollIntoViewIfNeeded();
+    await expect(build).toBeVisible();
+  });
+
+  test('U-CAL-024 create, voice, and generate are one tap', async ({ page, auth, request }) => {
+    const name = uniqueName('Phone pill');
+    expectOk(
+      await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
+        name,
+        eventType: 'admin',
+        estimatedTimeInMinutes: 30,
+      }),
+    );
+    await openAs(page, auth.onboarded);
+
+    await expect(page.getByRole('button', { name: 'Create task', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add task by voice', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Generate schedule', exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Create task', exact: true }).click();
+    const createDialog = page.getByRole('dialog');
+    await expect(createDialog.getByRole('textbox', { name: /Name/ })).toBeVisible();
+    await expect(createDialog.getByRole('button', { name: 'Unscheduled', exact: true })).toHaveCount(0);
+    await createDialog.getByRole('button', { name: 'Cancel' }).click();
+
+    await page.getByRole('button', { name: 'Generate schedule', exact: true }).click();
+    await expect(page.getByRole('dialog').filter({ hasText: 'Generate preview' })).toBeVisible();
+    await page.getByRole('button', { name: 'Cancel' }).click();
+
+    await page.getByRole('button', { name: 'More schedule actions' }).click();
+    const more = page.getByRole('dialog').filter({ hasText: 'Suggestions' });
+    await expect(more.getByRole('button', { name: 'Suggestions' })).toBeVisible();
+    await page.getByRole('button', { name: 'Close modal' }).click({ force: true });
+    await expect(more).toHaveCount(0);
+
+    await page.getByRole('link', { name: 'Tasks' }).click();
+    await expect(page.getByRole('button', { name: 'Create task', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add task by voice', exact: true })).toBeVisible();
+    const card = page.locator('.task-item').filter({ hasText: name });
+    await expect(card.getByText('To Do', { exact: true })).toBeVisible();
+    await expect(card.getByText('Medium', { exact: true })).toBeVisible();
+
+    const scheduled = page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: 'Scheduled', exact: true }) });
+    const searchBox = await scheduled.getByRole('searchbox', { name: 'Search scheduled' }).boundingBox();
+    const filterBox = await scheduled.getByRole('button', { name: 'Filters' }).boundingBox();
+    expect(searchBox).toBeTruthy();
+    expect(filterBox).toBeTruthy();
+    expect(Math.abs(searchBox!.y - filterBox!.y)).toBeLessThan(12);
+
+    await page.getByRole('button', { name: 'Create task', exact: true }).click();
+    await expect(page.getByRole('dialog').getByRole('textbox', { name: /Name/ })).toBeVisible();
+  });
+
+  test('320px phone does not scroll sideways and still shows hours', async ({ page, auth }) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await openAs(page, auth.onboarded);
+    const hours = page.getByTestId('calendar-hour-scroll');
+    await expect(hours).toBeVisible();
+    const fit = await page.evaluate(() => {
       const main = document.querySelector('main');
-      const header = document.querySelector('header');
-      const title = document.querySelector('h1');
-      if (!main || !header || !title) return null;
+      const node = document.querySelector('[data-testid="calendar-hour-scroll"]');
+      if (!main || !(node instanceof HTMLElement)) return null;
+      const mainBox = main.getBoundingClientRect();
+      const box = node.getBoundingClientRect();
       return {
-        titleTop: title.getBoundingClientRect().top,
-        headerBottom: header.getBoundingClientRect().bottom,
-        overflowY: getComputedStyle(main).overflowY,
+        pageWider: document.documentElement.scrollWidth > window.innerWidth + 2,
+        visible: Math.min(box.bottom, mainBox.bottom) - Math.max(box.top, mainBox.top),
       };
     });
-    expect(tasks!.titleTop).toBeGreaterThanOrEqual(tasks!.headerBottom - 1);
-    expect(tasks!.overflowY).toBe('auto');
+    expect(fit).toBeTruthy();
+    expect(fit!.pageWider).toBe(false);
+    expect(fit!.visible).toBeGreaterThan(160);
+  });
+});
+
+test.describe('week columns from 768px', () => {
+  test.use({ viewport: { width: 768, height: 1024 } });
+
+  test('seven day columns stay in the week grid', async ({ page, auth }) => {
+    await openAs(page, auth.onboarded);
+    const grid = page.getByTestId('calendar-time-grid');
+    await expect(grid).toBeVisible();
+    const minWidth = await grid.evaluate((node) => {
+      const wide = node.querySelector<HTMLElement>('[style*="min-width"]');
+      return wide ? Number.parseFloat(wide.style.minWidth) : 0;
+    });
+    expect(minWidth).toBeGreaterThan(600);
   });
 });
 
 test.describe('widths between the phone and desktop layouts', () => {
-  test('U-CAL-023 calendar stays visible from 1024px through 1279px', async ({ page, auth }) => {
+  test('U-CAL-023 calendar stays visible from 1024px through 1279px', async ({ page, auth, request }) => {
+    expectOk(
+      await apiJson(request, auth.onboarded.access_token, 'patch', '/user-settings', {
+        wakeTime: '08:00',
+        sleepTime: '23:00',
+        timeZone: 'Europe/Kyiv',
+      }),
+    );
+    await completeOpenTasks(request, auth.onboarded.access_token);
+    const phasesListed = await apiJson(request, auth.onboarded.access_token, 'get', '/phases');
+    expectOk(phasesListed);
+    for (const phase of Array.isArray(phasesListed.body) ? phasesListed.body : []) {
+      if (!phase?.id || phase.type !== 'time_phase') continue;
+      expectOk(
+        await apiJson(request, auth.onboarded.access_token, 'patch', `/phases/${phase.id}`, {
+          startTime: '08:00',
+          endTime: '23:00',
+          weekDays: [0, 1, 2, 3, 4, 5, 6],
+        }),
+      );
+    }
     await openAs(page, auth.onboarded);
     const sizes = [
       { width: 1024, height: 700 },

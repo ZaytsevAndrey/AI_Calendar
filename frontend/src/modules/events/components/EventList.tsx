@@ -41,7 +41,7 @@ const EventList: React.FC<EventListProps> = ({
   }
 
   return (
-    <div className="task-list space-y-3">
+    <div className="task-list space-y-4">
       {events.map((event) => (
         <EventItem
           key={event.id}

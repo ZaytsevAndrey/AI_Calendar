@@ -10,6 +10,7 @@ import {
   showHabitDots,
 } from '../habitDays';
 import type { HabitBlockChip } from '../habitBlocks';
+import { usePhoneLayout } from 'modules/common/hooks/useMediaQuery';
 import { useToggleHabit } from '../useToggleHabit';
 
 const MAX_DOTS = 6;
@@ -22,9 +23,11 @@ function lockMessage(date: string, today: string): string {
 export function HabitDayChecklist({
   date,
   omitTimed = false,
+  layout = 'stack',
 }: {
   date: string;
   omitTimed?: boolean;
+  layout?: 'stack' | 'row';
 }) {
   const { data } = useGetHabitsQuery();
   const { toggle, busy } = useToggleHabit();
@@ -35,19 +38,25 @@ export function HabitDayChecklist({
 
   const editable = isYmdInRange(date, data.editableFrom, data.editableTo);
 
+  const row = layout === 'row';
+
   return (
-    <ul className="max-h-40 space-y-1.5 overflow-y-auto">
+    <ul className={row ? 'flex gap-1 overflow-x-auto' : 'max-h-40 space-y-1.5 overflow-y-auto'}>
       {habits.map((habit) => {
         const done = habitDoneOn(habit.checkInDates, date);
         return (
-          <li key={habit.id}>
+          <li key={habit.id} className={row ? 'shrink-0' : undefined}>
             <button
               type="button"
               disabled={!editable || busy}
               aria-pressed={done}
               aria-label={`${habit.name} on ${formatHabitDateLabel(date)}`}
               onClick={() => void toggle(habit.id, date, done)}
-              className="flex w-full items-center gap-2 rounded-md border border-ide-border px-3 py-2 text-left text-sm disabled:opacity-60"
+              className={
+                row
+                  ? 'inline-flex h-8 max-w-[11rem] items-center gap-1.5 rounded-md border border-ide-border px-2 text-left text-xs disabled:opacity-60'
+                  : 'flex w-full items-center gap-2 rounded-md border border-ide-border px-3 py-2 text-left text-sm disabled:opacity-60'
+              }
               style={
                 done
                   ? { borderColor: habit.color, backgroundColor: `${habit.color}22` }
@@ -59,7 +68,9 @@ export function HabitDayChecklist({
                 style={{ backgroundColor: habit.color }}
               />
               <span className="min-w-0 flex-1 truncate text-ide-text">{habit.name}</span>
-              <span className="shrink-0 text-xs text-ide-muted">{done ? 'Done' : 'Mark'}</span>
+              {row ? null : (
+                <span className="shrink-0 text-xs text-ide-muted">{done ? 'Done' : 'Mark'}</span>
+              )}
             </button>
           </li>
         );
@@ -70,6 +81,7 @@ export function HabitDayChecklist({
 
 export function HabitDaySection({ date }: { date: string }) {
   const { data } = useGetHabitsQuery();
+  const phone = usePhoneLayout();
   const checkInOnly = (data?.habits ?? []).filter(
     (habit) => !habit.blockStartTime || !habit.blockMinutes,
   );
@@ -77,14 +89,14 @@ export function HabitDaySection({ date }: { date: string }) {
   const editable = isYmdInRange(date, data.editableFrom, data.editableTo);
 
   return (
-    <div className="mb-4 shrink-0">
-      <div className="mb-2 flex items-baseline justify-between gap-2">
+    <div className="mb-4 shrink-0 max-md:mb-1">
+      <div className="mb-2 flex items-baseline justify-between gap-2 max-md:mb-1">
         <h3 className="text-xs font-medium uppercase tracking-wide text-ide-muted">Habits</h3>
         {editable ? null : (
           <p className="text-xs text-ide-muted">{lockMessage(date, data.today)}</p>
         )}
       </div>
-      <HabitDayChecklist date={date} omitTimed />
+      <HabitDayChecklist date={date} omitTimed layout={phone ? 'row' : 'stack'} />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Plus } from 'lucide-react';
 import {
   useCreateHabitMutation,
   useDeleteHabitMutation,
@@ -105,8 +106,12 @@ const HabitsPage: React.FC = () => {
             connected.
           </p>
         </div>
-        <button type="button" onClick={openCreate} className="ui-btn-primary w-full sm:w-auto">
+        <button type="button" onClick={openCreate} className="ui-btn-primary max-md:hidden">
           Add habit
+        </button>
+        <button type="button" onClick={openCreate} className="ui-icon-btn text-ide-link md:hidden">
+          <Plus className="h-4 w-4" aria-hidden />
+          <span className="sr-only">Add habit</span>
         </button>
       </header>
 
