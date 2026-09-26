@@ -132,4 +132,4 @@ Further ids may be added later; these are the baseline contract.
 
 ## 9. Implementation note
 
-Code may still use priority ordering until roadmap **§2** lands. Product and test-matrix expectations above are the target contract; do not add new priority-displacement behavior.
+Roadmap **§2** shipped type + preferred placement in `IntelligentSchedulingEngine` (priority ignored; conflict/overflow structured outcomes). Problematic inbox UI/API is **§3**; shared conflict sheet is **§4**. Do not add new priority-displacement behavior.

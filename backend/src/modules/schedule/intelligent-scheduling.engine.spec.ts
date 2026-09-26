@@ -257,34 +257,36 @@ describe('IntelligentSchedulingEngine', () => {
     ).toEqual([atLocalTimeIso(0, 10), atLocalTimeIso(0, 11)]);
   });
 
-  it('places recurring tasks by priority into exact target slots', async () => {
-    const high = makeTask({
+  it('places recurring tasks by createdAt FIFO and ignores priority', async () => {
+    const laterUrgent = makeTask({
       id: 'r1',
       name: 'R1',
-      priority: TaskPriority.HIGH,
+      priority: TaskPriority.URGENT,
+      createdAt: new Date('2026-04-20T08:02:00.000Z'),
       isRecurring: true,
       recurrencePattern: 'DAILY',
       phases: [phaseWorkday],
     });
-    const low = makeTask({
+    const earlierLow = makeTask({
       id: 'r2',
       name: 'R2',
-      priority: TaskPriority.MEDIUM,
+      priority: TaskPriority.LOW,
+      createdAt: new Date('2026-04-20T08:01:00.000Z'),
       isRecurring: true,
       recurrencePattern: 'DAILY',
       phases: [phaseWorkday],
     });
-    taskRepo.find.mockResolvedValue([high, low]);
+    taskRepo.find.mockResolvedValue([laterUrgent, earlierLow]);
 
     await engine.run(userId);
 
-    const [highSlots, lowSlots] = extractTaskSegments(scheduledRepo.save.mock.calls);
-    expect(highSlots).toEqual([
+    const byTask = extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls);
+    expect(byTask.get('r2')).toEqual([
       [atLocalTimeIso(0, 9), atLocalTimeIso(0, 10)],
       [atLocalTimeIso(1, 9), atLocalTimeIso(1, 10)],
       [atLocalTimeIso(2, 9), atLocalTimeIso(2, 10)],
     ]);
-    expect(lowSlots).toEqual([
+    expect(byTask.get('r1')).toEqual([
       [atLocalTimeIso(0, 10), atLocalTimeIso(0, 11)],
       [atLocalTimeIso(1, 10), atLocalTimeIso(1, 11)],
       [atLocalTimeIso(2, 10), atLocalTimeIso(2, 11)],
@@ -311,7 +313,7 @@ describe('IntelligentSchedulingEngine', () => {
     ]);
   });
 
-  it('uses FIFO for same priority recurring conflicts', async () => {
+  it('uses FIFO for recurring conflicts regardless of priority', async () => {
     const first = makeTask({
       id: 'fifo-1',
       name: 'First',
@@ -934,7 +936,7 @@ describe('IntelligentSchedulingEngine', () => {
     expect(byTask.get('own-sync-3')?.length).toBeGreaterThan(0);
   });
 
-  it('keeps recurring preferred clock times when a later day is displaced', async () => {
+  it('keeps preferred clock on free days and asks when preferred lands on fixed', async () => {
     const preferredStart = new Date(atLocalTimeIso(0, 9));
     const preferredEnd = new Date(atLocalTimeIso(0, 10));
     const recurring = makeTask({
@@ -957,13 +959,21 @@ describe('IntelligentSchedulingEngine', () => {
     });
     taskRepo.find.mockResolvedValue([recurring, fixed]);
 
-    await engine.run(userId);
+    const result = await engine.run(userId);
 
     const byTask = extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls);
-    expect(byTask.get('rec-pref')?.[2]).toEqual([
-      atLocalTimeIso(2, 10),
-      atLocalTimeIso(2, 11),
+    expect(byTask.get('rec-pref')).toEqual([
+      [atLocalTimeIso(0, 9), atLocalTimeIso(0, 10)],
+      [atLocalTimeIso(1, 9), atLocalTimeIso(1, 10)],
     ]);
+    expect(result.conflicts.some((c) => c.reason === 'preferred_on_fixed')).toBe(
+      true,
+    );
+    expect(
+      result.warnings.some(
+        (w) => w.code === SchedulingWarningCode.NEEDS_CONFLICT_CHOICE,
+      ),
+    ).toBe(true);
     expect(recurring.scheduledStartTime?.toISOString()).toBe(
       preferredStart.toISOString(),
     );
@@ -1363,6 +1373,278 @@ describe('IntelligentSchedulingEngine', () => {
     expect(preview.warnings.some((warning) => warning.code === SchedulingWarningCode.OUTSIDE_HORIZON)).toBe(
       false,
     );
+  });
+
+  describe('type + preferred placement (conflict-rules matrix)', () => {
+    it('T10: seated flexible keeps slot; new flexible takes next free', async () => {
+      const seated = makeTask({
+        id: 'flex-a',
+        name: 'A',
+        createdAt: new Date('2026-04-20T08:01:00.000Z'),
+        estimatedTimeInMinutes: 60,
+        scheduledStartTime: new Date(atLocalTimeIso(0, 9)),
+        scheduledEndTime: new Date(atLocalTimeIso(0, 10)),
+        phases: [phaseWorkday],
+      });
+      const incoming = makeTask({
+        id: 'flex-b',
+        name: 'B',
+        createdAt: new Date('2026-04-20T08:02:00.000Z'),
+        estimatedTimeInMinutes: 60,
+        scheduledStartTime: new Date(atLocalTimeIso(0, 9)),
+        scheduledEndTime: new Date(atLocalTimeIso(0, 10)),
+        phases: [phaseWorkday],
+      });
+      taskRepo.find.mockResolvedValue([seated, incoming]);
+
+      const result = await engine.run(userId);
+
+      expect(result.errors).toHaveLength(0);
+      expect(result.conflicts).toHaveLength(0);
+      const byTask = extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls);
+      expect(byTask.get('flex-a')?.[0]).toEqual([
+        atLocalTimeIso(0, 9),
+        atLocalTimeIso(0, 10),
+      ]);
+      expect(byTask.get('flex-b')?.[0]).toEqual([
+        atLocalTimeIso(0, 10),
+        atLocalTimeIso(0, 11),
+      ]);
+    });
+
+    it('T11: two new flexibles same preferred use createdAt, ignore priority', async () => {
+      const first = makeTask({
+        id: 'flex-first',
+        name: 'First',
+        priority: TaskPriority.LOW,
+        createdAt: new Date('2026-04-20T08:01:00.000Z'),
+        estimatedTimeInMinutes: 60,
+        scheduledStartTime: new Date(atLocalTimeIso(0, 9)),
+        scheduledEndTime: new Date(atLocalTimeIso(0, 10)),
+        phases: [phaseWorkday],
+      });
+      const second = makeTask({
+        id: 'flex-second',
+        name: 'Second',
+        priority: TaskPriority.URGENT,
+        createdAt: new Date('2026-04-20T08:02:00.000Z'),
+        estimatedTimeInMinutes: 60,
+        scheduledStartTime: new Date(atLocalTimeIso(0, 9)),
+        scheduledEndTime: new Date(atLocalTimeIso(0, 10)),
+        phases: [phaseWorkday],
+      });
+      taskRepo.find.mockResolvedValue([second, first]);
+
+      await engine.run(userId);
+
+      const byTask = extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls);
+      expect(byTask.get('flex-first')?.[0]).toEqual([
+        atLocalTimeIso(0, 9),
+        atLocalTimeIso(0, 10),
+      ]);
+      expect(byTask.get('flex-second')?.[0]).toEqual([
+        atLocalTimeIso(0, 10),
+        atLocalTimeIso(0, 11),
+      ]);
+    });
+
+    it('T13: flexible without preferred silently dodges fixed', async () => {
+      taskRepo.find.mockResolvedValue([
+        makeTask({
+          id: 'fixed-f',
+          name: 'Fixed',
+          eventType: TaskEventType.FIXED,
+          scheduledStartTime: new Date(atLocalTimeIso(0, 9)),
+          scheduledEndTime: new Date(atLocalTimeIso(0, 10)),
+          phases: [phaseWorkday],
+        }),
+        makeTask({
+          id: 'flex-x',
+          name: 'X',
+          estimatedTimeInMinutes: 60,
+          scheduledStartTime: null,
+          scheduledEndTime: null,
+          phases: [phaseWorkday],
+        }),
+      ]);
+
+      const result = await engine.run(userId);
+
+      expect(result.conflicts).toHaveLength(0);
+      expect(
+        extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls).get('flex-x')?.[0],
+      ).toEqual([atLocalTimeIso(0, 10), atLocalTimeIso(0, 11)]);
+    });
+
+    it('T14: flexible preferred exactly on fixed returns conflict options', async () => {
+      taskRepo.find.mockResolvedValue([
+        makeTask({
+          id: 'fixed-f',
+          name: 'Fixed',
+          eventType: TaskEventType.FIXED,
+          scheduledStartTime: new Date(atLocalTimeIso(0, 9)),
+          scheduledEndTime: new Date(atLocalTimeIso(0, 10)),
+          phases: [phaseWorkday],
+        }),
+        makeTask({
+          id: 'flex-x',
+          name: 'X',
+          estimatedTimeInMinutes: 60,
+          scheduledStartTime: new Date(atLocalTimeIso(0, 9)),
+          scheduledEndTime: new Date(atLocalTimeIso(0, 10)),
+          phases: [phaseWorkday],
+        }),
+      ]);
+
+      const result = await engine.run(userId);
+
+      expect(result.conflicts).toEqual([
+        expect.objectContaining({
+          taskId: 'flex-x',
+          reason: 'preferred_on_fixed',
+          options: expect.arrayContaining(['move_new', 'leave_problematic']),
+        }),
+      ]);
+      expect(result.conflicts[0].options).not.toContain('move_other');
+      expect(
+        extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls).has('flex-x'),
+      ).toBe(false);
+      expect(
+        result.warnings.some(
+          (w) =>
+            w.code === SchedulingWarningCode.NEEDS_CONFLICT_CHOICE &&
+            w.meta?.readyForProblematic === true,
+        ),
+      ).toBe(true);
+    });
+
+    it('T20: two recurring same preferred pack by createdAt', async () => {
+      taskRepo.find.mockResolvedValue([
+        makeTask({
+          id: 'r1',
+          name: 'R1',
+          priority: TaskPriority.LOW,
+          createdAt: new Date('2026-04-20T08:01:00.000Z'),
+          isRecurring: true,
+          recurrencePattern: 'DAILY',
+          scheduledStartTime: new Date(atLocalTimeIso(0, 9)),
+          scheduledEndTime: new Date(atLocalTimeIso(0, 10)),
+          phases: [phaseWorkday],
+        }),
+        makeTask({
+          id: 'r2',
+          name: 'R2',
+          priority: TaskPriority.URGENT,
+          createdAt: new Date('2026-04-20T08:02:00.000Z'),
+          isRecurring: true,
+          recurrencePattern: 'DAILY',
+          scheduledStartTime: new Date(atLocalTimeIso(0, 9)),
+          scheduledEndTime: new Date(atLocalTimeIso(0, 10)),
+          phases: [phaseWorkday],
+        }),
+      ]);
+
+      const result = await engine.run(userId);
+      const byTask = extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls);
+
+      expect(result.errors).toHaveLength(0);
+      expect(byTask.get('r1')).toHaveLength(3);
+      expect(byTask.get('r2')).toHaveLength(3);
+      expect(byTask.get('r1')?.[0]).toEqual([
+        atLocalTimeIso(0, 9),
+        atLocalTimeIso(0, 10),
+      ]);
+      expect(byTask.get('r2')?.[0]).toEqual([
+        atLocalTimeIso(0, 10),
+        atLocalTimeIso(0, 11),
+      ]);
+      expect(
+        result.warnings.some((w) => w.code === SchedulingWarningCode.RECURRING_MOVED),
+      ).toBe(true);
+    });
+
+    it('T22: recurring overflow marks readyForProblematic', async () => {
+      const tightPhase = makePhase('phase-2h', '09:00', '11:00', [1, 2, 3, 4, 5]);
+      getSettingsMock.mockResolvedValue(
+        makeSettings({
+          ...baseSettings,
+          sleepTime: '11:00',
+          recurringScheduleHorizonDays: 2,
+          allowSplitScheduling: false,
+        }),
+      );
+      taskRepo.find.mockResolvedValue([
+        makeTask({
+          id: 'r1',
+          name: 'R1',
+          createdAt: new Date('2026-04-20T08:01:00.000Z'),
+          isRecurring: true,
+          recurrencePattern: 'DAILY',
+          scheduledStartTime: new Date(atLocalTimeIso(0, 9)),
+          scheduledEndTime: new Date(atLocalTimeIso(0, 10)),
+          phases: [tightPhase],
+        }),
+        makeTask({
+          id: 'r2',
+          name: 'R2',
+          createdAt: new Date('2026-04-20T08:02:00.000Z'),
+          isRecurring: true,
+          recurrencePattern: 'DAILY',
+          scheduledStartTime: new Date(atLocalTimeIso(0, 9)),
+          scheduledEndTime: new Date(atLocalTimeIso(0, 10)),
+          phases: [tightPhase],
+        }),
+        makeTask({
+          id: 'r3',
+          name: 'R3',
+          createdAt: new Date('2026-04-20T08:03:00.000Z'),
+          isRecurring: true,
+          recurrencePattern: 'DAILY',
+          scheduledStartTime: new Date(atLocalTimeIso(0, 9)),
+          scheduledEndTime: new Date(atLocalTimeIso(0, 10)),
+          phases: [tightPhase],
+        }),
+      ]);
+
+      const result = await engine.run(userId);
+      const byTask = extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls);
+
+      expect(byTask.get('r1')?.length).toBeGreaterThan(0);
+      expect(byTask.get('r2')?.length).toBeGreaterThan(0);
+      expect(byTask.get('r3')?.length ?? 0).toBe(0);
+      expect(
+        result.warnings.some(
+          (w) =>
+            w.taskId === 'r3' &&
+            w.code === SchedulingWarningCode.OCCURRENCE_SKIPPED &&
+            w.meta?.readyForProblematic === true,
+        ),
+      ).toBe(true);
+    });
+
+    it('deadline no-fit marks readyForUnscheduled not problematic', async () => {
+      taskRepo.find.mockResolvedValue([
+        makeTask({
+          id: 'deadline-miss',
+          name: 'Miss',
+          estimatedTimeInMinutes: 60,
+          deadline: new Date(atLocalTimeWithMinutesIso(0, 9, 30)),
+          phases: [phaseWorkday],
+        }),
+      ]);
+
+      const result = await engine.run(userId);
+
+      expect(result.errors.some((e) => e.taskId === 'deadline-miss')).toBe(true);
+      expect(
+        result.warnings.some(
+          (w) =>
+            w.taskId === 'deadline-miss' &&
+            w.meta?.readyForUnscheduled === true &&
+            w.meta?.readyForProblematic !== true,
+        ),
+      ).toBe(true);
+    });
   });
 });
 

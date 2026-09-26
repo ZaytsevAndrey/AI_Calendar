@@ -12,6 +12,10 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ## Shipped (Sep 2026)
 
+### Scheduling redesign (engine)
+
+- [x] **Engine: type + preferred, no priority.** `IntelligentSchedulingEngine` places by createdAt FIFO + preferred-first; priority ignored. Seated flexible keeps its slot; preferred on fixed/Google returns `NEEDS_CONFLICT_CHOICE` + option ids; recurring off-preferred emits `RECURRING_MOVED`; capacity overflow warnings carry `readyForProblematic` (inbox lands in §3).
+
 ### Scheduling redesign (docs)
 
 - [x] **Conflict rules spec + test matrix.** Product contract in [spec-conflict-rules.md](spec-conflict-rules.md): type + preferred (no priority bump), seated flexible stays, ask on fixed-vs-fixed and preferred-on-fixed, Unscheduled ≠ Problematic, no-reply → Problematic. [task-scheduling-test-matrix.md](task-scheduling-test-matrix.md) rewritten for those rules; intelligent-scheduling placement sections defer to the conflict spec.

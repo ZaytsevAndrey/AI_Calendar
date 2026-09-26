@@ -90,7 +90,8 @@ export async function completeOpenTasks(
 }
 
 export function stripBlock(page: Page, name: string) {
-  return page.locator('li, .rounded-md.border').filter({ hasText: name });
+  // Now/Next cards only — not Generate warning <li> rows that quote the task name.
+  return page.locator('div.rounded-md.border').filter({ hasText: name });
 }
 
 export function skippableStripCard(page: Page, name: string) {

@@ -19,10 +19,10 @@ Do in order unless you explicitly skip ahead.
 
 ### 2. Engine: type + preferred, no priority
 
-- [ ] Placement ignores priority (field soft-deprecated).
-- [ ] Preferred-first for flexible; fixed stays an anchor.
-- [ ] Flexible silent move within phase; recurring move + notify; overflow path ready for problematic.
-- [ ] Unit tests for the new matrix cases that belong to the engine only.
+- [x] Placement ignores priority (field soft-deprecated).
+- [x] Preferred-first for flexible; fixed stays an anchor.
+- [x] Flexible silent move within phase; recurring move + notify; overflow path ready for problematic.
+- [x] Unit tests for the new matrix cases that belong to the engine only.
 
 ### 3. Problematic inbox
 
@@ -90,5 +90,5 @@ Do in order unless you explicitly skip ahead.
 
 ## Recommended next steps
 
-1. Start at **§2 Engine: type + preferred, no priority**.
+1. Start at **§3 Problematic inbox**.
 2. After each feature ships: tick above, archive a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

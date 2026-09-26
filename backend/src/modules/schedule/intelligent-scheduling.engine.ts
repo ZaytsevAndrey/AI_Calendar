@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { Task, TaskPriority, TaskStatus } from '../tasks/entities/task.entity';
+import { Task, TaskStatus } from '../tasks/entities/task.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { ScheduledTask } from './schedule.entity';
 import { Phase } from '../phases/entities/phase.entity';
@@ -81,7 +81,25 @@ export enum SchedulingWarningCode {
   GOOGLE_BUSY_UNAVAILABLE = 'SCHEDULING_GOOGLE_BUSY_UNAVAILABLE',
   OUTSIDE_HORIZON = 'SCHEDULING_HORIZON_EXCEEDED',
   OCCURRENCE_SKIPPED = 'SCHEDULING_OCCURRENCE_SKIPPED',
+  /** Preferred landed on fixed/Google; UI/Voice (§4–5) should present options. */
+  NEEDS_CONFLICT_CHOICE = 'NEEDS_CONFLICT_CHOICE',
+  /** Recurring occurrence placed away from preferred clock (in-app toast later). */
+  RECURRING_MOVED = 'SCHEDULING_RECURRING_MOVED',
 }
+
+export type ConflictOptionId =
+  | 'move_other'
+  | 'move_new'
+  | 'skip_occurrence'
+  | 'leave_problematic';
+
+export type SchedulingConflict = {
+  taskId: string;
+  taskName: string;
+  reason: 'preferred_on_fixed' | 'phase_full';
+  options: ConflictOptionId[];
+  meta?: Record<string, unknown>;
+};
 
 export type SchedulingWarning = {
   code: SchedulingWarningCode;
@@ -259,17 +277,22 @@ function subtractMany(free: MsInterval[], busyList: MsInterval[]): MsInterval[] 
   return mergeIntervals(cur);
 }
 
-function priorityWeight(p: TaskPriority): number {
-  switch (p) {
-    case TaskPriority.URGENT:
-      return 4;
-    case TaskPriority.HIGH:
-      return 3;
-    case TaskPriority.MEDIUM:
-      return 2;
-    default:
-      return 1;
-  }
+function intervalsOverlap(a: MsInterval, b: MsInterval): boolean {
+  return a.start < b.end && b.start < a.end;
+}
+
+function overlapsAny(interval: MsInterval, busy: MsInterval[]): boolean {
+  return busy.some((b) => intervalsOverlap(interval, b));
+}
+
+/** Preferred fits inside at least one free slot (exact clock claim). */
+function preferredFitsSlots(
+  preferred: MsInterval,
+  slots: MsInterval[],
+): boolean {
+  return slots.some(
+    (slot) => preferred.start >= slot.start && preferred.end <= slot.end,
+  );
 }
 
 function normalizeHorizonDays(value?: number | null): number {
@@ -437,6 +460,7 @@ export class IntelligentSchedulingEngine {
     diff: DiffItem[];
     warnings: SchedulingWarning[];
     errors: { taskId: string; message: string }[];
+    conflicts: SchedulingConflict[];
   }> {
     const persist = options?.persist !== false;
     const settings = await this.userSettingsService.getSettings(userId);
@@ -461,6 +485,7 @@ export class IntelligentSchedulingEngine {
       order: { createdAt: 'ASC' },
     });
 
+    // Placement ignores priority: FIFO by createdAt (type + preferred decide seats).
     const movable = allTasks
       .filter(
         (t) =>
@@ -469,13 +494,10 @@ export class IntelligentSchedulingEngine {
           !t.isFixedExternal &&
           t.eventType !== TaskEventType.FIXED,
       )
-      .sort((a, b) => {
-        const d = priorityWeight(b.priority) - priorityWeight(a.priority);
-        if (d !== 0) return d;
-        return (
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        );
-      });
+      .sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
 
     const nowMs = Date.now();
     const unscheduledIds = allTasks.filter((t) => t.isUnscheduled).map((t) => t.id);
@@ -539,6 +561,7 @@ export class IntelligentSchedulingEngine {
     );
 
     const warnings: SchedulingWarning[] = [];
+    const conflicts: SchedulingConflict[] = [];
     let googleBusy: MsInterval[] = [];
     const ourGoogleEventIds = new Set(
       allTasks
@@ -592,56 +615,95 @@ export class IntelligentSchedulingEngine {
     const errors: { taskId: string; message: string }[] = [];
     const newSegments = new Map<string, { start: Date; end: Date }[]>();
 
-    const tiers = this.groupMovableIntoPriorityTiers(movable);
-
-    for (const tier of tiers) {
-      const tierStack: Task[] = [];
-      for (const task of tier) {
-        const res = this.tryPlaceWithDisplacement(
-          task,
-          tierStack,
-          newSegments,
-          anchorBusy,
-          bufferZones,
-          settings,
-          startDay,
-          horizonEnd,
-          extendedEnd,
-          nowMs,
-          endedMinutesByTask,
-        );
-        if (!res.ok) {
-          errors.push({
+    for (const task of movable) {
+      const res = this.attemptPlaceTask(
+        task,
+        settings,
+        horizonEnd,
+        extendedEnd,
+        startDay,
+        newSegments,
+        anchorBusy,
+        bufferZones,
+        nowMs,
+        endedMinutesByTask,
+      );
+      if (res.conflict) {
+        conflicts.push(res.conflict);
+        warnings.push({
+          code: SchedulingWarningCode.NEEDS_CONFLICT_CHOICE,
+          taskId: task.id,
+          taskName: task.name,
+          meta: {
+            reason: res.conflict.reason,
+            options: res.conflict.options,
+            readyForProblematic: true,
+            ...(res.conflict.meta ?? {}),
+          },
+          message: `Task "${task.name}" needs a conflict choice before it can be placed.`,
+        });
+      }
+      if (!res.ok) {
+        const deadlineMiss = !!task.deadline;
+        errors.push({
+          taskId: task.id,
+          message: deadlineMiss
+            ? `Cannot fit "${task.name}" before deadline; adjust phases, split settings, or deadline.`
+            : `Cannot fit "${task.name}" in the available window.`,
+        });
+        if (!res.conflict) {
+          warnings.push({
+            code: SchedulingWarningCode.OCCURRENCE_SKIPPED,
             taskId: task.id,
-            message: task.deadline
-              ? `Cannot fit "${task.name}" before deadline; adjust priority, phases, split settings, or deadline.`
-              : `Cannot fit "${task.name}" in the available window.`,
+            taskName: task.name,
+            meta: {
+              readyForProblematic: !deadlineMiss,
+              readyForUnscheduled: deadlineMiss,
+              reason: deadlineMiss ? 'deadline_no_fit' : 'phase_full',
+            },
+            message: deadlineMiss
+              ? `Task "${task.name}" has no valid slot before its deadline (Unscheduled path).`
+              : `Task "${task.name}" has no free slot after silent placement (Problematic overflow path).`,
           });
-        } else {
-          if (res.beyondHorizon) {
-            warnings.push({
-              code: SchedulingWarningCode.OUTSIDE_HORIZON,
-              taskId: task.id,
-              taskName: task.name,
-              meta: { horizonDays },
-              message: `Task "${task.name}" was placed outside the ${horizonDays}-day window.`,
-            });
-          }
-          const noteworthySkips = res.skipped.filter(
-            (s) => s.reason !== 'already_passed',
+        }
+      } else {
+        newSegments.set(task.id, res.segments);
+        if (res.beyondHorizon) {
+          warnings.push({
+            code: SchedulingWarningCode.OUTSIDE_HORIZON,
+            taskId: task.id,
+            taskName: task.name,
+            meta: { horizonDays },
+            message: `Task "${task.name}" was placed outside the ${horizonDays}-day window.`,
+          });
+        }
+        if (res.movedFromPreferred) {
+          warnings.push({
+            code: SchedulingWarningCode.RECURRING_MOVED,
+            taskId: task.id,
+            taskName: task.name,
+            meta: { movedOccurrences: res.movedOccurrences ?? 1 },
+            message: `Routine "${task.name}" was moved within its phase.`,
+          });
+        }
+        const noteworthySkips = res.skipped.filter(
+          (s) => s.reason !== 'already_passed',
+        );
+        if (noteworthySkips.length > 0) {
+          const overflowSkips = noteworthySkips.filter(
+            (s) => s.reason === 'no_slot' || s.reason === 'preferred_unavailable',
           );
-          if (noteworthySkips.length > 0) {
-            warnings.push({
-              code: SchedulingWarningCode.OCCURRENCE_SKIPPED,
-              taskId: task.id,
-              taskName: task.name,
-              meta: {
-                skippedOccurrences: noteworthySkips.length,
-                skipped: noteworthySkips,
-              },
-              message: formatSkippedOccurrencesMessage(task.name, noteworthySkips),
-            });
-          }
+          warnings.push({
+            code: SchedulingWarningCode.OCCURRENCE_SKIPPED,
+            taskId: task.id,
+            taskName: task.name,
+            meta: {
+              skippedOccurrences: noteworthySkips.length,
+              skipped: noteworthySkips,
+              readyForProblematic: overflowSkips.length > 0,
+            },
+            message: formatSkippedOccurrencesMessage(task.name, noteworthySkips),
+          });
         }
       }
     }
@@ -658,6 +720,7 @@ export class IntelligentSchedulingEngine {
         diff: this.buildDiff(allTasks, beforeByTask, afterByTask),
         warnings,
         errors,
+        conflicts,
       };
     }
 
@@ -729,21 +792,7 @@ export class IntelligentSchedulingEngine {
     }
 
     const diff = this.buildDiff(allTasks, beforeByTask, afterByTask);
-    return { diff, warnings, errors };
-  }
-
-  private groupMovableIntoPriorityTiers(movable: Task[]): Task[][] {
-    const tiers: Task[][] = [];
-    for (const t of movable) {
-      const w = priorityWeight(t.priority);
-      const last = tiers[tiers.length - 1];
-      if (!last || priorityWeight(last[0].priority) !== w) {
-        tiers.push([t]);
-      } else {
-        last.push(t);
-      }
-    }
-    return tiers;
+    return { diff, warnings, errors, conflicts };
   }
 
   private isTaskSplittable(task: Task, settings: UserSettings): boolean {
@@ -768,6 +817,25 @@ export class IntelligentSchedulingEngine {
     return mergeIntervals(intervals);
   }
 
+  private conflictPreferredOnFixed(
+    task: Task,
+    preferred: MsInterval,
+  ): SchedulingConflict {
+    const options: ConflictOptionId[] = task.isRecurring
+      ? ['move_new', 'skip_occurrence', 'leave_problematic']
+      : ['move_new', 'leave_problematic'];
+    return {
+      taskId: task.id,
+      taskName: task.name,
+      reason: 'preferred_on_fixed',
+      options,
+      meta: {
+        preferredStart: new Date(preferred.start).toISOString(),
+        preferredEnd: new Date(preferred.end).toISOString(),
+      },
+    };
+  }
+
   private attemptPlaceTask(
     task: Task,
     settings: UserSettings,
@@ -785,6 +853,9 @@ export class IntelligentSchedulingEngine {
     beyondHorizon: boolean;
     skippedOccurrences: number;
     skipped: SkippedOccurrence[];
+    conflict?: SchedulingConflict;
+    movedFromPreferred?: boolean;
+    movedOccurrences?: number;
   } {
     const recurrencePattern =
       task.isRecurring ? normalizeRecurrencePattern(task.recurrencePattern) : null;
@@ -852,6 +923,70 @@ export class IntelligentSchedulingEngine {
       ? task.eligibleWeekDays
       : null;
 
+    const preferredAbsolute =
+      task.scheduledStartTime && task.scheduledEndTime
+        ? ({
+            start: new Date(task.scheduledStartTime).getTime(),
+            end: new Date(task.scheduledEndTime).getTime(),
+          } as MsInterval)
+        : null;
+    if (
+      preferredAbsolute &&
+      preferredAbsolute.end > preferredAbsolute.start &&
+      preferredAbsolute.end - preferredAbsolute.start >= MIN_PLACE_MINUTES * 60_000
+    ) {
+      const preferredYmd = localYmd(
+        new Date(preferredAbsolute.start).toISOString(),
+        timeZone,
+      );
+      const dayEligible = this.eligibleIntervalsForDay(
+        preferredYmd,
+        phases,
+        settings.wakeTime,
+        settings.sleepTime,
+        settings.weekendWorkEnabled,
+        timeZone,
+      );
+      const softEligible = bufferZones.length
+        ? subtractMany(
+            dayEligible,
+            mergeIntervals([...placedBusy, ...bufferZones]),
+          )
+        : subtractMany(dayEligible, placedBusy);
+      const canPlaceByNow = preferredAbsolute.start >= nowMs;
+      const canPlaceByDeadline =
+        deadlineMs == null || preferredAbsolute.end <= deadlineMs;
+      const inPhase = preferredFitsSlots(preferredAbsolute, dayEligible);
+
+      if (canPlaceByNow && canPlaceByDeadline && inPhase) {
+        if (preferredFitsSlots(preferredAbsolute, softEligible)) {
+          return {
+            ok: true,
+            segments: [
+              {
+                start: new Date(preferredAbsolute.start),
+                end: new Date(preferredAbsolute.end),
+              },
+            ],
+            beyondHorizon: false,
+            skippedOccurrences: 0,
+            skipped: [],
+          };
+        }
+        if (overlapsAny(preferredAbsolute, anchorBusy)) {
+          return {
+            ok: false,
+            segments: [],
+            beyondHorizon: false,
+            skippedOccurrences: 0,
+            skipped: [],
+            conflict: this.conflictPreferredOnFixed(task, preferredAbsolute),
+          };
+        }
+        // Seated flexible (or other movable) keeps the seat — take next free silently.
+      }
+    }
+
     let result = this.placeGreedySoftBuffer(
       durationMin,
       minChunk,
@@ -886,6 +1021,20 @@ export class IntelligentSchedulingEngine {
       );
       beyondHorizon = result.ok;
     }
+    if (
+      !result.ok &&
+      preferredAbsolute &&
+      overlapsAny(preferredAbsolute, anchorBusy)
+    ) {
+      return {
+        ok: false,
+        segments: [],
+        beyondHorizon: false,
+        skippedOccurrences: 0,
+        skipped: [],
+        conflict: this.conflictPreferredOnFixed(task, preferredAbsolute),
+      };
+    }
     return {
       ok: result.ok,
       segments: result.segments,
@@ -912,6 +1061,9 @@ export class IntelligentSchedulingEngine {
     beyondHorizon: boolean;
     skippedOccurrences: number;
     skipped: SkippedOccurrence[];
+    conflict?: SchedulingConflict;
+    movedFromPreferred?: boolean;
+    movedOccurrences?: number;
   } {
     const rules = getEventTypeRules(task.eventType);
     const durationMin = task.estimatedTimeInMinutes;
@@ -942,6 +1094,8 @@ export class IntelligentSchedulingEngine {
 
     let beyondHorizon = false;
     const skipped: SkippedOccurrence[] = [];
+    let movedOccurrences = 0;
+    let seriesConflict: SchedulingConflict | undefined;
     const timeZone = settingsTimeZone(settings);
     const startYmd = localYmd(startDay.toISOString(), timeZone);
     const horizonEndYmd = localYmd(horizonEnd.toISOString(), timeZone);
@@ -1014,17 +1168,13 @@ export class IntelligentSchedulingEngine {
           start: preferredInterval.start,
           end: preferredInterval.end,
         };
-        const fits = (slots: MsInterval[]) =>
-          slots.some(
-            (slot) => preferredMs.start >= slot.start && preferredMs.end <= slot.end,
-          );
         const durationFromPreferred = (preferredMs.end - preferredMs.start) / 60000;
         const canPlaceByNow = preferredMs.start >= nowMs;
         const canPlaceByDeadline =
           deadlineMs == null || preferredMs.end <= deadlineMs;
 
         if (
-          fits(softEligible) &&
+          preferredFitsSlots(preferredMs, softEligible) &&
           canPlaceByNow &&
           canPlaceByDeadline &&
           durationFromPreferred > 0
@@ -1043,6 +1193,21 @@ export class IntelligentSchedulingEngine {
             !canPlaceByNow ? 'already_passed' : 'deadline',
             timeZone,
           );
+          occurrenceYmd = nextYmd;
+          continue;
+        }
+
+        // Preferred exactly on fixed/Google/habit anchor → ask (do not silent-dodge).
+        if (overlapsAny(preferredMs, anchorBusy)) {
+          recordSkip(skipped, occurrenceYmd, 'preferred_unavailable', timeZone);
+          if (!seriesConflict) {
+            seriesConflict = this.conflictPreferredOnFixed(task, preferredMs);
+            seriesConflict.meta = {
+              ...seriesConflict.meta,
+              occurrenceYmd,
+              readyForProblematic: true,
+            };
+          }
           occurrenceYmd = nextYmd;
           continue;
         }
@@ -1071,10 +1236,18 @@ export class IntelligentSchedulingEngine {
         const avoided = placeOnDay(softBusy);
         if (avoided.ok) {
           segments.push(...avoided.segments);
+          const first = avoided.segments[0];
+          if (
+            !first ||
+            first.start.getTime() !== preferredMs.start ||
+            first.end.getTime() !== preferredMs.end
+          ) {
+            movedOccurrences += 1;
+          }
           occurrenceYmd = nextYmd;
           continue;
         }
-        if (bufferZones.length && fits(hardEligible) && durationFromPreferred > 0) {
+        if (bufferZones.length && preferredFitsSlots(preferredMs, hardEligible) && durationFromPreferred > 0) {
           segments.push({
             start: new Date(preferredMs.start),
             end: new Date(preferredMs.end),
@@ -1095,6 +1268,7 @@ export class IntelligentSchedulingEngine {
           continue;
         }
         segments.push(...filled.segments);
+        movedOccurrences += 1;
         occurrenceYmd = nextYmd;
         continue;
       }
@@ -1145,138 +1319,10 @@ export class IntelligentSchedulingEngine {
       beyondHorizon,
       skippedOccurrences: skipped.length,
       skipped,
+      conflict: seriesConflict,
+      movedFromPreferred: movedOccurrences > 0,
+      movedOccurrences,
     };
-  }
-
-  /**
-   * Same-priority tier: if a task does not fit, temporarily unplace splittable peers (LIFO)
-   * and replan them after the newcomer (intra-priority combination).
-   */
-  private tryPlaceWithDisplacement(
-    task: Task,
-    tierStack: Task[],
-    newSegments: Map<string, { start: Date; end: Date }[]>,
-    anchorBusy: MsInterval[],
-    bufferZones: MsInterval[],
-    settings: UserSettings,
-    startDay: Date,
-    horizonEnd: Date,
-    extendedEnd: Date,
-    nowMs: number,
-    endedMinutesByTask: Map<string, number>,
-  ): { ok: boolean; beyondHorizon: boolean; skippedOccurrences: number; skipped: SkippedOccurrence[] } {
-    const att = this.attemptPlaceTask(
-      task,
-      settings,
-      horizonEnd,
-      extendedEnd,
-      startDay,
-      newSegments,
-      anchorBusy,
-      bufferZones,
-      nowMs,
-      endedMinutesByTask,
-    );
-    if (att.ok) {
-      newSegments.set(task.id, att.segments);
-      tierStack.push(task);
-      return {
-        ok: true,
-        beyondHorizon: att.beyondHorizon,
-        skippedOccurrences: att.skippedOccurrences,
-        skipped: att.skipped,
-      };
-    }
-
-    const displaced: { task: Task; segments: { start: Date; end: Date }[] }[] =
-      [];
-
-    while (tierStack.length > 0) {
-      const P = tierStack[tierStack.length - 1];
-      if (!this.isTaskSplittable(P, settings)) {
-        break;
-      }
-
-      tierStack.pop();
-      const pSegs = newSegments.get(P.id);
-      if (!pSegs) {
-        tierStack.push(P);
-        break;
-      }
-      newSegments.delete(P.id);
-      displaced.push({ task: P, segments: pSegs });
-
-      const att2 = this.attemptPlaceTask(
-        task,
-        settings,
-        horizonEnd,
-        extendedEnd,
-        startDay,
-        newSegments,
-        anchorBusy,
-        bufferZones,
-        nowMs,
-        endedMinutesByTask,
-      );
-      if (att2.ok) {
-        newSegments.set(task.id, att2.segments);
-        tierStack.push(task);
-
-        const replanned: Task[] = [];
-        let fatal = false;
-        for (let i = displaced.length - 1; i >= 0; i--) {
-          const Q = displaced[i].task;
-          const qAtt = this.attemptPlaceTask(
-            Q,
-            settings,
-            horizonEnd,
-            extendedEnd,
-            startDay,
-            newSegments,
-            anchorBusy,
-            bufferZones,
-            nowMs,
-            endedMinutesByTask,
-          );
-          if (!qAtt.ok) {
-            fatal = true;
-            break;
-          }
-          newSegments.set(Q.id, qAtt.segments);
-          tierStack.push(Q);
-          replanned.push(Q);
-        }
-
-        if (!fatal) {
-          return {
-            ok: true,
-            beyondHorizon: att2.beyondHorizon,
-            skippedOccurrences: att2.skippedOccurrences,
-            skipped: att2.skipped,
-          };
-        }
-
-        for (const R of replanned.slice().reverse()) {
-          newSegments.delete(R.id);
-          tierStack.pop();
-        }
-        newSegments.delete(task.id);
-        tierStack.pop();
-        for (let i = displaced.length - 1; i >= 0; i--) {
-          const d = displaced[i];
-          newSegments.set(d.task.id, d.segments);
-          tierStack.push(d.task);
-        }
-        return { ok: false, beyondHorizon: false, skippedOccurrences: 0, skipped: [] };
-      }
-    }
-
-    for (let i = displaced.length - 1; i >= 0; i--) {
-      const d = displaced[i];
-      newSegments.set(d.task.id, d.segments);
-      tierStack.push(d.task);
-    }
-    return { ok: false, beyondHorizon: false, skippedOccurrences: 0, skipped: [] };
   }
 
   private resolvePhasesForTask(task: Task): Phase[] {

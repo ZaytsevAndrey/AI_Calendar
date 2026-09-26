@@ -3,7 +3,7 @@
 Product contract: [spec-conflict-rules.md](spec-conflict-rules.md).  
 Format is aimed at direct transfer into unit/integration tests.
 
-**Target behavior** (roadmap §2+). Until the engine ships type + preferred rules, cases marked **Target** describe the contract; cases marked **Covered** already match current code.
+**Target behavior** for remaining UI/inbox cases (roadmap §3+). Engine placement cases marked **Covered** match `intelligent-scheduling.engine` unit tests after §2.
 
 ## Conventions
 
@@ -11,7 +11,7 @@ Format is aimed at direct transfer into unit/integration tests.
 - **W\*** (From/Until): client TZ (`Asia/Nicosia`), host UTC as on Render.
 - Slot step: 15 minutes.
 - Default phase: `09:00-17:00` unless noted.
-- **Placement algorithm (target):** type + preferred-first; **priority ignored**; already-seated flexible keeps its slot; silent dodge of fixed/Google unless preferred lands exactly on busy fixed; ask / Problematic / Unscheduled per conflict-rules spec.
+- **Placement algorithm:** type + preferred-first; **priority ignored**; already-seated flexible keeps its slot; silent dodge of fixed/Google unless preferred lands exactly on busy fixed; ask / Problematic / Unscheduled per conflict-rules spec.
 - Warnings asserted by `code`, not message text.
 
 Recommended codes (use real backend enums if names differ):
@@ -101,7 +101,7 @@ Recommended codes (use real backend enums if names differ):
 
 ---
 
-## T10 — Seated flexible keeps slot; new flexible finds next free (**Target**)
+## T10 — Seated flexible keeps slot; new flexible finds next free (**Covered**)
 
 **Given**
 
@@ -120,7 +120,7 @@ Recommended codes (use real backend enums if names differ):
 - No overlap.
 - No conflict UI.
 
-## T11 — Two new flexibles, same preferred, same create pass (**Target**)
+## T11 — Two new flexibles, same preferred, same create pass (**Covered**)
 
 **Given**
 
@@ -155,7 +155,7 @@ Recommended codes (use real backend enums if names differ):
 - If `X` preferred is exactly on `F` → see **T14** (ask).
 - If `X` has no preferred (or preferred elsewhere) → `X` silently dodges to the next valid slot (e.g. `10:30-11:30`).
 
-## T13 — Flexible without preferred silently dodges fixed (**Target**)
+## T13 — Flexible without preferred silently dodges fixed (**Covered**)
 
 **Given**
 
@@ -172,7 +172,7 @@ Recommended codes (use real backend enums if names differ):
 - `X` at `10:00-11:00` (or earliest free).
 - No conflict UI.
 
-## T14 — Flexible preferred exactly on fixed → ask (**Target**)
+## T14 — Flexible preferred exactly on fixed → ask (**Covered** engine; UI §4)
 
 **Given**
 
@@ -223,7 +223,7 @@ Recommended codes (use real backend enums if names differ):
 
 ---
 
-## T20 — Two recurring, same preferred, enough capacity (**Target**)
+## T20 — Two recurring, same preferred, enough capacity (**Covered**)
 
 **Given**
 
@@ -258,7 +258,7 @@ Recommended codes (use real backend enums if names differ):
 - Each day: `09:00`, `10:00`, `11:00` respectively.
 - No overlap.
 
-## T22 — Three recurring, not enough capacity → Problematic overflow (**Target**)
+## T22 — Three recurring, not enough capacity → Problematic overflow (**Covered** engine overflow meta; inbox §3)
 
 **Given**
 
