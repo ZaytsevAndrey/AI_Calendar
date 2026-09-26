@@ -47,7 +47,7 @@ export const store = configureStore({
             },
         }).concat(
             thunk,
-            logger,
+            ...(process.env.NODE_ENV !== 'production' ? [logger] : []),
             eventTasksApi.middleware,
             phasesApi.middleware,
             eventsApi.middleware,

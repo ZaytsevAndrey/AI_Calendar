@@ -4,6 +4,7 @@ import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import TsconfigPathsPlugin from 'tsconfig-paths-webpack-plugin';
 import HtmlWebpackPlugin from 'html-webpack-plugin';
+import TerserPlugin from 'terser-webpack-plugin';
 import webpack from 'webpack';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -52,6 +53,26 @@ export default async (_env, argv) => {
             clean: true,
         },
         optimization: {
+            minimize: isProd,
+            minimizer: isProd
+                ? [
+                      new TerserPlugin({
+                          terserOptions: {
+                              compress: {
+                                  drop_debugger: true,
+                                  pure_funcs: [
+                                      'console.log',
+                                      'console.debug',
+                                      'console.info',
+                                      'console.group',
+                                      'console.groupCollapsed',
+                                      'console.groupEnd',
+                                  ],
+                              },
+                          },
+                      }),
+                  ]
+                : [],
             runtimeChunk: 'single',
             splitChunks: {
                 chunks: 'all',
