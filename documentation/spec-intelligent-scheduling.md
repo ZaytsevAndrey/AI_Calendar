@@ -1,6 +1,7 @@
 # Specification: Intelligent scheduling & unified items
 
 **Status:** implemented in codebase (engine, jobs, diff); see [overview](overview.md) and [api-reference](api-reference.md) for HTTP/UI.  
+**Placement / conflict product contract:** [spec-conflict-rules.md](spec-conflict-rules.md) (supersedes priority-based ordering below as the target; engine migration is roadmap §2).  
 **Language:** English (implementation reference)  
 **Last updated:** September 2026
 
@@ -8,7 +9,7 @@
 
 - Treat **event**, **task**, and **todo** as a **single domain entity** (“item”) in the product and scheduling logic.
 - On **create/update** of an item, the system **automatically replans** placements within allowed time windows.
-- User provides **scheduling settings** (fixed vs movable, duration, optional recurrence and weekdays, optional preferred start), **one phase** (or any time), and **priority**; the engine chooses **where** to place the item.
+- User provides **scheduling settings** (fixed vs movable, duration, optional recurrence and weekdays, optional preferred start), **one phase** (or any time); the engine chooses **where** to place the item using **type + preferred** rules in [spec-conflict-rules.md](spec-conflict-rules.md). Numeric **priority** is soft-deprecated for placement.
 - Show the user **what moved** (diff). Support **undo** that restores **local DB and Google Calendar**.
 - **Google-imported / synced events** are **anchors**: never moved by the scheduler.
 - Planning runs in a **job queue**; horizon **30 days** from “planning anchor date” (see §6).
@@ -27,7 +28,7 @@ One persisted entity (evolve current `Task` or merge with calendar event model�
 | `title`, `description` | Optional description |
 | `eventType` | Storage flag: `fixed` (not moved) or `admin` (movable). New writes use only these two. |
 | `phaseIds` | At most one phase; empty = wake/sleep window |
-| `priority` | Ordered; ties broken by **creation time** (older first) |
+| `priority` | Soft-deprecated for placement; ignored under [conflict rules](spec-conflict-rules.md) |
 | `durationMinutes` | User-set; default 30 for movable tasks |
 | `deadline` | Optional not-after bound |
 | `earliestStartTime` | Optional not-before bound (survives replan) |
@@ -41,9 +42,7 @@ One persisted entity (evolve current `Task` or merge with calendar event model�
 | `scheduledSegments` | Zero or more `{ start, end }` (or link to `ScheduledTask`-like rows)—source of truth for “where it sits” |
 | `googleEventId` | If synced to Google |
 | `isFixedExternal` | True for Google-owned fixed events (anchors) |
-| `createdAt` | Tie-break within same priority |
-
-**Tie-break (same priority):** order by **`createdAt` ascending** — **older tasks first (FIFO)** within the same priority band (product confirmed).
+| `createdAt` | When neither item is seated yet in a planning pass, earlier create wins the preferred seat (see conflict rules) |
 
 ### 2.2 Phases
 
@@ -84,10 +83,13 @@ Legacy `eventType` strings (`daily_routine`, `learning`, …) may still exist in
 
 **Output:** new assignment for all **non-fixed** internal items in scope + **diff** list + optional **undo snapshot**.
 
-### 4.1 Ordering
+### 4.1 Ordering and conflict decisions
 
-1. Sort **schedulable** items by **priority** (descending urgency).  
-2. Within same priority, sort by **`createdAt` ascending** (earlier first).
+**Authoritative rules:** [spec-conflict-rules.md](spec-conflict-rules.md).
+
+Summary: place by **type** (fixed / flexible / recurring) + **preferred time**; do not use numeric priority. Already-seated flexible keeps its slot; newcomers take the next free slot. Ask on fixed-vs-fixed and on preferred exactly on fixed/Google busy. Overflow / no-reply → **Problematic**. Deadline window with no fit → **Unscheduled**.
+
+*Code note:* the live engine may still sort by priority until roadmap §2; do not document priority bump as the product target.
 
 ### 4.2 Slot graph
 
@@ -96,26 +98,25 @@ Legacy `eventType` strings (`daily_routine`, `learning`, …) may still exist in
 - Build **available** intervals = the task’s phase window (or wake/sleep if none) intersected with **weekend** rules from user settings.  
 - Respect **minimum split** when placing segments.
 
-### 4.3 Placement strategy (per item, in order)
+### 4.3 Placement strategy (per item)
 
-Items are processed in **priority order** (highest first). For each item:
+For each schedulable item (see conflict-rules for silent vs ask):
 
-1. Try to place the **remaining** duration (estimated minutes minus fully ended auto slots for non-recurring tasks) in the **nearest** valid slot inside the 30-day horizon (respect phase window, anchors, wake/sleep). If remaining work is below 5 minutes, skip — do not schedule the same past block again.  
-2. If not enough contiguous time and the item **allows split**: split into chunks ≥ `minSplitMinutes`, still prefer **earliest** completion inside the horizon.  
-3. If still no fit: within the **same priority band**, try to **split other already-placed items** that are **splittable/movable** to free space for this item (user-approved “combination”: priority first, then intra-priority splitting).  
-4. If still no fit inside the horizon: **schedule beyond the horizon** (earliest feasible slot after day 30) and surface a clear UI flag: “Placed outside your 30-day window—increase priority, free time, or adjust phases/deadline.”
-
-*Note:* A later iteration may add **explicit bumping** of strictly **lower-priority** movable items before step 4; MVP follows the steps above.
+1. Try **preferred** clock interval inside the phase ∩ wake/sleep ∩ From/Until; if free, place there. If preferred is taken by a seated flexible, take the **next free** slot (silent). If preferred lands exactly on fixed/Google → conflict options.
+2. If no preferred: earliest valid slot; always dodge fixed/Google silently.
+3. Place **remaining** duration (estimated minutes minus fully ended auto slots for non-recurring tasks). If remaining work is below 5 minutes, skip — do not schedule the same past block again.
+4. If not enough contiguous time and the item **allows split**: split into chunks ≥ `minSplitMinutes`.
+5. If still no fit: conflict options and/or **Problematic** (not priority displacement of peers). Horizon overflow messaging should not tell the user to “raise priority.”
 
 ### 4.4 Deadline / schedule window
 
 - If `earliestStartTime` is set: hard constraint—do not start any segment before that **instant**. Day-only From (00:00 in **settings `timeZone`**) snaps to wake that local day so a `+03:00` midnight is not treated as “this evening” on a UTC host. Wake/sleep from Postgres (`HH:mm:ss`) are normalized to `HH:mm` before that snap. A clock From such as 00:01 is left as an instant and is not snapped.
-- If `deadline` is set: hard constraint—**all segments must end by deadline**. If the deadline is **already in the past**, skip the task (no new slot, no error). If the deadline is still ahead and fit is impossible: **do not silently fail**—return structured error / UI message: e.g. “Cannot fit before deadline; raise priority, extend deadline, enable split, or remove other work.”
+- If `deadline` is set: hard constraint—**all segments must end by deadline**. If the deadline is **already in the past**, skip the task (no new slot, no error). If the deadline is still ahead and fit is impossible: land in **Unscheduled** (or structured warning)—**not** Problematic solely for deadline miss; suggest extend deadline, enable split, or free time (not “raise priority”).
 - If `eligibleWeekDays` is set on a non-recurring task: only those weekdays inside the window are eligible.
 
 ### 4.5 Phase and preferred start
 
-One optional phase. If a movable task has preferred start/end stored on the task, try that clock time first; if busy, take the earliest remaining slot that day (then later days).
+One optional phase. Preferred-first behavior and when to ask vs dodge are defined in [spec-conflict-rules.md](spec-conflict-rules.md) §5.
 
 ---
 
