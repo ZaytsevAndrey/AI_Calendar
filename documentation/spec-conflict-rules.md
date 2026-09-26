@@ -133,4 +133,4 @@ Further ids may be added later; these are the baseline contract.
 
 ## 9. Implementation note
 
-Roadmap **§2–§5** shipped: type + preferred placement, `isProblematic` inbox, shared conflict options sheet, and Voice on the same layer (spoken/tap option pick; do now for Unscheduled). Drag entry is **§6**. Do not add new priority-displacement behavior.
+Roadmap **§2–§6** shipped: type + preferred placement, `isProblematic` inbox, shared conflict options sheet, Voice on the same layer, and drag → silent replan + conflict sheet / recurring notice. Do not add new priority-displacement behavior.

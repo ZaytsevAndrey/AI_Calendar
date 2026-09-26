@@ -171,9 +171,12 @@ export const ScheduleApi = {
     originalEnd: string;
     start: string;
     end: string;
-  }): Promise<{ kind: 'fixed' | 'slot' | 'google' }> => {
+  }): Promise<{ kind: 'fixed' | 'slot' | 'google'; jobId: string | null }> => {
     const response = await axios.post('/schedule/move-event', body);
-    return response.data as { kind: 'fixed' | 'slot' | 'google' };
+    return response.data as {
+      kind: 'fixed' | 'slot' | 'google';
+      jobId: string | null;
+    };
   },
 
   rescheduleTask: async (id: string, startTime: string, endTime: string): Promise<ScheduledTaskDTO> => {

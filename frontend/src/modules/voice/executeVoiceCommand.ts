@@ -4,6 +4,7 @@ import { ScheduleApi } from 'api/schedule.api';
 import type { SkipOccurrenceDTO, UpdateTaskDTO } from 'api/tasks.api';
 import type { VoiceCommandAction } from 'api/voice.api';
 import i18n from 'i18n';
+import { settleReplanJob } from 'modules/schedule/settleReplanJob';
 import { showSuccessToast } from 'utils/toast';
 
 type Mutation<T> = (arg: T) => { unwrap: () => Promise<unknown> };
@@ -45,7 +46,7 @@ export async function executeVoiceCommand(
   }
 
   if (command.kind === 'move') {
-    await ScheduleApi.moveDisplayedEvent({
+    const moved = await ScheduleApi.moveDisplayedEvent({
       googleEventId: command.googleEventId,
       calendarId: command.calendarId ?? undefined,
       recurringEventId: command.recurringEventId ?? undefined,
@@ -54,8 +55,22 @@ export async function executeVoiceCommand(
       start: command.start,
       end: command.end,
     });
+    const { recurringMoved } = await settleReplanJob(moved.jobId);
     refreshCalendar(deps.dispatch);
-    showSuccessToast({ title: i18n.t('voice.eventMoved'), detail: command.taskName });
+    if (command.recurringEventId) {
+      showSuccessToast({
+        title: i18n.t('calendar.recurringInstanceMoved'),
+        detail: command.taskName,
+      });
+    } else {
+      showSuccessToast({ title: i18n.t('voice.eventMoved'), detail: command.taskName });
+    }
+    if (recurringMoved.length && !command.recurringEventId) {
+      showSuccessToast({
+        title: i18n.t('calendar.recurringRescheduled'),
+        detail: recurringMoved.slice(0, 3).join(', '),
+      });
+    }
     return;
   }
 

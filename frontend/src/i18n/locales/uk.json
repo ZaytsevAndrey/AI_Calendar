@@ -103,6 +103,8 @@
     "eventUpdateFailed": "Не вдалося оновити подію",
     "eventMoveFailed": "Не вдалося перенести подію",
     "eventMoved": "Подію перенесено",
+    "recurringInstanceMoved": "Появу серії перенесено",
+    "recurringRescheduled": "Повторювані блоки переплановано",
     "day": "День",
     "week": "Тиждень",
     "month": "Місяць",

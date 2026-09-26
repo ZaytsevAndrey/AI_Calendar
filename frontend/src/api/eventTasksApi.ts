@@ -2,35 +2,14 @@ import { createApi } from '@reduxjs/toolkit/query/react';
 import { customBaseQuery } from './customBaseQuery';
 import { TaskDTO, CreateTaskDTO, UpdateTaskDTO, SkipOccurrenceDTO } from './tasks.api';
 import { eventsApi } from './eventsApi';
-import { waitForScheduleJob } from './schedule.api';
-import {
-  emitScheduleConflicts,
-  notifyScheduleJobSettled,
-} from 'modules/schedule/conflictChoiceBus';
-import type { SchedulingConflictDTO } from 'modules/schedule/conflictChoiceBus';
-
-function conflictsFromJobResult(result: unknown): SchedulingConflictDTO[] {
-  if (!result || typeof result !== 'object') return [];
-  const conflicts = (result as { conflicts?: unknown }).conflicts;
-  return Array.isArray(conflicts) ? (conflicts as SchedulingConflictDTO[]) : [];
-}
+import { settleReplanJob } from 'modules/schedule/settleReplanJob';
 
 async function refreshAfterSilentReplan(
   dispatch: (action: unknown) => unknown,
   jobId?: string | null,
 ) {
   dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
-  if (!jobId) {
-    notifyScheduleJobSettled();
-    return;
-  }
-  try {
-    const job = await waitForScheduleJob(jobId);
-    emitScheduleConflicts(conflictsFromJobResult(job.result));
-  } catch {
-    notifyScheduleJobSettled();
-    /* still refresh; the task itself already saved */
-  }
+  await settleReplanJob(jobId);
   dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));
   dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
 }

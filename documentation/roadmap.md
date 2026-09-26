@@ -45,9 +45,9 @@ Do in order unless you explicitly skip ahead.
 
 ### 6. Drag → day / phase replan
 
-- [ ] After drag, replan affected phases for that civil day (A→B = both).
-- [ ] Flexible: silent shift if a hole exists; else conflict sheet / problematic.
-- [ ] Recurring instance moved → user-visible notice.
+- [x] After drag, replan affected phases for that civil day (A→B = both).
+- [x] Flexible: silent shift if a hole exists; else conflict sheet / problematic.
+- [x] Recurring instance moved → user-visible notice.
 
 ### 7. Unscheduled actions
 
@@ -90,5 +90,5 @@ Do in order unless you explicitly skip ahead.
 
 ## Recommended next steps
 
-1. Start at **§6 Drag → day / phase replan**.
+1. Start at **§7 Unscheduled actions**.
 2. After each feature ships: tick above, archive a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

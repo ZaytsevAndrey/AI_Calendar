@@ -134,13 +134,13 @@ export class ScheduleController {
   @HttpCode(200)
   @ApiOperation({
     summary:
-      'Move or resize one displayed calendar block. Does not enqueue replan. A flexible slot can move again on the next Generate.',
+      'Move or resize one displayed calendar block. App fixed/slot moves enqueue a silent replan (jobId); conflicts open the shared sheet. External Google-only moves do not replan.',
   })
-  @ApiResponse({ status: 200, description: 'Occurrence and Google event updated' })
+  @ApiResponse({ status: 200, description: 'Occurrence and Google event updated; optional jobId' })
   async moveDisplayedEvent(
     @Request() req,
     @Body() dto: MoveDisplayedEventDto,
-  ): Promise<{ kind: 'fixed' | 'slot' | 'google' }> {
+  ): Promise<{ kind: 'fixed' | 'slot' | 'google'; jobId: string | null }> {
     return this.displayedEventMoveService.move(req.user.userId, dto);
   }
 

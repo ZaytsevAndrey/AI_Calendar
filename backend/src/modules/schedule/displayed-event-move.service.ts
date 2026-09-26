@@ -11,8 +11,14 @@ import { Task } from '../tasks/entities/task.entity';
 import { TasksService } from '../tasks/tasks.service';
 import { MoveDisplayedEventDto } from './dto/move-displayed-event.dto';
 import { planDisplayedEventMove } from './move-displayed-event.util';
+import { ScheduleJobService } from './schedule-job.service';
 import { ScheduleService } from './schedule.service';
 import { ScheduledTask } from './schedule.entity';
+
+export type MoveDisplayedEventResult = {
+  kind: 'fixed' | 'slot' | 'google';
+  jobId: string | null;
+};
 
 @Injectable()
 export class DisplayedEventMoveService {
@@ -28,12 +34,13 @@ export class DisplayedEventMoveService {
     private readonly tasksService: TasksService,
     private readonly scheduleService: ScheduleService,
     private readonly googleCalendarService: GoogleCalendarService,
+    private readonly scheduleJobService: ScheduleJobService,
   ) {}
 
   async move(
     userId: string,
     dto: MoveDisplayedEventDto,
-  ): Promise<{ kind: 'fixed' | 'slot' | 'google' }> {
+  ): Promise<MoveDisplayedEventResult> {
     const start = new Date(dto.start);
     const end = new Date(dto.end);
     if (!(end > start)) {
@@ -86,7 +93,7 @@ export class DisplayedEventMoveService {
         scheduledEndTime: end.toISOString(),
         estimatedTimeInMinutes: minutes,
       });
-      return { kind: 'fixed' };
+      return this.withReplan(userId, 'fixed');
     }
 
     await this.googleCalendarService.patchEventTimes(
@@ -98,7 +105,8 @@ export class DisplayedEventMoveService {
     );
 
     if (plan.kind === 'google') {
-      return { kind: 'google' };
+      // External Google block only — nothing for the engine to reshuffle.
+      return { kind: 'google', jobId: null };
     }
 
     let slotSaved = false;
@@ -145,6 +153,14 @@ export class DisplayedEventMoveService {
       throw err;
     }
 
-    return { kind: 'slot' };
+    return this.withReplan(userId, 'slot');
+  }
+
+  private async withReplan(
+    userId: string,
+    kind: 'fixed' | 'slot',
+  ): Promise<MoveDisplayedEventResult> {
+    const job = await this.scheduleJobService.enqueueReplan(userId);
+    return { kind, jobId: job.id };
   }
 }

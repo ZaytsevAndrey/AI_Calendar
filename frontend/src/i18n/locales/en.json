@@ -103,6 +103,8 @@
     "eventUpdateFailed": "Could not update event",
     "eventMoveFailed": "Could not move event",
     "eventMoved": "Event moved",
+    "recurringInstanceMoved": "Recurring instance moved",
+    "recurringRescheduled": "Recurring blocks were rescheduled",
     "day": "Day",
     "week": "Week",
     "month": "Month",

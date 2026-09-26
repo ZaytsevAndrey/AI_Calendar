@@ -20,12 +20,14 @@ describe('DisplayedEventMoveService', () => {
     updateTask?: jest.Mock;
     updateSlot?: jest.Mock;
     updateWindow?: jest.Mock;
+    enqueueReplan?: jest.Mock;
   }) {
-    const patch =
-      opts.patch ?? jest.fn().mockResolvedValue(undefined);
+    const patch = opts.patch ?? jest.fn().mockResolvedValue(undefined);
     const updateTask = opts.updateTask ?? jest.fn().mockResolvedValue({});
     const updateSlot = opts.updateSlot ?? jest.fn().mockResolvedValue({});
     const updateWindow = opts.updateWindow ?? jest.fn().mockResolvedValue(undefined);
+    const enqueueReplan =
+      opts.enqueueReplan ?? jest.fn().mockResolvedValue({ id: 'job-move-1' });
     const slots = opts.slots ?? [];
     const move = new DisplayedEventMoveService(
       {
@@ -45,18 +47,20 @@ describe('DisplayedEventMoveService', () => {
       } as never,
       { update: updateSlot } as never,
       { patchEventTimes: patch } as never,
+      { enqueueReplan } as never,
     );
-    return { move, patch, updateTask, updateSlot, updateWindow };
+    return { move, patch, updateTask, updateSlot, updateWindow, enqueueReplan };
   }
 
   it('does not change a habit block', async () => {
-    const { move, patch } = service({ habit: true });
+    const { move, patch, enqueueReplan } = service({ habit: true });
     await expect(move.move(userId, dto)).rejects.toBeInstanceOf(BadRequestException);
     expect(patch).not.toHaveBeenCalled();
+    expect(enqueueReplan).not.toHaveBeenCalled();
   });
 
-  it('writes a fixed task through task update and does not patch Google itself', async () => {
-    const { move, patch, updateTask } = service({
+  it('writes a fixed task and enqueues replan', async () => {
+    const { move, patch, updateTask, enqueueReplan } = service({
       tasks: [
         {
           id: 'task-fixed',
@@ -66,18 +70,22 @@ describe('DisplayedEventMoveService', () => {
         },
       ],
     });
-    await expect(move.move(userId, dto)).resolves.toEqual({ kind: 'fixed' });
+    await expect(move.move(userId, dto)).resolves.toEqual({
+      kind: 'fixed',
+      jobId: 'job-move-1',
+    });
     expect(updateTask).toHaveBeenCalledWith('task-fixed', userId, {
       scheduledStartTime: '2026-09-22T11:00:00.000Z',
       scheduledEndTime: '2026-09-22T12:00:00.000Z',
       estimatedTimeInMinutes: 60,
     });
     expect(patch).not.toHaveBeenCalled();
+    expect(enqueueReplan).toHaveBeenCalledWith(userId);
   });
 
   it('patches Google before saving a flexible slot and rolls Google back if the slot save fails', async () => {
     const updateSlot = jest.fn().mockRejectedValue(new Error('overlap'));
-    const { move, patch, updateWindow } = service({
+    const { move, patch, updateWindow, enqueueReplan } = service({
       tasks: [
         {
           id: 'task-flex',
@@ -115,13 +123,47 @@ describe('DisplayedEventMoveService', () => {
       'primary',
     );
     expect(updateWindow).not.toHaveBeenCalled();
+    expect(enqueueReplan).not.toHaveBeenCalled();
   });
 
-  it('patches an external Google event and leaves tasks alone', async () => {
-    const { move, patch, updateTask, updateSlot } = service({ tasks: [] });
-    await expect(move.move(userId, dto)).resolves.toEqual({ kind: 'google' });
+  it('saves a flexible slot and enqueues replan', async () => {
+    const { move, enqueueReplan, updateSlot } = service({
+      tasks: [
+        {
+          id: 'task-flex',
+          eventType: 'admin',
+          isRecurring: false,
+          googleEventId: 'evt-1',
+        },
+      ],
+      slots: [
+        {
+          id: 'slot-1',
+          taskId: 'task-flex',
+          googleEventId: 'evt-1',
+          scheduledStartTime: new Date('2026-09-22T09:00:00.000Z'),
+        },
+      ],
+    });
+    await expect(move.move(userId, dto)).resolves.toEqual({
+      kind: 'slot',
+      jobId: 'job-move-1',
+    });
+    expect(updateSlot).toHaveBeenCalled();
+    expect(enqueueReplan).toHaveBeenCalledWith(userId);
+  });
+
+  it('patches an external Google event without replan', async () => {
+    const { move, patch, updateTask, updateSlot, enqueueReplan } = service({
+      tasks: [],
+    });
+    await expect(move.move(userId, dto)).resolves.toEqual({
+      kind: 'google',
+      jobId: null,
+    });
     expect(patch).toHaveBeenCalledTimes(1);
     expect(updateTask).not.toHaveBeenCalled();
     expect(updateSlot).not.toHaveBeenCalled();
+    expect(enqueueReplan).not.toHaveBeenCalled();
   });
 });

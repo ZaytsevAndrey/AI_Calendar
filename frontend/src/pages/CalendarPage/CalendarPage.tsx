@@ -39,6 +39,7 @@ import { VoiceTaskButton } from 'modules/voice/components/VoiceTaskButton';
 import { VoiceTaskSheet } from 'modules/voice/components/VoiceTaskSheet';
 import { useVoiceTask } from 'modules/voice/hooks/useVoiceTask';
 import { setConflictVoiceOpener } from 'modules/schedule/conflictChoiceBus';
+import { settleReplanJob } from 'modules/schedule/settleReplanJob';
 import { useCoarsePointer, usePhoneLayout } from 'modules/common/hooks/useMediaQuery';
 import { PhoneWeekStrip } from 'modules/calendar/components/PhoneWeekStrip';
 import { Modal } from '../../ui/Modal';
@@ -299,7 +300,7 @@ const CalendarPage: React.FC = () => {
             throw new Error('Event has no time range');
         }
         try {
-            await ScheduleApi.moveDisplayedEvent({
+            const moved = await ScheduleApi.moveDisplayedEvent({
                 googleEventId: event.id,
                 calendarId: event.calendarId,
                 recurringEventId: event.recurringEventId,
@@ -308,12 +309,26 @@ const CalendarPage: React.FC = () => {
                 start: start.toISOString(),
                 end: end.toISOString(),
             });
+            const { recurringMoved } = await settleReplanJob(moved.jobId);
             dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
             dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));
-            showSuccessToast({
-                title: t('calendar.eventMoved'),
-                detail: formatDateTimeRange(start.toISOString(), end.toISOString()),
-            });
+            if (event.recurringEventId) {
+                showSuccessToast({
+                    title: t('calendar.recurringInstanceMoved'),
+                    detail: formatDateTimeRange(start.toISOString(), end.toISOString()),
+                });
+            } else {
+                showSuccessToast({
+                    title: t('calendar.eventMoved'),
+                    detail: formatDateTimeRange(start.toISOString(), end.toISOString()),
+                });
+            }
+            if (recurringMoved.length && !event.recurringEventId) {
+                showSuccessToast({
+                    title: t('calendar.recurringRescheduled'),
+                    detail: recurringMoved.slice(0, 3).join(', '),
+                });
+            }
         } catch (err) {
             showErrorToast({
                 title: t('calendar.eventMoveFailed'),

@@ -133,7 +133,7 @@ Protected with JWT (`JwtAuthGuard`).
 | POST | `/schedule` | Create a scheduled slot |
 | PATCH | `/schedule/:id` | Change times |
 | DELETE | `/schedule/:id` | Delete |
-| POST | `/schedule/move-event` | Move or resize one displayed block. Body: `googleEventId`, `originalStart`, `originalEnd`, `start`, `end`, optional `calendarId` and `recurringEventId`. Updates that occurrence and Google. Does not enqueue replan. Returns `{ kind: "fixed" \| "slot" \| "google" }`. A habit block is 400. |
+| POST | `/schedule/move-event` | Move or resize one displayed block. Body: `googleEventId`, `originalStart`, `originalEnd`, `start`, `end`, optional `calendarId` and `recurringEventId`. Updates that occurrence and Google. App **fixed** / **slot** moves enqueue silent replan and return `{ kind, jobId }`. External Google-only moves return `{ kind: "google", jobId: null }`. Habit block is 400. Job `conflicts[]` opens the shared sheet; `SCHEDULING_RECURRING_MOVED` surfaces a toast. |
 | POST | `/schedule/recommendations` | Suggestions for the next 7 days in settings `timeZone`. Body ignored. Returns `{ summary, suggestions: [{ kind, title, detail, taskId }] }`. `kind` is `overload`, `gap`, `phase_mismatch`, or `deadline_risk`. Does not write tasks, slots, Google, or undo. Empty calendars skip Groq. Groq failures are 503. |
 | POST | `/schedule/conflict-option-phrases` | Body: one `SchedulingConflict` (`taskId`, `taskName`, `reason`, `options`, optional `meta`). Returns `{ options: [{ id, title, detail }] }`. Groq only phrases ids; templates if Groq is down. Applying uses task PATCH / skip-occurrence. |
 | POST | `/schedule/preview` | Dry-run of Calendar Generate. Returns `{ diff, warnings, errors }` and does not write slots, Google, or undo. |

@@ -19,4 +19,4 @@ Single source of truth for the project. Keep these files in sync with code chang
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** September 2026 (Voice on the same conflict layer; shared conflict sheet; Problematic inbox; engine type + preferred).
+**Last documentation update:** September 2026 (drag replan + conflict sheet; Voice on the same conflict layer; Problematic inbox; engine type + preferred).
