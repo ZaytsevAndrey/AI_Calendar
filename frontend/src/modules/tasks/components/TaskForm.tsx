@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useTranslation } from 'react-i18next';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import { CreateTaskDTO, TaskDTO, UpdateTaskDTO } from '../../../api/tasks.api';
 import { PhaseDTO } from '../../../api/phases.api';
@@ -54,6 +55,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
   onSkipOccurrence,
   mode,
 }) => {
+  const { t } = useTranslation();
   const { data: userSettings } = useGetUserSettingsQuery();
   const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
   const defaultValues = useMemo(
@@ -208,7 +210,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_8.5rem]">
           <div>
             <label htmlFor="task-form-name" className={lbl}>
-              Name <span className="text-ide-error">*</span>
+              {t('tasks.form.name')} <span className="text-ide-error">*</span>
             </label>
             <Controller
               name="name"
@@ -218,7 +220,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                   {...field}
                   id="task-form-name"
                   autoComplete="off"
-                  placeholder="e.g. Prepare quarterly review"
+                  placeholder={t('tasks.form.namePlaceholder')}
                   className={`${inp} ${errors.name ? 'border-ide-error' : ''}`}
                 />
               )}
@@ -231,7 +233,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
           </div>
           <div>
             <label htmlFor="task-form-priority" className={lbl}>
-              Priority
+              {t('tasks.form.priority')}
             </label>
             <Controller
               name="priority"
@@ -252,7 +254,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
         {showDescription ? (
           <div>
             <label htmlFor="task-form-description" className={lbl}>
-              Description
+              {t('tasks.form.description')}
             </label>
             <Controller
               name="description"
@@ -263,7 +265,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                   id="task-form-description"
                   rows={2}
                   className={inp}
-                  placeholder="Optional context"
+                  placeholder={t('tasks.form.descriptionPlaceholder')}
                 />
               )}
             />
@@ -274,7 +276,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
             className="text-xs text-ide-link hover:underline"
             onClick={() => setShowDescription(true)}
           >
-            + Description
+            {t('tasks.form.addDescription')}
           </button>
         )}
 
@@ -282,7 +284,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
         <>
         <div>
           <label htmlFor="task-form-phase" className={lbl}>
-            Phase
+            {t('tasks.form.phase')}
           </label>
           <Controller
             name="phaseId"
@@ -294,7 +296,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                 className={inp}
                 value={field.value ?? ''}
               >
-                <option value="">Any time</option>
+                <option value="">{t('tasks.form.anyTime')}</option>
                 {schedulingPhases.map((phase) => (
                   <option key={phase.id} value={phase.id}>
                     {phase.name} ({phase.startTime}–{phase.endTime})
@@ -319,7 +321,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                   ref={field.ref}
                   name={field.name}
                 />
-                Fixed time
+                {t('tasks.form.fixedTime')}
               </label>
             )}
           />
@@ -338,7 +340,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                       ref={field.ref}
                       name={field.name}
                     />
-                    Recurring
+                    {t('tasks.form.recurring')}
                   </label>
                 )}
               />
@@ -346,7 +348,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                 name="allowSplit"
                 control={control}
                 render={({ field }) => (
-                  <label className="inline-flex cursor-pointer items-center gap-2" title="Planner may split this into smaller chunks">
+                  <label className="inline-flex cursor-pointer items-center gap-2" title={t('tasks.form.allowSplitHint')}>
                     <input
                       type="checkbox"
                       checked={!!field.value}
@@ -355,7 +357,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                       ref={field.ref}
                       name={field.name}
                     />
-                    Allow split
+                    {t('tasks.form.allowSplit')}
                   </label>
                 )}
               />
@@ -367,7 +369,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label htmlFor="task-form-start" className={lbl}>
-                Start <span className="text-ide-error">*</span>
+                {t('tasks.form.start')} <span className="text-ide-error">*</span>
               </label>
               <Controller
                 name="scheduledStartTime"
@@ -387,7 +389,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
             </div>
             <div>
               <label htmlFor="task-form-end" className={lbl}>
-                End <span className="text-ide-error">*</span>
+                {t('tasks.form.end')} <span className="text-ide-error">*</span>
               </label>
               <Controller
                 name="scheduledEndTime"
@@ -412,7 +414,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
               <div className="space-y-2">
                 <div>
                   <label htmlFor="task-form-recurrence" className={lbl}>
-                    Repeat
+                    {t('tasks.form.repeat')}
                   </label>
                   <Controller
                     name="recurrencePattern"
@@ -433,7 +435,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                 </div>
                 {recurrencePattern !== 'MONTHLY' ? (
                   <div>
-                    <span className={lbl}>Days</span>
+                    <span className={lbl}>{t('tasks.form.days')}</span>
                     <div className="weekdays-toggle">
                       {WEEKDAY_OPTIONS.map(({ value, label }) => (
                         <button
@@ -448,7 +450,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                       ))}
                     </div>
                     <p className="mt-1 text-xs text-ide-muted">
-                      None selected = every day{phaseTimeBounds ? ' (still limited by the phase)' : ''}.
+                      {phaseTimeBounds ? t('tasks.form.daysHintWithPhase') : t('tasks.form.daysHint')}
                     </p>
                   </div>
                 ) : null}
@@ -458,7 +460,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label htmlFor="task-form-duration" className={lbl}>
-                  Duration (min) <span className="text-ide-error">*</span>
+                  {t('tasks.form.durationMin')} <span className="text-ide-error">*</span>
                 </label>
                 <Controller
                   name="estimatedTimeInMinutes"
@@ -483,7 +485,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
               </div>
               <div>
                 <label htmlFor="task-form-preferred-start" className={lbl}>
-                  Preferred start
+                  {t('tasks.form.preferredStart')}
                 </label>
                 <Controller
                   name="preferredStartTime"
@@ -510,7 +512,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                             value={opt.value}
                             disabled={opt.disabled}
                           >
-                            {opt.label}
+                            {opt.value === '' ? t('tasks.form.noPreference') : opt.label}
                           </option>
                         ))}
                       </select>
@@ -523,7 +525,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label htmlFor="task-form-from" className={lbl}>
-                  From
+                  {t('tasks.form.from')}
                 </label>
                 <Controller
                   name="earliestStartTime"
@@ -540,7 +542,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
               </div>
               <div>
                 <label htmlFor="task-form-deadline" className={lbl}>
-                  Until
+                  {t('tasks.form.until')}
                 </label>
                 <Controller
                   name="deadline"
@@ -560,12 +562,12 @@ const TaskForm: React.FC<TaskFormProps> = ({
               </div>
             </div>
             <p className="text-xs text-ide-muted">
-              Optional. One day, a range, or empty for any time. Times use {timeZone}.
+              {t('tasks.form.windowHint', { timeZone })}
             </p>
 
             {showWindowDays ? (
               <div>
-                <span className={lbl}>Only these days</span>
+                <span className={lbl}>{t('tasks.form.onlyTheseDays')}</span>
                 <div className="weekdays-toggle">
                   {WEEKDAY_OPTIONS.map(({ value, label }) => (
                     <button
@@ -580,7 +582,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                   ))}
                 </div>
                 <p className="mt-1 text-xs text-ide-muted">
-                  None selected = any day in the window.
+                  {t('tasks.form.eligibleDaysHint')}
                 </p>
               </div>
             ) : null}
@@ -590,7 +592,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
         {isFixed ? (
           <div>
             <label htmlFor="task-form-fixed-deadline" className={lbl}>
-              Deadline
+              {t('tasks.form.deadline')}
             </label>
             <Controller
               name="deadline"
@@ -610,7 +612,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
         ) : (
           <div>
             <label htmlFor="task-form-unscheduled-deadline" className={lbl}>
-              Deadline
+              {t('tasks.form.deadline')}
             </label>
             <Controller
               name="deadline"
@@ -625,7 +627,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
               )}
             />
             <p className="mt-1 text-xs text-ide-muted">
-              Optional. Stays off the calendar until you schedule it. Times use {timeZone}.
+              {t('tasks.form.unscheduledDeadlineHint', { timeZone })}
             </p>
           </div>
         )}
@@ -656,7 +658,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
             className="text-xs text-ide-link hover:underline"
             onClick={() => setShowMore(true)}
           >
-            + More options
+            {t('tasks.form.moreOptions')}
           </button>
         )}
       </div>
@@ -669,7 +671,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
             className="ui-btn-secondary w-full sm:mr-auto sm:w-auto"
             disabled={isSubmitting}
           >
-            Skip this occurrence
+            {t('tasks.form.skipOccurrence')}
           </button>
         ) : null}
         <button
@@ -678,10 +680,14 @@ const TaskForm: React.FC<TaskFormProps> = ({
           className="ui-btn-secondary w-full sm:w-auto"
           disabled={isSubmitting}
         >
-          Cancel
+          {t('common.cancel')}
         </button>
         <button type="submit" className="ui-btn-primary w-full sm:w-auto" disabled={isSubmitting}>
-          {isSubmitting ? 'Saving…' : mode === 'create' ? 'Create task' : 'Save changes'}
+          {isSubmitting
+            ? t('common.saving')
+            : mode === 'create'
+              ? t('tasks.form.createTask')
+              : t('tasks.form.saveChanges')}
         </button>
       </div>
     </form>

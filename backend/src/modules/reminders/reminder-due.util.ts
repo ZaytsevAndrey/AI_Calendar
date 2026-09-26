@@ -1,4 +1,5 @@
 import { addDaysToYmd, localDateTimeIso, localYmd } from '../voice/voice-local-date.util';
+import { isAppLanguage, t, type AppLanguage } from '../../i18n';
 
 /** One reminder if the start is still ahead and no further than this. */
 export const REMINDER_LOOKAHEAD_MS = 30 * 60 * 1000;
@@ -53,6 +54,10 @@ function minutesUntil(startMs: number, nowMs: number): number {
   return Math.max(1, Math.round((startMs - nowMs) / 60_000));
 }
 
+function reminderLanguage(value: string | undefined): AppLanguage {
+  return isAppLanguage(value) ? value : 'en';
+}
+
 export function selectDueReminders(input: {
   nowMs: number;
   lookaheadMs?: number;
@@ -62,7 +67,9 @@ export function selectDueReminders(input: {
   blocks: TimedReminderBlock[];
   habits: HabitReminderSource[];
   alreadySent: ReadonlySet<string>;
+  language?: string;
 }): DueReminder[] {
+  const lang = reminderLanguage(input.language);
   const lookaheadMs = input.lookaheadMs ?? REMINDER_LOOKAHEAD_MS;
   const due = (startMs: number) => startsWithinLookahead(startMs, input.nowMs, lookaheadMs);
   const items: DueReminder[] = [];
@@ -80,7 +87,7 @@ export function selectDueReminders(input: {
     const minutes = minutesUntil(block.startMs, input.nowMs);
     push({
       dedupeKey: `block:${block.key}:${block.startMs}`,
-      title: `Starting in ${minutes} min`,
+      title: t(lang, 'push.startingIn', { minutes }),
       body: title,
       url: '/',
     });
@@ -105,7 +112,9 @@ export function selectDueReminders(input: {
     if (fireYmd === input.todayYmd && habit.checkedToday) continue;
     push({
       dedupeKey: `habit:${habit.id}:${fireYmd}`,
-      title: `Habit in ${minutesUntil(startMs, input.nowMs)} min`,
+      title: t(lang, 'push.habitIn', {
+        minutes: minutesUntil(startMs, input.nowMs),
+      }),
       body: name,
       url: '/',
     });
@@ -122,7 +131,7 @@ export function selectDueReminders(input: {
       const body = names.join(', ');
       push({
         dedupeKey: `habits-wake:${fireYmd}`,
-        title: 'Habits',
+        title: t(lang, 'push.habits'),
         body: body.length > 140 ? `${body.slice(0, 137)}...` : body,
         url: '/',
       });

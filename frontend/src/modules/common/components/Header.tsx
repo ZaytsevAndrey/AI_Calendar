@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { CalendarDays } from 'lucide-react';
 import { prefetchRoute } from 'routeChunks';
 import { mainNavItems, mainNavLabel } from '../mainNav';
@@ -8,8 +9,9 @@ const linkBase =
     'whitespace-nowrap rounded-lg px-3 py-2.5 text-sm font-medium text-ide-text transition min-h-[44px] inline-flex items-center gap-2';
 
 const Header: React.FC = () => {
+    const { t } = useTranslation();
     const location = useLocation();
-    const section = mainNavLabel(location.pathname);
+    const section = t(mainNavLabel(location.pathname));
 
     const active = (cond: boolean) =>
         cond ? 'bg-ide-link/15 text-ide-text' : 'hover:bg-white/5';
@@ -26,11 +28,11 @@ const Header: React.FC = () => {
                         className="inline-flex items-center gap-2 truncate text-ide-text no-underline hover:text-ide-link"
                     >
                         <CalendarDays className="h-5 w-5 shrink-0 text-ide-link" aria-hidden />
-                        AI Calendar
+                        {t('nav.brand')}
                     </Link>
                 </div>
-                <nav className="hidden gap-1 md:flex" aria-label="Main">
-                    {mainNavItems.map(({ to, label, icon: Icon, match }) => (
+                <nav className="hidden gap-1 md:flex" aria-label={t('nav.main')}>
+                    {mainNavItems.map(({ to, labelKey, icon: Icon, match }) => (
                         <Link
                             key={to}
                             to={to}
@@ -39,7 +41,7 @@ const Header: React.FC = () => {
                             onFocus={() => prefetchRoute(to)}
                         >
                             <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
-                            {label}
+                            {t(labelKey)}
                         </Link>
                     ))}
                 </nav>

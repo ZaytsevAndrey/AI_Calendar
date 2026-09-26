@@ -1,23 +1,33 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
-import { enGB } from 'date-fns/locale';
+import { enGB, uk } from 'date-fns/locale';
 
-const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
-const MONTHS = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
+const WEEKDAY_KEYS = [
+    'calendar.weekdayMon',
+    'calendar.weekdayTue',
+    'calendar.weekdayWed',
+    'calendar.weekdayThu',
+    'calendar.weekdayFri',
+    'calendar.weekdaySat',
+    'calendar.weekdaySun',
+] as const;
+
+const MONTH_KEYS = [
+    'calendar.monthJanuary',
+    'calendar.monthFebruary',
+    'calendar.monthMarch',
+    'calendar.monthApril',
+    'calendar.monthMay',
+    'calendar.monthJune',
+    'calendar.monthJuly',
+    'calendar.monthAugust',
+    'calendar.monthSeptember',
+    'calendar.monthOctober',
+    'calendar.monthNovember',
+    'calendar.monthDecember',
 ] as const;
 
 type Props = {
@@ -54,6 +64,8 @@ function monthCells(cursor: Date): Date[] {
 }
 
 export function CalendarDatePicker({ value, label, caption, onChange, compact = false }: Props) {
+    const { t, i18n } = useTranslation();
+    const dateLocale = i18n.language === 'uk' ? uk : enGB;
     const [open, setOpen] = useState(false);
     const [cursor, setCursor] = useState(() => startOfMonth(value));
     const [pos, setPos] = useState({ top: 0, left: 0 });
@@ -146,7 +158,7 @@ export function CalendarDatePicker({ value, label, caption, onChange, compact = 
                 }
                 aria-haspopup="dialog"
                 aria-expanded={open}
-                aria-label={`Go to date, currently ${label}`}
+                aria-label={t('calendar.goToDate', { label })}
                 onClick={() => setOpen((prev) => !prev)}
             >
                 <CalendarDays className="h-4 w-4 shrink-0" aria-hidden />
@@ -158,7 +170,7 @@ export function CalendarDatePicker({ value, label, caption, onChange, compact = 
                       <div
                           ref={panelRef}
                           role="dialog"
-                          aria-label="Choose date"
+                          aria-label={t('calendar.chooseDate')}
                           className="fixed z-[1400] w-[min(300px,calc(100vw-1rem))] rounded-xl border border-ide-border bg-ide-panel p-3 shadow-ide-md"
                           style={{ top: pos.top, left: pos.left }}
                       >
@@ -166,13 +178,13 @@ export function CalendarDatePicker({ value, label, caption, onChange, compact = 
                               <button
                                   type="button"
                                   className="ui-btn-ghost min-h-[40px] min-w-[40px] px-0"
-                                  aria-label="Previous month"
+                                  aria-label={t('calendar.previousMonth')}
                                   onClick={() => shiftMonth(-1)}
                               >
                                   <ChevronLeft className="mx-auto h-4 w-4" aria-hidden />
                               </button>
                               <label className="sr-only" htmlFor="calendar-month">
-                                  Month
+                                  {t('common.month')}
                               </label>
                               <select
                                   id="calendar-month"
@@ -182,14 +194,14 @@ export function CalendarDatePicker({ value, label, caption, onChange, compact = 
                                       setCursor(new Date(cursor.getFullYear(), Number(event.target.value), 1))
                                   }
                               >
-                                  {MONTHS.map((month, index) => (
-                                      <option key={month} value={index}>
-                                          {month}
+                                  {MONTH_KEYS.map((key, index) => (
+                                      <option key={key} value={index}>
+                                          {t(key)}
                                       </option>
                                   ))}
                               </select>
                               <label className="sr-only" htmlFor="calendar-year">
-                                  Year
+                                  {t('common.year')}
                               </label>
                               <select
                                   id="calendar-year"
@@ -208,16 +220,16 @@ export function CalendarDatePicker({ value, label, caption, onChange, compact = 
                               <button
                                   type="button"
                                   className="ui-btn-ghost min-h-[40px] min-w-[40px] px-0"
-                                  aria-label="Next month"
+                                  aria-label={t('calendar.nextMonth')}
                                   onClick={() => shiftMonth(1)}
                               >
                                   <ChevronRight className="mx-auto h-4 w-4" aria-hidden />
                               </button>
                           </div>
                           <div className="mb-1 grid grid-cols-7 gap-0.5 text-center text-[11px] font-medium text-ide-muted">
-                              {WEEKDAYS.map((day) => (
-                                  <div key={day} className="py-1">
-                                      {day}
+                              {WEEKDAY_KEYS.map((key) => (
+                                  <div key={key} className="py-1">
+                                      {t(key)}
                                   </div>
                               ))}
                           </div>
@@ -241,7 +253,7 @@ export function CalendarDatePicker({ value, label, caption, onChange, compact = 
                                           }`}
                                           onClick={() => pick(day)}
                                       >
-                                          {format(day, 'd', { locale: enGB })}
+                                          {format(day, 'd', { locale: dateLocale })}
                                       </button>
                                   );
                               })}

@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { isRangeWithinActiveWindow } from '../utils/phasesTimeUtils';
 
 interface UsePhaseValidationProps {
@@ -18,6 +19,8 @@ export const usePhaseValidation = ({
   selectedDays,
   userSettings,
 }: UsePhaseValidationProps) => {
+  const { t, i18n } = useTranslation();
+
   const sleepError = useMemo(() => {
     if (
       !userSettings?.sleepTime ||
@@ -38,11 +41,11 @@ export const usePhaseValidation = ({
         userSettings.sleepTime,
       )
     ) {
-      return 'Phase cannot be outside of active day time!';
+      return t('phases.outsideActiveDay');
     }
 
     return null;
-  }, [startTime, endTime, selectedDays, userSettings]);
+  }, [startTime, endTime, selectedDays, userSettings, t, i18n.language]);
 
   return { sleepError };
 };

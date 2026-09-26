@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { ScheduleJobResultPayload } from 'api/schedule.api';
 import { Modal } from '../../../ui/Modal';
 import { Spinner } from '../../../ui/Spinner';
@@ -21,6 +22,7 @@ export function GeneratePreviewDialog({
   onCancel,
   onApply,
 }: Props) {
+  const { t } = useTranslation();
   const messages = result ? previewMessages(result) : { errors: [], warnings: [] };
   const moves = result?.diff ?? [];
   const canApply = Boolean(result) && !loading && !error;
@@ -29,7 +31,7 @@ export function GeneratePreviewDialog({
     <Modal
       open={open}
       onClose={onCancel}
-      title="Generate preview"
+      title={t('schedule.previewTitle')}
       footer={
         <>
           <button
@@ -37,7 +39,7 @@ export function GeneratePreviewDialog({
             onClick={onCancel}
             className="ui-btn-secondary w-full sm:w-auto"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -45,7 +47,7 @@ export function GeneratePreviewDialog({
             disabled={!canApply}
             className="ui-btn-primary w-full sm:w-auto"
           >
-            Apply generate
+            {t('schedule.applyGenerate')}
           </button>
         </>
       }
@@ -53,16 +55,16 @@ export function GeneratePreviewDialog({
       {loading ? (
         <div className="flex items-center gap-3 text-sm text-ide-muted">
           <Spinner className="h-4 w-4" />
-          Checking what will change…
+          {t('schedule.checkingChanges')}
         </div>
       ) : null}
       {error ? <p className="text-sm text-ide-error">{error}</p> : null}
       {result ? (
         <div className="space-y-4">
           <section>
-            <h2 className="mb-2 text-sm font-semibold text-ide-text">What will move</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ide-text">{t('schedule.whatWillMove')}</h2>
             {moves.length === 0 ? (
-              <p className="text-sm text-ide-muted">Nothing will move.</p>
+              <p className="text-sm text-ide-muted">{t('schedule.nothingWillMove')}</p>
             ) : (
               <ul className="space-y-2">
                 {moves.map((item) => (
@@ -77,9 +79,9 @@ export function GeneratePreviewDialog({
             )}
           </section>
           <section>
-            <h2 className="mb-2 text-sm font-semibold text-ide-text">Fit</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ide-text">{t('schedule.fit')}</h2>
             {messages.errors.length === 0 && messages.warnings.length === 0 ? (
-              <p className="text-sm text-ide-muted">Everything fits in the planning window.</p>
+              <p className="text-sm text-ide-muted">{t('schedule.everythingFits')}</p>
             ) : (
               <>
                 {messages.errors.length > 0 ? (
@@ -99,9 +101,7 @@ export function GeneratePreviewDialog({
               </>
             )}
           </section>
-          <p className="text-xs text-ide-muted">
-            Apply runs Generate from the current tasks. Cancel leaves the calendar unchanged.
-          </p>
+          <p className="text-xs text-ide-muted">{t('schedule.applyHint')}</p>
         </div>
       ) : null}
     </Modal>

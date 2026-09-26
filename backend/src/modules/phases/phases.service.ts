@@ -17,6 +17,7 @@ import {
   PHASE_PRESET_IDS,
   PhasePresetId,
 } from './lifestyle-presets';
+import { isAppLanguage, t, type AppLanguage } from '../../i18n';
 
 @Injectable()
 export class PhasesService {
@@ -43,18 +44,26 @@ export class PhasesService {
     );
   }
 
+  private phaseLanguage(settings?: UserSettings | null): AppLanguage {
+    return isAppLanguage(settings?.language) ? settings.language : 'en';
+  }
+
   private basePhaseRows(
     userId: string,
     wakeTime: string,
     sleepTime: string,
     weekDays: number[] | null,
+    language: AppLanguage = 'en',
   ) {
     return [
       {
         userId,
-        name: 'Sleep',
+        name: t(language, 'preset.sleep.name'),
         color: '#34495e',
-        description: 'Rest (from your sleep → wake settings)',
+        description:
+          language === 'uk'
+            ? 'Відпочинок (зі налаштувань сон → підйом)'
+            : 'Rest (from your sleep → wake settings)',
         startTime: sleepTime,
         endTime: wakeTime,
         type: 'sleep_time',
@@ -62,9 +71,12 @@ export class PhasesService {
       },
       {
         userId,
-        name: 'Focus hours',
+        name: t(language, 'preset.focus.name'),
         color: '#2980b9',
-        description: 'Main working window (wake → sleep from settings)',
+        description:
+          language === 'uk'
+            ? 'Основне робоче вікно (підйом → сон зі налаштувань)'
+            : 'Main working window (wake → sleep from settings)',
         startTime: wakeTime,
         endTime: sleepTime,
         type: 'main_phase',
@@ -85,11 +97,15 @@ export class PhasesService {
     const n = await this.phasesRepository.count({ where: { userId } });
     if (n > 0) return;
 
+    const settings = await this.userSettingsRepository.findOne({
+      where: { userId },
+    });
     const rows = this.basePhaseRows(
       userId,
       wakeTime,
       sleepTime,
       this.normalizeWeekDays(weekDays),
+      this.phaseLanguage(settings),
     );
     await this.phasesRepository.save(
       rows.map((row) => this.phasesRepository.create(row)),
@@ -120,6 +136,7 @@ export class PhasesService {
       presetId,
       settings.wakeTime,
       settings.sleepTime,
+      settings.language,
     );
 
     await this.phasesRepository.manager.transaction(async (manager) => {
@@ -151,7 +168,13 @@ export class PhasesService {
       }
 
       const rows = [
-        ...this.basePhaseRows(userId, settings.wakeTime, settings.sleepTime, wd),
+        ...this.basePhaseRows(
+          userId,
+          settings.wakeTime,
+          settings.sleepTime,
+          wd,
+          this.phaseLanguage(settings),
+        ),
         ...blocks.map((block) => ({
           userId,
           name: block.name,

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
+import { useTranslation } from 'react-i18next';
 import type { AppDispatch } from '../../../store';
 import { ChevronDown, Eye } from 'lucide-react';
 import { eventsApi, useLazyGetCalendarsQuery } from '../../../api/eventsApi';
@@ -14,6 +15,7 @@ import {
 } from '../calendarVisibility';
 
 export function CalendarVisibilityMenu({ compact = false }: { compact?: boolean }) {
+  const { t } = useTranslation();
   const { data: settings } = useGetUserSettingsQuery();
   const [updateSettings, { isLoading: isSaving }] = useUpdateUserSettingsMutation();
   const [loadCalendars, calendarsQuery] = useLazyGetCalendarsQuery();
@@ -70,7 +72,7 @@ export function CalendarVisibilityMenu({ compact = false }: { compact?: boolean 
       dispatch(eventsApi.util.invalidateTags(['Event']));
     } catch {
       setPendingHidden(null);
-      showErrorToast({ title: 'Could not update calendars' });
+      showErrorToast({ title: t('calendar.updateCalendarsFailed') });
     }
   };
 
@@ -85,14 +87,14 @@ export function CalendarVisibilityMenu({ compact = false }: { compact?: boolean 
         }
         aria-expanded={open}
         aria-haspopup="dialog"
-        aria-label="Calendars"
+        aria-label={t('calendar.calendars')}
         onClick={() => setOpen((value) => !value)}
       >
         {compact ? (
           <Eye className="h-4 w-4" aria-hidden />
         ) : (
           <>
-            Calendars
+            {t('calendar.calendars')}
             <ChevronDown className="h-4 w-4" aria-hidden />
           </>
         )}
@@ -100,7 +102,7 @@ export function CalendarVisibilityMenu({ compact = false }: { compact?: boolean 
       {open ? (
         <div
           role="dialog"
-          aria-label="Visible calendars"
+          aria-label={t('calendar.visibleCalendars')}
           className={
             compact
               ? 'fixed z-[1400] w-[min(20rem,calc(100vw-1rem))] rounded-lg border border-ide-border bg-ide-panel p-2'
@@ -109,11 +111,11 @@ export function CalendarVisibilityMenu({ compact = false }: { compact?: boolean 
           style={compact ? { top: panelTop, left: 8 } : undefined}
         >
           {calendarsQuery.isLoading || calendarsQuery.isUninitialized ? (
-            <p className="px-2 py-2 text-sm text-ide-muted">Loading calendars…</p>
+            <p className="px-2 py-2 text-sm text-ide-muted">{t('calendar.loadingCalendars')}</p>
           ) : calendarsQuery.isError ? (
-            <p className="px-2 py-2 text-sm text-ide-error">Could not load calendars.</p>
+            <p className="px-2 py-2 text-sm text-ide-error">{t('calendar.loadCalendarsFailed')}</p>
           ) : rows.length === 0 ? (
-            <p className="px-2 py-2 text-sm text-ide-muted">No calendars to show.</p>
+            <p className="px-2 py-2 text-sm text-ide-muted">{t('calendar.noCalendars')}</p>
           ) : (
             <>
             <ul className="max-h-72 space-y-1 overflow-y-auto">
@@ -129,15 +131,13 @@ export function CalendarVisibilityMenu({ compact = false }: { compact?: boolean 
                     />
                     <span className="min-w-0 flex-1 truncate">{row.label}</span>
                     {row.disabled ? (
-                      <span className="shrink-0 text-xs text-ide-muted">Always shown</span>
+                      <span className="shrink-0 text-xs text-ide-muted">{t('calendar.alwaysShown')}</span>
                     ) : null}
                   </label>
                 </li>
               ))}
             </ul>
-            <p className="px-2 pb-1 pt-2 text-xs text-ide-muted">
-              Hides events on this page. Generate still treats Primary and the app calendar as busy.
-            </p>
+            <p className="px-2 pb-1 pt-2 text-xs text-ide-muted">{t('calendar.calendarsHint')}</p>
             </>
           )}
         </div>

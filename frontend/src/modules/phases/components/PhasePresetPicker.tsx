@@ -1,30 +1,9 @@
 import React from 'react';
 import clsx from 'clsx';
+import { useTranslation } from 'react-i18next';
 import type { PhasePresetId } from 'api/phasesApi';
 
 export type PhasePresetChoice = PhasePresetId | 'defaults';
-
-const LIFESTYLE_OPTIONS: {
-  id: PhasePresetId;
-  title: string;
-  detail: string;
-}[] = [
-  {
-    id: 'working',
-    title: 'Working person',
-    detail: 'Deep work, meetings, then life admin before sleep.',
-  },
-  {
-    id: 'student',
-    title: 'Student / learner',
-    detail: 'Classes, study, then free time before sleep.',
-  },
-  {
-    id: 'open',
-    title: 'Open day',
-    detail: 'Morning focus, errands, personal projects, and wind down.',
-  },
-];
 
 type PhasePresetPickerProps = {
   value: PhasePresetChoice | null;
@@ -39,21 +18,45 @@ export function PhasePresetPicker({
   includeDefaults = false,
   disabled = false,
 }: PhasePresetPickerProps) {
+  const { t } = useTranslation();
+
+  const lifestyleOptions: {
+    id: PhasePresetId;
+    title: string;
+    detail: string;
+  }[] = [
+    {
+      id: 'working',
+      title: t('phases.presetWorking'),
+      detail: t('phases.presetWorkingDetail'),
+    },
+    {
+      id: 'student',
+      title: t('phases.presetStudent'),
+      detail: t('phases.presetStudentDetail'),
+    },
+    {
+      id: 'open',
+      title: t('phases.presetOpen'),
+      detail: t('phases.presetOpenDetail'),
+    },
+  ];
+
   const options: { id: PhasePresetChoice; title: string; detail: string }[] = [
     ...(includeDefaults
       ? [
           {
             id: 'defaults' as const,
-            title: 'Sleep and focus only',
-            detail: 'The usual setup: sleep overnight and a hidden focus window.',
+            title: t('phases.presetDefaults'),
+            detail: t('phases.presetDefaultsDetail'),
           },
         ]
       : []),
-    ...LIFESTYLE_OPTIONS,
+    ...lifestyleOptions,
   ];
 
   return (
-    <div role="radiogroup" aria-label="Phase preset" className="space-y-2">
+    <div role="radiogroup" aria-label={t('phases.presetAria')} className="space-y-2">
       {options.map((option) => {
         const selected = value === option.id;
         return (

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface LoginFormProps {
     requestStatus: string;
@@ -11,14 +12,15 @@ const LoginForm: React.FC<LoginFormProps> = ({
     requestStatus,
     errorMessage,
 }) => {
+    const { t } = useTranslation();
     const pending = requestStatus === 'pending';
 
     return (
         <div className="flex h-full min-h-0 flex-1 items-center justify-center px-4 py-6">
         <div className="auth-form-card my-0 w-full">
-            <h2 className="auth-form-title">Sign in</h2>
+            <h2 className="auth-form-title">{t('auth.signIn')}</h2>
             <p className="mb-6 text-sm text-ide-muted">
-                Continue with Google. Calendar access is requested once when you create an account.
+                {t('auth.signInLead')}
             </p>
             {errorMessage ? <p className="auth-form-error mb-4">{errorMessage}</p> : null}
             <button
@@ -27,7 +29,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
                 disabled={pending}
                 onClick={onGoogleSignIn}
             >
-                {pending ? 'Redirecting to Google…' : 'Continue with Google'}
+                {pending ? t('auth.redirecting') : t('auth.continueGoogle')}
             </button>
         </div>
         </div>

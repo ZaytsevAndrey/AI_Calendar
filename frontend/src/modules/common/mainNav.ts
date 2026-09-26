@@ -9,7 +9,7 @@ import {
 
 export type MainNavItem = {
     to: string;
-    label: string;
+    labelKey: string;
     icon: LucideIcon;
     match: (path: string) => boolean;
 };
@@ -17,36 +17,37 @@ export type MainNavItem = {
 export const mainNavItems: readonly MainNavItem[] = [
     {
         to: '/',
-        label: 'Calendar',
+        labelKey: 'nav.calendar',
         icon: CalendarDays,
         match: (path) => path === '/' || path === '/calendar',
     },
     {
         to: '/tasks',
-        label: 'Tasks',
+        labelKey: 'nav.tasks',
         icon: ListTodo,
         match: (path) => path === '/tasks' || path === '/events',
     },
     {
         to: '/phases',
-        label: 'Phases',
+        labelKey: 'nav.phases',
         icon: Layers,
         match: (path) => path === '/phases' || path.startsWith('/setup'),
     },
     {
         to: '/habits',
-        label: 'Habits',
+        labelKey: 'nav.habits',
         icon: Flame,
         match: (path) => path === '/habits',
     },
     {
         to: '/settings',
-        label: 'Settings',
+        labelKey: 'nav.settings',
         icon: Settings,
         match: (path) => path === '/settings',
     },
 ];
 
+/** Returns a nav.* translation key for the current route. */
 export function mainNavLabel(pathname: string): string {
-    return mainNavItems.find((item) => item.match(pathname))?.label ?? 'AI Calendar';
+    return mainNavItems.find((item) => item.match(pathname))?.labelKey ?? 'nav.brand';
 }

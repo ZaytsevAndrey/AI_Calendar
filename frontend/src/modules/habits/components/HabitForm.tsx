@@ -1,41 +1,18 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useTranslation } from 'react-i18next';
 import type { CreateHabitDTO, HabitDTO, UpdateHabitDTO } from 'api/habits.api';
 
-const habitSchema = z
-  .object({
-    name: z.string().trim().min(1, 'Name is required').max(80, 'Keep it under 80 characters'),
-    color: z.string().regex(/^#([A-Fa-f0-9]{6})$/, 'Use a hex color like #22c55e'),
-    description: z.string().max(500, 'Keep it under 500 characters').optional(),
-    reserveBlock: z.boolean(),
-    blockStartTime: z.string(),
-    blockMinutes: z.coerce.number(),
-  })
-  .superRefine((value, ctx) => {
-    if (!value.reserveBlock) return;
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value.blockStartTime)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['blockStartTime'],
-        message: 'Use a time like 07:30',
-      });
-    }
-    if (
-      !Number.isInteger(value.blockMinutes) ||
-      value.blockMinutes < 5 ||
-      value.blockMinutes > 240
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['blockMinutes'],
-        message: 'Use 5–240 minutes',
-      });
-    }
-  });
-
-type HabitFormData = z.infer<typeof habitSchema>;
+type HabitFormData = {
+  name: string;
+  color: string;
+  description?: string;
+  reserveBlock: boolean;
+  blockStartTime: string;
+  blockMinutes: number;
+};
 
 type HabitFormProps = {
   initialData?: HabitDTO | null;
@@ -58,6 +35,47 @@ const HabitForm: React.FC<HabitFormProps> = ({
   onDelete,
   isDeleting = false,
 }) => {
+  const { t } = useTranslation();
+
+  const habitSchema = useMemo(
+    () =>
+      z
+        .object({
+          name: z
+            .string()
+            .trim()
+            .min(1, t('habits.nameRequired'))
+            .max(80, t('habits.nameMax')),
+          color: z.string().regex(/^#([A-Fa-f0-9]{6})$/, t('habits.colorInvalid')),
+          description: z.string().max(500, t('habits.descriptionMax')).optional(),
+          reserveBlock: z.boolean(),
+          blockStartTime: z.string(),
+          blockMinutes: z.coerce.number(),
+        })
+        .superRefine((value, ctx) => {
+          if (!value.reserveBlock) return;
+          if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value.blockStartTime)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['blockStartTime'],
+              message: t('habits.timeFormat'),
+            });
+          }
+          if (
+            !Number.isInteger(value.blockMinutes) ||
+            value.blockMinutes < 5 ||
+            value.blockMinutes > 240
+          ) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['blockMinutes'],
+              message: t('habits.minutesRange'),
+            });
+          }
+        }),
+    [t],
+  );
+
   const {
     register,
     handleSubmit,
@@ -80,27 +98,27 @@ const HabitForm: React.FC<HabitFormProps> = ({
   const reserveBlock = watch('reserveBlock');
 
   return (
-        <form
-          onSubmit={handleSubmit((values) =>
-            onSubmit({
-              name: values.name,
-              color: values.color,
-              description: values.description,
-              blockStartTime: values.reserveBlock ? values.blockStartTime : null,
-              blockMinutes: values.reserveBlock ? values.blockMinutes : null,
-            }),
-          )}
-          className="space-y-1"
-        >
+    <form
+      onSubmit={handleSubmit((values) =>
+        onSubmit({
+          name: values.name,
+          color: values.color,
+          description: values.description,
+          blockStartTime: values.reserveBlock ? values.blockStartTime : null,
+          blockMinutes: values.reserveBlock ? values.blockMinutes : null,
+        }),
+      )}
+      className="space-y-1"
+    >
       <div className="ui-field">
         <label htmlFor="habit-name" className="ui-label">
-          Name
+          {t('habits.name')}
         </label>
         <input
           id="habit-name"
           {...register('name')}
           className={`ui-input ${errors.name ? 'ui-input-error' : ''}`}
-          placeholder="Exercise, No smoking…"
+          placeholder={t('habits.namePlaceholder')}
           autoFocus
         />
         {errors.name ? <span className="ui-error">{errors.name.message}</span> : null}
@@ -108,7 +126,7 @@ const HabitForm: React.FC<HabitFormProps> = ({
 
       <div className="ui-field">
         <label htmlFor="habit-color" className="ui-label">
-          Color
+          {t('habits.color')}
         </label>
         <div className="flex items-center gap-3">
           <input
@@ -121,7 +139,7 @@ const HabitForm: React.FC<HabitFormProps> = ({
             className="h-11 w-14 cursor-pointer rounded-lg border border-ide-border bg-ide-surface p-1"
           />
           <input
-            aria-label="Hex color"
+            aria-label={t('habits.hexColor')}
             {...register('color')}
             className={`ui-input ${errors.color ? 'ui-input-error' : ''}`}
           />
@@ -131,7 +149,7 @@ const HabitForm: React.FC<HabitFormProps> = ({
 
       <div className="ui-field">
         <label htmlFor="habit-description" className="ui-label">
-          Description (optional)
+          {t('habits.description')}
         </label>
         <textarea
           id="habit-description"
@@ -142,21 +160,21 @@ const HabitForm: React.FC<HabitFormProps> = ({
         {errors.description ? (
           <span className="ui-error">{errors.description.message}</span>
         ) : (
-          <p className="ui-hint">Tap = a successful day. The name carries the meaning.</p>
+          <p className="ui-hint">{t('habits.descriptionHint')}</p>
         )}
       </div>
 
       <div className="ui-field">
         <label className="flex items-center gap-2 text-sm text-ide-text">
           <input type="checkbox" {...register('reserveBlock')} className="h-4 w-4" />
-          Reserve a daily time block
+          {t('habits.reserveBlock')}
         </label>
         {reserveBlock ? (
           <>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <div>
                 <label htmlFor="habit-block-start" className="ui-label">
-                  Starts
+                  {t('habits.starts')}
                 </label>
                 <input
                   id="habit-block-start"
@@ -170,7 +188,7 @@ const HabitForm: React.FC<HabitFormProps> = ({
               </div>
               <div>
                 <label htmlFor="habit-block-minutes" className="ui-label">
-                  Minutes
+                  {t('habits.minutes')}
                 </label>
                 <input
                   id="habit-block-minutes"
@@ -186,10 +204,7 @@ const HabitForm: React.FC<HabitFormProps> = ({
                 ) : null}
               </div>
             </div>
-            <p className="ui-hint">
-              Generate will not place tasks on top of this time. When Google Calendar is connected,
-              the same block is added there every day.
-            </p>
+            <p className="ui-hint">{t('habits.reserveHint')}</p>
           </>
         ) : null}
       </div>
@@ -202,14 +217,18 @@ const HabitForm: React.FC<HabitFormProps> = ({
             disabled={isDeleting || isSubmitting}
             className="ui-btn-danger sm:mr-auto"
           >
-            {isDeleting ? 'Deleting…' : 'Delete'}
+            {isDeleting ? t('common.deleting') : t('common.delete')}
           </button>
         ) : null}
         <button type="button" onClick={onCancel} className="ui-btn-secondary">
-          Cancel
+          {t('common.cancel')}
         </button>
         <button type="submit" disabled={isSubmitting} className="ui-btn-primary">
-          {isSubmitting ? 'Saving…' : initialData ? 'Save' : 'Create habit'}
+          {isSubmitting
+            ? t('common.saving')
+            : initialData
+              ? t('common.save')
+              : t('habits.createHabit')}
         </button>
       </div>
     </form>

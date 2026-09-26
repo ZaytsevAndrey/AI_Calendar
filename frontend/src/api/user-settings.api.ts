@@ -22,6 +22,7 @@ export interface UserSettingsDTO {
   maxSplitMinutes: number;
   recurringScheduleHorizonDays: number;
   timeZone?: string | null;
+  language?: string;
   remindersEnabled?: boolean;
   /** When true, voice complete / skip / move asks before writing. */
   confirmVoiceCommands?: boolean;
@@ -50,6 +51,7 @@ export interface UpdateUserSettingsDTO {
   maxSplitMinutes?: number;
   recurringScheduleHorizonDays?: number;
   timeZone?: string;
+  language?: string;
   remindersEnabled?: boolean;
   confirmVoiceCommands?: boolean;
 }

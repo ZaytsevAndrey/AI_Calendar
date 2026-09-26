@@ -100,6 +100,10 @@ export class UserSettings {
   @Column({ default: false })
   confirmVoiceCommands: boolean;
 
+  /** UI and notification language (`en` | `uk`). */
+  @Column({ type: 'varchar', length: 8, default: 'en' })
+  language: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

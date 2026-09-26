@@ -1,3 +1,4 @@
+import i18n from 'i18n';
 import type { TaskFormValues } from './schema';
 
 export type TaskPresetId = 'flexible' | 'fixed' | 'recurring' | 'unscheduled';
@@ -11,32 +12,68 @@ export type TaskPreset = {
 export const TASK_PRESETS: TaskPreset[] = [
   {
     id: 'flexible',
-    label: 'Flexible',
-    hint: 'Planner picks a slot. You can still set a preferred start.',
+    get label() {
+      return i18n.t('tasks.preset.flexible');
+    },
+    get hint() {
+      return i18n.t('tasks.preset.flexibleHint');
+    },
   },
   {
     id: 'fixed',
-    label: 'Fixed',
-    hint: 'Exact start and end; planner will not move it.',
+    get label() {
+      return i18n.t('tasks.preset.fixed');
+    },
+    get hint() {
+      return i18n.t('tasks.preset.fixedHint');
+    },
   },
   {
     id: 'recurring',
-    label: 'Recurring',
-    hint: 'Repeats on a pattern. Planner may move occurrences.',
+    get label() {
+      return i18n.t('tasks.preset.recurring');
+    },
+    get hint() {
+      return i18n.t('tasks.preset.recurringHint');
+    },
   },
   {
     id: 'unscheduled',
-    label: 'Unscheduled',
-    hint: 'A to-do with no calendar slot until you schedule it.',
+    get label() {
+      return i18n.t('tasks.preset.unscheduled');
+    },
+    get hint() {
+      return i18n.t('tasks.preset.unscheduledHint');
+    },
   },
 ];
 
 export const PRIORITY_OPTIONS = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'urgent', label: 'Urgent' },
-] as const;
+  {
+    value: 'low' as const,
+    get label() {
+      return i18n.t('tasks.priority.low');
+    },
+  },
+  {
+    value: 'medium' as const,
+    get label() {
+      return i18n.t('tasks.priority.medium');
+    },
+  },
+  {
+    value: 'high' as const,
+    get label() {
+      return i18n.t('tasks.priority.high');
+    },
+  },
+  {
+    value: 'urgent' as const,
+    get label() {
+      return i18n.t('tasks.priority.urgent');
+    },
+  },
+];
 
 const FLEXIBLE_DEFAULTS: Pick<
   TaskFormValues,
@@ -58,21 +95,76 @@ const FLEXIBLE_DEFAULTS: Pick<
 };
 
 export const RECURRENCE_PATTERN_OPTIONS = [
-  { value: 'DAILY', label: 'Daily' },
-  { value: 'WEEKLY', label: 'Weekly' },
-  { value: 'BIWEEKLY', label: 'Bi-weekly' },
-  { value: 'MONTHLY', label: 'Monthly' },
-] as const;
+  {
+    value: 'DAILY' as const,
+    get label() {
+      return i18n.t('tasks.recurrence.daily');
+    },
+  },
+  {
+    value: 'WEEKLY' as const,
+    get label() {
+      return i18n.t('tasks.recurrence.weekly');
+    },
+  },
+  {
+    value: 'BIWEEKLY' as const,
+    get label() {
+      return i18n.t('tasks.recurrence.biweekly');
+    },
+  },
+  {
+    value: 'MONTHLY' as const,
+    get label() {
+      return i18n.t('tasks.recurrence.monthly');
+    },
+  },
+];
 
 export const WEEKDAY_OPTIONS = [
-  { value: 1, label: 'Mon' },
-  { value: 2, label: 'Tue' },
-  { value: 3, label: 'Wed' },
-  { value: 4, label: 'Thu' },
-  { value: 5, label: 'Fri' },
-  { value: 6, label: 'Sat' },
-  { value: 0, label: 'Sun' },
-] as const;
+  {
+    value: 1 as const,
+    get label() {
+      return i18n.t('tasks.weekday.mon');
+    },
+  },
+  {
+    value: 2 as const,
+    get label() {
+      return i18n.t('tasks.weekday.tue');
+    },
+  },
+  {
+    value: 3 as const,
+    get label() {
+      return i18n.t('tasks.weekday.wed');
+    },
+  },
+  {
+    value: 4 as const,
+    get label() {
+      return i18n.t('tasks.weekday.thu');
+    },
+  },
+  {
+    value: 5 as const,
+    get label() {
+      return i18n.t('tasks.weekday.fri');
+    },
+  },
+  {
+    value: 6 as const,
+    get label() {
+      return i18n.t('tasks.weekday.sat');
+    },
+  },
+  {
+    value: 0 as const,
+    get label() {
+      return i18n.t('tasks.weekday.sun');
+    },
+  },
+];
 
 export function presetPatch(id: TaskPresetId): Partial<TaskFormValues> {
   if (id === 'unscheduled') {

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 import { getEventColor } from '../hooks/useCalendar';
 import { useTimePhases, useTimePhasesForDate, getPhaseByTime } from '../../phases/hooks/usePhases';
@@ -60,6 +61,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     phoneMonth = false,
     onPickDay,
 }) => {
+    const { t, i18n } = useTranslation();
     const { data: timePhases = [] } = useTimePhasesForDate(date);
     const { data: allTimePhases = [] } = useTimePhases();
     const { data: userSettings } = useGetUserSettingsQuery();
@@ -110,17 +112,28 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
         <HabitDayDialog date={habitDate} onClose={() => setHabitDate(null)} />
     );
 
+    const weekdayKeys = [
+        'calendar.weekdayMon',
+        'calendar.weekdayTue',
+        'calendar.weekdayWed',
+        'calendar.weekdayThu',
+        'calendar.weekdayFri',
+        'calendar.weekdaySat',
+        'calendar.weekdaySun',
+    ] as const;
+    const dateLocale = i18n.language === 'uk' ? 'uk-UA' : 'en-GB';
+
     if (view === 'month' && phoneMonth) {
         return (
             <>
                 <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-lg border border-ide-border bg-ide-panel">
                     <div className="grid shrink-0 grid-cols-7 border-b border-ide-border">
-                        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((dayName) => (
+                        {weekdayKeys.map((key) => (
                             <div
-                                key={dayName}
+                                key={key}
                                 className="py-2 text-center text-[11px] font-medium text-ide-muted"
                             >
-                                {dayName.slice(0, 1)}
+                                {t(key).slice(0, 1)}
                             </div>
                         ))}
                     </div>
@@ -136,7 +149,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                 habitBlocks.some((block) => block.ymd === ymd);
                             const isCurrentDay = isToday(day);
                             const isInCurrentMonth = isCurrentMonth(day);
-                            const label = day.toLocaleDateString('en-GB', {
+                            const label = day.toLocaleDateString(dateLocale, {
                                 weekday: 'long',
                                 day: 'numeric',
                                 month: 'long',
@@ -145,7 +158,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                 <button
                                     key={ymd}
                                     type="button"
-                                    aria-label={`Show ${label}`}
+                                    aria-label={t('calendar.showDay', { label })}
                                     className={`flex min-h-[44px] flex-col items-center justify-center border-b border-r border-ide-border text-sm ${
                                         !isInCurrentMonth ? 'opacity-50' : ''
                                     } ${
@@ -302,7 +315,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                 {view === 'day' ? <HabitDaySection date={ymdFromLocalDate(days[0])} /> : null}
                 {onEventTimeChange ? (
                     <p className="mb-2 hidden shrink-0 text-xs text-ide-muted md:block">
-                        Drag a block or its top/bottom edge. Step: 15 min. Click the center to edit.
+                        {t('calendar.dragHint')}
                     </p>
                 ) : null}
                 <CalendarTimeGrid
@@ -370,9 +383,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
             )}
 
             <div className="mb-1 grid shrink-0 grid-cols-7 border-b border-ide-border">
-                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((dayName) => (
-                    <div key={dayName} className="border-r border-ide-border bg-ide-surface last:border-r-0">
-                        <div className="p-2 text-center text-xs font-bold text-ide-text">{dayName}</div>
+                {weekdayKeys.map((key) => (
+                    <div key={key} className="border-r border-ide-border bg-ide-surface last:border-r-0">
+                        <div className="p-2 text-center text-xs font-bold text-ide-text">{t(key)}</div>
                     </div>
                 ))}
             </div>

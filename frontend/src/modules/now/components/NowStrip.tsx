@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useGetEventsQuery } from 'api/eventsApi';
 import { useGetEventsQuery as useGetTasksQuery, useSkipOccurrenceMutation, useUpdateEventMutation } from 'api/eventTasksApi';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
@@ -7,6 +8,7 @@ import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { localHm } from 'utils/ianaDateTime';
 import { showErrorToast, showSuccessToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
+import i18n from 'i18n';
 import {
   buildNowBlocks,
   canCompleteNowBlock,
@@ -29,7 +31,7 @@ function useNowMs(intervalMs = 30_000): number {
 }
 
 function formatRange(block: NowBlock, timeZone: string): string {
-  if (block.allDay) return 'All day';
+  if (block.allDay) return i18n.t('common.allDay');
   const start = localHm(new Date(block.startMs).toISOString(), timeZone);
   const end = localHm(new Date(block.endMs).toISOString(), timeZone);
   return `${start}–${end}`;
@@ -52,6 +54,7 @@ function BlockRow({
   onSkip: (block: NowBlock) => void;
   busyId: string | null;
 }) {
+  const { t } = useTranslation();
   const showDone = !!(block && canCompleteNowBlock(block) && block.task);
   const showSkip = !!(block && canSkipNowBlock(block) && block.task);
   return (
@@ -72,7 +75,7 @@ function BlockRow({
                   disabled={busyId === block.task.id}
                   onClick={() => onSkip(block)}
                 >
-                  Skip
+                  {t('common.skip')}
                 </button>
               ) : null}
               {showDone && block.task ? (
@@ -82,7 +85,7 @@ function BlockRow({
                   disabled={busyId === block.task.id}
                   onClick={() => onDone(block.task!)}
                 >
-                  Done
+                  {t('common.done')}
                 </button>
               ) : null}
             </div>
@@ -96,6 +99,7 @@ function BlockRow({
 }
 
 export function NowStrip() {
+  const { t } = useTranslation();
   const nowMs = useNowMs();
   const { data: settings } = useGetUserSettingsQuery();
   const timeZone = resolveIanaTimeZone(settings?.timeZone);
@@ -143,10 +147,10 @@ export function NowStrip() {
     setBusyId(task.id);
     try {
       await updateTask({ id: task.id, body: { status: 'completed' } }).unwrap();
-      showSuccessToast({ title: 'Task completed', detail: task.name });
+      showSuccessToast({ title: t('tasks.completed'), detail: task.name });
     } catch (err) {
       showErrorToast({
-        title: 'Could not complete task',
+        title: t('tasks.completeFailed'),
         detail: extractApiErrorMessage(err),
       });
     } finally {
@@ -167,10 +171,10 @@ export function NowStrip() {
           googleEventCalendarId: block.event?.calendarId,
         },
       }).unwrap();
-      showSuccessToast({ title: 'Occurrence skipped', detail: task.name });
+      showSuccessToast({ title: t('now.occurrenceSkipped'), detail: task.name });
     } catch (err) {
       showErrorToast({
-        title: 'Could not skip occurrence',
+        title: t('now.skipFailed'),
         detail: extractApiErrorMessage(err),
       });
     } finally {
@@ -181,7 +185,7 @@ export function NowStrip() {
   const emptyClock = !now && !next && inbox.length === 0;
   const nowSummary = now
     ? `${now.title} · ${formatRange(now, ctx.timeZone)}`
-    : 'Nothing in progress';
+    : t('now.nothingInProgress');
 
   return (
     <section className="space-y-3 rounded-lg border border-ide-border bg-ide-panel p-3 max-md:space-y-2 max-md:p-2">
@@ -192,7 +196,9 @@ export function NowStrip() {
           aria-expanded={expanded}
           onClick={() => setExpanded((open) => !open)}
         >
-          <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-ide-muted">Now</span>
+          <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-ide-muted">
+            {t('now.label')}
+          </span>
           <span className="min-w-0 flex-1 truncate text-sm text-ide-text">{nowSummary}</span>
         </button>
       ) : null}
@@ -200,25 +206,27 @@ export function NowStrip() {
         <>
       <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
         <BlockRow
-          label="Now"
+          label={t('now.label')}
           block={now}
           timeZone={ctx.timeZone}
-          empty="Nothing in progress"
+          empty={t('now.nothingInProgress')}
           onDone={markDone}
           onSkip={markSkip}
           busyId={busyId}
         />
         <BlockRow
-          label="Next"
+          label={t('now.next')}
           block={next}
           timeZone={ctx.timeZone}
-          empty="Nothing else today"
+          empty={t('now.nothingElseToday')}
           onDone={markDone}
           onSkip={markSkip}
           busyId={busyId}
         />
         <div className="min-w-0 rounded-md border border-ide-border bg-ide-surface px-3 py-2.5">
-          <p className="text-xs font-medium uppercase tracking-wide text-ide-muted">Unscheduled</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-ide-muted">
+            {t('now.unscheduled')}
+          </p>
           {inbox.length ? (
             <ul className="mt-1 space-y-1.5">
               {inbox.map((task) => (
@@ -231,22 +239,19 @@ export function NowStrip() {
                       disabled={busyId === task.id}
                       onClick={() => void markDone(task)}
                     >
-                      Done
+                      {t('common.done')}
                     </button>
                   )}
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="mt-1 text-sm text-ide-muted">No inbox items for today</p>
+            <p className="mt-1 text-sm text-ide-muted">{t('now.noInbox')}</p>
           )}
         </div>
       </div>
       {emptyClock ? (
-        <p className="text-xs text-ide-muted">
-          Nothing on the clock.{' '}
-          <span>Generate a schedule or add a task.</span>
-        </p>
+        <p className="text-xs text-ide-muted">{t('now.emptyClock')}</p>
       ) : null}
       {phone ? null : <HabitNowStrip />}
         </>

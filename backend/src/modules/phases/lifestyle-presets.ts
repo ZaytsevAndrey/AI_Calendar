@@ -1,5 +1,7 @@
 /** Ready-made day phases, sized from the user's wake and sleep clocks. */
 
+import { isAppLanguage, t, type AppLanguage, type MessageKey } from '../../i18n';
+
 export const PHASE_PRESET_IDS = ['working', 'student', 'open'] as const;
 
 export type PhasePresetId = (typeof PHASE_PRESET_IDS)[number];
@@ -15,9 +17,9 @@ export interface LifestylePhaseBlock {
 const MIN_BLOCK_MINUTES = 30;
 
 type BlockSpec = {
-  name: string;
+  nameKey: MessageKey;
+  descriptionKey: MessageKey;
   color: string;
-  description: string;
 } & (
   | { place: 'afterWake'; offsetMin: number; durationMin: number }
   | { place: 'beforeSleep'; durationMin: number }
@@ -28,82 +30,82 @@ const PRESETS: Record<PhasePresetId, BlockSpec[]> = {
   working: [
     {
       place: 'afterWake',
-      name: 'Deep work',
+      nameKey: 'preset.working.deepWork.name',
+      descriptionKey: 'preset.working.deepWork.description',
       color: '#1d4ed8',
-      description: 'Focused work at the start of the day',
       offsetMin: 0,
       durationMin: 180,
     },
     {
       place: 'afterWake',
-      name: 'Meetings',
+      nameKey: 'preset.working.meetings.name',
+      descriptionKey: 'preset.working.meetings.description',
       color: '#7c3aed',
-      description: 'Calls and collaboration',
       offsetMin: 180,
       durationMin: 180,
     },
     {
       place: 'beforeSleep',
-      name: 'Life admin',
+      nameKey: 'preset.working.lifeAdmin.name',
+      descriptionKey: 'preset.working.lifeAdmin.description',
       color: '#0f766e',
-      description: 'Errands and admin before sleep',
       durationMin: 120,
     },
   ],
   student: [
     {
       place: 'afterWake',
-      name: 'Classes',
+      nameKey: 'preset.student.classes.name',
+      descriptionKey: 'preset.student.classes.description',
       color: '#1d4ed8',
-      description: 'Classes and lectures',
       offsetMin: 0,
       durationMin: 240,
     },
     {
       place: 'afterWake',
-      name: 'Study',
+      nameKey: 'preset.student.study.name',
+      descriptionKey: 'preset.student.study.description',
       color: '#15803d',
-      description: 'Focused study',
       offsetMin: 240,
       durationMin: 180,
     },
     {
       place: 'beforeSleep',
-      name: 'Free time',
+      nameKey: 'preset.student.freeTime.name',
+      descriptionKey: 'preset.student.freeTime.description',
       color: '#c2410c',
-      description: 'Unstructured time before sleep',
       durationMin: 120,
     },
   ],
   open: [
     {
       place: 'afterWake',
-      name: 'Morning focus',
+      nameKey: 'preset.open.morningFocus.name',
+      descriptionKey: 'preset.open.morningFocus.description',
       color: '#1d4ed8',
-      description: 'Deep work at the start of the day',
       offsetMin: 0,
       durationMin: 180,
     },
     {
       place: 'afterWake',
-      name: 'Errands',
+      nameKey: 'preset.open.errands.name',
+      descriptionKey: 'preset.open.errands.description',
       color: '#c2410c',
-      description: 'Errands after morning focus',
       offsetMin: 180,
       durationMin: 120,
     },
     {
       place: 'beforeSleep',
-      name: 'Wind down',
+      nameKey: 'preset.open.windDown.name',
+      descriptionKey: 'preset.open.windDown.description',
       color: '#0f766e',
-      description: 'Quiet time before sleep',
       durationMin: 120,
     },
     {
       place: 'fill',
-      name: 'Personal projects',
+      nameKey: 'preset.open.personalProjects.name',
+      descriptionKey: 'preset.open.personalProjects.description',
       color: '#7c3aed',
-      description: 'Project time between errands and wind down',
     },
   ],
 };
@@ -145,7 +147,9 @@ export function buildLifestylePresetBlocks(
   presetId: PhasePresetId,
   wakeTime: string,
   sleepTime: string,
+  language: string = 'en',
 ): LifestylePhaseBlock[] {
+  const lang: AppLanguage = isAppLanguage(language) ? language : 'en';
   const { wakeMin, duration } = awakeDurationMinutes(wakeTime, sleepTime);
   const specs = PRESETS[presetId];
   const placed: { start: number; end: number; place: BlockSpec['place'] }[] = [];
@@ -155,9 +159,9 @@ export function buildLifestylePresetBlocks(
     if (end - start < MIN_BLOCK_MINUTES) return;
     placed.push({ start, end, place: spec.place });
     blocks.push({
-      name: spec.name,
+      name: t(lang, spec.nameKey),
       color: spec.color,
-      description: spec.description,
+      description: t(lang, spec.descriptionKey),
       startTime: formatClock(wakeMin + start),
       endTime: formatClock(wakeMin + end),
     });

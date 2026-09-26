@@ -1,5 +1,10 @@
+import i18n from 'i18n';
 import { describeScheduleMove, previewMessages } from './generatePreview';
 import { ScheduleJobResultPayload } from '../../api/schedule.api';
+
+beforeAll(async () => {
+  await i18n.changeLanguage('en');
+});
 
 describe('describeScheduleMove', () => {
   const slot = {

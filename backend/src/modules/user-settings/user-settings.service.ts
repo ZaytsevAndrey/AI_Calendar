@@ -66,6 +66,9 @@ export class UserSettingsService {
       ) {
         userSettings.confirmVoiceCommands = false;
       }
+      if (!userSettings.language) {
+        userSettings.language = defaults.language;
+      }
 
       // Save updated settings if any defaults were applied
       await this.userSettingsRepository.save(userSettings);
@@ -142,27 +145,15 @@ export class UserSettingsService {
       appGoogleCalendarName: 'AI Calendar Assistant',
       remindersEnabled: false,
       confirmVoiceCommands: false,
+      language: 'en',
     };
   }
 
   private async createDefaultSettings(userId: string): Promise<UserSettings> {
+    const defaults = this.getDefaultSettings();
     const defaultSettings = this.userSettingsRepository.create({
       userId,
-      wakeTime: '07:00',
-      sleepTime: '22:00',
-      defaultWorkBlockDuration: 25,
-      defaultBreakDuration: 5,
-      defaultLunchDuration: 60,
-      preferredLunchTime: '12:00',
-      weekendWorkEnabled: false,
-      allowSplitScheduling: true,
-      fixedEventBufferMinutes: 0,
-      minSplitMinutes: 30,
-      maxSplitMinutes: 30,
-      recurringScheduleHorizonDays: 30,
-      appGoogleCalendarName: 'AI Calendar Assistant',
-      remindersEnabled: false,
-      confirmVoiceCommands: false,
+      ...defaults,
     });
 
     return this.userSettingsRepository.save(defaultSettings);

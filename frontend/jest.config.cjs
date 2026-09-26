@@ -4,7 +4,8 @@ module.exports = {
   maxWorkers: 1,
   roots: ['<rootDir>/src'],
   testMatch: ['**/*.spec.ts'],
-  moduleFileExtensions: ['ts', 'tsx', 'js'],
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'json'],
+  moduleDirectories: ['node_modules', '<rootDir>/src'],
   transform: {
     '^.+\\.tsx?$': [
       'ts-jest',
@@ -13,6 +14,7 @@ module.exports = {
           module: 'commonjs',
           jsx: 'react-jsx',
           esModuleInterop: true,
+          resolveJsonModule: true,
           strict: true,
         },
       },

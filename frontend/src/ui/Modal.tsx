@@ -1,5 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 
 export type ModalProps = {
     open: boolean;
@@ -18,6 +19,8 @@ export const Modal: React.FC<ModalProps> = ({
     footer,
     maxWidthClass = 'max-w-lg',
 }) => {
+    const { t } = useTranslation();
+
     if (!open) {
         return null;
     }
@@ -31,7 +34,7 @@ export const Modal: React.FC<ModalProps> = ({
             <button
                 type="button"
                 className="absolute inset-0 bg-black/60"
-                aria-label="Close modal"
+                aria-label={t('common.closeModal')}
                 onClick={onClose}
             />
             <div

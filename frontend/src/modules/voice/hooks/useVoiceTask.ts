@@ -4,6 +4,7 @@ import { useSkipOccurrenceMutation, useUpdateEventMutation } from 'api/eventTask
 import { VoiceApi, type VoiceCommandAction, type VoiceParsedTask } from 'api/voice.api';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
+import i18n from 'i18n';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 import { executeVoiceCommand } from '../executeVoiceCommand';
 import { useAudioRecorder } from './useAudioRecorder';
@@ -36,7 +37,7 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
   const [transcript, setTranscript] = useState('');
   const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busyLabel, setBusyLabel] = useState('Working…');
+  const [busyLabel, setBusyLabel] = useState(() => i18n.t('voice.working'));
   const [pendingCommand, setPendingCommand] = useState<VoiceCommandAction | null>(null);
 
   const reset = useCallback(() => {
@@ -60,7 +61,7 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
 
   const runCommand = useCallback(
     async (command: VoiceCommandAction) => {
-      setBusyLabel('Saving…');
+      setBusyLabel(i18n.t('voice.saving'));
       setStage('working');
       try {
         await executeVoiceCommand(command, { updateTask, skipOccurrence, dispatch });
@@ -75,7 +76,7 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
 
   const parseAndRoute = useCallback(
     async (text: string, clarification?: { previous: string; answer: string }) => {
-      setBusyLabel('Understanding…');
+      setBusyLabel(i18n.t('voice.understanding'));
       setStage('working');
       const result = await VoiceApi.parseTask({
         transcript: clarification?.answer ?? text,
@@ -101,13 +102,13 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
       }
 
       if (result.understanding === 'needs_clarification') {
-        setClarifyingQuestion(result.clarifyingQuestion || 'Could you add a bit more detail?');
+        setClarifyingQuestion(result.clarifyingQuestion || i18n.t('voice.clarifyMore'));
         setStage('clarifying');
         return;
       }
 
       if (!result.task?.name) {
-        setClarifyingQuestion('What should I call this task?');
+        setClarifyingQuestion(i18n.t('voice.askName'));
         setStage('clarifying');
         return;
       }
@@ -133,11 +134,11 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
       const name = (err as { name?: string })?.name;
       const message = err instanceof Error ? err.message : '';
       if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-        setError('Microphone permission is required. Allow it in the browser, then try again.');
+        setError(i18n.t('voice.micPermission'));
       } else if (message === 'unsupported') {
-        setError('This browser cannot record audio. Try Chrome on Android, or Safari 14.3+.');
+        setError(i18n.t('voice.micUnsupported'));
       } else {
-        setError('Could not start the microphone.');
+        setError(i18n.t('voice.micFailed'));
       }
       setStage('error');
     }
@@ -147,7 +148,7 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
     const previousTranscript = transcript;
     const answering = Boolean(clarifyingQuestion);
     try {
-      setBusyLabel('Transcribing…');
+      setBusyLabel(i18n.t('voice.transcribing'));
       setStage('working');
       const { base64, mimeType } = await stop();
       const { transcript: spoken } = await VoiceApi.transcribe(base64, mimeType);

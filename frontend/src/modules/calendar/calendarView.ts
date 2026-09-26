@@ -1,12 +1,17 @@
 import { format } from 'date-fns';
-import { enGB } from 'date-fns/locale';
+import { enGB, uk } from 'date-fns/locale';
+import i18n from 'i18n';
 import { GoogleCalendarEvent } from '../../api/google-calendar.api';
 import {
   minutesToTime,
   resolveActiveWindow,
   resolvePhaseRangeInActiveWindow,
 } from '../phases/utils/phasesTimeUtils';
-import { formatClock, formatLongDate, formatMonthYear, formatWeekRange } from '../../utils/formatDate';
+import { formatClock } from '../../utils/formatDate';
+
+function dateFnsLocale() {
+  return i18n.language === 'uk' ? uk : enGB;
+}
 
 export type CalendarView = 'day' | 'week' | 'month';
 
@@ -499,7 +504,7 @@ export function eventsVisibleInView(
 }
 
 export function chipLabel(event: GoogleCalendarEvent): string {
-  const title = event.summary || 'Event';
+  const title = event.summary || i18n.t('calendar.event');
   if (!event.start.dateTime) return title;
   const start = new Date(event.start.dateTime);
   if (Number.isNaN(start.getTime())) return title;
@@ -525,13 +530,14 @@ export function formatEventTime(event: GoogleCalendarEvent): string {
     }
     return startTime;
   }
-  return event.start.date || 'All day';
+  return event.start.date || i18n.t('common.allDay');
 }
 
 export function formatEventListDate(event: GoogleCalendarEvent): string {
   const start = eventStartDate(event);
-  if (!start) return 'Time not set';
-  return start.toLocaleDateString('en-GB', {
+  if (!start) return i18n.t('calendar.timeNotSet');
+  const locale = i18n.language === 'uk' ? 'uk-UA' : 'en-GB';
+  return start.toLocaleDateString(locale, {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -540,24 +546,25 @@ export function formatEventListDate(event: GoogleCalendarEvent): string {
 }
 
 export function formatEventListTime(event: GoogleCalendarEvent): string {
-  if (isAllDayEvent(event)) return 'All day';
+  if (isAllDayEvent(event)) return i18n.t('common.allDay');
   const start = eventStartDate(event);
   const end = eventEndDate(event);
-  if (!start) return 'Time not set';
+  if (!start) return i18n.t('calendar.timeNotSet');
+  const locale = i18n.language === 'uk' ? 'uk-UA' : 'en-GB';
   const timeOpts: Intl.DateTimeFormatOptions = {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
   };
-  const startLabel = start.toLocaleTimeString('en-GB', timeOpts);
+  const startLabel = start.toLocaleTimeString(locale, timeOpts);
   if (!end) return startLabel;
-  return `${startLabel} – ${end.toLocaleTimeString('en-GB', timeOpts)}`;
+  return `${startLabel} – ${end.toLocaleTimeString(locale, timeOpts)}`;
 }
 
 export function tooltipText(event: GoogleCalendarEvent): string {
-  const parts = [event.summary || 'Event', formatEventTime(event)];
+  const parts = [event.summary || i18n.t('calendar.event'), formatEventTime(event)];
   if (event.description) parts.push(event.description);
-  if (event.location) parts.push(`Location: ${event.location}`);
+  if (event.location) parts.push(i18n.t('calendar.locationPrefix', { location: event.location }));
   return parts.join('\n');
 }
 
@@ -636,17 +643,26 @@ export function shiftPeriod(date: Date, view: CalendarView, delta: number): Date
 }
 
 export function periodLabel(date: Date, view: CalendarView): string {
-  if (view === 'day') return formatLongDate(date);
-  if (view === 'month') return formatMonthYear(date);
+  const loc = { locale: dateFnsLocale() };
+  if (view === 'day') return format(date, 'EEEE, d MMMM yyyy', loc);
+  if (view === 'month') return format(date, 'MMMM yyyy', loc);
   const start = startOfWeekMonday(date);
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
-  return formatWeekRange(start, end);
+  const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
+  const sameYear = start.getFullYear() === end.getFullYear();
+  if (sameMonth) {
+    return `${format(start, 'd', loc)}–${format(end, 'd MMM yyyy', loc)}`;
+  }
+  if (sameYear) {
+    return `${format(start, 'd MMM', loc)} – ${format(end, 'd MMM yyyy', loc)}`;
+  }
+  return `${format(start, 'd MMM yyyy', loc)} – ${format(end, 'd MMM yyyy', loc)}`;
 }
 
 /** Short label for the phone date control. The full periodLabel stays in the accessible name. */
 export function compactPeriodLabel(date: Date, view: CalendarView): string {
-  const loc = { locale: enGB };
+  const loc = { locale: dateFnsLocale() };
   if (view === 'day') return format(date, 'EEE d MMM', loc);
   if (view === 'month') return format(date, 'MMM yyyy', loc);
   const start = startOfWeekMonday(date);

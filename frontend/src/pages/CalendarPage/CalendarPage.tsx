@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
+import { useTranslation } from 'react-i18next';
 import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Columns3, List, Mic, MoreHorizontal, Plus } from 'lucide-react';
 import {
     useEventsForDay,
@@ -67,10 +68,10 @@ const phoneToggle = (active: boolean) =>
     }`;
 
 const PHONE_VIEWS = [
-    { id: 'day', label: 'Day', Icon: Calendar },
-    { id: 'week', label: 'Week', Icon: Columns3 },
-    { id: 'month', label: 'Month', Icon: CalendarDays },
-] as const;
+    { id: 'day' as const, labelKey: 'calendar.day', Icon: Calendar },
+    { id: 'week' as const, labelKey: 'calendar.week', Icon: Columns3 },
+    { id: 'month' as const, labelKey: 'calendar.month', Icon: CalendarDays },
+];
 
 const CALENDAR_VIEW_KEY = 'calendar-view';
 
@@ -94,6 +95,7 @@ function defaultCalendarView(): CalendarView {
 }
 
 const CalendarPage: React.FC = () => {
+    const { t } = useTranslation();
     const dispatch = useDispatch();
     const phone = usePhoneLayout();
     const coarse = useCoarsePointer();
@@ -203,13 +205,13 @@ const CalendarPage: React.FC = () => {
             .unwrap()
             .then(() => {
                 showSuccessToast({
-                    title: 'Event deleted',
+                    title: t('calendar.eventDeleted'),
                     detail: eventName || undefined,
                 });
             })
             .catch((err) => {
                 showErrorToast({
-                    title: 'Could not delete event',
+                    title: t('calendar.eventDeleteFailed'),
                     detail: extractApiErrorMessage(err),
                 });
             });
@@ -253,7 +255,7 @@ const CalendarPage: React.FC = () => {
             .unwrap()
             .then(() => {
                 showSuccessToast({
-                    title: 'Event updated',
+                    title: t('calendar.eventUpdated'),
                     detail: joinToastDetail(
                         data.summary,
                         formatDateTimeRange(data.start?.dateTime, data.end?.dateTime),
@@ -262,7 +264,7 @@ const CalendarPage: React.FC = () => {
             })
             .catch((err) => {
                 showErrorToast({
-                    title: 'Could not update event',
+                    title: t('calendar.eventUpdateFailed'),
                     detail: extractApiErrorMessage(err),
                 });
             });
@@ -295,12 +297,12 @@ const CalendarPage: React.FC = () => {
             dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
             dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));
             showSuccessToast({
-                title: 'Event moved',
+                title: t('calendar.eventMoved'),
                 detail: formatDateTimeRange(start.toISOString(), end.toISOString()),
             });
         } catch (err) {
             showErrorToast({
-                title: 'Could not move event',
+                title: t('calendar.eventMoveFailed'),
                 detail: extractApiErrorMessage(err),
             });
             throw err;
@@ -367,13 +369,13 @@ const CalendarPage: React.FC = () => {
             <header className="mb-4 shrink-0 space-y-4 max-md:mb-1 max-md:space-y-1">
                 {phone ? (
                     <>
-                        <h1 className="sr-only">Calendar</h1>
+                        <h1 className="sr-only">{t('nav.calendar')}</h1>
                         <div className="flex min-w-0 items-center gap-0.5">
                             <button
                                 type="button"
                                 className={phoneIcon}
                                 onClick={() => setCurrentDate((prev) => shiftPeriod(prev, currentView, -1))}
-                                aria-label={`Previous ${currentView}`}
+                                aria-label={t('common.previous', { view: t(`calendar.${currentView}`) })}
                             >
                                 <ChevronLeft className="h-4 w-4" aria-hidden />
                             </button>
@@ -390,7 +392,7 @@ const CalendarPage: React.FC = () => {
                                 type="button"
                                 className={phoneIcon}
                                 onClick={() => setCurrentDate((prev) => shiftPeriod(prev, currentView, 1))}
-                                aria-label={`Next ${currentView}`}
+                                aria-label={t('common.next', { view: t(`calendar.${currentView}`) })}
                             >
                                 <ChevronRight className="h-4 w-4" aria-hidden />
                             </button>
@@ -399,19 +401,19 @@ const CalendarPage: React.FC = () => {
                                 className="h-7 shrink-0 rounded-md px-1.5 text-xs font-medium text-ide-muted hover:bg-white/5"
                                 onClick={() => setCurrentDate(new Date())}
                             >
-                                Today
+                                {t('common.today')}
                             </button>
                         </div>
                         <div className="flex items-center gap-0.5">
                             <div className="inline-flex rounded-md border border-ide-border bg-ide-surface p-0.5">
-                                {PHONE_VIEWS.map(({ id, label, Icon }) => (
+                                {PHONE_VIEWS.map(({ id, labelKey, Icon }) => (
                                     <button
                                         key={id}
                                         type="button"
                                         onClick={() => setCurrentView(id)}
                                         className={phoneToggle(currentView === id)}
                                         aria-pressed={currentView === id}
-                                        aria-label={label}
+                                        aria-label={t(labelKey)}
                                     >
                                         <Icon className="h-3.5 w-3.5" aria-hidden />
                                     </button>
@@ -419,7 +421,7 @@ const CalendarPage: React.FC = () => {
                             </div>
                             <button type="button" className={`${phoneIcon} ml-auto`} onClick={() => setEventsOpen(true)}>
                                 <List className="h-4 w-4" aria-hidden />
-                                <span className="sr-only">Events</span>
+                                <span className="sr-only">{t('common.events')}</span>
                             </button>
                             <CalendarVisibilityMenu compact />
                         </div>
@@ -428,7 +430,7 @@ const CalendarPage: React.FC = () => {
                     <>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                        <h1 className="page-title">Calendar</h1>
+                        <h1 className="page-title">{t('nav.calendar')}</h1>
                         <p className="page-lead">{periodLabel(currentDate, currentView)}</p>
                     </div>
                     <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap sm:justify-end">
@@ -437,7 +439,7 @@ const CalendarPage: React.FC = () => {
                             onClick={() => openCreate()}
                             className="ui-btn-primary min-w-[9rem] flex-1 sm:w-auto sm:flex-none"
                         >
-                            Create task
+                            {t('calendar.createTask')}
                         </button>
                         <VoiceTaskButton onClick={voice.open} />
                         <ScheduleMenu
@@ -474,7 +476,7 @@ const CalendarPage: React.FC = () => {
                                 className={`flex-1 sm:flex-none ${toggleBtn(currentView === v)}`}
                                 aria-pressed={currentView === v}
                             >
-                                {v.charAt(0).toUpperCase() + v.slice(1)}
+                                {t(`calendar.${v}`)}
                             </button>
                         ))}
                     </div>
@@ -484,7 +486,7 @@ const CalendarPage: React.FC = () => {
                             type="button"
                             className="ui-btn-ghost min-h-[44px] min-w-[44px] px-0"
                             onClick={() => setCurrentDate((prev) => shiftPeriod(prev, currentView, -1))}
-                            aria-label={`Previous ${currentView}`}
+                            aria-label={t('common.previous', { view: t(`calendar.${currentView}`) })}
                         >
                             <ChevronLeft className="mx-auto h-5 w-5" aria-hidden />
                         </button>
@@ -497,12 +499,12 @@ const CalendarPage: React.FC = () => {
                             type="button"
                             className="ui-btn-ghost min-h-[44px] min-w-[44px] px-0"
                             onClick={() => setCurrentDate((prev) => shiftPeriod(prev, currentView, 1))}
-                            aria-label={`Next ${currentView}`}
+                            aria-label={t('common.next', { view: t(`calendar.${currentView}`) })}
                         >
                             <ChevronRight className="mx-auto h-5 w-5" aria-hidden />
                         </button>
                         <button type="button" className="ui-btn-secondary px-4" onClick={() => setCurrentDate(new Date())}>
-                            Today
+                            {t('common.today')}
                         </button>
                         <CalendarVisibilityMenu />
                     </div>
@@ -519,7 +521,7 @@ const CalendarPage: React.FC = () => {
                     className="rounded-lg border border-ide-error bg-ide-error/10 px-4 py-3 text-sm text-ide-error"
                     role="alert"
                 >
-                    Failed to load calendar events. Please check your Google Calendar connection.
+                    {t('calendar.loadFailed')}
                 </div>
             ) : (
                 <div className="flex flex-col gap-4 max-md:min-h-0 max-md:flex-1 max-md:overflow-hidden lg:min-h-0 lg:flex-1 lg:overflow-y-auto xl:flex-row xl:overflow-hidden">
@@ -546,7 +548,7 @@ const CalendarPage: React.FC = () => {
                             events={displayEvents}
                             isLoading={getEventsQuery.isLoading}
                             error={getEventsQuery.error}
-                            title={`${currentView.charAt(0).toUpperCase() + currentView.slice(1)} events`}
+                            title={t('calendar.viewEvents', { view: t(`calendar.${currentView}`) })}
                             onEditEvent={handleEditEvent}
                             onDeleteEvent={handleDeleteEvent}
                         />
@@ -559,16 +561,16 @@ const CalendarPage: React.FC = () => {
                     <button
                         type="button"
                         className="inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg bg-ide-accentBlue px-3 text-sm font-medium text-white"
-                        aria-label="Create task"
+                        aria-label={t('calendar.createTask')}
                         onClick={() => openCreate()}
                     >
                         <Plus className="h-4 w-4 shrink-0" aria-hidden />
-                        Create
+                        {t('common.create')}
                     </button>
                     <button
                         type="button"
                         className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-ide-border bg-ide-surface text-ide-text"
-                        aria-label="Add task by voice"
+                        aria-label={t('calendar.addByVoice')}
                         onClick={() => voice.open()}
                     >
                         <Mic className="h-4 w-4" aria-hidden />
@@ -576,16 +578,16 @@ const CalendarPage: React.FC = () => {
                     <button
                         type="button"
                         className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-ide-border bg-ide-surface px-3 text-sm font-medium text-ide-text disabled:opacity-50"
-                        aria-label="Generate schedule"
+                        aria-label={t('calendar.generateSchedule')}
                         disabled={busy}
                         onClick={runGenerate}
                     >
-                        {isGenerating ? '…' : 'Generate'}
+                        {isGenerating ? '…' : t('calendar.generate')}
                     </button>
                     <button
                         type="button"
                         className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ide-muted hover:bg-white/5"
-                        aria-label="More schedule actions"
+                        aria-label={t('calendar.moreSchedule')}
                         onClick={() => setActionsOpen(true)}
                     >
                         <MoreHorizontal className="h-4 w-4" aria-hidden />
@@ -605,7 +607,7 @@ const CalendarPage: React.FC = () => {
             <Modal
                 open={deleteConfirmDialog.open}
                 onClose={cancelDeleteEvent}
-                title="Delete Event"
+                title={t('calendar.deleteEventTitle')}
                 footer={
                     <>
                         <button
@@ -613,25 +615,22 @@ const CalendarPage: React.FC = () => {
                             onClick={cancelDeleteEvent}
                             className="ui-btn-secondary w-full sm:w-auto"
                         >
-                            Cancel
+                            {t('common.cancel')}
                         </button>
                         <button
                             type="button"
                             onClick={confirmDeleteEvent}
                             className="ui-btn-danger w-full sm:w-auto"
                         >
-                            Delete
+                            {t('common.delete')}
                         </button>
                     </>
                 }
             >
                 <p className="mb-3 text-ide-text">
-                    Are you sure you want to delete the event &quot;{deleteConfirmDialog.eventName}&quot;?
+                    {t('calendar.deleteEventConfirm', { name: deleteConfirmDialog.eventName })}
                 </p>
-                <p className="text-sm text-ide-muted">
-                    This action cannot be undone. The event will be permanently removed from your Google
-                    Calendar.
-                </p>
+                <p className="text-sm text-ide-muted">{t('calendar.deleteEventHint')}</p>
             </Modal>
 
             <ScheduleSuggestionsDialog
@@ -651,7 +650,7 @@ const CalendarPage: React.FC = () => {
             <Modal
                 open={clearConfirmOpen}
                 onClose={() => setClearConfirmOpen(false)}
-                title="Clear schedule"
+                title={t('schedule.clear')}
                 footer={
                     <>
                         <button
@@ -660,7 +659,7 @@ const CalendarPage: React.FC = () => {
                             disabled={isClearing}
                             className="ui-btn-secondary w-full sm:w-auto"
                         >
-                            Cancel
+                            {t('common.cancel')}
                         </button>
                         <button
                             type="button"
@@ -668,21 +667,18 @@ const CalendarPage: React.FC = () => {
                             disabled={isClearing}
                             className="ui-btn-danger w-full sm:w-auto"
                         >
-                            {isClearing ? 'Clearing…' : 'Clear schedule'}
+                            {isClearing ? t('common.clearing') : t('schedule.clear')}
                         </button>
                     </>
                 }
             >
-                <p className="text-ide-text">
-                    Clear upcoming app-generated schedule blocks in the planning horizon?
-                    Already finished blocks stay in the calendar. This cannot be undone.
-                </p>
+                <p className="text-ide-text">{t('schedule.clearConfirmBody')}</p>
             </Modal>
 
             <Modal
                 open={undoConfirmOpen}
                 onClose={() => setUndoConfirmOpen(false)}
-                title="Undo last generate"
+                title={t('schedule.undoLast')}
                 footer={
                     <>
                         <button
@@ -691,7 +687,7 @@ const CalendarPage: React.FC = () => {
                             disabled={isUndoing}
                             className="ui-btn-secondary w-full sm:w-auto"
                         >
-                            Cancel
+                            {t('common.cancel')}
                         </button>
                         <button
                             type="button"
@@ -699,15 +695,12 @@ const CalendarPage: React.FC = () => {
                             disabled={isUndoing}
                             className="ui-btn-primary w-full sm:w-auto"
                         >
-                            {isUndoing ? 'Undoing…' : 'Undo generate'}
+                            {isUndoing ? t('common.undoing') : t('schedule.undoGenerate')}
                         </button>
                     </>
                 }
             >
-                <p className="text-ide-text">
-                    Restore upcoming app-generated blocks from before the last Generate?
-                    Already finished blocks stay. This only undoes Generate, not Clear.
-                </p>
+                <p className="text-ide-text">{t('schedule.undoConfirmBody')}</p>
             </Modal>
 
             {editorModal}
@@ -716,7 +709,7 @@ const CalendarPage: React.FC = () => {
             <Modal
                 open={phone && actionsOpen}
                 onClose={() => setActionsOpen(false)}
-                title="Schedule"
+                title={t('schedule.menu')}
             >
                 <div className="flex flex-col">
                     <button
@@ -728,7 +721,7 @@ const CalendarPage: React.FC = () => {
                             setSuggestionsOpen(true);
                         }}
                     >
-                        Suggestions
+                        {t('schedule.suggestions')}
                     </button>
                     <button
                         type="button"
@@ -739,7 +732,7 @@ const CalendarPage: React.FC = () => {
                             setUndoConfirmOpen(true);
                         }}
                     >
-                        {isUndoing ? 'Undoing…' : 'Undo last generate'}
+                        {isUndoing ? t('common.undoing') : t('schedule.undoLast')}
                     </button>
                     <button
                         type="button"
@@ -750,7 +743,7 @@ const CalendarPage: React.FC = () => {
                             setClearConfirmOpen(true);
                         }}
                     >
-                        {isClearing ? 'Clearing…' : 'Clear schedule'}
+                        {isClearing ? t('common.clearing') : t('schedule.clear')}
                     </button>
                 </div>
             </Modal>
@@ -758,7 +751,7 @@ const CalendarPage: React.FC = () => {
             <Modal
                 open={phone && eventsOpen}
                 onClose={() => setEventsOpen(false)}
-                title="Events"
+                title={t('common.events')}
                 maxWidthClass="max-w-lg"
             >
                 <div className="max-h-[60dvh]">
@@ -766,7 +759,7 @@ const CalendarPage: React.FC = () => {
                         events={displayEvents}
                         isLoading={getEventsQuery.isLoading}
                         error={getEventsQuery.error}
-                        title={`${currentView.charAt(0).toUpperCase() + currentView.slice(1)} events`}
+                        title={t('calendar.viewEvents', { view: t(`calendar.${currentView}`) })}
                         onEditEvent={(eventId) => {
                             setEventsOpen(false);
                             handleEditEvent(eventId);

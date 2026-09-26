@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useTranslation } from 'react-i18next';
 import { PhaseDTO, CreatePhaseDTO, UpdatePhaseDTO } from 'api/phases.api';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import { usePhaseValidation } from '../hooks/usePhaseValidation';
@@ -9,16 +10,14 @@ import { TimeRangeField } from './TimeRangeField';
 import { WeekDaysSelector } from './WeekDaysSelector';
 import { ColorField } from './ColorField';
 
-const phaseSchema = z.object({
-  name: z.string().min(1, 'Phase name is required'),
-  color: z.string().regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'Invalid color format'),
-  description: z.string().optional(),
-  startTime: z.string().min(1, 'Start time is required'),
-  endTime: z.string().min(1, 'End time is required'),
-  weekDays: z.array(z.number()).min(1, 'Select at least one day of the week'),
-});
-
-export type PhaseFormData = z.infer<typeof phaseSchema>;
+export type PhaseFormData = {
+  name: string;
+  color: string;
+  description?: string;
+  startTime: string;
+  endTime: string;
+  weekDays: number[];
+};
 
 interface PhaseFormProps {
   initialData?: PhaseDTO;
@@ -37,8 +36,24 @@ const PhaseForm = ({
   onDelete,
   isDeleting = false
 }: PhaseFormProps) => {
+  const { t } = useTranslation();
   const { data: userSettings } = useGetUserSettingsQuery();
   const [selectedDays, setSelectedDays] = useState<number[]>(initialData?.weekDays || [1,2,3,4,5]);
+
+  const phaseSchema = useMemo(
+    () =>
+      z.object({
+        name: z.string().min(1, t('phases.nameRequired')),
+        color: z
+          .string()
+          .regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, t('phases.colorInvalid')),
+        description: z.string().optional(),
+        startTime: z.string().min(1, t('phases.startRequired')),
+        endTime: z.string().min(1, t('phases.endRequired')),
+        weekDays: z.array(z.number()).min(1, t('phases.weekDaysRequired')),
+      }),
+    [t],
+  );
   
   const { register, handleSubmit, formState: { errors }, watch, setValue, control } = useForm<PhaseFormData>({
     resolver: zodResolver(phaseSchema),
@@ -81,7 +96,7 @@ const PhaseForm = ({
   return (
     <form onSubmit={handleSubmit(submitHandler)} className="phase-form space-y-1">
       <div className="form-group">
-        <label htmlFor="name">Phase Name*</label>
+        <label htmlFor="name">{t('phases.name')}</label>
         <input {...register('name')} id="name" className={errors.name ? 'error' : ''} />
         {errors.name && <span className="error-message">{errors.name.message}</span>}
       </div>
@@ -93,7 +108,7 @@ const PhaseForm = ({
       />
 
       <div className="form-group">
-        <label htmlFor="description">Description</label>
+        <label htmlFor="description">{t('phases.description')}</label>
         <textarea {...register('description')} id="description" rows={3} />
       </div>
 
@@ -121,7 +136,7 @@ const PhaseForm = ({
             disabled={isDeleting || isSubmitting}
             className="ui-btn-danger"
           >
-            {isDeleting ? 'Deleting...' : 'Delete'}
+            {isDeleting ? t('common.deleting') : t('common.delete')}
           </button>
         ) : null}
         {onCancel ? (
@@ -130,7 +145,7 @@ const PhaseForm = ({
             onClick={onCancel}
             className="ui-btn-secondary"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
         ) : null}
         <button 
@@ -138,11 +153,15 @@ const PhaseForm = ({
           disabled={isSubmitting || !!sleepError} 
           className="primary-button"
         >
-          {isSubmitting ? 'Saving...' : initialData ? 'Update Phase' : 'Create Phase'}
+          {isSubmitting
+            ? t('common.saving')
+            : initialData
+              ? t('phases.update')
+              : t('phases.create')}
         </button>
       </div>
     </form>
   );
 };
 
-export default PhaseForm; 
+export default PhaseForm;

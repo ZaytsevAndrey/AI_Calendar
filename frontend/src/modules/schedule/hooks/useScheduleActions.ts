@@ -11,6 +11,7 @@ import { eventsApi } from 'api/eventsApi';
 import { eventTasksApi } from 'api/eventTasksApi';
 import { showErrorToast, showInfoToast, showSuccessToast, showWarningToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
+import i18n from 'i18n';
 
 export type GenerateProgress = {
   stage: string;
@@ -138,37 +139,37 @@ export function useScheduleActions() {
       const warningCount = parsed?.warnings?.length ?? 0;
       if (errorCount > 0) {
         showErrorToast({
-          title: 'Schedule generated with errors',
-          detail: `${errorCount} error${errorCount === 1 ? '' : 's'}. Details are on this page.`,
+          title: i18n.t('schedule.generatedWithErrors'),
+          detail: i18n.t('schedule.errorsDetail', { count: errorCount }),
         });
       } else if (warningCount > 0) {
         showWarningToast({
-          title: 'Schedule generated with warnings',
-          detail: `${warningCount} warning${warningCount === 1 ? '' : 's'}. Details are on this page.`,
+          title: i18n.t('schedule.generatedWithWarnings'),
+          detail: i18n.t('schedule.warningsDetail', { count: warningCount }),
         });
       } else {
         const changed = parsed?.diff?.length ?? 0;
         if (changed > 0) {
           showSuccessToast({
-            title: 'Schedule generated',
-            detail: `${changed} task${changed === 1 ? '' : 's'} rescheduled.`,
+            title: i18n.t('schedule.generated'),
+            detail: i18n.t('schedule.rescheduled', { count: changed }),
           });
         } else if (tasks.length > 0) {
           showSuccessToast({
-            title: 'Schedule generated',
-            detail: `${tasks.length} time block${tasks.length === 1 ? '' : 's'} in this range.`,
+            title: i18n.t('schedule.generated'),
+            detail: i18n.t('schedule.blocksInRange', { count: tasks.length }),
           });
         } else {
           showSuccessToast({
-            title: 'Schedule generated',
-            detail: 'No time blocks in this range.',
+            title: i18n.t('schedule.generated'),
+            detail: i18n.t('schedule.noBlocksInRange'),
           });
         }
       }
       refreshCalendarEvents();
     } catch (e) {
       showErrorToast({
-        title: 'Schedule generation failed',
+        title: i18n.t('schedule.generateFailed'),
         detail: extractApiErrorMessage(e),
       });
     } finally {
@@ -183,13 +184,13 @@ export function useScheduleActions() {
     try {
       await ScheduleApi.undoLastGenerate();
       showSuccessToast({
-        title: 'Last generate undone',
-        detail: 'Upcoming app blocks were restored. Finished blocks stayed.',
+        title: i18n.t('schedule.undoSuccess'),
+        detail: i18n.t('schedule.undoSuccessDetail'),
       });
       refreshCalendarEvents();
     } catch (e) {
       showErrorToast({
-        title: 'Could not undo generate',
+        title: i18n.t('schedule.undoFailed'),
         detail: extractApiErrorMessage(e),
       });
     } finally {
@@ -204,19 +205,19 @@ export function useScheduleActions() {
       const { deleted } = await ScheduleApi.clearSchedule();
       if (deleted === 0) {
         showInfoToast({
-          title: 'Nothing to clear',
-          detail: 'There are no generated time blocks in the planning horizon.',
+          title: i18n.t('schedule.nothingToClear'),
+          detail: i18n.t('schedule.nothingToClearDetail'),
         });
       } else {
         showSuccessToast({
-          title: 'Schedule cleared',
-          detail: `${deleted} generated time block${deleted === 1 ? '' : 's'} removed.`,
+          title: i18n.t('schedule.cleared'),
+          detail: i18n.t('schedule.clearedDetail', { count: deleted }),
         });
       }
       refreshCalendarEvents();
     } catch (e) {
       showErrorToast({
-        title: 'Could not clear schedule',
+        title: i18n.t('schedule.clearFailed'),
         detail: extractApiErrorMessage(e),
       });
     } finally {

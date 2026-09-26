@@ -203,6 +203,7 @@ export class RemindersService {
         checkedToday: checked.has(habit.id),
       })),
       alreadySent: new Set(recent.map((row) => row.dedupeKey)),
+      language: settings.language,
     });
 
     let sent = 0;

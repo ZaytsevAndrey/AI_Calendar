@@ -3,6 +3,7 @@ import { eventTasksApi } from 'api/eventTasksApi';
 import { ScheduleApi } from 'api/schedule.api';
 import type { SkipOccurrenceDTO, UpdateTaskDTO } from 'api/tasks.api';
 import type { VoiceCommandAction } from 'api/voice.api';
+import i18n from 'i18n';
 import { showSuccessToast } from 'utils/toast';
 
 type Mutation<T> = (arg: T) => { unwrap: () => Promise<unknown> };
@@ -24,7 +25,7 @@ export async function executeVoiceCommand(
 ): Promise<void> {
   if (command.kind === 'complete') {
     await deps.updateTask({ id: command.taskId, body: { status: 'completed' } }).unwrap();
-    showSuccessToast({ title: 'Task completed', detail: command.taskName });
+    showSuccessToast({ title: i18n.t('voice.taskCompleted'), detail: command.taskName });
     return;
   }
 
@@ -39,7 +40,7 @@ export async function executeVoiceCommand(
         },
       })
       .unwrap();
-    showSuccessToast({ title: 'Occurrence skipped', detail: command.taskName });
+    showSuccessToast({ title: i18n.t('voice.occurrenceSkipped'), detail: command.taskName });
     return;
   }
 
@@ -54,14 +55,14 @@ export async function executeVoiceCommand(
       end: command.end,
     });
     refreshCalendar(deps.dispatch);
-    showSuccessToast({ title: 'Event moved', detail: command.taskName });
+    showSuccessToast({ title: i18n.t('voice.eventMoved'), detail: command.taskName });
     return;
   }
 
   if (command.kind === 'shift') {
     await ScheduleApi.rescheduleTask(command.slotId, command.start, command.end);
     refreshCalendar(deps.dispatch);
-    showSuccessToast({ title: 'Event moved', detail: command.taskName });
+    showSuccessToast({ title: i18n.t('voice.eventMoved'), detail: command.taskName });
     return;
   }
 
@@ -72,5 +73,5 @@ export async function executeVoiceCommand(
   if (command.scheduledEndTime) body.scheduledEndTime = command.scheduledEndTime;
   if (command.clearUnscheduled) body.isUnscheduled = false;
   await deps.updateTask({ id: command.taskId, body }).unwrap();
-  showSuccessToast({ title: 'Task rescheduled', detail: command.taskName });
+  showSuccessToast({ title: i18n.t('voice.taskRescheduled'), detail: command.taskName });
 }

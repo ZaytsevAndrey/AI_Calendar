@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PhaseDTO } from 'api/phases.api';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import {
@@ -13,15 +14,7 @@ const SNAP_MIN = 15;
 const MIN_DURATION_MIN = 15;
 const HANDLE_PX = 8;
 
-const COLUMNS: { dow: number; label: string }[] = [
-  { dow: 1, label: 'Mon' },
-  { dow: 2, label: 'Tue' },
-  { dow: 3, label: 'Wed' },
-  { dow: 4, label: 'Thu' },
-  { dow: 5, label: 'Fri' },
-  { dow: 6, label: 'Sat' },
-  { dow: 0, label: 'Sun' },
-];
+const COLUMN_DOWS = [1, 2, 3, 4, 5, 6, 0] as const;
 
 interface PhasesCalendarProps {
   phases: PhaseDTO[];
@@ -47,6 +40,7 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
   onEditPhase,
   onPhaseTimeChange,
 }) => {
+  const { t } = useTranslation();
   const { data: userSettings } = useGetUserSettingsQuery();
   const wake = userSettings?.wakeTime || '07:00';
   const sleep = userSettings?.sleepTime || '22:00';
@@ -55,6 +49,27 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
   const dayEndMin = activeWindow.end;
   const daySpanMin = Math.max(dayEndMin - dayStartMin, 60);
   const gridHeightPx = (daySpanMin / 60) * PX_PER_HOUR;
+
+  const columns = useMemo(
+    () =>
+      COLUMN_DOWS.map((dow) => ({
+        dow,
+        label: t(
+          (
+            {
+              1: 'phases.mon',
+              2: 'phases.tue',
+              3: 'phases.wed',
+              4: 'phases.thu',
+              5: 'phases.fri',
+              6: 'phases.sat',
+              0: 'phases.sun',
+            } as const
+          )[dow],
+        ),
+      })),
+    [t],
+  );
 
   const onPhaseTimeChangeRef = useRef(onPhaseTimeChange);
   onPhaseTimeChangeRef.current = onPhaseTimeChange;
@@ -266,22 +281,20 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
 
   return (
     <div className="mt-2 max-w-full rounded-lg border border-ide-border bg-ide-panel p-3 shadow-ide sm:p-4">
-      <h2 className="mb-1 text-lg font-semibold text-ide-text">Weekly phase template</h2>
+      <h2 className="mb-1 text-lg font-semibold text-ide-text">{t('phases.weeklyTemplate')}</h2>
       <p className="mb-4 hidden text-xs text-ide-muted md:block">
-        Drag a block or its top/bottom edge. Step: {SNAP_MIN} min. Click the center to edit.
+        {t('phases.dragHint', { minutes: SNAP_MIN })}
       </p>
-      <p className="mb-4 text-xs text-ide-muted md:hidden">
-        Tap a phase to edit it. Times follow your wake and sleep window.
-      </p>
+      <p className="mb-4 text-xs text-ide-muted md:hidden">{t('phases.tapHint')}</p>
 
       <ul className="space-y-3 md:hidden">
-        {COLUMNS.map(({ dow, label }) => {
+        {columns.map(({ dow, label }) => {
           const colPhases = displayPhases.filter((phase) => phaseAppliesOnDay(phase, dow));
           return (
             <li key={dow} className="rounded-lg border border-ide-border bg-ide-surface p-3">
               <h3 className="text-sm font-semibold text-ide-text">{label}</h3>
               {colPhases.length === 0 ? (
-                <p className="mt-2 text-sm text-ide-muted">No phases</p>
+                <p className="mt-2 text-sm text-ide-muted">{t('phases.noPhases')}</p>
               ) : (
                 <ul className="mt-2 space-y-2">
                   {colPhases.map((phase) => (
@@ -314,11 +327,11 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
       <div
         className="grid min-w-[520px] gap-0 rounded border border-ide-border"
         style={{
-          gridTemplateColumns: `56px repeat(${COLUMNS.length}, minmax(72px, 1fr))`,
+          gridTemplateColumns: `56px repeat(${columns.length}, minmax(72px, 1fr))`,
         }}
       >
         <div className="border-b border-ide-border bg-ide-surface/80 p-1" />
-        {COLUMNS.map(({ dow, label }) => (
+        {columns.map(({ dow, label }) => (
           <div
             key={dow}
             className="border-b border-l border-ide-border bg-ide-surface/80 p-1 text-center"
@@ -345,14 +358,14 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
           })}
         </div>
 
-        {COLUMNS.map(({ dow: dayOfWeek }, dayIndex) => {
+        {columns.map(({ dow: dayOfWeek }, dayIndex) => {
           const colPhases = displayPhases.filter((p) => phaseAppliesOnDay(p, dayOfWeek));
           return (
             <div
               key={dayOfWeek}
               id={`phase-col-${dayOfWeek}`}
               className={`relative border-ide-border bg-ide-surface ${
-                dayIndex < COLUMNS.length - 1 ? 'border-l border-r' : 'border-l'
+                dayIndex < columns.length - 1 ? 'border-l border-r' : 'border-l'
               }`}
               style={{ height: gridHeightPx }}
             >
@@ -414,7 +427,7 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
 
       {displayPhases.length > 0 && (
         <div className="mt-4 hidden flex-wrap gap-2 md:flex">
-          <span className="w-full text-sm font-semibold text-ide-text">Legend</span>
+          <span className="w-full text-sm font-semibold text-ide-text">{t('phases.legend')}</span>
           {[...displayPhases]
             .sort((a, b) => {
               const aRange = resolvePhaseRangeInActiveWindow(a.startTime, a.endTime, activeWindow);

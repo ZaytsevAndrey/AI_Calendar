@@ -177,6 +177,7 @@ export class VoiceService {
       alreadyClarified,
       tasks: tasks.map(toCommandTask),
       slots: slots.map(toCommandSlot),
+      language: settings.language,
     });
     if (resolved.type === 'clarify') {
       return {

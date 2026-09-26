@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import i18n from 'i18n';
 
 const reminderOverrideSchema = z.object({
   method: z.enum(['popup', 'email']),
@@ -7,7 +8,7 @@ const reminderOverrideSchema = z.object({
 
 export const taskFormSchema = z
   .object({
-    name: z.string().min(1, 'Task name is required'),
+    name: z.string(),
     description: z.string().optional(),
     isFixed: z.boolean(),
     isUnscheduled: z.boolean().optional(),
@@ -32,6 +33,14 @@ export const taskFormSchema = z
     googleReminderOverrides: z.array(reminderOverrideSchema).optional(),
   })
   .superRefine((data, ctx) => {
+    if (!data.name?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: i18n.t('tasks.validation.nameRequired'),
+        path: ['name'],
+      });
+    }
+
     if (data.isUnscheduled) {
       return;
     }
@@ -40,14 +49,14 @@ export const taskFormSchema = z
       if (!data.scheduledStartTime?.trim()) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'Start time is required for fixed tasks',
+          message: i18n.t('tasks.validation.startRequired'),
           path: ['scheduledStartTime'],
         });
       }
       if (!data.scheduledEndTime?.trim()) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'End time is required for fixed tasks',
+          message: i18n.t('tasks.validation.endRequired'),
           path: ['scheduledEndTime'],
         });
       }
@@ -58,7 +67,7 @@ export const taskFormSchema = z
       ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'End must be after start',
+          message: i18n.t('tasks.validation.endAfterStart'),
           path: ['scheduledEndTime'],
         });
       }
@@ -68,13 +77,13 @@ export const taskFormSchema = z
     if (typeof data.estimatedTimeInMinutes !== 'number' || Number.isNaN(data.estimatedTimeInMinutes)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Estimated time is required',
+        message: i18n.t('tasks.validation.estimatedRequired'),
         path: ['estimatedTimeInMinutes'],
       });
     } else if (data.estimatedTimeInMinutes < 1 || data.estimatedTimeInMinutes > 1440) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Time must be between 1 and 1440 minutes',
+        message: i18n.t('tasks.validation.estimatedRange'),
         path: ['estimatedTimeInMinutes'],
       });
     }
@@ -82,7 +91,7 @@ export const taskFormSchema = z
     if (data.isRecurring && !data.recurrencePattern?.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Select a recurrence pattern',
+        message: i18n.t('tasks.validation.recurrenceRequired'),
         path: ['recurrencePattern'],
       });
     }
@@ -94,7 +103,7 @@ export const taskFormSchema = z
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Until must be after From',
+        message: i18n.t('tasks.validation.untilAfterFrom'),
         path: ['deadline'],
       });
     }

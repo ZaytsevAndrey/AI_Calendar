@@ -2,6 +2,7 @@ import { useGetAllPhasesQuery, useCreatePhaseMutation, useUpdatePhaseMutation, u
 import type { PhasePresetId } from 'api/phasesApi';
 import React, { lazy, Suspense, useCallback, useState } from 'react';
 import { LayoutTemplate, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { PhaseDTO } from 'api/phases.api';
 import PhasesCalendar from 'modules/phases/components/PhasesCalendar';
 import { PhasePresetPicker, messageFromApiError } from 'modules/phases/components/PhasePresetPicker';
@@ -23,8 +24,9 @@ const PhaseForm = lazy(
 );
 
 const PhasesPage: React.FC = () => {
+    const { t } = useTranslation();
     const { data: phases = [], isLoading, error } = useGetAllPhasesQuery();
-    const visiblePhases = phases.filter((phase) => phase.type !== 'main_phase' && phase.name !== 'Focus hours');
+    const visiblePhases = phases.filter((phase) => phase.type !== 'main_phase' && phase.name !== 'Focus hours' && phase.name !== 'Години фокусу');
     const [createPhase, { isLoading: isCreating }] = useCreatePhaseMutation();
     const [updatePhase, { isLoading: isUpdating }] = useUpdatePhaseMutation();
     const [deletePhase, { isLoading: isDeleting }] = useDeletePhaseMutation();
@@ -49,8 +51,8 @@ const PhasesPage: React.FC = () => {
     const handleApplyPreset = async () => {
         if (presetDays.length === 0) {
             showErrorToast({
-                title: 'Select weekdays',
-                detail: 'Choose at least one day of the week for the preset.',
+                title: t('phases.selectWeekdays'),
+                detail: t('phases.selectWeekdaysDetail'),
             });
             return;
         }
@@ -59,10 +61,8 @@ const PhasesPage: React.FC = () => {
             setShowPreset(false);
         } catch (err: unknown) {
             showErrorToast({
-                title: 'Could not apply preset',
-                detail:
-                    messageFromApiError(err) ??
-                    'Phases were not replaced. If a phase still has tasks, move or delete them first.',
+                title: t('phases.applyFailed'),
+                detail: messageFromApiError(err) ?? t('phases.applyFailedDetail'),
             });
         }
     };
@@ -73,7 +73,7 @@ const PhasesPage: React.FC = () => {
     };
 
     const handleDelete = async (id: string) => {
-        if (window.confirm('Delete this phase?')) {
+        if (window.confirm(t('phases.deleteConfirm'))) {
             await deletePhase(id);
         }
     };
@@ -94,13 +94,13 @@ const PhasesPage: React.FC = () => {
                 await updatePhase({ id: phaseId, phase: { startTime, endTime } }).unwrap();
             } catch {
                 showErrorToast({
-                    title: 'Could not update phase',
-                    detail: 'The new time was not saved. Try again.',
+                    title: t('phases.updateFailed'),
+                    detail: t('phases.updateFailedDetail'),
                 });
                 throw new Error('phase-update-failed');
             }
         },
-        [updatePhase]
+        [t, updatePhase]
     );
 
     const handleDeleteFromModal = async () => {
@@ -116,7 +116,7 @@ const PhasesPage: React.FC = () => {
     if (isLoading) {
         return (
             <div className="page-shell-fill">
-                <div className="loading">Loading phases…</div>
+                <div className="loading">{t('phases.loading')}</div>
             </div>
         );
     }
@@ -125,7 +125,7 @@ const PhasesPage: React.FC = () => {
         return (
             <div className="page-shell-fill">
                 <div className="rounded-xl border border-ide-error bg-ide-error/10 px-4 py-6 text-center text-ide-error">
-                    Error loading phases
+                    {t('phases.loadError')}
                 </div>
             </div>
         );
@@ -135,25 +135,25 @@ const PhasesPage: React.FC = () => {
         <div className="page-shell-fill">
             <header className="page-head shrink-0">
                 <div>
-                    <h1 className="page-title">Phases</h1>
-                    <p className="page-lead">Time windows for scheduling and the weekly template.</p>
+                    <h1 className="page-title">{t('phases.title')}</h1>
+                    <p className="page-lead">{t('phases.lead')}</p>
                 </div>
                 <div className="flex gap-1 md:hidden">
                     <button type="button" onClick={openPreset} className="ui-icon-btn border border-ide-border">
                         <LayoutTemplate className="h-4 w-4" aria-hidden />
-                        <span className="sr-only">Use a preset</span>
+                        <span className="sr-only">{t('phases.usePreset')}</span>
                     </button>
                     <button type="button" onClick={handleAdd} className="ui-icon-btn text-ide-link">
                         <Plus className="h-4 w-4" aria-hidden />
-                        <span className="sr-only">Add Phase</span>
+                        <span className="sr-only">{t('phases.add')}</span>
                     </button>
                 </div>
                 <div className="hidden gap-2 md:flex">
                     <button type="button" onClick={openPreset} className="ui-btn-secondary">
-                        Use a preset
+                        {t('phases.usePreset')}
                     </button>
                     <button type="button" onClick={handleAdd} className="ui-btn-primary">
-                        Add Phase
+                        {t('phases.add')}
                     </button>
                 </div>
             </header>
@@ -161,11 +161,11 @@ const PhasesPage: React.FC = () => {
             <Modal
                 open={showForm}
                 onClose={() => setShowForm(false)}
-                title={editingPhase ? 'Edit Phase' : 'Create Phase'}
+                title={editingPhase ? t('phases.editTitle') : t('phases.createTitle')}
                 maxWidthClass="max-w-lg"
             >
                 <Suspense
-                    fallback={<div className="px-1 py-6 text-sm text-ide-muted">Loading…</div>}
+                    fallback={<div className="px-1 py-6 text-sm text-ide-muted">{t('common.loading')}</div>}
                 >
                     <PhaseForm
                         initialData={editingPhase}
@@ -181,13 +181,10 @@ const PhasesPage: React.FC = () => {
             <Modal
                 open={showPreset}
                 onClose={() => setShowPreset(false)}
-                title="Use a phase preset"
+                title={t('phases.presetTitle')}
                 maxWidthClass="max-w-lg"
             >
-                <p className="mb-4 text-sm text-ide-muted">
-                    Replaces Sleep and every other phase. Times follow your wake and sleep settings.
-                    This is blocked while any phase still has tasks.
-                </p>
+                <p className="mb-4 text-sm text-ide-muted">{t('phases.presetLead')}</p>
                 <PhasePresetPicker
                     value={presetId}
                     onChange={(choice) => {
@@ -201,7 +198,7 @@ const PhasesPage: React.FC = () => {
                         setSelectedDays={setPresetDays}
                         errors={
                             presetDays.length === 0
-                                ? { weekDays: { message: 'Select at least one day' } }
+                                ? { weekDays: { message: t('phases.selectOneDay') } }
                                 : {}
                         }
                     />
@@ -213,7 +210,7 @@ const PhasesPage: React.FC = () => {
                         onClick={() => setShowPreset(false)}
                         disabled={isApplyingPreset}
                     >
-                        Cancel
+                        {t('common.cancel')}
                     </button>
                     <button
                         type="button"
@@ -221,7 +218,7 @@ const PhasesPage: React.FC = () => {
                         onClick={handleApplyPreset}
                         disabled={isApplyingPreset || presetDays.length === 0}
                     >
-                        Replace phases
+                        {t('phases.replacePhases')}
                     </button>
                 </div>
             </Modal>
@@ -236,7 +233,7 @@ const PhasesPage: React.FC = () => {
                 </div>
 
                 {visiblePhases.length === 0 ? (
-                    <div className="empty-list">No phases yet. Add one to get started.</div>
+                    <div className="empty-list">{t('phases.empty')}</div>
                 ) : (
                     <div className="phase-grid">
                         {visiblePhases.map((phase: PhaseDTO) => (
@@ -251,7 +248,10 @@ const PhasesPage: React.FC = () => {
                                     {phase.startTime} – {phase.endTime}
                                 </div>
                                 <p className="text-xs text-ide-muted">
-                                    Type: {phase.type} · Days: {phase.weekDays?.join(', ')}
+                                    {t('phases.typeDays', {
+                                        type: phase.type,
+                                        days: phase.weekDays?.join(', '),
+                                    })}
                                 </p>
                                 <div className="category-actions">
                                     <button
@@ -260,7 +260,7 @@ const PhasesPage: React.FC = () => {
                                         onClick={() => handleEdit(phase)}
                                     >
                                         <Pencil className="h-4 w-4 md:hidden" aria-hidden />
-                                        <span className="max-md:sr-only">Edit</span>
+                                        <span className="max-md:sr-only">{t('common.edit')}</span>
                                     </button>
                                     <button
                                         type="button"
@@ -269,7 +269,7 @@ const PhasesPage: React.FC = () => {
                                         disabled={isDeleting}
                                     >
                                         <Trash2 className="h-4 w-4 md:hidden" aria-hidden />
-                                        <span className="max-md:sr-only">Delete</span>
+                                        <span className="max-md:sr-only">{t('common.delete')}</span>
                                     </button>
                                 </div>
                             </article>

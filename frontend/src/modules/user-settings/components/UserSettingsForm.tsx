@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useForm, useController } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { UserSettingsDTO } from '../../../api/user-settings.api';
 import { useUpdateUserSettingsMutation } from '../../../api/userSettingsApi';
 import { googleCalendarAPI } from '../../../api/google-calendar.api';
@@ -8,6 +9,12 @@ import { timeZoneSelectOptions } from '../ianaTimeZones';
 import { ReminderSettingsSection } from '../../pwa/ReminderSettingsSection';
 import { VoiceSettingsSection } from '../../voice/components/VoiceSettingsSection';
 import { showErrorToast, showSuccessToast } from '../../../utils/toast';
+import {
+    APP_LANGUAGES,
+    isAppLanguage,
+    writeStoredLanguage,
+    type AppLanguage,
+} from '../../../i18n';
 
 interface UserSettingsFormProps {
     initialData: UserSettingsDTO;
@@ -17,6 +24,7 @@ interface UserSettingsFormData {
     sleepTime: string;
     wakeTime: string;
     timeZone: string;
+    language: AppLanguage;
     googleCalendarLinked: boolean;
     appGoogleCalendarName: string;
     minSplitMinutes: number;
@@ -28,6 +36,7 @@ interface UserSettingsFormData {
 const fieldClass = 'ui-input max-w-xs';
 
 const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
+    const { t, i18n } = useTranslation();
     const [isCalendarConnected, setIsCalendarConnected] = useState(false);
     const [isCheckingConnection, setIsCheckingConnection] = useState(true);
     const [updateUserSettings] = useUpdateUserSettingsMutation();
@@ -35,11 +44,18 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
         sleepTime: string;
         wakeTime: string;
         timeZone: string;
+        language: AppLanguage;
         minSplitMinutes: number;
         maxSplitMinutes: number;
         recurringScheduleHorizonDays: number;
         fixedEventBufferMinutes: number;
     } | null>(null);
+
+    const defaultLanguage: AppLanguage = isAppLanguage(initialData?.language)
+        ? initialData.language
+        : isAppLanguage(i18n.language)
+          ? i18n.language
+          : 'en';
 
     const { control, setValue, watch, getValues } = useForm<UserSettingsFormData>({
         defaultValues: {
@@ -48,6 +64,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             wakeTime:
                 initialData?.wakeTime && initialData.wakeTime !== '' ? initialData.wakeTime : '07:00',
             timeZone: initialData?.timeZone?.trim() || '',
+            language: defaultLanguage,
             googleCalendarLinked: initialData?.googleCalendarLinked || false,
             appGoogleCalendarName:
                 initialData?.appGoogleCalendarName?.trim() || 'AI Calendar Assistant',
@@ -73,6 +90,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
     const sleepTime = watch('sleepTime');
     const wakeTime = watch('wakeTime');
     const timeZone = watch('timeZone');
+    const language = watch('language');
     const minSplitMinutes = watch('minSplitMinutes');
     const maxSplitMinutes = watch('maxSplitMinutes');
     const recurringScheduleHorizonDays = watch('recurringScheduleHorizonDays');
@@ -82,13 +100,13 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
     const sleepTimeController = useController({
         name: 'sleepTime',
         control,
-        rules: { required: 'Sleep time is required' },
+        rules: { required: t('settings.sleepRequired') },
     });
 
     const wakeTimeController = useController({
         name: 'wakeTime',
         control,
-        rules: { required: 'Wake time is required' },
+        rules: { required: t('settings.wakeRequired') },
     });
 
     useEffect(() => {
@@ -116,12 +134,12 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                 appGoogleCalendarName: v,
                 googleCalendarLinked: isCalendarConnected,
             }).unwrap();
-            showSuccessToast({ title: 'Calendar name saved', detail: v });
+            showSuccessToast({ title: t('settings.calendarNameSaved'), detail: v });
         } catch (error: any) {
             if (error?.response?.status === 401) return;
             showErrorToast({
-                title: 'Could not save calendar name',
-                detail: 'Check your connection and try again.',
+                title: t('settings.calendarNameSaveFailed'),
+                detail: t('settings.calendarNameSaveFailedDetail'),
             });
             console.error(error);
         }
@@ -132,6 +150,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             st: string | null | undefined,
             wt: string | null | undefined,
             tz: string | null | undefined,
+            lang: AppLanguage | null | undefined,
             minSplit: number | null | undefined,
             maxSplit: number | null | undefined,
             horizonDays: number | null | undefined,
@@ -141,6 +160,9 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                 return;
             }
             const trimmedZone = typeof tz === 'string' ? tz.trim() : '';
+            if (!isAppLanguage(lang)) {
+                return;
+            }
             if (
                 typeof minSplit !== 'number' ||
                 Number.isNaN(minSplit) ||
@@ -174,6 +196,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                     sleepTime: st,
                     wakeTime: wt,
                     ...(trimmedZone ? { timeZone: trimmedZone } : {}),
+                    language: lang,
                     googleCalendarLinked: isCalendarConnected,
                     minSplitMinutes: minSplit,
                     maxSplitMinutes: Math.max(minSplit, maxSplit),
@@ -181,21 +204,19 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                     fixedEventBufferMinutes: bufferMinutes,
                 }).unwrap();
                 showSuccessToast({
-                    title: 'Settings saved',
-                    detail: 'Sleep, wake, and planning times were updated.',
+                    title: t('settings.saved'),
                 });
             } catch (error: any) {
                 if (error?.response?.status === 401) {
                     return;
                 }
                 showErrorToast({
-                    title: 'Could not save settings',
-                    detail: 'Check your connection and try again.',
+                    title: t('settings.saveFailed'),
                 });
                 console.error('Error auto-saving settings:', error);
             }
         },
-        [isCalendarConnected, updateUserSettings]
+        [isCalendarConnected, t, updateUserSettings]
     );
 
     useEffect(() => {
@@ -206,9 +227,16 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
     }, [initialData?.timeZone, setValue]);
 
     useEffect(() => {
+        if (isAppLanguage(initialData?.language)) {
+            setValue('language', initialData.language);
+        }
+    }, [initialData?.language, setValue]);
+
+    useEffect(() => {
         if (
             sleepTime &&
             wakeTime &&
+            isAppLanguage(language) &&
             typeof minSplitMinutes === 'number' &&
             typeof maxSplitMinutes === 'number' &&
             typeof recurringScheduleHorizonDays === 'number' &&
@@ -219,13 +247,14 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                 sleepTime,
                 wakeTime,
                 timeZone: timeZone || '',
+                language,
                 minSplitMinutes,
                 maxSplitMinutes,
                 recurringScheduleHorizonDays,
                 fixedEventBufferMinutes,
             });
         }
-    }, [sleepTime, wakeTime, timeZone, minSplitMinutes, maxSplitMinutes, recurringScheduleHorizonDays, fixedEventBufferMinutes, initialValues]);
+    }, [sleepTime, wakeTime, timeZone, language, minSplitMinutes, maxSplitMinutes, recurringScheduleHorizonDays, fixedEventBufferMinutes, initialValues]);
 
     useEffect(() => {
         const hasChanged =
@@ -234,6 +263,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                 sleepTime !== initialValues.sleepTime ||
                 wakeTime !== initialValues.wakeTime ||
                 timeZone !== initialValues.timeZone ||
+                language !== initialValues.language ||
                 minSplitMinutes !== initialValues.minSplitMinutes ||
                 maxSplitMinutes !== initialValues.maxSplitMinutes ||
                 recurringScheduleHorizonDays !== initialValues.recurringScheduleHorizonDays ||
@@ -247,6 +277,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             wakeTime !== '' &&
             typeof sleepTime === 'string' &&
             typeof wakeTime === 'string' &&
+            isAppLanguage(language) &&
             typeof minSplitMinutes === 'number' &&
             typeof maxSplitMinutes === 'number' &&
             typeof recurringScheduleHorizonDays === 'number' &&
@@ -258,6 +289,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                     sleepTime,
                     wakeTime,
                     timeZone,
+                    language,
                     minSplitMinutes,
                     maxSplitMinutes,
                     recurringScheduleHorizonDays,
@@ -267,17 +299,24 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
 
             return () => clearTimeout(timeoutId);
         }
-    }, [sleepTime, wakeTime, timeZone, minSplitMinutes, maxSplitMinutes, recurringScheduleHorizonDays, fixedEventBufferMinutes, autoSaveTimeSettings, initialValues]);
+    }, [sleepTime, wakeTime, timeZone, language, minSplitMinutes, maxSplitMinutes, recurringScheduleHorizonDays, fixedEventBufferMinutes, autoSaveTimeSettings, initialValues]);
+
+    const onLanguageChange = (next: string) => {
+        if (!isAppLanguage(next)) return;
+        setValue('language', next);
+        writeStoredLanguage(next);
+        void i18n.changeLanguage(next);
+    };
 
     return (
         <div className="space-y-10">
             <section>
-                <h2 className="mb-4 text-lg font-semibold text-ide-text">Sleep schedule</h2>
-                <p className="ui-hint mb-6">Changes save automatically after you stop editing.</p>
+                <h2 className="mb-4 text-lg font-semibold text-ide-text">{t('settings.sleepSchedule')}</h2>
+                <p className="ui-hint mb-6">{t('settings.autosaveHint')}</p>
                 <div className="flex flex-col gap-6 sm:flex-row sm:flex-wrap">
                     <div className="flex flex-col gap-1">
                         <label htmlFor="time-zone" className="ui-label">
-                            Time zone
+                            {t('settings.timeZone')}
                         </label>
                         <select
                             id="time-zone"
@@ -287,7 +326,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                         >
                             {!timeZone ? (
                                 <option value="" disabled>
-                                    Detecting…
+                                    {t('settings.detecting')}
                                 </option>
                             ) : null}
                             {timeZoneSelectOptions(timeZone).map((zone) => (
@@ -298,8 +337,26 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                         </select>
                     </div>
                     <div className="flex flex-col gap-1">
+                        <label htmlFor="app-language" className="ui-label">
+                            {t('settings.language')}
+                        </label>
+                        <select
+                            id="app-language"
+                            className="ui-select max-w-xs"
+                            value={language}
+                            onChange={(e) => onLanguageChange(e.target.value)}
+                        >
+                            {APP_LANGUAGES.map((code) => (
+                                <option key={code} value={code}>
+                                    {code === 'en' ? t('settings.languageEn') : t('settings.languageUk')}
+                                </option>
+                            ))}
+                        </select>
+                        <p className="max-w-xs text-xs text-ide-muted">{t('settings.languageHint')}</p>
+                    </div>
+                    <div className="flex flex-col gap-1">
                         <label htmlFor="wake-time" className="ui-label">
-                            Wake time
+                            {t('settings.wakeTime')}
                         </label>
                         <input
                             id="wake-time"
@@ -314,7 +371,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                     </div>
                     <div className="flex flex-col gap-1">
                         <label htmlFor="sleep-time" className="ui-label">
-                            Sleep time
+                            {t('settings.sleepTime')}
                         </label>
                         <input
                             id="sleep-time"
@@ -329,7 +386,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                     </div>
                     <div className="flex flex-col gap-1">
                         <label htmlFor="min-split-minutes" className="ui-label">
-                            Min split chunk (minutes)
+                            {t('settings.minSplit')}
                         </label>
                         <input
                             id="min-split-minutes"
@@ -350,7 +407,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                     </div>
                     <div className="flex flex-col gap-1">
                         <label htmlFor="max-split-minutes" className="ui-label">
-                            Max split chunk (minutes)
+                            {t('settings.maxSplit')}
                         </label>
                         <input
                             id="max-split-minutes"
@@ -368,7 +425,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                     </div>
                     <div className="flex flex-col gap-1">
                         <label htmlFor="fixed-event-buffer-minutes" className="ui-label">
-                            Buffer around fixed events (minutes)
+                            {t('settings.buffer')}
                         </label>
                         <input
                             id="fixed-event-buffer-minutes"
@@ -386,14 +443,12 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                             }}
                         />
                         <p className="max-w-xs text-xs text-ide-muted">
-                            Free time before and after each fixed task and external Google event. Generate uses that
-                            gap only when the task would not fit otherwise. 0 turns it off. Dragging a block can still
-                            land in the gap.
+                            {t('settings.bufferHint')}
                         </p>
                     </div>
                     <div className="flex flex-col gap-1">
                         <label htmlFor="recurring-horizon-days" className="ui-label">
-                            Recurring schedule horizon (days)
+                            {t('settings.horizon')}
                         </label>
                         <input
                             id="recurring-horizon-days"
@@ -412,11 +467,11 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             </section>
 
             <section className="border-t border-ide-border pt-10">
-                <h2 className="mb-4 text-lg font-semibold text-ide-text">Google Calendar</h2>
+                <h2 className="mb-4 text-lg font-semibold text-ide-text">{t('settings.googleCalendar')}</h2>
 
                 <div className="mb-6 flex max-w-md flex-col gap-1">
                     <label htmlFor="app-google-calendar-name" className="ui-label">
-                        App calendar name
+                        {t('settings.appCalendarName')}
                     </label>
                     <input
                         id="app-google-calendar-name"
@@ -428,27 +483,25 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                         onBlur={() => void saveAppCalendarName()}
                     />
                     <p className="text-xs text-ide-muted">
-                        Events created by this app are written to a separate Google calendar with this title. Rename
-                        it here anytime; if Google is connected, the calendar title updates automatically.
+                        {t('settings.appCalendarNameHint')}
                     </p>
                 </div>
 
                 {isCheckingConnection ? (
                     <div className="flex items-center gap-3">
                         <Spinner className="h-5 w-5" />
-                        <span className="text-sm text-ide-muted">Checking connection status...</span>
+                        <span className="text-sm text-ide-muted">{t('settings.checkingConnection')}</span>
                     </div>
                 ) : isCalendarConnected ? (
                     <div className="flex items-center gap-3">
                         <span className="flex h-3 w-3 items-center justify-center rounded-full bg-ide-dim text-[0.65rem] text-ide-bg">
                             ✓
                         </span>
-                        <span className="font-medium text-ide-dim">Linked with your Google account</span>
+                        <span className="font-medium text-ide-dim">{t('settings.linked')}</span>
                     </div>
                 ) : (
                     <p className="text-sm text-ide-muted">
-                        Calendar is linked automatically when you sign in with Google. Sign out and sign in again if
-                        this status does not update.
+                        {t('settings.notLinkedHint')}
                     </p>
                 )}
             </section>

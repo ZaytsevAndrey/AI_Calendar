@@ -1,5 +1,6 @@
 import { isFixedEventType } from '../scheduling/event-type.enum';
 import { googleRecurringInstanceId } from '../tasks/skipped-occurrence.util';
+import { isAppLanguage, t, type AppLanguage, type MessageKey } from '../../i18n';
 import {
   endOfLocalDayIso,
   inferScheduleWindow,
@@ -24,6 +25,18 @@ export type VoiceCommandResolveResult =
   | { type: 'command'; command: VoiceCommand };
 
 const EDGE = '(?![\\p{L}\\p{N}])';
+
+function vt(
+  lang: AppLanguage,
+  key: MessageKey,
+  params?: Record<string, string | number>,
+): string {
+  return t(lang, key, params);
+}
+
+function resolveLang(value?: string): AppLanguage {
+  return isAppLanguage(value) ? value : 'en';
+}
 
 function leading(body: string): RegExp {
   return new RegExp(`^(?:${body})${EDGE}`, 'iu');
@@ -126,10 +139,12 @@ export function resolveVoiceCommand(input: {
   alreadyClarified: boolean;
   tasks: VoiceCommandTask[];
   slots: VoiceCommandSlot[];
+  language?: string;
 }): VoiceCommandResolveResult {
+  const lang = resolveLang(input.language);
   const draft = normalizeDraft(input.draft, input.transcript);
   const nowMs = Date.parse(input.nowIso);
-  const picked = pickTask({ ...input, draft });
+  const picked = pickTask({ ...input, draft, language: lang });
   if (picked.type === 'clarify') {
     return input.alreadyClarified
       ? { type: 'command', command: { kind: 'refuse', message: picked.question } }
@@ -146,7 +161,7 @@ export function resolveVoiceCommand(input: {
     if (task.isFixedExternal) {
       return {
         type: 'command',
-        command: { kind: 'refuse', message: 'That event is not an app task.' },
+        command: { kind: 'refuse', message: vt(lang, 'voice.notAppTask') },
       };
     }
     return {
@@ -155,26 +170,27 @@ export function resolveVoiceCommand(input: {
         kind: 'complete',
         taskId: task.id,
         taskName: task.name,
-        summary: `Mark "${task.name}" done?`,
+        summary: vt(lang, 'voice.markDone', { name: task.name }),
       },
     };
   }
 
   if (draft.intent === 'complete' || draft.intent === 'skip') {
-    return skipCommand(task, slot);
+    return skipCommand(task, slot, lang);
   }
 
-  return rescheduleCommand({ ...input, draft }, task, slot, nowMs);
+  return rescheduleCommand({ ...input, draft, language: lang }, task, slot, nowMs);
 }
 
 function skipCommand(
   task: VoiceCommandTask,
   slot: VoiceCommandSlot | null,
+  lang: AppLanguage,
 ): VoiceCommandResolveResult {
   if (task.isFixedExternal || isFixedEventType(task.eventType)) {
     return {
       type: 'command',
-      command: { kind: 'refuse', message: 'Fixed events cannot be skipped.' },
+      command: { kind: 'refuse', message: vt(lang, 'voice.fixedCannotSkip') },
     };
   }
   if (task.isUnscheduled) {
@@ -182,20 +198,20 @@ function skipCommand(
       type: 'command',
       command: {
         kind: 'refuse',
-        message: 'Unscheduled tasks have no occurrence to skip.',
+        message: vt(lang, 'voice.unscheduledNoSkip'),
       },
     };
   }
   if (!slot) {
     return {
       type: 'command',
-      command: { kind: 'refuse', message: 'There is no open time to skip.' },
+      command: { kind: 'refuse', message: vt(lang, 'voice.noOpenTimeToSkip') },
     };
   }
   const ids = googleIdsForOccurrence(task, slot);
   const summary = task.isRecurring
-    ? `Skip today's "${task.name}"?`
-    : `Skip "${task.name}"?`;
+    ? vt(lang, 'voice.skipToday', { name: task.name })
+    : vt(lang, 'voice.skip', { name: task.name });
   return {
     type: 'command',
     command: {
@@ -217,27 +233,29 @@ function rescheduleCommand(
     timeZone: string;
     nowIso: string;
     alreadyClarified: boolean;
+    language: AppLanguage;
   },
   task: VoiceCommandTask,
   slot: VoiceCommandSlot | null,
   nowMs: number,
 ): VoiceCommandResolveResult {
+  const lang = input.language;
   const when = planWhen(input.transcript, input.draft, input.timeZone, input.nowIso, slot);
   if (!when) {
-    const question = 'When should I move it?';
+    const question = vt(lang, 'voice.whenMove');
     return input.alreadyClarified
       ? { type: 'command', command: { kind: 'refuse', message: question } }
       : { type: 'clarify', question };
   }
 
   if (when.kind === 'move' && slot && Date.parse(slot.endIso) > nowMs) {
-    return moveSlot(task, slot, when.startIso, when.endIso, input.timeZone);
+    return moveSlot(task, slot, when.startIso, when.endIso, input.timeZone, lang);
   }
 
   if (task.isRecurring || task.isFixedExternal) {
     return {
       type: 'command',
-      command: { kind: 'refuse', message: 'There is no open time to move.' },
+      command: { kind: 'refuse', message: vt(lang, 'voice.noOpenTimeToMove') },
     };
   }
 
@@ -252,7 +270,7 @@ function rescheduleCommand(
     if (when.kind !== 'move') {
       return {
         type: 'command',
-        command: { kind: 'refuse', message: 'There is no open time to move.' },
+        command: { kind: 'refuse', message: vt(lang, 'voice.noOpenTimeToMove') },
       };
     }
     return {
@@ -261,7 +279,10 @@ function rescheduleCommand(
         kind: 'window',
         taskId: task.id,
         taskName: task.name,
-        summary: `Move "${task.name}" to ${formatWhen(when.startIso, input.timeZone)}?`,
+        summary: vt(lang, 'voice.moveTo', {
+          name: task.name,
+          when: formatWhen(when.startIso, input.timeZone),
+        }),
         earliestStartTime: null,
         deadline: null,
         scheduledStartTime: when.startIso,
@@ -277,7 +298,10 @@ function rescheduleCommand(
       kind: 'window',
       taskId: task.id,
       taskName: task.name,
-      summary: `Reschedule "${task.name}" to ${formatWhen(earliest, input.timeZone)} and replan?`,
+      summary: vt(lang, 'voice.rescheduleReplan', {
+        name: task.name,
+        when: formatWhen(earliest, input.timeZone),
+      }),
       earliestStartTime: earliest,
       deadline,
       scheduledStartTime: null,
@@ -293,14 +317,18 @@ function moveSlot(
   startIso: string,
   endIso: string,
   timeZone: string,
+  lang: AppLanguage,
 ): VoiceCommandResolveResult {
   if (!(Date.parse(endIso) > Date.parse(startIso))) {
     return {
       type: 'command',
-      command: { kind: 'refuse', message: 'That end time is not after the start.' },
+      command: { kind: 'refuse', message: vt(lang, 'voice.endNotAfterStart') },
     };
   }
-  const summary = `Move "${task.name}" to ${formatWhen(startIso, timeZone)}–${localHm(endIso, timeZone)}?`;
+  const summary = vt(lang, 'voice.moveRange', {
+    name: task.name,
+    when: `${formatWhen(startIso, timeZone)}–${localHm(endIso, timeZone)}`,
+  });
   const ids = googleIdsForOccurrence(task, slot);
   if (!slot.synthetic && !ids.googleEventId) {
     return {
@@ -323,7 +351,10 @@ function moveSlot(
         kind: 'window',
         taskId: task.id,
         taskName: task.name,
-        summary: `Move "${task.name}" to ${formatWhen(startIso, timeZone)}?`,
+        summary: vt(lang, 'voice.moveTo', {
+          name: task.name,
+          when: formatWhen(startIso, timeZone),
+        }),
         earliestStartTime: null,
         deadline: null,
         scheduledStartTime: startIso,
@@ -443,15 +474,17 @@ function pickTask(input: {
   alreadyClarified: boolean;
   tasks: VoiceCommandTask[];
   slots: VoiceCommandSlot[];
+  language: AppLanguage;
 }):
   | { type: 'task'; task: VoiceCommandTask }
   | { type: 'clarify'; question: string }
   | { type: 'refuse'; message: string } {
+  const lang = input.language;
   const open = input.tasks.filter(
     (task) => task.status !== 'completed' && task.status !== 'canceled',
   );
   if (input.draft.target === 'named' && input.draft.taskName) {
-    return matchNamed(open, input.draft.taskName);
+    return matchNamed(open, input.draft.taskName, lang);
   }
   if (input.draft.target === 'current' || !input.draft.taskName) {
     const nowMs = Date.parse(input.nowIso);
@@ -464,15 +497,17 @@ function pickTask(input: {
     if (current.length > 1) {
       return {
         type: 'clarify',
-        question: `Which task? ${current
-          .slice(0, 5)
-          .map((task) => task.name)
-          .join(', ')}`,
+        question: vt(lang, 'voice.whichTaskList', {
+          names: current
+            .slice(0, 5)
+            .map((task) => task.name)
+            .join(', '),
+        }),
       };
     }
-    return { type: 'refuse', message: 'Nothing is in progress.' };
+    return { type: 'refuse', message: vt(lang, 'voice.nothingInProgress') };
   }
-  return { type: 'clarify', question: 'Which task?' };
+  return { type: 'clarify', question: vt(lang, 'voice.whichTask') };
 }
 
 function normalizeDraft(draft: VoiceCommandDraft, transcript: string): VoiceCommandDraft {
@@ -536,13 +571,14 @@ function stripCommandPrefix(text: string): string | null {
 function matchNamed(
   open: VoiceCommandTask[],
   query: string,
+  lang: AppLanguage,
 ):
   | { type: 'task'; task: VoiceCommandTask }
   | { type: 'clarify'; question: string }
   | { type: 'refuse'; message: string } {
   const needle = normalizeName(query);
   if (!needle || CURRENT_WORDS.test(needle)) {
-    return { type: 'clarify', question: 'Which task?' };
+    return { type: 'clarify', question: vt(lang, 'voice.whichTask') };
   }
   const exact = open.filter((task) => normalizeName(task.name) === needle);
   const hits = exact.length
@@ -557,13 +593,15 @@ function matchNamed(
   if (hits.length > 1) {
     return {
       type: 'clarify',
-      question: `Which task? ${hits
-        .slice(0, 5)
-        .map((task) => task.name)
-        .join(', ')}`,
+      question: vt(lang, 'voice.whichTaskList', {
+        names: hits
+          .slice(0, 5)
+          .map((task) => task.name)
+          .join(', '),
+      }),
     };
   }
-  return { type: 'refuse', message: 'I could not find that task.' };
+  return { type: 'refuse', message: vt(lang, 'voice.couldNotFindTask') };
 }
 
 function pickOpenSlot(

@@ -1,8 +1,9 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { CalendarPlus, Check, Pencil, Trash2 } from 'lucide-react';
 import { TaskDTO } from '../../../api/tasks.api';
 import { formatDateTime, formatDateTimeRange, formatMinutes } from '../../../utils/formatDate';
-import { deadlineTone, deadlineToneLabel } from '../utils/deadlineTone';
+import { deadlineTone } from '../utils/deadlineTone';
 
 interface EventItemProps {
   event: TaskDTO;
@@ -18,20 +19,6 @@ const priorityColors = {
   medium: '#03a9f4',
   high: '#ff9800',
   urgent: '#f44336',
-};
-
-const priorityLabels = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  urgent: 'Urgent',
-};
-
-const statusLabels = {
-  todo: 'To Do',
-  in_progress: 'In Progress',
-  completed: 'Completed',
-  canceled: 'Canceled',
 };
 
 const statusPill = {
@@ -77,6 +64,7 @@ const EventItem: React.FC<EventItemProps> = ({
   onSchedule,
   busyId,
 }) => {
+  const { t } = useTranslation();
   const deadline = formatDateTime(event.deadline);
   const from = formatDateTime(event.earliestStartTime);
   const slot = formatDateTimeRange(event.scheduledStartTime, event.scheduledEndTime);
@@ -85,46 +73,66 @@ const EventItem: React.FC<EventItemProps> = ({
   const busy = busyId === event.id;
   const color = priorityColors[event.priority];
   const when = slot || (!unscheduled && from && deadline ? `${from} – ${deadline}` : null);
+
+  const tonePrefix =
+    tone === 'overdue'
+      ? t('tasks.item.overduePrefix')
+      : tone === 'today'
+        ? t('tasks.item.dueSoonPrefix')
+        : tone === 'soon'
+          ? t('tasks.item.approachingPrefix')
+          : '';
+
   const dueText =
     deadline && (!when || tone !== 'none')
-      ? `${deadlineToneLabel(tone)}${deadline}`
+      ? `${tonePrefix}${deadline}`
       : !deadline && from && !when
-        ? `From ${from}`
+        ? t('tasks.item.from', { time: from })
         : null;
+
+  const priorityLabel = t(`tasks.priority.${event.priority}`);
+  const statusLabel =
+    event.status === 'todo'
+      ? t('tasks.status.todo')
+      : event.status === 'in_progress'
+        ? t('tasks.status.inProgress')
+        : event.status === 'completed'
+          ? t('tasks.status.completed')
+          : t('tasks.status.canceled');
 
   const actions = (
     <>
       {onDone ? (
         <>
-          <button type="button" onClick={() => onDone(event)} className={`${iconBtn} md:hidden`} disabled={busy} aria-label="Done">
+          <button type="button" onClick={() => onDone(event)} className={`${iconBtn} md:hidden`} disabled={busy} aria-label={t('tasks.item.done')}>
             <Check className="h-4 w-4" aria-hidden />
           </button>
           <button type="button" onClick={() => onDone(event)} className="ui-btn-secondary hidden px-3 py-1.5 text-sm md:inline-flex" disabled={busy}>
-            Done
+            {t('tasks.item.done')}
           </button>
         </>
       ) : null}
       {onSchedule ? (
         <>
-          <button type="button" onClick={() => onSchedule(event)} className={`${iconBtn} text-ide-link md:hidden`} disabled={busy} aria-label="Schedule">
+          <button type="button" onClick={() => onSchedule(event)} className={`${iconBtn} text-ide-link md:hidden`} disabled={busy} aria-label={t('tasks.item.schedule')}>
             <CalendarPlus className="h-4 w-4" aria-hidden />
           </button>
           <button type="button" onClick={() => onSchedule(event)} className="ui-btn-primary hidden px-3 py-1.5 text-sm md:inline-flex" disabled={busy}>
-            Schedule
+            {t('tasks.item.schedule')}
           </button>
         </>
       ) : null}
-      <button type="button" onClick={() => onEdit(event)} className={`${iconBtn} md:hidden`} aria-label="Edit">
+      <button type="button" onClick={() => onEdit(event)} className={`${iconBtn} md:hidden`} aria-label={t('common.edit')}>
         <Pencil className="h-4 w-4" aria-hidden />
       </button>
       <button type="button" onClick={() => onEdit(event)} className="ui-btn-secondary hidden px-3 py-1.5 text-sm md:inline-flex">
-        Edit
+        {t('common.edit')}
       </button>
-      <button type="button" onClick={() => onDelete(event.id)} className={`${iconBtn} text-ide-error/80 hover:text-ide-error md:hidden`} aria-label="Delete">
+      <button type="button" onClick={() => onDelete(event.id)} className={`${iconBtn} text-ide-error/80 hover:text-ide-error md:hidden`} aria-label={t('common.delete')}>
         <Trash2 className="h-4 w-4" aria-hidden />
       </button>
       <button type="button" onClick={() => onDelete(event.id)} className="ui-btn-danger hidden px-3 py-1.5 text-sm md:inline-flex">
-        Delete
+        {t('common.delete')}
       </button>
     </>
   );
@@ -146,13 +154,13 @@ const EventItem: React.FC<EventItemProps> = ({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <span className="sr-only">{event.priority} priority</span>
+        <span className="sr-only">{t('tasks.item.prioritySr', { priority: event.priority })}</span>
         <Pill style={{ borderColor: `${color}88`, backgroundColor: `${color}24`, color }}>
-          {priorityLabels[event.priority]}
+          {priorityLabel}
         </Pill>
-        <Pill className={statusPill[event.status]}>{statusLabels[event.status]}</Pill>
+        <Pill className={statusPill[event.status]}>{statusLabel}</Pill>
         {unscheduled ? (
-          <Pill className="border-ide-warn/50 bg-ide-warn/15 text-ide-warn">Unscheduled</Pill>
+          <Pill className="border-ide-warn/50 bg-ide-warn/15 text-ide-warn">{t('tasks.item.unscheduled')}</Pill>
         ) : null}
         {event.phase ? (
           <Pill
@@ -171,7 +179,7 @@ const EventItem: React.FC<EventItemProps> = ({
           </Pill>
         ) : null}
         {event.isRecurring ? (
-          <Pill className="border-ide-link/40 bg-ide-link/15 text-ide-link">Repeats</Pill>
+          <Pill className="border-ide-link/40 bg-ide-link/15 text-ide-link">{t('tasks.item.repeats')}</Pill>
         ) : null}
         {when ? <Pill className={tonePill.none}>{when}</Pill> : null}
         {dueText ? <Pill className={tonePill[tone]}>{dueText}</Pill> : null}

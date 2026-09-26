@@ -1,5 +1,6 @@
 import React from 'react';
 import clsx from 'clsx';
+import { useTranslation } from 'react-i18next';
 
 interface WeekDaysSelectorProps {
   selectedDays: number[];
@@ -7,21 +8,23 @@ interface WeekDaysSelectorProps {
   errors: any;
 }
 
-const weekDays = [
-  { value: 1, label: 'Mon' },
-  { value: 2, label: 'Tue' },
-  { value: 3, label: 'Wed' },
-  { value: 4, label: 'Thu' },
-  { value: 5, label: 'Fri' },
-  { value: 6, label: 'Sat' },
-  { value: 0, label: 'Sun' },
-];
-
 export const WeekDaysSelector = ({
   selectedDays,
   setSelectedDays,
   errors
 }: WeekDaysSelectorProps) => {
+  const { t } = useTranslation();
+
+  const weekDays = [
+    { value: 1, label: t('phases.mon') },
+    { value: 2, label: t('phases.tue') },
+    { value: 3, label: t('phases.wed') },
+    { value: 4, label: t('phases.thu') },
+    { value: 5, label: t('phases.fri') },
+    { value: 6, label: t('phases.sat') },
+    { value: 0, label: t('phases.sun') },
+  ];
+
   const toggleDay = (value: number) => {
     setSelectedDays(
       selectedDays.includes(value) 
@@ -32,7 +35,7 @@ export const WeekDaysSelector = ({
 
   return (
     <div className="form-group">
-      <label htmlFor="weekDays-toggle">Days of Week*</label>
+      <label htmlFor="weekDays-toggle">{t('phases.daysOfWeek')}</label>
       <div id="weekDays-toggle" className="weekdays-toggle">
         {weekDays.map(({ value, label }) => (
           <button
@@ -48,4 +51,4 @@ export const WeekDaysSelector = ({
       {errors.weekDays && <span className="error-message">{errors.weekDays.message}</span>}
     </div>
   );
-}; 
+};

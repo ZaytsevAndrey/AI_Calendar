@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   GOOGLE_EVENT_COLORS,
   GOOGLE_TRANSPARENCY_OPTIONS,
@@ -30,13 +31,28 @@ export function GoogleEventSettingsFields({
   onChange,
   allowEmptyColor = false,
 }: GoogleEventSettingsFieldsProps) {
+  const { t } = useTranslation();
   const patch = (partial: Partial<GoogleEventSettingsValue>) => onChange({ ...value, ...partial });
+
+  const visibilityLabel = (optValue: string) => {
+    if (optValue === 'public') return t('calendar.eventSettings.public');
+    if (optValue === 'private') return t('calendar.eventSettings.private');
+    if (optValue === 'confidential') return t('calendar.eventSettings.confidential');
+    return t('calendar.eventSettings.visibilityDefault');
+  };
+
+  const transparencyLabel = (optValue: string) => {
+    if (optValue === 'transparent') return t('calendar.eventSettings.free');
+    return t('calendar.eventSettings.busy');
+  };
+
+  const colorLabel = (id: string) => t(`calendar.eventSettings.color${id}`);
 
   return (
     <div className="space-y-3">
       <div>
         <label htmlFor="google-event-location" className={lbl}>
-          Location
+          {t('calendar.eventSettings.location')}
         </label>
         <input
           id="google-event-location"
@@ -46,13 +62,13 @@ export function GoogleEventSettingsFields({
         />
       </div>
       <div>
-        <span className={lbl}>Color</span>
+        <span className={lbl}>{t('calendar.eventSettings.color')}</span>
         <div className="flex flex-wrap gap-1.5">
           {allowEmptyColor ? (
             <button
               type="button"
-              title="Phase color"
-              aria-label="Use phase color"
+              title={t('calendar.eventSettings.phaseColor')}
+              aria-label={t('calendar.eventSettings.usePhaseColor')}
               className={`h-7 w-7 rounded-full border ${
                 !value.colorId
                   ? 'border-ide-link ring-2 ring-ide-link'
@@ -65,8 +81,8 @@ export function GoogleEventSettingsFields({
             <button
               key={c.id}
               type="button"
-              title={c.label}
-              aria-label={c.label}
+              title={colorLabel(c.id)}
+              aria-label={colorLabel(c.id)}
               className={`h-7 w-7 rounded-full border ${
                 value.colorId === c.id
                   ? 'border-ide-link ring-2 ring-ide-link'
@@ -81,7 +97,7 @@ export function GoogleEventSettingsFields({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label htmlFor="google-event-visibility" className={lbl}>
-            Visibility
+            {t('calendar.eventSettings.visibility')}
           </label>
           <select
             id="google-event-visibility"
@@ -91,14 +107,14 @@ export function GoogleEventSettingsFields({
           >
             {GOOGLE_VISIBILITY_OPTIONS.map((opt) => (
               <option key={opt.value || 'default'} value={opt.value}>
-                {opt.label}
+                {visibilityLabel(opt.value)}
               </option>
             ))}
           </select>
         </div>
         <div>
           <label htmlFor="google-event-show-as" className={lbl}>
-            Show as
+            {t('calendar.eventSettings.showAs')}
           </label>
           <select
             id="google-event-show-as"
@@ -108,21 +124,21 @@ export function GoogleEventSettingsFields({
           >
             {GOOGLE_TRANSPARENCY_OPTIONS.filter((opt) => opt.value !== '').map((opt) => (
               <option key={opt.value} value={opt.value}>
-                {opt.label}
+                {transparencyLabel(opt.value)}
               </option>
             ))}
           </select>
         </div>
       </div>
       <div>
-        <span className={lbl}>Reminders</span>
+        <span className={lbl}>{t('calendar.eventSettings.reminders')}</span>
         <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm text-ide-text">
           <input
             type="checkbox"
             checked={value.keepDefaultReminders}
             onChange={(e) => patch({ keepDefaultReminders: e.target.checked })}
           />
-          Use calendar defaults
+          {t('calendar.eventSettings.useDefaults')}
         </label>
         {!value.keepDefaultReminders
           ? value.reminders.map((rem, idx) => (
@@ -140,8 +156,8 @@ export function GoogleEventSettingsFields({
                     })
                   }
                 >
-                  <option value="popup">Popup</option>
-                  <option value="email">Email</option>
+                  <option value="popup">{t('calendar.eventSettings.popup')}</option>
+                  <option value="email">{t('calendar.eventSettings.email')}</option>
                 </select>
                 <input
                   type="number"
@@ -163,7 +179,7 @@ export function GoogleEventSettingsFields({
                     patch({ reminders: value.reminders.filter((_, i) => i !== idx) })
                   }
                 >
-                  Delete
+                  {t('common.delete')}
                 </button>
               </div>
             ))
@@ -178,7 +194,7 @@ export function GoogleEventSettingsFields({
               })
             }
           >
-            + Reminder
+            {t('calendar.eventSettings.addReminder')}
           </button>
         ) : null}
       </div>

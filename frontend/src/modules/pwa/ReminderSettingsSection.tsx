@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useUpdateUserSettingsMutation } from 'api/userSettingsApi';
 import { showErrorToast, showSuccessToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
@@ -9,6 +10,7 @@ import {
 } from './browserReminders';
 
 export function ReminderSettingsSection({ remindersEnabled }: { remindersEnabled: boolean }) {
+  const { t } = useTranslation();
   const [updateUserSettings] = useUpdateUserSettingsMutation();
   const [enabled, setEnabled] = useState(remindersEnabled);
   const [browserReady, setBrowserReady] = useState(false);
@@ -41,10 +43,16 @@ export function ReminderSettingsSection({ remindersEnabled }: { remindersEnabled
       setEnabled(true);
       await enableBrowserReminders();
       setBrowserReady(true);
-      showSuccessToast({ title: 'Reminders on', detail: 'This browser will get push notifications.' });
+      showSuccessToast({
+        title: t('reminders.onTitle'),
+        detail: t('reminders.onDetail'),
+      });
     } catch (error) {
       setMessage(extractApiErrorMessage(error));
-      showErrorToast({ title: 'Could not enable reminders', detail: extractApiErrorMessage(error) });
+      showErrorToast({
+        title: t('reminders.enableFailed'),
+        detail: extractApiErrorMessage(error),
+      });
     } finally {
       setBusy(false);
     }
@@ -58,10 +66,16 @@ export function ReminderSettingsSection({ remindersEnabled }: { remindersEnabled
       setEnabled(false);
       setBrowserReady(false);
       await disableBrowserReminders();
-      showSuccessToast({ title: 'Reminders off', detail: 'Push notifications are stopped.' });
+      showSuccessToast({
+        title: t('reminders.offTitle'),
+        detail: t('reminders.offDetail'),
+      });
     } catch (error) {
       setMessage(extractApiErrorMessage(error));
-      showErrorToast({ title: 'Could not turn reminders off', detail: extractApiErrorMessage(error) });
+      showErrorToast({
+        title: t('reminders.disableFailed'),
+        detail: extractApiErrorMessage(error),
+      });
     } finally {
       setBusy(false);
     }
@@ -69,12 +83,8 @@ export function ReminderSettingsSection({ remindersEnabled }: { remindersEnabled
 
   return (
     <section className="border-t border-ide-border pt-10">
-      <h2 className="mb-2 text-lg font-semibold text-ide-text">Reminders</h2>
-      <p className="mb-4 text-sm text-ide-muted">
-        One reminder during the half hour before each timed block. A habit with a set time uses that
-        clock. Habits without a time share one reminder before wake. Already checked habits stay quiet.
-        On iPhone, add the app to the Home Screen first.
-      </p>
+      <h2 className="mb-2 text-lg font-semibold text-ide-text">{t('reminders.title')}</h2>
+      <p className="mb-4 text-sm text-ide-muted">{t('reminders.hint')}</p>
 
       <label className="flex items-center gap-2 text-sm text-ide-text">
         <input
@@ -87,7 +97,7 @@ export function ReminderSettingsSection({ remindersEnabled }: { remindersEnabled
             else void turnOff();
           }}
         />
-        Enable reminders
+        {t('reminders.enable')}
       </label>
 
       {enabled && !browserReady ? (
@@ -97,7 +107,7 @@ export function ReminderSettingsSection({ remindersEnabled }: { remindersEnabled
           disabled={busy}
           onClick={() => void turnOn()}
         >
-          Allow on this browser
+          {t('reminders.allowBrowser')}
         </button>
       ) : null}
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { TaskDTO } from '../../../api/tasks.api';
 import EventItem from './EventItem';
 
@@ -25,16 +26,18 @@ const EventList: React.FC<EventListProps> = ({
   busyId,
   emptyTitle,
 }) => {
+  const { t } = useTranslation();
+
   if (isLoading) {
-    return <div className="loading">Loading tasks…</div>;
+    return <div className="loading">{t('tasks.list.loading')}</div>;
   }
 
   if (events.length === 0) {
     return (
       <div className="empty-list">
-        <p>{emptyTitle || 'No tasks found. Create one to get started.'}</p>
+        <p>{emptyTitle || t('tasks.list.empty')}</p>
         <button type="button" onClick={onCreate} className="ui-btn-primary mt-4">
-          Create task
+          {t('tasks.list.createTask')}
         </button>
       </div>
     );

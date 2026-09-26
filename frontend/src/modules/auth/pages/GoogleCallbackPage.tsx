@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
+import { useTranslation } from 'react-i18next';
+import i18n from 'i18n';
 import { Spinner } from '../../../ui/Spinner';
 import apiCall from '../../common/utils/apiCall';
 import { LOGIN } from '../actions/actionTypes';
@@ -9,6 +11,7 @@ import { UserSettingsApi } from '../../../api/user-settings.api';
 import { showErrorToast } from '../../../utils/toast';
 
 const GoogleCallbackPage: React.FC = () => {
+    const { t } = useTranslation();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const dispatch = useDispatch();
@@ -21,8 +24,8 @@ const GoogleCallbackPage: React.FC = () => {
         const ticket = searchParams.get('ticket');
         if (!ticket) {
             showErrorToast({
-                title: 'Sign-in failed',
-                detail: 'Google sign-in did not complete.',
+                title: i18n.t('auth.signInFailed'),
+                detail: i18n.t('auth.didNotComplete'),
             });
             navigate('/login', { replace: true });
             return;
@@ -64,8 +67,8 @@ const GoogleCallbackPage: React.FC = () => {
             } catch (error) {
                 console.error('Google sign-in ticket exchange failed:', error);
                 showErrorToast({
-                    title: 'Sign-in failed',
-                    detail: 'Google sign-in failed. Try again.',
+                    title: i18n.t('auth.signInFailed'),
+                    detail: i18n.t('auth.googleFailed'),
                 });
                 navigate('/login', { replace: true });
             }
@@ -77,7 +80,7 @@ const GoogleCallbackPage: React.FC = () => {
     return (
         <div className="flex h-full min-h-0 flex-1 flex-col items-center justify-center gap-4 bg-ide-bg px-4 text-ide-text">
             <Spinner className="h-10 w-10" />
-            <p className="text-lg font-medium text-ide-text">Signing you in…</p>
+            <p className="text-lg font-medium text-ide-text">{t('auth.signingIn')}</p>
         </div>
     );
 };

@@ -15,10 +15,10 @@ import {
 import { ScheduledTask } from './schedule.entity';
 import {
   clockHm,
-  EMPTY_SCHEDULE_RECOMMENDATIONS,
+  emptyScheduleRecommendations,
   formatInTimeZone,
   parseScheduleRecommendations,
-  SCHEDULE_RECOMMENDATIONS_SYSTEM_PROMPT,
+  scheduleRecommendationsSystemPrompt,
   ScheduleRecommendations,
 } from './schedule-recommendations.util';
 
@@ -123,11 +123,11 @@ export class ScheduleRecommendationsService {
       snapshot.slots.length === 0 &&
       snapshot.externalEvents.length === 0
     ) {
-      return EMPTY_SCHEDULE_RECOMMENDATIONS;
+      return emptyScheduleRecommendations(settings.language);
     }
 
     const content = await this.groq.completeJson(
-      SCHEDULE_RECOMMENDATIONS_SYSTEM_PROMPT,
+      scheduleRecommendationsSystemPrompt(settings.language),
       JSON.stringify(snapshot),
     );
     const parsed = parseScheduleRecommendations(

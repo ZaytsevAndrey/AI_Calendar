@@ -5,6 +5,7 @@ import {
   IsInt,
   IsBoolean,
   IsArray,
+  IsIn,
   ArrayMaxSize,
   Min,
   Max,
@@ -15,6 +16,7 @@ import {
   ValidatorConstraintInterface,
 } from 'class-validator';
 import { isValidIanaTimeZone } from '../../../common/iana-time-zone';
+import { APP_LANGUAGES } from '../../../i18n';
 
 @ValidatorConstraint({ name: 'isIanaTimeZone', async: false })
 class IsIanaTimeZoneConstraint implements ValidatorConstraintInterface {
@@ -223,4 +225,15 @@ export class UpdateUserSettingsDto {
   @IsBoolean()
   @IsOptional()
   confirmVoiceCommands?: boolean;
+
+  @ApiProperty({
+    example: 'uk',
+    description: 'UI and notification language',
+    enum: APP_LANGUAGES,
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  @IsIn([...APP_LANGUAGES])
+  language?: string;
 }

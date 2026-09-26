@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Mic, Plus } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useGetEventsQuery, useDeleteEventMutation, useUpdateEventMutation } from 'api/eventTasksApi';
 import { useGetAllPhasesQuery } from 'api/phasesApi';
 import EventList from 'modules/events/components/EventList';
@@ -69,6 +70,7 @@ function sortUnscheduled(list: TaskDTO[]): TaskDTO[] {
 }
 
 const TasksPage: React.FC = () => {
+  const { t } = useTranslation();
   const [sortField, setSortField] = useState<SortField>('deadline');
   const [filterStatus, setFilterStatus] = useState<TaskStatusFilter>('active');
   const [scheduledQuery, setScheduledQuery] = useState('');
@@ -116,11 +118,11 @@ const TasksPage: React.FC = () => {
     void updateEvent({ id: task.id, body: { status: 'completed' } })
       .unwrap()
       .then(() => {
-        showSuccessToast({ title: 'Task completed', detail: task.name });
+        showSuccessToast({ title: t('tasks.completed'), detail: task.name });
       })
       .catch((err) => {
         showErrorToast({
-          title: 'Could not complete task',
+          title: t('tasks.completeFailed'),
           detail: extractApiErrorMessage(err),
         });
       })
@@ -129,25 +131,26 @@ const TasksPage: React.FC = () => {
 
   const requestDelete = (id: string) => {
     const task = events.find((item) => item.id === id);
-    setDeleteConfirm({ open: true, id, name: task?.name || 'this task' });
+    setDeleteConfirm({ open: true, id, name: task?.name || t('tasks.thisTask') });
   };
 
   const confirmDelete = () => {
     if (!deleteConfirm.id) return;
     const id = deleteConfirm.id;
     const name = deleteConfirm.name;
+    const thisTaskLabel = t('tasks.thisTask');
     setDeleteConfirm({ open: false, id: null, name: '' });
     void deleteEvent(id)
       .unwrap()
       .then(() => {
         showSuccessToast({
-          title: 'Task deleted',
-          detail: name !== 'this task' ? name : undefined,
+          title: t('tasks.deleted'),
+          detail: name !== thisTaskLabel ? name : undefined,
         });
       })
       .catch((err) => {
         showErrorToast({
-          title: 'Could not delete task',
+          title: t('tasks.deleteFailed'),
           detail: extractApiErrorMessage(err),
         });
       });
@@ -161,16 +164,15 @@ const TasksPage: React.FC = () => {
     <div className="page-shell-fill">
       <header className="page-head shrink-0">
         <div>
-          <h1 className="page-title">Tasks</h1>
+          <h1 className="page-title">{t('tasks.title')}</h1>
           <p className="page-lead max-md:hidden">
-            Inbox for things to do later, plus scheduled tasks. Unscheduled items stay off Google Calendar
-            until you schedule them.
+            {t('tasks.pageLead')}
           </p>
         </div>
         {phone ? null : (
           <div className="flex w-full shrink-0 flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
             <button type="button" onClick={() => openCreate()} className="ui-btn-primary min-w-[9rem] flex-1 sm:flex-none">
-              Create task
+              {t('calendar.createTask')}
             </button>
             <VoiceTaskButton onClick={voice.open} />
           </div>
@@ -180,8 +182,8 @@ const TasksPage: React.FC = () => {
       <div className="page-scroll space-y-6 max-md:pb-28">
         <section>
           <div className="mb-3">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-ide-muted">Unscheduled</h2>
-            <p className="text-xs text-ide-muted">No time slot. Mark done or schedule when you know when.</p>
+            <h2 className="text-sm font-medium uppercase tracking-wide text-ide-muted">{t('tasks.unscheduled')}</h2>
+            <p className="text-xs text-ide-muted">{t('tasks.unscheduledHint')}</p>
           </div>
           <TaskSectionFilters
             idPrefix="inbox"
@@ -191,15 +193,15 @@ const TasksPage: React.FC = () => {
             onStatusChange={setInboxStatus}
             overdueOnly={inboxOverdue}
             onOverdueOnlyChange={setInboxOverdue}
-            searchAriaLabel="Search unscheduled"
-            statusAriaLabel="Unscheduled tasks"
-            overdueAriaLabel="Overdue unscheduled"
+            searchAriaLabel={t('tasks.searchUnscheduled')}
+            statusAriaLabel={t('tasks.statusUnscheduled')}
+            overdueAriaLabel={t('tasks.overdueUnscheduled')}
           />
           {isLoadingEvents ? (
-            <div className="loading">Loading tasks…</div>
+            <div className="loading">{t('common.loading')}</div>
           ) : unscheduledInbox.length === 0 ? (
             <p className="text-sm text-ide-muted">
-              {inboxFiltersNarrow ? 'No unscheduled tasks match these filters.' : 'No unscheduled tasks.'}
+              {inboxFiltersNarrow ? t('tasks.noUnscheduledMatch') : t('tasks.noUnscheduled')}
             </p>
           ) : (
             <EventList
@@ -216,7 +218,7 @@ const TasksPage: React.FC = () => {
         </section>
 
         <section>
-          <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-ide-muted">Scheduled</h2>
+          <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-ide-muted">{t('tasks.scheduled')}</h2>
           <TaskSectionFilters
             idPrefix="scheduled"
             query={scheduledQuery}
@@ -225,8 +227,8 @@ const TasksPage: React.FC = () => {
             onStatusChange={setFilterStatus}
             overdueOnly={scheduledOverdue}
             onOverdueOnlyChange={setScheduledOverdue}
-            searchAriaLabel="Search scheduled"
-            overdueAriaLabel="Overdue scheduled"
+            searchAriaLabel={t('tasks.searchScheduled')}
+            overdueAriaLabel={t('tasks.overdueScheduled')}
             phases={phases}
             phaseId={phaseId}
             onPhaseIdChange={setPhaseId}
@@ -241,7 +243,7 @@ const TasksPage: React.FC = () => {
             onDelete={requestDelete}
             onCreate={() => openCreate()}
             isLoading={isLoadingEvents}
-            emptyTitle="No scheduled tasks in this filter."
+            emptyTitle={t('tasks.noScheduledFilter')}
           />
         </section>
       </div>
@@ -249,7 +251,7 @@ const TasksPage: React.FC = () => {
       <Modal
         open={deleteConfirm.open}
         onClose={() => setDeleteConfirm({ open: false, id: null, name: '' })}
-        title="Delete task"
+        title={t('tasks.deleteTitle')}
         footer={
           <>
             <button
@@ -257,20 +259,20 @@ const TasksPage: React.FC = () => {
               onClick={() => setDeleteConfirm({ open: false, id: null, name: '' })}
               className="ui-btn-secondary w-full sm:w-auto"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="button"
               onClick={confirmDelete}
               className="ui-btn-danger w-full sm:w-auto"
             >
-              Delete
+              {t('common.delete')}
             </button>
           </>
         }
       >
         <p className="text-ide-text">
-          Are you sure you want to delete &quot;{deleteConfirm.name}&quot;? This cannot be undone.
+          {t('tasks.deleteConfirm', { name: deleteConfirm.name })}
         </p>
       </Modal>
 
@@ -284,7 +286,7 @@ const TasksPage: React.FC = () => {
           <button
             type="button"
             className="flex h-12 w-12 items-center justify-center rounded-full border border-ide-border bg-ide-panel text-ide-text shadow-ide-md"
-            aria-label="Add task by voice"
+            aria-label={t('calendar.addByVoice')}
             onClick={() => voice.open()}
           >
             <Mic className="h-5 w-5" aria-hidden />
@@ -292,7 +294,7 @@ const TasksPage: React.FC = () => {
           <button
             type="button"
             className="flex h-14 w-14 items-center justify-center rounded-full bg-ide-accentBlue text-white shadow-ide-md"
-            aria-label="Create task"
+            aria-label={t('calendar.createTask')}
             onClick={() => openCreate()}
           >
             <Plus className="h-7 w-7" aria-hidden />

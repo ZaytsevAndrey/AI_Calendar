@@ -1,18 +1,20 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { prefetchRoute } from 'routeChunks';
 import { mainNavItems } from '../mainNav';
 
 const BottomNav: React.FC = () => {
+    const { t } = useTranslation();
     const location = useLocation();
 
     return (
         <nav
             className="z-[1200] shrink-0 border-t border-ide-border bg-ide-panel pb-[env(safe-area-inset-bottom)] md:hidden"
-            aria-label="Main"
+            aria-label={t('nav.main')}
         >
             <div className="grid h-14 grid-cols-5">
-                {mainNavItems.map(({ to, label, icon: Icon, match }) => {
+                {mainNavItems.map(({ to, labelKey, icon: Icon, match }) => {
                     const active = match(location.pathname);
                     return (
                         <Link
@@ -28,7 +30,7 @@ const BottomNav: React.FC = () => {
                             onFocus={() => prefetchRoute(to)}
                         >
                             <Icon className="h-5 w-5 shrink-0" aria-hidden />
-                            {label}
+                            {t(labelKey)}
                         </Link>
                     );
                 })}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Mic } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Modal } from '../../../ui/Modal';
 import { Spinner } from '../../../ui/Spinner';
 import type { useVoiceTask } from '../hooks/useVoiceTask';
@@ -7,6 +8,7 @@ import type { useVoiceTask } from '../hooks/useVoiceTask';
 type VoiceController = ReturnType<typeof useVoiceTask>;
 
 export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
+  const { t } = useTranslation();
   const {
     isOpen,
     close,
@@ -24,23 +26,23 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
   } = voice;
 
   const primaryLabel = isRecording
-    ? 'Stop'
+    ? t('voice.stop')
     : stage === 'confirm'
-      ? 'Confirm'
+      ? t('voice.confirm')
       : stage === 'clarifying'
-        ? 'Answer'
-        : 'Start speaking';
+        ? t('voice.answer')
+        : t('voice.startSpeaking');
 
   return (
     <Modal
       open={isOpen}
       onClose={close}
-      title="Add task by voice"
+      title={t('voice.addByVoice')}
       maxWidthClass="max-w-md"
       footer={
         <>
           <button type="button" className="ui-btn-secondary" onClick={close} disabled={isWorking}>
-            Cancel
+            {t('common.cancel')}
           </button>
           {isRecording ? (
             <button type="button" className="ui-btn-danger" onClick={() => void finishRecording()}>
@@ -73,7 +75,7 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
         {isRecording ? (
           <p className="flex items-center gap-2 font-medium text-ide-error">
             <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-ide-error" />
-            Listening… tap Stop when you are done.
+            {t('voice.listeningStop')}
           </p>
         ) : null}
         {isWorking ? (
@@ -89,14 +91,11 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
             {clarifyingQuestion}
           </p>
         ) : (
-          <p className="text-ide-muted">
-            Speak in Ukrainian, English, or Russian. Add a task, or say done, skip, or move it to a
-            new time.
-          </p>
+          <p className="text-ide-muted">{t('voice.hint')}</p>
         )}
         {transcript ? (
           <p className="text-ide-text">
-            <span className="text-ide-muted">Heard: </span>
+            <span className="text-ide-muted">{t('voice.heard')} </span>
             {transcript}
           </p>
         ) : null}

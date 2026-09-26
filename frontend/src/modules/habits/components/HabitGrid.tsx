@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pencil } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { HabitDTO } from 'api/habits.api';
 import {
   datesInclusive,
@@ -24,20 +25,21 @@ const HabitGrid: React.FC<HabitGridProps> = ({
   editableTo,
   onEdit,
 }) => {
+  const { t } = useTranslation();
   const { toggle, busy } = useToggleHabit();
   const dates = datesInclusive(editableFrom, editableTo);
 
   return (
     <div className="max-w-full overflow-auto overscroll-x-contain rounded-xl border border-ide-border bg-ide-panel [-webkit-overflow-scrolling:touch]">
       <table className="w-max min-w-full border-collapse text-sm">
-        <caption className="sr-only">Habit check-ins for the last 14 days</caption>
+        <caption className="sr-only">{t('habits.gridCaption')}</caption>
         <thead>
           <tr>
             <th
               scope="col"
               className="sticky left-0 z-10 min-w-[11rem] bg-ide-surface px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-ide-muted"
             >
-              Habit
+              {t('habits.habitColumn')}
             </th>
             {dates.map((date) => (
               <th
@@ -69,7 +71,10 @@ const HabitGrid: React.FC<HabitGridProps> = ({
                   <div className="min-w-0 flex-1">
                     <h2 className="truncate text-sm font-semibold text-ide-text">{habit.name}</h2>
                     <p className="text-xs text-ide-muted">
-                      {habit.currentStreak} day streak · {habit.points} pts
+                      {t('habits.streakPts', {
+                        streak: habit.currentStreak,
+                        points: habit.points,
+                      })}
                       {habit.blockStartTime && habit.blockMinutes
                         ? ` · ${habit.blockStartTime} · ${habit.blockMinutes} min`
                         : ''}
@@ -79,7 +84,7 @@ const HabitGrid: React.FC<HabitGridProps> = ({
                     type="button"
                     className="ui-btn-ghost shrink-0 px-2"
                     onClick={() => onEdit(habit)}
-                    aria-label={`Edit ${habit.name}`}
+                    aria-label={t('habits.editAria', { name: habit.name })}
                   >
                     <Pencil className="h-4 w-4" aria-hidden />
                   </button>
@@ -97,7 +102,9 @@ const HabitGrid: React.FC<HabitGridProps> = ({
                       disabled={busy}
                       aria-pressed={done}
                       aria-label={
-                        date === today ? `${habit.name} today` : `${habit.name} on ${date}`
+                        date === today
+                          ? t('habits.todayAria', { name: habit.name })
+                          : t('habits.dateAria', { name: habit.name, date })
                       }
                       onClick={() => void toggle(habit.id, date, done)}
                       className={`mx-auto flex h-11 w-11 items-center justify-center rounded-md border text-sm text-white ${

@@ -1,9 +1,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useGetHabitsQuery } from 'api/habitsApi';
 import { useToggleHabit } from 'modules/habits/useToggleHabit';
 
 export function HabitNowStrip() {
+  const { t } = useTranslation();
   const { data } = useGetHabitsQuery();
   const { toggle, busy } = useToggleHabit();
   const habits = data?.habits ?? [];
@@ -12,9 +14,9 @@ export function HabitNowStrip() {
   return (
     <div className="space-y-2">
       <div className="flex items-baseline justify-between gap-2">
-        <h3 className="text-xs font-medium uppercase tracking-wide text-ide-muted">Habits</h3>
+        <h3 className="text-xs font-medium uppercase tracking-wide text-ide-muted">{t('now.habits')}</h3>
         <Link to="/habits" className="text-xs text-ide-link hover:underline">
-          All habits
+          {t('now.allHabits')}
         </Link>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">

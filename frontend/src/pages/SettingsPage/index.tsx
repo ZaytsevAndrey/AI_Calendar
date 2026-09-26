@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useDispatch } from 'react-redux';
+import { useTranslation } from 'react-i18next';
 import { LogOut } from 'lucide-react';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import UserSettingsForm from 'modules/user-settings/components/UserSettingsForm';
@@ -7,6 +8,7 @@ import { logout } from 'modules/auth/actions/logoutActions';
 import { buildLabel } from 'modules/common/buildInfo';
 
 const SettingsPage: React.FC = () => {
+    const { t } = useTranslation();
     const dispatch = useDispatch<any>();
     const [error, setError] = useState<string | null>(null);
 
@@ -20,7 +22,7 @@ const SettingsPage: React.FC = () => {
         if (apiError instanceof Error) {
             setError(apiError.message);
         } else {
-            setError('Failed to fetch settings');
+            setError(t('settings.fetchFailed'));
         }
     };
 
@@ -29,8 +31,8 @@ const SettingsPage: React.FC = () => {
             <div className="page-shell-fill">
                 <div className="flex flex-1 items-center justify-center">
                     <div className="settings-card text-center">
-                        <h2 className="mb-2 text-lg font-semibold text-ide-text">Loading settings…</h2>
-                        <p className="text-sm text-ide-muted">Please wait.</p>
+                        <h2 className="mb-2 text-lg font-semibold text-ide-text">{t('settings.loadingTitle')}</h2>
+                        <p className="text-sm text-ide-muted">{t('common.pleaseWait')}</p>
                     </div>
                 </div>
             </div>
@@ -42,10 +44,10 @@ const SettingsPage: React.FC = () => {
             <div className="page-shell-fill">
                 <div className="flex flex-1 items-center justify-center">
                     <div className="settings-card border-ide-error text-center">
-                        <h2 className="mb-2 text-lg font-semibold text-ide-error">Could not load settings</h2>
-                        <p className="mb-4 text-sm text-ide-muted">Please try again.</p>
+                        <h2 className="mb-2 text-lg font-semibold text-ide-error">{t('settings.loadErrorTitle')}</h2>
+                        <p className="mb-4 text-sm text-ide-muted">{t('settings.loadErrorHint')}</p>
                         <button type="button" onClick={handleRetry} className="ui-btn-danger">
-                            Retry
+                            {t('common.retry')}
                         </button>
                     </div>
                 </div>
@@ -57,18 +59,17 @@ const SettingsPage: React.FC = () => {
         <div className="page-shell-fill">
             <header className="page-head shrink-0">
                 <div>
-                    <h1 className="page-title">Settings</h1>
-                    <p className="page-lead">Time zone, wake and sleep, reminders, Google Calendar, and account.</p>
+                    <h1 className="page-title">{t('settings.title')}</h1>
+                    <p className="page-lead">{t('settings.lead')}</p>
                 </div>
             </header>
 
             <div className="page-scroll space-y-6">
                 <div className="settings-card">
                     <div className="mb-8 border-b border-ide-border pb-8">
-                        <h2 className="mb-2 text-xl font-semibold text-ide-text">Time management</h2>
+                        <h2 className="mb-2 text-xl font-semibold text-ide-text">{t('settings.timeManagement')}</h2>
                         <p className="text-sm text-ide-muted">
-                            These settings affect how your schedule is built. Wake, sleep, and phases
-                            use the time zone you set here.
+                            {t('settings.timeManagementHint')}
                         </p>
                     </div>
 
@@ -84,10 +85,9 @@ const SettingsPage: React.FC = () => {
                 </div>
 
                 <section className="settings-card">
-                    <h2 className="mb-2 text-xl font-semibold text-ide-text">Account</h2>
+                    <h2 className="mb-2 text-xl font-semibold text-ide-text">{t('settings.account')}</h2>
                     <p className="mb-4 text-sm text-ide-muted">
-                        You are signed in with Google. Signing out only ends this session; your data stays on this
-                        account.
+                        {t('settings.accountHint')}
                     </p>
                     <button
                         type="button"
@@ -95,7 +95,7 @@ const SettingsPage: React.FC = () => {
                         className="ui-btn-secondary inline-flex items-center gap-2 border-ide-error text-ide-error hover:bg-ide-error/10 max-md:h-8 max-md:min-h-0 max-md:px-3 max-md:py-0"
                     >
                         <LogOut className="h-4 w-4" aria-hidden />
-                        Sign out
+                        {t('settings.logout')}
                     </button>
                     <p className="mt-4 text-center text-[11px] leading-4 text-ide-muted md:hidden">
                         Build {buildLabel()}

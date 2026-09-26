@@ -25,9 +25,23 @@ export const EMPTY_SCHEDULE_RECOMMENDATIONS: ScheduleRecommendations = {
   suggestions: [],
 };
 
+export function emptyScheduleRecommendations(language: string = 'en'): ScheduleRecommendations {
+  const lang = language === 'uk' ? 'uk' : 'en';
+  return {
+    summary:
+      lang === 'uk'
+        ? 'Поки нічого переглядати. Додайте задачі або згенеруйте розклад.'
+        : EMPTY_SCHEDULE_RECOMMENDATIONS.summary,
+    suggestions: [],
+  };
+}
+
 export const MAX_SUGGESTIONS = 5;
 
-export const SCHEDULE_RECOMMENDATIONS_SYSTEM_PROMPT = `You review a personal calendar and suggest concrete improvements. Reply with one JSON object only:
+export function scheduleRecommendationsSystemPrompt(language: string = 'en'): string {
+  const writeIn =
+    language === 'uk' ? 'Write in Ukrainian.' : 'Write in English.';
+  return `You review a personal calendar and suggest concrete improvements. Reply with one JSON object only:
 {"summary":"one sentence","suggestions":[{"kind":"overload"|"gap"|"phase_mismatch"|"deadline_risk","title":"short label","detail":"what to change and why, naming the task","taskId":"id from tasks or null"}]}
 Rules:
 - At most 5 suggestions.
@@ -38,7 +52,12 @@ Rules:
 - Do not treat sleep as work to schedule.
 - Times are local wall clocks in the snapshot time zone.
 - If externalCalendar is "unavailable", do not claim the day has no meetings.
-- Write in English.`;
+- ${writeIn}`;
+}
+
+/** @deprecated Prefer scheduleRecommendationsSystemPrompt(language). */
+export const SCHEDULE_RECOMMENDATIONS_SYSTEM_PROMPT =
+  scheduleRecommendationsSystemPrompt('en');
 
 const KIND_SET = new Set<string>(SCHEDULE_RECOMMENDATION_KINDS);
 

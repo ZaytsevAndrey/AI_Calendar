@@ -32,6 +32,16 @@ describe('selectDueReminders', () => {
     ]);
   });
 
+  it('localizes push titles when language is uk', () => {
+    const startMs = Date.parse(`${DAY}T10:00:00.000Z`);
+    const items = due({
+      nowMs: startMs - 20 * 60_000,
+      language: 'uk',
+      blocks: [{ key: 'event:1', title: 'Deep work', startMs }],
+    });
+    expect(items[0]?.title).toBe('Починається за 20 хв');
+  });
+
   it('skips a block that already started or is more than 30 minutes away', () => {
     const startMs = Date.parse(`${DAY}T10:00:00.000Z`);
     const block = { key: 'event:1', title: 'Deep work', startMs };

@@ -1,5 +1,6 @@
 import { LOGOUT } from './actionTypes';
 import apiCall from 'modules/common/utils/apiCall';
+import i18n from 'i18n';
 import { showSuccessToast } from '../../../utils/toast';
 import { removeLocalStorageItem } from '../../../utils/localStorage';
 
@@ -15,7 +16,10 @@ export const logout = (redirect = false) => async (dispatch: any) => {
         removeLocalStorageItem('access_token');
         removeLocalStorageItem('refresh_token');
 
-        showSuccessToast({ title: 'Logged out', detail: 'You have been signed out of this device.' });
+        showSuccessToast({
+            title: i18n.t('auth.loggedOut'),
+            detail: i18n.t('auth.loggedOutDetail'),
+        });
         dispatch({ type: LOGOUT });
 
         if (redirect) {
@@ -29,7 +33,10 @@ export const clientLogout = (redirect = false) => (dispatch: any) => {
     console.log('clientLogout called with redirect:', redirect);
     removeLocalStorageItem('access_token');
     removeLocalStorageItem('refresh_token');
-    showSuccessToast({ title: 'Logged out', detail: 'You have been signed out of this device.' });
+    showSuccessToast({
+        title: i18n.t('auth.loggedOut'),
+        detail: i18n.t('auth.loggedOutDetail'),
+    });
     dispatch({ type: LOGOUT });
     if (redirect) {
         console.log('Redirecting to login page');

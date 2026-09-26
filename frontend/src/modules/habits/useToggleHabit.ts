@@ -1,4 +1,5 @@
 import { useCheckInHabitMutation, useUncheckHabitMutation } from 'api/habitsApi';
+import i18n from 'i18n';
 import { showErrorToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
 
@@ -15,7 +16,7 @@ export function useToggleHabit() {
       }
     } catch (err) {
       showErrorToast({
-        title: currentlyDone ? 'Could not clear check-in' : 'Could not check in',
+        title: currentlyDone ? i18n.t('habits.clearFailed') : i18n.t('habits.checkInFailed'),
         detail: extractApiErrorMessage(err),
       });
     }

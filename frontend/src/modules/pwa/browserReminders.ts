@@ -3,6 +3,7 @@ import {
   getVapidPublicKey,
   savePushSubscription,
 } from 'api/reminders.api';
+import i18n from 'i18n';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -34,11 +35,11 @@ export async function browserHasPushSubscription(): Promise<boolean> {
 /** Ask for permission, subscribe this browser, and store it on the account. */
 export async function enableBrowserReminders(): Promise<void> {
   if (!canUsePush()) {
-    throw new Error('This browser cannot show reminders.');
+    throw new Error(i18n.t('pwa.cannotShow'));
   }
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') {
-    throw new Error('Notifications are blocked in this browser.');
+    throw new Error(i18n.t('pwa.notificationsBlocked'));
   }
   const publicKey = await getVapidPublicKey();
   const registration = await navigator.serviceWorker.register('/sw.js');
@@ -51,7 +52,7 @@ export async function enableBrowserReminders(): Promise<void> {
   });
   const json = subscription.toJSON();
   if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) {
-    throw new Error('Could not read the push subscription.');
+    throw new Error(i18n.t('pwa.subscriptionReadFailed'));
   }
   await savePushSubscription({
     endpoint: json.endpoint,

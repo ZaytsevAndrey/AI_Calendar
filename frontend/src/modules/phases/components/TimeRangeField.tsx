@@ -7,6 +7,7 @@ import {
   FieldValues,
   Path,
 } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import TimePicker from 'rsuite/TimePicker';
 import 'rsuite/dist/rsuite.min.css';
 
@@ -32,14 +33,15 @@ export function TimeRangeField<TFieldValues extends WithPhaseTimes>({
   control,
   errors,
 }: TimeRangeFieldProps<TFieldValues>) {
+  const { t } = useTranslation();
   const TimePickerAny = TimePicker as any;
 
   return (
     <div className="form-group">
-      <label htmlFor="timeRange">Time Range*</label>
+      <label htmlFor="timeRange">{t('phases.timeRange')}</label>
       <div className="phase-time-range-grid">
         <div className="phase-time-range-col">
-          <label className="phase-time-range-label">Start</label>
+          <label className="phase-time-range-label">{t('phases.start')}</label>
           <Controller
             name={'startTime' as Path<TFieldValues>}
             control={control}
@@ -57,7 +59,7 @@ export function TimeRangeField<TFieldValues extends WithPhaseTimes>({
                   if (val) field.onChange(formatPickerTime(val));
                 }}
                 showMeridiem={false}
-                placeholder="Start time"
+                placeholder={t('phases.startPlaceholder')}
                 cleanable={false}
                 block
                 container={() => document.body}
@@ -67,7 +69,7 @@ export function TimeRangeField<TFieldValues extends WithPhaseTimes>({
         </div>
 
         <div className="phase-time-range-col">
-          <label className="phase-time-range-label">End</label>
+          <label className="phase-time-range-label">{t('phases.end')}</label>
           <Controller
             name={'endTime' as Path<TFieldValues>}
             control={control}
@@ -85,7 +87,7 @@ export function TimeRangeField<TFieldValues extends WithPhaseTimes>({
                   if (val) field.onChange(formatPickerTime(val));
                 }}
                 showMeridiem={false}
-                placeholder="End time"
+                placeholder={t('phases.endPlaceholder')}
                 cleanable={false}
                 block
                 container={() => document.body}
@@ -102,4 +104,4 @@ export function TimeRangeField<TFieldValues extends WithPhaseTimes>({
       )}
     </div>
   );
-} 
+}

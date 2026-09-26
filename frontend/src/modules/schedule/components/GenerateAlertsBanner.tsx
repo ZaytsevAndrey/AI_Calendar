@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { SchedulingAlerts } from 'api/schedule.api';
 
 type Props = {
@@ -7,17 +8,18 @@ type Props = {
 };
 
 export function GenerateAlertsBanner({ alerts, onDismiss }: Props) {
+  const { t } = useTranslation();
   if (alerts.issueCount <= 0) return null;
 
   return (
     <section
       className="rounded-xl border border-ide-border bg-ide-panel p-4"
-      aria-label="Last generate notes"
+      aria-label={t('schedule.alertsAria')}
     >
       <div className="mb-2 flex items-start justify-between gap-3">
-        <h2 className="text-base font-semibold text-ide-text">Last generate</h2>
+        <h2 className="text-base font-semibold text-ide-text">{t('schedule.lastGenerate')}</h2>
         <button type="button" className="ui-btn-ghost shrink-0 text-sm" onClick={onDismiss}>
-          Dismiss
+          {t('common.dismiss')}
         </button>
       </div>
       {alerts.errors.length > 0 ? (

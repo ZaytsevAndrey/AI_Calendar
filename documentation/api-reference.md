@@ -28,6 +28,8 @@ Additional routes may exist in `auth.controller.ts` (email verification, etc.).
 
 Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWorkEnabled`, `allowSplitScheduling`, `minSplitMinutes`, **`timeZone`** (IANA, e.g. `Asia/Nicosia` / `Europe/Kyiv`). Empty `timeZone` is filled **once** from the browser on first login; the user can change it in Settings. Invalid IANA names are rejected. Postgres stores `wakeTime` / `sleepTime` as `time` (`HH:mm:ss`); the engine normalizes them to `HH:mm` and interprets those clocks **in `timeZone`** (fallback `UTC`).
 
+**`language`** (`en` | `uk`, default `en`) is the UI and notification language. Empty/`null` is seeded once from the browser (`uk*` → `uk`, else `en`). Push titles, voice refuse/confirm copy, schedule-suggestion language, and localized API error messages follow this setting. The frontend also sends `Accept-Language` matching the active locale.
+
 **`confirmVoiceCommands`** (default false) asks before a voice command completes, skips, or moves a task. Voice create is not affected.
 
 **`remindersEnabled`** (default false) turns on Web Push. See [Reminders](#reminders--reminders).

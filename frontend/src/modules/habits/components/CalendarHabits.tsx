@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { HabitDTO } from 'api/habits.api';
 import { useGetHabitsQuery } from 'api/habitsApi';
 import { Modal } from '../../../ui/Modal';
@@ -12,12 +13,13 @@ import {
 import type { HabitBlockChip } from '../habitBlocks';
 import { usePhoneLayout } from 'modules/common/hooks/useMediaQuery';
 import { useToggleHabit } from '../useToggleHabit';
+import i18n from 'i18n';
 
 const MAX_DOTS = 6;
 
 function lockMessage(date: string, today: string): string {
-  if (date > today) return 'Future days cannot be checked in.';
-  return 'You can change check-ins for the last 14 days.';
+  if (date > today) return i18n.t('habits.futureLocked');
+  return i18n.t('habits.rangeLocked');
 }
 
 export function HabitDayChecklist({
@@ -29,6 +31,7 @@ export function HabitDayChecklist({
   omitTimed?: boolean;
   layout?: 'stack' | 'row';
 }) {
+  const { t } = useTranslation();
   const { data } = useGetHabitsQuery();
   const { toggle, busy } = useToggleHabit();
   const habits = (data?.habits ?? []).filter(
@@ -50,7 +53,10 @@ export function HabitDayChecklist({
               type="button"
               disabled={!editable || busy}
               aria-pressed={done}
-              aria-label={`${habit.name} on ${formatHabitDateLabel(date)}`}
+              aria-label={t('habits.dateAria', {
+                name: habit.name,
+                date: formatHabitDateLabel(date),
+              })}
               onClick={() => void toggle(habit.id, date, done)}
               className={
                 row
@@ -69,7 +75,9 @@ export function HabitDayChecklist({
               />
               <span className="min-w-0 flex-1 truncate text-ide-text">{habit.name}</span>
               {row ? null : (
-                <span className="shrink-0 text-xs text-ide-muted">{done ? 'Done' : 'Mark'}</span>
+                <span className="shrink-0 text-xs text-ide-muted">
+                  {done ? t('habits.done') : t('habits.mark')}
+                </span>
               )}
             </button>
           </li>
@@ -80,6 +88,7 @@ export function HabitDayChecklist({
 }
 
 export function HabitDaySection({ date }: { date: string }) {
+  const { t } = useTranslation();
   const { data } = useGetHabitsQuery();
   const phone = usePhoneLayout();
   const checkInOnly = (data?.habits ?? []).filter(
@@ -91,7 +100,9 @@ export function HabitDaySection({ date }: { date: string }) {
   return (
     <div className="mb-4 shrink-0 max-md:mb-1">
       <div className="mb-2 flex items-baseline justify-between gap-2 max-md:mb-1">
-        <h3 className="text-xs font-medium uppercase tracking-wide text-ide-muted">Habits</h3>
+        <h3 className="text-xs font-medium uppercase tracking-wide text-ide-muted">
+          {t('habits.title')}
+        </h3>
         {editable ? null : (
           <p className="text-xs text-ide-muted">{lockMessage(date, data.today)}</p>
         )}
@@ -108,6 +119,7 @@ export function HabitDayDots({
   day: Date;
   onOpen: (ymd: string) => void;
 }) {
+  const { t } = useTranslation();
   const { data } = useGetHabitsQuery();
   if (!data?.habits.length) return null;
 
@@ -137,7 +149,11 @@ export function HabitDayDots({
     <button
       type="button"
       className="mt-1 flex min-h-6 shrink-0 items-center gap-0.5 py-0.5"
-      aria-label={`Habits on ${formatHabitDateLabel(ymd)}, ${doneCount} of ${marks.length} done`}
+      aria-label={t('habits.dotsAria', {
+        date: formatHabitDateLabel(ymd),
+        done: doneCount,
+        total: marks.length,
+      })}
       onClick={(event) => {
         event.stopPropagation();
         onOpen(ymd);
@@ -162,6 +178,7 @@ export function HabitDayDialog({
   date: string | null;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const { data } = useGetHabitsQuery();
   const editable =
     date && data ? isYmdInRange(date, data.editableFrom, data.editableTo) : false;
@@ -170,7 +187,11 @@ export function HabitDayDialog({
     <Modal
       open={Boolean(date)}
       onClose={onClose}
-      title={date ? `Habits · ${formatHabitDateLabel(date)}` : 'Habits'}
+      title={
+        date
+          ? t('habits.dayTitle', { date: formatHabitDateLabel(date) })
+          : t('habits.title')
+      }
       maxWidthClass="max-w-md"
     >
       {date && data && !editable ? (

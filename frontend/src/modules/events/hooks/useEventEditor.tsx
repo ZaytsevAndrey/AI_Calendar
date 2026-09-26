@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   useCreateEventMutation,
   useSkipOccurrenceMutation,
@@ -33,6 +34,7 @@ export type CreateTaskDefaults = {
 };
 
 export function useEventEditor() {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<TaskDTO | null>(null);
   const [occurrence, setOccurrence] = useState<TaskOccurrenceContext | null>(null);
@@ -106,13 +108,13 @@ export function useEventEditor() {
     void request
       .then(() => {
         showSuccessToast({
-          title: editing ? 'Task updated' : 'Task created',
+          title: editing ? t('tasks.toast.updated') : t('tasks.toast.created'),
           detail: describeTaskToastDetail(editing ? { ...editing, ...cleanData } : cleanData),
         });
       })
       .catch((err) => {
         showErrorToast({
-          title: editing ? 'Could not update task' : 'Could not create task',
+          title: editing ? t('tasks.toast.updateFailed') : t('tasks.toast.createFailed'),
           detail: extractApiErrorMessage(err),
         });
       });
@@ -122,7 +124,7 @@ export function useEventEditor() {
     const cleanData = cleanPayload(data) as CreateTaskDTO;
     await createEvent(cleanData).unwrap();
     showSuccessToast({
-      title: 'Task created',
+      title: t('tasks.toast.created'),
       detail: describeTaskToastDetail(cleanData),
     });
   };
@@ -155,33 +157,33 @@ export function useEventEditor() {
     })
       .unwrap()
       .then(() => {
-        showSuccessToast({ title: 'Occurrence skipped', detail: task.name });
+        showSuccessToast({ title: t('tasks.toast.occurrenceSkipped'), detail: task.name });
       })
       .catch((err) => {
         showErrorToast({
-          title: 'Could not skip occurrence',
+          title: t('tasks.toast.skipFailed'),
           detail: extractApiErrorMessage(err),
         });
       });
   };
 
+  const editorTitle = editingEvent
+    ? createDefaults?.scheduleIntent
+      ? t('tasks.editor.schedule')
+      : t('tasks.editor.edit')
+    : createDefaults?.unscheduled
+      ? t('tasks.editor.createUnscheduled')
+      : t('tasks.editor.create');
+
   const editorModal = (
     <Modal
       open={open}
       onClose={close}
-      title={
-        editingEvent
-          ? createDefaults?.scheduleIntent
-            ? 'Schedule task'
-            : 'Edit task'
-          : createDefaults?.unscheduled
-            ? 'Create unscheduled task'
-            : 'Create task'
-      }
+      title={editorTitle}
       maxWidthClass="max-w-xl"
       footer={null}
     >
-      <Suspense fallback={<div className="px-1 py-6 text-sm text-ide-muted">Loading…</div>}>
+      <Suspense fallback={<div className="px-1 py-6 text-sm text-ide-muted">{t('common.loading')}</div>}>
         <TaskForm
           key={
             editingEvent

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Plus } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import {
   useCreateHabitMutation,
   useDeleteHabitMutation,
@@ -14,6 +15,7 @@ import { showErrorToast, showSuccessToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
 
 const HabitsPage: React.FC = () => {
+  const { t } = useTranslation();
   const { data, isLoading, error } = useGetHabitsQuery();
   const [createHabit, { isLoading: isCreating }] = useCreateHabitMutation();
   const [updateHabit, { isLoading: isUpdating }] = useUpdateHabitMutation();
@@ -45,15 +47,15 @@ const HabitsPage: React.FC = () => {
     try {
       if (editing) {
         await updateHabit({ id: editing.id, habit: payload }).unwrap();
-        showSuccessToast({ title: 'Habit updated', detail: payload.name || editing.name });
+        showSuccessToast({ title: t('habits.updated'), detail: payload.name || editing.name });
       } else {
         const created = await createHabit(payload as CreateHabitDTO).unwrap();
-        showSuccessToast({ title: 'Habit added', detail: created.name });
+        showSuccessToast({ title: t('habits.added'), detail: created.name });
       }
       closeForm();
     } catch (err) {
       showErrorToast({
-        title: editing ? 'Could not update habit' : 'Could not create habit',
+        title: editing ? t('habits.updateFailed') : t('habits.createFailed'),
         detail: extractApiErrorMessage(err),
       });
     }
@@ -64,12 +66,12 @@ const HabitsPage: React.FC = () => {
     if (!habit) return;
     try {
       await deleteHabit(habit.id).unwrap();
-      showSuccessToast({ title: 'Habit deleted', detail: habit.name });
+      showSuccessToast({ title: t('habits.deleted'), detail: habit.name });
       setDeleteConfirm(null);
       closeForm();
     } catch (err) {
       showErrorToast({
-        title: 'Could not delete habit',
+        title: t('habits.deleteFailed'),
         detail: extractApiErrorMessage(err),
       });
     }
@@ -79,7 +81,7 @@ const HabitsPage: React.FC = () => {
     return (
       <div className="page-shell-fill">
         <div className="flex flex-1 items-center justify-center text-sm text-ide-muted">
-          Loading habits…
+          {t('habits.loading')}
         </div>
       </div>
     );
@@ -89,7 +91,7 @@ const HabitsPage: React.FC = () => {
     return (
       <div className="page-shell-fill">
         <div className="rounded-xl border border-ide-error bg-ide-error/10 px-4 py-6 text-center text-ide-error">
-          Could not load habits
+          {t('habits.loadError')}
         </div>
       </div>
     );
@@ -99,38 +101,32 @@ const HabitsPage: React.FC = () => {
     <div className="page-shell-fill">
       <header className="page-head shrink-0">
         <div>
-          <h1 className="page-title">Habits</h1>
-          <p className="page-lead">
-            Check in any of the last 14 days. A daily time block, if you set one, stays free for
-            that habit when you generate a schedule and is added to Google Calendar when it is
-            connected.
-          </p>
+          <h1 className="page-title">{t('habits.title')}</h1>
+          <p className="page-lead">{t('habits.lead')}</p>
         </div>
         <button type="button" onClick={openCreate} className="ui-btn-primary max-md:hidden">
-          Add habit
+          {t('habits.add')}
         </button>
         <button type="button" onClick={openCreate} className="ui-icon-btn text-ide-link md:hidden">
           <Plus className="h-4 w-4" aria-hidden />
-          <span className="sr-only">Add habit</span>
+          <span className="sr-only">{t('habits.add')}</span>
         </button>
       </header>
 
       {habits.length > 0 ? (
         <div className="mb-4 flex shrink-0 flex-wrap gap-3 text-sm text-ide-muted">
           <span className="rounded-lg border border-ide-border bg-ide-surface px-3 py-2 text-ide-text">
-            Today {doneToday}/{habits.length}
+            {t('habits.todayCount', { done: doneToday, total: habits.length })}
           </span>
           <span className="rounded-lg border border-ide-border bg-ide-surface px-3 py-2 text-ide-text">
-            {totalPoints} points
+            {t('habits.points', { count: totalPoints })}
           </span>
         </div>
       ) : null}
 
       <div className="page-scroll">
         {habits.length === 0 ? (
-          <div className="empty-list">
-            No habits yet. Add one — for example Exercise or No smoking.
-          </div>
+          <div className="empty-list">{t('habits.empty')}</div>
         ) : (
           <HabitGrid
             habits={habits}
@@ -145,7 +141,7 @@ const HabitsPage: React.FC = () => {
       <Modal
         open={showForm}
         onClose={closeForm}
-        title={editing ? 'Edit habit' : 'New habit'}
+        title={editing ? t('habits.editTitle') : t('habits.newTitle')}
         maxWidthClass="max-w-lg"
       >
         <HabitForm
@@ -162,7 +158,7 @@ const HabitsPage: React.FC = () => {
       <Modal
         open={Boolean(deleteConfirm)}
         onClose={() => setDeleteConfirm(null)}
-        title="Delete habit"
+        title={t('habits.deleteTitle')}
         footer={
           <>
             <button
@@ -170,7 +166,7 @@ const HabitsPage: React.FC = () => {
               onClick={() => setDeleteConfirm(null)}
               className="ui-btn-secondary w-full sm:w-auto"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -178,13 +174,13 @@ const HabitsPage: React.FC = () => {
               className="ui-btn-danger w-full sm:w-auto"
               disabled={isDeleting}
             >
-              {isDeleting ? 'Deleting…' : 'Delete'}
+              {isDeleting ? t('common.deleting') : t('common.delete')}
             </button>
           </>
         }
       >
         <p className="text-ide-text">
-          Delete &quot;{deleteConfirm?.name}&quot; and all of its check-ins? This cannot be undone.
+          {t('habits.deleteConfirm', { name: deleteConfirm?.name ?? '' })}
         </p>
       </Modal>
     </div>

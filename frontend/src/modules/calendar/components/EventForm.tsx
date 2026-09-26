@@ -1,4 +1,5 @@
 import React, { lazy, Suspense, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { GoogleCalendarEvent, CreateEventParams, UpdateEventParams } from '../../../api/google-calendar.api';
 import { useTimePhases, getPhaseByTime, useSleepTimePhases } from '../../phases/hooks/usePhases';
 import { useGetUserSettingsQuery } from '../../../api/userSettingsApi';
@@ -10,18 +11,8 @@ const EmojiPickerPanel = lazy(
     () => import(/* webpackChunkName: "emoji-picker" */ './EmojiPickerPanel'),
 );
 
-const PRIORITIES = [
-    { value: 'urgent', label: 'Urgent' },
-    { value: 'normal', label: 'Normal' },
-    { value: 'medium', label: 'Medium' },
-];
-
-const STATUSES = [
-    { value: 'in_progress', label: 'In Progress' },
-    { value: 'done', label: 'Done' },
-    { value: 'postponed', label: 'Postponed' },
-    { value: 'cancelled', label: 'Cancelled' },
-];
+const PRIORITY_VALUES = ['urgent', 'normal', 'medium'] as const;
+const STATUS_VALUES = ['in_progress', 'done', 'postponed', 'cancelled'] as const;
 
 const inp =
     'w-full rounded border border-ide-border bg-ide-input px-2.5 py-1.5 text-sm text-ide-text focus:border-ide-link focus:outline-none focus:ring-1 focus:ring-ide-link';
@@ -59,6 +50,7 @@ const EventForm: React.FC<EventFormProps> = ({
     isSubmitting,
     error,
 }) => {
+    const { t } = useTranslation();
     const { data: timePhases = [] } = useTimePhases();
     const { data: sleepTimePhases = [] } = useSleepTimePhases();
     const { data: userSettings } = useGetUserSettingsQuery();
@@ -210,7 +202,7 @@ const EventForm: React.FC<EventFormProps> = ({
         const startTime = timeFromDateTime(start);
         const endTime = timeFromDateTime(end);
         if (isSleepTime(startTime) || isSleepTime(endTime)) {
-            setSleepError('Events cannot be created during sleep time.');
+            setSleepError(t('calendar.form.sleepError'));
             return;
         }
         const startDateTime = start ? new Date(start) : undefined;
@@ -264,18 +256,31 @@ const EventForm: React.FC<EventFormProps> = ({
     };
 
     const sortedTimePhases = [...timePhases].sort((a: { startTime: string }, b: { startTime: string }) => {
-        const toMinutes = (t: string) => {
-            const [h, m] = t.split(':').map(Number);
+        const toMinutes = (tm: string) => {
+            const [h, m] = tm.split(':').map(Number);
             return h * 60 + m;
         };
         return toMinutes(a.startTime) - toMinutes(b.startTime);
     });
 
+    const priorityLabel = (value: (typeof PRIORITY_VALUES)[number]) => {
+        if (value === 'urgent') return t('calendar.priority.urgent');
+        if (value === 'normal') return t('calendar.priority.normal');
+        return t('calendar.priority.medium');
+    };
+
+    const statusLabel = (value: (typeof STATUS_VALUES)[number]) => {
+        if (value === 'in_progress') return t('calendar.status.inProgress');
+        if (value === 'done') return t('calendar.status.done');
+        if (value === 'postponed') return t('calendar.status.postponed');
+        return t('calendar.status.cancelled');
+    };
+
     return (
         <Modal
             open={open}
             onClose={onClose}
-            title={event ? 'Edit event' : 'Create event'}
+            title={event ? t('calendar.form.editEvent') : t('calendar.form.createEvent')}
             maxWidthClass="max-w-xl"
             footer={null}
         >
@@ -298,13 +303,13 @@ const EventForm: React.FC<EventFormProps> = ({
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_8.5rem]">
                         <div>
                             <label htmlFor="ev-summary" className={lbl}>
-                                Name <span className="text-ide-error">*</span>
+                                {t('common.name')} <span className="text-ide-error">*</span>
                             </label>
                             <input
                                 id="ev-summary"
                                 required
                                 autoComplete="off"
-                                placeholder="e.g. Prepare quarterly review"
+                                placeholder={t('calendar.form.namePlaceholder')}
                                 className={inp}
                                 value={summary}
                                 onChange={(e) => setSummary(e.target.value)}
@@ -312,7 +317,7 @@ const EventForm: React.FC<EventFormProps> = ({
                         </div>
                         <div>
                             <label htmlFor="ev-prio" className={lbl}>
-                                Priority
+                                {t('common.priority')}
                             </label>
                             <select
                                 id="ev-prio"
@@ -320,9 +325,9 @@ const EventForm: React.FC<EventFormProps> = ({
                                 value={priority}
                                 onChange={(e) => setPriority(e.target.value)}
                             >
-                                {PRIORITIES.map((p) => (
-                                    <option key={p.value} value={p.value}>
-                                        {p.label}
+                                {PRIORITY_VALUES.map((value) => (
+                                    <option key={value} value={value}>
+                                        {priorityLabel(value)}
                                     </option>
                                 ))}
                             </select>
@@ -332,13 +337,13 @@ const EventForm: React.FC<EventFormProps> = ({
                     {showDescription ? (
                         <div>
                             <label htmlFor="ev-desc" className={lbl}>
-                                Description
+                                {t('common.description')}
                             </label>
                             <textarea
                                 id="ev-desc"
                                 rows={2}
                                 className={inp}
-                                placeholder="Optional context"
+                                placeholder={t('calendar.form.descriptionPlaceholder')}
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
                             />
@@ -349,13 +354,13 @@ const EventForm: React.FC<EventFormProps> = ({
                             className="text-xs text-ide-link hover:underline"
                             onClick={() => setShowDescription(true)}
                         >
-                            + Description
+                            {t('calendar.form.addDescription')}
                         </button>
                     )}
 
                     <div>
                         <label htmlFor="ev-phase" className={lbl}>
-                            Phase
+                            {t('common.phase')}
                         </label>
                         <select
                             id="ev-phase"
@@ -364,7 +369,9 @@ const EventForm: React.FC<EventFormProps> = ({
                             onChange={(e) => handlePhaseChange(e.target.value)}
                         >
                             <option value="">
-                                {timePhases.length === 0 ? 'No phases available' : 'Any time'}
+                                {timePhases.length === 0
+                                    ? t('calendar.form.noPhases')
+                                    : t('calendar.form.anyTime')}
                             </option>
                             {sortedTimePhases.map((phase: { id: string; name: string; startTime: string; endTime: string }) => (
                                 <option key={phase.id} value={phase.id}>
@@ -381,7 +388,7 @@ const EventForm: React.FC<EventFormProps> = ({
                                 checked={isRecurring}
                                 onChange={(e) => setIsRecurring(e.target.checked)}
                             />
-                            Recurring
+                            {t('calendar.form.recurring')}
                         </label>
                         <label className="inline-flex cursor-pointer items-center gap-2">
                             <input
@@ -389,14 +396,14 @@ const EventForm: React.FC<EventFormProps> = ({
                                 checked={splitTasks}
                                 onChange={(e) => setSplitTasks(e.target.checked)}
                             />
-                            Allow split
+                            {t('calendar.form.allowSplit')}
                         </label>
                     </div>
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div>
                             <label htmlFor="ev-start" className={lbl}>
-                                Start <span className="text-ide-error">*</span>
+                                {t('calendar.form.start')} <span className="text-ide-error">*</span>
                             </label>
                             <input
                                 id="ev-start"
@@ -409,7 +416,7 @@ const EventForm: React.FC<EventFormProps> = ({
                         </div>
                         <div>
                             <label htmlFor="ev-end" className={lbl}>
-                                End <span className="text-ide-error">*</span>
+                                {t('calendar.form.end')} <span className="text-ide-error">*</span>
                             </label>
                             <input
                                 id="ev-end"
@@ -425,7 +432,7 @@ const EventForm: React.FC<EventFormProps> = ({
                     {isRecurring ? (
                         <div>
                             <label htmlFor="ev-rrule" className={lbl}>
-                                Repeat (RRULE)
+                                {t('calendar.form.repeatRrule')}
                             </label>
                             <input
                                 id="ev-rrule"
@@ -438,7 +445,7 @@ const EventForm: React.FC<EventFormProps> = ({
                     ) : (
                         <div>
                             <label htmlFor="ev-deadline" className={lbl}>
-                                Deadline
+                                {t('common.deadline')}
                             </label>
                             <input
                                 id="ev-deadline"
@@ -452,7 +459,7 @@ const EventForm: React.FC<EventFormProps> = ({
 
                     <div>
                         <label htmlFor="ev-est" className={lbl}>
-                            Duration (min)
+                            {t('calendar.form.durationMin')}
                         </label>
                         <input
                             id="ev-est"
@@ -467,7 +474,7 @@ const EventForm: React.FC<EventFormProps> = ({
                     {splitTasks ? (
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <div>
-                                <label className={lbl}>Min split (min)</label>
+                                <label className={lbl}>{t('calendar.form.minSplit')}</label>
                                 <input
                                     type="number"
                                     className={inp}
@@ -476,7 +483,7 @@ const EventForm: React.FC<EventFormProps> = ({
                                 />
                             </div>
                             <div>
-                                <label className={lbl}>Max split (min)</label>
+                                <label className={lbl}>{t('calendar.form.maxSplit')}</label>
                                 <input
                                     type="number"
                                     className={inp}
@@ -521,7 +528,7 @@ const EventForm: React.FC<EventFormProps> = ({
                             />
                             <div>
                                 <label htmlFor="ev-stat" className={lbl}>
-                                    Status
+                                    {t('common.status')}
                                 </label>
                                 <select
                                     id="ev-stat"
@@ -529,28 +536,30 @@ const EventForm: React.FC<EventFormProps> = ({
                                     value={status}
                                     onChange={(e) => setStatus(e.target.value)}
                                 >
-                                    {STATUSES.map((s) => (
-                                        <option key={s.value} value={s.value}>
-                                            {s.label}
+                                    {STATUS_VALUES.map((value) => (
+                                        <option key={value} value={value}>
+                                            {statusLabel(value)}
                                         </option>
                                     ))}
                                 </select>
                             </div>
                             <div>
-                                <span className={lbl}>Icon</span>
+                                <span className={lbl}>{t('calendar.form.icon')}</span>
                                 <div className="flex flex-wrap items-center gap-2">
                                     <button
                                         type="button"
                                         className="rounded border border-ide-border px-2.5 py-1.5 text-sm text-ide-text hover:bg-ide-surface"
                                         onClick={() => setShowEmojiPicker((v) => !v)}
                                     >
-                                        {emoji || 'Select'}
+                                        {emoji || t('common.select')}
                                     </button>
                                     {showEmojiPicker ? (
                                         <div className="w-full">
                                             <Suspense
                                                 fallback={
-                                                    <span className="text-xs text-ide-muted">Loading…</span>
+                                                    <span className="text-xs text-ide-muted">
+                                                        {t('common.loading')}
+                                                    </span>
                                                 }
                                             >
                                                 <EmojiPickerPanel
@@ -571,7 +580,7 @@ const EventForm: React.FC<EventFormProps> = ({
                             className="text-xs text-ide-link hover:underline"
                             onClick={() => setShowMore(true)}
                         >
-                            + More options
+                            {t('calendar.form.moreOptions')}
                         </button>
                     )}
                 </div>
@@ -583,14 +592,18 @@ const EventForm: React.FC<EventFormProps> = ({
                         className="ui-btn-secondary w-full sm:w-auto"
                         disabled={isSubmitting}
                     >
-                        Cancel
+                        {t('common.cancel')}
                     </button>
                     <button
                         type="submit"
                         className="ui-btn-primary w-full sm:w-auto"
                         disabled={isSubmitting || !summary}
                     >
-                        {isSubmitting ? 'Saving…' : event ? 'Save changes' : 'Create event'}
+                        {isSubmitting
+                            ? t('common.saving')
+                            : event
+                              ? t('calendar.form.saveChanges')
+                              : t('calendar.form.createEventSubmit')}
                     </button>
                 </div>
             </form>

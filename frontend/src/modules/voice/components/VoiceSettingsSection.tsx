@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useUpdateUserSettingsMutation } from 'api/userSettingsApi';
 import { showErrorToast, showSuccessToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
@@ -8,6 +9,7 @@ export function VoiceSettingsSection({
 }: {
   confirmVoiceCommands: boolean;
 }) {
+  const { t } = useTranslation();
   const [updateUserSettings] = useUpdateUserSettingsMutation();
   const [enabled, setEnabled] = useState(confirmVoiceCommands);
   const [busy, setBusy] = useState(false);
@@ -22,15 +24,13 @@ export function VoiceSettingsSection({
     try {
       await updateUserSettings({ confirmVoiceCommands: next }).unwrap();
       showSuccessToast({
-        title: next ? 'Voice confirmation on' : 'Voice confirmation off',
-        detail: next
-          ? 'Complete, skip, and move will ask first.'
-          : 'Those commands run as soon as they are understood.',
+        title: next ? t('voice.confirmOn') : t('voice.confirmOff'),
+        detail: next ? t('voice.confirmOnDetail') : t('voice.confirmOffDetail'),
       });
     } catch (error) {
       setEnabled(!next);
       showErrorToast({
-        title: 'Could not update voice settings',
+        title: t('voice.updateFailed'),
         detail: extractApiErrorMessage(error),
       });
     } finally {
@@ -40,11 +40,8 @@ export function VoiceSettingsSection({
 
   return (
     <section className="border-t border-ide-border pt-10">
-      <h2 className="mb-2 text-lg font-semibold text-ide-text">Voice</h2>
-      <p className="mb-4 text-sm text-ide-muted">
-        Creating a task by voice still happens immediately. This switch only covers finishing,
-        skipping, or moving a task.
-      </p>
+      <h2 className="mb-2 text-lg font-semibold text-ide-text">{t('voice.title')}</h2>
+      <p className="mb-4 text-sm text-ide-muted">{t('voice.sectionHint')}</p>
       <label className="flex items-center gap-2 text-sm text-ide-text">
         <input
           type="checkbox"
@@ -53,7 +50,7 @@ export function VoiceSettingsSection({
           disabled={busy}
           onChange={(event) => void toggle(event.target.checked)}
         />
-        Ask before voice commands
+        {t('voice.askBefore')}
       </label>
     </section>
   );

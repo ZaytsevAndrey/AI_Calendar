@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ScheduleRecommendationKind,
   ScheduleRecommendations,
@@ -8,11 +9,11 @@ import { Modal } from '../../../ui/Modal';
 import { Spinner } from '../../../ui/Spinner';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 
-const KIND_LABEL: Record<ScheduleRecommendationKind, string> = {
-  overload: 'Overload',
-  gap: 'Gap',
-  phase_mismatch: 'Phase mismatch',
-  deadline_risk: 'Deadline risk',
+const KIND_KEY: Record<ScheduleRecommendationKind, string> = {
+  overload: 'schedule.kindOverload',
+  gap: 'schedule.kindGap',
+  phase_mismatch: 'schedule.kindPhaseMismatch',
+  deadline_risk: 'schedule.kindDeadlineRisk',
 };
 
 type Props = {
@@ -21,6 +22,7 @@ type Props = {
 };
 
 export function ScheduleSuggestionsDialog({ open, onClose }: Props) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ScheduleRecommendations | null>(null);
@@ -52,20 +54,18 @@ export function ScheduleSuggestionsDialog({ open, onClose }: Props) {
     <Modal
       open={open}
       onClose={onClose}
-      title="Suggestions"
+      title={t('schedule.suggestions')}
       footer={
         <button type="button" onClick={onClose} className="ui-btn-secondary w-full sm:w-auto">
-          Close
+          {t('common.close')}
         </button>
       }
     >
-      <p className="mb-3 text-sm text-ide-muted">
-        Ideas for the next 7 days. Nothing is changed until you edit a task or run Generate.
-      </p>
+      <p className="mb-3 text-sm text-ide-muted">{t('schedule.suggestionsIntro')}</p>
       {loading ? (
         <div className="flex items-center gap-3 text-sm text-ide-muted">
           <Spinner className="h-4 w-4" />
-          Reviewing your schedule…
+          {t('schedule.reviewing')}
         </div>
       ) : null}
       {error ? <p className="text-sm text-ide-error">{error}</p> : null}
@@ -76,7 +76,9 @@ export function ScheduleSuggestionsDialog({ open, onClose }: Props) {
             <ul className="space-y-3">
               {result.suggestions.map((item, index) => (
                 <li key={`${item.kind}-${index}`} className="text-sm text-ide-text">
-                  <span className="font-medium">{KIND_LABEL[item.kind] ?? item.kind}</span>
+                  <span className="font-medium">
+                    {KIND_KEY[item.kind] ? t(KIND_KEY[item.kind]) : item.kind}
+                  </span>
                   <span className="text-ide-muted"> · {item.title}</span>
                   <span className="mt-0.5 block text-ide-muted">{item.detail}</span>
                 </li>

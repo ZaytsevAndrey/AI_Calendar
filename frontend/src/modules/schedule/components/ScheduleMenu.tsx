@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronDown } from 'lucide-react';
 
 type Props = {
@@ -24,6 +25,7 @@ export function ScheduleMenu({
     onUndo,
     onClear,
 }: Props) {
+    const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const rootRef = useRef<HTMLDivElement>(null);
 
@@ -46,7 +48,7 @@ export function ScheduleMenu({
                 aria-haspopup="menu"
                 onClick={() => setOpen((v) => !v)}
             >
-                Schedule
+                {t('schedule.menu')}
                 <ChevronDown className="h-4 w-4" aria-hidden />
             </button>
             {open ? (
@@ -64,7 +66,7 @@ export function ScheduleMenu({
                             onGenerate();
                         }}
                     >
-                        {isGenerating ? 'Generating…' : 'Generate schedule'}
+                        {isGenerating ? t('common.generating') : t('schedule.generate')}
                     </button>
                     <button
                         type="button"
@@ -76,7 +78,7 @@ export function ScheduleMenu({
                             onSuggest();
                         }}
                     >
-                        Suggestions
+                        {t('schedule.suggestions')}
                     </button>
                     <button
                         type="button"
@@ -88,7 +90,7 @@ export function ScheduleMenu({
                             onUndo();
                         }}
                     >
-                        {isUndoing ? 'Undoing…' : 'Undo last generate'}
+                        {isUndoing ? t('common.undoing') : t('schedule.undoLast')}
                     </button>
                     <button
                         type="button"
@@ -100,7 +102,7 @@ export function ScheduleMenu({
                             onClear();
                         }}
                     >
-                        {isClearing ? 'Clearing…' : 'Clear schedule'}
+                        {isClearing ? t('common.clearing') : t('schedule.clear')}
                     </button>
                 </div>
             ) : null}

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 const DISMISS_KEY = 'pwa-install-dismissed';
 
@@ -19,6 +20,7 @@ function isIos(): boolean {
 }
 
 export function PwaInstallBanner() {
+  const { t } = useTranslation();
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [showIosHint, setShowIosHint] = useState(false);
   const [hidden, setHidden] = useState(true);
@@ -60,19 +62,19 @@ export function PwaInstallBanner() {
       <div className="pointer-events-auto flex w-full max-w-lg items-start gap-3 rounded-2xl border border-ide-border bg-ide-panel px-4 py-3 shadow-ide-md">
         <div className="min-w-0 flex-1 text-sm text-ide-text">
           {deferred ? (
-            <p>Install AI Calendar on this device for quicker voice capture.</p>
+            <p>{t('pwa.installPrompt')}</p>
           ) : showIosHint ? (
-            <p>On iPhone: Share → Add to Home Screen to install the app.</p>
+            <p>{t('pwa.iosHint')}</p>
           ) : null}
         </div>
         <div className="flex shrink-0 gap-2">
           {deferred ? (
             <button type="button" className="ui-btn-primary min-h-[40px] px-3 py-1.5" onClick={() => void install()}>
-              Install
+              {t('pwa.install')}
             </button>
           ) : null}
           <button type="button" className="ui-btn-ghost min-h-[40px] px-3 py-1.5" onClick={dismiss}>
-            Not now
+            {t('pwa.notNow')}
           </button>
         </div>
       </div>

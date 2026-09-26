@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
     useGetUserSettingsQuery,
     useUpdateUserSettingsMutation,
@@ -15,6 +16,7 @@ import {
 import { showErrorToast } from 'utils/toast';
 
 const PhaseSetupPage: React.FC = () => {
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const { data: gate } = useCheckRequiredSettingsQuery();
     const { data: settings } = useGetUserSettingsQuery();
@@ -41,7 +43,7 @@ const PhaseSetupPage: React.FC = () => {
 
     const errors =
         selectedDays.length === 0
-            ? { weekDays: { message: 'Select at least one day' } as { message: string } }
+            ? { weekDays: { message: t('phases.selectOneDay') } as { message: string } }
             : {};
 
     const runBootstrap = async (weekDays: number[] | undefined) => {
@@ -55,7 +57,7 @@ const PhaseSetupPage: React.FC = () => {
                 'data' in err &&
                 (err as { data?: { message?: string } }).data?.message;
             showErrorToast({
-                title: 'Could not create phases',
+                title: t('phases.createFailed'),
                 detail: typeof msg === 'string' ? msg : undefined,
             });
         }
@@ -64,8 +66,8 @@ const PhaseSetupPage: React.FC = () => {
     const handleSave = async () => {
         if (selectedDays.length === 0) {
             showErrorToast({
-                title: 'Select weekdays',
-                detail: 'Choose at least one day of the week for your phases.',
+                title: t('phases.selectWeekdays'),
+                detail: t('phases.selectWeekdaysSetupDetail'),
             });
             return;
         }
@@ -73,8 +75,8 @@ const PhaseSetupPage: React.FC = () => {
             await updateSettings({ wakeTime, sleepTime }).unwrap();
         } catch {
             showErrorToast({
-                title: 'Could not save settings',
-                detail: 'Wake and sleep times were not saved. Try again.',
+                title: t('phases.saveSettingsFailed'),
+                detail: t('phases.saveSettingsDetail'),
             });
             return;
         }
@@ -90,7 +92,7 @@ const PhaseSetupPage: React.FC = () => {
             navigate('/', { replace: true });
         } catch (err: unknown) {
             showErrorToast({
-                title: 'Could not create phases',
+                title: t('phases.createFailed'),
                 detail: messageFromApiError(err),
             });
         }
@@ -107,15 +109,13 @@ const PhaseSetupPage: React.FC = () => {
             <div className="page-scroll">
                 <div className="mx-auto w-full max-w-2xl">
                     <div className="rounded-xl border border-ide-border bg-ide-panel p-5 shadow-ide-md sm:p-8">
-                        <h1 className="page-title mb-2">Set up your phases</h1>
-                        <p className="page-lead mb-8">
-                            Wake and sleep times define the day. Pick weekdays, then a day shape.
-                        </p>
+                        <h1 className="page-title mb-2">{t('phases.setupTitle')}</h1>
+                        <p className="page-lead mb-8">{t('phases.setupLead')}</p>
 
                         <div className="space-y-6">
                             <div>
                                 <label htmlFor="setup-wake" className="ui-label">
-                                    Wake
+                                    {t('phases.wake')}
                                 </label>
                                 <input
                                     id="setup-wake"
@@ -127,7 +127,7 @@ const PhaseSetupPage: React.FC = () => {
                             </div>
                             <div>
                                 <label htmlFor="setup-sleep" className="ui-label">
-                                    Sleep
+                                    {t('phases.sleep')}
                                 </label>
                                 <input
                                     id="setup-sleep"
@@ -143,7 +143,7 @@ const PhaseSetupPage: React.FC = () => {
                                 errors={errors}
                             />
                             <div>
-                                <p className="ui-label mb-2">Day shape</p>
+                                <p className="ui-label mb-2">{t('phases.dayShape')}</p>
                                 <PhasePresetPicker
                                     includeDefaults
                                     value={presetChoice}
@@ -160,7 +160,7 @@ const PhaseSetupPage: React.FC = () => {
                                 onClick={handleSave}
                                 className="ui-btn-primary flex-1 sm:flex-initial sm:min-w-[200px]"
                             >
-                                Save and create phases
+                                {t('phases.saveCreate')}
                             </button>
                             <button
                                 type="button"
@@ -168,7 +168,7 @@ const PhaseSetupPage: React.FC = () => {
                                 onClick={handleSkip}
                                 className="ui-btn-secondary flex-1 sm:flex-initial"
                             >
-                                Skip — default phases
+                                {t('phases.skipDefaults')}
                             </button>
                         </div>
                     </div>
