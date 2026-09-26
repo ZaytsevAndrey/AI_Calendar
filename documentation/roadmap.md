@@ -38,10 +38,10 @@ Do in order unless you explicitly skip ahead.
 
 ### 5. Voice on the same decision layer
 
-- [ ] Create / reschedule after parse call the same placement + conflict builder (not a second brain).
-- [ ] `needs_conflict_choice` → same sheet; second utterance or tap picks an option.
-- [ ] Unscheduled-oriented commands: done / skip / do now (wire as far as APIs allow).
-- [ ] Voice unit + P1 e2e for conflict choice.
+- [x] Create / reschedule after parse call the same placement + conflict builder (not a second brain).
+- [x] `needs_conflict_choice` → same sheet; second utterance or tap picks an option.
+- [x] Unscheduled-oriented commands: done / skip / do now (wire as far as APIs allow).
+- [x] Voice unit + P1 e2e for conflict choice.
 
 ### 6. Drag → day / phase replan
 
@@ -90,5 +90,5 @@ Do in order unless you explicitly skip ahead.
 
 ## Recommended next steps
 
-1. Start at **§5 Voice on the same decision layer**.
+1. Start at **§6 Drag → day / phase replan**.
 2. After each feature ships: tick above, archive a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

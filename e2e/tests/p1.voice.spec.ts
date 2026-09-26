@@ -142,4 +142,123 @@ test.describe('P1 voice UI', () => {
     });
     expectOk(restored);
   });
+
+  test('U-VOI-007 voice create conflict offers sheet and spoken option', async ({ page, auth }) => {
+    const taskId = 'voice-conflict-task';
+    const jobId = 'voice-conflict-job';
+    let spoken = 'add Voice conflict task';
+
+    await mockVoiceCapture(page);
+    await page.route('**/voice/transcribe', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({ transcript: spoken, language: 'en' }),
+      });
+    });
+    await page.route('**/voice/parse-task', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          understanding: 'complete',
+          clarifyingQuestion: null,
+          task: {
+            name: 'Voice conflict task',
+            eventType: 'admin',
+            estimatedTimeInMinutes: 30,
+            priority: 'medium',
+          },
+          command: null,
+        }),
+      });
+    });
+    await page.route('**/tasks', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: taskId,
+          name: 'Voice conflict task',
+          eventType: 'admin',
+          estimatedTimeInMinutes: 30,
+          priority: 'medium',
+          status: 'todo',
+          jobId,
+        }),
+      });
+    });
+    await page.route(`**/schedule-jobs/${jobId}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: jobId,
+          status: 'completed',
+          result: {
+            conflicts: [
+              {
+                taskId,
+                taskName: 'Voice conflict task',
+                reason: 'preferred_on_fixed',
+                options: ['move_new', 'leave_problematic'],
+              },
+            ],
+          },
+        }),
+      });
+    });
+    await page.route(`**/tasks/${taskId}`, async (route) => {
+      if (route.request().method() !== 'PATCH') {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: taskId,
+          name: 'Voice conflict task',
+          isProblematic: false,
+          scheduledStartTime: null,
+          scheduledEndTime: null,
+        }),
+      });
+    });
+
+    await openAs(page, auth.onboarded, '/tasks');
+    await page.getByRole('button', { name: 'Add task by voice' }).click();
+    const voice = page.getByRole('dialog', { name: 'Add task by voice' });
+    await voice.getByRole('button', { name: /Start speaking|Answer/ }).click();
+    await expect(voice.getByText(/Listening/)).toBeVisible();
+    await voice.getByRole('button', { name: 'Stop' }).click();
+
+    await expect(page.getByRole('dialog', { name: 'Schedule conflict' })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByRole('dialog', { name: 'Add task by voice' })).toHaveCount(0);
+
+    spoken = 'place this task elsewhere';
+    const conflict = page.getByRole('dialog', { name: 'Schedule conflict' });
+    await conflict.getByRole('button', { name: 'Answer by voice' }).click();
+    await expect(voice.getByText(/How should we resolve the schedule conflict/)).toBeVisible();
+    await voice.getByRole('button', { name: /Answer|Start speaking/ }).click();
+    await expect(voice.getByText(/Listening/)).toBeVisible();
+    await voice.getByRole('button', { name: 'Stop' }).click();
+
+    await expect(page.getByText('Conflict choice applied')).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Schedule conflict' })).toHaveCount(0);
+  });
 });

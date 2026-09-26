@@ -3,7 +3,10 @@ import { customBaseQuery } from './customBaseQuery';
 import { TaskDTO, CreateTaskDTO, UpdateTaskDTO, SkipOccurrenceDTO } from './tasks.api';
 import { eventsApi } from './eventsApi';
 import { waitForScheduleJob } from './schedule.api';
-import { emitScheduleConflicts } from 'modules/schedule/conflictChoiceBus';
+import {
+  emitScheduleConflicts,
+  notifyScheduleJobSettled,
+} from 'modules/schedule/conflictChoiceBus';
 import type { SchedulingConflictDTO } from 'modules/schedule/conflictChoiceBus';
 
 function conflictsFromJobResult(result: unknown): SchedulingConflictDTO[] {
@@ -17,11 +20,15 @@ async function refreshAfterSilentReplan(
   jobId?: string | null,
 ) {
   dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
-  if (!jobId) return;
+  if (!jobId) {
+    notifyScheduleJobSettled();
+    return;
+  }
   try {
     const job = await waitForScheduleJob(jobId);
     emitScheduleConflicts(conflictsFromJobResult(job.result));
   } catch {
+    notifyScheduleJobSettled();
     /* still refresh; the task itself already saved */
   }
   dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));

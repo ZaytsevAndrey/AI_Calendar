@@ -42,12 +42,21 @@ function leading(body: string): RegExp {
   return new RegExp(`^(?:${body})${EDGE}`, 'iu');
 }
 
+export function sniffDoNow(transcript: string): boolean {
+  const text = transcript.replace(/\s+/g, ' ').trim();
+  if (!text) return false;
+  return leading(
+    'do\\s+now|schedule\\s+(?:it\\s+)?now|place\\s+(?:it\\s+)?now|зроби\\s+зараз|заплануй(?:\\s+це)?\\s+зараз|сделай\\s+сейчас',
+  ).test(text);
+}
+
 export function sniffCommandIntent(transcript: string): VoiceCommandIntent | null {
   const text = transcript.replace(/\s+/g, ' ').trim();
   if (!text) return null;
   if (leading('add|create|new task|нагадай|створи|додай|создай|добавь').test(text)) {
     return null;
   }
+  if (sniffDoNow(text)) return 'reschedule';
   if (leading('skip|пропусти(?:ти)?|пропустить').test(text)) return 'skip';
   if (
     leading('move|reschedule|перенес(?:и|ти|іть)?|перестав(?:ь|ити)?|зсунь|сдвин(?:ь|уть)').test(
@@ -240,6 +249,32 @@ function rescheduleCommand(
   nowMs: number,
 ): VoiceCommandResolveResult {
   const lang = input.language;
+
+  if (sniffDoNow(input.transcript)) {
+    if (task.isFixedExternal || isFixedEventType(task.eventType)) {
+      return {
+        type: 'command',
+        command: { kind: 'refuse', message: vt(lang, 'voice.noOpenTimeToMove') },
+      };
+    }
+    const earliest = input.nowIso;
+    const deadline = endOfLocalDayIso(localYmd(earliest, input.timeZone), input.timeZone);
+    return {
+      type: 'command',
+      command: {
+        kind: 'window',
+        taskId: task.id,
+        taskName: task.name,
+        summary: vt(lang, 'voice.doNowReplan', { name: task.name }),
+        earliestStartTime: earliest,
+        deadline,
+        scheduledStartTime: null,
+        scheduledEndTime: null,
+        clearUnscheduled: true,
+      },
+    };
+  }
+
   const when = planWhen(input.transcript, input.draft, input.timeZone, input.nowIso, slot);
   if (!when) {
     const question = vt(lang, 'voice.whenMove');
@@ -557,7 +592,7 @@ function stripCommandPrefix(text: string): string | null {
     .trim()
     .replace(
       new RegExp(
-        `^(?:please\\s+|будь ласка\\s+)?(?:skip|пропусти(?:ти)?|пропустить|move|reschedule|перенес(?:и|ти|іть)?|перестав(?:ь|ити)?|зсунь|сдвин(?:ь|уть)|mark|закінч(?:ив|ила|ити)?|заверш(?:ив|ила)|зроби(?:в|ла)|готово|закончил(?:а)?|сделал(?:а)?|выполнил(?:а)?|done|complete|completed|finish(?:ed)?)${EDGE}\\s*`,
+        `^(?:please\\s+|будь ласка\\s+)?(?:do\\s+now|schedule\\s+(?:it\\s+)?now|place\\s+(?:it\\s+)?now|зроби\\s+зараз|заплануй(?:\\s+це)?\\s+зараз|сделай\\s+сейчас|skip|пропусти(?:ти)?|пропустить|move|reschedule|перенес(?:и|ти|іть)?|перестав(?:ь|ити)?|зсунь|сдвин(?:ь|уть)|mark|закінч(?:ив|ила|ити)?|заверш(?:ив|ила)|зроби(?:в|ла)|готово|закончил(?:а)?|сделал(?:а)?|выполнил(?:а)?|done|complete|completed|finish(?:ed)?)${EDGE}\\s*`,
         'iu',
       ),
       '',

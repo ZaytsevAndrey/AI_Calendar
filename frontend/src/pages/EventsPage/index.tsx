@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Mic, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useGetEventsQuery, useDeleteEventMutation, useUpdateEventMutation } from 'api/eventTasksApi';
@@ -9,6 +9,7 @@ import { useEventEditor } from 'modules/events/hooks/useEventEditor';
 import { VoiceTaskButton } from 'modules/voice/components/VoiceTaskButton';
 import { VoiceTaskSheet } from 'modules/voice/components/VoiceTaskSheet';
 import { useVoiceTask } from 'modules/voice/hooks/useVoiceTask';
+import { setConflictVoiceOpener } from 'modules/schedule/conflictChoiceBus';
 import { deadlineTone } from 'modules/events/utils/deadlineTone';
 import { usePhoneLayout } from 'modules/common/hooks/useMediaQuery';
 import {
@@ -98,6 +99,10 @@ const TasksPage: React.FC = () => {
     onComplete: createFromPayload,
     onSufficient: openCreateFromPrefill,
   });
+  useEffect(() => {
+    setConflictVoiceOpener(() => voice.open());
+    return () => setConflictVoiceOpener(null);
+  }, [voice.open]);
 
   const scheduledFilters = {
     query: scheduledQuery,

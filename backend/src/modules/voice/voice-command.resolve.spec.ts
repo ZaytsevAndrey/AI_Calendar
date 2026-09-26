@@ -49,6 +49,11 @@ describe('sniffCommandIntent', () => {
     expect(sniffCommandIntent('buy milk')).toBeNull();
   });
 
+  it('sniffs do-now as reschedule', () => {
+    expect(sniffCommandIntent('do now dentist')).toBe('reschedule');
+    expect(sniffCommandIntent('зроби зараз звіт')).toBe('reschedule');
+  });
+
   it('recognizes leading command verbs', () => {
     expect(sniffCommandIntent('skip dentist')).toBe('skip');
     expect(sniffCommandIntent('перенеси стоматолога на завтра')).toBe('reschedule');
@@ -185,6 +190,28 @@ describe('resolveVoiceCommand', () => {
         taskId: 't1',
         earliestStartTime: expect.stringContaining('2026-09-23T00:00:00'),
         deadline: expect.stringContaining('2026-09-23T23:59:00'),
+      },
+    });
+  });
+
+  it('do now clears unscheduled and opens a from-now window', () => {
+    const parking = task({ id: 't2', name: 'Parked report', isUnscheduled: true });
+    const result = resolveVoiceCommand({
+      draft: draft({ intent: 'reschedule', taskName: 'Parked report' }),
+      transcript: 'do now Parked report',
+      timeZone: ZONE,
+      nowIso: NOW,
+      alreadyClarified: false,
+      tasks: [parking],
+      slots: [],
+    });
+    expect(result).toMatchObject({
+      type: 'command',
+      command: {
+        kind: 'window',
+        taskId: 't2',
+        earliestStartTime: NOW,
+        clearUnscheduled: true,
       },
     });
   });

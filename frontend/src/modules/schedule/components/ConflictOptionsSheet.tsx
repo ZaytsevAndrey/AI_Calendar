@@ -10,7 +10,11 @@ import { Modal } from '../../../ui/Modal';
 import { showErrorToast, showSuccessToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 import { applyConflictOption } from '../applyConflictOption';
-import type { ConflictOptionId, SchedulingConflictDTO } from '../conflictChoiceBus';
+import {
+  openVoiceForConflictChoice,
+  type ConflictOptionId,
+  type SchedulingConflictDTO,
+} from '../conflictChoiceBus';
 
 type Phrase = { id: ConflictOptionId; title: string; detail: string };
 
@@ -114,14 +118,24 @@ export function ConflictOptionsSheet({ conflict, onClose }: Props) {
       title={t('schedule.conflictTitle')}
       maxWidthClass="max-w-md"
       footer={
-        <button
-          type="button"
-          className="ui-btn-ghost"
-          disabled={!!busyId}
-          onClick={() => void dismiss()}
-        >
-          {t('schedule.conflictDismiss')}
-        </button>
+        <>
+          <button
+            type="button"
+            className="ui-btn-secondary"
+            disabled={!!busyId}
+            onClick={() => openVoiceForConflictChoice()}
+          >
+            {t('schedule.conflictAnswerVoice')}
+          </button>
+          <button
+            type="button"
+            className="ui-btn-ghost"
+            disabled={!!busyId}
+            onClick={() => void dismiss()}
+          >
+            {t('schedule.conflictDismiss')}
+          </button>
+        </>
       }
     >
       <p className="mb-1 text-sm font-medium text-ide-text">{conflict.taskName}</p>

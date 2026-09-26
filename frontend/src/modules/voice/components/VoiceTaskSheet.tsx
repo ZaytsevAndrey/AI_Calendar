@@ -29,7 +29,7 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
     ? t('voice.stop')
     : stage === 'confirm'
       ? t('voice.confirm')
-      : stage === 'clarifying'
+      : stage === 'clarifying' || stage === 'needs_conflict_choice'
         ? t('voice.answer')
         : t('voice.startSpeaking');
 
@@ -39,6 +39,7 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
       onClose={close}
       title={t('voice.addByVoice')}
       maxWidthClass="max-w-md"
+      zIndexClass="z-[1400]"
       footer={
         <>
           <button type="button" className="ui-btn-secondary" onClick={close} disabled={isWorking}>
@@ -86,7 +87,10 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
         ) : null}
         {pendingSummary && stage === 'confirm' ? (
           <p className="rounded-lg border border-ide-border bg-ide-surface px-3 py-2">{pendingSummary}</p>
-        ) : clarifyingQuestion && (stage === 'clarifying' || stage === 'recording_clarification') ? (
+        ) : clarifyingQuestion &&
+          (stage === 'clarifying' ||
+            stage === 'recording_clarification' ||
+            stage === 'needs_conflict_choice') ? (
           <p className="rounded-lg border border-ide-border bg-ide-surface px-3 py-2">
             {clarifyingQuestion}
           </p>

@@ -14,7 +14,9 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ### Scheduling redesign (engine)
 
-- [x] **Shared conflict options sheet.** Job `conflicts[]` opens one Modal (create replan + Generate); Groq phrases option ids via `POST /schedule/conflict-option-phrases` with i18n fallback; apply uses PATCH / skip. Dismiss → Problematic. Voice/drag reuse `openConflictChoice` (§5–6).
+- [x] **Voice on the same decision layer.** Create/window after voice waits for replan `conflicts[]` and opens the shared sheet (`needs_conflict_choice`); spoken option ids or tap apply via existing APIs. Unscheduled: done works; skip still refuses; **do now** → from-now window + `clearUnscheduled`. Unit + P1 e2e (`U-VOI-007`).
+
+- [x] **Shared conflict options sheet.** Job `conflicts[]` opens one Modal (create replan + Generate); Groq phrases option ids via `POST /schedule/conflict-option-phrases` with i18n fallback; apply uses PATCH / skip. Dismiss → Problematic. Drag still reuses `openConflictChoice` (§6).
 
 - [x] **Problematic inbox.** Distinct `isProblematic` flag (not `isUnscheduled`). Generate/replan parks capacity overflow; Calendar banner + sheet (Open / Move / Skip / Resolve). Conflict choice no longer auto-parks until dismiss / leave_problematic (§4).
 

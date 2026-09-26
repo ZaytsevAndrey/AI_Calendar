@@ -25,6 +25,7 @@ export const uk: Record<MessageKey, string> = {
   'voice.moveRange': 'Перенести «{{name}}» на {{when}}?',
   'voice.rescheduleReplan':
     'Перепланувати «{{name}}» на {{when}} і перерозкласти?',
+  'voice.doNowReplan': 'Запланувати «{{name}}» якнайшвидше і перерозкласти?',
 
   'schedule.emptySummary':
     'Поки нічого переглядати. Додайте задачі або згенеруйте розклад.',

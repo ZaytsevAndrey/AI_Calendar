@@ -22,6 +22,7 @@ export const en = {
   'voice.moveTo': 'Move "{{name}}" to {{when}}?',
   'voice.moveRange': 'Move "{{name}}" to {{when}}?',
   'voice.rescheduleReplan': 'Reschedule "{{name}}" to {{when}} and replan?',
+  'voice.doNowReplan': 'Schedule "{{name}}" as soon as possible and replan?',
 
   'schedule.emptySummary':
     'Nothing to review yet. Add tasks or generate a schedule first.',

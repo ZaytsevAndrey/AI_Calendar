@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -9,6 +9,8 @@ export type ModalProps = {
     children: React.ReactNode;
     footer?: React.ReactNode;
     maxWidthClass?: string;
+    /** Stacking class for the portal root (default z-[1300]). */
+    zIndexClass?: string;
 };
 
 export const Modal: React.FC<ModalProps> = ({
@@ -18,8 +20,10 @@ export const Modal: React.FC<ModalProps> = ({
     children,
     footer,
     maxWidthClass = 'max-w-lg',
+    zIndexClass = 'z-[1300]',
 }) => {
     const { t } = useTranslation();
+    const titleId = useId();
 
     if (!open) {
         return null;
@@ -30,7 +34,7 @@ export const Modal: React.FC<ModalProps> = ({
     }
 
     return createPortal(
-        <div className="fixed inset-0 z-[1300] flex items-end justify-center p-0 sm:items-center sm:p-4">
+        <div className={`fixed inset-0 ${zIndexClass} flex items-end justify-center p-0 sm:items-center sm:p-4`}>
             <button
                 type="button"
                 className="absolute inset-0 bg-black/60"
@@ -40,10 +44,14 @@ export const Modal: React.FC<ModalProps> = ({
             <div
                 role="dialog"
                 aria-modal="true"
+                aria-labelledby={title ? titleId : undefined}
                 className={`relative z-10 flex max-h-[92dvh] w-full ${maxWidthClass} flex-col rounded-t-2xl border border-ide-border bg-ide-panel shadow-ide-md sm:max-h-[90vh] sm:rounded-2xl`}
             >
                 {title ? (
-                    <div className="border-b border-ide-border px-4 py-3 text-lg font-semibold text-ide-text">
+                    <div
+                        id={titleId}
+                        className="border-b border-ide-border px-4 py-3 text-lg font-semibold text-ide-text"
+                    >
                         {title}
                     </div>
                 ) : null}

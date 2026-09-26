@@ -38,6 +38,7 @@ import { isHabitGoogleEvent } from 'modules/habits/habitBlocks';
 import { VoiceTaskButton } from 'modules/voice/components/VoiceTaskButton';
 import { VoiceTaskSheet } from 'modules/voice/components/VoiceTaskSheet';
 import { useVoiceTask } from 'modules/voice/hooks/useVoiceTask';
+import { setConflictVoiceOpener } from 'modules/schedule/conflictChoiceBus';
 import { useCoarsePointer, usePhoneLayout } from 'modules/common/hooks/useMediaQuery';
 import { PhoneWeekStrip } from 'modules/calendar/components/PhoneWeekStrip';
 import { Modal } from '../../ui/Modal';
@@ -176,6 +177,10 @@ const CalendarPage: React.FC = () => {
         onComplete: createFromPayload,
         onSufficient: openCreateFromPrefill,
     });
+    useEffect(() => {
+        setConflictVoiceOpener(() => voice.open());
+        return () => setConflictVoiceOpener(null);
+    }, [voice.open]);
     useEffect(() => {
         try {
             sessionStorage.setItem(CALENDAR_VIEW_KEY, currentView);
