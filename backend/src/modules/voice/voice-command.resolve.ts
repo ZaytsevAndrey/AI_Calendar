@@ -206,8 +206,10 @@ function skipCommand(
     return {
       type: 'command',
       command: {
-        kind: 'refuse',
-        message: vt(lang, 'voice.unscheduledNoSkip'),
+        kind: 'cancel',
+        taskId: task.id,
+        taskName: task.name,
+        summary: vt(lang, 'voice.cancelUnscheduled', { name: task.name }),
       },
     };
   }

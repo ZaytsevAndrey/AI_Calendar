@@ -15,6 +15,7 @@ export type VoiceParseResult = {
 export type VoiceCommand =
   | { kind: 'refuse'; message: string }
   | { kind: 'complete'; taskId: string; taskName: string; summary: string }
+  | { kind: 'cancel'; taskId: string; taskName: string; summary: string }
   | {
       kind: 'skip';
       taskId: string;

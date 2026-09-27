@@ -2,16 +2,19 @@ import React, { useEffect, useState } from 'react';
 import { Mic, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useGetEventsQuery, useDeleteEventMutation, useUpdateEventMutation } from 'api/eventTasksApi';
+import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import { useGetAllPhasesQuery } from 'api/phasesApi';
 import EventList from 'modules/events/components/EventList';
 import TaskSectionFilters from 'modules/events/components/TaskSectionFilters';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
+import { buildDoNowPatch } from 'modules/events/unscheduledActions';
 import { VoiceTaskButton } from 'modules/voice/components/VoiceTaskButton';
 import { VoiceTaskSheet } from 'modules/voice/components/VoiceTaskSheet';
 import { useVoiceTask } from 'modules/voice/hooks/useVoiceTask';
 import { setConflictVoiceOpener } from 'modules/schedule/conflictChoiceBus';
 import { deadlineTone } from 'modules/events/utils/deadlineTone';
 import { usePhoneLayout } from 'modules/common/hooks/useMediaQuery';
+import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import {
   filterScheduledTasks,
   filterUnscheduledTasks,
@@ -90,10 +93,12 @@ const TasksPage: React.FC = () => {
 
   const { data: events = [], isLoading: isLoadingEvents } = useGetEventsQuery();
   const { data: phases = [] } = useGetAllPhasesQuery();
+  const { data: userSettings } = useGetUserSettingsQuery();
+  const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
   const [deleteEvent] = useDeleteEventMutation();
   const [updateEvent] = useUpdateEventMutation();
   const [busyId, setBusyId] = useState<string | null>(null);
-  const { openCreate, openCreateFromPrefill, openEdit, openSchedule, createFromPayload, editorModal } =
+  const { openCreate, openCreateFromPrefill, openEdit, createFromPayload, editorModal } =
     useEventEditor();
   const voice = useVoiceTask({
     onComplete: createFromPayload,
@@ -128,6 +133,38 @@ const TasksPage: React.FC = () => {
       .catch((err) => {
         showErrorToast({
           title: t('tasks.completeFailed'),
+          detail: extractApiErrorMessage(err),
+        });
+      })
+      .finally(() => setBusyId(null));
+  };
+
+  const markSkipped = (task: TaskDTO) => {
+    setBusyId(task.id);
+    void updateEvent({ id: task.id, body: { status: 'canceled' } })
+      .unwrap()
+      .then(() => {
+        showSuccessToast({ title: t('tasks.skipped'), detail: task.name });
+      })
+      .catch((err) => {
+        showErrorToast({
+          title: t('tasks.skipFailed'),
+          detail: extractApiErrorMessage(err),
+        });
+      })
+      .finally(() => setBusyId(null));
+  };
+
+  const doNow = (task: TaskDTO) => {
+    setBusyId(task.id);
+    void updateEvent({ id: task.id, body: buildDoNowPatch(timeZone) })
+      .unwrap()
+      .then(() => {
+        showSuccessToast({ title: t('tasks.doNowStarted'), detail: task.name });
+      })
+      .catch((err) => {
+        showErrorToast({
+          title: t('tasks.doNowFailed'),
           detail: extractApiErrorMessage(err),
         });
       })
@@ -215,7 +252,9 @@ const TasksPage: React.FC = () => {
               onDelete={requestDelete}
               onCreate={() => openCreate({ unscheduled: true })}
               onDone={markDone}
-              onSchedule={openSchedule}
+              onSkip={markSkipped}
+              onDoNow={doNow}
+              openLabel={t('tasks.item.open')}
               busyId={busyId}
               isLoading={false}
             />

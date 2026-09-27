@@ -379,6 +379,10 @@
     "deleteTitle": "Delete task",
     "completed": "Task completed",
     "completeFailed": "Could not complete task",
+    "skipped": "Task skipped",
+    "skipFailed": "Could not skip task",
+    "doNowStarted": "Scheduling now",
+    "doNowFailed": "Could not schedule now",
     "deleted": "Task deleted",
     "deleteFailed": "Could not delete task",
     "searchUnscheduled": "Search unscheduled",
@@ -387,7 +391,7 @@
     "overdueUnscheduled": "Overdue unscheduled",
     "overdueScheduled": "Overdue scheduled",
     "pageLead": "Inbox for things to do later, plus scheduled tasks. Unscheduled items stay off Google Calendar until you schedule them.",
-    "unscheduledHint": "No time slot. Mark done or schedule when you know when.",
+    "unscheduledHint": "No time slot. Done, skip, or do now — or open to edit.",
     "deleteConfirm": "Are you sure you want to delete \"{{name}}\"? This cannot be undone.",
     "thisTask": "this task",
     "form": {
@@ -489,6 +493,9 @@
     },
     "item": {
       "done": "Done",
+      "skip": "Skip",
+      "doNow": "Do now",
+      "open": "Open",
       "schedule": "Schedule",
       "unscheduled": "Unscheduled",
       "repeats": "Repeats",
@@ -677,6 +684,7 @@
     "askBefore": "Ask before voice commands",
     "button": "Voice",
     "taskCompleted": "Task completed",
+    "taskCanceled": "Task skipped",
     "occurrenceSkipped": "Occurrence skipped",
     "eventMoved": "Event moved",
     "taskRescheduled": "Task rescheduled"

@@ -30,6 +30,12 @@ export async function executeVoiceCommand(
     return;
   }
 
+  if (command.kind === 'cancel') {
+    await deps.updateTask({ id: command.taskId, body: { status: 'canceled' } }).unwrap();
+    showSuccessToast({ title: i18n.t('voice.taskCanceled'), detail: command.taskName });
+    return;
+  }
+
   if (command.kind === 'skip') {
     await deps
       .skipOccurrence({

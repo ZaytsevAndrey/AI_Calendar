@@ -116,7 +116,7 @@ Further ids may be added later; these are the baseline contract.
 | Flag / model | Existing `isUnscheduled` | `isProblematic` (distinct boolean; Calendar banner/sheet) |
 
 | Typical entry | User creates without scheduling; deadline window with no fit | Overflow; dismiss conflict; recurring won’t fit |
-| Actions (product) | Done / Skip / Do now / Open (roadmap §7) | Open task; move / skip / resolve (roadmap §3–4) |
+| Actions (product) | Done / Skip (cancel) / Do now / Open (§7) | Open task; move / skip / resolve (roadmap §3–4) |
 | UI default | Tasks page inbox | Calendar banner/chip + sheet (placement flexible until §3) |
 
 ---
@@ -133,4 +133,4 @@ Further ids may be added later; these are the baseline contract.
 
 ## 9. Implementation note
 
-Roadmap **§2–§6** shipped: type + preferred placement, `isProblematic` inbox, shared conflict options sheet, Voice on the same layer, and drag → silent replan + conflict sheet / recurring notice. Do not add new priority-displacement behavior.
+Roadmap **§2–§7** shipped: type + preferred placement, Problematic inbox, shared conflict sheet, Voice, drag replan, and Unscheduled card actions (including deadline-no-fit park). Do not add new priority-displacement behavior.

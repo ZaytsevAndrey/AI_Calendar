@@ -43,6 +43,7 @@ import {
   UndoSnapshot,
 } from './schedule-undo.util';
 import { collectProblematicTaskIds } from './problematic-from-warnings.util';
+import { collectUnscheduledTaskIds } from './unscheduled-from-warnings.util';
 
 function googleListedEventEndMs(ev: {
   end?: { dateTime?: string | null; date?: string | null };
@@ -323,6 +324,30 @@ export class ScheduleJobService {
       .execute();
   }
 
+  /**
+   * Persist Unscheduled inbox for deadline / window no-fit (not Problematic).
+   */
+  private async applyUnscheduledFromWarnings(
+    userId: string,
+    warnings: SchedulingWarning[],
+    conflicts: SchedulingConflict[],
+  ): Promise<void> {
+    const ids = collectUnscheduledTaskIds(warnings);
+    for (const id of collectProblematicTaskIds(warnings, conflicts)) {
+      ids.delete(id);
+    }
+    if (!ids.size) return;
+
+    await this.taskRepo
+      .createQueryBuilder()
+      .update(Task)
+      .set({ isUnscheduled: true, isProblematic: false })
+      .where('userId = :userId', { userId })
+      .andWhere('id IN (:...ids)', { ids: [...ids] })
+      .andWhere('status = :status', { status: TaskStatus.TODO })
+      .execute();
+  }
+
   private async runPendingJob(job: ScheduleJob): Promise<void> {
     job.status = 'running';
     job.progressStage = 'preparing';
@@ -351,6 +376,11 @@ export class ScheduleJobService {
       );
       // After sync so this run's placements still reach Google / Now strip.
       await this.applyProblematicFromWarnings(
+        job.userId,
+        result.warnings,
+        result.conflicts,
+      );
+      await this.applyUnscheduledFromWarnings(
         job.userId,
         result.warnings,
         result.conflicts,

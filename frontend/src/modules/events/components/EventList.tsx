@@ -11,6 +11,9 @@ interface EventListProps {
   isLoading: boolean;
   onDone?: (event: TaskDTO) => void;
   onSchedule?: (event: TaskDTO) => void;
+  onSkip?: (event: TaskDTO) => void;
+  onDoNow?: (event: TaskDTO) => void;
+  openLabel?: string;
   busyId?: string | null;
   emptyTitle?: string;
 }
@@ -23,6 +26,9 @@ const EventList: React.FC<EventListProps> = ({
   isLoading,
   onDone,
   onSchedule,
+  onSkip,
+  onDoNow,
+  openLabel,
   busyId,
   emptyTitle,
 }) => {
@@ -53,6 +59,9 @@ const EventList: React.FC<EventListProps> = ({
           onDelete={onDelete}
           onDone={onDone}
           onSchedule={onSchedule}
+          onSkip={onSkip}
+          onDoNow={onDoNow}
+          openLabel={openLabel}
           busyId={busyId}
         />
       ))}

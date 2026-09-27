@@ -1,6 +1,14 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { CalendarPlus, Check, Pencil, Trash2 } from 'lucide-react';
+import {
+  CalendarPlus,
+  Check,
+  ExternalLink,
+  Pencil,
+  SkipForward,
+  Trash2,
+  Zap,
+} from 'lucide-react';
 import { TaskDTO } from '../../../api/tasks.api';
 import { formatDateTime, formatDateTimeRange, formatMinutes } from '../../../utils/formatDate';
 import { deadlineTone } from '../utils/deadlineTone';
@@ -11,6 +19,9 @@ interface EventItemProps {
   onDelete: (eventId: string) => void;
   onDone?: (event: TaskDTO) => void;
   onSchedule?: (event: TaskDTO) => void;
+  onSkip?: (event: TaskDTO) => void;
+  onDoNow?: (event: TaskDTO) => void;
+  openLabel?: string;
   busyId?: string | null;
 }
 
@@ -62,6 +73,9 @@ const EventItem: React.FC<EventItemProps> = ({
   onDelete,
   onDone,
   onSchedule,
+  onSkip,
+  onDoNow,
+  openLabel,
   busyId,
 }) => {
   const { t } = useTranslation();
@@ -73,6 +87,8 @@ const EventItem: React.FC<EventItemProps> = ({
   const busy = busyId === event.id;
   const color = priorityColors[event.priority];
   const when = slot || (!unscheduled && from && deadline ? `${from} – ${deadline}` : null);
+  const editLabel = openLabel || t('common.edit');
+  const EditIcon = openLabel ? ExternalLink : Pencil;
 
   const tonePrefix =
     tone === 'overdue'
@@ -112,6 +128,26 @@ const EventItem: React.FC<EventItemProps> = ({
           </button>
         </>
       ) : null}
+      {onSkip ? (
+        <>
+          <button type="button" onClick={() => onSkip(event)} className={`${iconBtn} md:hidden`} disabled={busy} aria-label={t('tasks.item.skip')}>
+            <SkipForward className="h-4 w-4" aria-hidden />
+          </button>
+          <button type="button" onClick={() => onSkip(event)} className="ui-btn-secondary hidden px-3 py-1.5 text-sm md:inline-flex" disabled={busy}>
+            {t('tasks.item.skip')}
+          </button>
+        </>
+      ) : null}
+      {onDoNow ? (
+        <>
+          <button type="button" onClick={() => onDoNow(event)} className={`${iconBtn} text-ide-link md:hidden`} disabled={busy} aria-label={t('tasks.item.doNow')}>
+            <Zap className="h-4 w-4" aria-hidden />
+          </button>
+          <button type="button" onClick={() => onDoNow(event)} className="ui-btn-primary hidden px-3 py-1.5 text-sm md:inline-flex" disabled={busy}>
+            {t('tasks.item.doNow')}
+          </button>
+        </>
+      ) : null}
       {onSchedule ? (
         <>
           <button type="button" onClick={() => onSchedule(event)} className={`${iconBtn} text-ide-link md:hidden`} disabled={busy} aria-label={t('tasks.item.schedule')}>
@@ -122,11 +158,11 @@ const EventItem: React.FC<EventItemProps> = ({
           </button>
         </>
       ) : null}
-      <button type="button" onClick={() => onEdit(event)} className={`${iconBtn} md:hidden`} aria-label={t('common.edit')}>
-        <Pencil className="h-4 w-4" aria-hidden />
+      <button type="button" onClick={() => onEdit(event)} className={`${iconBtn} md:hidden`} aria-label={editLabel}>
+        <EditIcon className="h-4 w-4" aria-hidden />
       </button>
       <button type="button" onClick={() => onEdit(event)} className="ui-btn-secondary hidden px-3 py-1.5 text-sm md:inline-flex">
-        {t('common.edit')}
+        {editLabel}
       </button>
       <button type="button" onClick={() => onDelete(event.id)} className={`${iconBtn} text-ide-error/80 hover:text-ide-error md:hidden`} aria-label={t('common.delete')}>
         <Trash2 className="h-4 w-4" aria-hidden />

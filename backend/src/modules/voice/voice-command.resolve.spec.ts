@@ -215,4 +215,21 @@ describe('resolveVoiceCommand', () => {
       },
     });
   });
+
+  it('skip on unscheduled cancels the task', () => {
+    const parking = task({ id: 't3', name: 'Later errand', isUnscheduled: true });
+    const result = resolveVoiceCommand({
+      draft: draft({ intent: 'skip', taskName: 'Later errand' }),
+      transcript: 'skip Later errand',
+      timeZone: ZONE,
+      nowIso: NOW,
+      alreadyClarified: false,
+      tasks: [parking],
+      slots: [],
+    });
+    expect(result).toMatchObject({
+      type: 'command',
+      command: { kind: 'cancel', taskId: 't3' },
+    });
+  });
 });

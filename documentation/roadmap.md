@@ -51,9 +51,9 @@ Do in order unless you explicitly skip ahead.
 
 ### 7. Unscheduled actions
 
-- [ ] Card actions: **Done**, **Skip**, **Do now**, **Open**.
-- [ ] Deadline with no fit stays Unscheduled (not problematic), with existing overdue tone.
-- [ ] Align Voice commands with these actions.
+- [x] Card actions: **Done**, **Skip**, **Do now**, **Open**.
+- [x] Deadline with no fit stays Unscheduled (not problematic), with existing overdue tone.
+- [x] Align Voice commands with these actions.
 
 ### 8. Recurring extend; shrink Generate
 
@@ -90,5 +90,5 @@ Do in order unless you explicitly skip ahead.
 
 ## Recommended next steps
 
-1. Start at **§7 Unscheduled actions**.
+1. Start at **§8 Recurring extend; shrink Generate**.
 2. After each feature ships: tick above, archive a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

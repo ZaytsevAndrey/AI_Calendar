@@ -9,9 +9,8 @@ export const uk: Record<MessageKey, string> = {
 
   'voice.notAppTask': 'Ця подія не є задачею застосунку.',
   'voice.fixedCannotSkip': 'Фіксовані події не можна пропускати.',
-  'voice.unscheduledNoSkip': 'У незапланованих задач немає слоту для пропуску.',
-  'voice.noOpenTimeToSkip': 'Немає відкритого часу для пропуску.',
-  'voice.noOpenTimeToMove': 'Немає відкритого часу для перенесення.',
+  'voice.cancelUnscheduled': 'Пропустити «{{name}}» і скасувати?',
+  'voice.noOpenTimeToSkip': 'Немає відкритого часу для пропуску.',  'voice.noOpenTimeToMove': 'Немає відкритого часу для перенесення.',
   'voice.endNotAfterStart': 'Час завершення має бути пізніше за початок.',
   'voice.nothingInProgress': 'Зараз нічого не виконується.',
   'voice.whichTask': 'Яку задачу?',

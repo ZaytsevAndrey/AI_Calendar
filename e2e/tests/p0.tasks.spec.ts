@@ -92,8 +92,8 @@ test.describe('P0 tasks UI', () => {
     await expect(dialog.getByRole('button', { name: 'Unscheduled', exact: true })).toHaveCount(0);
   });
 
-  test('U-TSK-009 inbox Schedule saves without isUnscheduled', async ({ page, auth, request }) => {
-    const name = uniqueName('E2E schedule me');
+  test('U-TSK-009 inbox Do now clears unscheduled', async ({ page, auth, request }) => {
+    const name = uniqueName('E2E do now');
     const created = await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
       name,
       isUnscheduled: true,
@@ -102,14 +102,11 @@ test.describe('P0 tasks UI', () => {
 
     await openAs(page, auth.onboarded, '/tasks');
     const row = page.locator('.task-item').filter({ hasText: name });
-    await row.getByRole('button', { name: 'Schedule' }).click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog.getByText('Schedule task')).toBeVisible();
-    await dialog.getByRole('button', { name: 'Save changes' }).click();
-    await expect(page.getByText('Task updated')).toBeVisible();
+    await row.getByRole('button', { name: 'Do now' }).click();
+    await expect(page.getByText('Scheduling now')).toBeVisible();
 
     const scheduled = page.locator('section').filter({ hasText: 'Scheduled' });
-    await expect(scheduled.getByRole('heading', { name })).toBeVisible();
+    await expect(scheduled.getByRole('heading', { name })).toBeVisible({ timeout: 15_000 });
     await expect(row.getByText('Unscheduled', { exact: true })).toHaveCount(0);
   });
 
@@ -127,5 +124,35 @@ test.describe('P0 tasks UI', () => {
     await expect(page.getByText('Task completed')).toBeVisible();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(row).toHaveCount(0);
+  });
+
+  test('U-TSK-011 inbox Skip cancels without a confirm dialog', async ({ page, auth, request }) => {
+    const name = uniqueName('E2E inbox skip');
+    const created = await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
+      name,
+      isUnscheduled: true,
+    });
+    expectOk(created);
+
+    await openAs(page, auth.onboarded, '/tasks');
+    const row = page.locator('.task-item').filter({ hasText: name });
+    await row.getByRole('button', { name: 'Skip' }).click();
+    await expect(page.getByText('Task skipped')).toBeVisible();
+    await expect(row).toHaveCount(0);
+  });
+
+  test('U-TSK-012 inbox Open opens the editor', async ({ page, auth, request }) => {
+    const name = uniqueName('E2E inbox open');
+    const created = await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
+      name,
+      isUnscheduled: true,
+    });
+    expectOk(created);
+
+    await openAs(page, auth.onboarded, '/tasks');
+    const row = page.locator('.task-item').filter({ hasText: name });
+    await row.getByRole('button', { name: 'Open' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('textbox', { name: /Name/ })).toHaveValue(name);
   });
 });

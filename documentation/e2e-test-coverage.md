@@ -280,8 +280,10 @@ Silent replan: `jobId` on create/update when `shouldReplanAfterSave`. Unschedule
 | U-TSK-006 | U | P0 | Recurring Daily Mon–Fri | Submit | Created |
 | U-TSK-007 | U | P0 | Unscheduled | Name only | Inbox section; not on Generate |
 | U-TSK-008 | U | P1 | Unscheduled with deadline soon/overdue | List | Tone highlight (overdue/today/soon) |
-| U-TSK-009 | U | P0 | Inbox **Schedule** | Opens form as Flexible/Fixed | Save without `isUnscheduled` |
+| U-TSK-009 | U | P0 | Inbox **Do now** | Clears `isUnscheduled`, from-now window | Lands in Scheduled after silent replan |
 | U-TSK-010 | U | P0 | Inbox **Done** | Confirm path | `completed`; disappears from inbox; **no** calendar block |
+| U-TSK-011 | U | P0 | Inbox **Skip** | Cancels | `canceled`; disappears from active inbox |
+| U-TSK-012 | U | P0 | Inbox **Open** | Opens editor | Prefills name; edit form |
 | U-TSK-011 | U | P1 | Uncheck Fixed | Form | Allow split restored (preset rules) |
 | U-TSK-012 | U | P1 | Clear phase / deadline on edit | Save `phaseIds: []` / `deadline: null` | Deadline clears. **Current:** GET still returns previous `phaseId` after `phaseIds: []` |
 | U-TSK-013 | U | P1 | Expand Google options | location/color/visibility/reminders | Persisted |

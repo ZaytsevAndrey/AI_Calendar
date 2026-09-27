@@ -7,9 +7,8 @@ export const en = {
 
   'voice.notAppTask': 'That event is not an app task.',
   'voice.fixedCannotSkip': 'Fixed events cannot be skipped.',
-  'voice.unscheduledNoSkip': 'Unscheduled tasks have no occurrence to skip.',
-  'voice.noOpenTimeToSkip': 'There is no open time to skip.',
-  'voice.noOpenTimeToMove': 'There is no open time to move.',
+  'voice.cancelUnscheduled': 'Skip "{{name}}" and cancel it?',
+  'voice.noOpenTimeToSkip': 'There is no open time to skip.',  'voice.noOpenTimeToMove': 'There is no open time to move.',
   'voice.endNotAfterStart': 'That end time is not after the start.',
   'voice.nothingInProgress': 'Nothing is in progress.',
   'voice.whichTask': 'Which task?',
