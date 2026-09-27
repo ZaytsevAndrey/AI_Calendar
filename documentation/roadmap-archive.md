@@ -14,6 +14,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ### Scheduling redesign (engine)
 
+- [x] **Habits: AI streak tips.** On streak 3/7/30/100 unlock, Groq one-liner from habit name/description (settings language; light safety); template fallback if Groq is down; tip stored and shown under streak + in check-in toast.
+
 - [x] **Habits: achievements.** Per-habit catalog (`first_check_in`, streak 3/7/30/100, `clean_week`) with persisted `unlockedAt`, one-time toast via `newlyUnlocked`, badges on Habits; points/streaks unchanged.
 
 - [x] **Recurring extend; shrink Generate.** Hourly background tick enqueues `extend_recurring` (same placement as silent replan) for users with active recurring tasks on a ~20h cooldown, so series stay alive without Generate. Calendar “Review schedule” is cleanup/preview copy; Apply still runs a full rewrite when you ask.

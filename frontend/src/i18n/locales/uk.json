@@ -582,6 +582,7 @@
     "dotsAria": "Звички на {{date}}, {{done}} з {{total}} виконано",
     "checkInFailed": "Не вдалося відмітити",
     "clearFailed": "Не вдалося зняти відмітку",
+    "streakTipTitle": "Порада за серію",
     "achievements": {
       "unlocked": "Досягнення відкрито",
       "badgesAria": "Досягнення звичок",

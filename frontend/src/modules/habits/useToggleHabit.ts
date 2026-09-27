@@ -1,7 +1,12 @@
 import { useCheckInHabitMutation, useUncheckHabitMutation } from 'api/habitsApi';
+import type { HabitAchievementId } from 'api/habits.api';
 import i18n from 'i18n';
 import { showErrorToast, showSuccessToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
+
+function isStreakAchievement(id: HabitAchievementId): boolean {
+  return id.startsWith('streak_');
+}
 
 export function useToggleHabit() {
   const [checkIn, { isLoading: checking }] = useCheckInHabitMutation();
@@ -13,11 +18,19 @@ export function useToggleHabit() {
         await uncheck({ id: habitId, date }).unwrap();
       } else {
         const result = await checkIn({ id: habitId, date }).unwrap();
+        let tipShown = false;
         for (const id of result.newlyUnlocked ?? []) {
+          const useTip =
+            !tipShown && Boolean(result.streakTip) && isStreakAchievement(id);
           showSuccessToast({
-            title: i18n.t('habits.achievements.unlocked'),
-            detail: i18n.t(`habits.achievements.${id}`),
+            title: useTip
+              ? i18n.t('habits.streakTipTitle')
+              : i18n.t('habits.achievements.unlocked'),
+            detail: useTip
+              ? result.streakTip
+              : i18n.t(`habits.achievements.${id}`),
           });
+          if (useTip) tipShown = true;
         }
       }
     } catch (err) {

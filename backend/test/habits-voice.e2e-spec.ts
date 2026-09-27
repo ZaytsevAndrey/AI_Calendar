@@ -196,6 +196,37 @@ describe('Habits and voice API e2e', () => {
     );
   });
 
+  it('A-HAB-026 streak unlock returns a tip (Groq or fallback)', async () => {
+    const { token, user } = await seedOnboardedUser(ctx.app);
+    const created = await api(ctx.app, 'POST', '/habits', {
+      token,
+      payload: { name: 'Stretch' },
+    });
+    const id = String(jsonBody(created).id);
+    const today = String(jsonBody(await api(ctx.app, 'GET', '/habits', { token })).today);
+    const checkIns = ctx.app.get<Repository<HabitCheckIn>>(
+      getRepositoryToken(HabitCheckIn),
+    );
+    for (let i = 2; i >= 1; i -= 1) {
+      await checkIns.save(
+        checkIns.create({
+          habitId: id,
+          userId: user.id,
+          localDate: addDaysYmd(today, -i),
+        }),
+      );
+    }
+
+    const res = await api(ctx.app, 'POST', `/habits/${id}/check-ins`, {
+      token,
+      payload: { date: today },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = jsonBody(res);
+    expect(body.newlyUnlocked).toEqual(expect.arrayContaining(['streak_3']));
+    expect(String(body.streakTip)).toContain('Stretch');
+  });
+
   it('A-HAB-018 / A-HAB-019 streak and weekly bonus points', async () => {
     const { token, user } = await seedOnboardedUser(ctx.app);
     const created = await api(ctx.app, 'POST', '/habits', {

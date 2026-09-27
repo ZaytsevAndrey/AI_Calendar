@@ -44,6 +44,10 @@ export class Habit {
   @Column({ type: 'json', nullable: true })
   achievements: Record<string, string> | null;
 
+  /** Last AI/template tip after a streak unlock. Shown under the streak line. */
+  @Column({ type: 'text', nullable: true })
+  lastStreakTip: string | null;
+
   @OneToMany(() => HabitCheckIn, (checkIn) => checkIn.habit)
   checkIns: HabitCheckIn[];
 

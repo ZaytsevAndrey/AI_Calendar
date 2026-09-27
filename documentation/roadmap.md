@@ -4,7 +4,7 @@ Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Produ
 
 **How we work:** one chat = **one feature** below (top open item, or name it). Say *«давай наступну фічу»* / *«next feature»*. Finish → check it off here and move a short done note into the archive.
 
-Design decisions for this queue: [spec-conflict-rules.md](spec-conflict-rules.md) (type + preferred time, no priorities, conflict options, problematic ≠ unscheduled, Voice on the same layer; habits AI tips still in the redesign plan).
+Design decisions for this queue: [spec-conflict-rules.md](spec-conflict-rules.md) (type + preferred time, no priorities, conflict options, problematic ≠ unscheduled, Voice on the same layer). Habits achievements + AI streak tips are done.
 
 ---
 
@@ -68,9 +68,9 @@ Do in order unless you explicitly skip ahead.
 
 ### 10. Habits: AI streak tips
 
-- [ ] On streak thresholds (3 / 7 / 30…), Groq line from habit name/description (humor OK; light safety).
-- [ ] Offline fallback templates if Groq is down.
-- [ ] Show under streak / after check-in toast.
+- [x] On streak thresholds (3 / 7 / 30…), Groq line from habit name/description (humor OK; light safety).
+- [x] Offline fallback templates if Groq is down.
+- [x] Show under streak / after check-in toast.
 
 ### Later (not blocking the queue above)
 
@@ -90,5 +90,5 @@ Do in order unless you explicitly skip ahead.
 
 ## Recommended next steps
 
-1. Start at **§10 Habits: AI streak tips**.
+1. Start at **Later** items (UI language, voice habit check-in, sheet polish) or park the redesign queue.
 2. After each feature ships: tick above, archive a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

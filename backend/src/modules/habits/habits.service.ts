@@ -21,6 +21,8 @@ import {
   HabitAchievementsMap,
   mergeHabitAchievements,
 } from './habit-achievements.util';
+import { HabitStreakTipService } from './habit-streak-tip.service';
+import { pickStreakTipId } from './habit-streak-tip.util';
 import {
   CHECK_IN_WINDOW_DAYS,
   checkInEditableFrom,
@@ -44,6 +46,8 @@ export type HabitSummary = {
   checkInDates: string[];
   achievements: HabitAchievementsMap;
   newlyUnlocked: HabitAchievementId[];
+  /** Last streak tip (AI or template). Null until a streak threshold unlocks. */
+  streakTip: string | null;
   blockStartTime: string | null;
   blockMinutes: number | null;
   googleEventId: string | null;
@@ -79,6 +83,7 @@ export class HabitsService {
     @InjectRepository(UserSettings)
     private readonly userSettingsRepository: Repository<UserSettings>,
     private readonly googleCalendar: GoogleCalendarService,
+    private readonly streakTips: HabitStreakTipService,
   ) {}
 
   async findAll(userId: string): Promise<HabitsListResponse> {
@@ -167,7 +172,7 @@ export class HabitsService {
     done: boolean,
   ): Promise<HabitSummary> {
     const habit = await this.requireHabit(userId, habitId);
-    const { today } = await this.civilToday(userId);
+    const { today, language } = await this.civilToday(userId);
     const localDate = this.requireAllowedDate(date, today);
 
     const existing = await this.checkInsRepository.findOne({
@@ -194,6 +199,18 @@ export class HabitsService {
       habit,
       rows.map((row) => row.localDate),
     );
+
+    const tipId = done ? pickStreakTipId(newlyUnlocked) : null;
+    if (tipId) {
+      const tip = await this.streakTips.tip({
+        name: habit.name,
+        description: habit.description,
+        tipId,
+        language,
+      });
+      habit.lastStreakTip = tip;
+      await this.habitsRepository.save(habit);
+    }
 
     const [summary] = await this.summariesFor([habit], today, {
       [habit.id]: newlyUnlocked,
@@ -245,6 +262,7 @@ export class HabitsService {
         checkInDates: [...done].filter(isValidYmd).sort(),
         achievements,
         newlyUnlocked: newlyUnlockedByHabit[habit.id] ?? [],
+        streakTip: habit.lastStreakTip ?? null,
         blockStartTime: habit.blockStartTime ?? null,
         blockMinutes: habit.blockMinutes ?? null,
         googleEventId: habit.googleEventId ?? null,
@@ -286,13 +304,15 @@ export class HabitsService {
   private async civilToday(userId: string): Promise<{
     today: string;
     timeZone: string;
+    language: string;
   }> {
     const settings = await this.userSettingsRepository.findOne({
       where: { userId },
     });
     const timeZone = resolveIanaTimeZone(settings?.timeZone);
     const today = localYmd(new Date().toISOString(), timeZone);
-    return { today, timeZone };
+    const language = settings?.language === 'uk' ? 'uk' : 'en';
+    return { today, timeZone, language };
   }
 
   private requireAllowedDate(date: string, today: string): string {

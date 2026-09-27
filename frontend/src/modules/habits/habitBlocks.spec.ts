@@ -14,6 +14,7 @@ function habit(partial: Partial<HabitDTO>): HabitDTO {
     checkInDates: [],
     achievements: {},
     newlyUnlocked: [],
+    streakTip: null,
     blockStartTime: '09:00',
     blockMinutes: 30,
     googleEventId: null,

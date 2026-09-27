@@ -80,6 +80,9 @@ const HabitGrid: React.FC<HabitGridProps> = ({
                         ? ` · ${habit.blockStartTime} · ${habit.blockMinutes} min`
                         : ''}
                     </p>
+                    {habit.streakTip ? (
+                      <p className="mt-1 text-xs text-ide-muted">{habit.streakTip}</p>
+                    ) : null}
                     <HabitAchievementBadges
                       achievements={habit.achievements}
                       className="mt-1"

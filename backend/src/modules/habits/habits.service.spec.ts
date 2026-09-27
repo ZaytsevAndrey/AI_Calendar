@@ -6,6 +6,7 @@ import { HabitsService } from './habits.service';
 import { Habit } from './entities/habit.entity';
 import { HabitCheckIn } from './entities/habit-check-in.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
+import { HabitStreakTipService } from './habit-streak-tip.service';
 
 describe('HabitsService', () => {
   let service: HabitsService;
@@ -37,12 +38,19 @@ describe('HabitsService', () => {
     deleteEvent: jest.fn(),
   };
 
+  const streakTipsMock = {
+    tip: jest.fn(async ({ name, tipId }: { name: string; tipId: string }) =>
+      `Tip for ${name} (${tipId})`,
+    ),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-09-08T12:00:00.000Z'));
     userSettingsRepositoryMock.findOne.mockResolvedValue({
       timeZone: 'UTC',
+      language: 'en',
     });
 
     const module: TestingModule = await Test.createTestingModule({
@@ -58,6 +66,7 @@ describe('HabitsService', () => {
           useValue: userSettingsRepositoryMock,
         },
         { provide: GoogleCalendarService, useValue: googleCalendarMock },
+        { provide: HabitStreakTipService, useValue: streakTipsMock },
       ],
     }).compile();
 
@@ -286,6 +295,14 @@ describe('HabitsService', () => {
     expect(result.newlyUnlocked).toEqual(['streak_3']);
     expect(result.achievements.first_check_in).toBe('2026-01-01T00:00:00.000Z');
     expect(result.achievements.streak_3).toBeTruthy();
+    expect(streakTipsMock.tip).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Exercise',
+        tipId: 'streak_3',
+        language: 'en',
+      }),
+    );
+    expect(result.streakTip).toBe('Tip for Exercise (streak_3)');
   });
 
   it('stores a daily time block when start and duration are both set', async () => {

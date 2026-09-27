@@ -580,6 +580,7 @@
     "dotsAria": "Habits on {{date}}, {{done}} of {{total}} done",
     "checkInFailed": "Could not check in",
     "clearFailed": "Could not clear check-in",
+    "streakTipTitle": "Streak tip",
     "achievements": {
       "unlocked": "Achievement unlocked",
       "badgesAria": "Habit achievements",

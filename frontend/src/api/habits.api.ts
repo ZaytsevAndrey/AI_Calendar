@@ -20,6 +20,7 @@ export type HabitDTO = {
   checkInDates: string[];
   achievements: HabitAchievementsMap;
   newlyUnlocked: HabitAchievementId[];
+  streakTip: string | null;
   blockStartTime: string | null;
   blockMinutes: number | null;
   googleEventId: string | null;
