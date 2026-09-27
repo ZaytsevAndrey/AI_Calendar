@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { format } from 'date-fns';
+import { dateFnsOptions } from '../../../i18n/dateLocale';
 import { getDaysInView, sameLocalDay } from '../calendarView';
 import { HabitDayDialog, HabitDayDots } from '../../habits/components/CalendarHabits';
 
@@ -12,6 +13,7 @@ export function PhoneWeekStrip({ date, onSelect }: Props) {
     const days = getDaysInView('week', date);
     const [habitDate, setHabitDate] = useState<string | null>(null);
     const today = new Date();
+    const loc = dateFnsOptions();
 
     return (
         <div className="mb-2 shrink-0">
@@ -24,7 +26,7 @@ export function PhoneWeekStrip({ date, onSelect }: Props) {
                             <button
                                 type="button"
                                 aria-pressed={selected}
-                                aria-label={format(day, 'EEEE d')}
+                                aria-label={format(day, 'EEEE d', loc)}
                                 className={`flex min-h-[44px] w-full flex-col items-center justify-center rounded-md px-0.5 text-xs ${
                                     selected
                                         ? 'bg-ide-selection text-ide-text'
@@ -34,8 +36,8 @@ export function PhoneWeekStrip({ date, onSelect }: Props) {
                                 }`}
                                 onClick={() => onSelect(day)}
                             >
-                                <span className="uppercase">{format(day, 'EEE')}</span>
-                                <span className="text-sm font-medium">{format(day, 'd')}</span>
+                                <span className="uppercase">{format(day, 'EEE', loc)}</span>
+                                <span className="text-sm font-medium">{format(day, 'd', loc)}</span>
                             </button>
                             <HabitDayDots day={day} onOpen={setHabitDate} />
                         </div>

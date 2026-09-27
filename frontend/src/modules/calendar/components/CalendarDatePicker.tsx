@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
-import { enGB, uk } from 'date-fns/locale';
+import { dateFnsLocale } from '../../../i18n/dateLocale';
 
 const WEEKDAY_KEYS = [
     'calendar.weekdayMon',
@@ -64,8 +64,8 @@ function monthCells(cursor: Date): Date[] {
 }
 
 export function CalendarDatePicker({ value, label, caption, onChange, compact = false }: Props) {
-    const { t, i18n } = useTranslation();
-    const dateLocale = i18n.language === 'uk' ? uk : enGB;
+    const { t } = useTranslation();
+    const dateLocale = dateFnsLocale();
     const [open, setOpen] = useState(false);
     const [cursor, setCursor] = useState(() => startOfMonth(value));
     const [pos, setPos] = useState({ top: 0, left: 0 });

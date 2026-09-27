@@ -4,6 +4,7 @@ import type { HabitDTO } from 'api/habits.api';
 import { useGetHabitsQuery } from 'api/habitsApi';
 import { Modal } from '../../../ui/Modal';
 import { ymdFromLocalDate } from '../../../utils/ianaDateTime';
+import { formatClock } from '../../../utils/formatDate';
 import {
   formatHabitDateLabel,
   habitDoneOn,
@@ -211,10 +212,7 @@ export function HabitBlockButton({
   showTime: boolean;
   onOpen: (ymd: string) => void;
 }) {
-  const clock = block.start.toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  const clock = formatClock(block.start);
   return (
     <button
       type="button"

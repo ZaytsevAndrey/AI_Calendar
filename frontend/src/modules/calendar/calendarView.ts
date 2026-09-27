@@ -1,17 +1,13 @@
 import { format } from 'date-fns';
-import { enGB, uk } from 'date-fns/locale';
 import i18n from 'i18n';
 import { GoogleCalendarEvent } from '../../api/google-calendar.api';
+import { dateFnsLocale, intlLocale } from '../../i18n/dateLocale';
 import {
   minutesToTime,
   resolveActiveWindow,
   resolvePhaseRangeInActiveWindow,
 } from '../phases/utils/phasesTimeUtils';
 import { formatClock } from '../../utils/formatDate';
-
-function dateFnsLocale() {
-  return i18n.language === 'uk' ? uk : enGB;
-}
 
 export type CalendarView = 'day' | 'week' | 'month';
 
@@ -110,11 +106,7 @@ function eventClockHm(event: GoogleCalendarEvent): string | null {
   if (!event.start.dateTime) return null;
   const start = new Date(event.start.dateTime);
   if (Number.isNaN(start.getTime())) return null;
-  return start.toLocaleTimeString('en-US', {
-    hour12: false,
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatClock(start);
 }
 
 export function isEventInSleepHours(
@@ -515,18 +507,9 @@ export function formatEventTime(event: GoogleCalendarEvent): string {
   if (event.start.dateTime) {
     const startDate = new Date(event.start.dateTime);
     const endDate = event.end.dateTime ? new Date(event.end.dateTime) : null;
-    const startTime = startDate.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
+    const startTime = formatClock(startDate);
     if (endDate) {
-      const endTime = endDate.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-      });
-      return `${startTime} - ${endTime}`;
+      return `${startTime} – ${formatClock(endDate)}`;
     }
     return startTime;
   }
@@ -536,8 +519,7 @@ export function formatEventTime(event: GoogleCalendarEvent): string {
 export function formatEventListDate(event: GoogleCalendarEvent): string {
   const start = eventStartDate(event);
   if (!start) return i18n.t('calendar.timeNotSet');
-  const locale = i18n.language === 'uk' ? 'uk-UA' : 'en-GB';
-  return start.toLocaleDateString(locale, {
+  return start.toLocaleDateString(intlLocale(), {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -550,7 +532,7 @@ export function formatEventListTime(event: GoogleCalendarEvent): string {
   const start = eventStartDate(event);
   const end = eventEndDate(event);
   if (!start) return i18n.t('calendar.timeNotSet');
-  const locale = i18n.language === 'uk' ? 'uk-UA' : 'en-GB';
+  const locale = intlLocale();
   const timeOpts: Intl.DateTimeFormatOptions = {
     hour: '2-digit',
     minute: '2-digit',

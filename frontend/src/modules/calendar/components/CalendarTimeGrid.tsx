@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { format } from 'date-fns';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 import { HabitBlockChip } from '../../habits/habitBlocks';
+import { dateFnsOptions } from '../../../i18n/dateLocale';
 import { ymdFromLocalDate } from '../../../utils/ianaDateTime';
 import { getEventColor } from '../hooks/useCalendar';
 import {
@@ -308,7 +309,9 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                   : 'text-ide-text'
               }`}
             >
-              {days.length === 1 ? format(day, 'EEEE d') : format(day, 'EEE d')}
+              {days.length === 1
+                ? format(day, 'EEEE d', dateFnsOptions())
+                : format(day, 'EEE d', dateFnsOptions())}
               {renderDayExtra?.(day)}
             </div>
           );

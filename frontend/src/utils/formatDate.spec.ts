@@ -1,3 +1,4 @@
+import i18n from 'i18n';
 import {
   describeTaskToastDetail,
   describeTaskWhen,
@@ -8,6 +9,10 @@ import {
 function localIso(year: number, monthIndex: number, day: number, hour: number, minute: number): string {
   return new Date(year, monthIndex, day, hour, minute, 0, 0).toISOString();
 }
+
+beforeEach(async () => {
+  await i18n.changeLanguage('en');
+});
 
 describe('formatDateTimeRange', () => {
   it('returns null when both ends are missing', () => {

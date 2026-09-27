@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 import { addDaysToYmd } from '../../utils/ianaDateTime';
+import { dateFnsOptions } from '../../i18n/dateLocale';
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -40,11 +41,11 @@ function civilDate(ymd: string): Date {
 }
 
 export function formatHabitDateLabel(ymd: string): string {
-  return format(civilDate(ymd), 'EEE, MMM d');
+  return format(civilDate(ymd), 'EEE, MMM d', dateFnsOptions());
 }
 
 export function formatHabitWeekday(ymd: string): string {
-  return format(civilDate(ymd), 'EEE');
+  return format(civilDate(ymd), 'EEE', dateFnsOptions());
 }
 
 export function formatHabitDayNumber(ymd: string): string {

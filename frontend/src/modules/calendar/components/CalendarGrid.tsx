@@ -27,6 +27,7 @@ import { dateOnDayAtMinutes } from '../eventDrag';
 import { HabitBlockButton, HabitDayDialog, HabitDayDots, HabitDaySection } from '../../habits/components/CalendarHabits';
 import { habitBlockChips, isHabitGoogleEvent } from '../../habits/habitBlocks';
 import { ymdFromLocalDate } from '../../../utils/ianaDateTime';
+import { formatClock } from '../../../utils/formatDate';
 
 function eventStartMinutes(event: GoogleCalendarEvent): number {
     if (!event.start.dateTime) return -1;
@@ -188,11 +189,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     const renderGridEvent = (event: GoogleCalendarEvent) => {
         let eventPhase = null;
         if (event.start?.dateTime) {
-            const eventTime = new Date(event.start.dateTime).toLocaleTimeString('en-US', {
-                hour12: false,
-                hour: '2-digit',
-                minute: '2-digit',
-            });
+            const eventTime = formatClock(new Date(event.start.dateTime));
             eventPhase = getPhaseForTime(eventTime);
         }
 

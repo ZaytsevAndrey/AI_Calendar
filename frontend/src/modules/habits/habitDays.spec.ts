@@ -1,3 +1,4 @@
+import i18n from 'i18n';
 import {
   datesInclusive,
   formatHabitDateLabel,
@@ -7,6 +8,10 @@ import {
 } from './habitDays';
 
 describe('habitDays', () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('en');
+  });
+
   it('builds an inclusive date range', () => {
     expect(datesInclusive('2026-09-07', '2026-09-09')).toEqual([
       '2026-09-07',
@@ -45,5 +50,10 @@ describe('habitDays', () => {
 
   it('formats a civil date without shifting the weekday', () => {
     expect(formatHabitDateLabel('2026-09-08')).toBe('Tue, Sep 8');
+  });
+
+  it('formats habit labels in Ukrainian when the app language is uk', async () => {
+    await i18n.changeLanguage('uk');
+    expect(formatHabitDateLabel('2026-09-08')).toMatch(/вів/i);
   });
 });
