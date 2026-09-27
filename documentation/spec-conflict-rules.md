@@ -21,7 +21,7 @@ This document is the **single source of truth** for who moves silently, who asks
 - Restoring priority-based displacement as the main scheduler rule.
 - Habitica-style RPG / social leaderboards.
 - Rewriting STT / mic capture.
-- Pixel-perfect Problematic UI (later polish).
+- Pixel-perfect Problematic UI (later polish) — done: conflict-style sheet cards + banner.
 
 ---
 
