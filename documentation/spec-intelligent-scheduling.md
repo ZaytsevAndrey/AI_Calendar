@@ -12,7 +12,7 @@
 - User provides **scheduling settings** (fixed vs movable, duration, optional recurrence and weekdays, optional preferred start), **one phase** (or any time); the engine chooses **where** to place the item using **type + preferred** rules in [spec-conflict-rules.md](spec-conflict-rules.md). Numeric **priority** is soft-deprecated for placement.
 - Show the user **what moved** (diff). Support **undo** that restores **local DB and Google Calendar**.
 - **Google-imported / synced events** are **anchors**: never moved by the scheduler.
-- Planning runs in a **job queue**; horizon **30 days** from “planning anchor date” (see §6).
+- Planning runs in a **job queue**; horizon from Settings (`recurringScheduleHorizonDays`, default **30**) slides forward via **silent replan**, **drag replan**, and a **background `extend_recurring` tick** (so recurring series stay alive without Generate).
 
 ---
 

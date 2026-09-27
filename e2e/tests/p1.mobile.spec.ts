@@ -96,7 +96,7 @@ test.describe('phone layout', () => {
 
     await expect(page.getByRole('button', { name: 'Create task', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Add task by voice', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Generate schedule', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Review schedule', exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Create task', exact: true }).click();
     const createDialog = page.getByRole('dialog');
@@ -104,8 +104,8 @@ test.describe('phone layout', () => {
     await expect(createDialog.getByRole('button', { name: 'Unscheduled', exact: true })).toHaveCount(0);
     await createDialog.getByRole('button', { name: 'Cancel' }).click();
 
-    await page.getByRole('button', { name: 'Generate schedule', exact: true }).click();
-    await expect(page.getByRole('dialog').filter({ hasText: 'Generate preview' })).toBeVisible();
+    await page.getByRole('button', { name: 'Review schedule', exact: true }).click();
+    await expect(page.getByRole('dialog').filter({ hasText: 'Schedule cleanup preview' })).toBeVisible();
     await page.getByRole('button', { name: 'Cancel' }).click();
 
     await page.getByRole('button', { name: 'More schedule actions' }).click();

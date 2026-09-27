@@ -133,4 +133,4 @@ Further ids may be added later; these are the baseline contract.
 
 ## 9. Implementation note
 
-Roadmap **§2–§7** shipped: type + preferred placement, Problematic inbox, shared conflict sheet, Voice, drag replan, and Unscheduled card actions (including deadline-no-fit park). Do not add new priority-displacement behavior.
+Roadmap **§2–§8** shipped: type + preferred placement, Problematic inbox, shared conflict sheet, Voice, drag replan, Unscheduled actions, and background recurring extend (Generate/Review is cleanup, not liveness). Do not add new priority-displacement behavior.

@@ -131,15 +131,15 @@ async function pinAwakeAroundNow(
 
 async function generateSchedule(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: 'Schedule' }).click();
-  await page.getByRole('menuitem', { name: 'Generate schedule' }).click();
-  const preview = page.getByRole('dialog').filter({ hasText: 'Generate preview' });
+  await page.getByRole('menuitem', { name: 'Review schedule' }).click();
+  const preview = page.getByRole('dialog').filter({ hasText: 'Schedule cleanup preview' });
   await expect(preview).toBeVisible({ timeout: 60_000 });
-  await preview.getByRole('button', { name: 'Apply generate' }).click();
+  await preview.getByRole('button', { name: 'Apply cleanup' }).click();
   await page
     .getByLabel('Schedule generation progress')
     .waitFor({ state: 'visible', timeout: 10_000 })
     .catch(() => undefined);
-  await expect(page.getByText(/Schedule generated/)).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText(/Schedule cleaned up/)).toBeVisible({ timeout: 60_000 });
 }
 
 test.describe('P0 calendar UI', () => {

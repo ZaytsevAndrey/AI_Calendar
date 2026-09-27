@@ -395,7 +395,7 @@ Recommended codes (use real backend enums if names differ):
 - Occurrences only for the first 5 valid days.
 - Warning `SCHEDULING_HORIZON_EXCEEDED` or `SCHEDULING_OCCURRENCE_SKIPPED`.
 - Exact created count asserted.
-- (Later: background extend / open-ended series — roadmap §8 — may change horizon semantics.)
+- (Background `extend_recurring` slides the Settings horizon so series stay alive without Review/Generate; horizon length itself is unchanged.)
 
 ---
 

@@ -44,6 +44,7 @@ import {
 } from './schedule-undo.util';
 import { collectProblematicTaskIds } from './problematic-from-warnings.util';
 import { collectUnscheduledTaskIds } from './unscheduled-from-warnings.util';
+import { shouldEnqueueRecurringExtend } from './recurring-extend.util';
 
 function googleListedEventEndMs(ev: {
   end?: { dateTime?: string | null; date?: string | null };
@@ -55,6 +56,22 @@ function googleListedEventEndMs(ev: {
   if (ev.end?.date) {
     const t = Date.parse(`${ev.end.date}T00:00:00.000Z`);
     return Number.isNaN(t) ? null : t;
+  }
+  return null;
+}
+
+/** Latest done job that slides the planning horizon (extend or silent replan). */
+function latestHorizonSlideAt(jobs: ScheduleJob[]): Date | null {
+  for (const job of jobs) {
+    if (!job.payloadJson) continue;
+    try {
+      const payload = JSON.parse(job.payloadJson) as { type?: string };
+      if (payload.type === 'extend_recurring' || payload.type === 'full_replan') {
+        return job.updatedAt ? new Date(job.updatedAt) : null;
+      }
+    } catch {
+      /* ignore bad payload */
+    }
   }
   return null;
 }
@@ -82,6 +99,67 @@ export class ScheduleJobService {
     return this.enqueueJob(userId, 'generate');
   }
 
+  /**
+   * Background horizon slide for recurring series (same engine as silent replan;
+   * not an undoable Generate).
+   */
+  async enqueueExtendRecurring(userId: string): Promise<ScheduleJob> {
+    return this.enqueueJob(userId, 'extend_recurring');
+  }
+
+  /**
+   * Enqueue extend jobs for users with active recurring tasks who are past the cooldown.
+   * Caps how many users are queued per tick.
+   */
+  async enqueueRecurringExtends(limit = 10): Promise<number> {
+    const userIds = await this.taskRepo
+      .createQueryBuilder('task')
+      .select('DISTINCT task.userId', 'userId')
+      .where('task.isRecurring = :recurring', { recurring: true })
+      .andWhere('task.isUnscheduled = :unscheduled', { unscheduled: false })
+      .andWhere('task.isProblematic = :problematic', { problematic: false })
+      .andWhere('task.status IN (:...statuses)', {
+        statuses: [TaskStatus.TODO, TaskStatus.IN_PROGRESS],
+      })
+      .getRawMany<{ userId: string }>();
+
+    const now = new Date();
+    let enqueued = 0;
+    for (const row of userIds) {
+      if (enqueued >= limit) break;
+      const userId = row.userId;
+      if (!userId) continue;
+
+      const busy = await this.jobRepo.count({
+        where: [
+          { userId, status: 'pending' },
+          { userId, status: 'running' },
+        ],
+      });
+      const recentDone = await this.jobRepo.find({
+        where: { userId, status: 'done' },
+        order: { updatedAt: 'DESC' },
+        take: 20,
+      });
+      const lastExtendAt = latestHorizonSlideAt(recentDone);
+
+      if (
+        !shouldEnqueueRecurringExtend({
+          hasActiveRecurring: true,
+          hasPendingOrRunningJob: busy > 0,
+          lastExtendAt,
+          now,
+        })
+      ) {
+        continue;
+      }
+
+      await this.enqueueExtendRecurring(userId);
+      enqueued += 1;
+    }
+    return enqueued;
+  }
+
   /** Same placement as Generate, without writing slots, tasks, Google, or undo. */
   async preview(userId: string): Promise<{
     diff: DiffItem[];
@@ -94,7 +172,7 @@ export class ScheduleJobService {
 
   private async enqueueJob(
     userId: string,
-    type: 'generate' | 'full_replan',
+    type: 'generate' | 'full_replan' | 'extend_recurring',
   ): Promise<ScheduleJob> {
     const job = this.jobRepo.create({
       userId,

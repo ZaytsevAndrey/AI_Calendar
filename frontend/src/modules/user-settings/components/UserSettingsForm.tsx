@@ -462,6 +462,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                                 setValue('recurringScheduleHorizonDays', Number.isNaN(parsed) ? 30 : parsed);
                             }}
                         />
+                        <p className="text-xs text-ide-muted">{t('settings.horizonHint')}</p>
                     </div>
                 </div>
             </section>

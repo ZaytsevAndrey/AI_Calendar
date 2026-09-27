@@ -7,6 +7,7 @@ import { ScheduleJob } from './entities/schedule-job.entity';
 import { IntelligentSchedulingEngine } from './intelligent-scheduling.engine';
 import { ScheduleJobService } from './schedule-job.service';
 import { ScheduleJobProcessor } from './schedule-job.processor';
+import { RecurringExtendProcessor } from './recurring-extend.processor';
 import { ScheduleJobController } from './schedule-job.controller';
 import { DisplayedEventMoveService } from './displayed-event-move.service';
 import { ScheduleRecommendationsService } from './schedule-recommendations.service';
@@ -39,6 +40,7 @@ import { VoiceModule } from '../voice/voice.module';
     IntelligentSchedulingEngine,
     ScheduleJobService,
     ScheduleJobProcessor,
+    RecurringExtendProcessor,
     DisplayedEventMoveService,
     ScheduleRecommendationsService,
     ConflictOptionPhrasesService,

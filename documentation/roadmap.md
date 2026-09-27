@@ -57,8 +57,8 @@ Do in order unless you explicitly skip ahead.
 
 ### 8. Recurring extend; shrink Generate
 
-- [ ] Open-ended series and/or background job to extend the local/Google window.
-- [ ] Generate becomes “clean up / preview”, not the way recurring stays alive.
+- [x] Open-ended series and/or background job to extend the local/Google window.
+- [x] Generate becomes “clean up / preview”, not the way recurring stays alive.
 
 ### 9. Habits: achievements
 
@@ -90,5 +90,5 @@ Do in order unless you explicitly skip ahead.
 
 ## Recommended next steps
 
-1. Start at **§8 Recurring extend; shrink Generate**.
+1. Start at **§9 Habits: achievements**.
 2. After each feature ships: tick above, archive a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

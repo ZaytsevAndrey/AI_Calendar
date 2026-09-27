@@ -14,6 +14,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ### Scheduling redesign (engine)
 
+- [x] **Recurring extend; shrink Generate.** Hourly background tick enqueues `extend_recurring` (same placement as silent replan) for users with active recurring tasks on a ~20h cooldown, so series stay alive without Generate. Calendar “Review schedule” is cleanup/preview copy; Apply still runs a full rewrite when you ask.
+
 - [x] **Unscheduled actions.** Inbox cards: Done / Skip (cancel) / Do now (from-now window + replan) / Open. Generate/replan parks deadline-no-fit via `readyForUnscheduled` (not Problematic). Voice skip on unscheduled → cancel; do now already aligned.
 
 - [x] **Drag → day / phase replan.** `POST /schedule/move-event` enqueues silent replan for app fixed/slot moves (`jobId`); client polls and opens the shared conflict sheet. Recurring instance drag (and engine `RECURRING_MOVED`) show a toast. External Google-only moves stay write-only. Full replan for now (engine keeps seated flexibles); tighter day/phase scoping can follow.

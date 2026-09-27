@@ -41,19 +41,19 @@ test.describe('P0 UI smoke', () => {
     await expect(page.getByText('Task created')).toBeVisible();
   });
 
-  test('U-CAL-004 generate schedule', async ({ page, auth }) => {
+  test('U-CAL-004 Review schedule', async ({ page, auth }) => {
     test.setTimeout(90_000);
     await openAs(page, auth.onboarded);
     await page.getByRole('button', { name: 'Schedule' }).click();
-    await page.getByRole('menuitem', { name: 'Generate schedule' }).click();
-    const preview = page.getByRole('dialog').filter({ hasText: 'Generate preview' });
+    await page.getByRole('menuitem', { name: 'Review schedule' }).click();
+    const preview = page.getByRole('dialog').filter({ hasText: 'Schedule cleanup preview' });
     await expect(preview).toBeVisible({ timeout: 60_000 });
-    await preview.getByRole('button', { name: 'Apply generate' }).click();
+    await preview.getByRole('button', { name: 'Apply cleanup' }).click();
     await page
       .getByLabel('Schedule generation progress')
       .waitFor({ state: 'visible', timeout: 10_000 })
       .catch(() => undefined);
-    await expect(page.getByText(/Schedule generated/)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/Schedule cleaned up/)).toBeVisible({ timeout: 60_000 });
   });
 
   test('U-CAL-013 Now Done completes a timed app task', async ({ page, auth, request }) => {

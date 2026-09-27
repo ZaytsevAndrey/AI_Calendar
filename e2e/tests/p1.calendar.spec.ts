@@ -94,12 +94,12 @@ test.describe('P1 calendar UI', () => {
     });
     await openAs(page, auth.onboarded);
     await page.getByRole('button', { name: 'Schedule' }).click();
-    await page.getByRole('menuitem', { name: 'Generate schedule' }).click();
-    const preview = page.getByRole('dialog').filter({ hasText: 'Generate preview' });
+    await page.getByRole('menuitem', { name: 'Review schedule' }).click();
+    const preview = page.getByRole('dialog').filter({ hasText: 'Schedule cleanup preview' });
     await expect(preview).toBeVisible({ timeout: 60_000 });
-    await preview.getByRole('button', { name: 'Apply generate' }).click();
+    await preview.getByRole('button', { name: 'Apply cleanup' }).click();
     await expect(page.getByRole('button', { name: 'Schedule' })).toBeDisabled();
-    await expect(page.getByText(/Schedule generated/)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/Schedule cleaned up/)).toBeVisible({ timeout: 60_000 });
   });
 
   test('U-CAL-007 generate hang shows an error toast', async ({ page, auth }) => {
@@ -140,16 +140,16 @@ test.describe('P1 calendar UI', () => {
         response.url().includes('/schedule-jobs/hang-job') && response.request().method() === 'GET',
     );
     await page.getByRole('button', { name: 'Schedule' }).click();
-    await page.getByRole('menuitem', { name: 'Generate schedule' }).click();
-    const preview = page.getByRole('dialog').filter({ hasText: 'Generate preview' });
+    await page.getByRole('menuitem', { name: 'Review schedule' }).click();
+    const preview = page.getByRole('dialog').filter({ hasText: 'Schedule cleanup preview' });
     await expect(preview).toBeVisible({ timeout: 60_000 });
-    await preview.getByRole('button', { name: 'Apply generate' }).click();
+    await preview.getByRole('button', { name: 'Apply cleanup' }).click();
     await expect(page.getByLabel('Schedule generation progress')).toBeVisible();
     await polled;
     await page.evaluate(() => {
       (window as unknown as { __e2eAddNow: (ms: number) => void }).__e2eAddNow(130_000);
     });
-    await expect(page.getByText('Schedule generation failed')).toBeVisible();
+    await expect(page.getByText('Schedule cleanup failed')).toBeVisible();
     await expect(page.getByText('Schedule job timed out')).toBeVisible();
     await expect(page.getByLabel('Schedule generation progress')).toHaveCount(0);
   });
@@ -223,7 +223,7 @@ test.describe('P1 calendar UI', () => {
     await expect(page.getByLabel('Last generate notes')).toHaveCount(0);
   });
 
-  test('U-CAL-021 generate preview lists moves and cancel does not apply', async ({ page, auth }) => {
+  test('U-CAL-021 Schedule cleanup preview lists moves and cancel does not apply', async ({ page, auth }) => {
     let generatePosts = 0;
     await page.route('**/schedule/preview', async (route) => {
       if (route.request().method() !== 'POST') {
@@ -264,8 +264,8 @@ test.describe('P1 calendar UI', () => {
 
     await openAs(page, auth.onboarded);
     await page.getByRole('button', { name: 'Schedule' }).click();
-    await page.getByRole('menuitem', { name: 'Generate schedule' }).click();
-    const dialog = page.getByRole('dialog').filter({ hasText: 'Generate preview' });
+    await page.getByRole('menuitem', { name: 'Review schedule' }).click();
+    const dialog = page.getByRole('dialog').filter({ hasText: 'Schedule cleanup preview' });
     await expect(dialog.getByText('Preview task', { exact: true })).toBeVisible();
     await expect(dialog.getByText('Cannot fit "Overflow" in the available window.')).toBeVisible();
     await expect(dialog.getByText(/outside the 30-day window/)).toBeVisible();
