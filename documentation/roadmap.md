@@ -4,7 +4,7 @@ Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Produ
 
 **How we work:** one chat = **one feature** below (top open item, or name it). Say *«давай наступну фічу»* / *«next feature»*. Finish → check it off here and move a short done note into the archive.
 
-Design decisions for this queue: [spec-conflict-rules.md](spec-conflict-rules.md) (type + preferred time, no priorities, conflict options, problematic ≠ unscheduled, Voice on the same layer; habits achievements + AI tips still in the redesign plan).
+Design decisions for this queue: [spec-conflict-rules.md](spec-conflict-rules.md) (type + preferred time, no priorities, conflict options, problematic ≠ unscheduled, Voice on the same layer; habits AI tips still in the redesign plan).
 
 ---
 
@@ -62,9 +62,9 @@ Do in order unless you explicitly skip ahead.
 
 ### 9. Habits: achievements
 
-- [ ] Unlock catalog (e.g. first check-in, streak 3 / 7 / 30 / 100, clean week).
-- [ ] Persist `unlockedAt`; toast once; badges row on Habits.
-- [ ] Keep existing points/streaks.
+- [x] Unlock catalog (e.g. first check-in, streak 3 / 7 / 30 / 100, clean week).
+- [x] Persist `unlockedAt`; toast once; badges row on Habits.
+- [x] Keep existing points/streaks.
 
 ### 10. Habits: AI streak tips
 
@@ -90,5 +90,5 @@ Do in order unless you explicitly skip ahead.
 
 ## Recommended next steps
 
-1. Start at **§9 Habits: achievements**.
+1. Start at **§10 Habits: AI streak tips**.
 2. After each feature ships: tick above, archive a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

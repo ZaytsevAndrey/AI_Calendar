@@ -40,6 +40,10 @@ export class Habit {
   @Column({ type: 'varchar', length: 255, nullable: true })
   googleEventCalendarId: string | null;
 
+  /** Achievement id → unlockedAt ISO. Null until the first unlock. */
+  @Column({ type: 'json', nullable: true })
+  achievements: Record<string, string> | null;
+
   @OneToMany(() => HabitCheckIn, (checkIn) => checkIn.habit)
   checkIns: HabitCheckIn[];
 

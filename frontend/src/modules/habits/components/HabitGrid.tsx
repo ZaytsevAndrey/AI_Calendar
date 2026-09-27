@@ -9,6 +9,7 @@ import {
   habitDoneOn,
 } from '../habitDays';
 import { useToggleHabit } from '../useToggleHabit';
+import HabitAchievementBadges from './HabitAchievementBadges';
 
 type HabitGridProps = {
   habits: HabitDTO[];
@@ -79,6 +80,10 @@ const HabitGrid: React.FC<HabitGridProps> = ({
                         ? ` · ${habit.blockStartTime} · ${habit.blockMinutes} min`
                         : ''}
                     </p>
+                    <HabitAchievementBadges
+                      achievements={habit.achievements}
+                      className="mt-1"
+                    />
                   </div>
                   <button
                     type="button"

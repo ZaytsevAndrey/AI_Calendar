@@ -10,6 +10,9 @@ import {
 import type { CreateHabitDTO, HabitDTO, UpdateHabitDTO } from 'api/habits.api';
 import HabitGrid from 'modules/habits/components/HabitGrid';
 import HabitForm from 'modules/habits/components/HabitForm';
+import HabitAchievementBadges from 'modules/habits/components/HabitAchievementBadges';
+import { HABIT_ACHIEVEMENT_IDS } from 'modules/habits/habitAchievements';
+import type { HabitAchievementsMap } from 'api/habits.api';
 import { Modal } from '../../ui/Modal';
 import { showErrorToast, showSuccessToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
@@ -27,6 +30,13 @@ const HabitsPage: React.FC = () => {
   const habits = data?.habits ?? [];
   const doneToday = habits.filter((habit) => habit.checkedToday).length;
   const totalPoints = habits.reduce((sum, habit) => sum + habit.points, 0);
+  const pageAchievements: HabitAchievementsMap = {};
+  for (const habit of habits) {
+    for (const id of HABIT_ACHIEVEMENT_IDS) {
+      const at = habit.achievements?.[id];
+      if (at && !pageAchievements[id]) pageAchievements[id] = at;
+    }
+  }
 
   const openCreate = () => {
     setEditing(null);
@@ -114,13 +124,16 @@ const HabitsPage: React.FC = () => {
       </header>
 
       {habits.length > 0 ? (
-        <div className="mb-4 flex shrink-0 flex-wrap gap-3 text-sm text-ide-muted">
-          <span className="rounded-lg border border-ide-border bg-ide-surface px-3 py-2 text-ide-text">
-            {t('habits.todayCount', { done: doneToday, total: habits.length })}
-          </span>
-          <span className="rounded-lg border border-ide-border bg-ide-surface px-3 py-2 text-ide-text">
-            {t('habits.points', { count: totalPoints })}
-          </span>
+        <div className="mb-4 flex shrink-0 flex-col gap-3">
+          <div className="flex flex-wrap gap-3 text-sm text-ide-muted">
+            <span className="rounded-lg border border-ide-border bg-ide-surface px-3 py-2 text-ide-text">
+              {t('habits.todayCount', { done: doneToday, total: habits.length })}
+            </span>
+            <span className="rounded-lg border border-ide-border bg-ide-surface px-3 py-2 text-ide-text">
+              {t('habits.points', { count: totalPoints })}
+            </span>
+          </div>
+          <HabitAchievementBadges achievements={pageAchievements} />
         </div>
       ) : null}
 

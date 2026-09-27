@@ -162,6 +162,40 @@ describe('Habits and voice API e2e', () => {
     ).toBe(400);
   });
 
+  it('A-HAB-025 first check-in unlocks achievement once', async () => {
+    const { token } = await seedOnboardedUser(ctx.app);
+    const created = await api(ctx.app, 'POST', '/habits', {
+      token,
+      payload: { name: 'Badge' },
+    });
+    const id = String(jsonBody(created).id);
+    const today = String(jsonBody(await api(ctx.app, 'GET', '/habits', { token })).today);
+
+    const first = await api(ctx.app, 'POST', `/habits/${id}/check-ins`, {
+      token,
+      payload: { date: today },
+    });
+    expect(first.statusCode).toBe(201);
+    const firstBody = jsonBody(first);
+    expect(firstBody.newlyUnlocked).toEqual(
+      expect.arrayContaining(['first_check_in']),
+    );
+    const firstAchievements = firstBody.achievements as Record<string, string>;
+    expect(firstAchievements.first_check_in).toBeTruthy();
+
+    const second = await api(ctx.app, 'POST', `/habits/${id}/check-ins`, {
+      token,
+      payload: { date: today },
+    });
+    expect(second.statusCode).toBe(201);
+    const secondBody = jsonBody(second);
+    expect(secondBody.newlyUnlocked).toEqual([]);
+    const secondAchievements = secondBody.achievements as Record<string, string>;
+    expect(secondAchievements.first_check_in).toBe(
+      firstAchievements.first_check_in,
+    );
+  });
+
   it('A-HAB-018 / A-HAB-019 streak and weekly bonus points', async () => {
     const { token, user } = await seedOnboardedUser(ctx.app);
     const created = await api(ctx.app, 'POST', '/habits', {

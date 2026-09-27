@@ -581,7 +581,17 @@
     "dayTitle": "Звички · {{date}}",
     "dotsAria": "Звички на {{date}}, {{done}} з {{total}} виконано",
     "checkInFailed": "Не вдалося відмітити",
-    "clearFailed": "Не вдалося зняти відмітку"
+    "clearFailed": "Не вдалося зняти відмітку",
+    "achievements": {
+      "unlocked": "Досягнення відкрито",
+      "badgesAria": "Досягнення звичок",
+      "first_check_in": "Перша відмітка",
+      "streak_3": "Серія 3 дні",
+      "streak_7": "Серія 7 днів",
+      "streak_30": "Серія 30 днів",
+      "streak_100": "Серія 100 днів",
+      "clean_week": "Чистий тиждень"
+    }
   },
   "phases": {
     "title": "Фази",

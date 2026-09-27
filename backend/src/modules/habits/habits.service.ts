@@ -16,6 +16,12 @@ import { UpdateHabitDto } from './dto/update-habit.dto';
 import { HabitCheckIn } from './entities/habit-check-in.entity';
 import { Habit } from './entities/habit.entity';
 import {
+  evaluateHabitAchievements,
+  HabitAchievementId,
+  HabitAchievementsMap,
+  mergeHabitAchievements,
+} from './habit-achievements.util';
+import {
   CHECK_IN_WINDOW_DAYS,
   checkInEditableFrom,
   computeHabitStats,
@@ -36,6 +42,8 @@ export type HabitSummary = {
   points: number;
   totalCheckIns: number;
   checkInDates: string[];
+  achievements: HabitAchievementsMap;
+  newlyUnlocked: HabitAchievementId[];
   blockStartTime: string | null;
   blockMinutes: number | null;
   googleEventId: string | null;
@@ -178,7 +186,18 @@ export class HabitsService {
       await this.checkInsRepository.remove(existing);
     }
 
-    const [summary] = await this.summariesFor([habit], today);
+    const rows = await this.checkInsRepository.find({
+      where: { habitId: habit.id },
+      select: ['localDate'],
+    });
+    const newlyUnlocked = await this.persistAchievementUnlocks(
+      habit,
+      rows.map((row) => row.localDate),
+    );
+
+    const [summary] = await this.summariesFor([habit], today, {
+      [habit.id]: newlyUnlocked,
+    });
     return summary;
   }
 
@@ -191,6 +210,7 @@ export class HabitsService {
   private async summariesFor(
     habits: Habit[],
     today: string,
+    newlyUnlockedByHabit: Record<string, HabitAchievementId[]> = {},
   ): Promise<HabitSummary[]> {
     if (habits.length === 0) return [];
     const rows = await this.checkInsRepository.find({
@@ -203,11 +223,17 @@ export class HabitsService {
       list.push(row.localDate);
       datesByHabit.set(row.habitId, list);
     }
-    return habits.map((habit) => {
+    const summaries: HabitSummary[] = [];
+    for (const habit of habits) {
       const dates = datesByHabit.get(habit.id) ?? [];
       const done = new Set(dates);
       const stats = computeHabitStats(dates, today);
-      return {
+      // Silent backfill so badges show after deploy without a toast storm.
+      if (!(habit.id in newlyUnlockedByHabit)) {
+        await this.persistAchievementUnlocks(habit, dates);
+      }
+      const achievements = (habit.achievements ?? {}) as HabitAchievementsMap;
+      summaries.push({
         id: habit.id,
         name: habit.name,
         color: habit.color,
@@ -217,13 +243,36 @@ export class HabitsService {
         points: stats.points,
         totalCheckIns: stats.totalCheckIns,
         checkInDates: [...done].filter(isValidYmd).sort(),
+        achievements,
+        newlyUnlocked: newlyUnlockedByHabit[habit.id] ?? [],
         blockStartTime: habit.blockStartTime ?? null,
         blockMinutes: habit.blockMinutes ?? null,
         googleEventId: habit.googleEventId ?? null,
         createdAt: habit.createdAt,
         updatedAt: habit.updatedAt,
-      };
-    });
+      });
+    }
+    return summaries;
+  }
+
+  /** Persist newly earned achievements; return ids unlocked in this call. */
+  private async persistAchievementUnlocks(
+    habit: Habit,
+    checkInYmds: string[],
+  ): Promise<HabitAchievementId[]> {
+    const earned = evaluateHabitAchievements(checkInYmds);
+    const { next, newlyUnlocked } = mergeHabitAchievements(
+      habit.achievements as HabitAchievementsMap | null,
+      earned,
+      new Date().toISOString(),
+    );
+    if (newlyUnlocked.length === 0) {
+      habit.achievements = next as Record<string, string>;
+      return [];
+    }
+    habit.achievements = next as Record<string, string>;
+    await this.habitsRepository.save(habit);
+    return newlyUnlocked;
   }
 
   private async requireHabit(userId: string, id: string): Promise<Habit> {

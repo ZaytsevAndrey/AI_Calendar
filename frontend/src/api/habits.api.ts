@@ -1,3 +1,13 @@
+export type HabitAchievementId =
+  | 'first_check_in'
+  | 'streak_3'
+  | 'streak_7'
+  | 'streak_30'
+  | 'streak_100'
+  | 'clean_week';
+
+export type HabitAchievementsMap = Partial<Record<HabitAchievementId, string>>;
+
 export type HabitDTO = {
   id: string;
   name: string;
@@ -8,6 +18,8 @@ export type HabitDTO = {
   points: number;
   totalCheckIns: number;
   checkInDates: string[];
+  achievements: HabitAchievementsMap;
+  newlyUnlocked: HabitAchievementId[];
   blockStartTime: string | null;
   blockMinutes: number | null;
   googleEventId: string | null;

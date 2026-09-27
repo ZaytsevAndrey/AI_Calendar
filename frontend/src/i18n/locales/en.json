@@ -579,7 +579,17 @@
     "dayTitle": "Habits · {{date}}",
     "dotsAria": "Habits on {{date}}, {{done}} of {{total}} done",
     "checkInFailed": "Could not check in",
-    "clearFailed": "Could not clear check-in"
+    "clearFailed": "Could not clear check-in",
+    "achievements": {
+      "unlocked": "Achievement unlocked",
+      "badgesAria": "Habit achievements",
+      "first_check_in": "First check-in",
+      "streak_3": "3-day streak",
+      "streak_7": "7-day streak",
+      "streak_30": "30-day streak",
+      "streak_100": "100-day streak",
+      "clean_week": "Clean week"
+    }
   },
   "phases": {
     "title": "Phases",

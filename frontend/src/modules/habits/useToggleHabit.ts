@@ -1,6 +1,6 @@
 import { useCheckInHabitMutation, useUncheckHabitMutation } from 'api/habitsApi';
 import i18n from 'i18n';
-import { showErrorToast } from 'utils/toast';
+import { showErrorToast, showSuccessToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
 
 export function useToggleHabit() {
@@ -12,7 +12,13 @@ export function useToggleHabit() {
       if (currentlyDone) {
         await uncheck({ id: habitId, date }).unwrap();
       } else {
-        await checkIn({ id: habitId, date }).unwrap();
+        const result = await checkIn({ id: habitId, date }).unwrap();
+        for (const id of result.newlyUnlocked ?? []) {
+          showSuccessToast({
+            title: i18n.t('habits.achievements.unlocked'),
+            detail: i18n.t(`habits.achievements.${id}`),
+          });
+        }
       }
     } catch (err) {
       showErrorToast({

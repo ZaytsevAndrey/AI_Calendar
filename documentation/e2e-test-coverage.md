@@ -401,7 +401,7 @@ Generate body `{ startDate, endDate }` is **ignored**. Horizon = today → `recu
 
 ## 16. Cases — habits
 
-Civil today from **settings `timeZone`**. Check-in for today and the previous 13 days. Older dates stay on `checkInDates` but return 400 if edited. Points: +1/day +1 every 7 consecutive in history. Streak: consecutive ending today, or yesterday if today unchecked. Optional daily block is both `blockStartTime` and `blockMinutes`, or neither. Generate treats that window as busy (engine unit test). When Google Calendar is linked, creating or saving the block creates a daily recurring event (`habits.service.spec.ts`). Listing habits backfills a block that has no `googleEventId`. Renaming, recoloring, or changing the clock replaces the series. Clearing the block or deleting the habit deletes it. An unchanged save and a check-in do not call Google. A missing token does not fail the save or the delete. Generate reserves the habit interval and does not treat that Google series as extra busy (engine unit test). The in-app calendar still draws the chip and hides that Google series.
+Civil today from **settings `timeZone`**. Check-in for today and the previous 13 days. Older dates stay on `checkInDates` but return 400 if edited. Points: +1/day +1 every 7 consecutive in history. Streak: consecutive ending today, or yesterday if today unchecked. Achievements: per-habit map with `unlockedAt`; first check-in unlocks `first_check_in` and returns it in `newlyUnlocked`; repeat check-in does not re-list that id. Optional daily block is both `blockStartTime` and `blockMinutes`, or neither. Generate treats that window as busy (engine unit test). When Google Calendar is linked, creating or saving the block creates a daily recurring event (`habits.service.spec.ts`). Listing habits backfills a block that has no `googleEventId`. Renaming, recoloring, or changing the clock replaces the series. Clearing the block or deleting the habit deletes it. An unchanged save and a check-in do not call Google. A missing token does not fail the save or the delete. Generate reserves the habit interval and does not treat that Google series as extra busy (engine unit test). The in-app calendar still draws the chip and hides that Google series.
 
 | ID | Layer | P | Given | When | Then |
 |----|-------|---|-------|------|------|
@@ -425,6 +425,7 @@ Civil today from **settings `timeZone`**. Check-in for today and the previous 13
 | A-HAB-018 | A | P1 | 7 consecutive days in history | GET | points include +1 bonus |
 | A-HAB-019 | A | P1 | Today unchecked, yesterday checked | GET | streak counts from yesterday |
 | A-HAB-020 | A | P1 | TZ `Pacific/Auckland` near midnight UTC | GET today | Civil date in that TZ, not UTC |
+| A-HAB-025 | A | P1 | First check-in | POST check-in | `newlyUnlocked` includes `first_check_in`; `achievements.first_check_in` set; second identical check-in does not re-list it |
 | U-HAB-001 | U | P0 | `/habits` | CRUD modal | Create/edit/delete; list updates |
 | U-HAB-002 | U | P0 | 14-day grid | Toggle today and an earlier day | `aria-pressed` matches |
 | U-HAB-003 | U | P1 | Summary bar | Streak/points | Matches GET |

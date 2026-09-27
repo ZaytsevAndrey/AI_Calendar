@@ -254,6 +254,38 @@ describe('HabitsService', () => {
     expect(checkInsRepositoryMock.save).toHaveBeenCalled();
     expect(result.checkedToday).toBe(true);
     expect(result.currentStreak).toBe(1);
+    expect(result.newlyUnlocked).toEqual(['first_check_in']);
+    expect(result.achievements.first_check_in).toBeTruthy();
+  });
+
+  it('does not re-toast an already unlocked achievement', async () => {
+    habitsRepositoryMock.findOne.mockResolvedValue({
+      id: 'habit-1',
+      userId: 'user-1',
+      name: 'Exercise',
+      color: '#22c55e',
+      description: null,
+      achievements: { first_check_in: '2026-01-01T00:00:00.000Z' },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    checkInsRepositoryMock.findOne.mockResolvedValue(null);
+    checkInsRepositoryMock.find.mockResolvedValue([
+      { habitId: 'habit-1', localDate: '2026-09-06' },
+      { habitId: 'habit-1', localDate: '2026-09-07' },
+      { habitId: 'habit-1', localDate: '2026-09-08' },
+    ]);
+
+    const result = await service.setCheckIn(
+      'user-1',
+      'habit-1',
+      '2026-09-08',
+      true,
+    );
+
+    expect(result.newlyUnlocked).toEqual(['streak_3']);
+    expect(result.achievements.first_check_in).toBe('2026-01-01T00:00:00.000Z');
+    expect(result.achievements.streak_3).toBeTruthy();
   });
 
   it('stores a daily time block when start and duration are both set', async () => {
