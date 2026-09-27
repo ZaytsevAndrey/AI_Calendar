@@ -57,6 +57,13 @@ export type VoiceCommand =
       scheduledStartTime: string | null;
       scheduledEndTime: string | null;
       clearUnscheduled: boolean;
+    }
+  | {
+      kind: 'habit_check_in';
+      habitId: string;
+      habitName: string;
+      date: string;
+      summary: string;
     };
 
 export type VoiceCommandAction = Exclude<VoiceCommand, { kind: 'refuse' }>;

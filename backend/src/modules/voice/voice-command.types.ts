@@ -1,4 +1,4 @@
-export type VoiceCommandIntent = 'complete' | 'skip' | 'reschedule';
+export type VoiceCommandIntent = 'complete' | 'skip' | 'reschedule' | 'habit_check_in';
 
 export type VoiceCommandTask = {
   id: string;
@@ -12,6 +12,11 @@ export type VoiceCommandTask = {
   googleEventCalendarId: string | null;
   scheduledStartTime: string | null;
   scheduledEndTime: string | null;
+};
+
+export type VoiceCommandHabit = {
+  id: string;
+  name: string;
 };
 
 export type VoiceCommandSlot = {
@@ -70,6 +75,13 @@ export type VoiceCommand =
       scheduledStartTime: string | null;
       scheduledEndTime: string | null;
       clearUnscheduled: boolean;
+    }
+  | {
+      kind: 'habit_check_in';
+      habitId: string;
+      habitName: string;
+      date: string;
+      summary: string;
     };
 
 export type VoiceCommandDraft = {

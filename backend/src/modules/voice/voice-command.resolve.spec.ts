@@ -60,12 +60,19 @@ describe('sniffCommandIntent', () => {
     expect(sniffCommandIntent('зробив звіт')).toBe('complete');
     expect(sniffCommandIntent('done')).toBe('complete');
   });
+
+  it('sniffs habit check-in phrases', () => {
+    expect(sniffCommandIntent('check in Stretch')).toBe('habit_check_in');
+    expect(sniffCommandIntent('відмітив звичку спорт')).toBe('habit_check_in');
+    expect(sniffCommandIntent('I did my habit Stretch')).toBe('habit_check_in');
+    expect(sniffCommandIntent('I did the report')).toBeNull();
+  });
 });
 
 describe('resolveVoiceCommand', () => {
   const dentist = task({ id: 't1', name: 'Dentist' });
   const gym = task({ id: 't2', name: 'Gym', isRecurring: true, googleEventId: 'series-1' });
-
+  const stretch = { id: 'h1', name: 'Stretch' };
   it('completes a named non-recurring task', () => {
     const result = resolveVoiceCommand({
       draft: draft({ intent: 'complete', taskName: 'Dentist' }),
@@ -230,6 +237,62 @@ describe('resolveVoiceCommand', () => {
     expect(result).toMatchObject({
       type: 'command',
       command: { kind: 'cancel', taskId: 't3' },
+    });
+  });
+
+  it('checks in a named habit for today', () => {
+    const result = resolveVoiceCommand({
+      draft: draft({ intent: 'habit_check_in', taskName: 'Stretch' }),
+      transcript: 'I did Stretch',
+      timeZone: ZONE,
+      nowIso: NOW,
+      alreadyClarified: false,
+      tasks: [],
+      slots: [],
+      habits: [stretch],
+    });
+    expect(result).toMatchObject({
+      type: 'command',
+      command: {
+        kind: 'habit_check_in',
+        habitId: 'h1',
+        habitName: 'Stretch',
+        date: '2026-09-22',
+      },
+    });
+  });
+
+  it('falls back from task complete to habit when only a habit matches', () => {
+    const result = resolveVoiceCommand({
+      draft: draft({ intent: 'complete', taskName: 'Stretch' }),
+      transcript: 'зробив Stretch',
+      timeZone: ZONE,
+      nowIso: NOW,
+      alreadyClarified: false,
+      tasks: [dentist],
+      slots: [],
+      habits: [stretch],
+    });
+    expect(result).toMatchObject({
+      type: 'command',
+      command: { kind: 'habit_check_in', habitId: 'h1' },
+    });
+  });
+
+  it('refuses habit check-in when there are no habits', () => {
+    const result = resolveVoiceCommand({
+      draft: draft({ intent: 'habit_check_in', taskName: 'Stretch' }),
+      transcript: 'check in Stretch',
+      timeZone: ZONE,
+      nowIso: NOW,
+      alreadyClarified: false,
+      tasks: [],
+      slots: [],
+      habits: [],
+    });
+    expect(result).toMatchObject({
+      type: 'command',
+      command: { kind: 'refuse' },
     });
   });
 });

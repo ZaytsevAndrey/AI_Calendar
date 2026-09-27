@@ -413,4 +413,36 @@ describe('Habits and voice API e2e', () => {
     expect(body.task).toBeNull();
     expect(body.command).toMatchObject({ kind: 'complete', taskId: id, taskName: 'Report' });
   });
+
+  it('A-VOI-014 habit check-in resolves a named habit', async () => {
+    const { token } = await seedOnboardedUser(ctx.app);
+    const created = await api(ctx.app, 'POST', '/habits', {
+      token,
+      payload: { name: 'Stretch' },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = String(jsonBody(created).id);
+    const today = String(jsonBody(await api(ctx.app, 'GET', '/habits', { token })).today);
+    ctx.groq.completeJson.mockResolvedValueOnce(
+      JSON.stringify({
+        intent: 'habit_check_in',
+        understanding: 'complete',
+        command: { target: 'named', taskName: 'Stretch', start: null, end: null },
+        task: null,
+      }),
+    );
+    const parsed = await api(ctx.app, 'POST', '/voice/parse-task', {
+      token,
+      payload: { transcript: 'check in Stretch', timeZone: 'Europe/Kyiv' },
+    });
+    expect(parsed.statusCode).toBe(201);
+    const body = jsonBody(parsed);
+    expect(body.task).toBeNull();
+    expect(body.command).toMatchObject({
+      kind: 'habit_check_in',
+      habitId: id,
+      habitName: 'Stretch',
+      date: today,
+    });
+  });
 });

@@ -75,7 +75,7 @@ Do in order unless you explicitly skip ahead.
 ### Later (not blocking the queue above)
 
 - [x] **UI language (uk / en)** — chrome and dates follow settings `language`; voice already multilingual.
-- [ ] Voice habit check-in.
+- [x] Voice habit check-in.
 - [ ] Pixel-polish for the problematic sheet.
 
 ---
@@ -90,5 +90,5 @@ Do in order unless you explicitly skip ahead.
 
 ## Recommended next steps
 
-1. Start at **Voice habit check-in** (or sheet polish).
+1. Start at **Pixel-polish for the problematic sheet**.
 2. After each feature ships: tick above, archive a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

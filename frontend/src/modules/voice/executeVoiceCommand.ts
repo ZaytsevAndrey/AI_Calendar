@@ -1,8 +1,11 @@
 import { eventsApi } from 'api/eventsApi';
 import { eventTasksApi } from 'api/eventTasksApi';
+import { habitsApi } from 'api/habitsApi';
+import type { HabitAchievementId, HabitDTO } from 'api/habits.api';
 import { ScheduleApi } from 'api/schedule.api';
 import type { SkipOccurrenceDTO, UpdateTaskDTO } from 'api/tasks.api';
 import type { VoiceCommandAction } from 'api/voice.api';
+import apiCall from 'modules/common/utils/apiCall';
 import i18n from 'i18n';
 import { settleReplanJob } from 'modules/schedule/settleReplanJob';
 import { showSuccessToast } from 'utils/toast';
@@ -20,10 +23,41 @@ function refreshCalendar(dispatch: (action: any) => void): void {
   dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));
 }
 
+function isStreakAchievement(id: HabitAchievementId): boolean {
+  return id.startsWith('streak_');
+}
+
 export async function executeVoiceCommand(
   command: VoiceCommandAction,
   deps: ExecuteDeps,
 ): Promise<void> {
+  if (command.kind === 'habit_check_in') {
+    const response = await apiCall({
+      url: `/habits/${command.habitId}/check-ins`,
+      method: 'POST',
+      data: { date: command.date },
+    });
+    const habit = response.data as HabitDTO;
+    deps.dispatch(habitsApi.util.invalidateTags([{ type: 'Habits', id: 'LIST' }]));
+    showSuccessToast({
+      title: i18n.t('voice.habitCheckedIn'),
+      detail: command.habitName,
+    });
+    let tipShown = false;
+    for (const id of habit.newlyUnlocked ?? []) {
+      const useTip =
+        !tipShown && Boolean(habit.streakTip) && isStreakAchievement(id);
+      showSuccessToast({
+        title: useTip
+          ? i18n.t('habits.streakTipTitle')
+          : i18n.t('habits.achievements.unlocked'),
+        detail: useTip ? habit.streakTip : i18n.t(`habits.achievements.${id}`),
+      });
+      if (useTip) tipShown = true;
+    }
+    return;
+  }
+
   if (command.kind === 'complete') {
     await deps.updateTask({ id: command.taskId, body: { status: 'completed' } }).unwrap();
     showSuccessToast({ title: i18n.t('voice.taskCompleted'), detail: command.taskName });

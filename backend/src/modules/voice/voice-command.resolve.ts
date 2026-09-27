@@ -12,6 +12,7 @@ import {
 import type {
   VoiceCommand,
   VoiceCommandDraft,
+  VoiceCommandHabit,
   VoiceCommandIntent,
   VoiceCommandSlot,
   VoiceCommandTask,
@@ -57,6 +58,13 @@ export function sniffCommandIntent(transcript: string): VoiceCommandIntent | nul
     return null;
   }
   if (sniffDoNow(text)) return 'reschedule';
+  if (
+    leading(
+      'check(?:ed)?\\s*in|mark\\s+(?:my\\s+)?habit|habit\\s+check|i\\s+(?:did|have\\s+done)(?:\\s+my)?\\s+habit|відміт(?:ив|ила|ити)(?:\\s+звичку)?|звичк[ауіи]',
+    ).test(text)
+  ) {
+    return 'habit_check_in';
+  }
   if (leading('skip|пропусти(?:ти)?|пропустить').test(text)) return 'skip';
   if (
     leading('move|reschedule|перенес(?:и|ти|іть)?|перестав(?:ь|ити)?|зсунь|сдвин(?:ь|уть)').test(
@@ -96,6 +104,7 @@ export function readVoiceIntent(
     intent === 'complete' ||
     intent === 'skip' ||
     intent === 'reschedule' ||
+    intent === 'habit_check_in' ||
     intent === 'create' ||
     intent === 'needs_clarification'
   ) {
@@ -148,10 +157,24 @@ export function resolveVoiceCommand(input: {
   alreadyClarified: boolean;
   tasks: VoiceCommandTask[];
   slots: VoiceCommandSlot[];
+  habits?: VoiceCommandHabit[];
   language?: string;
 }): VoiceCommandResolveResult {
   const lang = resolveLang(input.language);
   const draft = normalizeDraft(input.draft, input.transcript);
+  const habits = input.habits ?? [];
+
+  if (draft.intent === 'habit_check_in') {
+    return resolveHabitCheckIn({
+      draft,
+      habits,
+      timeZone: input.timeZone,
+      nowIso: input.nowIso,
+      alreadyClarified: input.alreadyClarified,
+      language: lang,
+    });
+  }
+
   const nowMs = Date.parse(input.nowIso);
   const picked = pickTask({ ...input, draft, language: lang });
   if (picked.type === 'clarify') {
@@ -160,6 +183,27 @@ export function resolveVoiceCommand(input: {
       : picked;
   }
   if (picked.type === 'refuse') {
+    if (draft.intent === 'complete' && habits.length > 0) {
+      const habitResult = resolveHabitCheckIn({
+        draft: { ...draft, intent: 'habit_check_in' },
+        habits,
+        timeZone: input.timeZone,
+        nowIso: input.nowIso,
+        alreadyClarified: input.alreadyClarified,
+        language: lang,
+      });
+      if (
+        habitResult.type === 'command' &&
+        habitResult.command.kind === 'habit_check_in'
+      ) {
+        return habitResult;
+      }
+      if (habitResult.type === 'clarify') {
+        return input.alreadyClarified
+          ? { type: 'command', command: { kind: 'refuse', message: habitResult.question } }
+          : habitResult;
+      }
+    }
     return { type: 'command', command: { kind: 'refuse', message: picked.message } };
   }
 
@@ -189,6 +233,71 @@ export function resolveVoiceCommand(input: {
   }
 
   return rescheduleCommand({ ...input, draft, language: lang }, task, slot, nowMs);
+}
+
+function resolveHabitCheckIn(input: {
+  draft: VoiceCommandDraft;
+  habits: VoiceCommandHabit[];
+  timeZone: string;
+  nowIso: string;
+  alreadyClarified: boolean;
+  language: AppLanguage;
+}): VoiceCommandResolveResult {
+  const lang = input.language;
+  if (input.habits.length === 0) {
+    return {
+      type: 'command',
+      command: { kind: 'refuse', message: vt(lang, 'voice.noHabits') },
+    };
+  }
+  const query = input.draft.taskName;
+  if (!query) {
+    if (input.habits.length === 1) {
+      return habitCheckInCommand(input.habits[0], input.timeZone, input.nowIso, lang);
+    }
+    return input.alreadyClarified
+      ? {
+          type: 'command',
+          command: { kind: 'refuse', message: vt(lang, 'voice.whichHabit') },
+        }
+      : {
+          type: 'clarify',
+          question: vt(lang, 'voice.whichHabitList', {
+            names: input.habits
+              .slice(0, 5)
+              .map((habit) => habit.name)
+              .join(', '),
+          }),
+        };
+  }
+  const matched = matchNamedHabit(input.habits, query, lang);
+  if (matched.type === 'clarify') {
+    return input.alreadyClarified
+      ? { type: 'command', command: { kind: 'refuse', message: matched.question } }
+      : matched;
+  }
+  if (matched.type === 'refuse') {
+    return { type: 'command', command: { kind: 'refuse', message: matched.message } };
+  }
+  return habitCheckInCommand(matched.habit, input.timeZone, input.nowIso, lang);
+}
+
+function habitCheckInCommand(
+  habit: VoiceCommandHabit,
+  timeZone: string,
+  nowIso: string,
+  lang: AppLanguage,
+): VoiceCommandResolveResult {
+  return {
+    type: 'command',
+    command: {
+      kind: 'habit_check_in',
+      habitId: habit.id,
+      habitName: habit.name,
+      date: localYmd(nowIso, timeZone),
+      summary: vt(lang, 'voice.habitCheckIn', { name: habit.name }),
+    },
+  };
 }
 
 function skipCommand(
@@ -594,7 +703,7 @@ function stripCommandPrefix(text: string): string | null {
     .trim()
     .replace(
       new RegExp(
-        `^(?:please\\s+|будь ласка\\s+)?(?:do\\s+now|schedule\\s+(?:it\\s+)?now|place\\s+(?:it\\s+)?now|зроби\\s+зараз|заплануй(?:\\s+це)?\\s+зараз|сделай\\s+сейчас|skip|пропусти(?:ти)?|пропустить|move|reschedule|перенес(?:и|ти|іть)?|перестав(?:ь|ити)?|зсунь|сдвин(?:ь|уть)|mark|закінч(?:ив|ила|ити)?|заверш(?:ив|ила)|зроби(?:в|ла)|готово|закончил(?:а)?|сделал(?:а)?|выполнил(?:а)?|done|complete|completed|finish(?:ed)?)${EDGE}\\s*`,
+        `^(?:please\\s+|будь ласка\\s+)?(?:do\\s+now|schedule\\s+(?:it\\s+)?now|place\\s+(?:it\\s+)?now|зроби\\s+зараз|заплануй(?:\\s+це)?\\s+зараз|сделай\\s+сейчас|check(?:ed)?\\s*in|mark\\s+(?:my\\s+)?habit|habit\\s+check|i\\s+(?:did|have\\s+done)(?:\\s+my)?\\s+habit|відміт(?:ив|ила|ити)(?:\\s+звичку)?|звичк[ауіи]|skip|пропусти(?:ти)?|пропустить|move|reschedule|перенес(?:и|ти|іть)?|перестав(?:ь|ити)?|зсунь|сдвин(?:ь|уть)|mark|закінч(?:ив|ила|ити)?|заверш(?:ив|ила)|зроби(?:в|ла)|готово|закончил(?:а)?|сделал(?:а)?|выполнил(?:а)?|done|complete|completed|finish(?:ed)?)${EDGE}\\s*`,
         'iu',
       ),
       '',
@@ -639,6 +748,42 @@ function matchNamed(
     };
   }
   return { type: 'refuse', message: vt(lang, 'voice.couldNotFindTask') };
+}
+
+function matchNamedHabit(
+  habits: VoiceCommandHabit[],
+  query: string,
+  lang: AppLanguage,
+):
+  | { type: 'habit'; habit: VoiceCommandHabit }
+  | { type: 'clarify'; question: string }
+  | { type: 'refuse'; message: string } {
+  const needle = normalizeName(query);
+  if (!needle || CURRENT_WORDS.test(needle)) {
+    return { type: 'clarify', question: vt(lang, 'voice.whichHabit') };
+  }
+  const exact = habits.filter((habit) => normalizeName(habit.name) === needle);
+  const hits = exact.length
+    ? exact
+    : habits.filter((habit) => {
+        const name = normalizeName(habit.name);
+        if (!name) return false;
+        if (name.includes(needle)) return true;
+        return needle.includes(name) && name.length >= 3;
+      });
+  if (hits.length === 1) return { type: 'habit', habit: hits[0] };
+  if (hits.length > 1) {
+    return {
+      type: 'clarify',
+      question: vt(lang, 'voice.whichHabitList', {
+        names: hits
+          .slice(0, 5)
+          .map((habit) => habit.name)
+          .join(', '),
+      }),
+    };
+  }
+  return { type: 'refuse', message: vt(lang, 'voice.couldNotFindHabit') };
 }
 
 function pickOpenSlot(

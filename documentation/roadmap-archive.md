@@ -14,6 +14,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ### Scheduling redesign (engine)
 
+- [x] **Voice habit check-in.** Parse intent `habit_check_in` (check in / відмітив звичку); match habit by name for today in settings TZ; “done” that only matches a habit also checks in. Client applies via existing `POST /habits/:id/check-ins`.
+
 - [x] **UI language (uk / en).** Settings `language` drives chrome and user-visible dates (calendar week strip, habit day labels, toast when-lines, event times); voice was already multilingual.
 
 - [x] **Habits: AI streak tips.** On streak 3/7/30/100 unlock, Groq one-liner from habit name/description (settings language; light safety); template fallback if Groq is down; tip stored and shown under streak + in check-in toast.

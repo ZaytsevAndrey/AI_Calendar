@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { Habit } from '../habits/entities/habit.entity';
 import { Phase } from '../phases/entities/phase.entity';
 import { ScheduledTask } from '../schedule/schedule.entity';
 import { Task } from '../tasks/entities/task.entity';
@@ -9,7 +10,10 @@ import { VoiceController } from './voice.controller';
 import { VoiceService } from './voice.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Phase, Task, ScheduledTask]), UserSettingsModule],
+  imports: [
+    TypeOrmModule.forFeature([Phase, Task, ScheduledTask, Habit]),
+    UserSettingsModule,
+  ],
   controllers: [VoiceController],
   providers: [VoiceService, GroqClient],
   exports: [GroqClient],

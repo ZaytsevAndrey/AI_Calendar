@@ -25,6 +25,11 @@ export const uk: Record<MessageKey, string> = {
   'voice.rescheduleReplan':
     'Перепланувати «{{name}}» на {{when}} і перерозкласти?',
   'voice.doNowReplan': 'Запланувати «{{name}}» якнайшвидше і перерозкласти?',
+  'voice.whichHabit': 'Яку звичку?',
+  'voice.whichHabitList': 'Яку звичку? {{names}}',
+  'voice.couldNotFindHabit': 'Не вдалося знайти цю звичку.',
+  'voice.noHabits': 'Немає звичок для відмітки.',
+  'voice.habitCheckIn': 'Відмітити «{{name}}» на сьогодні?',
 
   'schedule.emptySummary':
     'Поки нічого переглядати. Додайте задачі або згенеруйте розклад.',

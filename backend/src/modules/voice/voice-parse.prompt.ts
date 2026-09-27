@@ -9,13 +9,14 @@ Reply with a single JSON object only. No markdown.
 First set "intent":
 - "create": they want a new task.
 - "complete": mark an existing task done (done, finished, закінчив, зробив, готово).
+- "habit_check_in": mark a habit done for today (check in, I did <habit>, відмітив звичку, я зробив <habit name>). Prefer this when the name matches the habits list.
 - "skip": skip one occurrence (skip, пропусти).
 - "reschedule": move an existing task (move, reschedule, перенеси).
 - "needs_clarification": only when a command has no target and no time you can guess. Prefer a concrete intent.
 
 JSON shape:
 {
-  "intent": "create" | "complete" | "skip" | "reschedule" | "needs_clarification",
+  "intent": "create" | "complete" | "habit_check_in" | "skip" | "reschedule" | "needs_clarification",
   "understanding": "complete" | "sufficient" | "needs_clarification",
   "clarifyingQuestion": string | null,
   "command": {
@@ -46,11 +47,12 @@ JSON shape:
 Command rules (intent is not "create"):
 - command is required. task may be null.
 - target "current" when they mean the block in progress (this, now, цю, зараз, поточну) and do not name a different task.
-- target "named" when they name a task. taskName is a short title copied from the open-task list when one matches, otherwise the words they used. Do not include the time phrase in taskName.
+- target "named" when they name a task or habit. taskName is a short title copied from the open-task or habits list when one matches, otherwise the words they used. Do not include the time phrase in taskName.
 - "done" / "закінчив" on a repeating task still uses intent "complete". The app skips today's occurrence.
+- habit_check_in: put the habit title in command.taskName from the habits list when possible. Leave start/end null. Do not create a task.
 - reschedule: put the new start in command.start as ISO-8601 with offset. command.end only when they gave a clock range. A day with no clock ("tomorrow", "завтра") is start at 00:00 and end at 23:59 of that local day.
-- Habits and native Google meetings are not tasks. Use needs_clarification and ask which app task, in the same language.
-- Do not invent a new task when they are finishing, skipping, or moving one.
+- Native Google meetings are not tasks. Use needs_clarification and ask which app task, in the same language.
+- Do not invent a new task when they are finishing, skipping, moving, or checking in a habit.
 
 understanding (intent "create" only):
 - complete: there is a usable task name. The app creates immediately. Defaults are fine (duration 30, priority medium, no phase).
@@ -95,6 +97,7 @@ export function buildVoiceParseUserPrompt(input: {
   previousTranscript?: string;
   clarificationAnswer?: string;
   openTaskNames?: string[];
+  habitNames?: string[];
 }): string {
   const phaseLines = input.phases.length
     ? input.phases
@@ -124,6 +127,13 @@ Open tasks (incomplete):
 ${
   input.openTaskNames?.length
     ? input.openTaskNames.map((name) => `- ${JSON.stringify(name)}`).join('\n')
+    : '(none)'
+}
+
+Habits:
+${
+  input.habitNames?.length
+    ? input.habitNames.map((name) => `- ${JSON.stringify(name)}`).join('\n')
     : '(none)'
 }
 
