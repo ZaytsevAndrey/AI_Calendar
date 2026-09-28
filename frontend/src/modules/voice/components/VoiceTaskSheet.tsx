@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '../../../ui/Modal';
 import { Spinner } from '../../../ui/Spinner';
 import type { useVoiceTask } from '../hooks/useVoiceTask';
+import { VoiceMicEqualizer } from './VoiceMicEqualizer';
 
 type VoiceController = ReturnType<typeof useVoiceTask>;
 
@@ -18,6 +19,7 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
     pendingSummary,
     error,
     busyLabel,
+    micLevel,
     beginRecording,
     finishRecording,
     confirmCommand,
@@ -74,10 +76,14 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
     >
       <div className="space-y-3 text-sm">
         {isRecording ? (
-          <p className="flex items-center gap-2 font-medium text-ide-error">
-            <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-ide-error" />
-            {t('voice.listeningStop')}
-          </p>
+          <div className="space-y-2">
+            <p className="flex items-center gap-2 font-medium text-ide-error">
+              <span className="inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-ide-error" />
+              {t('voice.listening')}
+            </p>
+            <VoiceMicEqualizer level={micLevel} label={t('voice.equalizerLabel')} />
+            <p className="text-ide-muted">{t('voice.listeningStop')}</p>
+          </div>
         ) : null}
         {isWorking ? (
           <p className="flex items-center gap-2 text-ide-muted">
@@ -94,9 +100,9 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
           <p className="rounded-lg border border-ide-border bg-ide-surface px-3 py-2">
             {clarifyingQuestion}
           </p>
-        ) : (
+        ) : !isRecording ? (
           <p className="text-ide-muted">{t('voice.hint')}</p>
-        )}
+        ) : null}
         {transcript ? (
           <p className="text-ide-text">
             <span className="text-ide-muted">{t('voice.heard')} </span>

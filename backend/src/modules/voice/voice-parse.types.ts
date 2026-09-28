@@ -20,6 +20,14 @@ export type VoiceParsedTask = {
   scheduledEndTime?: string | null;
   phaseId?: string | null;
   phaseIds?: string[];
+  location?: string | null;
+  googleColorId?: string | null;
+  googleVisibility?: string | null;
+  googleTransparency?: string | null;
+  googleReminders?: {
+    useDefault: boolean;
+    overrides?: { method: 'email' | 'popup'; minutes: number }[];
+  } | null;
 };
 
 import type { VoiceCommand } from './voice-command.types';

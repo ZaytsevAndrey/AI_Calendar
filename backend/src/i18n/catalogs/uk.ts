@@ -30,6 +30,15 @@ export const uk: Record<MessageKey, string> = {
   'voice.couldNotFindHabit': 'Не вдалося знайти цю звичку.',
   'voice.noHabits': 'Немає звичок для відмітки.',
   'voice.habitCheckIn': 'Відмітити «{{name}}» на сьогодні?',
+  'voice.deleteTask': 'Видалити «{{name}}»?',
+  'voice.updateTask': 'Оновити «{{name}}»?',
+  'voice.whatToChange': 'Що змінити в цій задачі?',
+  'voice.createHabit': 'Створити звичку «{{name}}»?',
+  'voice.updateHabit': 'Оновити звичку «{{name}}»?',
+  'voice.deleteHabit': 'Видалити звичку «{{name}}»?',
+  'voice.uncheckHabit': 'Зняти сьогоднішню відмітку «{{name}}»?',
+  'voice.habitName': 'Як назвати цю звичку?',
+  'voice.whatToChangeHabit': 'Що змінити в цій звичці?',
 
   'schedule.emptySummary':
     'Поки нічого переглядати. Додайте задачі або згенеруйте розклад.',

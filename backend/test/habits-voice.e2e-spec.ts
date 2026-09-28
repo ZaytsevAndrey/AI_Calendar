@@ -445,4 +445,114 @@ describe('Habits and voice API e2e', () => {
       date: today,
     });
   });
+
+  it('A-VOI-015 update command resolves a named task patch', async () => {
+    const { token } = await seedOnboardedUser(ctx.app);
+    const created = await api(ctx.app, 'POST', '/tasks', {
+      token,
+      payload: {
+        name: 'Report',
+        eventType: 'admin',
+        estimatedTimeInMinutes: 30,
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = jsonBody(created).id;
+    ctx.groq.completeJson.mockResolvedValueOnce(
+      JSON.stringify({
+        intent: 'update',
+        understanding: 'complete',
+        command: { target: 'named', taskName: 'Report', start: null, end: null },
+        task: { estimatedTimeInMinutes: 45 },
+      }),
+    );
+    const parsed = await api(ctx.app, 'POST', '/voice/parse-task', {
+      token,
+      payload: { transcript: 'change report to 45 minutes', timeZone: 'Europe/Kyiv' },
+    });
+    expect(parsed.statusCode).toBe(201);
+    const body = jsonBody(parsed);
+    expect(body.task).toBeNull();
+    expect(body.command).toMatchObject({
+      kind: 'update',
+      taskId: id,
+      patch: { estimatedTimeInMinutes: 45 },
+    });
+  });
+
+  it('A-VOI-016 delete command resolves a named task', async () => {
+    const { token } = await seedOnboardedUser(ctx.app);
+    const created = await api(ctx.app, 'POST', '/tasks', {
+      token,
+      payload: {
+        name: 'Temp',
+        eventType: 'admin',
+        estimatedTimeInMinutes: 30,
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = jsonBody(created).id;
+    ctx.groq.completeJson.mockResolvedValueOnce(
+      JSON.stringify({
+        intent: 'delete',
+        understanding: 'complete',
+        command: { target: 'named', taskName: 'Temp', start: null, end: null },
+        task: null,
+      }),
+    );
+    const parsed = await api(ctx.app, 'POST', '/voice/parse-task', {
+      token,
+      payload: { transcript: 'delete Temp', timeZone: 'Europe/Kyiv' },
+    });
+    expect(parsed.statusCode).toBe(201);
+    expect(jsonBody(parsed).command).toMatchObject({ kind: 'delete', taskId: id });
+  });
+
+  it('A-VOI-017 habit create and uncheck resolve', async () => {
+    const { token } = await seedOnboardedUser(ctx.app);
+    ctx.groq.completeJson.mockResolvedValueOnce(
+      JSON.stringify({
+        intent: 'habit_create',
+        understanding: 'complete',
+        command: { target: 'named', taskName: 'Meditation', start: null, end: null },
+        habit: { name: 'Meditation', color: '#22c55e' },
+        task: null,
+      }),
+    );
+    const created = await api(ctx.app, 'POST', '/voice/parse-task', {
+      token,
+      payload: { transcript: 'create habit Meditation', timeZone: 'Europe/Kyiv' },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(jsonBody(created).command).toMatchObject({
+      kind: 'habit_create',
+      fields: { name: 'Meditation', color: '#22c55e' },
+    });
+
+    const habit = await api(ctx.app, 'POST', '/habits', {
+      token,
+      payload: { name: 'Stretch' },
+    });
+    expect(habit.statusCode).toBe(201);
+    const habitId = String(jsonBody(habit).id);
+    const today = String(jsonBody(await api(ctx.app, 'GET', '/habits', { token })).today);
+    ctx.groq.completeJson.mockResolvedValueOnce(
+      JSON.stringify({
+        intent: 'habit_uncheck',
+        understanding: 'complete',
+        command: { target: 'named', taskName: 'Stretch', start: null, end: null },
+        task: null,
+      }),
+    );
+    const unchecked = await api(ctx.app, 'POST', '/voice/parse-task', {
+      token,
+      payload: { transcript: 'uncheck Stretch', timeZone: 'Europe/Kyiv' },
+    });
+    expect(unchecked.statusCode).toBe(201);
+    expect(jsonBody(unchecked).command).toMatchObject({
+      kind: 'habit_uncheck',
+      habitId,
+      date: today,
+    });
+  });
 });

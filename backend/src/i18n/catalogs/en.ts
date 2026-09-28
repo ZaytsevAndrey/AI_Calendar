@@ -27,6 +27,15 @@ export const en = {
   'voice.couldNotFindHabit': 'I could not find that habit.',
   'voice.noHabits': 'You have no habits to check in.',
   'voice.habitCheckIn': 'Check in "{{name}}" for today?',
+  'voice.deleteTask': 'Delete "{{name}}"?',
+  'voice.updateTask': 'Update "{{name}}"?',
+  'voice.whatToChange': 'What should I change on that task?',
+  'voice.createHabit': 'Create habit "{{name}}"?',
+  'voice.updateHabit': 'Update habit "{{name}}"?',
+  'voice.deleteHabit': 'Delete habit "{{name}}"?',
+  'voice.uncheckHabit': 'Clear today\'s check-in for "{{name}}"?',
+  'voice.habitName': 'What should I call this habit?',
+  'voice.whatToChangeHabit': 'What should I change on that habit?',
 
   'schedule.emptySummary':
     'Nothing to review yet. Add tasks or generate a schedule first.',

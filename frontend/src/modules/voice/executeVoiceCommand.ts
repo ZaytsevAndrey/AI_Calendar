@@ -15,6 +15,7 @@ type Mutation<T> = (arg: T) => { unwrap: () => Promise<unknown> };
 type ExecuteDeps = {
   updateTask: Mutation<{ id: string; body: UpdateTaskDTO }>;
   skipOccurrence: Mutation<{ id: string; body: SkipOccurrenceDTO }>;
+  deleteTask: Mutation<string>;
   dispatch: (action: any) => void;
 };
 
@@ -58,6 +59,60 @@ export async function executeVoiceCommand(
     return;
   }
 
+  if (command.kind === 'habit_create') {
+    await apiCall({
+      url: '/habits',
+      method: 'POST',
+      data: command.fields,
+    });
+    deps.dispatch(habitsApi.util.invalidateTags([{ type: 'Habits', id: 'LIST' }]));
+    showSuccessToast({
+      title: i18n.t('voice.habitCreated'),
+      detail: command.fields.name,
+    });
+    return;
+  }
+
+  if (command.kind === 'habit_update') {
+    await apiCall({
+      url: `/habits/${command.habitId}`,
+      method: 'PATCH',
+      data: command.patch,
+    });
+    deps.dispatch(habitsApi.util.invalidateTags([{ type: 'Habits', id: 'LIST' }]));
+    showSuccessToast({
+      title: i18n.t('voice.habitUpdated'),
+      detail: command.habitName,
+    });
+    return;
+  }
+
+  if (command.kind === 'habit_delete') {
+    await apiCall({
+      url: `/habits/${command.habitId}`,
+      method: 'DELETE',
+    });
+    deps.dispatch(habitsApi.util.invalidateTags([{ type: 'Habits', id: 'LIST' }]));
+    showSuccessToast({
+      title: i18n.t('voice.habitDeleted'),
+      detail: command.habitName,
+    });
+    return;
+  }
+
+  if (command.kind === 'habit_uncheck') {
+    await apiCall({
+      url: `/habits/${command.habitId}/check-ins/${command.date}`,
+      method: 'DELETE',
+    });
+    deps.dispatch(habitsApi.util.invalidateTags([{ type: 'Habits', id: 'LIST' }]));
+    showSuccessToast({
+      title: i18n.t('voice.habitUnchecked'),
+      detail: command.habitName,
+    });
+    return;
+  }
+
   if (command.kind === 'complete') {
     await deps.updateTask({ id: command.taskId, body: { status: 'completed' } }).unwrap();
     showSuccessToast({ title: i18n.t('voice.taskCompleted'), detail: command.taskName });
@@ -67,6 +122,56 @@ export async function executeVoiceCommand(
   if (command.kind === 'cancel') {
     await deps.updateTask({ id: command.taskId, body: { status: 'canceled' } }).unwrap();
     showSuccessToast({ title: i18n.t('voice.taskCanceled'), detail: command.taskName });
+    return;
+  }
+
+  if (command.kind === 'delete') {
+    await deps.deleteTask(command.taskId).unwrap();
+    refreshCalendar(deps.dispatch);
+    showSuccessToast({ title: i18n.t('voice.taskDeleted'), detail: command.taskName });
+    return;
+  }
+
+  if (command.kind === 'update') {
+    const patch = command.patch;
+    const body: UpdateTaskDTO = {};
+    if (patch.name !== undefined) body.name = patch.name;
+    if (patch.description !== undefined) body.description = patch.description ?? undefined;
+    if (patch.eventType !== undefined) body.eventType = patch.eventType;
+    if (patch.estimatedTimeInMinutes !== undefined) {
+      body.estimatedTimeInMinutes = patch.estimatedTimeInMinutes;
+    }
+    if (patch.isRecurring !== undefined) body.isRecurring = patch.isRecurring;
+    if (patch.recurrencePattern !== undefined) {
+      body.recurrencePattern = patch.recurrencePattern ?? undefined;
+    }
+    if (patch.recurrenceWeekDays !== undefined) {
+      body.recurrenceWeekDays = patch.recurrenceWeekDays;
+    }
+    if (patch.allowSplit !== undefined) body.allowSplit = patch.allowSplit;
+    if (patch.priority !== undefined) body.priority = patch.priority;
+    if (patch.deadline !== undefined) body.deadline = patch.deadline;
+    if (patch.earliestStartTime !== undefined) body.earliestStartTime = patch.earliestStartTime;
+    if (patch.eligibleWeekDays !== undefined) body.eligibleWeekDays = patch.eligibleWeekDays;
+    if (patch.scheduledStartTime !== undefined) {
+      body.scheduledStartTime = patch.scheduledStartTime;
+    }
+    if (patch.scheduledEndTime !== undefined) body.scheduledEndTime = patch.scheduledEndTime;
+    if (patch.status !== undefined) body.status = patch.status;
+    if (patch.location !== undefined) body.location = patch.location;
+    if (patch.googleColorId !== undefined) body.googleColorId = patch.googleColorId;
+    if (patch.googleVisibility !== undefined) body.googleVisibility = patch.googleVisibility;
+    if (patch.googleTransparency !== undefined) {
+      body.googleTransparency = patch.googleTransparency;
+    }
+    if (patch.googleReminders !== undefined) body.googleReminders = patch.googleReminders;
+    if (patch.phaseId !== undefined) {
+      body.phaseId = patch.phaseId ?? undefined;
+      body.phaseIds = patch.phaseId ? [patch.phaseId] : [];
+    }
+    await deps.updateTask({ id: command.taskId, body }).unwrap();
+    refreshCalendar(deps.dispatch);
+    showSuccessToast({ title: i18n.t('voice.taskUpdated'), detail: command.taskName });
     return;
   }
 

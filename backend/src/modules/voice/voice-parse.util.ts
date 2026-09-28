@@ -75,6 +75,21 @@ function asWeekDays(value: unknown): number[] | null {
   return days.length ? days : null;
 }
 
+function normalizeGoogleReminders(
+  value: unknown,
+): VoiceParsedTask['googleReminders'] {
+  if (value == null) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) return null;
+  const rem = value as {
+    useDefault?: unknown;
+    overrides?: { method: 'email' | 'popup'; minutes: number }[];
+  };
+  return {
+    useDefault: Boolean(rem.useDefault),
+    overrides: Array.isArray(rem.overrides) ? rem.overrides : undefined,
+  };
+}
+
 function isIsoLike(value: string | null): value is string {
   if (!value) return false;
   const time = Date.parse(value);
@@ -209,6 +224,11 @@ export function normalizeVoiceParse(
     scheduledEndTime,
     phaseId,
     phaseIds: phaseId ? [phaseId] : undefined,
+    location: asNullableString(taskRaw.location),
+    googleColorId: asNullableString(taskRaw.googleColorId),
+    googleVisibility: asNullableString(taskRaw.googleVisibility),
+    googleTransparency: asNullableString(taskRaw.googleTransparency),
+    googleReminders: normalizeGoogleReminders(taskRaw.googleReminders),
   };
 
   if (ctx.timeZone && ctx.nowIso) {

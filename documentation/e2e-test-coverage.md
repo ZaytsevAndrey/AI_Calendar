@@ -322,8 +322,14 @@ Do **not** hit real Groq. Stub transcribe + parse.
 | U-VOI-005 | U | P2 | `GROQ` stub missing | Transcribe | **Current:** error text in the voice sheet (`Could not transcribe audio`), not a toast |
 | A-VOI-013 | A | P1 | Named incomplete task, intent complete | `POST /voice/parse-task` | `command.kind=complete`, that task id, `task` null |
 | A-VOI-014 | A | P1 | Named habit, intent habit_check_in | `POST /voice/parse-task` | `command.kind=habit_check_in`, habit id, today `date`, `task` null |
+| A-VOI-015 | A | P1 | Named task, intent update with duration | `POST /voice/parse-task` | `command.kind=update`, patch includes `estimatedTimeInMinutes` |
+| A-VOI-016 | A | P1 | Named task, intent delete | `POST /voice/parse-task` | `command.kind=delete`, that task id |
+| A-VOI-017 | A | P1 | Habit create + uncheck | `POST /voice/parse-task` | `habit_create` fields; `habit_uncheck` with today |
 | U-VOI-006 | U | P1 | Stub `command.complete` | Setting off, then on | Off completes immediately. On shows Confirm, then completes. Setting is restored off |
 | U-VOI-007 | U | P1 | Stub create + job `conflicts[]` | Voice create, reopen, spoken option | Shared conflict sheet opens; reopen voice picks `move_new` via speech |
+| U-VOI-008 | U | P1 | Stub `command.delete`, confirm off | Voice delete | Confirm always shown; Confirm deletes |
+| U-VOI-009 | U | P1 | Mic stub recording | Voice sheet | Listening + microphone level equalizer visible |
+| U-VOI-010 | U | P1 | Settings Voice | Speak replies | Toggle visible; off shows toast |
 
 ---
 

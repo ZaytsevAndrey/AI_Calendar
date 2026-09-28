@@ -39,6 +39,8 @@ function draft(partial: Partial<VoiceCommandDraft> & Pick<VoiceCommandDraft, 'in
     taskName: null,
     spokenStart: null,
     spokenEnd: null,
+    patch: null,
+    habitFields: null,
     ...partial,
   };
 }
@@ -294,5 +296,96 @@ describe('resolveVoiceCommand', () => {
       type: 'command',
       command: { kind: 'refuse' },
     });
+  });
+
+  it('updates a named task with a patch', () => {
+    const result = resolveVoiceCommand({
+      draft: draft({
+        intent: 'update',
+        taskName: 'Dentist',
+        patch: { estimatedTimeInMinutes: 45 },
+      }),
+      transcript: 'change dentist to 45 minutes',
+      timeZone: ZONE,
+      nowIso: NOW,
+      alreadyClarified: false,
+      tasks: [dentist],
+      slots: [],
+    });
+    expect(result).toMatchObject({
+      type: 'command',
+      command: {
+        kind: 'update',
+        taskId: 't1',
+        patch: { estimatedTimeInMinutes: 45 },
+      },
+    });
+  });
+
+  it('deletes a named task', () => {
+    const result = resolveVoiceCommand({
+      draft: draft({ intent: 'delete', taskName: 'Dentist' }),
+      transcript: 'delete dentist',
+      timeZone: ZONE,
+      nowIso: NOW,
+      alreadyClarified: false,
+      tasks: [dentist],
+      slots: [],
+    });
+    expect(result).toMatchObject({
+      type: 'command',
+      command: { kind: 'delete', taskId: 't1' },
+    });
+  });
+
+  it('creates a habit from a name', () => {
+    const result = resolveVoiceCommand({
+      draft: draft({
+        intent: 'habit_create',
+        taskName: 'Meditation',
+        habitFields: { name: 'Meditation', color: '#22c55e' },
+      }),
+      transcript: 'create habit Meditation',
+      timeZone: ZONE,
+      nowIso: NOW,
+      alreadyClarified: false,
+      tasks: [],
+      slots: [],
+      habits: [],
+    });
+    expect(result).toMatchObject({
+      type: 'command',
+      command: {
+        kind: 'habit_create',
+        fields: { name: 'Meditation', color: '#22c55e' },
+      },
+    });
+  });
+
+  it('unchecks a habit for today', () => {
+    const result = resolveVoiceCommand({
+      draft: draft({ intent: 'habit_uncheck', taskName: 'Stretch' }),
+      transcript: 'uncheck Stretch',
+      timeZone: ZONE,
+      nowIso: NOW,
+      alreadyClarified: false,
+      tasks: [],
+      slots: [],
+      habits: [stretch],
+    });
+    expect(result).toMatchObject({
+      type: 'command',
+      command: { kind: 'habit_uncheck', habitId: 'h1', date: '2026-09-22' },
+    });
+  });
+});
+
+describe('sniffCommandIntent extras', () => {
+  it('sniffs update delete and habit CRUD', () => {
+    expect(sniffCommandIntent('delete dentist')).toBe('delete');
+    expect(sniffCommandIntent('rename dentist to checkup')).toBe('update');
+    expect(sniffCommandIntent('create habit Stretch')).toBe('habit_create');
+    expect(sniffCommandIntent('delete habit Stretch')).toBe('habit_delete');
+    expect(sniffCommandIntent('uncheck Stretch')).toBe('habit_uncheck');
   });
 });

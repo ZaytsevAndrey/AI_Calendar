@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { useSkipOccurrenceMutation, useUpdateEventMutation } from 'api/eventTasksApi';
+import { useSkipOccurrenceMutation, useUpdateEventMutation, useDeleteEventMutation } from 'api/eventTasksApi';
 import { VoiceApi, type VoiceCommandAction, type VoiceParsedTask } from 'api/voice.api';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
@@ -16,6 +16,7 @@ import i18n from 'i18n';
 import { showSuccessToast } from 'utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 import { executeVoiceCommand } from '../executeVoiceCommand';
+import { VoiceSpeech } from '../speech';
 import { useAudioRecorder } from './useAudioRecorder';
 
 export type VoiceStage =
@@ -33,12 +34,19 @@ type UseVoiceTaskOptions = {
   onSufficient: (task: VoiceParsedTask) => void;
 };
 
+function requiresAlwaysConfirm(kind: VoiceCommandAction['kind']): boolean {
+  return kind === 'cancel' || kind === 'delete' || kind === 'habit_delete';
+}
+
 export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) {
-  const { start, stop, cancel, error: recorderError } = useAudioRecorder();
+  const { start, stop, cancel, error: recorderError, level: micLevel } = useAudioRecorder();
   const { data: userSettings } = useGetUserSettingsQuery();
   const confirmCommands = !!userSettings?.confirmVoiceCommands;
+  const speakReplies = userSettings?.speakVoiceReplies !== false;
+  const speechLang = userSettings?.language || i18n.language || 'en';
   const [updateTask] = useUpdateEventMutation();
   const [skipOccurrence] = useSkipOccurrenceMutation();
+  const [deleteTask] = useDeleteEventMutation();
   const dispatch = useDispatch();
   // Same IANA as the task form / engine, not the browser zone.
   const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
@@ -51,7 +59,16 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
   const [pendingCommand, setPendingCommand] = useState<VoiceCommandAction | null>(null);
   const [heldConflict, setHeldConflict] = useState<SchedulingConflictDTO | null>(null);
 
+  const maybeSpeak = useCallback(
+    async (text: string | null | undefined) => {
+      if (!speakReplies || !text?.trim()) return;
+      await VoiceSpeech.speak(text, { lang: speechLang });
+    },
+    [speakReplies, speechLang],
+  );
+
   const reset = useCallback(() => {
+    VoiceSpeech.stop();
     cancel();
     setStage('idle');
     setTranscript('');
@@ -67,6 +84,7 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
   }, [reset]);
 
   const open = useCallback(() => {
+    VoiceSpeech.stop();
     cancel();
     setTranscript('');
     setPendingCommand(null);
@@ -74,15 +92,17 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
     const pending = getPendingConflictChoice();
     if (pending) {
       setHeldConflict(pending);
-      setClarifyingQuestion(i18n.t('voice.pickConflictOption'));
+      const question = i18n.t('voice.pickConflictOption');
+      setClarifyingQuestion(question);
       setStage('needs_conflict_choice');
+      void maybeSpeak(question);
     } else {
       setHeldConflict(null);
       setClarifyingQuestion(null);
       setStage('idle');
     }
     setIsOpen(true);
-  }, [cancel]);
+  }, [cancel, maybeSpeak]);
 
   const runCommand = useCallback(
     async (command: VoiceCommandAction) => {
@@ -91,17 +111,18 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
       try {
         const waitConflict =
           command.kind === 'window' ? waitForScheduleConflict(12_000) : Promise.resolve(null);
-        await executeVoiceCommand(command, { updateTask, skipOccurrence, dispatch });
+        await executeVoiceCommand(command, { updateTask, skipOccurrence, deleteTask, dispatch });
         if (command.kind === 'window') {
           await waitConflict;
         }
+        await maybeSpeak(command.summary);
         close();
       } catch (err) {
         setError(extractApiErrorMessage(err));
         setStage('error');
       }
     },
-    [close, dispatch, skipOccurrence, updateTask],
+    [close, deleteTask, dispatch, maybeSpeak, skipOccurrence, updateTask],
   );
 
   const applySpokenConflict = useCallback(
@@ -116,7 +137,9 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
           skipOccurrence: (id, body) => skipOccurrence({ id, body }).unwrap(),
         });
         notifyConflictChoiceConsumed(conflict.taskId);
-        showSuccessToast({ title: i18n.t('schedule.conflictApplied') });
+        const title = i18n.t('schedule.conflictApplied');
+        showSuccessToast({ title });
+        await maybeSpeak(title);
         close();
         return 'applied';
       } catch (err) {
@@ -125,7 +148,7 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
         return 'error';
       }
     },
-    [close, skipOccurrence, updateTask],
+    [close, maybeSpeak, skipOccurrence, updateTask],
   );
 
   const parseAndRoute = useCallback(
@@ -144,11 +167,13 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
         if (result.command.kind === 'refuse') {
           setError(result.command.message);
           setStage('error');
+          await maybeSpeak(result.command.message);
           return;
         }
-        if (confirmCommands) {
+        if (confirmCommands || requiresAlwaysConfirm(result.command.kind)) {
           setPendingCommand(result.command);
           setStage('confirm');
+          await maybeSpeak(result.command.summary);
           return;
         }
         await runCommand(result.command);
@@ -156,14 +181,18 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
       }
 
       if (result.understanding === 'needs_clarification') {
-        setClarifyingQuestion(result.clarifyingQuestion || i18n.t('voice.clarifyMore'));
+        const question = result.clarifyingQuestion || i18n.t('voice.clarifyMore');
+        setClarifyingQuestion(question);
         setStage('clarifying');
+        await maybeSpeak(question);
         return;
       }
 
       if (!result.task?.name) {
-        setClarifyingQuestion(i18n.t('voice.askName'));
+        const question = i18n.t('voice.askName');
+        setClarifyingQuestion(question);
         setStage('clarifying');
+        await maybeSpeak(question);
         return;
       }
 
@@ -171,6 +200,7 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
         const waitConflict = waitForScheduleConflict(12_000);
         await onComplete(result.task);
         await waitConflict;
+        await maybeSpeak(result.task.name);
         close();
         return;
       }
@@ -178,11 +208,12 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
       close();
       onSufficient(result.task);
     },
-    [close, confirmCommands, onComplete, onSufficient, runCommand, timeZone],
+    [close, confirmCommands, maybeSpeak, onComplete, onSufficient, runCommand, timeZone],
   );
 
   const beginRecording = useCallback(async () => {
     setError(null);
+    VoiceSpeech.stop();
     try {
       await start();
       setStage((current) =>
@@ -220,10 +251,12 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
         const outcome = await applySpokenConflict(spoken, conflict);
         if (outcome === 'applied' || outcome === 'error') return;
         if (wasConflictTurn) {
-          setError(i18n.t('voice.conflictOptionUnclear'));
+          const unclear = i18n.t('voice.conflictOptionUnclear');
+          setError(unclear);
           setClarifyingQuestion(i18n.t('voice.pickConflictOption'));
           setHeldConflict(conflict);
           setStage('needs_conflict_choice');
+          await maybeSpeak(unclear);
           return;
         }
       }
@@ -243,6 +276,7 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
     applySpokenConflict,
     clarifyingQuestion,
     heldConflict,
+    maybeSpeak,
     parseAndRoute,
     stage,
     stop,
@@ -259,6 +293,7 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
     pendingSummary: pendingCommand?.summary ?? null,
     error: error || recorderError,
     busyLabel,
+    micLevel,
     beginRecording,
     finishRecording,
     confirmCommand: () => {

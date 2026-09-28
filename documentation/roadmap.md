@@ -4,7 +4,7 @@ Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Produ
 
 **How we work:** one chat = **one feature** below (top open item, or name it). Say *«давай наступну фічу»* / *«next feature»*. Finish → check it off here and move a short done note into the archive.
 
-Design decisions for this queue: [spec-conflict-rules.md](spec-conflict-rules.md) (type + preferred time, no priorities, conflict options, problematic ≠ unscheduled, Voice on the same layer). Habits achievements + AI streak tips are done.
+Design decisions for this queue: [spec-conflict-rules.md](spec-conflict-rules.md) (type + preferred time, no priorities, conflict options, problematic ≠ unscheduled, Voice on the same layer); [spec-voice-commander.md](spec-voice-commander.md) (Voice Commander §13). Habits achievements + AI streak tips are done.
 
 ---
 

@@ -14,6 +14,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ### Scheduling redesign (engine)
 
+- [x] **Voice Commander.** Full task/habit CRUD by voice (update/delete/reopen; habit create/update/delete/uncheck), Web Speech Speak replies + `speakVoiceReplies`, mic equalizer while Listening, always-confirm delete/cancel/habit_delete. Contract: [spec-voice-commander.md](spec-voice-commander.md).
+
 - [x] **Problematic Move: visual free-slot pick.** `GET /schedule/free-slots` returns phase gaps + 15‑min candidates; Move sheet is a snap-scrolling day timeline (ghost block) for recurring one-offs and non-recurring place-in-place. Replaces the bare time input.
 
 - [x] **Problematic sheet polish.** Info cards (name, phase, duration, overflow day + reason); one-word Skip / Move / Edit / Resolve; Move used a compact place-at-time sheet until §11 visual pick.

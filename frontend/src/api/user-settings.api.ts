@@ -26,6 +26,8 @@ export interface UserSettingsDTO {
   remindersEnabled?: boolean;
   /** When true, voice complete / skip / move asks before writing. */
   confirmVoiceCommands?: boolean;
+  /** When true, speak clarifying / confirm / result via client TTS. */
+  speakVoiceReplies?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -54,6 +56,7 @@ export interface UpdateUserSettingsDTO {
   language?: string;
   remindersEnabled?: boolean;
   confirmVoiceCommands?: boolean;
+  speakVoiceReplies?: boolean;
 }
 
 export const UserSettingsApi = {

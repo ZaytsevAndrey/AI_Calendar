@@ -27,6 +27,7 @@ test.describe('P1 settings UI', () => {
   test('U-SET-001 changing horizon auto-saves after debounce', async ({ page, auth, request }) => {
     await openAs(page, auth.onboarded, '/settings');
     const horizon = page.getByLabel('Recurring schedule horizon (days)');
+    await horizon.scrollIntoViewIfNeeded();
     await expect(horizon).toBeVisible();
     const current = Number((await horizon.inputValue()) || '14');
     const next = current === 21 ? 22 : 21;

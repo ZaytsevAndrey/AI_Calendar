@@ -6,21 +6,28 @@ import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
 
 export function VoiceSettingsSection({
   confirmVoiceCommands,
+  speakVoiceReplies,
 }: {
   confirmVoiceCommands: boolean;
+  speakVoiceReplies: boolean;
 }) {
   const { t } = useTranslation();
   const [updateUserSettings] = useUpdateUserSettingsMutation();
-  const [enabled, setEnabled] = useState(confirmVoiceCommands);
-  const [busy, setBusy] = useState(false);
+  const [confirmEnabled, setConfirmEnabled] = useState(confirmVoiceCommands);
+  const [speakEnabled, setSpeakEnabled] = useState(speakVoiceReplies);
+  const [busy, setBusy] = useState<'confirm' | 'speak' | null>(null);
 
   useEffect(() => {
-    setEnabled(confirmVoiceCommands);
+    setConfirmEnabled(confirmVoiceCommands);
   }, [confirmVoiceCommands]);
 
-  const toggle = async (next: boolean) => {
-    setBusy(true);
-    setEnabled(next);
+  useEffect(() => {
+    setSpeakEnabled(speakVoiceReplies);
+  }, [speakVoiceReplies]);
+
+  const toggleConfirm = async (next: boolean) => {
+    setBusy('confirm');
+    setConfirmEnabled(next);
     try {
       await updateUserSettings({ confirmVoiceCommands: next }).unwrap();
       showSuccessToast({
@@ -28,13 +35,33 @@ export function VoiceSettingsSection({
         detail: next ? t('voice.confirmOnDetail') : t('voice.confirmOffDetail'),
       });
     } catch (error) {
-      setEnabled(!next);
+      setConfirmEnabled(!next);
       showErrorToast({
         title: t('voice.updateFailed'),
         detail: extractApiErrorMessage(error),
       });
     } finally {
-      setBusy(false);
+      setBusy(null);
+    }
+  };
+
+  const toggleSpeak = async (next: boolean) => {
+    setBusy('speak');
+    setSpeakEnabled(next);
+    try {
+      await updateUserSettings({ speakVoiceReplies: next }).unwrap();
+      showSuccessToast({
+        title: next ? t('voice.speakOn') : t('voice.speakOff'),
+        detail: next ? t('voice.speakOnDetail') : t('voice.speakOffDetail'),
+      });
+    } catch (error) {
+      setSpeakEnabled(!next);
+      showErrorToast({
+        title: t('voice.updateFailed'),
+        detail: extractApiErrorMessage(error),
+      });
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -42,16 +69,28 @@ export function VoiceSettingsSection({
     <section className="border-t border-ide-border pt-10">
       <h2 className="mb-2 text-lg font-semibold text-ide-text">{t('voice.title')}</h2>
       <p className="mb-4 text-sm text-ide-muted">{t('voice.sectionHint')}</p>
-      <label className="flex items-center gap-2 text-sm text-ide-text">
-        <input
-          type="checkbox"
-          className="h-4 w-4"
-          checked={enabled}
-          disabled={busy}
-          onChange={(event) => void toggle(event.target.checked)}
-        />
-        {t('voice.askBefore')}
-      </label>
+      <div className="space-y-3">
+        <label className="flex items-center gap-2 text-sm text-ide-text">
+          <input
+            type="checkbox"
+            className="h-4 w-4"
+            checked={confirmEnabled}
+            disabled={busy !== null}
+            onChange={(event) => void toggleConfirm(event.target.checked)}
+          />
+          {t('voice.askBefore')}
+        </label>
+        <label className="flex items-center gap-2 text-sm text-ide-text">
+          <input
+            type="checkbox"
+            className="h-4 w-4"
+            checked={speakEnabled}
+            disabled={busy !== null}
+            onChange={(event) => void toggleSpeak(event.target.checked)}
+          />
+          {t('voice.speakReplies')}
+        </label>
+      </div>
     </section>
   );
 }

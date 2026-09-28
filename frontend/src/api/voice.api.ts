@@ -5,6 +5,41 @@ export type VoiceUnderstanding = 'complete' | 'sufficient' | 'needs_clarificatio
 
 export type VoiceParsedTask = CreateTaskDTO;
 
+export type VoiceTaskPatch = {
+  name?: string;
+  description?: string | null;
+  phaseId?: string | null;
+  eventType?: string;
+  estimatedTimeInMinutes?: number;
+  isRecurring?: boolean;
+  recurrencePattern?: string | null;
+  recurrenceWeekDays?: number[] | null;
+  allowSplit?: boolean;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  deadline?: string | null;
+  earliestStartTime?: string | null;
+  eligibleWeekDays?: number[] | null;
+  scheduledStartTime?: string | null;
+  scheduledEndTime?: string | null;
+  status?: 'todo' | 'in_progress' | 'completed' | 'canceled';
+  location?: string | null;
+  googleColorId?: string | null;
+  googleVisibility?: string | null;
+  googleTransparency?: string | null;
+  googleReminders?: {
+    useDefault: boolean;
+    overrides?: { method: 'email' | 'popup'; minutes: number }[];
+  } | null;
+};
+
+export type VoiceHabitFields = {
+  name?: string;
+  color?: string;
+  description?: string | null;
+  blockStartTime?: string | null;
+  blockMinutes?: number | null;
+};
+
 export type VoiceParseResult = {
   understanding: VoiceUnderstanding;
   clarifyingQuestion: string | null;
@@ -59,7 +94,45 @@ export type VoiceCommand =
       clearUnscheduled: boolean;
     }
   | {
+      kind: 'update';
+      taskId: string;
+      taskName: string;
+      summary: string;
+      patch: VoiceTaskPatch;
+    }
+  | {
+      kind: 'delete';
+      taskId: string;
+      taskName: string;
+      summary: string;
+    }
+  | {
       kind: 'habit_check_in';
+      habitId: string;
+      habitName: string;
+      date: string;
+      summary: string;
+    }
+  | {
+      kind: 'habit_create';
+      summary: string;
+      fields: VoiceHabitFields & { name: string };
+    }
+  | {
+      kind: 'habit_update';
+      habitId: string;
+      habitName: string;
+      summary: string;
+      patch: VoiceHabitFields;
+    }
+  | {
+      kind: 'habit_delete';
+      habitId: string;
+      habitName: string;
+      summary: string;
+    }
+  | {
+      kind: 'habit_uncheck';
       habitId: string;
       habitName: string;
       date: string;

@@ -508,7 +508,10 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             </section>
 
             <ReminderSettingsSection remindersEnabled={!!initialData.remindersEnabled} />
-            <VoiceSettingsSection confirmVoiceCommands={!!initialData.confirmVoiceCommands} />
+            <VoiceSettingsSection
+              confirmVoiceCommands={!!initialData.confirmVoiceCommands}
+              speakVoiceReplies={initialData.speakVoiceReplies !== false}
+            />
         </div>
     );
 };

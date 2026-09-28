@@ -29,6 +29,23 @@ export async function mockVoiceCapture(page: Page): Promise<void> {
       ({
         getTracks: () => [{ stop() {} }],
       }) as MediaStream;
+    // Instant TTS so Speak replies does not stall Playwright.
+    const synth = {
+      speaking: false,
+      pending: false,
+      paused: false,
+      getVoices: () => [],
+      cancel() {},
+      pause() {},
+      resume() {},
+      speak(utterance: { onend?: (() => void) | null; onerror?: (() => void) | null }) {
+        queueMicrotask(() => utterance.onend?.());
+      },
+      addEventListener() {},
+      removeEventListener() {},
+      dispatchEvent: () => false,
+    };
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: synth });
   });
 }
 
@@ -76,6 +93,6 @@ export async function stubVoiceApis(
 export async function recordOnce(page: Page): Promise<void> {
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: /Start speaking|Answer/ }).click();
-  await expect(dialog.getByText(/Listening/)).toBeVisible();
+  await expect(dialog.getByText('Listening…', { exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: 'Stop' }).click();
 }

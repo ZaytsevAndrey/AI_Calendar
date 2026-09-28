@@ -30,7 +30,7 @@ Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWor
 
 **`language`** (`en` | `uk`, default `en`) is the UI and notification language. Empty/`null` is seeded once from the browser (`uk*` → `uk`, else `en`). Push titles, voice refuse/confirm copy, schedule-suggestion language, and localized API error messages follow this setting. The frontend also sends `Accept-Language` matching the active locale.
 
-**`confirmVoiceCommands`** (default false) asks before a voice command completes, skips, or moves a task. Voice create is not affected.
+**`confirmVoiceCommands`** (default false) asks before a voice command completes, skips, or moves a task. Voice create is not affected. **Delete** and **cancel** always confirm. **`speakVoiceReplies`** (default true) has the client speak clarifying questions, confirm summaries, and success/refuse results via Web Speech.
 
 **`remindersEnabled`** (default false) turns on Web Push. See [Reminders](#reminders--reminders).
 
@@ -77,7 +77,7 @@ JWT. Free Groq backend (`GROQ_API_KEY`). Audio is **not** stored.
 
 `understanding`: `complete` (client creates immediately when a name exists; defaults fill the rest), `sufficient` (treated as complete if a name exists), `needs_clarification` (no usable name — one follow-up question). After a clarification reply the API will not ask a second question. The client sends Settings IANA `timeZone`. Calendar-day parsing uses **settings `timeZone`** when set, otherwise the request `timeZone`, otherwise `UTC`.
 
-`command` is `null` for create. For complete, skip, reschedule, or habit check-in it is a resolved action (`complete`, `skip`, `move`, `shift`, `window`, `habit_check_in`) or `{ kind: "refuse", message }`. The client writes through the existing task, skip, move, and habit check-in APIs. **Now / this** is the app task whose open slot overlaps now. A named match is among incomplete tasks (or habits for `habit_check_in`). Done on a recurring task skips today's open occurrence. Saying a habit was done (or “check in …”) marks that habit for today in settings TZ. If a “done” command names a habit and no matching task, it checks in the habit. An open slot is moved like a calendar drag; a task with no open slot gets a new From/Until window and a silent replan. One clarifying question, then a refusal. When `confirmVoiceCommands` is on, the sheet asks before that write.
+`command` is `null` for create. Otherwise it is a resolved action (`complete`, `skip`, `move`, `shift`, `window`, `update`, `delete`, `habit_check_in`, `habit_create`, `habit_update`, `habit_delete`, `habit_uncheck`) or `{ kind: "refuse", message }`. The client writes through the existing task, skip, move, and habit APIs. **Now / this** is the app task whose open slot overlaps now. A named match is among incomplete tasks (or habits for habit intents). Done on a recurring task skips today's open occurrence. Saying a habit was done (or “check in …”) marks that habit for today in settings TZ. If a “done” command names a habit and no matching task, it checks in the habit. An open slot is moved like a calendar drag; a task with no open slot gets a new From/Until window and a silent replan. One clarifying question, then a refusal. When `confirmVoiceCommands` is on, the sheet asks before that write; delete/cancel/habit_delete always ask. See [spec-voice-commander.md](spec-voice-commander.md).
 
 ## Habits — `/habits`
 

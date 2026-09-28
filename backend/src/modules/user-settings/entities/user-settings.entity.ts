@@ -96,9 +96,17 @@ export class UserSettings {
   /**
    * When true, voice complete / skip / reschedule waits for a confirmation.
    * Creating a task by voice is never gated by this flag.
+   * Delete / cancel always confirm regardless of this flag.
    */
   @Column({ default: false })
   confirmVoiceCommands: boolean;
+
+  /**
+   * When true, the client speaks clarifying questions, confirm summaries, and
+   * success/refuse results via Web Speech (or a future TTS backend).
+   */
+  @Column({ default: true })
+  speakVoiceReplies: boolean;
 
   /** UI and notification language (`en` | `uk`). */
   @Column({ type: 'varchar', length: 8, default: 'en' })

@@ -13,10 +13,11 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Roadmap](roadmap.md) | Live queue |
 | [Roadmap archive](roadmap-archive.md) | Shipped work |
 | [Spec: Conflict rules](spec-conflict-rules.md) | Silent vs ask, Unscheduled vs Problematic, option ids (placement contract) |
+| [Spec: Voice Commander](spec-voice-commander.md) | Full task/habit CRUD by voice, TTS, mic equalizer, confirm delete/cancel (roadmap §13) |
 | [Spec: Intelligent scheduling](spec-intelligent-scheduling.md) | Unified items, settings, phases, queue, diff/undo, Google anchors (defers placement to conflict rules) |
 | [Task scheduling test matrix](task-scheduling-test-matrix.md) | Given/When/Then cases mapped to unit tests |
 | [E2E test coverage plan](e2e-test-coverage.md) | All live API/UI cases and edge cases, layers, P0 smoke, implementation waves |
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** September 2026 (recurring background extend + Review/cleanup Generate; Unscheduled actions; drag replan; Voice conflict layer).
+**Last documentation update:** September 2026 (Voice Commander product spec + roadmap §13; recurring extend; Unscheduled actions; drag replan; Voice conflict layer).

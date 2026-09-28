@@ -19,7 +19,7 @@ test.describe('P1 voice UI', () => {
     await expect(page.getByRole('dialog').getByText('Add task by voice')).toBeVisible();
     await recordOnce(page);
     await expect(page.getByText('Task created')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Voice dentist' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Voice dentist' }).first()).toBeVisible();
   });
 
   test('U-VOI-002 sufficient parse opens the wizard prefilled', async ({ page, auth }) => {
@@ -70,7 +70,7 @@ test.describe('P1 voice UI', () => {
     await expect(sheet.getByText('What should I call this task?')).toBeVisible();
     await recordOnce(page);
     await expect(page.getByText('Task created')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Clarified walk' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Clarified walk' }).first()).toBeVisible();
     await expect(page.getByText('What should I call this task?')).toHaveCount(0);
   });
 
@@ -141,6 +141,84 @@ test.describe('P1 voice UI', () => {
       confirmVoiceCommands: false,
     });
     expectOk(restored);
+  });
+
+  test('U-VOI-008 delete always asks to confirm', async ({ page, auth, request }) => {
+    const token = auth.onboarded.access_token;
+    const settings = await apiJson(request, token, 'patch', '/user-settings', {
+      confirmVoiceCommands: false,
+    });
+    expectOk(settings);
+
+    const name = uniqueName('Voice delete');
+    const created = await apiJson(request, token, 'post', '/tasks', {
+      name,
+      eventType: 'admin',
+      estimatedTimeInMinutes: 30,
+      priority: 'medium',
+    });
+    expectOk(created);
+
+    await mockVoiceCapture(page);
+    await stubVoiceApis(
+      page,
+      () => ({
+        understanding: 'complete',
+        clarifyingQuestion: null,
+        task: null,
+        command: {
+          kind: 'delete',
+          taskId: created.body.id as string,
+          taskName: name,
+          summary: `Delete "${name}"?`,
+        },
+      }),
+      'delete task',
+    );
+    await openAs(page, auth.onboarded, '/tasks');
+    await page.getByRole('button', { name: 'Add task by voice' }).click();
+    await recordOnce(page);
+    const sheet = page.getByRole('dialog');
+    await expect(sheet.getByText(`Delete "${name}"?`)).toBeVisible();
+    await sheet.getByRole('button', { name: 'Confirm' }).click();
+    await expect(page.getByText('Task deleted')).toBeVisible();
+  });
+
+  test('U-VOI-009 listening shows equalizer bars', async ({ page, auth }) => {
+    await mockVoiceCapture(page);
+    await stubVoiceApis(page, () => ({
+      understanding: 'complete',
+      clarifyingQuestion: null,
+      task: {
+        name: 'Equalizer task',
+        eventType: 'admin',
+        estimatedTimeInMinutes: 30,
+        priority: 'medium',
+      },
+    }));
+    await openAs(page, auth.onboarded, '/tasks');
+    await page.getByRole('button', { name: 'Add task by voice' }).click();
+    const sheet = page.getByRole('dialog');
+    await sheet.getByRole('button', { name: /Start speaking|Answer/ }).click();
+    await expect(sheet.getByText('Listening…', { exact: true })).toBeVisible();
+    await expect(sheet.getByRole('img', { name: 'Microphone level' })).toBeVisible();
+    await sheet.getByRole('button', { name: 'Stop' }).click();
+    await expect(page.getByText('Task created')).toBeVisible();
+  });
+
+  test('U-VOI-010 Speak replies toggle is in Settings', async ({ page, auth, request }) => {
+    const token = auth.onboarded.access_token;
+    const primed = await apiJson(request, token, 'patch', '/user-settings', {
+      speakVoiceReplies: true,
+    });
+    expectOk(primed);
+
+    await openAs(page, auth.onboarded, '/settings');
+    const speak = page.getByRole('checkbox', { name: 'Speak replies' });
+    await expect(speak).toBeVisible();
+    await expect(speak).toBeChecked();
+    await speak.click();
+    await expect(page.getByText('Speak replies off')).toBeVisible();
   });
 
   test('U-VOI-007 voice create conflict offers sheet and spoken option', async ({ page, auth }) => {
@@ -242,7 +320,7 @@ test.describe('P1 voice UI', () => {
     await page.getByRole('button', { name: 'Add task by voice' }).click();
     const voice = page.getByRole('dialog', { name: 'Add task by voice' });
     await voice.getByRole('button', { name: /Start speaking|Answer/ }).click();
-    await expect(voice.getByText(/Listening/)).toBeVisible();
+    await expect(voice.getByText('Listening…', { exact: true })).toBeVisible();
     await voice.getByRole('button', { name: 'Stop' }).click();
 
     await expect(page.getByRole('dialog', { name: 'Schedule conflict' })).toBeVisible({
@@ -255,7 +333,7 @@ test.describe('P1 voice UI', () => {
     await conflict.getByRole('button', { name: 'Answer by voice' }).click();
     await expect(voice.getByText(/How should we resolve the schedule conflict/)).toBeVisible();
     await voice.getByRole('button', { name: /Answer|Start speaking/ }).click();
-    await expect(voice.getByText(/Listening/)).toBeVisible();
+    await expect(voice.getByText('Listening…', { exact: true })).toBeVisible();
     await voice.getByRole('button', { name: 'Stop' }).click();
 
     await expect(page.getByText('Conflict choice applied')).toBeVisible();

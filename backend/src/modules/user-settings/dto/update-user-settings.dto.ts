@@ -219,12 +219,22 @@ export class UpdateUserSettingsDto {
   @ApiProperty({
     example: false,
     description:
-      'Ask before a voice command completes, skips, or moves a task. Off runs the command immediately. Does not affect voice create.',
+      'Ask before a voice command completes, skips, or moves a task. Off runs the command immediately. Does not affect voice create. Delete and cancel always confirm.',
     required: false,
   })
   @IsBoolean()
   @IsOptional()
   confirmVoiceCommands?: boolean;
+
+  @ApiProperty({
+    example: true,
+    description:
+      'Speak clarifying questions, confirm summaries, and success/refuse results (client TTS).',
+    required: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  speakVoiceReplies?: boolean;
 
   @ApiProperty({
     example: 'uk',

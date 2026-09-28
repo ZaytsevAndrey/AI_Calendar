@@ -66,6 +66,12 @@ export class UserSettingsService {
       ) {
         userSettings.confirmVoiceCommands = false;
       }
+      if (
+        userSettings.speakVoiceReplies === undefined ||
+        userSettings.speakVoiceReplies === null
+      ) {
+        userSettings.speakVoiceReplies = defaults.speakVoiceReplies;
+      }
       if (!userSettings.language) {
         userSettings.language = defaults.language;
       }
@@ -145,6 +151,7 @@ export class UserSettingsService {
       appGoogleCalendarName: 'AI Calendar Assistant',
       remindersEnabled: false,
       confirmVoiceCommands: false,
+      speakVoiceReplies: true,
       language: 'en',
     };
   }
