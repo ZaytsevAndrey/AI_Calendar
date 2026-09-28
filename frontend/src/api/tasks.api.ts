@@ -27,6 +27,10 @@ export interface TaskDTO {
   isFixedExternal?: boolean;
   isUnscheduled?: boolean;
   isProblematic?: boolean;
+  /** Civil days that failed to place when parked as problematic. */
+  problematicOccurrenceYmds?: string[] | null;
+  /** Short engine reason code for the problematic park. */
+  problematicReason?: string | null;
   location?: string | null;
   googleColorId?: string | null;
   googleVisibility?: string | null;
@@ -66,6 +70,10 @@ export interface CreateTaskDTO {
   timeZone?: string;
   isUnscheduled?: boolean;
   isProblematic?: boolean;
+  /** Civil days that failed to place when parked as problematic. */
+  problematicOccurrenceYmds?: string[] | null;
+  /** Short engine reason code for the problematic park. */
+  problematicReason?: string | null;
   location?: string | null;
   googleColorId?: string | null;
   googleVisibility?: string | null;

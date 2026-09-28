@@ -72,11 +72,26 @@ Do in order unless you explicitly skip ahead.
 - [x] Offline fallback templates if Groq is down.
 - [x] Show under streak / after check-in toast.
 
+### 11. Problematic move: pick among free slots (visual)
+
+- [x] **No free-form date/time picker as the main UX.** User chooses among **available slots** for that day (phase / free gaps the engine already knows).
+- [x] Visual placement: the task **block spins / snaps** into a **day timeline** or **mini calendar** so the move is spatial (see where it lands), not a form.
+- [x] Confirm places the one-off (or instance) and skips that series day; same outcome as current Move, clearer interaction.
+- [x] Works from Problematic inbox (and ideally reuse later from conflict sheet / drag if useful).
+
+### 12. Unscheduled inbox: more informative + functional
+
+§7 shipped basic Done / Skip / Do now / Open. Cards still feel thin next to Problematic.
+
+- [ ] **Richer card info** — why it is unscheduled (deadline miss / no window / user parked), deadline / earliest, phase, duration; clear overdue state.
+- [ ] **Stronger actions** — schedule into a real slot (reuse §11 visual pick where it fits), edit constraints without hunting, clearer Do now / Skip outcomes.
+- [ ] **Discoverability** — banner/chip or empty-state copy so Unscheduled is as obvious as Problematic when items pile up.
+
 ### Later (not blocking the queue above)
 
 - [x] **UI language (uk / en)** — chrome and dates follow settings `language`; voice already multilingual.
 - [x] Voice habit check-in.
-- [x] Pixel-polish for the problematic sheet.
+- [x] Pixel-polish for the problematic sheet (cards + one-word Skip / Move / Edit / Resolve).
 
 ---
 
@@ -90,5 +105,5 @@ Do in order unless you explicitly skip ahead.
 
 ## Recommended next steps
 
-1. Park the redesign queue — all numbered and Later items above are done — or pick net-new work from product priorities.
+1. **§12** — Unscheduled cards: more context + stronger schedule/edit actions.
 2. After each feature ships: tick above, archive a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

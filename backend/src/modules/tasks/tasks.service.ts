@@ -79,6 +79,8 @@ export class TasksService {
     if (task.isUnscheduled && task.isProblematic) {
       // Unscheduled (intentional inbox) wins when both arrive set.
       task.isProblematic = false;
+      task.problematicOccurrenceYmds = null;
+      task.problematicReason = null;
     }
     if (!task.isUnscheduled) {
       return;
@@ -95,6 +97,8 @@ export class TasksService {
 
   private applyProblematicConstraints(task: Task): void {
     if (!task.isProblematic) {
+      task.problematicOccurrenceYmds = null;
+      task.problematicReason = null;
       return;
     }
     if (task.isUnscheduled) {

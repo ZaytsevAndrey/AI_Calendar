@@ -159,6 +159,7 @@ const CalendarPage: React.FC = () => {
         undo,
         clear,
         generateAlerts,
+        parkDayHints,
         dismissGenerateAlerts,
         generateProgress,
     } =
@@ -742,8 +743,10 @@ const CalendarPage: React.FC = () => {
             <ProblematicInboxSheet
                 open={problematicOpen}
                 tasks={problematicTasks}
+                timeZone={timeZone}
+                dayHints={parkDayHints}
                 onClose={() => setProblematicOpen(false)}
-                onOpenTask={(task) => openEdit(task)}
+                onEdit={(task) => openEdit(task)}
             />
             <VoiceTaskSheet voice={voice} />
 

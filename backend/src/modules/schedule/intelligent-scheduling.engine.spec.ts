@@ -1643,14 +1643,20 @@ describe('IntelligentSchedulingEngine', () => {
       expect(byTask.get('r1')?.length).toBeGreaterThan(0);
       expect(byTask.get('r2')?.length).toBeGreaterThan(0);
       expect(byTask.get('r3')?.length ?? 0).toBe(0);
-      expect(
-        result.warnings.some(
-          (w) =>
-            w.taskId === 'r3' &&
-            w.code === SchedulingWarningCode.OCCURRENCE_SKIPPED &&
-            w.meta?.readyForProblematic === true,
-        ),
-      ).toBe(true);
+      const overflow = result.warnings.find(
+        (w) =>
+          w.taskId === 'r3' &&
+          w.code === SchedulingWarningCode.OCCURRENCE_SKIPPED &&
+          w.meta?.readyForProblematic === true,
+      );
+      expect(overflow).toBeTruthy();
+      const skipped = overflow?.meta?.skipped as
+        | Array<{ dateKey: string; reason: string }>
+        | undefined;
+      expect(skipped?.some((s) => s.reason === 'no_slot')).toBe(true);
+      expect(skipped?.some((s) => /^\d{4}-\d{2}-\d{2}$/.test(s.dateKey))).toBe(
+        true,
+      );
     });
 
     it('deadline no-fit marks readyForUnscheduled not problematic', async () => {
@@ -1762,6 +1768,8 @@ function makeTask(partial: Partial<Task>): Task {
     isFixedExternal: false,
     isUnscheduled: partial.isUnscheduled ?? false,
     isProblematic: partial.isProblematic ?? false,
+    problematicOccurrenceYmds: partial.problematicOccurrenceYmds ?? null,
+    problematicReason: partial.problematicReason ?? null,
     location: partial.location ?? null,
     googleColorId: partial.googleColorId ?? null,
     googleVisibility: partial.googleVisibility ?? null,

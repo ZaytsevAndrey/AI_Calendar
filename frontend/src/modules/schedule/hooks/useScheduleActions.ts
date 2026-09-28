@@ -10,6 +10,10 @@ import {
 import { eventsApi } from 'api/eventsApi';
 import { eventTasksApi } from 'api/eventTasksApi';
 import { emitScheduleConflicts } from 'modules/schedule/conflictChoiceBus';
+import {
+  parkDayHintsFromJobResult,
+  type ParkDayHint,
+} from 'modules/schedule/parkDayHints';
 import { showErrorToast, showInfoToast, showSuccessToast, showWarningToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
 import i18n from 'i18n';
@@ -24,8 +28,16 @@ export type GenerateProgress = {
 const DISMISSED_JOB_KEY = 'scheduleGenerateAlertsDismissedJobId';
 
 function parseJobResult(result: unknown): ScheduleJobResultPayload | null {
-  if (!result || typeof result !== 'object') return null;
-  const o = result as Record<string, unknown>;
+  let payload = result;
+  if (typeof payload === 'string') {
+    try {
+      payload = JSON.parse(payload) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (!payload || typeof payload !== 'object') return null;
+  const o = payload as Record<string, unknown>;
   if (!Array.isArray(o.diff)) return null;
   return {
     diff: o.diff as ScheduleJobResultPayload['diff'],
@@ -64,6 +76,7 @@ export function useScheduleActions() {
   const [isUndoing, setIsUndoing] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [generateAlerts, setGenerateAlerts] = useState<SchedulingAlerts | null>(null);
+  const [parkDayHints, setParkDayHints] = useState<Record<string, ParkDayHint>>({});
   const [generateProgress, setGenerateProgress] = useState<GenerateProgress | null>(null);
 
   const refreshCalendarEvents = () => {
@@ -83,17 +96,23 @@ export function useScheduleActions() {
 
   useEffect(() => {
     let cancelled = false;
-    ScheduleApi.getLatestAlerts()
-      .then((alerts) => {
-        if (cancelled) return;
+    ScheduleApi.getLatestDoneJob()
+      .then(({ job }) => {
+        if (cancelled || !job) return;
+        const alerts = alertsFromJob(job, 24);
         if (!alerts.issueCount || (alerts.jobId && readDismissedJobId() === alerts.jobId)) {
           setGenerateAlerts(null);
-          return;
+        } else {
+          setGenerateAlerts(alerts);
         }
-        setGenerateAlerts(alerts);
+        const parsed = parseJobResult(job.result);
+        setParkDayHints(parkDayHintsFromJobResult(parsed));
       })
       .catch(() => {
-        if (!cancelled) setGenerateAlerts(null);
+        if (!cancelled) {
+          setGenerateAlerts(null);
+          setParkDayHints({});
+        }
       });
     ScheduleApi.getUndoAvailability()
       .then((state) => {
@@ -138,6 +157,7 @@ export function useScheduleActions() {
       const parsed = parseJobResult(job.result);
       const alerts = alertsFromJob(job);
       setGenerateAlerts(alerts.issueCount > 0 ? alerts : null);
+      setParkDayHints(parkDayHintsFromJobResult(parsed));
       if (parsed?.conflicts?.length) {
         emitScheduleConflicts(parsed.conflicts);
       }
@@ -242,6 +262,7 @@ export function useScheduleActions() {
     undo,
     clear,
     generateAlerts,
+    parkDayHints,
     dismissGenerateAlerts,
     generateProgress,
   };

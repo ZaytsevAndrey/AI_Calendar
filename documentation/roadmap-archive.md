@@ -14,7 +14,9 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ### Scheduling redesign (engine)
 
-- [x] **Problematic sheet polish.** Conflict-style cards (name + meta, full-width Open / Move / Skip / Resolve with details), busy spinner, clearer empty/banner; same actions as before.
+- [x] **Problematic Move: visual free-slot pick.** `GET /schedule/free-slots` returns phase gaps + 15‑min candidates; Move sheet is a snap-scrolling day timeline (ghost block) for recurring one-offs and non-recurring place-in-place. Replaces the bare time input.
+
+- [x] **Problematic sheet polish.** Info cards (name, phase, duration, overflow day + reason); one-word Skip / Move / Edit / Resolve; Move used a compact place-at-time sheet until §11 visual pick.
 
 - [x] **Voice habit check-in.** Parse intent `habit_check_in` (check in / відмітив звичку); match habit by name for today in settings TZ; “done” that only matches a habit also checks in. Client applies via existing `POST /habits/:id/check-ins`.
 

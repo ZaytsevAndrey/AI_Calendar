@@ -12,6 +12,7 @@ import { ScheduleJobController } from './schedule-job.controller';
 import { DisplayedEventMoveService } from './displayed-event-move.service';
 import { ScheduleRecommendationsService } from './schedule-recommendations.service';
 import { ConflictOptionPhrasesService } from './conflict-option-phrases.service';
+import { FreeSlotsService } from './free-slots.service';
 import { TasksModule } from '../tasks/tasks.module';
 import { UserSettingsModule } from '../user-settings/user-settings.module';
 import { Task } from '../tasks/entities/task.entity';
@@ -44,6 +45,7 @@ import { VoiceModule } from '../voice/voice.module';
     DisplayedEventMoveService,
     ScheduleRecommendationsService,
     ConflictOptionPhrasesService,
+    FreeSlotsService,
   ],
   exports: [ScheduleService, ScheduleJobService],
 })

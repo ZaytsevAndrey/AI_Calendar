@@ -142,7 +142,50 @@ export async function waitForScheduleJob(
   return pollJobUntilDone(jobId, timeoutMs);
 }
 
+export type FreeSlotIntervalDTO = {
+  start: string;
+  end: string;
+  label?: string;
+};
+
+export type FreeSlotsResponse = {
+  ymd: string;
+  timeZone: string;
+  durationMinutes: number;
+  dayStart: string;
+  dayEnd: string;
+  phase: { id: string; name: string; color: string } | null;
+  busy: FreeSlotIntervalDTO[];
+  free: FreeSlotIntervalDTO[];
+  candidates: string[];
+};
+
 export const ScheduleApi = {
+  getFreeSlots: async (
+    taskId: string,
+    ymd: string,
+    phaseId?: string | null,
+  ): Promise<FreeSlotsResponse> => {
+    const { data } = await axios.get<FreeSlotsResponse>('/schedule/free-slots', {
+      params: {
+        taskId,
+        ymd,
+        ...(phaseId ? { phaseId } : {}),
+      },
+    });
+    return {
+      ymd: data.ymd,
+      timeZone: data.timeZone,
+      durationMinutes: data.durationMinutes,
+      dayStart: data.dayStart,
+      dayEnd: data.dayEnd,
+      phase: data.phase ?? null,
+      busy: data.busy ?? [],
+      free: data.free ?? [],
+      candidates: data.candidates ?? [],
+    };
+  },
+
   getScheduledTasks: async (params?: ScheduleQueryParams): Promise<ScheduledTaskDTO[]> => {
     const queryParams = new URLSearchParams();
 

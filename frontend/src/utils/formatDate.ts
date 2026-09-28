@@ -147,6 +147,18 @@ export function formatMinutes(mins: number): string {
     : i18n.t('common.hoursShort', { count: hours });
 }
 
+/** Format a civil YYYY-MM-DD without timezone shift. */
+export function formatCivilYmd(ymd: string): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const d = new Date(year, month - 1, day);
+  if (Number.isNaN(d.getTime())) return null;
+  return format(d, 'd MMM yyyy', loc());
+}
+
 export function startOfLocalDayIso(date: Date): string {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);

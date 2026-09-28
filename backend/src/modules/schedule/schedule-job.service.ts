@@ -42,7 +42,11 @@ import {
   parseUndoSnapshot,
   UndoSnapshot,
 } from './schedule-undo.util';
-import { collectProblematicTaskIds } from './problematic-from-warnings.util';
+import {
+  collectParkDayHints,
+  collectProblematicParks,
+  collectProblematicTaskIds,
+} from './problematic-from-warnings.util';
 import { collectUnscheduledTaskIds } from './unscheduled-from-warnings.util';
 import { shouldEnqueueRecurringExtend } from './recurring-extend.util';
 
@@ -74,6 +78,17 @@ function latestHorizonSlideAt(jobs: ScheduleJob[]): Date | null {
     }
   }
   return null;
+}
+
+function mergeUniqueSortedYmds(
+  existing: string[] | null | undefined,
+  extra: string[],
+): string[] {
+  const set = new Set(existing ?? []);
+  for (const ymd of extra) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) set.add(ymd);
+  }
+  return [...set].sort();
 }
 
 @Injectable()
@@ -383,23 +398,81 @@ export class ScheduleJobService {
   /**
    * Persist Problematic inbox from engine overflow / unanswered-conflict hooks.
    * Does not set isUnscheduled (deadline-no-fit stays separate).
+   * Also refreshes day/reason meta on tasks already parked when hints exist.
    */
   private async applyProblematicFromWarnings(
     userId: string,
     warnings: SchedulingWarning[],
     conflicts: SchedulingConflict[],
   ): Promise<void> {
-    const ids = collectProblematicTaskIds(warnings, conflicts);
-    if (!ids.size) return;
+    const fallbackYmd = localYmd(new Date().toISOString(), 'UTC');
+    const parks = collectProblematicParks(warnings, conflicts, fallbackYmd);
+    const hints = collectParkDayHints(warnings, conflicts, fallbackYmd);
 
-    await this.taskRepo
-      .createQueryBuilder()
-      .update(Task)
-      .set({ isProblematic: true, isUnscheduled: false })
-      .where('userId = :userId', { userId })
-      .andWhere('id IN (:...ids)', { ids: [...ids] })
-      .andWhere('status = :status', { status: TaskStatus.TODO })
-      .execute();
+    const parkIds = [...parks.keys()];
+    const hintIds = [...hints.keys()];
+    const alreadyParked = await this.taskRepo.find({
+      where: {
+        userId,
+        isProblematic: true,
+        status: TaskStatus.TODO,
+      },
+    });
+    const alreadyIds = alreadyParked.map((t) => t.id);
+    const ids = [...new Set([...parkIds, ...hintIds, ...alreadyIds])];
+    if (!ids.length) return;
+
+    const tasks = await this.taskRepo.find({
+      where: {
+        userId,
+        id: In(ids),
+        status: TaskStatus.TODO,
+      },
+    });
+    if (!tasks.length) return;
+
+    let dirty = false;
+    for (const task of tasks) {
+      const park = parks.get(task.id);
+      const hint = hints.get(task.id);
+      if (park) {
+        task.isProblematic = true;
+        task.isUnscheduled = false;
+        task.problematicOccurrenceYmds =
+          (hint?.occurrenceYmds?.length
+            ? hint.occurrenceYmds
+            : park.occurrenceYmds.length
+              ? park.occurrenceYmds
+              : task.problematicOccurrenceYmds) ?? null;
+        task.problematicReason =
+          hint?.reason ?? park.reason ?? task.problematicReason;
+        dirty = true;
+        continue;
+      }
+      // Already parked (or conflict hint only): refresh day/reason when missing.
+      if (task.isProblematic && hint) {
+        if (
+          hint.occurrenceYmds.length &&
+          (!task.problematicOccurrenceYmds?.length ||
+            hint.occurrenceYmds.some(
+              (ymd) => !task.problematicOccurrenceYmds?.includes(ymd),
+            ))
+        ) {
+          task.problematicOccurrenceYmds = mergeUniqueSortedYmds(
+            task.problematicOccurrenceYmds,
+            hint.occurrenceYmds,
+          );
+          dirty = true;
+        }
+        if (!task.problematicReason && hint.reason) {
+          task.problematicReason = hint.reason;
+          dirty = true;
+        }
+      }
+    }
+    if (dirty) {
+      await this.taskRepo.save(tasks);
+    }
   }
 
   /**
@@ -419,7 +492,12 @@ export class ScheduleJobService {
     await this.taskRepo
       .createQueryBuilder()
       .update(Task)
-      .set({ isUnscheduled: true, isProblematic: false })
+      .set({
+        isUnscheduled: true,
+        isProblematic: false,
+        problematicOccurrenceYmds: null,
+        problematicReason: null,
+      })
       .where('userId = :userId', { userId })
       .andWhere('id IN (:...ids)', { ids: [...ids] })
       .andWhere('status = :status', { status: TaskStatus.TODO })

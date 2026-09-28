@@ -152,6 +152,20 @@ export class Task {
   isProblematic: boolean;
 
   /**
+   * Civil days (YYYY-MM-DD) that failed to place when parked as problematic.
+   * Cleared when `isProblematic` is cleared.
+   */
+  @Column({ type: 'json', nullable: true })
+  problematicOccurrenceYmds: string[] | null;
+
+  /**
+   * Short engine reason code for the park (phase_full, no_slot, …).
+   * Cleared when `isProblematic` is cleared.
+   */
+  @Column({ nullable: true, type: 'varchar', length: 64 })
+  problematicReason: string | null;
+
+  /**
    * Recurring only: civil days (YYYY-MM-DD in settings IANA) the user skipped.
    * Generate/replan must not place those occurrences again.
    */

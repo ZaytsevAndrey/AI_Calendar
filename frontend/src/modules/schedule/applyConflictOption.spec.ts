@@ -17,7 +17,11 @@ describe('applyConflictOption', () => {
       updateTask,
       skipOccurrence,
     });
-    expect(updateTask).toHaveBeenCalledWith('t1', { isProblematic: true });
+    expect(updateTask).toHaveBeenCalledWith('t1', {
+      isProblematic: true,
+      problematicReason: 'preferred_on_fixed',
+      problematicOccurrenceYmds: ['2026-04-20'],
+    });
     expect(skipOccurrence).not.toHaveBeenCalled();
   });
 

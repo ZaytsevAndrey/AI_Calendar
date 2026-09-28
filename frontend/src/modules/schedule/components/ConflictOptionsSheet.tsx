@@ -15,6 +15,7 @@ import {
   type ConflictOptionId,
   type SchedulingConflictDTO,
 } from '../conflictChoiceBus';
+import { formatCivilYmd } from '../../../utils/formatDate';
 
 type Phrase = { id: ConflictOptionId; title: string; detail: string };
 
@@ -32,6 +33,22 @@ function i18nPhrases(
     title: t(`schedule.conflictOption.${id}.title`),
     detail: t(`schedule.conflictOption.${id}.detail`),
   }));
+}
+
+function conflictDayYmd(conflict: SchedulingConflictDTO): string | null {
+  const meta = conflict.meta;
+  if (!meta) return null;
+  if (
+    typeof meta.occurrenceYmd === 'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(meta.occurrenceYmd)
+  ) {
+    return meta.occurrenceYmd;
+  }
+  if (typeof meta.preferredStart === 'string' && meta.preferredStart) {
+    const day = meta.preferredStart.slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(day)) return day;
+  }
+  return null;
 }
 
 export function ConflictOptionsSheet({ conflict, onClose }: Props) {
@@ -68,6 +85,9 @@ export function ConflictOptionsSheet({ conflict, onClose }: Props) {
   }, [conflict, t]);
 
   if (!conflict) return null;
+
+  const dayYmd = conflictDayYmd(conflict);
+  const dayLabel = dayYmd ? formatCivilYmd(dayYmd) ?? dayYmd : null;
 
   const pick = async (optionId: ConflictOptionId) => {
     setBusyId(optionId);
@@ -139,6 +159,11 @@ export function ConflictOptionsSheet({ conflict, onClose }: Props) {
       }
     >
       <p className="mb-1 text-sm font-medium text-ide-text">{conflict.taskName}</p>
+      {dayLabel ? (
+        <p className="mb-1 text-sm font-medium text-ide-warn">
+          {t('schedule.conflictOnDay', { date: dayLabel })}
+        </p>
+      ) : null}
       <p className="mb-4 text-sm text-ide-muted">{t('schedule.conflictIntro')}</p>
       <ul className="flex flex-col gap-2">
         {phrases.map((phrase) => (

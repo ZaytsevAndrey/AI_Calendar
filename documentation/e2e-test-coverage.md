@@ -365,6 +365,24 @@ Generate body `{ startDate, endDate }` is **ignored**. Horizon = today → `recu
 | A-SCH-030 | A | P2 | Job poll timeout on UI (120s) | Hang stub | UI error toast — UI case U-CAL-007 |
 | A-SCH-031 | A | P1 | Movable TODO, replan not drained | `POST /schedule/preview` | `diff` places the task; `/schedule` stays empty; undo stays unavailable |
 | A-SCH-032 | A | P1 | Groq stub | `POST /schedule/recommendations` | 401 without JWT. Empty user skips Groq and returns no suggestions. A task returns only suggestions whose `taskId` exists. `/schedule` stays empty |
+| A-SCH-033a | A | P1 | No JWT | `GET /schedule/free-slots` | 401 |
+| A-SCH-033b | A | P1 | JWT, missing `taskId` | GET | 400 |
+| A-SCH-033c | A | P1 | Invalid `ymd` | GET | 400 |
+| A-SCH-033d | A | P1 | Unknown `taskId` | GET | 404 |
+| A-SCH-033e | A | P1 | Another user’s task | GET | 404 |
+| A-SCH-033f | A | P1 | Parked flexible task + weekday `ymd` | GET | 200; non-empty `candidates` |
+| A-SCH-033g | A | P1 | Task with known duration | GET | `durationMinutes` matches task |
+| A-SCH-033h | A | P1 | Candidates returned | GET | Each start sits on a 15-min grid |
+| A-SCH-033i | A | P1 | Candidates returned | GET | Each start ∈ `[dayStart, dayEnd)` and fits duration |
+| A-SCH-033j | A | P1 | Candidates returned | GET | Candidate strings are ISO datetimes |
+| A-SCH-033k | A | P1 | Valid schedulable `phaseId` | GET | Candidates clipped to that phase ∩ wake/sleep |
+| A-SCH-033l | A | P1 | `phaseId` is `sleep_time` | GET | 400 |
+| A-SCH-033m | A | P1 | Unknown `phaseId` | GET | 400 |
+| A-SCH-033n | A | P1 | Fixed peer busy on same day | GET | Fewer / later candidates than empty day |
+| A-SCH-033o | A | P1 | Duration larger than any gap | GET | `candidates: []` |
+| A-SCH-033p | A | P1 | Flexible task, not problematic | GET | Still lists slots (no `isProblematic` required) |
+| A-SCH-033q | A | P1 | User has timeZone setting | GET | Response `timeZone` matches settings |
+| A-SCH-033r | A | P1 | Task linked to morning phase; evening phase also exists | GET without `phaseId` | Candidates span morning **and** evening; with `phaseId=morning` only morning |
 
 ---
 
@@ -495,6 +513,21 @@ Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day,
 | U-CAL-021 | U | P1 | Generate preview | Cancel | Moves and fit messages shown; Generate is not posted |
 | U-CAL-022 | U | P1 | Calendars menu | Uncheck a selected Google calendar | `hiddenGoogleCalendarIds` stores that id |
 | U-CAL-023 | U | P1 | Viewports 1024×700, 1100×800, 1279×768, then 1280×720 | Week, day, month | Hour grid stays on screen, including 08:00 and 20:00. Month grid has height. Event list can be scrolled into view. Desktop hour grid still has height |
+| U-CAL-025a | U | P1 | Problematic parked task | Banner Review | Problematic inbox opens with the task |
+| U-CAL-025b | U | P1 | Move sheet open | Inspect | Day + Phase + Start time fields visible |
+| U-CAL-025c | U | P1 | Move sheet open | Load free-slots | Listbox “Available start times” has options |
+| U-CAL-025d | U | P1 | Slot selected | Place | Toast; task leaves problematic; becomes `fixed` on that day |
+| U-CAL-025e | U | P1 | Move sheet open | Cancel | Sheet closes; task still problematic |
+| U-CAL-025f | U | P1 | Move sheet open | Change Day | New `GET /schedule/free-slots` with updated `ymd` |
+| U-CAL-025g | U | P1 | API returns empty candidates | Move | Empty-state copy; Place disabled |
+| U-CAL-025h | U | P1 | free-slots request fails | Move | Error copy in sheet; Place disabled |
+| U-CAL-025i | U | P1 | Phase select changed | free-slots / UI | free-slots stays without `phaseId`; Phase select value updates (seek, no refetch filter) |
+| U-CAL-025j | U | P1 | Move timeline open | Wheel-scroll down; wait | Timeline `scrollTop` stays down; modal body does not jump to top |
+| U-CAL-025k | U | P1 | Free morning + busy midday | Fill Start time `12:00` | Range 12:00–12:30; “can't place”; Place disabled (no soft-snap back) |
+| U-CAL-025l | U | P1 | Full-day free candidates | Click a later option (14:00) | Range shows 14:00–14:30; Place stays enabled |
+| U-CAL-025m | U | P1 | Move timeline open | Fill Start time `14:00` | Range 14:00–14:30; Place enabled |
+| U-CAL-025n | U | P1 | Morning + afternoon phases | Seek to 14:00 | Phase select auto-switches to afternoon |
+| U-CAL-025o | U | P1 | Free / busy / free bands | Fill 10:00 → 13:00 → 15:30 | Place enabled → disabled + busy copy → enabled again |
 
 `canCompleteNowBlock`: has linked task, not recurring, not `isFixedExternal`, not completed/canceled.
 

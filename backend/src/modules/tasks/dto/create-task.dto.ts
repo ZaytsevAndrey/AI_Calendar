@@ -192,6 +192,30 @@ export class CreateTaskDto {
   @IsOptional()
   isProblematic?: boolean;
 
+  @ApiProperty({
+    description:
+      'Civil days (YYYY-MM-DD) that failed to place when parked as problematic.',
+    required: false,
+    nullable: true,
+    type: [String],
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsArray()
+  @IsString({ each: true })
+  problematicOccurrenceYmds?: string[] | null;
+
+  @ApiProperty({
+    description: 'Short engine reason code for the problematic park.',
+    required: false,
+    nullable: true,
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsString()
+  @MaxLength(64)
+  @IsOptional()
+  problematicReason?: string | null;
+
   @ApiProperty({ required: false, nullable: true })
   @ValidateIf((_, value) => value !== null && value !== undefined)
   @IsString()

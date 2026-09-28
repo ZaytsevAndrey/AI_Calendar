@@ -6,6 +6,35 @@ type ApplyDeps = {
   skipOccurrence: (id: string, body: SkipOccurrenceDTO) => Promise<unknown>;
 };
 
+function parkPayload(conflict: SchedulingConflictDTO): UpdateTaskDTO {
+  const ymds: string[] = [];
+  const meta = conflict.meta;
+  if (meta && Array.isArray(meta.skipped)) {
+    for (const row of meta.skipped) {
+      if (!row || typeof row !== 'object') continue;
+      const dateKey = (row as { dateKey?: unknown }).dateKey;
+      if (typeof dateKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+        ymds.push(dateKey);
+      }
+    }
+  }
+  const single =
+    typeof meta?.occurrenceYmd === 'string'
+      ? meta.occurrenceYmd
+      : typeof meta?.preferredStart === 'string'
+        ? meta.preferredStart.slice(0, 10)
+        : null;
+  if (single && /^\d{4}-\d{2}-\d{2}$/.test(single) && !ymds.includes(single)) {
+    ymds.push(single);
+  }
+  ymds.sort();
+  return {
+    isProblematic: true,
+    problematicReason: conflict.reason,
+    ...(ymds.length ? { problematicOccurrenceYmds: ymds } : {}),
+  };
+}
+
 /**
  * Apply a structured conflict option using existing task APIs.
  * move_other is reserved until the engine emits a movable blocker.
@@ -17,7 +46,7 @@ export async function applyConflictOption(
 ): Promise<void> {
   switch (optionId) {
     case 'leave_problematic':
-      await deps.updateTask(conflict.taskId, { isProblematic: true });
+      await deps.updateTask(conflict.taskId, parkPayload(conflict));
       return;
     case 'move_new':
       await deps.updateTask(conflict.taskId, {
@@ -44,6 +73,6 @@ export async function applyConflictOption(
       await deps.updateTask(conflict.taskId, { isProblematic: false });
       return;
     default:
-      await deps.updateTask(conflict.taskId, { isProblematic: true });
+      await deps.updateTask(conflict.taskId, parkPayload(conflict));
   }
 }

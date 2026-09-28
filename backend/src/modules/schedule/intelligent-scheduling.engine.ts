@@ -1316,6 +1316,16 @@ export class IntelligentSchedulingEngine {
       occurrenceYmd = nextYmd;
     }
 
+    if (seriesConflict) {
+      const overflowSkips = skipped.filter(
+        (s) => s.reason === 'no_slot' || s.reason === 'preferred_unavailable',
+      );
+      seriesConflict.meta = {
+        ...(seriesConflict.meta ?? {}),
+        skipped: overflowSkips,
+      };
+    }
+
     return {
       ok: true,
       segments,

@@ -40,6 +40,7 @@ export function useEventEditor() {
   const [occurrence, setOccurrence] = useState<TaskOccurrenceContext | null>(null);
   const [createDefaults, setCreateDefaults] = useState<CreateTaskDefaults | undefined>();
   const [formPrefill, setFormPrefill] = useState<ReturnType<typeof formValuesFromCreatePayload> | undefined>();
+  const [afterCreate, setAfterCreate] = useState<(() => Promise<void>) | null>(null);
   const { data: phases = [] } = useGetAllPhasesQuery();
   const { data: userSettings } = useGetUserSettingsQuery();
   const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
@@ -53,6 +54,7 @@ export function useEventEditor() {
     setOccurrence(null);
     setCreateDefaults(undefined);
     setFormPrefill(undefined);
+    setAfterCreate(null);
   };
 
   const openCreate = (defaults?: CreateTaskDefaults) => {
@@ -60,14 +62,19 @@ export function useEventEditor() {
     setOccurrence(null);
     setCreateDefaults(defaults);
     setFormPrefill(undefined);
+    setAfterCreate(null);
     setOpen(true);
   };
 
-  const openCreateFromPrefill = (payload: CreateTaskDTO) => {
+  const openCreateFromPrefill = (
+    payload: CreateTaskDTO,
+    options?: { afterCreate?: () => Promise<void> },
+  ) => {
     setEditingEvent(null);
     setOccurrence(null);
     setCreateDefaults(undefined);
     setFormPrefill(formValuesFromCreatePayload(payload, timeZone));
+    setAfterCreate(() => options?.afterCreate ?? null);
     setOpen(true);
   };
 
@@ -76,6 +83,7 @@ export function useEventEditor() {
     setOccurrence(nextOccurrence ?? null);
     setCreateDefaults(undefined);
     setFormPrefill(undefined);
+    setAfterCreate(null);
     setOpen(true);
   };
 
@@ -84,6 +92,7 @@ export function useEventEditor() {
     setOccurrence(null);
     setCreateDefaults({ scheduleIntent: true });
     setFormPrefill(undefined);
+    setAfterCreate(null);
     setOpen(true);
   };
 
@@ -101,16 +110,20 @@ export function useEventEditor() {
   const submit = (data: CreateTaskDTO | UpdateTaskDTO) => {
     const cleanData = cleanPayload(data);
     const editing = editingEvent;
+    const onCreated = afterCreate;
     close();
     const request = editing
       ? updateEvent({ id: editing.id, body: cleanData as UpdateTaskDTO }).unwrap()
       : createEvent(cleanData as CreateTaskDTO).unwrap();
     void request
-      .then(() => {
+      .then(async () => {
         showSuccessToast({
           title: editing ? t('tasks.toast.updated') : t('tasks.toast.created'),
           detail: describeTaskToastDetail(editing ? { ...editing, ...cleanData } : cleanData),
         });
+        if (!editing && onCreated) {
+          await onCreated();
+        }
       })
       .catch((err) => {
         showErrorToast({

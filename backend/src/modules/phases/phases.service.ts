@@ -241,6 +241,14 @@ export class PhasesService {
     return phases.filter((phase) => !this.isSystemMainPhase(phase));
   }
 
+  /** All phases including system Focus (`main_phase`) — for scheduling / free-slots. */
+  async findAllForScheduling(userId: string): Promise<Phase[]> {
+    return this.phasesRepository.find({
+      where: { userId },
+      order: { name: 'ASC' },
+    });
+  }
+
   async findOne(id: string, userId: string): Promise<Phase> {
     const phase = await this.phasesRepository.findOne({
       where: { id, userId },

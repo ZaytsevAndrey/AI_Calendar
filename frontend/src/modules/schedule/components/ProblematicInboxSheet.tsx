@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { CalendarPlus, Pencil, SkipForward, CheckCircle2 } from 'lucide-react';
 import type { TaskDTO } from 'api/tasks.api';
 import {
   useSkipOccurrenceMutation,
@@ -7,46 +8,132 @@ import {
 } from 'api/eventTasksApi';
 import { Modal } from '../../../ui/Modal';
 import { Spinner } from '../../../ui/Spinner';
-import { formatMinutes } from '../../../utils/formatDate';
+import { formatCivilYmd, formatMinutes } from '../../../utils/formatDate';
 import { showErrorToast, showSuccessToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
+import { occurrenceStartIsoForYmd } from '../buildOneOffFromSeries';
+import type { ParkDayHint } from '../parkDayHints';
+import { MoveOccurrenceSheet } from './MoveOccurrenceSheet';
+import { localYmd } from '../../../utils/ianaDateTime';
 
 type Props = {
   open: boolean;
   tasks: TaskDTO[];
+  timeZone: string;
+  dayHints?: Record<string, ParkDayHint>;
   onClose: () => void;
-  onOpenTask: (task: TaskDTO) => void;
+  onEdit: (task: TaskDTO) => void;
 };
 
-type ActionId = 'open' | 'move' | 'skip' | 'resolve';
+const pill =
+  'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium leading-none';
+const iconBtn =
+  'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-ide-text hover:bg-white/10 disabled:opacity-50';
 
-function taskMeta(task: TaskDTO, t: (key: string, opts?: Record<string, unknown>) => string): string {
-  const parts: string[] = [];
-  if (task.isRecurring) parts.push(t('tasks.item.repeats'));
-  if (task.estimatedTimeInMinutes && task.estimatedTimeInMinutes > 0) {
-    parts.push(formatMinutes(task.estimatedTimeInMinutes));
+function reasonKey(reason: string | null | undefined): string {
+  switch (reason) {
+    case 'phase_full':
+      return 'schedule.problematicReason.phase_full';
+    case 'no_slot':
+      return 'schedule.problematicReason.no_slot';
+    case 'preferred_unavailable':
+      return 'schedule.problematicReason.preferred_unavailable';
+    case 'deadline_no_fit':
+      return 'schedule.problematicReason.deadline_no_fit';
+    case 'preferred_on_fixed':
+    case 'conflict':
+      return 'schedule.problematicReason.conflict';
+    default:
+      return 'schedule.problematicReason.unknown';
   }
-  return parts.join(' · ');
+}
+
+/** API/json columns may arrive as a real array or a JSON string. */
+function normalizeYmdList(raw: unknown): string[] {
+  let value = raw;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+      value = JSON.parse(trimmed) as unknown;
+    } catch {
+      return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? [trimmed] : [];
+    }
+  }
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value.filter(
+        (ymd): ymd is string =>
+          typeof ymd === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ymd),
+      ),
+    ),
+  ].sort();
+}
+
+function dayList(task: TaskDTO, hint?: ParkDayHint): string[] {
+  const fromTask = normalizeYmdList(task.problematicOccurrenceYmds);
+  if (fromTask.length) return fromTask;
+  return normalizeYmdList(hint?.occurrenceYmds);
+}
+
+/** Prefer stored/hint days; otherwise today so Skip/Move stay available. */
+function actionDays(
+  task: TaskDTO,
+  hint: ParkDayHint | undefined,
+  timeZone: string,
+): string[] {
+  const known = dayList(task, hint);
+  if (known.length) return known;
+  return [localYmd(new Date().toISOString(), timeZone)];
 }
 
 export function ProblematicInboxSheet({
   open,
   tasks,
+  timeZone,
+  dayHints = {},
   onClose,
-  onOpenTask,
+  onEdit,
 }: Props) {
   const { t } = useTranslation();
   const [updateEvent] = useUpdateEventMutation();
   const [skipOccurrence] = useSkipOccurrenceMutation();
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [moveTarget, setMoveTarget] = useState<{
+    task: TaskDTO;
+    occurrenceYmd: string;
+  } | null>(null);
+
+  const clearProblematic = async (task: TaskDTO) => {
+    await updateEvent({
+      id: task.id,
+      body: { isProblematic: false },
+    }).unwrap();
+  };
+
+  const removeParkedDay = async (task: TaskDTO, occurrenceYmd: string) => {
+    const remaining = dayList(task, dayHints[task.id]).filter(
+      (ymd) => ymd !== occurrenceYmd,
+    );
+    if (remaining.length === 0) {
+      await clearProblematic(task);
+      return;
+    }
+    await updateEvent({
+      id: task.id,
+      body: {
+        isProblematic: true,
+        problematicOccurrenceYmds: remaining,
+        problematicReason: task.problematicReason ?? null,
+      },
+    }).unwrap();
+  };
 
   const resolve = async (task: TaskDTO) => {
     setBusyKey(`${task.id}:resolve`);
     try {
-      await updateEvent({
-        id: task.id,
-        body: { isProblematic: false },
-      }).unwrap();
+      await clearProblematic(task);
       showSuccessToast({ title: t('schedule.problematicResolved') });
     } catch (e) {
       showErrorToast({
@@ -58,18 +145,16 @@ export function ProblematicInboxSheet({
     }
   };
 
-  const skip = async (task: TaskDTO) => {
-    setBusyKey(`${task.id}:skip`);
+  const skipDay = async (task: TaskDTO, occurrenceYmd: string) => {
+    setBusyKey(`${task.id}:skip:${occurrenceYmd}`);
     try {
-      const at = task.scheduledStartTime ?? new Date().toISOString();
       await skipOccurrence({
         id: task.id,
-        body: { occurrenceStart: at },
+        body: {
+          occurrenceStart: occurrenceStartIsoForYmd(occurrenceYmd, timeZone),
+        },
       }).unwrap();
-      await updateEvent({
-        id: task.id,
-        body: { isProblematic: false },
-      }).unwrap();
+      await removeParkedDay(task, occurrenceYmd);
       showSuccessToast({ title: t('schedule.problematicSkipped') });
     } catch (e) {
       showErrorToast({
@@ -81,14 +166,8 @@ export function ProblematicInboxSheet({
     }
   };
 
-  const openTask = (task: TaskDTO, action: ActionId) => {
-    setBusyKey(`${task.id}:${action}`);
-    onOpenTask(task);
-    onClose();
-    setBusyKey(null);
-  };
-
   return (
+    <>
     <Modal
       open={open}
       onClose={onClose}
@@ -113,98 +192,205 @@ export function ProblematicInboxSheet({
         <ul className="flex flex-col gap-4">
           {tasks.map((task) => {
             const rowBusy = busyKey?.startsWith(`${task.id}:`) ?? false;
-            const meta = taskMeta(task, t);
-            const actions: Array<{
-              id: ActionId;
-              title: string;
-              detail: string;
-              onClick: () => void;
-              primary?: boolean;
-              show: boolean;
-            }> = [
-              {
-                id: 'open',
-                title: t('schedule.problematicOpen'),
-                detail: t('schedule.problematicOpenDetail'),
-                onClick: () => openTask(task, 'open'),
-                show: true,
-              },
-              {
-                id: 'move',
-                title: t('schedule.problematicMove'),
-                detail: t('schedule.problematicMoveDetail'),
-                onClick: () => openTask(task, 'move'),
-                show: true,
-              },
-              {
-                id: 'skip',
-                title: t('schedule.problematicSkip'),
-                detail: t('schedule.problematicSkipDetail'),
-                onClick: () => void skip(task),
-                show: Boolean(task.isRecurring),
-              },
-              {
-                id: 'resolve',
-                title: t('schedule.problematicResolve'),
-                detail: t('schedule.problematicResolveDetail'),
-                onClick: () => void resolve(task),
-                primary: true,
-                show: true,
-              },
-            ];
+            const phase = task.phase ?? task.phases?.[0];
+            const hint = dayHints[task.id];
+            const recurring = !!task.isRecurring;
+            const knownDays = dayList(task, hint);
+            const days = recurring
+              ? actionDays(task, hint, timeZone)
+              : knownDays;
+            const reason = task.problematicReason ?? hint?.reason ?? null;
 
             return (
               <li
                 key={task.id}
-                className="rounded-lg border border-ide-border bg-ide-surface"
+                className="task-item flex flex-col gap-3 border-l-4"
+                style={{
+                  borderLeftColor: phase?.color || '#808080',
+                  backgroundColor: '#3C3F41',
+                  backgroundImage: `linear-gradient(135deg, ${phase?.color || '#808080'}38, ${phase?.color || '#808080'}14 46%, transparent)`,
+                }}
                 aria-busy={rowBusy}
               >
-                <div className="border-b border-ide-border px-3 py-3">
-                  <p className="text-sm font-medium text-ide-text">{task.name}</p>
-                  {meta ? (
-                    <p className="mt-0.5 text-xs text-ide-muted">{meta}</p>
+                <h3 className="line-clamp-2 text-base font-semibold leading-snug text-ide-text">
+                  {task.name}
+                </h3>
+
+                <div className="flex flex-wrap gap-2">
+                  {recurring ? (
+                    <span className={`${pill} border-ide-link/40 bg-ide-link/15 text-ide-link`}>
+                      {t('tasks.item.repeats')}
+                    </span>
                   ) : null}
+                  {phase ? (
+                    <span
+                      className={pill}
+                      style={{
+                        borderColor: `${phase.color || '#808080'}88`,
+                        backgroundColor: `${phase.color || '#808080'}24`,
+                        color: phase.color || undefined,
+                      }}
+                    >
+                      {phase.name}
+                    </span>
+                  ) : null}
+                  {task.estimatedTimeInMinutes > 0 ? (
+                    <span className={`${pill} border-white/10 bg-white/5 text-ide-text`}>
+                      {formatMinutes(task.estimatedTimeInMinutes)}
+                    </span>
+                  ) : null}
+                  <span className={`${pill} border-ide-warn/50 bg-ide-warn/15 text-ide-warn`}>
+                    {t(reasonKey(reason))}
+                  </span>
                 </div>
-                <ul className="flex flex-col gap-0 divide-y divide-ide-border">
-                  {actions
-                    .filter((action) => action.show)
-                    .map((action) => {
-                      const thisBusy = busyKey === `${task.id}:${action.id}`;
+
+                {days.length > 0 ? (
+                  <p className="text-sm font-medium text-ide-warn">
+                    {days.length === 1
+                      ? t('schedule.problematicDidNotFit', {
+                          date: formatCivilYmd(days[0]) ?? days[0],
+                        })
+                      : t('schedule.problematicDidNotFitMany', {
+                          dates: days
+                            .map((ymd) => formatCivilYmd(ymd) ?? ymd)
+                            .join(', '),
+                        })}
+                  </p>
+                ) : (
+                  <p className="text-sm text-ide-muted">
+                    {t('schedule.problematicNoDay')}
+                  </p>
+                )}
+
+                {recurring && days.length > 1 ? (
+                  <ul className="flex flex-col gap-2">
+                    {days.map((ymd) => {
+                      const label = formatCivilYmd(ymd) ?? ymd;
+                      const skipBusy = busyKey === `${task.id}:skip:${ymd}`;
                       return (
-                        <li key={action.id}>
-                          <button
-                            type="button"
-                            className={`flex w-full items-start gap-2 px-3 py-3 text-left hover:bg-ide-selection/40 disabled:opacity-60 ${
-                              action.primary ? 'bg-ide-selection/15' : ''
-                            }`}
-                            disabled={rowBusy}
-                            onClick={action.onClick}
-                          >
-                            <span className="min-w-0 flex-1">
-                              <span
-                                className={`block text-sm font-medium ${
-                                  action.primary ? 'text-ide-link' : 'text-ide-text'
-                                }`}
-                              >
-                                {action.title}
-                              </span>
-                              <span className="mt-0.5 block text-xs text-ide-muted">
-                                {action.detail}
-                              </span>
-                            </span>
-                            {thisBusy ? (
-                              <Spinner className="mt-0.5 h-4 w-4 shrink-0" />
-                            ) : null}
-                          </button>
+                        <li
+                          key={ymd}
+                          className="flex flex-wrap items-center justify-between gap-2"
+                        >
+                          <span className="text-sm text-ide-text">{label}</span>
+                          <span className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className={iconBtn}
+                              disabled={rowBusy}
+                              onClick={() => void skipDay(task, ymd)}
+                            >
+                              {skipBusy ? (
+                                <Spinner className="h-4 w-4" />
+                              ) : (
+                                <SkipForward className="h-4 w-4" aria-hidden />
+                              )}
+                              {t('schedule.problematicSkipDay')}
+                            </button>
+                            <button
+                              type="button"
+                              className={`${iconBtn} text-ide-link`}
+                              disabled={rowBusy}
+                              onClick={() =>
+                                setMoveTarget({ task, occurrenceYmd: ymd })
+                              }
+                            >
+                              <CalendarPlus className="h-4 w-4" aria-hidden />
+                              {t('schedule.problematicMoveDay')}
+                            </button>
+                          </span>
                         </li>
                       );
                     })}
-                </ul>
+                  </ul>
+                ) : null}
+
+                <div className="flex flex-wrap items-center justify-end gap-2 border-t border-white/10 pt-3">
+                  {recurring && days.length === 1 ? (
+                    <>
+                      <button
+                        type="button"
+                        className={iconBtn}
+                        disabled={rowBusy}
+                        onClick={() => void skipDay(task, days[0])}
+                      >
+                        {busyKey === `${task.id}:skip:${days[0]}` ? (
+                          <Spinner className="h-4 w-4" />
+                        ) : (
+                          <SkipForward className="h-4 w-4" aria-hidden />
+                        )}
+                        {t('schedule.problematicSkipDay')}
+                      </button>
+                      <button
+                        type="button"
+                        className={`${iconBtn} text-ide-link`}
+                        disabled={rowBusy}
+                        onClick={() =>
+                          setMoveTarget({ task, occurrenceYmd: days[0] })
+                        }
+                      >
+                        <CalendarPlus className="h-4 w-4" aria-hidden />
+                        {t('schedule.problematicMoveDay')}
+                      </button>
+                    </>
+                  ) : null}
+                  {!recurring ? (
+                    <button
+                      type="button"
+                      className={`${iconBtn} text-ide-link`}
+                      disabled={rowBusy}
+                      onClick={() => {
+                        const ymd =
+                          days[0] ??
+                          localYmd(new Date().toISOString(), timeZone);
+                        setMoveTarget({ task, occurrenceYmd: ymd });
+                      }}
+                    >
+                      <CalendarPlus className="h-4 w-4" aria-hidden />
+                      {t('schedule.problematicMove')}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className={iconBtn}
+                    disabled={rowBusy}
+                    onClick={() => {
+                      onEdit(task);
+                      onClose();
+                    }}
+                  >
+                    <Pencil className="h-4 w-4" aria-hidden />
+                    {t('schedule.problematicEdit')}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${iconBtn} text-ide-link`}
+                    disabled={rowBusy}
+                    onClick={() => void resolve(task)}
+                  >
+                    {busyKey === `${task.id}:resolve` ? (
+                      <Spinner className="h-4 w-4" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4" aria-hidden />
+                    )}
+                    {t('schedule.problematicResolve')}
+                  </button>
+                </div>
               </li>
             );
           })}
         </ul>
       )}
     </Modal>
+      <MoveOccurrenceSheet
+        target={moveTarget}
+        timeZone={timeZone}
+        onClose={() => setMoveTarget(null)}
+        onDone={() => {
+          setMoveTarget(null);
+          onClose();
+        }}
+      />
+    </>
   );
 }

@@ -23,6 +23,10 @@ import { ScheduleJobService } from './schedule-job.service';
 import { DisplayedEventMoveService } from './displayed-event-move.service';
 import { ScheduleRecommendationsService } from './schedule-recommendations.service';
 import { ConflictOptionPhrasesService } from './conflict-option-phrases.service';
+import {
+  FreeSlotsResponse,
+  FreeSlotsService,
+} from './free-slots.service';
 import { ScheduleRecommendations } from './schedule-recommendations.util';
 import { ConflictOptionPhrase } from './conflict-option-phrases.util';
 import {
@@ -51,6 +55,7 @@ export class ScheduleController {
     private readonly displayedEventMoveService: DisplayedEventMoveService,
     private readonly scheduleRecommendationsService: ScheduleRecommendationsService,
     private readonly conflictOptionPhrasesService: ConflictOptionPhrasesService,
+    private readonly freeSlotsService: FreeSlotsService,
   ) {}
 
   @Post()
@@ -79,6 +84,26 @@ export class ScheduleController {
     @Query() query: ScheduleQueryDto,
   ): Promise<ScheduledTask[]> {
     return this.scheduleService.findAll(req.user.userId, query);
+  }
+
+  @Get('free-slots')
+  @ApiOperation({
+    summary:
+      'Free gaps and 15-minute candidate starts for placing a Problematic Move on one civil day',
+  })
+  @ApiResponse({ status: 200, description: 'Day timeline + candidate starts' })
+  async freeSlots(
+    @Request() req,
+    @Query('taskId') taskId: string,
+    @Query('ymd') ymd: string,
+    @Query('phaseId') phaseId?: string,
+  ): Promise<FreeSlotsResponse> {
+    return this.freeSlotsService.forTaskDay(
+      req.user.userId,
+      taskId,
+      ymd,
+      phaseId,
+    );
   }
 
   @Get(':id')
