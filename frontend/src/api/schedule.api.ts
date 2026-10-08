@@ -64,49 +64,6 @@ export interface ScheduleRecommendations {
   suggestions: ScheduleRecommendation[];
 }
 
-export interface SchedulingAlerts {
-  jobId: string | null;
-  errors: string[];
-  warnings: string[];
-  issueCount: number;
-  updatedAt: string | null;
-}
-
-const EMPTY_ALERTS: SchedulingAlerts = {
-  jobId: null,
-  errors: [],
-  warnings: [],
-  issueCount: 0,
-  updatedAt: null,
-};
-
-export function alertsFromJob(
-  job: ScheduleJobStatusResponse | null,
-  maxAgeHours?: number,
-): SchedulingAlerts {
-  if (!job?.result) return { ...EMPTY_ALERTS };
-  if (typeof maxAgeHours === 'number') {
-    const updatedAtMs = job.updatedAt ? new Date(job.updatedAt).getTime() : NaN;
-    const maxAgeMs = maxAgeHours * 60 * 60 * 1000;
-    if (!Number.isFinite(updatedAtMs) || Date.now() - updatedAtMs > maxAgeMs) {
-      return { ...EMPTY_ALERTS, jobId: job.id, updatedAt: job.updatedAt ?? null };
-    }
-  }
-  const errors = [...new Set((job.result.errors ?? []).map((e) => e.message).filter(Boolean))];
-  const warnings = [
-    ...new Set(
-      (job.result.warnings ?? []).map((w) => w?.message).filter(Boolean) as string[],
-    ),
-  ];
-  return {
-    jobId: job.id,
-    errors,
-    warnings,
-    issueCount: errors.length + warnings.length,
-    updatedAt: job.updatedAt ?? null,
-  };
-}
-
 async function pollJobUntilDone(
   jobId: string,
   timeoutMs = 120_000,
@@ -243,28 +200,6 @@ export const ScheduleApi = {
     return response.data as ScheduledTaskDTO;
   },
 
-  /**
-   * Enqueues replan, waits for job completion, returns refreshed tasks + engine output.
-   */
-  generateSchedule: async (
-    startDate: string,
-    endDate: string,
-    onProgress?: (job: ScheduleJobStatusResponse) => void,
-  ): Promise<{ tasks: ScheduledTaskDTO[]; job: ScheduleJobStatusResponse }> => {
-    const { data } = await axios.post<{ jobId: string; status: string }>('/schedule/generate', {
-      startDate,
-      endDate,
-    });
-    const job = await pollJobUntilDone(data.jobId, 120_000, onProgress);
-
-    const queryParams = new URLSearchParams();
-    queryParams.append('startDate', startDate);
-    queryParams.append('endDate', endDate);
-    const list = await axios.get<ScheduledTaskDTO[]>(`/schedule?${queryParams.toString()}`);
-
-    return { tasks: list.data, job };
-  },
-
   recommendSchedule: async (): Promise<ScheduleRecommendations> => {
     const { data } = await axios.post<ScheduleRecommendations>(
       '/schedule/recommendations',
@@ -276,15 +211,6 @@ export const ScheduleApi = {
     };
   },
 
-  previewSchedule: async (): Promise<ScheduleJobResultPayload> => {
-    const { data } = await axios.post<ScheduleJobResultPayload>('/schedule/preview', {});
-    return {
-      diff: data.diff ?? [],
-      warnings: data.warnings ?? [],
-      errors: data.errors ?? [],
-    };
-  },
-
   getLatestDoneJob: async (): Promise<{
     job: ScheduleJobStatusResponse | null;
   }> => {
@@ -292,40 +218,5 @@ export const ScheduleApi = {
       '/schedule-jobs/latest/done',
     );
     return data;
-  },
-
-  getLatestAlerts: async (
-    maxAgeHours = 24,
-  ): Promise<SchedulingAlerts> => {
-    const { job } = await ScheduleApi.getLatestDoneJob();
-    return alertsFromJob(job, maxAgeHours);
-  },
-
-  getUndoAvailability: async (): Promise<{
-    available: boolean;
-    jobId: string | null;
-    generatedAt: string | null;
-  }> => {
-    const { data } = await axios.get<{
-      available: boolean;
-      jobId: string | null;
-      generatedAt: string | null;
-    }>('/schedule-jobs/undo');
-    return data;
-  },
-
-  undoLastGenerate: async (): Promise<{ jobId: string; status: string }> => {
-    const { data } = await axios.post<{ jobId: string; status: string }>(
-      '/schedule-jobs/undo',
-    );
-    return data;
-  },
-
-  clearSchedule: async (
-    _startDate?: string,
-    _endDate?: string,
-  ): Promise<{ deleted: number }> => {
-    const { data } = await axios.delete<{ deleted: number }>('/schedule');
-    return { deleted: data?.deleted ?? 0 };
   },
 };

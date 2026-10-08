@@ -73,27 +73,6 @@ test.describe('P2 chrome and empty states', () => {
     await expect(page.getByText(/Today \d+\//)).toHaveCount(0);
   });
 
-  test('U-CAL-018 clear with nothing to delete shows the info toast', async ({ page, auth }) => {
-    await page.route('**/schedule', async (route) => {
-      if (route.request().method() !== 'DELETE') {
-        await route.continue();
-        return;
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ deleted: 0 }),
-      });
-    });
-
-    await openAs(page, auth.onboarded);
-    await page.getByRole('button', { name: 'Schedule' }).click();
-    await page.getByRole('menuitem', { name: 'Clear schedule' }).click();
-    const confirm = page.getByRole('dialog').filter({ hasText: 'Clear schedule' });
-    await confirm.getByRole('button', { name: 'Clear schedule' }).click();
-    await expect(page.getByText('Nothing to clear')).toBeVisible();
-  });
-
   test('U-PH-006 overnight phase appears on the day grid', async ({ page, auth, request }) => {
     await deleteUnusedTimePhases(request, auth.onboarded.access_token);
     const name = uniqueName('P2 overnight');

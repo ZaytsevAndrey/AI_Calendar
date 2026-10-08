@@ -1,10 +1,10 @@
 # Task Scheduling Test Matrix (Given/When/Then)
 
-Live engine for Generate and these cases: [spec-conflict-rules.md](spec-conflict-rules.md) (full replan; seated flexible keeps its slot). Create and geometric edit no longer enqueue that replan; they call the placement step.  
-Target write-set, not yet covered by these tests: [spec-incremental-placement.md](spec-incremental-placement.md).  
+Live write path is `PlacementStepService.place` (create / edit / drag / append). Generate, Clear, Undo, and preview APIs are removed; `engine.run` is not used to write slots.  
+Conflict-rule cases still document intended placement behavior: [spec-conflict-rules.md](spec-conflict-rules.md). Incremental write-set: [spec-incremental-placement.md](spec-incremental-placement.md).  
 Format is aimed at direct transfer into unit/integration tests.
 
-**Target behavior** for remaining UI/inbox cases (roadmap §3+). Engine placement cases marked **Covered** match `intelligent-scheduling.engine` unit tests after §2.
+**Target behavior** for remaining UI/inbox cases (roadmap §3+). Placement cases marked **Covered** match unit tests for the placement step / conflict rules after §2.
 
 ## Conventions
 
@@ -12,7 +12,7 @@ Format is aimed at direct transfer into unit/integration tests.
 - **W\*** (From/Until): client TZ (`Asia/Nicosia`), host UTC as on Render.
 - Slot step: 15 minutes.
 - Default phase: `09:00-17:00` unless noted.
-- **Placement algorithm (live engine, what these cases assert):** type + preferred-first; **priority ignored**; already-seated flexible keeps its slot; silent dodge of fixed/Google unless preferred lands exactly on busy fixed; ask / Problematic / Unscheduled per conflict-rules spec. The target rule (claimant takes the interval) is not asserted here yet.
+- **Placement algorithm (what these cases assert):** type + preferred-first; **priority ignored**; already-seated flexible keeps its slot; silent dodge of fixed/Google unless preferred lands exactly on busy fixed; ask / Problematic / Unscheduled per conflict-rules spec. The target rule (claimant takes the interval) is not asserted here yet.
 - Warnings asserted by `code`, not message text.
 
 Recommended codes (use real backend enums if names differ):
@@ -483,40 +483,13 @@ Recommended codes (use real backend enums if names differ):
 
 - Google event is not deleted automatically.
 
-## T53 — Replan keeps fully ended auto slots
+## T53 — ~~Replan keeps fully ended auto slots~~ (**Removed**)
 
-**Given**
+Generate / full replan write path removed. Ended-slot keep semantics no longer apply via Generate.
 
-- Movable TODO has an auto-generated slot that already ended (`scheduledEndTime <= now`).
+## T54 — ~~Clear keeps finished blocks~~ (**Removed**)
 
-**When**
-
-- Generate / replan.
-
-**Then**
-
-- That row is **not** deleted.
-- Treated as busy anchor.
-- Non-recurring remaining work = estimated minutes minus ended minutes.
-- Past deadline TODO skipped (no new slot, no “Cannot fit before deadline” error).
-- If status becomes `completed` during replan, no new slot written.
-- Covered by `intelligent-scheduling.engine.spec.ts`.
-
-## T54 — Clear keeps finished blocks, including earlier today
-
-**Given**
-
-- Auto slots: one ended this morning, one still open later today.
-
-**When**
-
-- `DELETE /schedule`.
-
-**Then**
-
-- Only the still-open row is removed locally.
-- Google wipe keeps ended series id in `keepEventIds` and caps with `UNTIL`.
-- Covered by `schedule.service.spec.ts` / `schedule-job.service.spec.ts`.
+`DELETE /schedule` Clear API removed.
 
 ## T55 — Calendar grays only our finished app events
 
@@ -534,22 +507,9 @@ Recommended codes (use real backend enums if names differ):
 - External calendars keep Google `colorId`.
 - Covered by `frontend/src/modules/calendar/hooks/eventAppearance.spec.ts`.
 
-## T56 — Undo last Generate restores still-open slots only
+## T56 — ~~Undo last Generate~~ (**Removed**)
 
-**Given**
-
-- Completed Calendar Generate job with `undoSnapshotJson`.
-
-**When**
-
-- `POST /schedule-jobs/undo`.
-
-**Then**
-
-- Still-open auto rows replaced from snapshot.
-- Fully ended rows not deleted/rewritten.
-- Snapshot cannot be undone twice.
-- Covered by `schedule-job.service.spec.ts`.
+`POST /schedule-jobs/undo` and Generate undo snapshots removed.
 
 ---
 
@@ -676,4 +636,4 @@ Recommended codes (use real backend enums if names differ):
 
 ## Minimal smoke set for CI (fast)
 
-- `T05`, `T10`, `T12`, `T14`, `T20`, `T22`, `T30`, `T33`, `T40`, `T50`, `T53`, `T54`, `T55`, `W01`, `W03`, `W04`, `C01`.
+- `T05`, `T10`, `T12`, `T14`, `T20`, `T22`, `T30`, `T33`, `T40`, `T50`, `T55`, `W01`, `W03`, `W04`, `C01`.

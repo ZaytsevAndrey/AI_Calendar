@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { useTranslation } from 'react-i18next';
 import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Columns3, List, Mic, MoreHorizontal, Plus } from 'lucide-react';
@@ -18,13 +18,10 @@ import CalendarGrid from 'modules/calendar/components/CalendarGrid';
 import { CalendarDatePicker } from 'modules/calendar/components/CalendarDatePicker';
 import { CalendarVisibilityMenu } from 'modules/calendar/components/CalendarVisibilityMenu';
 import { EventType } from 'modules/calendar/types';
-import { ScheduleApi, ScheduleJobResultPayload } from 'api/schedule.api';
+import { ScheduleApi } from 'api/schedule.api';
 import { useScheduleActions } from 'modules/schedule/hooks/useScheduleActions';
-import { GeneratePreviewDialog } from 'modules/schedule/components/GeneratePreviewDialog';
-import { GenerateAlertsBanner } from 'modules/schedule/components/GenerateAlertsBanner';
 import { ProblematicInboxBanner } from 'modules/schedule/components/ProblematicInboxBanner';
 import { ProblematicInboxSheet } from 'modules/schedule/components/ProblematicInboxSheet';
-import { GenerateProgressPanel } from 'modules/schedule/components/GenerateProgressPanel';
 import { ScheduleMenu } from 'modules/schedule/components/ScheduleMenu';
 import { ScheduleSuggestionsDialog } from 'modules/schedule/components/ScheduleSuggestionsDialog';
 import { SeriesDragHost } from 'modules/schedule/components/SeriesDragHost';
@@ -55,7 +52,6 @@ import {
     compactPeriodLabel,
     periodLabel,
     shiftPeriod,
-    visibleRangeYmd,
     eventStartDate,
     eventEndDate,
 } from 'modules/calendar/calendarView';
@@ -119,15 +115,8 @@ const CalendarPage: React.FC = () => {
         eventId: null,
         eventName: '',
     });
-    const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
-    const [undoConfirmOpen, setUndoConfirmOpen] = useState(false);
     const [suggestionsOpen, setSuggestionsOpen] = useState(false);
-    const [previewOpen, setPreviewOpen] = useState(false);
-    const [previewLoading, setPreviewLoading] = useState(false);
     const [problematicOpen, setProblematicOpen] = useState(false);
-    const [previewError, setPreviewError] = useState<string | null>(null);
-    const [previewResult, setPreviewResult] = useState<ScheduleJobResultPayload | null>(null);
-    const previewRequest = useRef(0);
     const [eventFormDialog, setEventFormDialog] = useState<{
         open: boolean;
         event: GoogleCalendarEvent | null;
@@ -152,20 +141,7 @@ const CalendarPage: React.FC = () => {
     const getEventsQuery = queryMap[currentView];
     const [updateEventTrigger] = useUpdateEvent();
     const [deleteEventTrigger] = useDeleteEvent();
-    const {
-        isGenerating,
-        isClearing,
-        isUndoing,
-        canUndo,
-        generate,
-        undo,
-        clear,
-        generateAlerts,
-        parkDayHints,
-        dismissGenerateAlerts,
-        generateProgress,
-    } =
-        useScheduleActions();
+    const { parkDayHints } = useScheduleActions();
     const { data: userSettings } = useGetUserSettingsQuery();
     const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
     const { openCreate, openCreateFromPrefill, openEdit, createFromPayload, editorModal } = useEventEditor();
@@ -193,7 +169,6 @@ const CalendarPage: React.FC = () => {
         }
     }, [currentView]);
     const gridView: CalendarView = phone && currentView === 'week' ? 'day' : currentView;
-    const busy = isGenerating || isClearing || isUndoing || previewLoading || previewOpen;
     const habitEventIds = new Set(
         (habitsData?.habits ?? [])
             .map((habit) => habit.googleEventId)
@@ -352,53 +327,6 @@ const CalendarPage: React.FC = () => {
         });
     };
 
-    const closePreview = () => {
-        if (isGenerating) return;
-        previewRequest.current += 1;
-        setPreviewOpen(false);
-        setPreviewLoading(false);
-        setPreviewError(null);
-        setPreviewResult(null);
-    };
-
-    const runGenerate = () => {
-        const requestId = ++previewRequest.current;
-        setPreviewOpen(true);
-        setPreviewLoading(true);
-        setPreviewError(null);
-        setPreviewResult(null);
-        void ScheduleApi.previewSchedule()
-            .then((result) => {
-                if (previewRequest.current !== requestId) return;
-                setPreviewResult(result);
-            })
-            .catch((err) => {
-                if (previewRequest.current !== requestId) return;
-                setPreviewError(extractApiErrorMessage(err));
-            })
-            .finally(() => {
-                if (previewRequest.current !== requestId) return;
-                setPreviewLoading(false);
-            });
-    };
-
-    const applyGenerate = () => {
-        const { startDate, endDate } = visibleRangeYmd(currentView, currentDate);
-        setPreviewOpen(false);
-        setPreviewResult(null);
-        void generate(startDate, endDate);
-    };
-
-    const confirmClear = async () => {
-        setClearConfirmOpen(false);
-        await clear();
-    };
-
-    const confirmUndo = async () => {
-        setUndoConfirmOpen(false);
-        await undo();
-    };
-
     return (
         <div className="page-shell-fill max-md:px-3 max-md:py-2">
             <header className="mb-4 shrink-0 space-y-4 max-md:mb-1 max-md:space-y-1">
@@ -478,15 +406,8 @@ const CalendarPage: React.FC = () => {
                         </button>
                         <VoiceTaskButton onClick={voice.open} />
                         <ScheduleMenu
-                            busy={busy}
-                            isGenerating={isGenerating}
-                            isClearing={isClearing}
-                            isUndoing={isUndoing}
-                            canUndo={canUndo}
-                            onGenerate={runGenerate}
+                            busy={false}
                             onSuggest={() => setSuggestionsOpen(true)}
-                            onUndo={() => setUndoConfirmOpen(true)}
-                            onClear={() => setClearConfirmOpen(true)}
                         />
                     </div>
                 </div>
@@ -497,13 +418,6 @@ const CalendarPage: React.FC = () => {
                     <ProblematicInboxBanner
                         count={problematicTasks.length}
                         onOpen={() => setProblematicOpen(true)}
-                    />
-                ) : null}
-                {generateProgress ? <GenerateProgressPanel progress={generateProgress} /> : null}
-                {generateAlerts ? (
-                    <GenerateAlertsBanner
-                        alerts={generateAlerts}
-                        onDismiss={dismissGenerateAlerts}
                     />
                 ) : null}
                 {phone ? null : (
@@ -618,15 +532,6 @@ const CalendarPage: React.FC = () => {
                     </button>
                     <button
                         type="button"
-                        className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-ide-border bg-ide-surface px-3 text-sm font-medium text-ide-text disabled:opacity-50"
-                        aria-label={t('calendar.generateSchedule')}
-                        disabled={busy}
-                        onClick={runGenerate}
-                    >
-                        {isGenerating ? '…' : t('calendar.generate')}
-                    </button>
-                    <button
-                        type="button"
                         className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ide-muted hover:bg-white/5"
                         aria-label={t('calendar.moreSchedule')}
                         onClick={() => setActionsOpen(true)}
@@ -679,71 +584,6 @@ const CalendarPage: React.FC = () => {
                 onClose={() => setSuggestionsOpen(false)}
             />
 
-            <GeneratePreviewDialog
-                open={previewOpen}
-                loading={previewLoading}
-                error={previewError}
-                result={previewResult}
-                onCancel={closePreview}
-                onApply={applyGenerate}
-            />
-
-            <Modal
-                open={clearConfirmOpen}
-                onClose={() => setClearConfirmOpen(false)}
-                title={t('schedule.clear')}
-                footer={
-                    <>
-                        <button
-                            type="button"
-                            onClick={() => setClearConfirmOpen(false)}
-                            disabled={isClearing}
-                            className="ui-btn-secondary w-full sm:w-auto"
-                        >
-                            {t('common.cancel')}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => void confirmClear()}
-                            disabled={isClearing}
-                            className="ui-btn-danger w-full sm:w-auto"
-                        >
-                            {isClearing ? t('common.clearing') : t('schedule.clear')}
-                        </button>
-                    </>
-                }
-            >
-                <p className="text-ide-text">{t('schedule.clearConfirmBody')}</p>
-            </Modal>
-
-            <Modal
-                open={undoConfirmOpen}
-                onClose={() => setUndoConfirmOpen(false)}
-                title={t('schedule.undoLast')}
-                footer={
-                    <>
-                        <button
-                            type="button"
-                            onClick={() => setUndoConfirmOpen(false)}
-                            disabled={isUndoing}
-                            className="ui-btn-secondary w-full sm:w-auto"
-                        >
-                            {t('common.cancel')}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => void confirmUndo()}
-                            disabled={isUndoing}
-                            className="ui-btn-primary w-full sm:w-auto"
-                        >
-                            {isUndoing ? t('common.undoing') : t('schedule.undoGenerate')}
-                        </button>
-                    </>
-                }
-            >
-                <p className="text-ide-text">{t('schedule.undoConfirmBody')}</p>
-            </Modal>
-
             {editorModal}
             <ProblematicInboxSheet
                 open={problematicOpen}
@@ -765,35 +605,12 @@ const CalendarPage: React.FC = () => {
                     <button
                         type="button"
                         className="ui-menu-row"
-                        disabled={busy}
                         onClick={() => {
                             setActionsOpen(false);
                             setSuggestionsOpen(true);
                         }}
                     >
                         {t('schedule.suggestions')}
-                    </button>
-                    <button
-                        type="button"
-                        className="ui-menu-row"
-                        disabled={busy || !canUndo}
-                        onClick={() => {
-                            setActionsOpen(false);
-                            setUndoConfirmOpen(true);
-                        }}
-                    >
-                        {isUndoing ? t('common.undoing') : t('schedule.undoLast')}
-                    </button>
-                    <button
-                        type="button"
-                        className="ui-menu-row text-ide-error"
-                        disabled={busy}
-                        onClick={() => {
-                            setActionsOpen(false);
-                            setClearConfirmOpen(true);
-                        }}
-                    >
-                        {isClearing ? t('common.clearing') : t('schedule.clear')}
                     </button>
                 </div>
             </Modal>

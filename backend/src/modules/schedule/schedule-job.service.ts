@@ -55,8 +55,6 @@ import {
   collectProblematicTaskIds,
 } from './problematic-from-warnings.util';
 import { collectUnscheduledTaskIds } from './unscheduled-from-warnings.util';
-import { shouldEnqueueRecurringExtend } from './recurring-extend.util';
-
 function googleListedEventEndMs(ev: {
   end?: { dateTime?: string | null; date?: string | null };
 }): number | null {
@@ -72,21 +70,6 @@ function googleListedEventEndMs(ev: {
 }
 
 /** Latest done job that slides the planning horizon (extend or silent replan). */
-function latestHorizonSlideAt(jobs: ScheduleJob[]): Date | null {
-  for (const job of jobs) {
-    if (!job.payloadJson) continue;
-    try {
-      const payload = JSON.parse(job.payloadJson) as { type?: string };
-      if (payload.type === 'extend_recurring' || payload.type === 'full_replan') {
-        return job.updatedAt ? new Date(job.updatedAt) : null;
-      }
-    } catch {
-      /* ignore bad payload */
-    }
-  }
-  return null;
-}
-
 function mergeUniqueSortedYmds(
   existing: string[] | null | undefined,
   extra: string[],
@@ -113,98 +96,7 @@ export class ScheduleJobService {
     private readonly googleCalendarService: GoogleCalendarService,
   ) {}
 
-  async enqueueReplan(userId: string): Promise<ScheduleJob> {
-    return this.enqueueJob(userId, 'full_replan');
-  }
-
-  async enqueueGenerate(userId: string): Promise<ScheduleJob> {
-    return this.enqueueJob(userId, 'generate');
-  }
-
-  /**
-   * Background horizon slide for recurring series (same engine as silent replan;
-   * not an undoable Generate).
-   */
-  async enqueueExtendRecurring(userId: string): Promise<ScheduleJob> {
-    return this.enqueueJob(userId, 'extend_recurring');
-  }
-
-  /**
-   * Enqueue extend jobs for users with active recurring tasks who are past the cooldown.
-   * Caps how many users are queued per tick.
-   */
-  async enqueueRecurringExtends(limit = 10): Promise<number> {
-    const userIds = await this.taskRepo
-      .createQueryBuilder('task')
-      .select('DISTINCT task.userId', 'userId')
-      .where('task.isRecurring = :recurring', { recurring: true })
-      .andWhere('task.isUnscheduled = :unscheduled', { unscheduled: false })
-      .andWhere('task.scheduleState != :parked', {
-        parked: ScheduleState.PROBLEMATIC,
-      })
-      .andWhere('task.status IN (:...statuses)', {
-        statuses: [TaskStatus.TODO, TaskStatus.IN_PROGRESS],
-      })
-      .getRawMany<{ userId: string }>();
-
-    const now = new Date();
-    let enqueued = 0;
-    for (const row of userIds) {
-      if (enqueued >= limit) break;
-      const userId = row.userId;
-      if (!userId) continue;
-
-      const busy = await this.jobRepo.count({
-        where: [
-          { userId, status: 'pending' },
-          { userId, status: 'running' },
-        ],
-      });
-      const recentDone = await this.jobRepo.find({
-        where: { userId, status: 'done' },
-        order: { updatedAt: 'DESC' },
-        take: 20,
-      });
-      const lastExtendAt = latestHorizonSlideAt(recentDone);
-
-      if (
-        !shouldEnqueueRecurringExtend({
-          hasActiveRecurring: true,
-          hasPendingOrRunningJob: busy > 0,
-          lastExtendAt,
-          now,
-        })
-      ) {
-        continue;
-      }
-
-      await this.enqueueExtendRecurring(userId);
-      enqueued += 1;
-    }
-    return enqueued;
-  }
-
-  /** Same placement as Generate, without writing slots, tasks, Google, or undo. */
-  async preview(userId: string): Promise<{
-    diff: DiffItem[];
-    warnings: SchedulingWarning[];
-    errors: { taskId: string; message: string }[];
-    conflicts: SchedulingConflict[];
-  }> {
-    return this.engine.run(userId, { persist: false });
-  }
-
-  private async enqueueJob(
-    userId: string,
-    type: 'generate' | 'full_replan' | 'extend_recurring',
-  ): Promise<ScheduleJob> {
-    const job = this.jobRepo.create({
-      userId,
-      status: 'pending',
-      payloadJson: JSON.stringify({ type, at: new Date().toISOString() }),
-    });
-    return this.jobRepo.save(job);
-  }
+  /** Generate / replan / extend jobs no longer enqueue; horizon append uses placement. */
 
   async getJob(jobId: string, userId: string): Promise<ScheduleJob> {
     const job = await this.jobRepo.findOne({ where: { id: jobId } });
@@ -515,69 +407,24 @@ export class ScheduleJobService {
       .execute();
   }
 
+  /**
+   * Leftover queue rows from Generate / replan are drained without writing slots.
+   * New seating goes through PlacementStepService only.
+   */
   private async runPendingJob(job: ScheduleJob): Promise<void> {
-    job.status = 'running';
-    job.progressStage = 'preparing';
+    job.status = 'failed';
+    job.progressStage = 'failed';
     job.progressCurrent = null;
     job.progressTotal = null;
+    job.errorMessage =
+      'Generate, Clear, and full replan were removed. Slots are written by the placement step.';
+    job.resultDiffJson = JSON.stringify({
+      diff: [],
+      warnings: [],
+      errors: [],
+      conflicts: [],
+    });
     await this.jobRepo.save(job);
-
-    try {
-      const snapshotRows = await this.engine.captureAutoSegmentsSnapshot(
-        job.userId,
-      );
-      const taskSnaps = await this.engine.captureTaskScheduleSnapshot(
-        job.userId,
-      );
-
-      await this.setJobProgress(job, 'computing');
-      const result = await this.engine.run(job.userId);
-
-      await this.setJobProgress(job, 'syncing_google');
-      await this.syncGoogleAfterReplan(
-        job.userId,
-        snapshotRows,
-        async (current, total) => {
-          await this.setJobProgress(job, 'syncing_google', current, total);
-        },
-      );
-      // After sync so this run's placements still reach Google / Now strip.
-      await this.applyProblematicFromWarnings(
-        job.userId,
-        result.warnings,
-        result.conflicts,
-      );
-      await this.applyUnscheduledFromWarnings(
-        job.userId,
-        result.warnings,
-        result.conflicts,
-      );
-
-      job.status = 'done';
-      job.progressStage = 'done';
-      job.resultDiffJson = JSON.stringify({
-        diff: result.diff,
-        warnings: result.warnings,
-        errors: result.errors,
-        conflicts: result.conflicts,
-      });
-      job.errorMessage = null;
-      if (isGenerateJobPayload(job.payloadJson)) {
-        await this.invalidateGenerateUndo(job.userId);
-        job.undoSnapshotJson = JSON.stringify({
-          version: 1,
-          tasks: taskSnaps,
-          segments: snapshotRows,
-        });
-        job.undoConsumedAt = null;
-      }
-      await this.jobRepo.save(job);
-    } catch (e: any) {
-      job.status = 'failed';
-      job.progressStage = 'failed';
-      job.errorMessage = e?.message ?? String(e);
-      await this.jobRepo.save(job);
-    }
   }
 
   private fallbackCalendarId(task: Task, appCal?: string | null): string {

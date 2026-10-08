@@ -129,19 +129,6 @@ async function pinAwakeAroundNow(
   };
 }
 
-async function generateSchedule(page: import('@playwright/test').Page) {
-  await page.getByRole('button', { name: 'Schedule' }).click();
-  await page.getByRole('menuitem', { name: 'Review schedule' }).click();
-  const preview = page.getByRole('dialog').filter({ hasText: 'Schedule cleanup preview' });
-  await expect(preview).toBeVisible({ timeout: 60_000 });
-  await preview.getByRole('button', { name: 'Apply cleanup' }).click();
-  await page
-    .getByLabel('Schedule generation progress')
-    .waitFor({ state: 'visible', timeout: 10_000 })
-    .catch(() => undefined);
-  await expect(page.getByText(/Schedule cleaned up/)).toBeVisible({ timeout: 60_000 });
-}
-
 test.describe('P0 calendar UI', () => {
   test.describe('U-CAL-003 day-click window', () => {
     test.use({ timezoneId: 'America/New_York' });
@@ -171,48 +158,6 @@ test.describe('P0 calendar UI', () => {
       await expect(dialog.locator('#task-form-deadline')).toHaveValue(`${ymd}T23:59`);
       await expect(dialog.getByText(/Times use Europe\/Kyiv/)).toBeVisible();
     });
-  });
-
-  test('U-CAL-005 undo last generate after confirm', async ({ page, auth, request }) => {
-    test.setTimeout(90_000);
-    const created = await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
-      name: uniqueName('E2E undo seed'),
-      eventType: 'admin',
-      estimatedTimeInMinutes: 30,
-      allowSplit: true,
-    });
-    expectOk(created);
-
-    await openAs(page, auth.onboarded);
-    await generateSchedule(page);
-
-    await page.getByRole('button', { name: 'Schedule' }).click();
-    await page.getByRole('menuitem', { name: 'Undo last generate' }).click();
-    const confirm = page.getByRole('dialog').filter({ hasText: 'Undo last generate' });
-    await expect(confirm).toBeVisible();
-    await confirm.getByRole('button', { name: 'Undo generate' }).click();
-    await expect(page.getByText('Last generate undone')).toBeVisible();
-  });
-
-  test('U-CAL-006 clear schedule after confirm', async ({ page, auth, request }) => {
-    test.setTimeout(90_000);
-    const created = await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
-      name: uniqueName('E2E clear seed'),
-      eventType: 'admin',
-      estimatedTimeInMinutes: 30,
-      allowSplit: true,
-    });
-    expectOk(created);
-
-    await openAs(page, auth.onboarded);
-    await generateSchedule(page);
-
-    await page.getByRole('button', { name: 'Schedule' }).click();
-    await page.getByRole('menuitem', { name: 'Clear schedule' }).click();
-    const confirm = page.getByRole('dialog').filter({ hasText: 'Clear schedule' });
-    await expect(confirm).toBeVisible();
-    await confirm.getByRole('button', { name: 'Clear schedule' }).click();
-    await expect(page.getByText(/Schedule cleared|Nothing to clear/)).toBeVisible();
   });
 
   test('U-CAL-010/011 Now and Next show timed blocks', async ({ page, auth, request }) => {

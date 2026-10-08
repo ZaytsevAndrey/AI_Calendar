@@ -24,6 +24,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 - [x] **Incremental placement: Google.** Seated local writes sync to Google; failures go to `pending_google_writes` and retry in the background. A newer Google edit of time/title/description drops the pending row and pulls into the task. No slot means no Google event. The hourly tick appends missing series days via placement and purges past problematic copies. `syncGoogleDeletions` (default off) deletes the local task when a linked Google event is gone.
 
+- [x] **Incremental placement: remove Generate / Clear / Undo.** Calendar Review, preview, Clear, and Undo are gone. `POST /schedule/generate`, preview, clear, undo, and `POST /schedule-jobs/replan` are removed. Leftover jobs fail without calling `engine.run`. Horizon append stays on the hourly placement tick.
+
 ## Shipped (Sep 2026)
 
 ### Scheduling redesign (engine)

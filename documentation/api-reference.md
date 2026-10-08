@@ -139,27 +139,23 @@ Protected with JWT (`JwtAuthGuard`).
 | POST | `/schedule/move-event` | Move or resize one displayed block. Body: `googleEventId`, `originalStart`, `originalEnd`, `start`, `end`, optional `calendarId`, `recurringEventId`, and `seriesScope` (`occurrence` or `series`). A recurring app task with no `seriesScope` returns `{ kind: "series-choice", jobId: null, taskName }` and writes nothing. `occurrence` skips that day and creates a one-off. `series` ends the old series before that day and starts a new recurring task at the new time. Other app moves return `{ kind, jobId: null }` and seat through the placement step. External Google-only moves return `{ kind: "google", jobId: null }`. Habit block is 400. |
 | POST | `/schedule/recommendations` | Suggestions for the next 7 days in settings `timeZone`. Body ignored. Returns `{ summary, suggestions: [{ kind, title, detail, taskId }] }`. `kind` is `overload`, `gap`, `phase_mismatch`, or `deadline_risk`. Does not write tasks, slots, Google, or undo. Empty calendars skip Groq. Groq failures are 503. |
 | POST | `/schedule/conflict-option-phrases` | Body: one `SchedulingConflict` (`taskId`, `taskName`, `reason`, `options`, optional `meta`). Returns `{ options: [{ id, title, detail }] }`. Groq only phrases ids; templates if Groq is down. Applying uses task PATCH / skip-occurrence. |
-| POST | `/schedule/preview` | Dry-run of Calendar Generate. Returns `{ diff, warnings, errors }` and does not write slots, Google, or undo. |
-| POST | `/schedule/generate` | Enqueues Calendar generate (async); returns `{ jobId, status, message }` — poll `GET /schedule-jobs/:id`. Stores an undo snapshot. |
-| DELETE | `/schedule` | Clear still-open app-generated local slots through the Settings horizon, and leftover upcoming events on the app Google calendar. Fully ended blocks stay. Drops Generate undo. Returns `{ deleted: number }`. |
+
+Generate, Clear, Undo, preview, and `POST /schedule-jobs/replan` are removed. Slots are written by the placement step on create/edit/drag/horizon append.
 
 ## Event phases — `/event-phases`
 
 Links Google Calendar events to phases (separate from CRUD `/phases`). See `event-phases.controller.ts`.
 
-## Schedule jobs (intelligent replan queue) — `/schedule-jobs`
+## Schedule jobs — `/schedule-jobs`
+
+Legacy read-only status for old jobs. Nothing new is enqueued.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/schedule-jobs/replan` | Enqueue a full replan. Create, edit, drag, skip, delete, complete, and cancel do not use this; Generate still does. |
-| GET | `/schedule-jobs/undo` | `{ available, jobId, generatedAt }` for the last Calendar Generate |
-| POST | `/schedule-jobs/undo` | Restore still-open slots + Google from that snapshot; finished blocks stay |
-| GET | `/schedule-jobs/latest/done` | Latest completed job + parsed `result` (diff / warnings / errors) |
-| GET | `/schedule-jobs/:id` | Poll job status until `done` or `failed`. While running, `progressStage` is `preparing` / `computing` / `syncing_google` (optional `progressCurrent` / `progressTotal` during Google sync). |
+| GET | `/schedule-jobs/latest/done` | Latest completed job + parsed `result` when present |
+| GET | `/schedule-jobs/:id` | Job status (leftover queue rows fail without writing slots) |
 
-`POST /schedule/generate` enqueues the same pipeline and returns `{ jobId, status, message }` (frontend polls `GET /schedule-jobs/:id`).
-
-Completed jobs expose a parsed `result` with `diff`, `warnings`, `errors`, and `conflicts` (structured option ids for the shared choice sheet; see [spec-conflict-rules](spec-conflict-rules.md)). Generate / Clear live on the **Calendar** page. Generate opens a preview (`POST /schedule/preview`) and applies only after confirmation; the job then shows a stage timeline. **Undo last generate** restores the previous still-open app blocks (and Google). A dismissible **Last generate** notes panel lists warnings/errors; a colored toast (title + detail, green / yellow / red by outcome) summarizes the run. Past **app-generated** events stay after replan/clear/undo and render in gray; other Google calendars keep their colors. Task and calendar edits return immediately. Create and geometric edit seat the changed task through the placement step and do not enqueue a replan job (`jobId` is null). Cosmetic edits update the task and, when it already has one, the same Google event. Generate still returns a job. After Generate, if `conflicts` is non-empty the shared conflict sheet opens; dismiss parks as Problematic.
+Create and geometric edit seat through the placement step (`jobId` is null). Anchor conflicts return `conflicts[]` on the write response.
 
 ## Tasks (scheduling-related fields)
 
@@ -180,4 +176,4 @@ Create/update body may include:
 - `recurrenceWeekDays` — `0` = Sunday … `6` = Saturday. Empty / omitted / all seven = no extra weekday filter. Intersected with the phase `weekDays`.
 - `allowSplit` — per-task; engine also requires the user setting `allowSplitScheduling`
 
-Non-`fixed` create and geometric edit call the placement step and return `jobId: null`. An anchor conflict returns `conflicts[]` (same shape as a replan job) without parking; the client opens the shared sheet, and dismiss / `leave_problematic` sets `problematic`. Resolve (`scheduleState: resolved`) reseats `problematicOriginalStart`/`End` as a second-layer slot. Skip on a non-recurring problematic copy with `parentSeriesId` skips that day on the parent series, then deletes the copy. Seated writes sync to Google; failures enqueue `pending_google_writes`. No slot means no Google event. They do not enqueue `full_replan`. Cosmetic edits do not move the slot. Drag, skip, delete, complete, and cancel do not enqueue `full_replan`. A freed hole seats problematic tasks that fit, oldest first. `POST /schedule-jobs/replan` and Generate still run the full engine.
+Non-`fixed` create and geometric edit call the placement step and return `jobId: null`. An anchor conflict returns `conflicts[]` without parking; the client opens the shared sheet, and dismiss / `leave_problematic` sets `problematic`. Resolve (`scheduleState: resolved`) reseats `problematicOriginalStart`/`End` as a second-layer slot. Skip on a non-recurring problematic copy with `parentSeriesId` skips that day on the parent series, then deletes the copy. Seated writes sync to Google; failures enqueue `pending_google_writes`. No slot means no Google event. Cosmetic edits do not move the slot. Drag, skip, delete, complete, and cancel do not replan. A freed hole seats problematic tasks that fit, oldest first. `engine.run` does not write slots.

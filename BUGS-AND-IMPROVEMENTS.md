@@ -6,7 +6,7 @@
 
 ## Черга
 
-Порожньо. Наступний крок у roadmap — §12, зріз **Remove Generate, Clear, and Undo**.
+Порожньо. Наступний крок у roadmap — §13, Unscheduled cards.
 
 ---
 

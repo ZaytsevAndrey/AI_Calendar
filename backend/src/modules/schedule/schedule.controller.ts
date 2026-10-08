@@ -19,7 +19,6 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ScheduleService } from './schedule.service';
-import { ScheduleJobService } from './schedule-job.service';
 import { DisplayedEventMoveService } from './displayed-event-move.service';
 import { ScheduleRecommendationsService } from './schedule-recommendations.service';
 import { ConflictOptionPhrasesService } from './conflict-option-phrases.service';
@@ -33,16 +32,11 @@ import {
   CreateScheduleDto,
   UpdateScheduleDto,
   ScheduleQueryDto,
-  GenerateScheduleDto,
   MoveDisplayedEventDto,
 } from './dto';
 import { PhraseConflictOptionsDto } from './dto/phrase-conflict-options.dto';
 import { ScheduledTask } from './schedule.entity';
-import {
-  DiffItem,
-  SchedulingConflict,
-  SchedulingWarning,
-} from './intelligent-scheduling.engine';
+import { SchedulingConflict } from './intelligent-scheduling.engine';
 
 @ApiTags('schedule')
 @ApiBearerAuth()
@@ -51,7 +45,6 @@ import {
 export class ScheduleController {
   constructor(
     private readonly scheduleService: ScheduleService,
-    private readonly scheduleJobService: ScheduleJobService,
     private readonly displayedEventMoveService: DisplayedEventMoveService,
     private readonly scheduleRecommendationsService: ScheduleRecommendationsService,
     private readonly conflictOptionPhrasesService: ConflictOptionPhrasesService,
@@ -137,16 +130,6 @@ export class ScheduleController {
     return this.scheduleService.update(id, req.user.userId, updateScheduleDto);
   }
 
-  @Delete()
-  @ApiOperation({
-    summary:
-      'Clear app-generated slots in the planning horizon (Settings: recurringScheduleHorizonDays)',
-  })
-  @ApiResponse({ status: 200, description: 'Schedule cleared' })
-  async clearSchedule(@Request() req): Promise<{ deleted: number }> {
-    return this.scheduleService.clearSchedule(req.user.userId);
-  }
-
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a scheduled item' })
   @ApiResponse({ status: 200, description: 'Deleted successfully' })
@@ -208,38 +191,4 @@ export class ScheduleController {
     return { options };
   }
 
-  @Post('preview')
-  @HttpCode(200)
-  @ApiOperation({
-    summary:
-      'Dry-run the same placement as Generate. Does not write slots, Google, or undo.',
-  })
-  @ApiResponse({ status: 200, description: 'Projected diff, warnings, and errors' })
-  async previewSchedule(@Request() req): Promise<{
-    diff: DiffItem[];
-    warnings: SchedulingWarning[];
-    errors: { taskId: string; message: string }[];
-    conflicts: SchedulingConflict[];
-  }> {
-    return this.scheduleJobService.preview(req.user.userId);
-  }
-
-  @Post('generate')
-  @ApiOperation({
-    summary:
-      'Enqueue intelligent replan (async). Poll GET /schedule-jobs/:jobId for diff.',
-  })
-  @ApiResponse({ status: 201, description: 'Job enqueued' })
-  async generateSchedule(
-    @Request() req,
-    @Body() _generateDto: GenerateScheduleDto,
-  ): Promise<{ jobId: string; status: string; message: string }> {
-    const job = await this.scheduleJobService.enqueueGenerate(req.user.userId);
-    return {
-      jobId: job.id,
-      status: job.status,
-      message:
-        'Poll GET /schedule-jobs/:id until status is done, then refresh /schedule.',
-    };
-  }
 }

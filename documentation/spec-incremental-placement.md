@@ -312,7 +312,7 @@ flowchart TD
 
 Не переписується і не є новою поведінкою: пріоритет, звички як окремі блоки, сірий колір минулих подій app-календаря, збереження повністю закінчених слотів, `UNTIL` для минулого Google, буфер як не-подія.
 
-Імплементація ще не дописана до кінця: Generate, Clear і `POST /schedule-jobs/replan` досі роблять повний `engine.run`. Створення й геометричне редагування кличуть `PlacementStepService.place` і не ставлять `full_replan`. Косметика оновлює задачу й той самий Google-івент. Drag, skip, delete, complete і cancel не ставлять `full_replan`. Звільнена дірка саджає проблемні задачі, які вміщаються, від найстарішої. Drag серії питає «цей день чи вся серія». Конфлікт із якорем відкриває шит. Resolve — другий шар. Skip із Problematic пропускає день серії і видаляє копію. Успішні локальні посадки синхронізуються в Google; збої йдуть у `pending_google_writes` і доганяються фоном; новіша правка в Google скасовує чергу і підтягується в базу. Годинний тік дописує відсутні дні серії через placement і прибирає прострочені Problematic. Generate / Clear / Undo ще в UI. [task-scheduling-test-matrix.md](task-scheduling-test-matrix.md) досі описує повний рушій для Generate.
+Контракт посадки в коді: слоти пише `PlacementStepService.place` (create/edit/drag/append). Generate, Clear, Undo і `POST /schedule-jobs/replan` прибрані; `engine.run` більше не пише слоти. Косметика оновлює задачу й Google. Звільнена дірка саджає Problematic. Drag серії питає «цей день чи вся серія». Конфлікт із якорем відкриває шит. Resolve — другий шар. Google sync + `pending_google_writes`. Годинний тік дописує дні серії й чистить прострочені Problematic. [task-scheduling-test-matrix.md](task-scheduling-test-matrix.md) оновлено під placement.
 
 ---
 
