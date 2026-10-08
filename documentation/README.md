@@ -12,7 +12,8 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Task creation rules](task-creation-rules.md) | Presets vs settings, validation, phase, recurrence weekdays, Google sync |
 | [Roadmap](roadmap.md) | Live queue |
 | [Roadmap archive](roadmap-archive.md) | Shipped work |
-| [Spec: Conflict rules](spec-conflict-rules.md) | Silent vs ask, Unscheduled vs Problematic, option ids (placement contract) |
+| [Spec: Incremental placement](spec-incremental-placement.md) | Who is read and written per calendar edit. No Generate button. A displaced day becomes a new task; a chain runs only when everyone still fits (target; engine still full-replans) |
+| [Spec: Conflict rules](spec-conflict-rules.md) | Unscheduled vs Problematic, conflict option ids; who moves defers to incremental placement |
 | [Spec: Voice Commander](spec-voice-commander.md) | Full task/habit CRUD by voice, TTS, mic equalizer, confirm delete/cancel (roadmap §13) |
 | [Spec: Intelligent scheduling](spec-intelligent-scheduling.md) | Unified items, settings, phases, queue, diff/undo, Google anchors (defers placement to conflict rules) |
 | [Task scheduling test matrix](task-scheduling-test-matrix.md) | Given/When/Then cases mapped to unit tests |
@@ -20,4 +21,4 @@ Single source of truth for the project. Keep these files in sync with code chang
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** September 2026 (Voice Commander product spec + roadmap §13; recurring extend; Unscheduled actions; drag replan; Voice conflict layer).
+**Last documentation update:** October 2026 (incremental placement contract; engine still full-replans).

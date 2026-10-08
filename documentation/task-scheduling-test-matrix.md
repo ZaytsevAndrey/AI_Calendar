@@ -1,6 +1,7 @@
 # Task Scheduling Test Matrix (Given/When/Then)
 
-Product contract: [spec-conflict-rules.md](spec-conflict-rules.md).  
+Live engine and these cases: [spec-conflict-rules.md](spec-conflict-rules.md) as implemented today (full replan; seated flexible keeps its slot).  
+Target write-set, not yet covered by these tests: [spec-incremental-placement.md](spec-incremental-placement.md).  
 Format is aimed at direct transfer into unit/integration tests.
 
 **Target behavior** for remaining UI/inbox cases (roadmap §3+). Engine placement cases marked **Covered** match `intelligent-scheduling.engine` unit tests after §2.
@@ -11,7 +12,7 @@ Format is aimed at direct transfer into unit/integration tests.
 - **W\*** (From/Until): client TZ (`Asia/Nicosia`), host UTC as on Render.
 - Slot step: 15 minutes.
 - Default phase: `09:00-17:00` unless noted.
-- **Placement algorithm:** type + preferred-first; **priority ignored**; already-seated flexible keeps its slot; silent dodge of fixed/Google unless preferred lands exactly on busy fixed; ask / Problematic / Unscheduled per conflict-rules spec.
+- **Placement algorithm (live engine, what these cases assert):** type + preferred-first; **priority ignored**; already-seated flexible keeps its slot; silent dodge of fixed/Google unless preferred lands exactly on busy fixed; ask / Problematic / Unscheduled per conflict-rules spec. The target rule (claimant takes the interval) is not asserted here yet.
 - Warnings asserted by `code`, not message text.
 
 Recommended codes (use real backend enums if names differ):

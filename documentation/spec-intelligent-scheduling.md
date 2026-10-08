@@ -1,14 +1,14 @@
 # Specification: Intelligent scheduling & unified items
 
 **Status:** implemented in codebase (engine, jobs, diff); see [overview](overview.md) and [api-reference](api-reference.md) for HTTP/UI.  
-**Placement / conflict product contract:** [spec-conflict-rules.md](spec-conflict-rules.md) (supersedes priority-based ordering below as the target; engine migration is roadmap §2).  
+**Placement write-set (target):** [spec-incremental-placement.md](spec-incremental-placement.md). Inboxes and option ids: [spec-conflict-rules.md](spec-conflict-rules.md).  
 **Language:** English (implementation reference)  
-**Last updated:** September 2026
+**Last updated:** October 2026
 
 ## 1. Goals
 
 - Treat **event**, **task**, and **todo** as a **single domain entity** (“item”) in the product and scheduling logic.
-- On **create/update** of an item, the system **automatically replans** placements within allowed time windows.
+- On **create** or a geometric edit, the system seats that item. The live engine still **replans every open flexible**; the target is [incremental placement](spec-incremental-placement.md) (do not rewrite seated tasks).
 - User provides **scheduling settings** (fixed vs movable, duration, optional recurrence and weekdays, optional preferred start), **one phase** (or any time); the engine chooses **where** to place the item using **type + preferred** rules in [spec-conflict-rules.md](spec-conflict-rules.md). Numeric **priority** is soft-deprecated for placement.
 - Show the user **what moved** (diff). Support **undo** that restores **local DB and Google Calendar**.
 - **Google-imported / synced events** are **anchors**: never moved by the scheduler.
@@ -87,7 +87,7 @@ Legacy `eventType` strings (`daily_routine`, `learning`, …) may still exist in
 
 **Authoritative rules:** [spec-conflict-rules.md](spec-conflict-rules.md).
 
-Summary: place by **type** (fixed / flexible / recurring) + **preferred time**; do not use numeric priority. Already-seated flexible keeps its slot; newcomers take the next free slot. Ask on fixed-vs-fixed and on preferred exactly on fixed/Google busy. Overflow / no-reply → **Problematic**. Deadline window with no fit → **Unscheduled**.
+Summary: place by **type** (fixed / flexible / recurring) + **preferred time**; do not use numeric priority. A claimed interval takes the seat and moves only the overlapped task ([incremental placement](spec-incremental-placement.md)). Ask on fixed-vs-fixed and on preferred exactly on fixed/Google busy. Overflow / no-reply → **Problematic**. Deadline window with no fit → **Unscheduled**.
 
 *Code note:* the live engine may still sort by priority until roadmap §2; do not document priority bump as the product target.
 
@@ -102,7 +102,7 @@ Summary: place by **type** (fixed / flexible / recurring) + **preferred time**; 
 
 For each schedulable item (see conflict-rules for silent vs ask):
 
-1. Try **preferred** clock interval inside the phase ∩ wake/sleep ∩ From/Until; if free, place there. If preferred is taken by a seated flexible, take the **next free** slot (silent). If preferred lands exactly on fixed/Google → conflict options.
+1. Try **preferred** clock interval inside the phase ∩ wake/sleep ∩ From/Until; if free, place there. If preferred is taken by a seated flexible, the claimant takes it and only that task moves ([incremental placement](spec-incremental-placement.md)). If preferred lands exactly on fixed/Google → conflict options. The live engine still sends the newcomer to the next free slot.
 2. If no preferred: earliest valid slot; always dodge fixed/Google silently.
 3. Place **remaining** duration (estimated minutes minus fully ended auto slots for non-recurring tasks). If remaining work is below 5 minutes, skip — do not schedule the same past block again.
 4. If not enough contiguous time and the item **allows split**: split into chunks ≥ `minSplitMinutes`.
@@ -122,9 +122,12 @@ One optional phase. Preferred-first behavior and when to ask vs dodge are define
 
 ## 5. Triggers and UX
 
-- **On create** (and on relevant **update**): enqueue **replan job** and return immediately; processing continues in the background (HTTP does not wait for Google sync). The Calendar page shows a **stage timeline** while Generate runs (`preparing` → `computing` → `syncing_google`).  
-- **Generate / Clear / Undo** keep **fully ended** app-generated slots (`scheduledEndTime <= now`), including earlier today. Only still-open blocks are rewritten, cleared, or restored. Past app-calendar events render **gray** in the UI; other Google calendars keep their colors. Calendar **Undo last generate** reverses the last Generate snapshot.  
-- Optional later: manual **“Replan now”** button (same pipeline).
+**Target write-set:** [spec-incremental-placement.md](spec-incremental-placement.md). A create or geometric edit seats the claimant and, only when the claimed interval overlaps someone, that someone. Cosmetic edits, complete, cancel, skip, and delete do not replan the calendar. The live engine still enqueues a full replan for most flexible saves; that is not the target.
+
+- **Generate / Review and undo-last-generate are not part of the target.** Tasks receive a seat when they are created or when a later claim overlaps them. The live Calendar button still exists until that UI is removed.
+- **Clear** is not part of the target either. The live Calendar action remains until that UI is removed.
+- Fully ended app-generated slots (`scheduledEndTime <= now`) stay. Past app-calendar events render **gray**; other Google calendars keep their colors.
+- The live worker may still rewrite every open flexible slot until the incremental contract is implemented.
 
 ### 5.1 Diff
 
@@ -133,9 +136,7 @@ One optional phase. Preferred-first behavior and when to ask vs dodge are define
 
 ### 5.2 Undo
 
-- **Single-level undo** of Calendar **Generate** only (not silent replan after task save, not Clear).  
-- Persist **snapshot** on the generate job before apply: scheduled segments + task Google ids/times. A new Generate or Clear consumes the previous snapshot.  
-- Undo restores **still-open** local slots and **pushes updates to Google**. Fully ended blocks stay.
+Target: no undo of a calendar-wide generate, because that action is removed. Create, drag, and a displacement are not batch-undone. The live `POST /schedule-jobs/undo` remains only until Generate is removed. Clear has no undo. Fully ended blocks stay.
 
 ---
 
@@ -150,6 +151,8 @@ One optional phase. Preferred-first behavior and when to ask vs dodge are define
 ---
 
 ## 7. Google Calendar
+
+Target source of truth, failed-write queue, and `scheduleState` (`none` / `problematic` / `resolved`) live in [spec-incremental-placement.md](spec-incremental-placement.md) §12. The bullets below describe the live engine until that ships.
 
 - **Inbound:** events from Google → stored as **anchors** (`isFixedExternal=true` or separate table); never moved by scheduler.  
 - **Outbound:** our items with sync flag get **create/update/delete** when **still-open** segments change. Fully ended app events are left in place.  

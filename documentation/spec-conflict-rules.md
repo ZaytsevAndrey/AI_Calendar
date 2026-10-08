@@ -4,7 +4,7 @@
 **Language:** English  
 **Last updated:** September 2026  
 
-This document is the **single source of truth** for who moves silently, who asks the user, and when a task lands in **Unscheduled** vs **Problematic**. Placement expectations in [task-scheduling-test-matrix.md](task-scheduling-test-matrix.md) follow these rules. Queue, Google sync, diff/undo, and settings that are still accurate live in [spec-intelligent-scheduling.md](spec-intelligent-scheduling.md) (placement/ordering there defers here).
+This document is the contract for **when to ask**, **option ids**, and **Unscheduled vs Problematic**. Who moves, and which edits write slots at all, live in [spec-incremental-placement.md](spec-incremental-placement.md) (target; the live engine still full-replans). [task-scheduling-test-matrix.md](task-scheduling-test-matrix.md) follows the live engine until that target ships. Queue, Google sync, diff/undo, and settings that are still accurate live in [spec-intelligent-scheduling.md](spec-intelligent-scheduling.md).
 
 ---
 
@@ -45,7 +45,7 @@ Form create, drag, and Voice share this contract (same decision layer; implement
 | Situation | Outcome |
 |-----------|---------|
 | Free slot at preferred (or earliest if no preferred) | Place silently |
-| New **flexible** preferred collides with **already seated flexible** | Seated stays; new finds next free slot in phase (silent) |
+| New **flexible** preferred collides with **already seated flexible** | Target: claimant takes the interval; only the overlapped task moves ([incremental placement](spec-incremental-placement.md)). Live engine until that ships: seated stays; new finds the next free slot |
 | Flexible (or recurring) in the way of a placement that **wins** (e.g. after user picks `move_other`) | Move the flexible silently within phase |
 | **Recurring** occurrence moved to free a hole or dodge an anchor | Place + **notify** (in-app toast, not push) |
 | **Recurring** cannot fit in phase/horizon after moves | **Problematic** (not Unscheduled) |
@@ -55,6 +55,8 @@ Form create, drag, and Voice share this contract (same decision layer; implement
 | Phase full / no hole after silent flexible shifts | **Ask**; if no answer → Problematic |
 | Deadline / From–Until with **no fit** (user intentional window) | Stay / land in **Unscheduled** (overdue tone as today); **not** Problematic |
 | User **dismisses** conflict UI or never answers (incl. Voice) | Target work → **Problematic** |
+
+The diagram is the live full-replan engine. The target flow is [spec-incremental-placement.md](spec-incremental-placement.md) §4.
 
 ```mermaid
 flowchart TD
@@ -83,7 +85,7 @@ flowchart TD
 
 1. If the item has a preferred start/end, try that **exact** clock interval inside the phase ∩ wake/sleep ∩ From/Until.
 2. If that interval is free → place there.
-3. If occupied by a **seated flexible** (or other movable that must keep the seat under §4) → take the **next free** contiguous slot that day, then later days in horizon (silent).
+3. If occupied by a **seated flexible** → the claimant takes that interval; only the overlapped task looks for the next free hole ([incremental placement](spec-incremental-placement.md)). No cascade.
 4. If occupied by **fixed** / Google and preferred is **exactly** that busy interval → conflict options (§6).
 5. If no preferred → earliest valid slot; always dodge fixed/Google silently.
 
@@ -104,7 +106,7 @@ Engine/API returns structured options; Groq (or copy) only **phrases** them. App
 
 Further ids may be added later; these are the baseline contract.
 
-**No-reply:** closing the sheet, navigating away, or not choosing via Voice → treat as unresolved → **Problematic** for the work that could not be placed.
+**No-reply on the conflict sheet:** closing the sheet or navigating away parks the claimant in **Problematic** when no free hole exists. An unanswered Voice clarification is different: the task is created from the fields already understood, then follows normal placement ([incremental placement](spec-incremental-placement.md) §10).
 
 ---
 
@@ -121,16 +123,12 @@ Further ids may be added later; these are the baseline contract.
 
 ---
 
-## 8. Triggers (same rules)
+## 8. Triggers
 
-| Trigger | Behavior |
-|---------|----------|
-| **Form create/update** | Find slot → silent / ask / unscheduled / problematic per §4 |
-| **Drag** | Replan affected phases that civil day; flexible silent shift if a hole exists; else ask / problematic; recurring move → notify |
-| **Voice** | After parse, same placement + conflict builder; `needs_conflict_choice` → same options; spoken or tap pick; no-reply → Problematic |
+Which edits read or write seats is defined in [spec-incremental-placement.md](spec-incremental-placement.md) §5. Form, drag, and voice share that table. A small edit does not replan every open flexible. No answer on the conflict sheet still parks the claimant in Problematic (§7); already seated tasks stay.
 
 ---
 
 ## 9. Implementation note
 
-Roadmap **§2–§8** shipped: type + preferred placement, Problematic inbox, shared conflict sheet, Voice, drag replan, Unscheduled actions, and background recurring extend (Generate/Review is cleanup, not liveness). Do not add new priority-displacement behavior.
+Roadmap **§2–§8** shipped the live full-replan engine, Problematic inbox, shared conflict sheet, Voice, and background extend. The target write-set is [spec-incremental-placement.md](spec-incremental-placement.md). Do not add priority-based displacement. A claimant overlapping a seated flexible is not a priority bump: only that overlapped task moves.
