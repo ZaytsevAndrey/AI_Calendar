@@ -1,16 +1,22 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  AlarmClock,
+  CalendarClock,
   CalendarPlus,
   Check,
+  CircleDot,
   ExternalLink,
+  Inbox,
   Pencil,
+  Repeat,
   SkipForward,
   Trash2,
   Zap,
 } from 'lucide-react';
 import { TaskDTO } from '../../../api/tasks.api';
 import { formatDateTime, formatDateTimeRange, formatMinutes } from '../../../utils/formatDate';
+import { buildUnscheduledIconMeta } from '../unscheduledCardMeta';
 import { deadlineTone } from '../utils/deadlineTone';
 
 interface EventItemProps {
@@ -46,10 +52,21 @@ const tonePill = {
   none: 'border-white/10 bg-white/5 text-ide-text',
 };
 
+const toneIcon = {
+  overdue: 'border-ide-error/50 bg-ide-error/20 text-ide-error',
+  today: 'border-ide-warn/50 bg-ide-warn/20 text-ide-warn',
+  soon: 'border-ide-warn/40 bg-ide-warn/15 text-ide-warn',
+  none: 'border-white/10 bg-white/5 text-ide-text',
+  phase: 'border-white/10 bg-white/5 text-ide-text',
+};
+
 const pill = 'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium leading-none';
 
 const iconBtn =
   'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-ide-text hover:bg-white/10 disabled:opacity-50';
+
+const iconMetaBtn =
+  'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border';
 
 function Pill({
   className,
@@ -89,6 +106,7 @@ const EventItem: React.FC<EventItemProps> = ({
   const when = slot || (!unscheduled && from && deadline ? `${from} – ${deadline}` : null);
   const editLabel = openLabel || t('common.edit');
   const EditIcon = openLabel ? ExternalLink : Pencil;
+  const overdue = unscheduled && tone === 'overdue';
 
   const tonePrefix =
     tone === 'overdue'
@@ -116,68 +134,117 @@ const EventItem: React.FC<EventItemProps> = ({
           ? t('tasks.status.completed')
           : t('tasks.status.canceled');
 
+  const unscheduledMeta = unscheduled
+    ? buildUnscheduledIconMeta({
+        phaseName: event.phase?.name,
+        phaseColor: event.phase?.color,
+        earliestFormatted: from,
+        deadlineFormatted: deadline,
+        tone,
+        fromLabel: (time) => t('tasks.item.from', { time }),
+        dueLabel: (whenDue) => t('tasks.item.due', { when: whenDue }),
+        overduePrefix: t('tasks.item.overduePrefix'),
+        dueSoonPrefix: t('tasks.item.dueSoonPrefix'),
+        approachingPrefix: t('tasks.item.approachingPrefix'),
+      })
+    : [];
+
+  const iconAction = (
+    label: string,
+    onClick: () => void,
+    icon: React.ReactNode,
+    className = '',
+  ) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${iconBtn} ${className}`}
+      disabled={busy}
+      aria-label={label}
+      title={label}
+    >
+      {icon}
+    </button>
+  );
+
+  const textOrIcon = (
+    label: string,
+    onClick: () => void,
+    icon: React.ReactNode,
+    desktopClass: string,
+    iconClass = '',
+  ) =>
+    unscheduled ? (
+      iconAction(label, onClick, icon, iconClass)
+    ) : (
+      <>
+        <button
+          type="button"
+          onClick={onClick}
+          className={`${iconBtn} ${iconClass} md:hidden`}
+          disabled={busy}
+          aria-label={label}
+        >
+          {icon}
+        </button>
+        <button
+          type="button"
+          onClick={onClick}
+          className={`${desktopClass} hidden px-3 py-1.5 text-sm md:inline-flex`}
+          disabled={busy}
+        >
+          {label}
+        </button>
+      </>
+    );
+
   const actions = (
     <>
-      {onDone ? (
-        <>
-          <button type="button" onClick={() => onDone(event)} className={`${iconBtn} md:hidden`} disabled={busy} aria-label={t('tasks.item.done')}>
-            <Check className="h-4 w-4" aria-hidden />
-          </button>
-          <button type="button" onClick={() => onDone(event)} className="ui-btn-secondary hidden px-3 py-1.5 text-sm md:inline-flex" disabled={busy}>
-            {t('tasks.item.done')}
-          </button>
-        </>
-      ) : null}
-      {onSkip ? (
-        <>
-          <button type="button" onClick={() => onSkip(event)} className={`${iconBtn} md:hidden`} disabled={busy} aria-label={t('tasks.item.skip')}>
-            <SkipForward className="h-4 w-4" aria-hidden />
-          </button>
-          <button type="button" onClick={() => onSkip(event)} className="ui-btn-secondary hidden px-3 py-1.5 text-sm md:inline-flex" disabled={busy}>
-            {t('tasks.item.skip')}
-          </button>
-        </>
-      ) : null}
-      {onDoNow ? (
-        <>
-          <button type="button" onClick={() => onDoNow(event)} className={`${iconBtn} text-ide-link md:hidden`} disabled={busy} aria-label={t('tasks.item.doNow')}>
-            <Zap className="h-4 w-4" aria-hidden />
-          </button>
-          <button type="button" onClick={() => onDoNow(event)} className="ui-btn-primary hidden px-3 py-1.5 text-sm md:inline-flex" disabled={busy}>
-            {t('tasks.item.doNow')}
-          </button>
-        </>
-      ) : null}
-      {onSchedule ? (
-        <>
-          <button type="button" onClick={() => onSchedule(event)} className={`${iconBtn} text-ide-link md:hidden`} disabled={busy} aria-label={t('tasks.item.schedule')}>
-            <CalendarPlus className="h-4 w-4" aria-hidden />
-          </button>
-          <button type="button" onClick={() => onSchedule(event)} className="ui-btn-primary hidden px-3 py-1.5 text-sm md:inline-flex" disabled={busy}>
-            {t('tasks.item.schedule')}
-          </button>
-        </>
-      ) : null}
-      <button type="button" onClick={() => onEdit(event)} className={`${iconBtn} md:hidden`} aria-label={editLabel}>
-        <EditIcon className="h-4 w-4" aria-hidden />
-      </button>
-      <button type="button" onClick={() => onEdit(event)} className="ui-btn-secondary hidden px-3 py-1.5 text-sm md:inline-flex">
-        {editLabel}
-      </button>
-      <button type="button" onClick={() => onDelete(event.id)} className={`${iconBtn} text-ide-error/80 hover:text-ide-error md:hidden`} aria-label={t('common.delete')}>
-        <Trash2 className="h-4 w-4" aria-hidden />
-      </button>
-      <button type="button" onClick={() => onDelete(event.id)} className="ui-btn-danger hidden px-3 py-1.5 text-sm md:inline-flex">
-        {t('common.delete')}
-      </button>
+      {onDone
+        ? textOrIcon(t('tasks.item.done'), () => onDone(event), <Check className="h-4 w-4" aria-hidden />, 'ui-btn-secondary')
+        : null}
+      {onSkip
+        ? textOrIcon(
+            t('tasks.item.skip'),
+            () => onSkip(event),
+            <SkipForward className="h-4 w-4" aria-hidden />,
+            'ui-btn-secondary',
+          )
+        : null}
+      {onDoNow
+        ? textOrIcon(
+            t('tasks.item.doNow'),
+            () => onDoNow(event),
+            <Zap className="h-4 w-4" aria-hidden />,
+            'ui-btn-primary',
+            'text-ide-link',
+          )
+        : null}
+      {onSchedule
+        ? textOrIcon(
+            t('tasks.item.schedule'),
+            () => onSchedule(event),
+            <CalendarPlus className="h-4 w-4" aria-hidden />,
+            'ui-btn-primary',
+            'text-ide-link',
+          )
+        : null}
+      {textOrIcon(editLabel, () => onEdit(event), <EditIcon className="h-4 w-4" aria-hidden />, 'ui-btn-secondary')}
+      {textOrIcon(
+        t('common.delete'),
+        () => onDelete(event.id),
+        <Trash2 className="h-4 w-4" aria-hidden />,
+        'ui-btn-danger',
+        'text-ide-error/80 hover:text-ide-error',
+      )}
     </>
   );
 
   return (
     <div
-      className="task-item flex flex-col gap-3 border-l-4"
+      className={`task-item flex flex-col gap-3 border-l-4 ${overdue ? 'ring-1 ring-ide-error/40' : ''}`}
       style={{
-        borderLeftColor: color,
+        borderLeftColor: overdue ? '#f44336' : color,
         backgroundColor: '#3C3F41',
         backgroundImage: `linear-gradient(135deg, ${color}38, ${color}14 46%, transparent)`,
       }}
@@ -186,42 +253,90 @@ const EventItem: React.FC<EventItemProps> = ({
         <h3 className="line-clamp-2 min-w-0 flex-1 text-base font-semibold leading-snug text-ide-text sm:text-lg">
           {event.name}
         </h3>
-        <div className="hidden shrink-0 items-center gap-2 md:flex">{actions}</div>
+        <div className={`shrink-0 items-center gap-2 ${unscheduled ? 'flex' : 'hidden md:flex'}`}>
+          {actions}
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <span className="sr-only">{t('tasks.item.prioritySr', { priority: event.priority })}</span>
-        <Pill style={{ borderColor: `${color}88`, backgroundColor: `${color}24`, color }}>
-          {priorityLabel}
-        </Pill>
-        <Pill className={statusPill[event.status]}>{statusLabel}</Pill>
-        {unscheduled ? (
-          <Pill className="border-ide-warn/50 bg-ide-warn/15 text-ide-warn">{t('tasks.item.unscheduled')}</Pill>
-        ) : null}
-        {event.phase ? (
-          <Pill
-            style={{
-              borderColor: `${event.phase.color || '#808080'}88`,
-              backgroundColor: `${event.phase.color || '#808080'}24`,
-              color: event.phase.color || undefined,
-            }}
+      {unscheduled ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="sr-only">{t('tasks.item.prioritySr', { priority: event.priority })}</span>
+          <span
+            className={`${iconMetaBtn} border-ide-warn/50 bg-ide-warn/15 text-ide-warn`}
+            title={t('tasks.item.unscheduled')}
+            aria-label={t('tasks.item.unscheduled')}
           >
-            {event.phase.name}
+            <Inbox className="h-4 w-4" aria-hidden />
+          </span>
+          {unscheduledMeta.map((meta) => {
+            const Icon =
+              meta.id === 'phase' ? CircleDot : meta.id === 'earliest' ? CalendarClock : AlarmClock;
+            const className =
+              meta.id === 'phase'
+                ? iconMetaBtn
+                : `${iconMetaBtn} ${toneIcon[meta.tone === 'phase' ? 'none' : meta.tone]}`;
+            return (
+              <span
+                key={meta.id}
+                className={className}
+                style={
+                  meta.id === 'phase'
+                    ? {
+                        borderColor: `${meta.color || '#808080'}88`,
+                        backgroundColor: `${meta.color || '#808080'}24`,
+                        color: meta.color || undefined,
+                      }
+                    : undefined
+                }
+                title={meta.label}
+                aria-label={meta.label}
+              >
+                <Icon className="h-4 w-4" aria-hidden />
+              </span>
+            );
+          })}
+          {event.isRecurring ? (
+            <span
+              className={`${iconMetaBtn} border-ide-link/40 bg-ide-link/15 text-ide-link`}
+              title={t('tasks.item.repeats')}
+              aria-label={t('tasks.item.repeats')}
+            >
+              <Repeat className="h-4 w-4" aria-hidden />
+            </span>
+          ) : null}
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <span className="sr-only">{t('tasks.item.prioritySr', { priority: event.priority })}</span>
+          <Pill style={{ borderColor: `${color}88`, backgroundColor: `${color}24`, color }}>
+            {priorityLabel}
           </Pill>
-        ) : null}
-        {!unscheduled ? (
+          <Pill className={statusPill[event.status]}>{statusLabel}</Pill>
+          {event.phase ? (
+            <Pill
+              style={{
+                borderColor: `${event.phase.color || '#808080'}88`,
+                backgroundColor: `${event.phase.color || '#808080'}24`,
+                color: event.phase.color || undefined,
+              }}
+            >
+              {event.phase.name}
+            </Pill>
+          ) : null}
           <Pill className="border-white/10 bg-white/5 text-ide-text">
             {formatMinutes(event.estimatedTimeInMinutes)}
           </Pill>
-        ) : null}
-        {event.isRecurring ? (
-          <Pill className="border-ide-link/40 bg-ide-link/15 text-ide-link">{t('tasks.item.repeats')}</Pill>
-        ) : null}
-        {when ? <Pill className={tonePill.none}>{when}</Pill> : null}
-        {dueText ? <Pill className={tonePill[tone]}>{dueText}</Pill> : null}
-      </div>
+          {event.isRecurring ? (
+            <Pill className="border-ide-link/40 bg-ide-link/15 text-ide-link">{t('tasks.item.repeats')}</Pill>
+          ) : null}
+          {when ? <Pill className={tonePill.none}>{when}</Pill> : null}
+          {dueText ? <Pill className={tonePill[tone]}>{dueText}</Pill> : null}
+        </div>
+      )}
 
-      <div className="flex items-center justify-end gap-2 border-t border-white/10 pt-3 md:hidden">{actions}</div>
+      {unscheduled ? null : (
+        <div className="flex items-center justify-end gap-2 border-t border-white/10 pt-3 md:hidden">{actions}</div>
+      )}
     </div>
   );
 };

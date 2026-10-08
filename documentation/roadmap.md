@@ -95,7 +95,7 @@ Contract: [spec-incremental-placement.md](spec-incremental-placement.md). Do the
 
 §7 shipped basic Done / Skip / Do now / Open. Cards still feel thin next to Problematic.
 
-- [ ] **Richer card info** — why it is unscheduled (deadline miss / no window / user parked), deadline / earliest, phase, duration; clear overdue state.
+- [x] **Richer card info** — Unscheduled cards use icon-only actions and icon meta for inbox / phase / earliest / deadline (accessible labels + tooltips). Overdue gets a red edge and ring. No reason field; duration stays off these cards.
 - [ ] **Stronger actions** — schedule into a real slot (reuse §11 visual pick where it fits), edit constraints without hunting, clearer Do now / Skip outcomes.
 - [ ] **Discoverability** — banner/chip or empty-state copy so Unscheduled is as obvious as Problematic when items pile up.
 
@@ -126,6 +126,6 @@ Voice can already delete a task. The calendar block and the edit modal cannot.
 
 ## Recommended next steps
 
-1. **§13** — Unscheduled cards: more context + stronger schedule/edit actions.
+1. **§13** — Stronger Unscheduled actions (slot pick / edit constraints) and discoverability chip/banner.
 2. **§14** — Delete a task from the calendar block and the edit modal; recurring asks this event or all events.
 3. After each feature ships: tick above, archive a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

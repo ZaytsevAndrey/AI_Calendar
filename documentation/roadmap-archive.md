@@ -26,6 +26,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 - [x] **Incremental placement: remove Generate / Clear / Undo.** Calendar Review, preview, Clear, and Undo are gone. `POST /schedule/generate`, preview, clear, undo, and `POST /schedule-jobs/replan` are removed. Leftover jobs fail without calling `engine.run`. Horizon append stays on the hourly placement tick.
 
+- [x] **Unscheduled richer cards.** Tasks inbox cards use icon-only actions and icon meta for phase / earliest / deadline with a clear overdue state. No unscheduled-reason field; duration stays off Unscheduled cards. Schedule pick and Calendar chip are still open.
+
 ## Shipped (Sep 2026)
 
 ### Scheduling redesign (engine)

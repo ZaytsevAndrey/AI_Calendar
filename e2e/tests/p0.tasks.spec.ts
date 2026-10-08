@@ -86,7 +86,7 @@ test.describe('P0 tasks UI', () => {
     const inbox = page.locator('section').filter({ hasText: 'Unscheduled' }).first();
     const row = inbox.locator('.task-item').filter({ hasText: name });
     await expect(row.getByRole('heading', { name })).toBeVisible();
-    await expect(row.getByText('Unscheduled', { exact: true })).toBeVisible();
+    await expect(row.getByLabel('Unscheduled', { exact: true })).toBeVisible();
 
     const dialog = await openCreateTaskDialog(page);
     await expect(dialog.getByRole('button', { name: 'Unscheduled', exact: true })).toHaveCount(0);
@@ -107,7 +107,7 @@ test.describe('P0 tasks UI', () => {
 
     const scheduled = page.locator('section').filter({ hasText: 'Scheduled' });
     await expect(scheduled.getByRole('heading', { name })).toBeVisible({ timeout: 15_000 });
-    await expect(row.getByText('Unscheduled', { exact: true })).toHaveCount(0);
+    await expect(row.getByLabel('Unscheduled', { exact: true })).toHaveCount(0);
   });
 
   test('U-TSK-010 inbox Done completes without a confirm dialog', async ({ page, auth, request }) => {

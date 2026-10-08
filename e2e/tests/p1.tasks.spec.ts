@@ -161,7 +161,7 @@ test.describe('P1 tasks UI', () => {
     );
     await openAs(page, auth.onboarded, '/tasks');
     const row = page.locator('.task-item').filter({ hasText: name });
-    await expect(row.getByText(/Overdue/)).toBeVisible();
+    await expect(row.getByLabel(/Overdue/)).toBeVisible();
   });
 
   test('U-TSK-012 edit can clear phase and deadline', async ({ page, auth, request }) => {
