@@ -150,18 +150,44 @@ test.describe('P1 tasks UI', () => {
     await expect(page.getByText('DB down')).toBeVisible();
   });
 
-  test('U-TSK-008 unscheduled overdue deadline is highlighted', async ({ page, auth, request }) => {
+  test('U-TSK-008 unscheduled card shows icon meta for phase, earliest, overdue', async ({
+    page,
+    auth,
+    request,
+  }) => {
+    const token = auth.onboarded.access_token;
+    const phaseName = uniqueName('P1 inbox phase');
+    const phase = await apiJson(request, token, 'post', '/phases', {
+      name: phaseName,
+      color: '#22aa66',
+      startTime: '10:00',
+      endTime: '12:00',
+      weekDays: [1, 2, 3, 4, 5],
+      type: 'time_phase',
+    });
+    expectOk(phase);
     const name = uniqueName('P1 overdue inbox');
+    const earliest = new Date(Date.now() + 2 * 60 * 60_000).toISOString();
+    const deadline = new Date(Date.now() - 60 * 60_000).toISOString();
     expectOk(
-      await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
+      await apiJson(request, token, 'post', '/tasks', {
         name,
         isUnscheduled: true,
-        deadline: new Date(Date.now() - 60 * 60_000).toISOString(),
+        phaseIds: [phase.body.id],
+        earliestStartTime: earliest,
+        deadline,
       }),
     );
     await openAs(page, auth.onboarded, '/tasks');
     const row = page.locator('.task-item').filter({ hasText: name });
+    await expect(row.getByLabel('Unscheduled', { exact: true })).toBeVisible();
+    await expect(row.getByLabel(phaseName, { exact: true })).toBeVisible();
+    await expect(row.getByLabel(/^From /)).toBeVisible();
     await expect(row.getByLabel(/Overdue/)).toBeVisible();
+    // Icon-only actions (aria-label), not desktop text pills for duration.
+    await expect(row.getByRole('button', { name: 'Done' })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Do now' })).toBeVisible();
+    await expect(row.getByText(/min/i)).toHaveCount(0);
   });
 
   test('U-TSK-012 edit can clear phase and deadline', async ({ page, auth, request }) => {

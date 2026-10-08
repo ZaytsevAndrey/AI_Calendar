@@ -99,7 +99,7 @@ async function pinAwakeAroundNow(
   const phases = await apiJson(request, token, 'get', '/phases');
   expectOk(phases);
   const list = Array.isArray(phases.body) ? phases.body : [];
-  const focus = list.find((phase) => phase?.name === 'Focus hours');
+  const timePhases = list.filter((phase) => phase?.type === 'time_phase');
   const window = awakeWindowAround(nowMs);
   expectOk(
     await apiJson(request, token, 'patch', '/user-settings', {
@@ -107,11 +107,13 @@ async function pinAwakeAroundNow(
       sleepTime: window.sleepTime,
     }),
   );
-  if (focus?.id) {
+  // Every time phase must intersect wake/sleep, or claim windows are empty → phase_full.
+  for (const phase of timePhases) {
     expectOk(
-      await apiJson(request, token, 'patch', `/phases/${focus.id}`, {
+      await apiJson(request, token, 'patch', `/phases/${phase.id}`, {
         startTime: window.wakeTime,
         endTime: window.sleepTime,
+        weekDays: [0, 1, 2, 3, 4, 5, 6],
       }),
     );
   }
@@ -120,10 +122,11 @@ async function pinAwakeAroundNow(
       wakeTime: settings.body.wakeTime,
       sleepTime: settings.body.sleepTime,
     });
-    if (focus?.id) {
-      await apiJson(request, token, 'patch', `/phases/${focus.id}`, {
-        startTime: focus.startTime,
-        endTime: focus.endTime,
+    for (const phase of timePhases) {
+      await apiJson(request, token, 'patch', `/phases/${phase.id}`, {
+        startTime: phase.startTime,
+        endTime: phase.endTime,
+        weekDays: phase.weekDays ?? null,
       });
     }
   };
@@ -294,21 +297,28 @@ test.describe('P0 calendar UI', () => {
     const token = auth.onboarded.access_token;
     await completeOpenTasks(request, token);
     await releaseCompletedFixedBlocks(request, token);
+    await deleteUnusedTimePhases(request, token);
     const nowMs = Date.now();
     const restoreAwake = await pinAwakeAroundNow(request, token, nowMs);
     const name = uniqueName('E2E skip now');
+    const start = new Date(nowMs - 5 * 60_000).toISOString();
+    const end = new Date(nowMs + 25 * 60_000).toISOString();
     try {
+      // Seed an overlapping movable slot — create no longer searchHole-overlaps "now".
       const created = await apiJson(request, token, 'post', '/tasks', {
         name,
         eventType: 'admin',
         estimatedTimeInMinutes: 30,
         allowSplit: false,
+        scheduledStartTime: start,
+        scheduledEndTime: end,
         timeZone: 'Europe/Kyiv',
       });
       expectOk(created);
-      await waitForScheduleJob(request, token, created.body.jobId);
+      expect(created.body.jobId == null).toBeTruthy();
       const placed = await apiJson(request, token, 'get', `/tasks/${created.body.id}`);
       expectOk(placed);
+      expect(placed.body.scheduleState ?? 'none').toBe('none');
       expect(new Date(placed.body.scheduledStartTime).getTime()).toBeLessThanOrEqual(Date.now());
       expect(new Date(placed.body.scheduledEndTime).getTime()).toBeGreaterThan(Date.now());
 
@@ -329,12 +339,16 @@ test.describe('P0 calendar UI', () => {
   });
 
   test('U-CAL-020 recurring Now block has Skip and no Done', async ({ page, auth, request }) => {
-    await completeOpenTasks(request, auth.onboarded.access_token);
+    const token = auth.onboarded.access_token;
+    await completeOpenTasks(request, token);
+    await deleteUnusedTimePhases(request, token);
+    const nowMs = Date.now();
+    const restoreAwake = await pinAwakeAroundNow(request, token, nowMs);
     const name = uniqueName('E2E skip series');
-    const start = new Date(Date.now() - 5 * 60_000).toISOString();
-    const end = new Date(Date.now() + 25 * 60_000).toISOString();
-    expectOk(
-      await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
+    const start = new Date(nowMs - 5 * 60_000).toISOString();
+    const end = new Date(nowMs + 25 * 60_000).toISOString();
+    try {
+      const created = await apiJson(request, token, 'post', '/tasks', {
         name,
         eventType: 'admin',
         isRecurring: true,
@@ -344,13 +358,20 @@ test.describe('P0 calendar UI', () => {
         scheduledStartTime: start,
         scheduledEndTime: end,
         timeZone: 'Europe/Kyiv',
-      }),
-    );
+      });
+      expectOk(created);
+      const placed = await apiJson(request, token, 'get', `/tasks/${created.body.id}`);
+      expectOk(placed);
+      expect(placed.body.scheduleState ?? 'none').toBe('none');
+      expect(placed.body.scheduledStartTime).toBeTruthy();
 
-    await openAs(page, auth.onboarded);
-    const nowCard = stripBlock(page, name);
-    await expect(nowCard).toBeVisible();
-    await expect(nowCard.getByRole('button', { name: 'Done' })).toHaveCount(0);
-    await expect(nowCard.getByRole('button', { name: 'Skip' })).toHaveCount(1);
+      await openAs(page, auth.onboarded);
+      const nowCard = skippableStripCard(page, name);
+      await expect(nowCard).toBeVisible();
+      await expect(nowCard.getByRole('button', { name: 'Done' })).toHaveCount(0);
+      await expect(nowCard.getByRole('button', { name: 'Skip' })).toHaveCount(1);
+    } finally {
+      await restoreAwake();
+    }
   });
 });

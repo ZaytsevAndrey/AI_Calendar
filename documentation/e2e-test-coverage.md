@@ -278,9 +278,9 @@ Silent replan: `jobId` on create/update when `shouldReplanAfterSave`. Unschedule
 | U-TSK-004 | U | P0 | Fixed | Valid slot | Created; Google stub event if connected |
 | U-TSK-005 | U | P0 | Recurring | No pattern | Client blocks |
 | U-TSK-006 | U | P0 | Recurring Daily Mon–Fri | Submit | Created |
-| U-TSK-007 | U | P0 | Unscheduled | Name only | Inbox section; not on Generate |
-| U-TSK-008 | U | P1 | Unscheduled with deadline soon/overdue | List | Tone highlight (overdue/today/soon) |
-| U-TSK-009 | U | P0 | Inbox **Do now** | Clears `isUnscheduled`, from-now window | Lands in Scheduled after silent replan |
+| U-TSK-007 | U | P0 | Unscheduled | Name only | Inbox section; Unscheduled icon (`aria-label`) |
+| U-TSK-008 | U | P1 | Unscheduled with phase + earliest + overdue deadline | List | Icon meta labels for Unscheduled / phase / From / Overdue; icon-only Done/Do now; no duration text |
+| U-TSK-009 | U | P0 | Inbox **Do now** | Clears `isUnscheduled`, from-now window | Lands in Scheduled after placement |
 | U-TSK-010 | U | P0 | Inbox **Done** | Confirm path | `completed`; disappears from inbox; **no** calendar block |
 | U-TSK-011 | U | P0 | Inbox **Skip** | Cancels | `canceled`; disappears from active inbox |
 | U-TSK-012 | U | P0 | Inbox **Open** | Opens editor | Prefills name; edit form |
@@ -493,18 +493,18 @@ Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day,
 
 | ID | Layer | P | Given | When | Then |
 |----|-------|---|-------|------|------|
-| U-CAL-001 | U | P0 | Authenticated onboarded | Open `/` | Calendar + NowStrip + Generate menu |
+| U-CAL-001 | U | P0 | Authenticated onboarded | Open `/` | Calendar + NowStrip + schedule menu (Suggestions; no Generate) |
 | U-CAL-002 | U | P1 | Day / week / month | Switch views + date picker + prev/next | Range changes; events reload |
 | U-CAL-003 | U | P0 | Click empty civil day | Create | From/Until = that day in **Settings** TZ (not browser TZ) |
-| U-CAL-004 | U | P0 | Generate | Preview, then Apply | Progress panel stages; toast by outcome; events refresh |
-| U-CAL-005 | U | P0 | After generate | Undo confirm | Slots restored; toast |
-| U-CAL-006 | U | P0 | Clear confirm | Confirm | Upcoming app blocks gone; finished stay gray |
-| U-CAL-007 | U | P1 | Generate job hang | Timeout | Error toast; not infinite spinner |
-| U-CAL-008 | U | P1 | Last generate warnings | Banner | Dismiss stores `scheduleGenerateAlertsDismissedJobId`; stays dismissed on reload |
-| U-CAL-009 | U | P1 | Alerts older than 24h | Load | Banner not shown |
-| U-CAL-016 | U | P1 | No open tasks, schedule cleared | Schedule → Suggestions | Dialog shows the empty review message and Close dismisses it |
+| U-CAL-004 | U | — | ~~Generate preview/apply~~ | removed | Generate / Clear / Undo UI and APIs gone |
+| U-CAL-005 | U | — | ~~Undo~~ | removed | |
+| U-CAL-006 | U | — | ~~Clear~~ | removed | |
+| U-CAL-007 | U | — | ~~Generate hang~~ | removed | |
+| U-CAL-008 | U | — | ~~Generate warnings banner~~ | removed | |
+| U-CAL-009 | U | — | ~~Alerts older than 24h~~ | removed | |
+| U-CAL-016 | U | P1 | No open tasks | Schedule → Suggestions | Dialog shows the empty review message and Close dismisses it |
 | U-CAL-017 | U | P1 | Phone viewport 390×844 and 320×568 | Calendar day, week strip, month, events sheet, Tasks, Settings | Day is the default. Hour grid is on screen without scrolling the page. Week is one column. Month tap opens that day. Sign out sits above the tab bar |
-| U-CAL-024 | U | P1 | Phone 390×844 | Calendar action bar, then Tasks | Create task, voice, and Generate preview each open in one tap. More schedule actions still has Suggestions. Task card shows To Do and Medium pills. Search and Filters share a row |
+| U-CAL-024 | U | P1 | Phone 390×844 | Calendar action bar, then Tasks | Create task and voice each open in one tap. More schedule actions still has Suggestions. Scheduled task card shows To Do and Medium pills. Search and Filters share a row |
 | U-CAL-010 | U | P0 | Now overlapping block | Strip | Now title; Done if `canCompleteNowBlock` |
 | U-CAL-011 | U | P0 | Next start later today | Strip | Next shown |
 | U-CAL-012 | U | P0 | Flexible waiting for slot **today** | Strip Unscheduled | Transitional inbox (not `isUnscheduled` Tasks inbox) |
@@ -512,11 +512,11 @@ Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day,
 | U-CAL-014 | U | P0 | Recurring / external Google in Now | Strip | **No** Done; Skip on recurring; no Skip on external |
 | U-CAL-015 | U | P1 | All-day event today | Now | Eligible for Now if no timed current |
 | U-CAL-016 | U | P1 | Voice on Calendar | Same as U-VOI-\* | |
-| U-CAL-017 | U | P1 | Generate / Clear / Undo while busy | Menu | Actions disabled |
-| U-CAL-018 | U | P2 | Clear with deleted=0 | Confirm | Info toast nothing cleared |
-| U-CAL-019 | U | P0 | Now **Skip** on movable timed app task | Click | Slot gone; task stays `todo`; block leaves Now |
-| U-CAL-020 | U | P0 | Recurring overlapping Now | Strip | Skip; **no** Done |
-| U-CAL-021 | U | P1 | Generate preview | Cancel | Moves and fit messages shown; Generate is not posted |
+| U-CAL-017b | U | — | ~~Generate/Clear/Undo while busy~~ | removed | |
+| U-CAL-018 | U | — | ~~Clear empty~~ | removed | |
+| U-CAL-019 | U | P0 | Now **Skip** on movable timed app task (seed overlapping slot; placement-only create) | Click | Slot gone; task stays `todo`; block leaves Now |
+| U-CAL-020 | U | P0 | Recurring overlapping Now (awake window pinned) | Strip Skip card | Skip; **no** Done |
+| U-CAL-021 | U | — | ~~Generate preview cancel~~ | removed |
 | U-CAL-022 | U | P1 | Calendars menu | Uncheck a selected Google calendar | `hiddenGoogleCalendarIds` stores that id |
 | U-CAL-023 | U | P1 | Viewports 1024×700, 1100×800, 1279×768, then 1280×720 | Week, day, month | Hour grid stays on screen, including 08:00 and 20:00. Month grid has height. Event list can be scrolled into view. Desktop hour grid still has height |
 | U-CAL-025a | U | P1 | Problematic parked task | Banner Review | Problematic inbox opens with the task |
