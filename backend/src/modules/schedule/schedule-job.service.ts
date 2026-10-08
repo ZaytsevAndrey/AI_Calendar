@@ -16,7 +16,14 @@ import {
   SegmentSnapshot,
 } from './intelligent-scheduling.engine';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
-import { Task, TaskStatus } from '../tasks/entities/task.entity';
+import {
+  clearedParkColumns,
+  isProblematicSchedule,
+  rememberSingleProblematicDay,
+  ScheduleState,
+  Task,
+  TaskStatus,
+} from '../tasks/entities/task.entity';
 import { TaskEventType } from '../scheduling/event-type.enum';
 import { ScheduledTask } from './schedule.entity';
 import { phaseHexToGoogleColorId } from '../google-calendar/phase-hex-to-google-color-id.util';
@@ -132,7 +139,9 @@ export class ScheduleJobService {
       .select('DISTINCT task.userId', 'userId')
       .where('task.isRecurring = :recurring', { recurring: true })
       .andWhere('task.isUnscheduled = :unscheduled', { unscheduled: false })
-      .andWhere('task.isProblematic = :problematic', { problematic: false })
+      .andWhere('task.scheduleState != :parked', {
+        parked: ScheduleState.PROBLEMATIC,
+      })
       .andWhere('task.status IN (:...statuses)', {
         statuses: [TaskStatus.TODO, TaskStatus.IN_PROGRESS],
       })
@@ -414,7 +423,7 @@ export class ScheduleJobService {
     const alreadyParked = await this.taskRepo.find({
       where: {
         userId,
-        isProblematic: true,
+        scheduleState: ScheduleState.PROBLEMATIC,
         status: TaskStatus.TODO,
       },
     });
@@ -436,7 +445,7 @@ export class ScheduleJobService {
       const park = parks.get(task.id);
       const hint = hints.get(task.id);
       if (park) {
-        task.isProblematic = true;
+        task.scheduleState = ScheduleState.PROBLEMATIC;
         task.isUnscheduled = false;
         task.problematicOccurrenceYmds =
           (hint?.occurrenceYmds?.length
@@ -446,11 +455,12 @@ export class ScheduleJobService {
               : task.problematicOccurrenceYmds) ?? null;
         task.problematicReason =
           hint?.reason ?? park.reason ?? task.problematicReason;
+        rememberSingleProblematicDay(task);
         dirty = true;
         continue;
       }
       // Already parked (or conflict hint only): refresh day/reason when missing.
-      if (task.isProblematic && hint) {
+      if (isProblematicSchedule(task) && hint) {
         if (
           hint.occurrenceYmds.length &&
           (!task.problematicOccurrenceYmds?.length ||
@@ -468,6 +478,9 @@ export class ScheduleJobService {
           task.problematicReason = hint.reason;
           dirty = true;
         }
+        const dayBefore = task.problematicDay;
+        rememberSingleProblematicDay(task);
+        if (task.problematicDay !== dayBefore) dirty = true;
       }
     }
     if (dirty) {
@@ -494,9 +507,7 @@ export class ScheduleJobService {
       .update(Task)
       .set({
         isUnscheduled: true,
-        isProblematic: false,
-        problematicOccurrenceYmds: null,
-        problematicReason: null,
+        ...clearedParkColumns(),
       })
       .where('userId = :userId', { userId })
       .andWhere('id IN (:...ids)', { ids: [...ids] })
@@ -683,7 +694,7 @@ export class ScheduleJobService {
   ): Promise<void> {
     if (
       task.isUnscheduled ||
-      task.isProblematic ||
+      isProblematicSchedule(task) ||
       task.eventType === TaskEventType.FIXED
     ) {
       return;
@@ -983,7 +994,7 @@ export class ScheduleJobService {
     }
 
     const toSync = tasks.filter((task) => {
-      if (task.isUnscheduled || task.isProblematic) return false;
+      if (task.isUnscheduled || isProblematicSchedule(task)) return false;
       if (task.eventType === TaskEventType.FIXED) return false;
       if (task.status !== TaskStatus.TODO) return false;
       const after = afterByTask.get(task.id) ?? [];

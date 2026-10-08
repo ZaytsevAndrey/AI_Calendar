@@ -11,7 +11,7 @@ async function seedProblematic(
     name,
     eventType: 'admin',
     estimatedTimeInMinutes: opts?.minutes ?? 30,
-    isProblematic: true,
+    scheduleState: 'problematic',
     problematicReason: 'phase_full',
     problematicOccurrenceYmds: [placeYmd],
   });
@@ -111,13 +111,13 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
           (row: { id?: string }) => row.id === taskId,
         );
         return {
-          problematic: task?.isProblematic,
+          scheduleState: task?.scheduleState,
           eventType: task?.eventType,
           start: String(task?.scheduledStartTime || ''),
         };
       })
       .toMatchObject({
-        problematic: false,
+        scheduleState: 'none',
         eventType: 'fixed',
       });
     await expect
@@ -149,7 +149,7 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     const task = (Array.isArray(listed.body) ? listed.body : []).find(
       (row: { id?: string }) => row.id === taskId,
     );
-    expect(task?.isProblematic).toBe(true);
+    expect(task?.scheduleState).toBe('problematic');
     expect(task?.scheduledStartTime == null || task?.eventType !== 'fixed').toBe(true);
   });
 

@@ -115,7 +115,7 @@ Further ids may be added later; these are the baseline contract.
 | | **Unscheduled** | **Problematic** |
 |--|-----------------|-----------------|
 | Meaning | Intentional “don’t forget / decide later” | Fell out of schedule after create, drag, replan, or unanswered conflict |
-| Flag / model | Existing `isUnscheduled` | `isProblematic` (distinct boolean; Calendar banner/sheet) |
+| Flag / model | Existing `isUnscheduled` | `scheduleState` `problematic` (enum `none` \| `problematic` \| `resolved`; Calendar banner/sheet). `resolved` is stored and not shown as the inbox |
 
 | Typical entry | User creates without scheduling; deadline window with no fit | Overflow; dismiss conflict; recurring won’t fit |
 | Actions (product) | Done / Skip (cancel) / Do now / Open (§7) | Open task; move / skip / resolve (roadmap §3–4) |

@@ -29,7 +29,7 @@ describe('buildOneOffFromSeries', () => {
       eventType: 'fixed',
       isRecurring: false,
       allowSplit: false,
-      isProblematic: false,
+      scheduleState: 'none',
       estimatedTimeInMinutes: 45,
       location: 'Hall',
     });

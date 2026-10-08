@@ -61,6 +61,12 @@ export class UserSettingsService {
       if (userSettings.remindersEnabled === undefined || userSettings.remindersEnabled === null)
         userSettings.remindersEnabled = false;
       if (
+        userSettings.syncGoogleDeletions === undefined ||
+        userSettings.syncGoogleDeletions === null
+      ) {
+        userSettings.syncGoogleDeletions = false;
+      }
+      if (
         userSettings.confirmVoiceCommands === undefined ||
         userSettings.confirmVoiceCommands === null
       ) {
@@ -150,6 +156,7 @@ export class UserSettingsService {
       recurringScheduleHorizonDays: 30,
       appGoogleCalendarName: 'AI Calendar Assistant',
       remindersEnabled: false,
+      syncGoogleDeletions: false,
       confirmVoiceCommands: false,
       speakVoiceReplies: true,
       language: 'en',

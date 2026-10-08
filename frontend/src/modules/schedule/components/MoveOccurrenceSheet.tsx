@@ -163,14 +163,14 @@ export function MoveOccurrenceSheet({
     if (remaining.length === 0) {
       await updateEvent({
         id: task.id,
-        body: { isProblematic: false },
+        body: { scheduleState: 'none' },
       }).unwrap();
       return;
     }
     await updateEvent({
       id: task.id,
       body: {
-        isProblematic: true,
+        scheduleState: 'problematic',
         problematicOccurrenceYmds: remaining,
         problematicReason: task.problematicReason ?? null,
       },
@@ -225,7 +225,7 @@ export function MoveOccurrenceSheet({
             scheduledEndTime: end,
             phaseId: chosenPhase || undefined,
             phaseIds: chosenPhase ? [chosenPhase] : undefined,
-            isProblematic: false,
+            scheduleState: 'none',
             isUnscheduled: false,
             problematicOccurrenceYmds: null,
             problematicReason: null,

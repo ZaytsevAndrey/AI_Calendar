@@ -99,6 +99,10 @@ describe('UserSettingsService', () => {
     expect(saved.fixedEventBufferMinutes).toBe(15);
   });
 
+  it('defaults syncGoogleDeletions to off', () => {
+    expect(service.getDefaultSettings().syncGoogleDeletions).toBe(false);
+  });
+
   it('stores hidden calendar ids and drops the app calendar', async () => {
     const existing = {
       userId: 'user-1',

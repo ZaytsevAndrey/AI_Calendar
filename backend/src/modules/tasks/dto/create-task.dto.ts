@@ -13,8 +13,9 @@ import {
   ArrayMaxSize,
   ValidateIf,
   MaxLength,
+  Matches,
 } from 'class-validator';
-import { TaskPriority } from '../entities/task.entity';
+import { ScheduleState, TaskPriority } from '../entities/task.entity';
 import { TaskEventType } from '../../scheduling/event-type.enum';
 
 export class CreateTaskDto {
@@ -183,14 +184,56 @@ export class CreateTaskDto {
   isUnscheduled?: boolean;
 
   @ApiProperty({
+    enum: ScheduleState,
     description:
-      'Fell out of schedule after Generate/conflict overflow. Distinct from isUnscheduled.',
+      'none: ordinary task. problematic: no slot. resolved: second layer on its slot. Distinct from status and from isUnscheduled.',
     required: false,
-    default: false,
+    default: ScheduleState.NONE,
   })
-  @IsBoolean()
+  @ValidateIf((_, value) => value !== undefined)
+  @IsEnum(ScheduleState)
+  scheduleState?: ScheduleState;
+
+  @ApiProperty({
+    description: 'Civil day (YYYY-MM-DD) of a problematic or resolved copy.',
+    required: false,
+    nullable: true,
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
   @IsOptional()
-  isProblematic?: boolean;
+  problematicDay?: string | null;
+
+  @ApiProperty({
+    description: 'Start of the interval the copy held before it was parked.',
+    required: false,
+    nullable: true,
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsDateString()
+  @IsOptional()
+  problematicOriginalStart?: string | null;
+
+  @ApiProperty({
+    description: 'End of the interval the copy held before it was parked.',
+    required: false,
+    nullable: true,
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsDateString()
+  @IsOptional()
+  problematicOriginalEnd?: string | null;
+
+  @ApiProperty({
+    description: 'Series this copy was detached from.',
+    required: false,
+    nullable: true,
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsUUID()
+  @IsOptional()
+  parentSeriesId?: string | null;
 
   @ApiProperty({
     description:

@@ -170,7 +170,7 @@ const CalendarPage: React.FC = () => {
     const { data: tasks = [] } = useGetTasksQuery();
     const problematicTasks = tasks.filter(
         (task) =>
-            !!task.isProblematic &&
+            task.scheduleState === 'problematic' &&
             task.status !== 'completed' &&
             task.status !== 'canceled',
     );

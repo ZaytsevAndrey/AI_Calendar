@@ -34,6 +34,8 @@ Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWor
 
 **`remindersEnabled`** (default false) turns on Web Push. See [Reminders](#reminders--reminders).
 
+**`syncGoogleDeletions`** (default false) is stored on settings. While it is off, deleting an app event in Google does not change the local task. The flag is not applied yet: no sync path reads it.
+
 **`hiddenGoogleCalendarIds`** (string array) hides those Google calendars on the Calendar page. Empty means primary, the app calendar, and calendars selected in Google. The stored app calendar id is dropped if sent. A non-array is 400. This does not change which calendars Generate treats as busy.
 
 **`fixedEventBufferMinutes`** (integer, default 0, max 180) is the gap Generate keeps before and after each fixed task and external Google event. 0 turns it off. Generate may place work in that gap when the task would not fit otherwise. Habits are not padded. Dragging a block is not blocked by the gap.
@@ -165,7 +167,8 @@ Create/update body may include:
 
 - `eventType` — `fixed` (pinned, not moved) or `admin` (flexible / recurring). Optional; default `admin`. Legacy values may still exist on old rows.
 - `isUnscheduled` — inbox item with no slot. Skips silent replan, Generate, and Google sync until the user schedules it. Cannot be combined with `eventType=fixed`.
-- `isProblematic` — fell out of schedule (overflow / unanswered conflict). Distinct from `isUnscheduled`. Parked from Generate until Resolve / Skip / the user edits. Mutually exclusive with `isUnscheduled` (setting one clears the other).
+- `scheduleState` — `none` | `problematic` | `resolved`. Distinct from task status and from `isUnscheduled`. `problematic` fell out of schedule (overflow / unanswered conflict) and is parked until Resolve / Skip / the user edits. `resolved` keeps park metadata (including `parentSeriesId`) as a second layer; the live engine does not treat it as an anchor yet. Mutually exclusive with `isUnscheduled` (an unscheduled create clears a problematic park; `resolved` clears `isUnscheduled`).
+- `problematicReason`, `problematicOccurrenceYmds`, `problematicDay` (`YYYY-MM-DD`), `problematicOriginalStart`, `problematicOriginalEnd`, `parentSeriesId` — metadata on a problematic or resolved copy. Cleared when `scheduleState` returns to `none`. A single `problematicOccurrenceYmds` entry is copied into `problematicDay` when that day is empty.
 - `location`, `googleColorId`, `googleVisibility`, `googleTransparency`, `googleReminders` — stored on the task and written to Google when a timed event is created.
 - `phaseIds` — at most one phase UUID (empty = full wake/sleep window)
 - `estimatedTimeInMinutes` — optional; default 30 for non-fixed, or derived from start/end for fixed
@@ -177,4 +180,4 @@ Create/update body may include:
 - `recurrenceWeekDays` — `0` = Sunday … `6` = Saturday. Empty / omitted / all seven = no extra weekday filter. Intersected with the phase `weekDays`.
 - `allowSplit` — per-task; engine also requires the user setting `allowSplitScheduling`
 
-Non-`fixed` tasks trigger an automatic replan job after create/update/delete/status change, except parked inbox items (`isUnscheduled` or `isProblematic`). Replan still runs when a previously scheduled task is moved into either inbox (to free the slot), and when Problematic is cleared so placement can retry.
+Non-`fixed` tasks trigger an automatic replan job after create/update/delete/status change, except parked inbox items (`isUnscheduled` or `scheduleState` `problematic`). Replan still runs when a previously scheduled task is moved into either inbox (to free the slot), and when Problematic is cleared so placement can retry.

@@ -177,6 +177,63 @@ describe('TasksService', () => {
     expect(googleCalendarService.createEvent).not.toHaveBeenCalled();
   });
 
+  it('stores problematic state and the single parked day', async () => {
+    const created = await service.create('user-1', {
+      name: 'Stuck',
+      scheduleState: 'problematic',
+      problematicReason: 'phase_full',
+      problematicOccurrenceYmds: ['2026-10-06'],
+      parentSeriesId: '11111111-1111-4111-8111-111111111111',
+      estimatedTimeInMinutes: 30,
+    } as any);
+
+    expect(created.scheduleState).toBe('problematic');
+    expect(created.problematicDay).toBe('2026-10-06');
+    expect(created.parentSeriesId).toBe('11111111-1111-4111-8111-111111111111');
+    expect(created.jobId).toBeNull();
+    expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+  });
+
+  it('lets an unscheduled create win over problematic', async () => {
+    const created = await service.create('user-1', {
+      name: 'Later',
+      isUnscheduled: true,
+      scheduleState: 'problematic',
+      problematicReason: 'phase_full',
+      estimatedTimeInMinutes: 15,
+    } as any);
+
+    expect(created.isUnscheduled).toBe(true);
+    expect(created.scheduleState).toBe('none');
+    expect(created.problematicReason).toBeNull();
+    expect(created.problematicDay).toBeNull();
+  });
+
+  it('keeps the series link on resolved and clears it when returned to none', async () => {
+    await service.create('user-1', {
+      name: 'Copy',
+      scheduleState: 'problematic',
+      parentSeriesId: '11111111-1111-4111-8111-111111111111',
+      problematicOccurrenceYmds: ['2026-10-06'],
+      estimatedTimeInMinutes: 30,
+    } as any);
+
+    const resolved = await service.update('task-1', 'user-1', {
+      scheduleState: 'resolved',
+    } as any);
+    expect(resolved.scheduleState).toBe('resolved');
+    expect(resolved.parentSeriesId).toBe('11111111-1111-4111-8111-111111111111');
+    expect(resolved.problematicDay).toBe('2026-10-06');
+
+    const cleared = await service.update('task-1', 'user-1', {
+      scheduleState: 'none',
+    } as any);
+    expect(cleared.scheduleState).toBe('none');
+    expect(cleared.parentSeriesId).toBeNull();
+    expect(cleared.problematicDay).toBeNull();
+    expect(cleared.problematicReason).toBeNull();
+  });
+
   it('rejects unscheduled + fixed', async () => {
     await expect(
       service.create('user-1', {

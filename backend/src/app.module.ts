@@ -13,6 +13,7 @@ import { VoiceModule } from './modules/voice/voice.module';
 import { HabitsModule } from './modules/habits/habits.module';
 import { RemindersModule } from './modules/reminders/reminders.module';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
+import { migrateLegacyScheduleState } from './database/migrate-schedule-state';
 import { createTypeOrmOptions } from './database/typeorm.config';
 
 @Module({
@@ -22,14 +23,17 @@ import { createTypeOrmOptions } from './database/typeorm.config';
     }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) =>
-        createTypeOrmOptions({
+      useFactory: async (config: ConfigService) => {
+        const env = {
           ...process.env,
           DATABASE_URL: config.get<string>('DATABASE_URL') ?? process.env.DATABASE_URL,
           SQLITE_PATH: config.get<string>('SQLITE_PATH') ?? process.env.SQLITE_PATH,
           TYPEORM_SYNC: config.get<string>('TYPEORM_SYNC') ?? process.env.TYPEORM_SYNC,
           DATABASE_SSL: config.get<string>('DATABASE_SSL') ?? process.env.DATABASE_SSL,
-        }),
+        };
+        await migrateLegacyScheduleState(env);
+        return createTypeOrmOptions(env);
+      },
     }),
     AuthModule,
     UsersModule,

@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { Task, TaskStatus } from '../tasks/entities/task.entity';
+import {
+  isProblematicSchedule,
+  Task,
+  TaskStatus,
+} from '../tasks/entities/task.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { ScheduledTask } from './schedule.entity';
 import { Phase } from '../phases/entities/phase.entity';
@@ -491,7 +495,7 @@ export class IntelligentSchedulingEngine {
         (t) =>
           t.status === TaskStatus.TODO &&
           !t.isUnscheduled &&
-          !t.isProblematic &&
+          !isProblematicSchedule(t) &&
           !t.isFixedExternal &&
           t.eventType !== TaskEventType.FIXED,
       )
@@ -502,7 +506,9 @@ export class IntelligentSchedulingEngine {
 
     const nowMs = Date.now();
     const unscheduledIds = allTasks.filter((t) => t.isUnscheduled).map((t) => t.id);
-    const problematicIds = allTasks.filter((t) => t.isProblematic).map((t) => t.id);
+    const problematicIds = allTasks
+      .filter((t) => isProblematicSchedule(t))
+      .map((t) => t.id);
     const parkedIdSet = new Set([...unscheduledIds, ...problematicIds]);
     const parkedIds = [...parkedIdSet];
     if (persist && parkedIds.length) {

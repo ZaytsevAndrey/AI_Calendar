@@ -18,7 +18,7 @@ describe('applyConflictOption', () => {
       skipOccurrence,
     });
     expect(updateTask).toHaveBeenCalledWith('t1', {
-      isProblematic: true,
+      scheduleState: 'problematic',
       problematicReason: 'preferred_on_fixed',
       problematicOccurrenceYmds: ['2026-04-20'],
     });
@@ -32,7 +32,7 @@ describe('applyConflictOption', () => {
       skipOccurrence: jest.fn(),
     });
     expect(updateTask).toHaveBeenCalledWith('t1', {
-      isProblematic: false,
+      scheduleState: 'none',
       scheduledStartTime: null,
       scheduledEndTime: null,
     });
@@ -48,6 +48,6 @@ describe('applyConflictOption', () => {
     expect(skipOccurrence).toHaveBeenCalledWith('t1', {
       occurrenceStart: '2026-04-20T09:00:00.000Z',
     });
-    expect(updateTask).toHaveBeenCalledWith('t1', { isProblematic: false });
+    expect(updateTask).toHaveBeenCalledWith('t1', { scheduleState: 'none' });
   });
 });

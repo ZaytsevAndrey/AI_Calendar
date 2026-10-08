@@ -28,6 +28,63 @@ export enum TaskStatus {
   CANCELED = 'canceled',
 }
 
+/** Where the task sits relative to placement. Distinct from `TaskStatus`. */
+export enum ScheduleState {
+  NONE = 'none',
+  PROBLEMATIC = 'problematic',
+  RESOLVED = 'resolved',
+}
+
+export function isProblematicSchedule(task: {
+  scheduleState?: ScheduleState | null;
+}): boolean {
+  return task.scheduleState === ScheduleState.PROBLEMATIC;
+}
+
+/** Columns cleared when a task leaves the problematic/resolved park (`scheduleState = none`). */
+export function clearedParkColumns(): {
+  scheduleState: ScheduleState.NONE;
+  problematicOccurrenceYmds: null;
+  problematicReason: null;
+  problematicDay: null;
+  problematicOriginalStart: null;
+  problematicOriginalEnd: null;
+  parentSeriesId: null;
+} {
+  return {
+    scheduleState: ScheduleState.NONE,
+    problematicOccurrenceYmds: null,
+    problematicReason: null,
+    problematicDay: null,
+    problematicOriginalStart: null,
+    problematicOriginalEnd: null,
+    parentSeriesId: null,
+  };
+}
+
+export function clearParkMetadata(task: {
+  scheduleState: ScheduleState;
+  problematicOccurrenceYmds: string[] | null;
+  problematicReason: string | null;
+  problematicDay: string | null;
+  problematicOriginalStart: Date | null;
+  problematicOriginalEnd: Date | null;
+  parentSeriesId: string | null;
+}): void {
+  Object.assign(task, clearedParkColumns());
+}
+
+/** One parked day is the copy's civil day. Multi-day legacy rows keep the list only. */
+export function rememberSingleProblematicDay(task: {
+  problematicDay: string | null;
+  problematicOccurrenceYmds: string[] | null;
+}): void {
+  const ymds = task.problematicOccurrenceYmds;
+  if (!task.problematicDay && ymds?.length === 1) {
+    task.problematicDay = ymds[0];
+  }
+}
+
 @Entity('tasks')
 export class Task {
   @PrimaryGeneratedColumn('uuid')
@@ -145,25 +202,41 @@ export class Task {
   isUnscheduled: boolean;
 
   /**
-   * Fell out of schedule (overflow, unanswered conflict). Distinct from
-   * `isUnscheduled`. Parked until the user opens / moves / resolves it.
+   * `problematic`: no slot until a hole or an explicit move.
+   * `resolved`: kept on its slot as a second layer (not seated by later placement).
+   * `none`: ordinary task. Cleared park metadata lives only while not `none`.
    */
-  @Column({ default: false })
-  isProblematic: boolean;
+  @Column({ type: 'varchar', length: 32, default: ScheduleState.NONE })
+  scheduleState: ScheduleState;
 
   /**
    * Civil days (YYYY-MM-DD) that failed to place when parked as problematic.
-   * Cleared when `isProblematic` is cleared.
+   * Cleared when `scheduleState` returns to `none`.
    */
   @Column({ type: 'json', nullable: true })
   problematicOccurrenceYmds: string[] | null;
 
   /**
    * Short engine reason code for the park (phase_full, no_slot, …).
-   * Cleared when `isProblematic` is cleared.
+   * Cleared when `scheduleState` returns to `none`.
    */
   @Column({ nullable: true, type: 'varchar', length: 64 })
   problematicReason: string | null;
+
+  /** Civil day (YYYY-MM-DD) of a problematic/resolved copy. */
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  problematicDay: string | null;
+
+  /** Interval the copy held before it was parked. */
+  @Column({ type: timestampColumnType(), nullable: true })
+  problematicOriginalStart: Date | null;
+
+  @Column({ type: timestampColumnType(), nullable: true })
+  problematicOriginalEnd: Date | null;
+
+  /** Series this copy was detached from. Kept after resolve. */
+  @Column({ type: 'uuid', nullable: true })
+  parentSeriesId: string | null;
 
   /**
    * Recurring only: civil days (YYYY-MM-DD in settings IANA) the user skipped.

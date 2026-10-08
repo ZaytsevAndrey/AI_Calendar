@@ -45,7 +45,7 @@ export function buildOneOffFromSeries(
     eligibleWeekDays: [],
     timeZone: zone,
     isUnscheduled: false,
-    isProblematic: false,
+    scheduleState: 'none',
     location: task.location ?? null,
     googleColorId: task.googleColorId ?? null,
     googleVisibility: task.googleVisibility ?? null,

@@ -24,6 +24,8 @@ export interface UserSettingsDTO {
   timeZone?: string | null;
   language?: string;
   remindersEnabled?: boolean;
+  /** When true, a Google delete of an app event also removes it in the app. */
+  syncGoogleDeletions?: boolean;
   /** When true, voice complete / skip / move asks before writing. */
   confirmVoiceCommands?: boolean;
   /** When true, speak clarifying / confirm / result via client TTS. */
@@ -55,6 +57,7 @@ export interface UpdateUserSettingsDTO {
   timeZone?: string;
   language?: string;
   remindersEnabled?: boolean;
+  syncGoogleDeletions?: boolean;
   confirmVoiceCommands?: boolean;
   speakVoiceReplies?: boolean;
 }

@@ -26,11 +26,18 @@ export interface TaskDTO {
   googleEventId?: string | null;
   isFixedExternal?: boolean;
   isUnscheduled?: boolean;
-  isProblematic?: boolean;
+  /** none | problematic | resolved. Distinct from status. */
+  scheduleState?: 'none' | 'problematic' | 'resolved';
   /** Civil days that failed to place when parked as problematic. */
   problematicOccurrenceYmds?: string[] | null;
   /** Short engine reason code for the problematic park. */
   problematicReason?: string | null;
+  /** Civil day (YYYY-MM-DD) of a problematic or resolved copy. */
+  problematicDay?: string | null;
+  problematicOriginalStart?: string | null;
+  problematicOriginalEnd?: string | null;
+  /** Series this copy was detached from. */
+  parentSeriesId?: string | null;
   location?: string | null;
   googleColorId?: string | null;
   googleVisibility?: string | null;
@@ -69,11 +76,15 @@ export interface CreateTaskDTO {
   eligibleWeekDays?: number[] | null;
   timeZone?: string;
   isUnscheduled?: boolean;
-  isProblematic?: boolean;
+  scheduleState?: 'none' | 'problematic' | 'resolved';
   /** Civil days that failed to place when parked as problematic. */
   problematicOccurrenceYmds?: string[] | null;
   /** Short engine reason code for the problematic park. */
   problematicReason?: string | null;
+  problematicDay?: string | null;
+  problematicOriginalStart?: string | null;
+  problematicOriginalEnd?: string | null;
+  parentSeriesId?: string | null;
   location?: string | null;
   googleColorId?: string | null;
   googleVisibility?: string | null;

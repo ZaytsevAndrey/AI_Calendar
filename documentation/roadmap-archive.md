@@ -10,6 +10,10 @@ Sign-in is **Google only**. Password register, login, reset, and email verificat
 
 Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-coverage.md)). Each route screen is its own lazy chunk (`splitChunks`); production is no longer one `bundle.js`.
 
+## Shipped (Oct 2026)
+
+- [x] **Incremental placement: data.** `scheduleState` (`none` | `problematic` | `resolved`) replaces `isProblematic`. A parked copy can store reason, civil day, original interval, and parent series id. `syncGoogleDeletions` defaults off (not applied yet). Failed Google writes have a `pending_google_writes` table; the retry worker is still later. The engine still full-replans.
+
 ## Shipped (Sep 2026)
 
 ### Scheduling redesign (engine)

@@ -219,6 +219,16 @@ export class UpdateUserSettingsDto {
   @ApiProperty({
     example: false,
     description:
+      'When true, deleting an app event in Google also removes it in the app. Off by default.',
+    required: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  syncGoogleDeletions?: boolean;
+
+  @ApiProperty({
+    example: false,
+    description:
       'Ask before a voice command completes, skips, or moves a task. Off runs the command immediately. Does not affect voice create. Delete and cancel always confirm.',
     required: false,
   })

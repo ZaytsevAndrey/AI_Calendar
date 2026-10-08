@@ -6,7 +6,7 @@
 
 ## Черга
 
-Порожньо. Наступна фіча в roadmap — §12 Unscheduled inbox.
+Порожньо. Наступний крок у roadmap — §12 Incremental placement, зріз **Placement step** (крок Data уже в архіві).
 
 ---
 

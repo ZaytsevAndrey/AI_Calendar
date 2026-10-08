@@ -9,7 +9,14 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { isValidIanaTimeZone, resolveIanaTimeZone } from '../../common/iana-time-zone';
-import { Task, TaskStatus } from './entities/task.entity';
+import {
+  clearParkMetadata,
+  isProblematicSchedule,
+  rememberSingleProblematicDay,
+  ScheduleState,
+  Task,
+  TaskStatus,
+} from './entities/task.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { SkipOccurrenceDto } from './dto/skip-occurrence.dto';
@@ -57,14 +64,16 @@ export class TasksService {
   }
 
   private shouldReplanAfterSave(
-    previous: { isUnscheduled: boolean; isProblematic?: boolean } | null,
+    previous: { isUnscheduled: boolean; scheduleState?: ScheduleState } | null,
     saved: Task,
   ): boolean {
     if (saved.isUnscheduled) {
       return !!previous && !previous.isUnscheduled;
     }
-    if (saved.isProblematic) {
-      return !!previous && !previous.isProblematic;
+    if (isProblematicSchedule(saved)) {
+      return (
+        !!previous && previous.scheduleState !== ScheduleState.PROBLEMATIC
+      );
     }
     if (saved.eventType === TaskEventType.FIXED) {
       return false;
@@ -76,11 +85,9 @@ export class TasksService {
   }
 
   private applyUnscheduledConstraints(task: Task): void {
-    if (task.isUnscheduled && task.isProblematic) {
+    if (task.isUnscheduled && isProblematicSchedule(task)) {
       // Unscheduled (intentional inbox) wins when both arrive set.
-      task.isProblematic = false;
-      task.problematicOccurrenceYmds = null;
-      task.problematicReason = null;
+      clearParkMetadata(task);
     }
     if (!task.isUnscheduled) {
       return;
@@ -96,14 +103,20 @@ export class TasksService {
   }
 
   private applyProblematicConstraints(task: Task): void {
-    if (!task.isProblematic) {
-      task.problematicOccurrenceYmds = null;
-      task.problematicReason = null;
+    if (task.scheduleState === ScheduleState.RESOLVED) {
+      if (task.isUnscheduled) {
+        task.isUnscheduled = false;
+      }
+      return;
+    }
+    if (!isProblematicSchedule(task)) {
+      clearParkMetadata(task);
       return;
     }
     if (task.isUnscheduled) {
       task.isUnscheduled = false;
     }
+    rememberSingleProblematicDay(task);
   }
 
   private resolveTaskPhaseColorHex(task: Task): string | undefined {
@@ -235,7 +248,6 @@ export class TasksService {
     createTaskDto: CreateTaskDto,
   ): Promise<Task & { jobId: string | null }> {
     const isUnscheduled = !!createTaskDto.isUnscheduled;
-    const isProblematic = !!createTaskDto.isProblematic && !isUnscheduled;
     const eventType = isUnscheduled
       ? TaskEventType.ADMIN
       : (createTaskDto.eventType ?? TaskEventType.ADMIN);
@@ -263,6 +275,9 @@ export class TasksService {
       deadline,
       earliestStartTime,
       timeZone,
+      scheduleState,
+      problematicOriginalStart,
+      problematicOriginalEnd,
       ...rest
     } = createTaskDto;
 
@@ -277,7 +292,9 @@ export class TasksService {
       userId,
       eventType,
       isUnscheduled,
-      isProblematic,
+      scheduleState: isUnscheduled
+        ? ScheduleState.NONE
+        : (scheduleState ?? ScheduleState.NONE),
       estimatedTimeInMinutes,
       deadline: deadline ? new Date(deadline) : undefined,
       earliestStartTime: earliestStartTime
@@ -289,6 +306,12 @@ export class TasksService {
         : undefined,
       scheduledEndTime: scheduledEndTime
         ? new Date(scheduledEndTime)
+        : undefined,
+      problematicOriginalStart: problematicOriginalStart
+        ? new Date(problematicOriginalStart)
+        : undefined,
+      problematicOriginalEnd: problematicOriginalEnd
+        ? new Date(problematicOriginalEnd)
         : undefined,
     });
     this.applyUnscheduledConstraints(task);
@@ -354,7 +377,7 @@ export class TasksService {
   ): Promise<Task & { jobId: string | null }> {
     const task = await this.findOne(id, userId);
     const wasUnscheduled = task.isUnscheduled;
-    const wasProblematic = task.isProblematic;
+    const wasScheduleState = task.scheduleState;
 
     const dto = updateTaskDto as UpdateTaskDto & {
       phaseIds?: string[];
@@ -386,6 +409,8 @@ export class TasksService {
       timeZone,
       scheduledStartTime,
       scheduledEndTime,
+      problematicOriginalStart,
+      problematicOriginalEnd,
       ...rest
     } = dto;
     this.tasksRepository.merge(task, rest);
@@ -410,6 +435,16 @@ export class TasksService {
     if (scheduledEndTime !== undefined) {
       task.scheduledEndTime = scheduledEndTime
         ? new Date(scheduledEndTime)
+        : null;
+    }
+    if (problematicOriginalStart !== undefined) {
+      task.problematicOriginalStart = problematicOriginalStart
+        ? new Date(problematicOriginalStart)
+        : null;
+    }
+    if (problematicOriginalEnd !== undefined) {
+      task.problematicOriginalEnd = problematicOriginalEnd
+        ? new Date(problematicOriginalEnd)
         : null;
     }
 
@@ -448,7 +483,7 @@ export class TasksService {
       userId,
       row,
       this.shouldReplanAfterSave(
-        { isUnscheduled: wasUnscheduled, isProblematic: wasProblematic },
+        { isUnscheduled: wasUnscheduled, scheduleState: wasScheduleState },
         row,
       ),
     );
@@ -674,7 +709,7 @@ export class TasksService {
       this.shouldReplanAfterSave(
         {
           isUnscheduled: saved.isUnscheduled,
-          isProblematic: saved.isProblematic,
+          scheduleState: saved.scheduleState,
         },
         saved,
       )

@@ -45,6 +45,13 @@ export class UserSettings {
   @Column({ default: false })
   googleCalendarLinked: boolean;
 
+  /**
+   * When true, deleting an app event in Google also removes it in the app.
+   * Off by default: a Google delete does not change the local task.
+   */
+  @Column({ default: false })
+  syncGoogleDeletions: boolean;
+
   /** Display name for the dedicated Google calendar where this app writes events. */
   @Column({ default: 'AI Calendar Assistant' })
   appGoogleCalendarName: string;

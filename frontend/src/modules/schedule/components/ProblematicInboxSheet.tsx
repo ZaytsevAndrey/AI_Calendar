@@ -108,7 +108,7 @@ export function ProblematicInboxSheet({
   const clearProblematic = async (task: TaskDTO) => {
     await updateEvent({
       id: task.id,
-      body: { isProblematic: false },
+      body: { scheduleState: 'none' },
     }).unwrap();
   };
 
@@ -123,7 +123,7 @@ export function ProblematicInboxSheet({
     await updateEvent({
       id: task.id,
       body: {
-        isProblematic: true,
+        scheduleState: 'problematic',
         problematicOccurrenceYmds: remaining,
         problematicReason: task.problematicReason ?? null,
       },

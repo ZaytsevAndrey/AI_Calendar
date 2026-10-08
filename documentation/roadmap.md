@@ -79,7 +79,19 @@ Do in order unless you explicitly skip ahead.
 - [x] Confirm places the one-off (or instance) and skips that series day; same outcome as current Move, clearer interaction.
 - [x] Works from Problematic inbox (and ideally reuse later from conflict sheet / drag if useful).
 
-### 12. Unscheduled inbox: more informative + functional
+### 12. Incremental placement
+
+Contract: [spec-incremental-placement.md](spec-incremental-placement.md). Do these in order. The live engine still full-replans until the last step. Do not delete `engine.run` before new writes go through the single placement step.
+
+- [x] **Data.** Replace boolean `isProblematic` with `scheduleState`: `none` | `problematic` | `resolved`. Keep task status (`todo` / `in_progress` / `completed` / `canceled`). Store reason code, day, original interval, and parent series id on the copy. Add `syncGoogleDeletions` (default off) and a queue of Google writes that failed. Migrate existing problematic rows to `problematic`.
+- [ ] **Placement step.** New service beside the engine. One call seats the claimant and only the days that must move for everyone to still have a seat. A one-off moves itself. A series day is removed from the series and becomes an identical non-recurring task. A chain is written only when everyone fits. `resolved` is not movable. `engine.run` stays, but new writes do not use it.
+- [ ] **Stop full replan on small edits.** Create and geometric edit call the placement step. Cosmetic save only updates the task and the same Google event. Drag, skip, delete, complete, and cancel do not enqueue `full_replan`. A freed hole immediately seats every problematic task that fits, oldest first.
+- [ ] **Series drag.** Ask this day or the whole series. This day detaches a one-off. The whole series ends the old series before that day and starts a new recurring task at the new time. Earlier occurrences stay.
+- [ ] **Inboxes and resolved.** Conflict sheet with no answer and no hole sets `problematic`. Voice clarification with no answer creates the task from the fields already understood, then uses normal create. Resolve keeps the task as a second layer on the same slot and sets `resolved`. A new claim on that time looks for another hole. Skip from Problematic writes the series skip first, then deletes the copy and its Google event.
+- [ ] **Google.** Successful local writes enqueue a Google update. A background retry sends the queue until it lands. If the user edited that event’s time, title, or description in Google before the retry, drop the pending write and pull Google. No slot means no Google event. A day stays on the series while its time is unchanged. A foreign event is never moved; the overlapped app task moves, or becomes `problematic` when no hole exists. The hourly tick only appends missing recurring days and deletes problematic copies whose day is already past.
+- [ ] **Remove Generate, Clear, and Undo.** Remove the Calendar actions, client calls, and `POST /schedule/generate`, undo, and clear. Keep `extend_recurring` only as the horizon append. Then stop calling `engine.run` to write slots and rewrite [task-scheduling-test-matrix.md](task-scheduling-test-matrix.md) for this contract.
+
+### 13. Unscheduled inbox: more informative + functional
 
 §7 shipped basic Done / Skip / Do now / Open. Cards still feel thin next to Problematic.
 
@@ -87,7 +99,7 @@ Do in order unless you explicitly skip ahead.
 - [ ] **Stronger actions** — schedule into a real slot (reuse §11 visual pick where it fits), edit constraints without hunting, clearer Do now / Skip outcomes.
 - [ ] **Discoverability** — banner/chip or empty-state copy so Unscheduled is as obvious as Problematic when items pile up.
 
-### 13. Delete a task on the calendar and in the edit modal
+### 14. Delete a task on the calendar and in the edit modal
 
 Voice can already delete a task. The calendar block and the edit modal cannot.
 
@@ -95,18 +107,6 @@ Voice can already delete a task. The calendar block and the edit modal cannot.
 - [ ] **Edit modal** — the same action while editing.
 - [ ] **One-off** — delete the task and its linked Google event.
 - [ ] **Recurring** — choose **this event** or **all events**. This event drops that occurrence (existing skip-occurrence, so Generate does not bring it back). All events deletes the series.
-
-### 14. Incremental placement
-
-Contract: [spec-incremental-placement.md](spec-incremental-placement.md). Do these in order. The live engine still full-replans until the last step. Do not delete `engine.run` before new writes go through the single placement step.
-
-- [ ] **Data.** Replace boolean `isProblematic` with `scheduleState`: `none` | `problematic` | `resolved`. Keep task status (`todo` / `in_progress` / `completed` / `canceled`). Store reason code, day, original interval, and parent series id on the copy. Add `syncGoogleDeletions` (default off) and a queue of Google writes that failed. Migrate existing problematic rows to `problematic`.
-- [ ] **Placement step.** New service beside the engine. One call seats the claimant and only the days that must move for everyone to still have a seat. A one-off moves itself. A series day is removed from the series and becomes an identical non-recurring task. A chain is written only when everyone fits. `resolved` is not movable. `engine.run` stays, but new writes do not use it.
-- [ ] **Stop full replan on small edits.** Create and geometric edit call the placement step. Cosmetic save only updates the task and the same Google event. Drag, skip, delete, complete, and cancel do not enqueue `full_replan`. A freed hole immediately seats every problematic task that fits, oldest first.
-- [ ] **Series drag.** Ask this day or the whole series. This day detaches a one-off. The whole series ends the old series before that day and starts a new recurring task at the new time. Earlier occurrences stay.
-- [ ] **Inboxes and resolved.** Conflict sheet with no answer and no hole sets `problematic`. Voice clarification with no answer creates the task from the fields already understood, then uses normal create. Resolve keeps the task as a second layer on the same slot and sets `resolved`. A new claim on that time looks for another hole. Skip from Problematic writes the series skip first, then deletes the copy and its Google event.
-- [ ] **Google.** Successful local writes enqueue a Google update. A background retry sends the queue until it lands. If the user edited that event’s time, title, or description in Google before the retry, drop the pending write and pull Google. No slot means no Google event. A day stays on the series while its time is unchanged. A foreign event is never moved; the overlapped app task moves, or becomes `problematic` when no hole exists. The hourly tick only appends missing recurring days and deletes problematic copies whose day is already past.
-- [ ] **Remove Generate, Clear, and Undo.** Remove the Calendar actions, client calls, and `POST /schedule/generate`, undo, and clear. Keep `extend_recurring` only as the horizon append. Then stop calling `engine.run` to write slots and rewrite [task-scheduling-test-matrix.md](task-scheduling-test-matrix.md) for this contract.
 
 ### Later (not blocking the queue above)
 
@@ -126,7 +126,7 @@ Contract: [spec-incremental-placement.md](spec-incremental-placement.md). Do the
 
 ## Recommended next steps
 
-1. **§12** — Unscheduled cards: more context + stronger schedule/edit actions.
-2. **§13** — Delete a task from the calendar block and the edit modal; recurring asks this event or all events.
-3. **§14** — Incremental placement, in the order listed. Do not start by deleting the engine.
+1. **§12** — Incremental placement, next slice: **Placement step** (one call seats the claimant and only the days that must move). Do not start by deleting the engine.
+2. **§13** — Unscheduled cards: more context + stronger schedule/edit actions.
+3. **§14** — Delete a task from the calendar block and the edit modal; recurring asks this event or all events.
 4. After each feature ships: tick above, archive a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

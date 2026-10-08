@@ -29,7 +29,7 @@ function parkPayload(conflict: SchedulingConflictDTO): UpdateTaskDTO {
   }
   ymds.sort();
   return {
-    isProblematic: true,
+    scheduleState: 'problematic',
     problematicReason: conflict.reason,
     ...(ymds.length ? { problematicOccurrenceYmds: ymds } : {}),
   };
@@ -50,7 +50,7 @@ export async function applyConflictOption(
       return;
     case 'move_new':
       await deps.updateTask(conflict.taskId, {
-        isProblematic: false,
+        scheduleState: 'none',
         scheduledStartTime: null,
         scheduledEndTime: null,
       });
@@ -65,12 +65,12 @@ export async function applyConflictOption(
       await deps.skipOccurrence(conflict.taskId, {
         occurrenceStart: preferredStart,
       });
-      await deps.updateTask(conflict.taskId, { isProblematic: false });
+      await deps.updateTask(conflict.taskId, { scheduleState: 'none' });
       return;
     }
     case 'move_other':
       // Engine does not emit this for fixed blockers yet; keep preferred and clear park.
-      await deps.updateTask(conflict.taskId, { isProblematic: false });
+      await deps.updateTask(conflict.taskId, { scheduleState: 'none' });
       return;
     default:
       await deps.updateTask(conflict.taskId, parkPayload(conflict));

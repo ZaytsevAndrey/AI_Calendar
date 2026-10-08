@@ -386,7 +386,7 @@ Generate body `{ startDate, endDate }` is **ignored**. Horizon = today → `recu
 | A-SCH-033m | A | P1 | Unknown `phaseId` | GET | 400 |
 | A-SCH-033n | A | P1 | Fixed peer busy on same day | GET | Fewer / later candidates than empty day |
 | A-SCH-033o | A | P1 | Duration larger than any gap | GET | `candidates: []` |
-| A-SCH-033p | A | P1 | Flexible task, not problematic | GET | Still lists slots (no `isProblematic` required) |
+| A-SCH-033p | A | P1 | Flexible task, not problematic | GET | Still lists slots (`scheduleState` need not be `problematic`) |
 | A-SCH-033q | A | P1 | User has timeZone setting | GET | Response `timeZone` matches settings |
 | A-SCH-033r | A | P1 | Task linked to morning phase; evening phase also exists | GET without `phaseId` | Candidates span morning **and** evening; with `phaseId=morning` only morning |
 

@@ -309,7 +309,7 @@ test.describe('P1 voice UI', () => {
         body: JSON.stringify({
           id: taskId,
           name: 'Voice conflict task',
-          isProblematic: false,
+          scheduleState: 'none',
           scheduledStartTime: null,
           scheduledEndTime: null,
         }),

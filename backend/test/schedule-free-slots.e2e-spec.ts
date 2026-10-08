@@ -36,7 +36,7 @@ describe('Schedule free-slots API e2e (A-SCH-033+)', () => {
       payload: {
         name: opts?.name ?? 'Parked for slots',
         estimatedTimeInMinutes: opts?.minutes ?? 30,
-        isProblematic: true,
+        scheduleState: 'problematic',
         problematicReason: 'phase_full',
         problematicOccurrenceYmds: [ymd],
       },
@@ -240,7 +240,7 @@ describe('Schedule free-slots API e2e (A-SCH-033+)', () => {
     expect((jsonBody(res) as unknown as FreeSlotsBody).candidates).toEqual([]);
   });
 
-  it('A-SCH-033p does not require isProblematic to list slots', async () => {
+  it('A-SCH-033p does not require scheduleState problematic to list slots', async () => {
     const { token } = await seedOnboardedUser(ctx.app);
     const created = await api(ctx.app, 'POST', '/tasks', {
       token,
@@ -298,7 +298,7 @@ describe('Schedule free-slots API e2e (A-SCH-033+)', () => {
         name: 'Linked to morning',
         estimatedTimeInMinutes: 30,
         phaseId: morningId,
-        isProblematic: true,
+        scheduleState: 'problematic',
         problematicReason: 'phase_full',
         problematicOccurrenceYmds: ['2026-10-22'],
       },

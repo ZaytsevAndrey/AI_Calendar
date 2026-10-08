@@ -7,7 +7,12 @@ import {
   normalizeFixedEventBufferMinutes,
   expandIntervalsBothSides,
 } from './intelligent-scheduling.engine';
-import { Task, TaskPriority, TaskStatus } from '../tasks/entities/task.entity';
+import {
+  ScheduleState,
+  Task,
+  TaskPriority,
+  TaskStatus,
+} from '../tasks/entities/task.entity';
 import { TaskEventType } from '../scheduling/event-type.enum';
 import { Phase } from '../phases/entities/phase.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
@@ -819,7 +824,7 @@ describe('IntelligentSchedulingEngine', () => {
       makeTask({
         id: 'stuck',
         name: 'Stuck',
-        isProblematic: true,
+        scheduleState: ScheduleState.PROBLEMATIC,
         estimatedTimeInMinutes: 60,
         phases: [phase911],
       }),
@@ -1732,6 +1737,7 @@ function makeSettings(partial: Partial<UserSettings>): UserSettings {
     recurringScheduleHorizonDays: 3,
     timeZone: 'UTC',
     remindersEnabled: false,
+    syncGoogleDeletions: false,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...partial,
@@ -1767,9 +1773,13 @@ function makeTask(partial: Partial<Task>): Task {
       .googleEventCalendarId ?? null,
     isFixedExternal: false,
     isUnscheduled: partial.isUnscheduled ?? false,
-    isProblematic: partial.isProblematic ?? false,
+    scheduleState: partial.scheduleState ?? ScheduleState.NONE,
     problematicOccurrenceYmds: partial.problematicOccurrenceYmds ?? null,
     problematicReason: partial.problematicReason ?? null,
+    problematicDay: partial.problematicDay ?? null,
+    problematicOriginalStart: partial.problematicOriginalStart ?? null,
+    problematicOriginalEnd: partial.problematicOriginalEnd ?? null,
+    parentSeriesId: partial.parentSeriesId ?? null,
     location: partial.location ?? null,
     googleColorId: partial.googleColorId ?? null,
     googleVisibility: partial.googleVisibility ?? null,
