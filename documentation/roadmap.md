@@ -84,7 +84,7 @@ Do in order unless you explicitly skip ahead.
 Contract: [spec-incremental-placement.md](spec-incremental-placement.md). Do these in order. The live engine still full-replans until the last step. Do not delete `engine.run` before new writes go through the single placement step.
 
 - [x] **Data.** Replace boolean `isProblematic` with `scheduleState`: `none` | `problematic` | `resolved`. Keep task status (`todo` / `in_progress` / `completed` / `canceled`). Store reason code, day, original interval, and parent series id on the copy. Add `syncGoogleDeletions` (default off) and a queue of Google writes that failed. Migrate existing problematic rows to `problematic`.
-- [ ] **Placement step.** New service beside the engine. One call seats the claimant and only the days that must move for everyone to still have a seat. A one-off moves itself. A series day is removed from the series and becomes an identical non-recurring task. A chain is written only when everyone fits. `resolved` is not movable. `engine.run` stays, but new writes do not use it.
+- [x] **Placement step.** New service beside the engine. One call seats the claimant and only the days that must move for everyone to still have a seat. A one-off moves itself. A series day is removed from the series and becomes an identical non-recurring task. A chain is written only when everyone fits. `resolved` is not movable. `engine.run` stays, but new writes do not use it.
 - [ ] **Stop full replan on small edits.** Create and geometric edit call the placement step. Cosmetic save only updates the task and the same Google event. Drag, skip, delete, complete, and cancel do not enqueue `full_replan`. A freed hole immediately seats every problematic task that fits, oldest first.
 - [ ] **Series drag.** Ask this day or the whole series. This day detaches a one-off. The whole series ends the old series before that day and starts a new recurring task at the new time. Earlier occurrences stay.
 - [ ] **Inboxes and resolved.** Conflict sheet with no answer and no hole sets `problematic`. Voice clarification with no answer creates the task from the fields already understood, then uses normal create. Resolve keeps the task as a second layer on the same slot and sets `resolved`. A new claim on that time looks for another hole. Skip from Problematic writes the series skip first, then deletes the copy and its Google event.
@@ -126,7 +126,7 @@ Voice can already delete a task. The calendar block and the edit modal cannot.
 
 ## Recommended next steps
 
-1. **§12** — Incremental placement, next slice: **Placement step** (one call seats the claimant and only the days that must move). Do not start by deleting the engine.
+1. **§12** — Incremental placement, next slice: **Stop full replan on small edits** (create and geometric edit call the placement step). Do not start by deleting the engine.
 2. **§13** — Unscheduled cards: more context + stronger schedule/edit actions.
 3. **§14** — Delete a task from the calendar block and the edit modal; recurring asks this event or all events.
 4. After each feature ships: tick above, archive a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

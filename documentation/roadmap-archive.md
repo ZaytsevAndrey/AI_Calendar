@@ -14,6 +14,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 - [x] **Incremental placement: data.** `scheduleState` (`none` | `problematic` | `resolved`) replaces `isProblematic`. A parked copy can store reason, civil day, original interval, and parent series id. `syncGoogleDeletions` defaults off (not applied yet). Failed Google writes have a `pending_google_writes` table; the retry worker is still later. The engine still full-replans.
 
+- [x] **Incremental placement: one step.** `PlacementStepService.place` seats the claimant and only the overlapped days (one-off shifts, series day becomes a non-recurring copy, chain only when everyone fits, `resolved` stays). It does not call `engine.run`. Create and edit still enqueue a full replan.
+
 ## Shipped (Sep 2026)
 
 ### Scheduling redesign (engine)

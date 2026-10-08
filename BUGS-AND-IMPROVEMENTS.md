@@ -6,7 +6,7 @@
 
 ## Черга
 
-Порожньо. Наступний крок у roadmap — §12 Incremental placement, зріз **Placement step** (крок Data уже в архіві).
+Порожньо. Наступний крок у roadmap — §12, зріз **Stop full replan on small edits**.
 
 ---
 

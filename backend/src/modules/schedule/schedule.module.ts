@@ -13,6 +13,7 @@ import { DisplayedEventMoveService } from './displayed-event-move.service';
 import { ScheduleRecommendationsService } from './schedule-recommendations.service';
 import { ConflictOptionPhrasesService } from './conflict-option-phrases.service';
 import { FreeSlotsService } from './free-slots.service';
+import { PlacementStepService } from './placement-step.service';
 import { TasksModule } from '../tasks/tasks.module';
 import { UserSettingsModule } from '../user-settings/user-settings.module';
 import { Task } from '../tasks/entities/task.entity';
@@ -46,7 +47,8 @@ import { VoiceModule } from '../voice/voice.module';
     ScheduleRecommendationsService,
     ConflictOptionPhrasesService,
     FreeSlotsService,
+    PlacementStepService,
   ],
-  exports: [ScheduleService, ScheduleJobService],
+  exports: [ScheduleService, ScheduleJobService, PlacementStepService],
 })
 export class ScheduleModule {}
