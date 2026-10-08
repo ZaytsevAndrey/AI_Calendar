@@ -22,6 +22,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 - [x] **Incremental placement: inboxes and resolved.** Create/preferred against an anchor returns `conflicts[]` for the shared sheet; dismiss / `leave_problematic` parks the claimant. Resolve sets `resolved` and reseats the original interval as a second layer. Skip from Problematic skips the parent series day then deletes the copy. Voice with enough fields creates through normal placement (including cancel during clarification).
 
+- [x] **Incremental placement: Google.** Seated local writes sync to Google; failures go to `pending_google_writes` and retry in the background. A newer Google edit of time/title/description drops the pending row and pulls into the task. No slot means no Google event. The hourly tick appends missing series days via placement and purges past problematic copies. `syncGoogleDeletions` (default off) deletes the local task when a linked Google event is gone.
+
 ## Shipped (Sep 2026)
 
 ### Scheduling redesign (engine)

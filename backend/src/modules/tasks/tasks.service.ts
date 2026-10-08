@@ -33,8 +33,7 @@ import type { SchedulingConflict } from '../schedule/intelligent-scheduling.engi
 import { ScheduledTask } from '../schedule/schedule.entity';
 import { hasFullyEnded } from '../schedule/google-segment-sync.util';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
-import { phaseHexToGoogleColorId } from '../google-calendar/phase-hex-to-google-color-id.util';
-import { applyTaskGoogleEventFields } from '../google-calendar/task-google-event-fields.util';
+import { PendingGoogleWriteService } from '../google-calendar/pending-google-write.service';
 import { localYmd } from '../voice/voice-local-date.util';
 import {
   addSkippedOccurrenceYmd,
@@ -60,14 +59,8 @@ export class TasksService {
     @Inject(forwardRef(() => PlacementStepService))
     private readonly placementStep: PlacementStepService,
     private readonly googleCalendarService: GoogleCalendarService,
+    private readonly pendingGoogleWrites: PendingGoogleWriteService,
   ) {}
-
-  private canSyncTaskToGoogle(task: Task): boolean {
-    if (task.isUnscheduled || isProblematicSchedule(task)) return false;
-    if (!task.scheduledStartTime || !task.scheduledEndTime) return false;
-    if (task.eventType === TaskEventType.FIXED) return true;
-    return !!task.googleEventId;
-  }
 
   private canPlace(task: Task): boolean {
     if (task.isUnscheduled || isProblematicSchedule(task)) return false;
@@ -114,81 +107,6 @@ export class TasksService {
       task.isUnscheduled = false;
     }
     rememberSingleProblematicDay(task);
-  }
-
-  private resolveTaskPhaseColorHex(task: Task): string | undefined {
-    const p = task.phases?.[0] ?? task.phase;
-    return p?.color;
-  }
-
-  private buildGoogleEventPayload(task: Task): Record<string, unknown> {
-    const fallbackColorId = phaseHexToGoogleColorId(
-      this.resolveTaskPhaseColorHex(task),
-    );
-    const payload: Record<string, unknown> = {
-      summary: task.name,
-      description: task.description || undefined,
-      start: {
-        dateTime: task.scheduledStartTime?.toISOString(),
-        timeZone: task.scheduleTimeZone || 'UTC',
-      },
-      end: {
-        dateTime: task.scheduledEndTime?.toISOString(),
-        timeZone: task.scheduleTimeZone || 'UTC',
-      },
-    };
-    return applyTaskGoogleEventFields(payload, task, fallbackColorId);
-  }
-
-  private async syncTaskWithGoogleCalendar(
-    userId: string,
-    task: Task,
-  ): Promise<void> {
-    if (!this.canSyncTaskToGoogle(task)) {
-      // Non-FIXED tasks use googleEventId from replan sync; do not delete here.
-      return;
-    }
-
-    const conn = await this.googleCalendarService.checkConnection(userId);
-    if (!conn.connected) {
-      this.logger.warn(
-        `Google Calendar not connected for user ${userId}; skipped sync for FIXED task ${task.id}.`,
-      );
-      return;
-    }
-
-    const payload = this.buildGoogleEventPayload(task);
-    const syncOpts = {
-      skipSleepWindowCheck: true as const,
-      calendarId: task.googleEventCalendarId ?? 'primary',
-    };
-    try {
-      if (task.googleEventId) {
-        await this.googleCalendarService.updateEvent(
-          userId,
-          task.googleEventId,
-          payload,
-          syncOpts,
-        );
-      } else {
-        const ev = await this.googleCalendarService.createEvent(
-          userId,
-          payload,
-          syncOpts,
-        );
-        if (typeof ev?.id === 'string') {
-          task.googleEventId = ev.id;
-        }
-        const appCal = (ev as { appCalendarId?: string }).appCalendarId;
-        if (appCal) {
-          task.googleEventCalendarId = appCal;
-        }
-      }
-    } catch (e: any) {
-      this.logger.warn(
-        `Failed to sync task ${task.id} to Google Calendar: ${e?.message ?? e}`,
-      );
-    }
   }
 
   private async resolveTaskTimeZone(
@@ -372,9 +290,12 @@ export class TasksService {
     userId: string,
     task: Task,
   ): Promise<Task & { jobId: string | null }> {
-    await this.syncTaskWithGoogleCalendar(userId, task);
-    const synced = await this.tasksRepository.save(task);
-    return Object.assign(synced, { jobId: null as string | null });
+    await this.pendingGoogleWrites.syncTask(userId, task.id);
+    const synced = await this.tasksRepository.findOne({
+      where: { id: task.id, userId },
+      relations: ['phase', 'phases'],
+    });
+    return Object.assign(synced ?? task, { jobId: null as string | null });
   }
 
   async create(
@@ -614,21 +535,6 @@ export class TasksService {
         task.scheduledEndTime = new Date(task.problematicOriginalEnd);
       }
     }
-    if ((enteredUnscheduled || enteredProblematic) && task.googleEventId) {
-      try {
-        await this.scheduleJobService.deleteSyncedGoogleEventsForTask(
-          userId,
-          task,
-        );
-      } catch (e: any) {
-        this.logger.warn(
-          `Failed to delete Google event for parked task ${task.id}: ${e?.message ?? e}`,
-        );
-      }
-      task.googleEventId = null;
-      task.googleEventCalendarId = null;
-    }
-
     const saved = await this.tasksRepository.save(task);
     if (enteredUnscheduled || enteredProblematic) {
       await this.releaseOpenSlots(saved.id);
@@ -643,6 +549,8 @@ export class TasksService {
         saved.scheduledEndTime = null;
         await this.tasksRepository.save(saved);
       }
+      // No slot → drop Google (enqueue delete if the API call fails).
+      await this.pendingGoogleWrites.syncTask(userId, saved.id);
       await this.placementStep.seatOpenHoles(
         userId,
         enteredProblematic ? saved.id : undefined,
@@ -876,9 +784,13 @@ export class TasksService {
         calendarId ?? undefined,
       );
     } catch (e: any) {
-      this.logger.warn(
-        `Failed to delete skipped Google event ${eventId}: ${e?.message ?? e}`,
-      );
+      const message = e?.message ?? String(e);
+      this.logger.warn(`Failed to delete skipped Google event ${eventId}: ${message}`);
+      await this.pendingGoogleWrites.enqueue(userId, 'delete', {
+        googleEventId: eventId,
+        googleCalendarId: calendarId ?? null,
+        error: message,
+      });
     }
   }
 

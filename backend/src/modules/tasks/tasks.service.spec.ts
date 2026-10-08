@@ -8,6 +8,7 @@ import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { ScheduleJobService } from '../schedule/schedule-job.service';
 import { PlacementStepService } from '../schedule/placement-step.service';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { PendingGoogleWriteService } from '../google-calendar/pending-google-write.service';
 import { ScheduledTask } from '../schedule/schedule.entity';
 import { TaskEventType } from '../scheduling/event-type.enum';
 import { TaskStatus } from './entities/task.entity';
@@ -54,6 +55,9 @@ describe('TasksService', () => {
     updateEvent: jest.fn(),
     deleteEvent: jest.fn(),
   };
+  const pendingGoogleWrites = {
+    syncTask: jest.fn().mockResolvedValue(undefined),
+  };
   const placementStep = {
     place: jest.fn().mockImplementation(async (_userId: string, _taskId: string, opts) => {
       const start = opts?.preferredStart ? new Date(opts.preferredStart).getTime() : 0;
@@ -82,6 +86,12 @@ describe('TasksService', () => {
       };
     });
     placementStep.seatOpenHoles.mockResolvedValue(undefined);
+    pendingGoogleWrites.syncTask.mockImplementation(async () => {
+      if (lastSaved) {
+        lastSaved.googleEventId = null;
+        lastSaved.googleEventCalendarId = null;
+      }
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TasksService,
@@ -106,6 +116,7 @@ describe('TasksService', () => {
           useValue: scheduleJobService,
         },
         { provide: GoogleCalendarService, useValue: googleCalendarService },
+        { provide: PendingGoogleWriteService, useValue: pendingGoogleWrites },
         { provide: PlacementStepService, useValue: placementStep },
       ],
     }).compile();
@@ -204,7 +215,7 @@ describe('TasksService', () => {
     expect(created.isUnscheduled).toBe(true);
     expect(created.jobId).toBeNull();
     expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
-    expect(googleCalendarService.createEvent).not.toHaveBeenCalled();
+    expect(pendingGoogleWrites.syncTask).toHaveBeenCalled();
   });
 
   it('stores problematic state and the single parked day', async () => {
@@ -502,7 +513,7 @@ describe('TasksService', () => {
       expect(row.scheduledEndTime).toBeNull();
       expect(row.location).toBe('Store');
       expect(row.googleColorId).toBe('4');
-      expect(googleCalendarService.createEvent).not.toHaveBeenCalled();
+      expect(pendingGoogleWrites.syncTask).toHaveBeenCalled();
       expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
     });
 
@@ -563,9 +574,7 @@ describe('TasksService', () => {
         isUnscheduled: true,
       } as any);
 
-      expect(
-        scheduleJobService.deleteSyncedGoogleEventsForTask,
-      ).toHaveBeenCalled();
+      expect(pendingGoogleWrites.syncTask).toHaveBeenCalledWith('user-1', 'task-1');
       expect(updated.googleEventId).toBeNull();
       expect(updated.googleEventCalendarId).toBeNull();
       expect(updated.isUnscheduled).toBe(true);
@@ -627,7 +636,7 @@ describe('TasksService', () => {
       expect(updated.jobId).toBeNull();
       expect(placementStep.place).not.toHaveBeenCalled();
       expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
-      expect(googleCalendarService.updateEvent).toHaveBeenCalled();
+      expect(pendingGoogleWrites.syncTask).toHaveBeenCalledWith('user-1', 'task-1');
     });
 
     it('keeps the old slot and returns a conflict when preferred cannot be taken', async () => {

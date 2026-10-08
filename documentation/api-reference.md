@@ -34,7 +34,7 @@ Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWor
 
 **`remindersEnabled`** (default false) turns on Web Push. See [Reminders](#reminders--reminders).
 
-**`syncGoogleDeletions`** (default false) is stored on settings. While it is off, deleting an app event in Google does not change the local task. The flag is not applied yet: no sync path reads it.
+**`syncGoogleDeletions`** (default false): when off, a missing linked Google event during retry only clears local Google ids. When on, that missing event deletes the local task. Failed Google writes sit in `pending_google_writes` and retry in the background; a newer Google edit of time/title/description drops the pending row and pulls into the task.
 
 **`hiddenGoogleCalendarIds`** (string array) hides those Google calendars on the Calendar page. Empty means primary, the app calendar, and calendars selected in Google. The stored app calendar id is dropped if sent. A non-array is 400. This does not change which calendars Generate treats as busy.
 
@@ -180,4 +180,4 @@ Create/update body may include:
 - `recurrenceWeekDays` — `0` = Sunday … `6` = Saturday. Empty / omitted / all seven = no extra weekday filter. Intersected with the phase `weekDays`.
 - `allowSplit` — per-task; engine also requires the user setting `allowSplitScheduling`
 
-Non-`fixed` create and geometric edit call the placement step and return `jobId: null`. An anchor conflict returns `conflicts[]` (same shape as a replan job) without parking; the client opens the shared sheet, and dismiss / `leave_problematic` sets `problematic`. Resolve (`scheduleState: resolved`) reseats `problematicOriginalStart`/`End` as a second-layer slot. Skip on a non-recurring problematic copy with `parentSeriesId` skips that day on the parent series, then deletes the copy. They do not enqueue `full_replan`. Cosmetic edits do not move the slot. Drag, skip, delete, complete, and cancel do not enqueue `full_replan`. A freed hole seats problematic tasks that fit, oldest first. `POST /schedule-jobs/replan` and Generate still run the full engine.
+Non-`fixed` create and geometric edit call the placement step and return `jobId: null`. An anchor conflict returns `conflicts[]` (same shape as a replan job) without parking; the client opens the shared sheet, and dismiss / `leave_problematic` sets `problematic`. Resolve (`scheduleState: resolved`) reseats `problematicOriginalStart`/`End` as a second-layer slot. Skip on a non-recurring problematic copy with `parentSeriesId` skips that day on the parent series, then deletes the copy. Seated writes sync to Google; failures enqueue `pending_google_writes`. No slot means no Google event. They do not enqueue `full_replan`. Cosmetic edits do not move the slot. Drag, skip, delete, complete, and cancel do not enqueue `full_replan`. A freed hole seats problematic tasks that fit, oldest first. `POST /schedule-jobs/replan` and Generate still run the full engine.

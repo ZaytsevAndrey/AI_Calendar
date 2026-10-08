@@ -8,10 +8,12 @@ import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import { habitBlockIntervals } from '../habits/habit-blocks.util';
 import { Habit } from '../habits/entities/habit.entity';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { PendingGoogleWriteService } from '../google-calendar/pending-google-write.service';
 import { PhasesService } from '../phases/phases.service';
 import { TaskEventType } from '../scheduling/event-type.enum';
 import {
   clearParkMetadata,
+  isProblematicSchedule,
   ScheduleState,
   Task,
   TaskStatus,
@@ -89,6 +91,7 @@ export class PlacementStepService {
     private readonly userSettingsService: UserSettingsService,
     private readonly phasesService: PhasesService,
     private readonly googleCalendarService: GoogleCalendarService,
+    private readonly pendingGoogleWrites: PendingGoogleWriteService,
   ) {}
 
   place(
@@ -107,6 +110,42 @@ export class PlacementStepService {
     return withUserLock(userId, () =>
       this.seatOpenHolesUnlocked(userId, exceptTaskId),
     );
+  }
+
+  /** Append missing horizon days for every active recurring task of this user. */
+  appendMissingSeriesDays(userId: string): Promise<void> {
+    return withUserLock(userId, () => this.appendMissingSeriesDaysUnlocked(userId));
+  }
+
+  /** Delete problematic copies whose civil day is already past (settings TZ). */
+  async purgePastProblematicCopies(limit = 50): Promise<number> {
+    const parked = await this.taskRepo.find({
+      where: { scheduleState: ScheduleState.PROBLEMATIC },
+      take: limit * 4,
+      order: { createdAt: 'ASC' },
+    });
+    let removed = 0;
+    const byUser = new Map<string, Task[]>();
+    for (const task of parked) {
+      const list = byUser.get(task.userId) ?? [];
+      list.push(task);
+      byUser.set(task.userId, list);
+    }
+    for (const [userId, tasks] of byUser) {
+      if (removed >= limit) break;
+      const settings = await this.userSettingsService.getSettings(userId);
+      const timeZone = resolveIanaTimeZone(settings.timeZone);
+      const today = localYmd(new Date().toISOString(), timeZone);
+      for (const task of tasks) {
+        if (removed >= limit) break;
+        const day = task.problematicDay;
+        if (!day || day >= today) continue;
+        await this.pendingGoogleWrites.syncTask(userId, task.id);
+        await this.taskRepo.remove(task);
+        removed += 1;
+      }
+    }
+    return removed;
   }
 
   private async seatOpenHolesUnlocked(
@@ -368,7 +407,34 @@ export class PlacementStepService {
     if (plan.outcome === 'seated' && this.shouldExpandSeries(task, opts)) {
       await this.expandSeriesDays(userId, task.id);
     }
+    if (
+      plan.outcome === 'seated' ||
+      plan.outcome === 'problematic' ||
+      plan.outcome === 'unscheduled'
+    ) {
+      await this.pendingGoogleWrites.syncTask(userId, taskId);
+      for (const move of plan.outcome === 'seated' ? plan.moves : []) {
+        await this.pendingGoogleWrites.syncTask(userId, move.taskId);
+      }
+    }
     return plan;
+  }
+
+  private async appendMissingSeriesDaysUnlocked(userId: string): Promise<void> {
+    const series = await this.taskRepo.find({
+      where: {
+        userId,
+        isRecurring: true,
+        isUnscheduled: false,
+        status: TaskStatus.TODO,
+      },
+    });
+    for (const task of series) {
+      if (isProblematicSchedule(task) || !task.scheduledStartTime) continue;
+      if (task.scheduleState === ScheduleState.RESOLVED) continue;
+      await this.expandSeriesDays(userId, task.id);
+      await this.pendingGoogleWrites.syncTask(userId, task.id);
+    }
   }
 
   private shouldExpandSeries(task: Task, opts?: PlaceOptions): boolean {

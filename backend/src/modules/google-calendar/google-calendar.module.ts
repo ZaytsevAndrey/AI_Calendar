@@ -8,11 +8,21 @@ import { EventPhasesModule } from '../event-phases/event-phases.module';
 import { PhasesModule } from '../phases/phases.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
+import { PendingGoogleWrite } from './entities/pending-google-write.entity';
+import { PendingGoogleWriteService } from './pending-google-write.service';
+import { PendingGoogleWriteProcessor } from './pending-google-write.processor';
+import { Task } from '../tasks/entities/task.entity';
+import { ScheduledTask } from '../schedule/schedule.entity';
 
 @Module({
   imports: [
     UsersModule,
-    TypeOrmModule.forFeature([UserSettings]),
+    TypeOrmModule.forFeature([
+      UserSettings,
+      PendingGoogleWrite,
+      Task,
+      ScheduledTask,
+    ]),
     EventPhasesModule,
     PhasesModule,
     JwtModule.registerAsync({
@@ -25,7 +35,11 @@ import { JwtModule } from '@nestjs/jwt';
     }),
   ],
   controllers: [GoogleCalendarController],
-  providers: [GoogleCalendarService],
-  exports: [GoogleCalendarService],
+  providers: [
+    GoogleCalendarService,
+    PendingGoogleWriteService,
+    PendingGoogleWriteProcessor,
+  ],
+  exports: [GoogleCalendarService, PendingGoogleWriteService],
 })
 export class GoogleCalendarModule {}
