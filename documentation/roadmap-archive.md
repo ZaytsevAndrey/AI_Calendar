@@ -20,6 +20,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 - [x] **Incremental placement: series drag.** Dragging a series day asks this day or the whole series. This day skips that occurrence and creates a one-off at the new time. The whole series ends the old series before that day and starts a new recurring task at the new clock. Earlier occurrences stay. Google series split is still later.
 
+- [x] **Incremental placement: inboxes and resolved.** Create/preferred against an anchor returns `conflicts[]` for the shared sheet; dismiss / `leave_problematic` parks the claimant. Resolve sets `resolved` and reseats the original interval as a second layer. Skip from Problematic skips the parent series day then deletes the copy. Voice with enough fields creates through normal placement (including cancel during clarification).
+
 ## Shipped (Sep 2026)
 
 ### Scheduling redesign (engine)

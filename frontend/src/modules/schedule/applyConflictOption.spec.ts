@@ -21,6 +21,7 @@ describe('applyConflictOption', () => {
       scheduleState: 'problematic',
       problematicReason: 'preferred_on_fixed',
       problematicOccurrenceYmds: ['2026-04-20'],
+      problematicOriginalStart: '2026-04-20T09:00:00.000Z',
     });
     expect(skipOccurrence).not.toHaveBeenCalled();
   });

@@ -50,6 +50,14 @@ export interface TaskDTO {
   updatedAt: string;
   /** Present on create/update when a silent replan was enqueued. */
   jobId?: string | null;
+  /** Anchor conflict from the placement step — open the shared conflict sheet. */
+  conflicts?: Array<{
+    taskId: string;
+    taskName: string;
+    reason: 'preferred_on_fixed' | 'phase_full';
+    options: Array<'move_other' | 'move_new' | 'skip_occurrence' | 'leave_problematic'>;
+    meta?: Record<string, unknown>;
+  }>;
   phase?: {
     id: string;
     name: string;

@@ -40,6 +40,8 @@ describe('TasksService', () => {
   const scheduledTaskRepository = {
     find: jest.fn().mockResolvedValue([]),
     remove: jest.fn(),
+    create: jest.fn((value) => value),
+    save: jest.fn(async (entity) => entity),
   };
   const scheduleJobService = {
     enqueueReplan: jest.fn().mockResolvedValue({ id: 'job-1' }),
@@ -237,12 +239,46 @@ describe('TasksService', () => {
     expect(created.problematicDay).toBeNull();
   });
 
-  it('keeps the series link on resolved and clears it when returned to none', async () => {
+  it('returns a conflict sheet payload instead of parking on create', async () => {
+    placementStep.place.mockResolvedValue({
+      outcome: 'conflict',
+      conflict: {
+        taskId: 'task-1',
+        taskName: 'Deep work',
+        reason: 'preferred_on_fixed',
+        options: ['move_new', 'leave_problematic'],
+        meta: {
+          preferredStart: '2026-10-08T09:00:00.000Z',
+          preferredEnd: '2026-10-08T10:00:00.000Z',
+        },
+      },
+    });
+
+    const created = await service.create('user-1', {
+      name: 'Deep work',
+      estimatedTimeInMinutes: 60,
+      scheduledStartTime: '2026-10-08T09:00:00.000Z',
+      scheduledEndTime: '2026-10-08T10:00:00.000Z',
+    } as any);
+
+    expect(created.scheduleState).toBe('none');
+    expect(created.conflicts).toEqual([
+      expect.objectContaining({
+        reason: 'preferred_on_fixed',
+        taskId: 'task-1',
+      }),
+    ]);
+    expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+  });
+
+  it('keeps the series link on resolved and seats the original interval', async () => {
     await service.create('user-1', {
       name: 'Copy',
       scheduleState: 'problematic',
       parentSeriesId: '11111111-1111-4111-8111-111111111111',
       problematicOccurrenceYmds: ['2026-10-06'],
+      problematicOriginalStart: '2026-10-06T09:00:00.000Z',
+      problematicOriginalEnd: '2026-10-06T10:00:00.000Z',
       estimatedTimeInMinutes: 30,
     } as any);
 
@@ -252,6 +288,15 @@ describe('TasksService', () => {
     expect(resolved.scheduleState).toBe('resolved');
     expect(resolved.parentSeriesId).toBe('11111111-1111-4111-8111-111111111111');
     expect(resolved.problematicDay).toBe('2026-10-06');
+    expect(resolved.scheduledStartTime).toEqual(
+      new Date('2026-10-06T09:00:00.000Z'),
+    );
+    expect(scheduledTaskRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-1',
+        scheduledStartTime: new Date('2026-10-06T09:00:00.000Z'),
+      }),
+    );
 
     const cleared = await service.update('task-1', 'user-1', {
       scheduleState: 'none',
@@ -585,11 +630,16 @@ describe('TasksService', () => {
       expect(googleCalendarService.updateEvent).toHaveBeenCalled();
     });
 
-    it('keeps the old slot when a preferred time cannot be taken', async () => {
+    it('keeps the old slot and returns a conflict when preferred cannot be taken', async () => {
       lastSaved = { ...seated };
       placementStep.place.mockResolvedValue({
         outcome: 'conflict',
-        conflict: { reason: 'preferred_on_fixed' },
+        conflict: {
+          taskId: 'task-1',
+          taskName: 'Write brief',
+          reason: 'preferred_on_fixed',
+          options: ['move_new', 'leave_problematic'],
+        },
       });
 
       const updated = await service.update('task-1', 'user-1', {
@@ -599,6 +649,9 @@ describe('TasksService', () => {
 
       expect(updated.scheduledStartTime).toEqual(seated.scheduledStartTime);
       expect(updated.scheduledEndTime).toEqual(seated.scheduledEndTime);
+      expect(updated.conflicts).toEqual([
+        expect.objectContaining({ reason: 'preferred_on_fixed' }),
+      ]);
       expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
       expect(placementStep.seatOpenHoles).not.toHaveBeenCalled();
     });
@@ -630,6 +683,68 @@ describe('TasksService', () => {
 
     afterEach(() => {
       jest.useRealTimers();
+    });
+
+    it('skips the parent series day then deletes a problematic copy', async () => {
+      const parent = {
+        id: 'series-1',
+        userId: 'user-1',
+        name: 'Gym',
+        isUnscheduled: false,
+        isRecurring: true,
+        isFixedExternal: false,
+        eventType: TaskEventType.ADMIN,
+        status: TaskStatus.TODO,
+        scheduleState: 'none',
+        skippedOccurrenceYmds: null as string[] | null,
+        scheduleTimeZone: 'UTC',
+      };
+      const copy = {
+        id: 'copy-1',
+        userId: 'user-1',
+        name: 'Gym',
+        isUnscheduled: false,
+        isRecurring: false,
+        isFixedExternal: false,
+        eventType: TaskEventType.ADMIN,
+        status: TaskStatus.TODO,
+        scheduleState: 'problematic',
+        parentSeriesId: 'series-1',
+        problematicDay: '2026-09-22',
+        skippedOccurrenceYmds: null,
+        scheduleTimeZone: 'UTC',
+      };
+      tasksRepository.findOne.mockImplementation(((opts: { where?: { id?: string } }) => {
+        if (opts?.where?.id === 'copy-1') return Promise.resolve({ ...copy });
+        if (opts?.where?.id === 'series-1') return Promise.resolve({ ...parent });
+        return Promise.resolve(null);
+      }) as never);
+      tasksRepository.save.mockImplementation(((entity: {
+        id?: string;
+        skippedOccurrenceYmds?: string[] | null;
+      }) => {
+        if (entity.id === 'series-1') {
+          parent.skippedOccurrenceYmds = entity.skippedOccurrenceYmds ?? null;
+          return Promise.resolve({ ...parent });
+        }
+        return Promise.resolve(entity);
+      }) as never);
+      tasksRepository.remove.mockResolvedValue(undefined);
+      scheduledTaskRepository.find.mockResolvedValue([]);
+
+      await service.skipOccurrence('copy-1', 'user-1', {
+        occurrenceStart: '2026-09-22T09:00:00.000Z',
+      });
+
+      expect(parent.skippedOccurrenceYmds).toEqual(['2026-09-22']);
+      expect(tasksRepository.remove).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'copy-1' }),
+      );
+      tasksRepository.findOne.mockImplementation(async () => lastSaved);
+      tasksRepository.save.mockImplementation(async (entity) => {
+        lastSaved = { ...entity, id: entity.id ?? 'task-1' };
+        return lastSaved;
+      });
     });
 
     it('removes a one-off slot without completing or replanning', async () => {

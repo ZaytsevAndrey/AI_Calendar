@@ -28,10 +28,16 @@ function parkPayload(conflict: SchedulingConflictDTO): UpdateTaskDTO {
     ymds.push(single);
   }
   ymds.sort();
+  const preferredStart =
+    typeof meta?.preferredStart === 'string' ? meta.preferredStart : null;
+  const preferredEnd =
+    typeof meta?.preferredEnd === 'string' ? meta.preferredEnd : null;
   return {
     scheduleState: 'problematic',
     problematicReason: conflict.reason,
     ...(ymds.length ? { problematicOccurrenceYmds: ymds } : {}),
+    ...(preferredStart ? { problematicOriginalStart: preferredStart } : {}),
+    ...(preferredEnd ? { problematicOriginalEnd: preferredEnd } : {}),
   };
 }
 

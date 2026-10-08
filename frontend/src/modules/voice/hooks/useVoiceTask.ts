@@ -32,14 +32,15 @@ export type VoiceStage =
 
 type UseVoiceTaskOptions = {
   onComplete: (task: VoiceParsedTask) => Promise<void>;
-  onSufficient: (task: VoiceParsedTask) => void;
+  /** @deprecated Sufficient creates like complete; kept for call-site compat. */
+  onSufficient?: (task: VoiceParsedTask) => void;
 };
 
 function requiresAlwaysConfirm(kind: VoiceCommandAction['kind']): boolean {
   return kind === 'cancel' || kind === 'delete' || kind === 'habit_delete';
 }
 
-export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) {
+export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
   const { start, stop, cancel, error: recorderError, level: micLevel } = useAudioRecorder();
   const { data: userSettings } = useGetUserSettingsQuery();
   const confirmCommands = !!userSettings?.confirmVoiceCommands;
@@ -55,6 +56,7 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
   const [stage, setStage] = useState<VoiceStage>('idle');
   const [transcript, setTranscript] = useState('');
   const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
+  const [draftTask, setDraftTask] = useState<VoiceParsedTask | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyLabel, setBusyLabel] = useState(() => i18n.t('voice.working'));
   const [pendingCommand, setPendingCommand] = useState<VoiceCommandAction | null>(null);
@@ -74,15 +76,23 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
     setStage('idle');
     setTranscript('');
     setClarifyingQuestion(null);
+    setDraftTask(null);
     setPendingCommand(null);
     setHeldConflict(null);
     setError(null);
   }, [cancel]);
 
   const close = useCallback(() => {
+    const shouldCreate =
+      (stage === 'clarifying' || stage === 'recording_clarification') &&
+      Boolean(draftTask?.name);
+    const payload = draftTask;
     reset();
     setIsOpen(false);
-  }, [reset]);
+    if (shouldCreate && payload) {
+      void onComplete(payload);
+    }
+  }, [draftTask, onComplete, reset, stage]);
 
   const open = useCallback(() => {
     VoiceSpeech.stop();
@@ -187,6 +197,7 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
 
       if (result.understanding === 'needs_clarification') {
         const question = result.clarifyingQuestion || i18n.t('voice.clarifyMore');
+        setDraftTask(result.task?.name ? result.task : null);
         setClarifyingQuestion(question);
         setStage('clarifying');
         await maybeSpeak(question);
@@ -195,25 +206,23 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
 
       if (!result.task?.name) {
         const question = i18n.t('voice.askName');
+        setDraftTask(null);
         setClarifyingQuestion(question);
         setStage('clarifying');
         await maybeSpeak(question);
         return;
       }
 
-      if (result.understanding === 'complete') {
-        const waitConflict = waitForScheduleConflict(12_000);
-        await onComplete(result.task);
-        await waitConflict;
-        await maybeSpeak(result.task.name);
-        close();
-        return;
-      }
-
-      close();
-      onSufficient(result.task);
+      // complete and sufficient both create through the normal placement path.
+      const waitConflict = waitForScheduleConflict(12_000);
+      await onComplete(result.task);
+      await waitConflict;
+      await maybeSpeak(result.task.name);
+      setDraftTask(null);
+      reset();
+      setIsOpen(false);
     },
-    [close, confirmCommands, maybeSpeak, onComplete, onSufficient, runCommand, timeZone],
+    [confirmCommands, maybeSpeak, onComplete, reset, runCommand, timeZone],
   );
 
   const beginRecording = useCallback(async () => {

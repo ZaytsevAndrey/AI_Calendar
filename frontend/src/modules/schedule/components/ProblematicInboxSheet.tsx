@@ -133,7 +133,10 @@ export function ProblematicInboxSheet({
   const resolve = async (task: TaskDTO) => {
     setBusyKey(`${task.id}:resolve`);
     try {
-      await clearProblematic(task);
+      await updateEvent({
+        id: task.id,
+        body: { scheduleState: 'resolved' },
+      }).unwrap();
       showSuccessToast({ title: t('schedule.problematicResolved') });
     } catch (e) {
       showErrorToast({
@@ -154,7 +157,10 @@ export function ProblematicInboxSheet({
           occurrenceStart: occurrenceStartIsoForYmd(occurrenceYmd, timeZone),
         },
       }).unwrap();
-      await removeParkedDay(task, occurrenceYmd);
+      // Non-recurring problematic copies are deleted by skipOccurrence.
+      if (task.isRecurring) {
+        await removeParkedDay(task, occurrenceYmd);
+      }
       showSuccessToast({ title: t('schedule.problematicSkipped') });
     } catch (e) {
       showErrorToast({
