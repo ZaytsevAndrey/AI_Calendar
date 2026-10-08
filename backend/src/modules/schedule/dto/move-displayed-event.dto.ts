@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class MoveDisplayedEventDto {
   @ApiProperty({ description: 'Google event id shown on the calendar, including a recurring instance id' })
@@ -32,4 +32,14 @@ export class MoveDisplayedEventDto {
   @ApiProperty()
   @IsDateString()
   end: string;
+
+  @ApiProperty({
+    required: false,
+    enum: ['occurrence', 'series'],
+    description:
+      'Recurring drag only. occurrence detaches that day. series moves that day and every later day.',
+  })
+  @IsOptional()
+  @IsIn(['occurrence', 'series'])
+  seriesScope?: 'occurrence' | 'series';
 }

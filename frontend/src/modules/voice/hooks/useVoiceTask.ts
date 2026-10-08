@@ -11,6 +11,7 @@ import {
   type SchedulingConflictDTO,
 } from 'modules/schedule/conflictChoiceBus';
 import { applyConflictOption } from 'modules/schedule/applyConflictOption';
+import { SeriesMoveCancelled } from 'modules/schedule/seriesDragChoice';
 import { resolveSpokenConflictOption } from 'modules/schedule/resolveSpokenConflictOption';
 import i18n from 'i18n';
 import { showSuccessToast } from 'utils/toast';
@@ -118,6 +119,10 @@ export function useVoiceTask({ onComplete, onSufficient }: UseVoiceTaskOptions) 
         await maybeSpeak(command.summary);
         close();
       } catch (err) {
+        if (err instanceof SeriesMoveCancelled) {
+          close();
+          return;
+        }
         setError(extractApiErrorMessage(err));
         setStage('error');
       }

@@ -159,13 +159,20 @@ export class ScheduleController {
   @HttpCode(200)
   @ApiOperation({
     summary:
-      'Move or resize one displayed calendar block. App fixed/slot moves enqueue a silent replan (jobId); conflicts open the shared sheet. External Google-only moves do not replan.',
+      'Move or resize one displayed calendar block. Recurring app tasks without seriesScope return series-choice. External Google-only moves do not seat.',
   })
-  @ApiResponse({ status: 200, description: 'Occurrence and Google event updated; optional jobId' })
+  @ApiResponse({
+    status: 200,
+    description: 'Occurrence updated, series-choice ask, or Google-only patch; jobId is usually null',
+  })
   async moveDisplayedEvent(
     @Request() req,
     @Body() dto: MoveDisplayedEventDto,
-  ): Promise<{ kind: 'fixed' | 'slot' | 'google'; jobId: string | null }> {
+  ): Promise<{
+    kind: 'fixed' | 'slot' | 'google' | 'series-choice';
+    jobId: string | null;
+    taskName?: string;
+  }> {
     return this.displayedEventMoveService.move(req.user.userId, dto);
   }
 

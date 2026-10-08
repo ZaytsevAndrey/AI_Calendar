@@ -10,6 +10,7 @@ import { useEventEditor } from 'modules/events/hooks/useEventEditor';
 import { buildDoNowPatch } from 'modules/events/unscheduledActions';
 import { VoiceTaskButton } from 'modules/voice/components/VoiceTaskButton';
 import { VoiceTaskSheet } from 'modules/voice/components/VoiceTaskSheet';
+import { SeriesDragHost } from 'modules/schedule/components/SeriesDragHost';
 import { useVoiceTask } from 'modules/voice/hooks/useVoiceTask';
 import { setConflictVoiceOpener } from 'modules/schedule/conflictChoiceBus';
 import { deadlineTone } from 'modules/events/utils/deadlineTone';
@@ -322,6 +323,7 @@ const TasksPage: React.FC = () => {
 
       {editorModal}
       <VoiceTaskSheet voice={voice} />
+      <SeriesDragHost />
       {phone ? (
         <div
           className="fixed z-[1250] flex items-center gap-2 md:hidden"

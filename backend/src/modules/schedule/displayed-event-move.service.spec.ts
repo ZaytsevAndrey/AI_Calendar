@@ -20,6 +20,11 @@ describe('DisplayedEventMoveService', () => {
     updateTask?: jest.Mock;
     place?: jest.Mock;
     seatOpenHoles?: jest.Mock;
+    skipOccurrence?: jest.Mock;
+    createTask?: jest.Mock;
+    saveTask?: jest.Mock;
+    findSlots?: jest.Mock;
+    removeSlots?: jest.Mock;
   }) {
     const patch = opts.patch ?? jest.fn().mockResolvedValue(undefined);
     const updateTask =
@@ -40,6 +45,11 @@ describe('DisplayedEventMoveService', () => {
       }));
     const seatOpenHoles = opts.seatOpenHoles ?? jest.fn().mockResolvedValue(undefined);
     const slots = opts.slots ?? [];
+    const taskRepo = {
+      save: opts.saveTask ?? jest.fn(async (row) => ({ id: 'series-new', ...row })),
+      create: jest.fn((row) => row),
+      find: opts.findSlots ?? jest.fn().mockResolvedValue([]),
+    };
     const move = new DisplayedEventMoveService(
       {
         createQueryBuilder: () => ({
@@ -47,18 +57,26 @@ describe('DisplayedEventMoveService', () => {
           where: jest.fn().mockReturnThis(),
           getMany: jest.fn().mockResolvedValue(slots),
         }),
+        find: opts.findSlots ?? jest.fn().mockResolvedValue([]),
+        remove: opts.removeSlots ?? jest.fn().mockResolvedValue(undefined),
       } as never,
+      taskRepo as never,
       {
         findOne: jest.fn().mockResolvedValue(opts.habit ? { id: 'habit' } : null),
       } as never,
       {
         findAll: jest.fn().mockResolvedValue(opts.tasks ?? []),
         update: updateTask,
+        skipOccurrence: opts.skipOccurrence ?? jest.fn().mockResolvedValue({}),
+        create: opts.createTask ?? jest.fn().mockResolvedValue({ id: 'copy-1' }),
       } as never,
       { patchEventTimes: patch } as never,
       { place, seatOpenHoles } as never,
+      {
+        getSettings: jest.fn().mockResolvedValue({ timeZone: 'UTC' }),
+      } as never,
     );
-    return { move, patch, updateTask, place, seatOpenHoles };
+    return { move, patch, updateTask, place, seatOpenHoles, taskRepo };
   }
 
   it('does not change a habit block', async () => {
@@ -190,5 +208,124 @@ describe('DisplayedEventMoveService', () => {
     expect(patch).toHaveBeenCalledTimes(1);
     expect(updateTask).not.toHaveBeenCalled();
     expect(place).not.toHaveBeenCalled();
+  });
+
+  const seriesDto = dto;
+  const seriesTask = {
+    id: 'series-1',
+    name: 'Gym',
+    eventType: 'admin',
+    isRecurring: true,
+    googleEventId: 'evt-1',
+    estimatedTimeInMinutes: 60,
+    recurrencePattern: 'DAILY',
+    phaseId: null,
+    allowSplit: false,
+    priority: 'medium',
+  };
+
+  it('asks before moving a series day', async () => {
+    const { move, place, patch } = service({
+      tasks: [seriesTask],
+      slots: [
+        {
+          id: 'slot-1',
+          taskId: 'series-1',
+          googleEventId: 'evt-1',
+          scheduledStartTime: new Date('2026-09-22T09:00:00.000Z'),
+        },
+      ],
+    });
+    await expect(move.move(userId, seriesDto)).resolves.toEqual({
+      kind: 'series-choice',
+      jobId: null,
+      taskName: 'Gym',
+    });
+    expect(place).not.toHaveBeenCalled();
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it('detaches one series day into a one-off', async () => {
+    const skipOccurrence = jest.fn().mockResolvedValue({});
+    const createTask = jest.fn().mockResolvedValue({ id: 'copy-1' });
+    const { move, place } = service({
+      tasks: [seriesTask],
+      slots: [
+        {
+          id: 'slot-1',
+          taskId: 'series-1',
+          googleEventId: 'evt-1',
+          scheduledStartTime: new Date('2026-09-22T09:00:00.000Z'),
+        },
+      ],
+      skipOccurrence,
+      createTask,
+    });
+    await expect(
+      move.move(userId, { ...seriesDto, seriesScope: 'occurrence' }),
+    ).resolves.toEqual({ kind: 'slot', jobId: null });
+    expect(skipOccurrence).toHaveBeenCalledWith('series-1', userId, {
+      occurrenceStart: seriesDto.originalStart,
+      googleEventId: 'evt-1',
+      googleEventCalendarId: 'primary',
+    });
+    expect(createTask).toHaveBeenCalledWith(
+      userId,
+      expect.objectContaining({
+        name: 'Gym',
+        isRecurring: false,
+        parentSeriesId: 'series-1',
+        scheduledStartTime: seriesDto.start,
+      }),
+    );
+    expect(place).not.toHaveBeenCalled();
+  });
+
+  it('ends the old series before the dropped day and starts a new series', async () => {
+    const future = {
+      ...dto,
+      originalStart: '2026-10-20T09:00:00.000Z',
+      originalEnd: '2026-10-20T10:00:00.000Z',
+      start: '2026-10-20T11:00:00.000Z',
+      end: '2026-10-20T12:00:00.000Z',
+    };
+    const saveTask = jest.fn(async (row) => ({ id: row.id ?? 'series-new', ...row }));
+    const removeSlots = jest.fn().mockResolvedValue(undefined);
+    const { move, place, seatOpenHoles } = service({
+      tasks: [seriesTask],
+      slots: [
+        {
+          id: 'slot-1',
+          taskId: 'series-1',
+          googleEventId: 'evt-1',
+          scheduledStartTime: new Date(future.originalStart),
+        },
+      ],
+      saveTask,
+      removeSlots,
+      findSlots: jest.fn().mockResolvedValue([
+        {
+          id: 'slot-1',
+          taskId: 'series-1',
+          scheduledStartTime: new Date(future.originalStart),
+          scheduledEndTime: new Date(future.originalEnd),
+        },
+      ]),
+    });
+    await expect(
+      move.move(userId, { ...future, seriesScope: 'series' }),
+    ).resolves.toEqual({ kind: 'slot', jobId: null });
+    expect(saveTask).toHaveBeenCalled();
+    expect(removeSlots).toHaveBeenCalled();
+    expect(place).toHaveBeenCalledWith(
+      userId,
+      'series-new',
+      expect.objectContaining({
+        commit: 'preferred',
+        expandSeries: true,
+        durationMinutes: 60,
+      }),
+    );
+    expect(seatOpenHoles).toHaveBeenCalledWith(userId);
   });
 });

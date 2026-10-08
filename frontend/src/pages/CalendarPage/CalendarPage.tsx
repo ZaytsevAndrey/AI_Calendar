@@ -27,6 +27,8 @@ import { ProblematicInboxSheet } from 'modules/schedule/components/ProblematicIn
 import { GenerateProgressPanel } from 'modules/schedule/components/GenerateProgressPanel';
 import { ScheduleMenu } from 'modules/schedule/components/ScheduleMenu';
 import { ScheduleSuggestionsDialog } from 'modules/schedule/components/ScheduleSuggestionsDialog';
+import { SeriesDragHost } from 'modules/schedule/components/SeriesDragHost';
+import { SeriesMoveCancelled } from 'modules/schedule/seriesDragChoice';
 import { NowStrip } from 'modules/now/components/NowStrip';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
@@ -331,6 +333,9 @@ const CalendarPage: React.FC = () => {
                 });
             }
         } catch (err) {
+            if (err instanceof SeriesMoveCancelled) {
+                throw err;
+            }
             showErrorToast({
                 title: t('calendar.eventMoveFailed'),
                 detail: extractApiErrorMessage(err),
@@ -749,6 +754,7 @@ const CalendarPage: React.FC = () => {
                 onEdit={(task) => openEdit(task)}
             />
             <VoiceTaskSheet voice={voice} />
+            <SeriesDragHost />
 
             <Modal
                 open={phone && actionsOpen}

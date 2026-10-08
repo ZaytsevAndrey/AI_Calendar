@@ -350,7 +350,12 @@ export class PlacementStepService {
       ),
     });
 
-    if (!shouldWritePlan(plan, opts)) return plan;
+    if (!shouldWritePlan(plan, opts)) {
+      if (this.shouldExpandSeries(task, opts)) {
+        await this.expandSeriesDays(userId, task.id);
+      }
+      return plan;
+    }
     if (
       plan.outcome === 'problematic' &&
       opts?.searchHole &&
@@ -360,15 +365,14 @@ export class PlacementStepService {
       return plan;
     }
     await this.persist(task, plan, now, timeZone, opts?.durationMinutes);
-    if (
-      opts?.expandSeries &&
-      !opts.seriesDay &&
-      plan.outcome === 'seated' &&
-      task.isRecurring
-    ) {
+    if (plan.outcome === 'seated' && this.shouldExpandSeries(task, opts)) {
       await this.expandSeriesDays(userId, task.id);
     }
     return plan;
+  }
+
+  private shouldExpandSeries(task: Task, opts?: PlaceOptions): boolean {
+    return !!opts?.expandSeries && !opts.seriesDay && task.isRecurring && !!task.scheduledStartTime;
   }
 
   private async expandSeriesDays(userId: string, taskId: string): Promise<void> {
@@ -385,12 +389,17 @@ export class PlacementStepService {
     const hm = normalizeClockHm(
       localHm(new Date(task.scheduledStartTime).toISOString(), timeZone),
     );
+    const durationMs = Math.max(1, task.estimatedTimeInMinutes || 30) * 60_000;
+    const untilMs = task.deadline ? new Date(task.deadline).getTime() : Number.POSITIVE_INFINITY;
     const ymds = seriesOccurrenceYmds({
       anchorYmd,
       horizonEndYmd,
       pattern: task.recurrencePattern,
       weekDays: task.recurrenceWeekDays,
       skippedYmds: task.skippedOccurrenceYmds,
+    }).filter((ymd) => {
+      const startMs = new Date(localDateTimeIso(ymd, hm, timeZone)).getTime();
+      return startMs + durationMs <= untilMs;
     });
     const wanted = new Set([anchorYmd, ...ymds]);
     const existing = await this.scheduledRepo.find({ where: { taskId } });

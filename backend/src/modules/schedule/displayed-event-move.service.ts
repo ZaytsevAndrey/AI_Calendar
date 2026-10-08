@@ -7,8 +7,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { Habit } from '../habits/entities/habit.entity';
-import { Task } from '../tasks/entities/task.entity';
+import { ScheduleState, Task, TaskStatus } from '../tasks/entities/task.entity';
 import { TasksService } from '../tasks/tasks.service';
+import { UserSettingsService } from '../user-settings/user-settings.service';
+import { resolveIanaTimeZone } from '../../common/iana-time-zone';
+import { localYmd, startOfLocalDayIso } from '../voice/voice-local-date.util';
 import { MoveDisplayedEventDto } from './dto/move-displayed-event.dto';
 import { planDisplayedEventMove } from './move-displayed-event.util';
 import { PlacementStepService } from './placement-step.service';
@@ -16,8 +19,9 @@ import type { PlacementPlan } from './placement-step.util';
 import { ScheduledTask } from './schedule.entity';
 
 export type MoveDisplayedEventResult = {
-  kind: 'fixed' | 'slot' | 'google';
+  kind: 'fixed' | 'slot' | 'google' | 'series-choice';
   jobId: string | null;
+  taskName?: string;
 };
 
 @Injectable()
@@ -27,11 +31,14 @@ export class DisplayedEventMoveService {
   constructor(
     @InjectRepository(ScheduledTask)
     private readonly scheduledRepo: Repository<ScheduledTask>,
+    @InjectRepository(Task)
+    private readonly taskRepo: Repository<Task>,
     @InjectRepository(Habit)
     private readonly habitRepo: Repository<Habit>,
     private readonly tasksService: TasksService,
     private readonly googleCalendarService: GoogleCalendarService,
     private readonly placementStep: PlacementStepService,
+    private readonly userSettingsService: UserSettingsService,
   ) {}
 
   async move(
@@ -108,6 +115,19 @@ export class DisplayedEventMoveService {
       return { kind: 'fixed', jobId: null };
     }
 
+    const owner = tasks.find((task) => task.id === plan.taskId);
+    if (owner?.isRecurring) {
+      if (!dto.seriesScope) {
+        return { kind: 'series-choice', jobId: null, taskName: owner.name };
+      }
+      if (dto.seriesScope === 'occurrence') {
+        await this.moveSeriesDay(userId, owner, dto, minutes);
+      } else {
+        await this.moveSeriesTail(userId, owner, dto, start, end, minutes);
+      }
+      return { kind: 'slot', jobId: null };
+    }
+
     const placed = await this.placementStep.place(userId, plan.taskId, {
       preferredStart: start,
       durationMinutes: minutes,
@@ -132,6 +152,111 @@ export class DisplayedEventMoveService {
     }
     await this.placementStep.seatOpenHoles(userId);
     return { kind: 'slot', jobId: null };
+  }
+
+  /** Drop one series day and seat an identical one-off at the dropped time. */
+  private async moveSeriesDay(
+    userId: string,
+    series: Task,
+    dto: MoveDisplayedEventDto,
+    minutes: number,
+  ): Promise<void> {
+    await this.tasksService.skipOccurrence(series.id, userId, {
+      occurrenceStart: dto.originalStart,
+      googleEventId: dto.googleEventId,
+      googleEventCalendarId: dto.calendarId,
+    });
+    await this.tasksService.create(userId, {
+      name: series.name,
+      description: series.description ?? undefined,
+      phaseId: series.phaseId ?? undefined,
+      eventType: series.eventType,
+      estimatedTimeInMinutes: minutes,
+      isRecurring: false,
+      allowSplit: series.allowSplit,
+      priority: series.priority,
+      scheduledStartTime: dto.start,
+      scheduledEndTime: dto.end,
+      location: series.location ?? undefined,
+      googleColorId: series.googleColorId ?? undefined,
+      googleVisibility: series.googleVisibility ?? undefined,
+      googleTransparency: series.googleTransparency ?? undefined,
+      googleReminders: series.googleReminders ?? undefined,
+      parentSeriesId: series.id,
+      timeZone: series.scheduleTimeZone ?? undefined,
+    });
+  }
+
+  /**
+   * End the old series before this day and start a new series at the new clock.
+   * Days before the drop stay on the old clock.
+   */
+  private async moveSeriesTail(
+    userId: string,
+    series: Task,
+    dto: MoveDisplayedEventDto,
+    start: Date,
+    end: Date,
+    minutes: number,
+  ): Promise<void> {
+    const settings = await this.userSettingsService.getSettings(userId);
+    const timeZone = resolveIanaTimeZone(settings.timeZone || series.scheduleTimeZone);
+    const splitYmd = localYmd(new Date(dto.originalStart).toISOString(), timeZone);
+    const splitStart = new Date(startOfLocalDayIso(splitYmd, timeZone));
+    const previousDeadline = series.deadline ? new Date(series.deadline) : null;
+    if (!previousDeadline || previousDeadline.getTime() > splitStart.getTime()) {
+      series.deadline = splitStart;
+      await this.taskRepo.save(series);
+    }
+
+    const rows = await this.scheduledRepo.find({ where: { taskId: series.id } });
+    const now = Date.now();
+    const tail = rows.filter((row) => {
+      if (new Date(row.scheduledEndTime).getTime() <= now) return false;
+      const ymd = localYmd(new Date(row.scheduledStartTime).toISOString(), timeZone);
+      return ymd >= splitYmd;
+    });
+    if (tail.length) await this.scheduledRepo.remove(tail);
+
+    const keptDeadline =
+      previousDeadline && previousDeadline.getTime() > splitStart.getTime()
+        ? previousDeadline
+        : null;
+    const created = await this.taskRepo.save(
+      this.taskRepo.create({
+        userId,
+        name: series.name,
+        description: series.description,
+        phaseId: series.phaseId,
+        phases: series.phases,
+        eventType: series.eventType,
+        estimatedTimeInMinutes: minutes,
+        isRecurring: true,
+        recurrencePattern: series.recurrencePattern,
+        recurrenceWeekDays: series.recurrenceWeekDays,
+        allowSplit: series.allowSplit,
+        priority: series.priority,
+        deadline: keptDeadline,
+        scheduledStartTime: start,
+        scheduledEndTime: end,
+        scheduleTimeZone: timeZone,
+        location: series.location,
+        googleColorId: series.googleColorId,
+        googleVisibility: series.googleVisibility,
+        googleTransparency: series.googleTransparency,
+        googleReminders: series.googleReminders,
+        status: TaskStatus.TODO,
+        scheduleState: ScheduleState.NONE,
+        isUnscheduled: false,
+      }),
+    );
+    await this.placementStep.place(userId, created.id, {
+      preferredStart: start,
+      durationMinutes: minutes,
+      commit: 'preferred',
+      expandSeries: true,
+    });
+    await this.placementStep.seatOpenHoles(userId);
   }
 }
 

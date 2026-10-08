@@ -1,6 +1,7 @@
 import axios from './axios';
 import { TaskDTO } from './tasks.api';
 import type { SchedulingConflictDTO } from 'modules/schedule/conflictChoiceBus';
+import { askSeriesDragScope, SeriesMoveCancelled } from 'modules/schedule/seriesDragChoice';
 
 export interface ScheduledTaskDTO extends TaskDTO {
   scheduledStartTime: string;
@@ -214,12 +215,24 @@ export const ScheduleApi = {
     originalEnd: string;
     start: string;
     end: string;
+    seriesScope?: 'occurrence' | 'series';
   }): Promise<{ kind: 'fixed' | 'slot' | 'google'; jobId: string | null }> => {
-    const response = await axios.post('/schedule/move-event', body);
-    return response.data as {
-      kind: 'fixed' | 'slot' | 'google';
-      jobId: string | null;
+    const post = async (payload: typeof body) => {
+      const response = await axios.post('/schedule/move-event', payload);
+      return response.data as {
+        kind: 'fixed' | 'slot' | 'google' | 'series-choice';
+        jobId: string | null;
+        taskName?: string;
+      };
     };
+    const first = await post(body);
+    if (first.kind !== 'series-choice') {
+      return { kind: first.kind, jobId: first.jobId };
+    }
+    const scope = await askSeriesDragScope(first.taskName ?? '');
+    if (!scope) throw new SeriesMoveCancelled();
+    const second = await post({ ...body, seriesScope: scope });
+    return { kind: second.kind === 'series-choice' ? 'slot' : second.kind, jobId: second.jobId };
   },
 
   rescheduleTask: async (id: string, startTime: string, endTime: string): Promise<ScheduledTaskDTO> => {
