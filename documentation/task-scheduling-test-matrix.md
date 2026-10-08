@@ -1,6 +1,6 @@
 # Task Scheduling Test Matrix (Given/When/Then)
 
-Live engine and these cases: [spec-conflict-rules.md](spec-conflict-rules.md) as implemented today (full replan; seated flexible keeps its slot).  
+Live engine for Generate and these cases: [spec-conflict-rules.md](spec-conflict-rules.md) (full replan; seated flexible keeps its slot). Create and geometric edit no longer enqueue that replan; they call the placement step.  
 Target write-set, not yet covered by these tests: [spec-incremental-placement.md](spec-incremental-placement.md).  
 Format is aimed at direct transfer into unit/integration tests.
 

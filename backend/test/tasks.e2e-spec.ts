@@ -66,7 +66,7 @@ describe('Tasks API e2e', () => {
     expect([201, 400]).toContain(res.statusCode);
   });
 
-  it('A-TSK-007 recurring DAILY returns jobId', async () => {
+  it('A-TSK-007 recurring DAILY seats without a replan job', async () => {
     const { token } = await seedOnboardedUser(ctx.app);
     const res = await api(ctx.app, 'POST', '/tasks', {
       token,
@@ -78,7 +78,7 @@ describe('Tasks API e2e', () => {
       },
     });
     expect(res.statusCode).toBe(201);
-    expect(jsonBody(res).jobId).toBeTruthy();
+    expect(jsonBody(res).jobId).toBeNull();
     await ctx.drainJobs();
   });
 
@@ -198,8 +198,8 @@ describe('Tasks API e2e', () => {
       payload: { name: 'Patched' },
     });
     expect(patched.statusCode).toBe(200);
-    expect(jsonBody(patched).jobId).toBeTruthy();
-    await ctx.drainJobs();
+    expect(jsonBody(patched).name).toBe('Patched');
+    expect(jsonBody(patched).jobId).toBeNull();
 
     const fixed = await api(ctx.app, 'POST', '/tasks', {
       token,
@@ -236,16 +236,14 @@ describe('Tasks API e2e', () => {
     const inbox = jsonBody(toInbox);
     expect(inbox.isUnscheduled).toBe(true);
     expect(inbox.scheduledStartTime == null).toBe(true);
-    expect(inbox.jobId).toBeTruthy();
-    await ctx.drainJobs();
+    expect(inbox.jobId).toBeNull();
 
     const back = await api(ctx.app, 'PATCH', `/tasks/${created.body.id}`, {
       token,
       payload: { isUnscheduled: false, estimatedTimeInMinutes: 30 },
     });
     expect(jsonBody(back).isUnscheduled).toBe(false);
-    expect(jsonBody(back).jobId).toBeTruthy();
-    await ctx.drainJobs();
+    expect(jsonBody(back).jobId).toBeNull();
   });
 
   it('A-TSK-024 / A-TSK-025 / A-TSK-026 status transitions', async () => {

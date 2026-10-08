@@ -5,6 +5,11 @@ import {
   type MsInterval,
   subtractMany,
 } from './free-slots.util';
+import {
+  addDaysToYmd,
+  addMonthsToYmd,
+  weekdayIndex,
+} from '../voice/voice-local-date.util';
 
 export type PlacementSeatRole =
   | 'anchor'
@@ -370,4 +375,49 @@ export function planPlacement(input: {
     end: interval.end,
     moves,
   };
+}
+
+/**
+ * Civil days after `anchorYmd` and before `horizonEndYmd` for one series.
+ * The anchor day itself is already seated by the first placement.
+ */
+export function seriesOccurrenceYmds(input: {
+  anchorYmd: string;
+  horizonEndYmd: string;
+  pattern?: string | null;
+  weekDays?: number[] | null;
+  skippedYmds?: string[] | null;
+}): string[] {
+  const pattern = (input.pattern ?? 'DAILY').toUpperCase();
+  const weekDays = input.weekDays?.length ? input.weekDays : null;
+  const skipped = new Set(input.skippedYmds ?? []);
+  const stepDaily = !!weekDays && pattern !== 'MONTHLY';
+  const out: string[] = [];
+  let ymd = stepSeriesYmd(input.anchorYmd, pattern, stepDaily);
+  let guard = 0;
+  while (ymd < input.horizonEndYmd && guard++ < 400) {
+    const weekdayOk = !weekDays || weekDays.includes(weekdayIndex(ymd));
+    const biweeklyOk =
+      pattern !== 'BIWEEKLY' ||
+      !stepDaily ||
+      weeksBetweenYmd(input.anchorYmd, ymd) % 2 === 0;
+    if (weekdayOk && biweeklyOk && !skipped.has(ymd)) out.push(ymd);
+    ymd = stepSeriesYmd(ymd, pattern, stepDaily);
+  }
+  return out;
+}
+
+function stepSeriesYmd(ymd: string, pattern: string, stepDaily: boolean): string {
+  if (stepDaily || pattern === 'DAILY') return addDaysToYmd(ymd, 1);
+  if (pattern === 'WEEKLY') return addDaysToYmd(ymd, 7);
+  if (pattern === 'BIWEEKLY') return addDaysToYmd(ymd, 14);
+  return addMonthsToYmd(ymd, 1);
+}
+
+function weeksBetweenYmd(fromYmd: string, toYmd: string): number {
+  const [fy, fm, fd] = fromYmd.split('-').map(Number);
+  const [ty, tm, td] = toYmd.split('-').map(Number);
+  const start = Date.UTC(fy, fm - 1, fd);
+  const end = Date.UTC(ty, tm - 1, td);
+  return Math.round((end - start) / (7 * 24 * 60 * 60 * 1000));
 }

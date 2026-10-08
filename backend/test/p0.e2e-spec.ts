@@ -84,7 +84,7 @@ describe('P0 API e2e', () => {
   });
 
   describe('A-TSK create', () => {
-    it('A-TSK-001 flexible create returns jobId', async () => {
+    it('A-TSK-001 flexible create seats without a replan job', async () => {
       const { token } = await seedOnboardedUser(ctx.app);
       const res = await api(ctx.app, 'POST', '/tasks', {
         token,
@@ -93,9 +93,8 @@ describe('P0 API e2e', () => {
       expect(res.statusCode).toBe(201);
       const body = jsonBody(res);
       expect(body.id).toBeTruthy();
-      expect(body.jobId).toBeTruthy();
+      expect(body.jobId).toBeNull();
       expect(body.eventType).toBe('admin');
-      await ctx.drainJobs();
     });
 
     it('A-TSK-006 unscheduled create has null jobId', async () => {

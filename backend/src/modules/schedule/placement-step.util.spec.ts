@@ -1,4 +1,4 @@
-import { planPlacement, type PlacementSeat } from './placement-step.util';
+import { planPlacement, seriesOccurrenceYmds, type PlacementSeat } from './placement-step.util';
 
 const DAY = Date.parse('2026-10-08T09:00:00.000Z');
 const HOUR = 60 * 60 * 1000;
@@ -252,5 +252,37 @@ describe('planPlacement', () => {
       outcome: 'seated',
       start: DAY + 3 * HOUR,
     });
+  });
+});
+
+describe('seriesOccurrenceYmds', () => {
+  it('lists later daily days before the horizon end, skipping a parked day', () => {
+    expect(
+      seriesOccurrenceYmds({
+        anchorYmd: '2026-10-08',
+        horizonEndYmd: '2026-10-12',
+        pattern: 'DAILY',
+        skippedYmds: ['2026-10-10'],
+      }),
+    ).toEqual(['2026-10-09', '2026-10-11']);
+  });
+
+  it('keeps a weekly step and a weekday filter', () => {
+    expect(
+      seriesOccurrenceYmds({
+        anchorYmd: '2026-10-08',
+        horizonEndYmd: '2026-10-30',
+        pattern: 'WEEKLY',
+      }),
+    ).toEqual(['2026-10-15', '2026-10-22', '2026-10-29']);
+
+    expect(
+      seriesOccurrenceYmds({
+        anchorYmd: '2026-10-08',
+        horizonEndYmd: '2026-10-15',
+        pattern: 'DAILY',
+        weekDays: [1, 3],
+      }),
+    ).toEqual(['2026-10-12', '2026-10-14']);
   });
 });

@@ -6,6 +6,7 @@ import { Task } from './entities/task.entity';
 import { Phase } from '../phases/entities/phase.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { ScheduleJobService } from '../schedule/schedule-job.service';
+import { PlacementStepService } from '../schedule/placement-step.service';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { ScheduledTask } from '../schedule/schedule.entity';
 import { TaskEventType } from '../scheduling/event-type.enum';
@@ -51,12 +52,34 @@ describe('TasksService', () => {
     updateEvent: jest.fn(),
     deleteEvent: jest.fn(),
   };
+  const placementStep = {
+    place: jest.fn().mockImplementation(async (_userId: string, _taskId: string, opts) => {
+      const start = opts?.preferredStart ? new Date(opts.preferredStart).getTime() : 0;
+      return {
+        outcome: 'seated',
+        start,
+        end: start + 30 * 60_000,
+        moves: [],
+      };
+    }),
+    seatOpenHoles: jest.fn().mockResolvedValue(undefined),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
     lastSaved = null;
     userSettingsRepository.findOne.mockResolvedValue(null);
     scheduledTaskRepository.find.mockResolvedValue([]);
+    placementStep.place.mockImplementation(async (_userId: string, _taskId: string, opts) => {
+      const start = opts?.preferredStart ? new Date(opts.preferredStart).getTime() : 0;
+      return {
+        outcome: 'seated',
+        start,
+        end: start + 30 * 60_000,
+        moves: [],
+      };
+    });
+    placementStep.seatOpenHoles.mockResolvedValue(undefined);
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TasksService,
@@ -81,6 +104,7 @@ describe('TasksService', () => {
           useValue: scheduleJobService,
         },
         { provide: GoogleCalendarService, useValue: googleCalendarService },
+        { provide: PlacementStepService, useValue: placementStep },
       ],
     }).compile();
 
@@ -110,26 +134,30 @@ describe('TasksService', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
-  it('enqueues replan for non-fixed tasks', async () => {
-    await service.create('user-1', {
-      name: 'Task',
-      eventType: TaskEventType.ADMIN,
-      estimatedTimeInMinutes: 60,
-    } as any);
-
-    expect(scheduleJobService.enqueueReplan).toHaveBeenCalledWith('user-1');
-    expect(scheduleJobService.processNextPendingForUser).toHaveBeenCalledWith(
-      'user-1',
-    );
-  });
-
-  it('returns the replan jobId on create so the client can poll', async () => {
+  it('seats a flexible create instead of enqueueing a full replan', async () => {
     const created = await service.create('user-1', {
       name: 'Task',
       eventType: TaskEventType.ADMIN,
       estimatedTimeInMinutes: 60,
     } as any);
-    expect(created.jobId).toBe('job-1');
+
+    expect(placementStep.place).toHaveBeenCalledWith(
+      'user-1',
+      'task-1',
+      expect.objectContaining({ searchHole: true }),
+    );
+    expect(created.jobId).toBeNull();
+    expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+    expect(scheduleJobService.processNextPendingForUser).not.toHaveBeenCalled();
+  });
+
+  it('returns a null jobId for flexible create', async () => {
+    const created = await service.create('user-1', {
+      name: 'Task',
+      eventType: TaskEventType.ADMIN,
+      estimatedTimeInMinutes: 60,
+    } as any);
+    expect(created.jobId).toBeNull();
   });
 
   it('returns a null jobId for fixed create', async () => {
@@ -143,7 +171,7 @@ describe('TasksService', () => {
     expect(created.jobId).toBeNull();
   });
 
-  it('returns from create without waiting for replan to finish', async () => {
+  it('does not start a replan job while seating a create', async () => {
     let resolveProcess: (() => void) | undefined;
     const processGate = new Promise<void>((resolve) => {
       resolveProcess = resolve;
@@ -286,7 +314,7 @@ describe('TasksService', () => {
       expect(created.earliestStartTime?.toISOString()).toBe(
         '2026-09-10T21:00:00.000Z',
       );
-      expect(scheduleJobService.enqueueReplan).toHaveBeenCalled();
+      expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
       expect(log).toHaveBeenCalledWith(
         expect.stringContaining('earliest=2026-09-11T00:00:00+03:00'),
       );
@@ -378,16 +406,16 @@ describe('TasksService', () => {
       );
     });
 
-    it('saves the window before replan runs', async () => {
+    it('saves the window before placement runs', async () => {
       const order: string[] = [];
       tasksRepository.save.mockImplementation(async (entity) => {
         order.push('save');
         lastSaved = { ...entity, id: entity.id ?? 'task-1' };
         return lastSaved;
       });
-      scheduleJobService.enqueueReplan.mockImplementation(async () => {
-        order.push('replan');
-        return { id: 'job-1' };
+      placementStep.place.mockImplementation(async () => {
+        order.push('place');
+        return { outcome: 'seated', start: 0, end: 1, moves: [] };
       });
 
       await service.create('user-1', {
@@ -400,8 +428,8 @@ describe('TasksService', () => {
       } as any);
 
       expect(order[0]).toBe('save');
-      expect(order).toContain('replan');
-      expect(order.indexOf('save')).toBeLessThan(order.indexOf('replan'));
+      expect(order).toContain('place');
+      expect(order.indexOf('save')).toBeLessThan(order.indexOf('place'));
     });
   });
 
@@ -452,7 +480,7 @@ describe('TasksService', () => {
       expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
     });
 
-    it('replans when an inbox task is scheduled', async () => {
+    it('places an inbox task when it is scheduled', async () => {
       lastSaved = {
         id: 'task-1',
         userId: 'user-1',
@@ -460,6 +488,7 @@ describe('TasksService', () => {
         isUnscheduled: true,
         eventType: TaskEventType.ADMIN,
         status: TaskStatus.TODO,
+        scheduleState: 'none',
       };
 
       const updated = await service.update('task-1', 'user-1', {
@@ -468,11 +497,12 @@ describe('TasksService', () => {
       } as any);
 
       expect(updated.isUnscheduled).toBe(false);
-      expect(updated.jobId).toBe('job-1');
-      expect(scheduleJobService.enqueueReplan).toHaveBeenCalledWith('user-1');
+      expect(updated.jobId).toBeNull();
+      expect(placementStep.place).toHaveBeenCalled();
+      expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
     });
 
-    it('drops Google events and replans when a scheduled task moves to the inbox', async () => {
+    it('drops Google events and seats other problematic tasks when a scheduled task moves to the inbox', async () => {
       lastSaved = {
         id: 'task-1',
         userId: 'user-1',
@@ -494,7 +524,8 @@ describe('TasksService', () => {
       expect(updated.googleEventId).toBeNull();
       expect(updated.googleEventCalendarId).toBeNull();
       expect(updated.isUnscheduled).toBe(true);
-      expect(scheduleJobService.enqueueReplan).toHaveBeenCalledWith('user-1');
+      expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+      expect(placementStep.seatOpenHoles).toHaveBeenCalledWith('user-1', undefined);
     });
 
     it('does not replan after deleting or completing an inbox task', async () => {
@@ -520,6 +551,71 @@ describe('TasksService', () => {
       };
       await service.updateStatus('task-2', 'user-1', TaskStatus.COMPLETED);
       expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('placement on edit', () => {
+    const seated = {
+      id: 'task-1',
+      userId: 'user-1',
+      name: 'Write brief',
+      isUnscheduled: false,
+      eventType: TaskEventType.ADMIN,
+      status: TaskStatus.TODO,
+      scheduleState: 'none',
+      estimatedTimeInMinutes: 60,
+      scheduledStartTime: new Date('2026-10-08T09:00:00.000Z'),
+      scheduledEndTime: new Date('2026-10-08T10:00:00.000Z'),
+      googleEventId: 'g-1',
+      isRecurring: false,
+      allowSplit: false,
+    };
+
+    it('updates the same Google event for a cosmetic save and does not place', async () => {
+      lastSaved = { ...seated };
+      googleCalendarService.checkConnection.mockResolvedValue({ connected: true });
+
+      const updated = await service.update('task-1', 'user-1', {
+        name: 'Write the brief',
+      } as any);
+
+      expect(updated.jobId).toBeNull();
+      expect(placementStep.place).not.toHaveBeenCalled();
+      expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+      expect(googleCalendarService.updateEvent).toHaveBeenCalled();
+    });
+
+    it('keeps the old slot when a preferred time cannot be taken', async () => {
+      lastSaved = { ...seated };
+      placementStep.place.mockResolvedValue({
+        outcome: 'conflict',
+        conflict: { reason: 'preferred_on_fixed' },
+      });
+
+      const updated = await service.update('task-1', 'user-1', {
+        scheduledStartTime: '2026-10-08T12:00:00.000Z',
+        scheduledEndTime: '2026-10-08T13:00:00.000Z',
+      } as any);
+
+      expect(updated.scheduledStartTime).toEqual(seated.scheduledStartTime);
+      expect(updated.scheduledEndTime).toEqual(seated.scheduledEndTime);
+      expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+      expect(placementStep.seatOpenHoles).not.toHaveBeenCalled();
+    });
+
+    it('does not replan or fill holes when a task is completed', async () => {
+      lastSaved = { ...seated };
+      await service.updateStatus('task-1', 'user-1', TaskStatus.COMPLETED);
+      expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+      expect(placementStep.place).not.toHaveBeenCalled();
+      expect(placementStep.seatOpenHoles).not.toHaveBeenCalled();
+    });
+
+    it('seats problematic tasks after a scheduled task is deleted', async () => {
+      lastSaved = { ...seated };
+      await service.remove('task-1', 'user-1');
+      expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+      expect(placementStep.seatOpenHoles).toHaveBeenCalledWith('user-1');
     });
   });
 
@@ -578,6 +674,7 @@ describe('TasksService', () => {
       expect(result.jobId).toBeNull();
       expect(result.status).toBe(TaskStatus.TODO);
       expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+      expect(placementStep.seatOpenHoles).toHaveBeenCalledWith('user-1');
       expect(googleCalendarService.deleteEvent).toHaveBeenCalledWith(
         'user-1',
         'g-1',
@@ -617,6 +714,7 @@ describe('TasksService', () => {
       expect(result.skippedOccurrenceYmds).toEqual(['2026-09-22']);
       expect(result.jobId).toBeNull();
       expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+      expect(placementStep.seatOpenHoles).toHaveBeenCalledWith('user-1');
       expect(googleCalendarService.deleteEvent).not.toHaveBeenCalled();
     });
 
@@ -655,6 +753,8 @@ describe('TasksService', () => {
         undefined,
       );
       expect(result.jobId).toBeNull();
+      expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+      expect(placementStep.seatOpenHoles).not.toHaveBeenCalled();
     });
   });
 });

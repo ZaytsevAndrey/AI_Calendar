@@ -151,7 +151,7 @@ Links Google Calendar events to phases (separate from CRUD `/phases`). See `even
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/schedule-jobs/replan` | Enqueue full replan (same pipeline as after task changes; no undo snapshot) |
+| POST | `/schedule-jobs/replan` | Enqueue a full replan. Create, edit, drag, skip, delete, complete, and cancel do not use this; Generate still does. |
 | GET | `/schedule-jobs/undo` | `{ available, jobId, generatedAt }` for the last Calendar Generate |
 | POST | `/schedule-jobs/undo` | Restore still-open slots + Google from that snapshot; finished blocks stay |
 | GET | `/schedule-jobs/latest/done` | Latest completed job + parsed `result` (diff / warnings / errors) |
@@ -159,7 +159,7 @@ Links Google Calendar events to phases (separate from CRUD `/phases`). See `even
 
 `POST /schedule/generate` enqueues the same pipeline and returns `{ jobId, status, message }` (frontend polls `GET /schedule-jobs/:id`).
 
-Completed jobs expose a parsed `result` with `diff`, `warnings`, `errors`, and `conflicts` (structured option ids for the shared choice sheet; see [spec-conflict-rules](spec-conflict-rules.md)). Generate / Clear live on the **Calendar** page. Generate opens a preview (`POST /schedule/preview`) and applies only after confirmation; the job then shows a stage timeline. **Undo last generate** restores the previous still-open app blocks (and Google). A dismissible **Last generate** notes panel lists warnings/errors; a colored toast (title + detail, green / yellow / red by outcome) summarizes the run. Past **app-generated** events stay after replan/clear/undo and render in gray; other Google calendars keep their colors. Task and calendar edits return immediately; replan continues in the background. After create/update or Generate, if `conflicts` is non-empty the shared conflict sheet opens; dismiss parks as Problematic.
+Completed jobs expose a parsed `result` with `diff`, `warnings`, `errors`, and `conflicts` (structured option ids for the shared choice sheet; see [spec-conflict-rules](spec-conflict-rules.md)). Generate / Clear live on the **Calendar** page. Generate opens a preview (`POST /schedule/preview`) and applies only after confirmation; the job then shows a stage timeline. **Undo last generate** restores the previous still-open app blocks (and Google). A dismissible **Last generate** notes panel lists warnings/errors; a colored toast (title + detail, green / yellow / red by outcome) summarizes the run. Past **app-generated** events stay after replan/clear/undo and render in gray; other Google calendars keep their colors. Task and calendar edits return immediately. Create and geometric edit seat the changed task through the placement step and do not enqueue a replan job (`jobId` is null). Cosmetic edits update the task and, when it already has one, the same Google event. Generate still returns a job. After Generate, if `conflicts` is non-empty the shared conflict sheet opens; dismiss parks as Problematic.
 
 ## Tasks (scheduling-related fields)
 
@@ -180,4 +180,4 @@ Create/update body may include:
 - `recurrenceWeekDays` — `0` = Sunday … `6` = Saturday. Empty / omitted / all seven = no extra weekday filter. Intersected with the phase `weekDays`.
 - `allowSplit` — per-task; engine also requires the user setting `allowSplitScheduling`
 
-Non-`fixed` tasks trigger an automatic replan job after create/update/delete/status change, except parked inbox items (`isUnscheduled` or `scheduleState` `problematic`). Replan still runs when a previously scheduled task is moved into either inbox (to free the slot), and when Problematic is cleared so placement can retry.
+Non-`fixed` create and geometric edit call the placement step and return `jobId: null`. They do not enqueue `full_replan`. Cosmetic edits do not move the slot. Drag, skip, delete, complete, and cancel do not enqueue `full_replan`. A freed hole seats problematic tasks that fit, oldest first. `POST /schedule-jobs/replan` and Generate still run the full engine.

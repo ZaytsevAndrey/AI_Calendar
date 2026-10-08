@@ -16,6 +16,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 - [x] **Incremental placement: one step.** `PlacementStepService.place` seats the claimant and only the overlapped days (one-off shifts, series day becomes a non-recurring copy, chain only when everyone fits, `resolved` stays). It does not call `engine.run`. Create and edit still enqueue a full replan.
 
+- [x] **Incremental placement: stop full replan on small edits.** Create and geometric edit call `place`. A new series also writes its other horizon days at that clock. Cosmetic save updates the task and the same Google event. Drag, skip, delete, complete, and cancel do not enqueue `full_replan`. A freed hole seats fitting problematic tasks, oldest first. Generate and `POST /schedule-jobs/replan` still use `engine.run`. Series drag does not yet ask this day versus the whole series.
+
 ## Shipped (Sep 2026)
 
 ### Scheduling redesign (engine)

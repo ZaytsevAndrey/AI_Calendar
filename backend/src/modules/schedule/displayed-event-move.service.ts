@@ -11,8 +11,8 @@ import { Task } from '../tasks/entities/task.entity';
 import { TasksService } from '../tasks/tasks.service';
 import { MoveDisplayedEventDto } from './dto/move-displayed-event.dto';
 import { planDisplayedEventMove } from './move-displayed-event.util';
-import { ScheduleJobService } from './schedule-job.service';
-import { ScheduleService } from './schedule.service';
+import { PlacementStepService } from './placement-step.service';
+import type { PlacementPlan } from './placement-step.util';
 import { ScheduledTask } from './schedule.entity';
 
 export type MoveDisplayedEventResult = {
@@ -27,14 +27,11 @@ export class DisplayedEventMoveService {
   constructor(
     @InjectRepository(ScheduledTask)
     private readonly scheduledRepo: Repository<ScheduledTask>,
-    @InjectRepository(Task)
-    private readonly taskRepo: Repository<Task>,
     @InjectRepository(Habit)
     private readonly habitRepo: Repository<Habit>,
     private readonly tasksService: TasksService,
-    private readonly scheduleService: ScheduleService,
     private readonly googleCalendarService: GoogleCalendarService,
-    private readonly scheduleJobService: ScheduleJobService,
+    private readonly placementStep: PlacementStepService,
   ) {}
 
   async move(
@@ -83,84 +80,67 @@ export class DisplayedEventMoveService {
       throw new BadRequestException('Habit blocks cannot be moved from the calendar.');
     }
 
-    if (plan.kind === 'fixed') {
-      const minutes = Math.max(
-        1,
-        Math.round((end.getTime() - start.getTime()) / 60_000),
+    if (plan.kind === 'google') {
+      await this.googleCalendarService.patchEventTimes(
+        userId,
+        dto.googleEventId,
+        start.toISOString(),
+        end.toISOString(),
+        dto.calendarId,
       );
-      await this.tasksService.update(plan.taskId, userId, {
+      return { kind: 'google', jobId: null };
+    }
+
+    const minutes = Math.max(
+      1,
+      Math.round((end.getTime() - start.getTime()) / 60_000),
+    );
+
+    if (plan.kind === 'fixed') {
+      const saved = await this.tasksService.update(plan.taskId, userId, {
         scheduledStartTime: start.toISOString(),
         scheduledEndTime: end.toISOString(),
         estimatedTimeInMinutes: minutes,
       });
-      return this.withReplan(userId, 'fixed');
+      if (!sitsAt(saved.scheduledStartTime, start)) {
+        throw new BadRequestException('That time is already taken.');
+      }
+      return { kind: 'fixed', jobId: null };
     }
 
-    await this.googleCalendarService.patchEventTimes(
-      userId,
-      dto.googleEventId,
-      start.toISOString(),
-      end.toISOString(),
-      dto.calendarId,
-    );
-
-    if (plan.kind === 'google') {
-      // External Google block only — nothing for the engine to reshuffle.
-      return { kind: 'google', jobId: null };
+    const placed = await this.placementStep.place(userId, plan.taskId, {
+      preferredStart: start,
+      durationMinutes: minutes,
+      commit: 'preferred',
+    });
+    if (!seatedAt(placed, start)) {
+      throw new BadRequestException('That time is already taken.');
     }
-
-    let slotSaved = false;
     try {
-      await this.scheduleService.update(plan.slotId, userId, {
-        scheduledStartTime: start.toISOString(),
-        scheduledEndTime: end.toISOString(),
-      });
-      slotSaved = true;
-      if (plan.updateTaskWindow) {
-        await this.taskRepo.update(plan.taskId, {
-          scheduledStartTime: start,
-          scheduledEndTime: end,
-        });
-      }
+      await this.googleCalendarService.patchEventTimes(
+        userId,
+        dto.googleEventId,
+        start.toISOString(),
+        end.toISOString(),
+        dto.calendarId,
+      );
     } catch (err) {
-      if (slotSaved) {
-        try {
-          await this.scheduleService.update(plan.slotId, userId, {
-            scheduledStartTime: new Date(dto.originalStart).toISOString(),
-            scheduledEndTime: new Date(dto.originalEnd).toISOString(),
-          });
-        } catch (revertSlotErr) {
-          this.logger.error(
-            `Could not restore slot ${plan.slotId} after a failed move`,
-            revertSlotErr instanceof Error ? revertSlotErr.stack : undefined,
-          );
-        }
-      }
-      try {
-        await this.googleCalendarService.patchEventTimes(
-          userId,
-          dto.googleEventId,
-          new Date(dto.originalStart).toISOString(),
-          new Date(dto.originalEnd).toISOString(),
-          dto.calendarId,
-        );
-      } catch (revertErr) {
-        this.logger.error(
-          `Could not restore Google event ${dto.googleEventId} after a failed move`,
-          revertErr instanceof Error ? revertErr.stack : undefined,
-        );
-      }
-      throw err;
+      this.logger.error(
+        `Could not update Google event ${dto.googleEventId} after a move`,
+        err instanceof Error ? err.stack : undefined,
+      );
     }
-
-    return this.withReplan(userId, 'slot');
+    await this.placementStep.seatOpenHoles(userId);
+    return { kind: 'slot', jobId: null };
   }
+}
 
-  private async withReplan(
-    userId: string,
-    kind: 'fixed' | 'slot',
-  ): Promise<MoveDisplayedEventResult> {
-    const job = await this.scheduleJobService.enqueueReplan(userId);
-    return { kind, jobId: job.id };
-  }
+function sitsAt(value: Date | string | null | undefined, start: Date): boolean {
+  if (!value) return false;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) && Math.abs(ms - start.getTime()) < 1000;
+}
+
+function seatedAt(plan: PlacementPlan, start: Date): boolean {
+  return plan.outcome === 'seated' && Math.abs(plan.start - start.getTime()) < 1000;
 }

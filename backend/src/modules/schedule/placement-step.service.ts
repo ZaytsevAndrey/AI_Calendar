@@ -20,6 +20,8 @@ import { addSkippedOccurrenceYmd } from '../tasks/skipped-occurrence.util';
 import { UserSettingsService } from '../user-settings/user-settings.service';
 import {
   addDaysToYmd,
+  localDateTimeIso,
+  localHm,
   localYmd,
   normalizeClockHm,
 } from '../voice/voice-local-date.util';
@@ -31,10 +33,28 @@ import {
 import { normalizeFixedEventBufferMinutes, planningHorizonRange } from './intelligent-scheduling.engine';
 import {
   planPlacement,
+  seriesOccurrenceYmds,
   type PlacementMove,
   type PlacementPlan,
   type PlacementSeat,
 } from './placement-step.util';
+
+export type PlaceOptions = {
+  preferredStart?: Date | null;
+  /** Claim length when a drag resized the block. */
+  durationMinutes?: number;
+  /**
+   * `preferred` writes only when the claimant sits on `preferredStart`.
+   * `keep` writes nothing when the current interval still fits its windows.
+   */
+  commit?: 'always' | 'preferred' | 'keep';
+  /** Ignore the stored clock and take the nearest hole. */
+  searchHole?: boolean;
+  /** After the first day, write the rest of a series inside the horizon. */
+  expandSeries?: boolean;
+  /** This call is a later day of a series already being expanded. */
+  seriesDay?: boolean;
+};
 import { ScheduledTask } from './schedule.entity';
 
 const locks = new Map<string, Promise<unknown>>();
@@ -74,15 +94,44 @@ export class PlacementStepService {
   place(
     userId: string,
     taskId: string,
-    opts?: { preferredStart?: Date | null },
+    opts?: PlaceOptions,
   ): Promise<PlacementPlan> {
     return withUserLock(userId, () => this.placeUnlocked(userId, taskId, opts));
+  }
+
+  /**
+   * Seat every problematic task that fits a free hole, oldest first.
+   * Does not move tasks that are already seated. `resolved` is left alone.
+   */
+  seatOpenHoles(userId: string, exceptTaskId?: string): Promise<void> {
+    return withUserLock(userId, () =>
+      this.seatOpenHolesUnlocked(userId, exceptTaskId),
+    );
+  }
+
+  private async seatOpenHolesUnlocked(
+    userId: string,
+    exceptTaskId?: string,
+  ): Promise<void> {
+    const parked = await this.taskRepo.find({
+      where: {
+        userId,
+        scheduleState: ScheduleState.PROBLEMATIC,
+        isUnscheduled: false,
+        status: In([TaskStatus.TODO, TaskStatus.IN_PROGRESS]),
+      },
+      order: { createdAt: 'ASC' },
+    });
+    for (const task of parked) {
+      if (task.id === exceptTaskId) continue;
+      await this.placeUnlocked(userId, task.id, { searchHole: true });
+    }
   }
 
   private async placeUnlocked(
     userId: string,
     taskId: string,
-    opts?: { preferredStart?: Date | null },
+    opts?: PlaceOptions,
   ): Promise<PlacementPlan> {
     const task = await this.taskRepo.findOne({
       where: { id: taskId, userId },
@@ -240,10 +289,48 @@ export class PlacementStepService {
     );
     seats.push(...google);
 
-    const durationMinutes = Math.max(1, task.estimatedTimeInMinutes || 30);
+    const durationMinutes = Math.max(
+      1,
+      opts?.durationMinutes ?? task.estimatedTimeInMinutes ?? 30,
+    );
     const claimWindows = windowsFor(linkedPhases(task).length ? linkedPhases(task) : phases);
     const windowExpired = isWindowExpired(task, nowMs);
-    const interval = claimInterval(task, durationMinutes, opts?.preferredStart);
+    let interval = opts?.searchHole
+      ? null
+      : claimInterval(task, durationMinutes, opts?.preferredStart);
+
+    if (opts?.commit === 'keep' && !windowExpired && interval) {
+      const fits =
+        task.eventType === TaskEventType.FIXED ||
+        claimWindows.some(
+          (window) =>
+            interval!.start >= window.start && interval!.end <= window.end,
+        );
+      if (fits) {
+        if (opts.expandSeries && task.isRecurring) {
+          await this.expandSeriesDays(userId, task.id);
+        }
+        return {
+          outcome: 'seated',
+          start: interval.start,
+          end: interval.end,
+          moves: [],
+        };
+      }
+      interval = null;
+    }
+
+    if (interval && interval.end <= nowMs) {
+      if (opts?.expandSeries && !opts.seriesDay && task.isRecurring) {
+        await this.expandSeriesDays(userId, task.id);
+      }
+      return {
+        outcome: 'seated',
+        start: interval.start,
+        end: interval.end,
+        moves: [],
+      };
+    }
 
     const plan = planPlacement({
       claim: {
@@ -263,9 +350,63 @@ export class PlacementStepService {
       ),
     });
 
-    if (plan.outcome === 'conflict') return plan;
-    await this.persist(task, plan, now, timeZone);
+    if (!shouldWritePlan(plan, opts)) return plan;
+    if (
+      plan.outcome === 'problematic' &&
+      opts?.searchHole &&
+      task.scheduleState === ScheduleState.PROBLEMATIC &&
+      !task.scheduledStartTime
+    ) {
+      return plan;
+    }
+    await this.persist(task, plan, now, timeZone, opts?.durationMinutes);
+    if (
+      opts?.expandSeries &&
+      !opts.seriesDay &&
+      plan.outcome === 'seated' &&
+      task.isRecurring
+    ) {
+      await this.expandSeriesDays(userId, task.id);
+    }
     return plan;
+  }
+
+  private async expandSeriesDays(userId: string, taskId: string): Promise<void> {
+    const task = await this.taskRepo.findOne({ where: { id: taskId, userId } });
+    if (!task?.isRecurring || !task.scheduledStartTime) return;
+    const settings = await this.userSettingsService.getSettings(userId);
+    const timeZone = resolveIanaTimeZone(settings.timeZone);
+    const horizon = planningHorizonRange(settings, new Date());
+    const anchorYmd = localYmd(
+      new Date(task.scheduledStartTime).toISOString(),
+      timeZone,
+    );
+    const horizonEndYmd = localYmd(horizon.end.toISOString(), timeZone);
+    const hm = normalizeClockHm(
+      localHm(new Date(task.scheduledStartTime).toISOString(), timeZone),
+    );
+    const ymds = seriesOccurrenceYmds({
+      anchorYmd,
+      horizonEndYmd,
+      pattern: task.recurrencePattern,
+      weekDays: task.recurrenceWeekDays,
+      skippedYmds: task.skippedOccurrenceYmds,
+    });
+    const wanted = new Set([anchorYmd, ...ymds]);
+    const existing = await this.scheduledRepo.find({ where: { taskId } });
+    const now = Date.now();
+    for (const row of existing) {
+      if (new Date(row.scheduledEndTime).getTime() <= now) continue;
+      const ymd = localYmd(new Date(row.scheduledStartTime).toISOString(), timeZone);
+      if (!wanted.has(ymd)) await this.scheduledRepo.remove(row);
+    }
+    for (const ymd of ymds) {
+      await this.placeUnlocked(userId, taskId, {
+        preferredStart: new Date(localDateTimeIso(ymd, hm, timeZone)),
+        commit: 'preferred',
+        seriesDay: true,
+      });
+    }
   }
 
   private async persist(
@@ -273,6 +414,7 @@ export class PlacementStepService {
     plan: PlacementPlan,
     now: Date,
     timeZone: string,
+    durationMinutes?: number,
   ): Promise<void> {
     await this.dataSource.transaction(async (manager) => {
       const tasks = manager.getRepository(Task);
@@ -300,6 +442,9 @@ export class PlacementStepService {
 
       clearParkMetadata(task);
       task.isUnscheduled = false;
+      if (durationMinutes && !task.isRecurring) {
+        task.estimatedTimeInMinutes = durationMinutes;
+      }
       if (!task.isRecurring || !task.scheduledStartTime) {
         task.scheduledStartTime = new Date(plan.start);
         task.scheduledEndTime = new Date(plan.end);
@@ -578,6 +723,13 @@ function seatFrom(
     notBefore: nowMs,
     buffered,
   };
+}
+
+function shouldWritePlan(plan: PlacementPlan, opts?: PlaceOptions): boolean {
+  if (plan.outcome === 'conflict') return false;
+  if (opts?.commit !== 'preferred') return true;
+  if (plan.outcome !== 'seated' || !opts.preferredStart) return false;
+  return Math.abs(plan.start - opts.preferredStart.getTime()) < 1000;
 }
 
 function claimInterval(

@@ -122,7 +122,7 @@ One optional phase. Preferred-first behavior and when to ask vs dodge are define
 
 ## 5. Triggers and UX
 
-**Target write-set:** [spec-incremental-placement.md](spec-incremental-placement.md). A create or geometric edit seats the claimant and, only when the claimed interval overlaps someone, that someone. Cosmetic edits, complete, cancel, skip, and delete do not replan the calendar. The live engine still enqueues a full replan for most flexible saves; that is not the target.
+**Target write-set:** [spec-incremental-placement.md](spec-incremental-placement.md). Create and geometric edit seat the claimant through `PlacementStepService.place` and do not enqueue a full replan. Generate and `POST /schedule-jobs/replan` still run `engine.run`.
 
 - **Generate / Review and undo-last-generate are not part of the target.** Tasks receive a seat when they are created or when a later claim overlaps them. The live Calendar button still exists until that UI is removed.
 - **Clear** is not part of the target either. The live Calendar action remains until that UI is removed.

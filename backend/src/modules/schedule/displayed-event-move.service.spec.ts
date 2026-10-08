@@ -18,16 +18,27 @@ describe('DisplayedEventMoveService', () => {
     slots?: Record<string, unknown>[];
     patch?: jest.Mock;
     updateTask?: jest.Mock;
-    updateSlot?: jest.Mock;
-    updateWindow?: jest.Mock;
-    enqueueReplan?: jest.Mock;
+    place?: jest.Mock;
+    seatOpenHoles?: jest.Mock;
   }) {
     const patch = opts.patch ?? jest.fn().mockResolvedValue(undefined);
-    const updateTask = opts.updateTask ?? jest.fn().mockResolvedValue({});
-    const updateSlot = opts.updateSlot ?? jest.fn().mockResolvedValue({});
-    const updateWindow = opts.updateWindow ?? jest.fn().mockResolvedValue(undefined);
-    const enqueueReplan =
-      opts.enqueueReplan ?? jest.fn().mockResolvedValue({ id: 'job-move-1' });
+    const updateTask =
+      opts.updateTask ??
+      jest.fn().mockImplementation(async (_id: string, _userId: string, body) => ({
+        scheduledStartTime: body.scheduledStartTime,
+        scheduledEndTime: body.scheduledEndTime,
+      }));
+    const place =
+      opts.place ??
+      jest.fn().mockImplementation(async (_userId: string, _taskId: string, body) => ({
+        outcome: 'seated',
+        start: new Date(body.preferredStart).getTime(),
+        end:
+          new Date(body.preferredStart).getTime() +
+          body.durationMinutes * 60_000,
+        moves: [],
+      }));
+    const seatOpenHoles = opts.seatOpenHoles ?? jest.fn().mockResolvedValue(undefined);
     const slots = opts.slots ?? [];
     const move = new DisplayedEventMoveService(
       {
@@ -37,7 +48,6 @@ describe('DisplayedEventMoveService', () => {
           getMany: jest.fn().mockResolvedValue(slots),
         }),
       } as never,
-      { update: updateWindow } as never,
       {
         findOne: jest.fn().mockResolvedValue(opts.habit ? { id: 'habit' } : null),
       } as never,
@@ -45,22 +55,21 @@ describe('DisplayedEventMoveService', () => {
         findAll: jest.fn().mockResolvedValue(opts.tasks ?? []),
         update: updateTask,
       } as never,
-      { update: updateSlot } as never,
       { patchEventTimes: patch } as never,
-      { enqueueReplan } as never,
+      { place, seatOpenHoles } as never,
     );
-    return { move, patch, updateTask, updateSlot, updateWindow, enqueueReplan };
+    return { move, patch, updateTask, place, seatOpenHoles };
   }
 
   it('does not change a habit block', async () => {
-    const { move, patch, enqueueReplan } = service({ habit: true });
+    const { move, patch, place } = service({ habit: true });
     await expect(move.move(userId, dto)).rejects.toBeInstanceOf(BadRequestException);
     expect(patch).not.toHaveBeenCalled();
-    expect(enqueueReplan).not.toHaveBeenCalled();
+    expect(place).not.toHaveBeenCalled();
   });
 
-  it('writes a fixed task and enqueues replan', async () => {
-    const { move, patch, updateTask, enqueueReplan } = service({
+  it('writes a fixed task without a full replan', async () => {
+    const { move, patch, updateTask, place } = service({
       tasks: [
         {
           id: 'task-fixed',
@@ -72,7 +81,7 @@ describe('DisplayedEventMoveService', () => {
     });
     await expect(move.move(userId, dto)).resolves.toEqual({
       kind: 'fixed',
-      jobId: 'job-move-1',
+      jobId: null,
     });
     expect(updateTask).toHaveBeenCalledWith('task-fixed', userId, {
       scheduledStartTime: '2026-09-22T11:00:00.000Z',
@@ -80,12 +89,34 @@ describe('DisplayedEventMoveService', () => {
       estimatedTimeInMinutes: 60,
     });
     expect(patch).not.toHaveBeenCalled();
-    expect(enqueueReplan).toHaveBeenCalledWith(userId);
+    expect(place).not.toHaveBeenCalled();
   });
 
-  it('patches Google before saving a flexible slot and rolls Google back if the slot save fails', async () => {
-    const updateSlot = jest.fn().mockRejectedValue(new Error('overlap'));
-    const { move, patch, updateWindow, enqueueReplan } = service({
+  it('rejects a fixed drag that the placement step did not keep', async () => {
+    const updateTask = jest.fn().mockResolvedValue({
+      scheduledStartTime: '2026-09-22T09:00:00.000Z',
+    });
+    const { move, patch } = service({
+      tasks: [
+        {
+          id: 'task-fixed',
+          eventType: 'fixed',
+          isRecurring: false,
+          googleEventId: 'evt-1',
+        },
+      ],
+      updateTask,
+    });
+    await expect(move.move(userId, dto)).rejects.toBeInstanceOf(BadRequestException);
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it('does not patch Google when a flexible drag cannot take the time', async () => {
+    const place = jest.fn().mockResolvedValue({
+      outcome: 'conflict',
+      conflict: { reason: 'preferred_on_fixed' },
+    });
+    const { move, patch, seatOpenHoles } = service({
       tasks: [
         {
           id: 'task-flex',
@@ -102,32 +133,16 @@ describe('DisplayedEventMoveService', () => {
           scheduledStartTime: new Date('2026-09-22T09:00:00.000Z'),
         },
       ],
-      updateSlot,
+      place,
     });
 
-    await expect(move.move(userId, dto)).rejects.toThrow('overlap');
-    expect(patch).toHaveBeenNthCalledWith(
-      1,
-      userId,
-      'evt-1',
-      '2026-09-22T11:00:00.000Z',
-      '2026-09-22T12:00:00.000Z',
-      'primary',
-    );
-    expect(patch).toHaveBeenNthCalledWith(
-      2,
-      userId,
-      'evt-1',
-      '2026-09-22T09:00:00.000Z',
-      '2026-09-22T10:00:00.000Z',
-      'primary',
-    );
-    expect(updateWindow).not.toHaveBeenCalled();
-    expect(enqueueReplan).not.toHaveBeenCalled();
+    await expect(move.move(userId, dto)).rejects.toBeInstanceOf(BadRequestException);
+    expect(patch).not.toHaveBeenCalled();
+    expect(seatOpenHoles).not.toHaveBeenCalled();
   });
 
-  it('saves a flexible slot and enqueues replan', async () => {
-    const { move, enqueueReplan, updateSlot } = service({
+  it('seats a flexible drag through the placement step and does not replan', async () => {
+    const { move, place, patch, seatOpenHoles } = service({
       tasks: [
         {
           id: 'task-flex',
@@ -147,14 +162,25 @@ describe('DisplayedEventMoveService', () => {
     });
     await expect(move.move(userId, dto)).resolves.toEqual({
       kind: 'slot',
-      jobId: 'job-move-1',
+      jobId: null,
     });
-    expect(updateSlot).toHaveBeenCalled();
-    expect(enqueueReplan).toHaveBeenCalledWith(userId);
+    expect(place).toHaveBeenCalledWith(userId, 'task-flex', {
+      preferredStart: new Date('2026-09-22T11:00:00.000Z'),
+      durationMinutes: 60,
+      commit: 'preferred',
+    });
+    expect(patch).toHaveBeenCalledWith(
+      userId,
+      'evt-1',
+      '2026-09-22T11:00:00.000Z',
+      '2026-09-22T12:00:00.000Z',
+      'primary',
+    );
+    expect(seatOpenHoles).toHaveBeenCalledWith(userId);
   });
 
-  it('patches an external Google event without replan', async () => {
-    const { move, patch, updateTask, updateSlot, enqueueReplan } = service({
+  it('patches an external Google event without placement', async () => {
+    const { move, patch, updateTask, place } = service({
       tasks: [],
     });
     await expect(move.move(userId, dto)).resolves.toEqual({
@@ -163,7 +189,6 @@ describe('DisplayedEventMoveService', () => {
     });
     expect(patch).toHaveBeenCalledTimes(1);
     expect(updateTask).not.toHaveBeenCalled();
-    expect(updateSlot).not.toHaveBeenCalled();
-    expect(enqueueReplan).not.toHaveBeenCalled();
+    expect(place).not.toHaveBeenCalled();
   });
 });

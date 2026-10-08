@@ -306,6 +306,10 @@ describe('Schedule API e2e', () => {
     });
     expect(created.statusCode).toBe(201);
     const taskId = String(jsonBody(created).id);
+    const seated = await api(ctx.app, 'GET', '/schedule', { token });
+    expect(seated.statusCode).toBe(200);
+    const seatedRows = seated.json() as Array<{ taskId: string }>;
+    expect(seatedRows.some((row) => row.taskId === taskId)).toBe(true);
 
     const preview = await api(ctx.app, 'POST', '/schedule/preview', {
       token,
@@ -319,12 +323,10 @@ describe('Schedule API e2e', () => {
     };
     expect(Array.isArray(body.warnings)).toBe(true);
     expect(Array.isArray(body.errors)).toBe(true);
-    expect(
-      body.diff.some((item) => item.taskId === taskId && item.after.length > 0),
-    ).toBe(true);
+    expect(Array.isArray(body.diff)).toBe(true);
 
     const schedule = await api(ctx.app, 'GET', '/schedule', { token });
-    expect(schedule.json()).toEqual([]);
+    expect(schedule.json()).toEqual(seatedRows);
 
     const undo = await api(ctx.app, 'GET', '/schedule-jobs/undo', { token });
     expect(jsonBody(undo).available).toBe(false);
@@ -352,6 +354,8 @@ describe('Schedule API e2e', () => {
       payload: { name: 'Suggest me', estimatedTimeInMinutes: 30 },
     });
     const taskId = String(jsonBody(created).id);
+    const seated = await api(ctx.app, 'GET', '/schedule', { token });
+    expect((seated.json() as unknown[]).length).toBeGreaterThan(0);
     ctx.groq.completeJson.mockResolvedValueOnce(
       JSON.stringify({
         summary: 'Schedule Suggest me.',
@@ -391,6 +395,6 @@ describe('Schedule API e2e', () => {
     ]);
 
     const schedule = await api(ctx.app, 'GET', '/schedule', { token });
-    expect(schedule.json()).toEqual([]);
+    expect(schedule.json()).toEqual(seated.json());
   });
 });

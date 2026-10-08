@@ -24,6 +24,11 @@ import { Phase } from '../phases/entities/phase.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { TaskEventType, getEventTypeRules } from '../scheduling/event-type.enum';
 import { ScheduleJobService } from '../schedule/schedule-job.service';
+import {
+  PlacementStepService,
+  type PlaceOptions,
+} from '../schedule/placement-step.service';
+import type { PlacementPlan } from '../schedule/placement-step.util';
 import { ScheduledTask } from '../schedule/schedule.entity';
 import { hasFullyEnded } from '../schedule/google-segment-sync.util';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
@@ -51,37 +56,28 @@ export class TasksService {
     private scheduledTaskRepository: Repository<ScheduledTask>,
     @Inject(forwardRef(() => ScheduleJobService))
     private readonly scheduleJobService: ScheduleJobService,
+    @Inject(forwardRef(() => PlacementStepService))
+    private readonly placementStep: PlacementStepService,
     private readonly googleCalendarService: GoogleCalendarService,
   ) {}
 
   private canSyncTaskToGoogle(task: Task): boolean {
-    return (
-      !task.isUnscheduled &&
-      task.eventType === TaskEventType.FIXED &&
-      !!task.scheduledStartTime &&
-      !!task.scheduledEndTime
-    );
+    if (task.isUnscheduled || isProblematicSchedule(task)) return false;
+    if (!task.scheduledStartTime || !task.scheduledEndTime) return false;
+    if (task.eventType === TaskEventType.FIXED) return true;
+    return !!task.googleEventId;
   }
 
-  private shouldReplanAfterSave(
-    previous: { isUnscheduled: boolean; scheduleState?: ScheduleState } | null,
-    saved: Task,
-  ): boolean {
-    if (saved.isUnscheduled) {
-      return !!previous && !previous.isUnscheduled;
-    }
-    if (isProblematicSchedule(saved)) {
-      return (
-        !!previous && previous.scheduleState !== ScheduleState.PROBLEMATIC
-      );
-    }
-    if (saved.eventType === TaskEventType.FIXED) {
+  private canPlace(task: Task): boolean {
+    if (task.isUnscheduled || isProblematicSchedule(task)) return false;
+    if (task.scheduleState === ScheduleState.RESOLVED) return false;
+    if (
+      task.status === TaskStatus.COMPLETED ||
+      task.status === TaskStatus.CANCELED
+    ) {
       return false;
     }
-    return (
-      saved.status !== TaskStatus.COMPLETED &&
-      saved.status !== TaskStatus.CANCELED
-    );
+    return true;
   }
 
   private applyUnscheduledConstraints(task: Task): void {
@@ -229,18 +225,132 @@ export class TasksService {
     return phases;
   }
 
-  private async attachReplanJob(
+  private snapshot(task: Task): ScheduleSnapshot {
+    return {
+      isUnscheduled: !!task.isUnscheduled,
+      scheduleState: task.scheduleState ?? ScheduleState.NONE,
+      eventType: task.eventType,
+      estimatedTimeInMinutes: task.estimatedTimeInMinutes ?? 0,
+      scheduledStartTime: isoInstant(task.scheduledStartTime),
+      scheduledEndTime: isoInstant(task.scheduledEndTime),
+      earliestStartTime: isoInstant(task.earliestStartTime),
+      deadline: isoInstant(task.deadline),
+      phaseId: task.phaseId ?? null,
+      isRecurring: !!task.isRecurring,
+      recurrencePattern: task.recurrencePattern ?? null,
+      recurrenceWeekDays: JSON.stringify(task.recurrenceWeekDays ?? null),
+      eligibleWeekDays: JSON.stringify(task.eligibleWeekDays ?? null),
+      allowSplit: !!task.allowSplit,
+    };
+  }
+
+  private geometryChanged(before: ScheduleSnapshot, after: ScheduleSnapshot): boolean {
+    return (Object.keys(before) as (keyof ScheduleSnapshot)[]).some(
+      (key) => before[key] !== after[key],
+    );
+  }
+
+  private placeOptions(
+    before: ScheduleSnapshot | null,
+    task: Task,
+  ): PlaceOptions | null {
+    if (!this.canPlace(task)) return null;
+    const after = this.snapshot(task);
+    if (before && !this.geometryChanged(before, after)) return null;
+
+    const patternChanged =
+      !!before &&
+      (before.isRecurring !== after.isRecurring ||
+        before.recurrencePattern !== after.recurrencePattern ||
+        before.recurrenceWeekDays !== after.recurrenceWeekDays);
+    const startChanged =
+      !!before && before.scheduledStartTime !== after.scheduledStartTime;
+    const leftInbox =
+      !!before &&
+      ((before.isUnscheduled && !after.isUnscheduled) ||
+        (before.scheduleState === ScheduleState.PROBLEMATIC &&
+          after.scheduleState === ScheduleState.NONE) ||
+        (before.scheduleState === ScheduleState.RESOLVED &&
+          after.scheduleState === ScheduleState.NONE &&
+          !after.scheduledStartTime));
+
+    if (!before || (leftInbox && !startChanged && !task.scheduledStartTime)) {
+      return {
+        searchHole:
+          !task.scheduledStartTime && task.eventType !== TaskEventType.FIXED,
+        expandSeries: !!task.isRecurring,
+      };
+    }
+    if (startChanged && task.scheduledStartTime) {
+      return {
+        commit: 'preferred',
+        preferredStart: new Date(task.scheduledStartTime),
+        durationMinutes: task.estimatedTimeInMinutes,
+        expandSeries: !!task.isRecurring,
+      };
+    }
+    const durationChanged =
+      before.estimatedTimeInMinutes !== after.estimatedTimeInMinutes;
+    const endChanged = before.scheduledEndTime !== after.scheduledEndTime;
+    if (durationChanged || endChanged) {
+      return { expandSeries: !!task.isRecurring };
+    }
+    if (task.isRecurring && patternChanged) {
+      return { commit: 'keep', expandSeries: true };
+    }
+    return { commit: 'keep' };
+  }
+
+  private async placeSavedTask(
+    userId: string,
+    before: ScheduleSnapshot,
+    task: Task,
+  ): Promise<void> {
+    const opts = this.placeOptions(before, task);
+    if (!opts) return;
+    const plan = await this.placementStep.place(userId, task.id, opts);
+    if (opts.commit === 'preferred' && !preferredHonored(plan, opts)) {
+      task.scheduledStartTime = before.scheduledStartTime
+        ? new Date(before.scheduledStartTime)
+        : null;
+      task.scheduledEndTime = before.scheduledEndTime
+        ? new Date(before.scheduledEndTime)
+        : null;
+      task.estimatedTimeInMinutes = before.estimatedTimeInMinutes;
+      await this.tasksRepository.save(task);
+      return;
+    }
+    if (freedAHole(before, plan, opts)) {
+      await this.placementStep.seatOpenHoles(userId);
+    }
+  }
+
+  private async parkUnanswered(task: Task, reason: string): Promise<void> {
+    task.scheduleState = ScheduleState.PROBLEMATIC;
+    task.problematicReason = reason;
+    task.isUnscheduled = false;
+    task.scheduledStartTime = null;
+    task.scheduledEndTime = null;
+    rememberSingleProblematicDay(task);
+    await this.tasksRepository.save(task);
+  }
+
+  private async releaseOpenSlots(taskId: string): Promise<void> {
+    const rows = await this.scheduledTaskRepository.find({ where: { taskId } });
+    const now = Date.now();
+    const open = rows.filter(
+      (row) => new Date(row.scheduledEndTime).getTime() > now,
+    );
+    if (open.length) await this.scheduledTaskRepository.remove(open);
+  }
+
+  private async finishSaved(
     userId: string,
     task: Task,
-    shouldReplan: boolean,
   ): Promise<Task & { jobId: string | null }> {
-    let jobId: string | null = null;
-    if (shouldReplan) {
-      const job = await this.scheduleJobService.enqueueReplan(userId);
-      jobId = job.id;
-      void this.scheduleJobService.processNextPendingForUser(userId);
-    }
-    return Object.assign(task, { jobId });
+    await this.syncTaskWithGoogleCalendar(userId, task);
+    const synced = await this.tasksRepository.save(task);
+    return Object.assign(synced, { jobId: null as string | null });
   }
 
   async create(
@@ -336,15 +446,19 @@ export class TasksService {
     }
 
     const saved = await this.tasksRepository.save(task);
-    await this.syncTaskWithGoogleCalendar(userId, saved);
-    await this.tasksRepository.save(saved);
-
-    const row = await this.findOne(saved.id, userId);
-    return this.attachReplanJob(
-      userId,
-      row,
-      this.shouldReplanAfterSave(null, row),
-    );
+    let row = await this.findOne(saved.id, userId);
+    const opts = this.placeOptions(null, row);
+    if (opts) {
+      const plan = await this.placementStep.place(userId, row.id, opts);
+      if (plan.outcome === 'conflict') {
+        await this.parkUnanswered(
+          row,
+          plan.conflict.reason ?? 'preferred_on_fixed',
+        );
+      }
+      row = await this.findOne(row.id, userId);
+    }
+    return this.finishSaved(userId, row);
   }
 
   async findAll(userId: string): Promise<Task[]> {
@@ -376,6 +490,7 @@ export class TasksService {
     updateTaskDto: UpdateTaskDto,
   ): Promise<Task & { jobId: string | null }> {
     const task = await this.findOne(id, userId);
+    const before = this.snapshot(task);
     const wasUnscheduled = task.isUnscheduled;
     const wasScheduleState = task.scheduleState;
 
@@ -459,7 +574,11 @@ export class TasksService {
       }
     }
 
-    if (task.isUnscheduled && !wasUnscheduled && task.googleEventId) {
+    const enteredUnscheduled = task.isUnscheduled && !wasUnscheduled;
+    const enteredProblematic =
+      isProblematicSchedule(task) &&
+      wasScheduleState !== ScheduleState.PROBLEMATIC;
+    if ((enteredUnscheduled || enteredProblematic) && task.googleEventId) {
       try {
         await this.scheduleJobService.deleteSyncedGoogleEventsForTask(
           userId,
@@ -467,7 +586,7 @@ export class TasksService {
         );
       } catch (e: any) {
         this.logger.warn(
-          `Failed to delete Google event for unscheduled task ${task.id}: ${e?.message ?? e}`,
+          `Failed to delete Google event for parked task ${task.id}: ${e?.message ?? e}`,
         );
       }
       task.googleEventId = null;
@@ -475,18 +594,24 @@ export class TasksService {
     }
 
     const saved = await this.tasksRepository.save(task);
-    await this.syncTaskWithGoogleCalendar(userId, saved);
-    await this.tasksRepository.save(saved);
+    if (enteredUnscheduled || enteredProblematic) {
+      await this.releaseOpenSlots(saved.id);
+      if (enteredProblematic) {
+        saved.scheduledStartTime = null;
+        saved.scheduledEndTime = null;
+        await this.tasksRepository.save(saved);
+      }
+      await this.placementStep.seatOpenHoles(
+        userId,
+        enteredProblematic ? saved.id : undefined,
+      );
+      const parked = await this.findOne(saved.id, userId);
+      return Object.assign(parked, { jobId: null as string | null });
+    }
 
+    await this.placeSavedTask(userId, before, saved);
     const row = await this.findOne(saved.id, userId);
-    return this.attachReplanJob(
-      userId,
-      row,
-      this.shouldReplanAfterSave(
-        { isUnscheduled: wasUnscheduled, scheduleState: wasScheduleState },
-        row,
-      ),
-    );
+    return this.finishSaved(userId, row);
   }
 
   async remove(id: string, userId: string): Promise<void> {
@@ -500,12 +625,9 @@ export class TasksService {
         );
       }
     }
-    const shouldReplan = !task.isUnscheduled;
+    const freed = !task.isUnscheduled;
     await this.tasksRepository.remove(task);
-    if (shouldReplan) {
-      await this.scheduleJobService.enqueueReplan(userId);
-      void this.scheduleJobService.processNextPendingForUser(userId);
-    }
+    if (freed) await this.placementStep.seatOpenHoles(userId);
   }
 
   async findByStatus(userId: string, status: TaskStatus): Promise<Task[]> {
@@ -616,6 +738,7 @@ export class TasksService {
     }
 
     const saved = await this.tasksRepository.save(task);
+    if (openSlot) await this.placementStep.seatOpenHoles(userId);
     const row = await this.findOne(saved.id, userId);
     return Object.assign(row, { jobId: null });
   }
@@ -704,19 +827,50 @@ export class TasksService {
   ): Promise<Task> {
     const task = await this.findOne(id, userId);
     task.status = status;
-    const saved = await this.tasksRepository.save(task);
-    if (
-      this.shouldReplanAfterSave(
-        {
-          isUnscheduled: saved.isUnscheduled,
-          scheduleState: saved.scheduleState,
-        },
-        saved,
-      )
-    ) {
-      await this.scheduleJobService.enqueueReplan(userId);
-      void this.scheduleJobService.processNextPendingForUser(userId);
-    }
-    return saved;
+    return this.tasksRepository.save(task);
   }
+}
+
+type ScheduleSnapshot = {
+  isUnscheduled: boolean;
+  scheduleState: ScheduleState;
+  eventType: TaskEventType;
+  estimatedTimeInMinutes: number;
+  scheduledStartTime: string | null;
+  scheduledEndTime: string | null;
+  earliestStartTime: string | null;
+  deadline: string | null;
+  phaseId: string | null;
+  isRecurring: boolean;
+  recurrencePattern: string | null;
+  recurrenceWeekDays: string;
+  eligibleWeekDays: string;
+  allowSplit: boolean;
+};
+
+function isoInstant(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function preferredHonored(plan: PlacementPlan, opts: PlaceOptions): boolean {
+  if (plan.outcome !== 'seated' || !opts.preferredStart) return false;
+  return Math.abs(plan.start - new Date(opts.preferredStart).getTime()) < 1000;
+}
+
+function freedAHole(
+  before: ScheduleSnapshot,
+  plan: PlacementPlan,
+  opts: PlaceOptions,
+): boolean {
+  if (opts.commit === 'preferred' && !preferredHonored(plan, opts)) return false;
+  if (!before.scheduledStartTime || !before.scheduledEndTime) return false;
+  if (plan.outcome === 'problematic' || plan.outcome === 'unscheduled') return true;
+  if (plan.outcome !== 'seated') return false;
+  const startMoved =
+    Math.abs(plan.start - new Date(before.scheduledStartTime).getTime()) >= 1000;
+  const endShrunk =
+    plan.end + 1000 < new Date(before.scheduledEndTime).getTime();
+  return startMoved || endShrunk;
 }

@@ -6,7 +6,7 @@
 
 ## Черга
 
-Порожньо. Наступний крок у roadmap — §12, зріз **Stop full replan on small edits**.
+Порожньо. Наступний крок у roadmap — §12, зріз **Series drag**.
 
 ---
 
