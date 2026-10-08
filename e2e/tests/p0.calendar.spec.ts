@@ -45,91 +45,54 @@ function zonedClockToUtc(ymd: string, hour: number, minute: number, timeZone: st
   return utcGuess - (asUtc - utcGuess);
 }
 
-function clockMinutes(ms: number): number {
-  const p = zonedParts(ms, KYIV);
-  let hour = Number(p.hour);
-  if (hour === 24) hour = 0;
-  return hour * 60 + Number(p.minute);
-}
-
-function formatHm(mins: number): string {
-  const m = ((mins % 1440) + 1440) % 1440;
-  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-}
-
-/** Wake/sleep that contains now and the next 45 minutes, including across midnight. */
-function awakeWindowAround(nowMs: number): { wakeTime: string; sleepTime: string } {
-  const nowMin = clockMinutes(nowMs);
-  const start = nowMin - 5;
-  const end = nowMin + 45;
-  if (start >= 0 && end < 1440) {
-    return { wakeTime: formatHm(start), sleepTime: formatHm(end) };
-  }
-  if (start < 0) {
-    return { wakeTime: '00:00', sleepTime: formatHm(Math.max(end, 45)) };
-  }
-  return { wakeTime: formatHm(start), sleepTime: formatHm(end) };
-}
-
-async function releaseCompletedFixedBlocks(request: APIRequestContext, token: string): Promise<void> {
-  const listed = await apiJson(request, token, 'get', '/tasks');
-  expectOk(listed);
-  const tasks = Array.isArray(listed.body) ? listed.body : [];
-  for (const task of tasks) {
-    if (!task?.id || task.eventType !== 'fixed') continue;
-    if (task.status !== 'completed' && task.status !== 'canceled') continue;
-    if (!task.scheduledStartTime && !task.scheduledEndTime) continue;
-    expectOk(
-      await apiJson(request, token, 'patch', `/tasks/${task.id}`, {
-        eventType: 'admin',
-        scheduledStartTime: null,
-        scheduledEndTime: null,
-      }),
-    );
-  }
-}
-
-async function pinAwakeAroundNow(
+/**
+ * Full civil day for placement. GET /phases hides system Focus (`main_phase`), which stays
+ * wake→sleep (often 08:00–23:00); CI at night Kyiv then gets phase_full. Add a visible
+ * time_phase that unions into claim windows.
+ */
+async function pinAwakeAllDay(
   request: APIRequestContext,
   token: string,
-  nowMs: number,
 ): Promise<() => Promise<void>> {
   const settings = await apiJson(request, token, 'get', '/user-settings');
   expectOk(settings);
-  const phases = await apiJson(request, token, 'get', '/phases');
-  expectOk(phases);
-  const list = Array.isArray(phases.body) ? phases.body : [];
-  const timePhases = list.filter((phase) => phase?.type === 'time_phase');
-  const window = awakeWindowAround(nowMs);
   expectOk(
     await apiJson(request, token, 'patch', '/user-settings', {
-      wakeTime: window.wakeTime,
-      sleepTime: window.sleepTime,
+      wakeTime: '00:00',
+      sleepTime: '23:59',
+      weekendWorkEnabled: true,
     }),
   );
-  // Every time phase must intersect wake/sleep, or claim windows are empty → phase_full.
-  for (const phase of timePhases) {
-    expectOk(
-      await apiJson(request, token, 'patch', `/phases/${phase.id}`, {
-        startTime: window.wakeTime,
-        endTime: window.sleepTime,
-        weekDays: [0, 1, 2, 3, 4, 5, 6],
-      }),
-    );
-  }
+  const phase = await apiJson(request, token, 'post', '/phases', {
+    name: uniqueName('E2E all-day'),
+    color: '#6688aa',
+    startTime: '00:00',
+    endTime: '23:59',
+    weekDays: [0, 1, 2, 3, 4, 5, 6],
+    type: 'time_phase',
+  });
+  expectOk(phase);
   return async () => {
+    if (phase.body?.id) {
+      await apiJson(request, token, 'delete', `/phases/${phase.body.id}`);
+    }
     await apiJson(request, token, 'patch', '/user-settings', {
       wakeTime: settings.body.wakeTime,
       sleepTime: settings.body.sleepTime,
+      weekendWorkEnabled: settings.body.weekendWorkEnabled,
     });
-    for (const phase of timePhases) {
-      await apiJson(request, token, 'patch', `/phases/${phase.id}`, {
-        startTime: phase.startTime,
-        endTime: phase.endTime,
-        weekDays: phase.weekDays ?? null,
-      });
-    }
   };
+}
+
+/** Remove every task so leftover fixed/series slots cannot force phase_full / conflict. */
+async function deleteAllTasks(request: APIRequestContext, token: string): Promise<void> {
+  const listed = await apiJson(request, token, 'get', '/tasks');
+  expectOk(listed);
+  for (const task of Array.isArray(listed.body) ? listed.body : []) {
+    if (!task?.id) continue;
+    const deleted = await apiJson(request, token, 'delete', `/tasks/${task.id}`);
+    expectOk(deleted);
+  }
 }
 
 test.describe('P0 calendar UI', () => {
@@ -295,32 +258,32 @@ test.describe('P0 calendar UI', () => {
     request,
   }) => {
     const token = auth.onboarded.access_token;
-    await completeOpenTasks(request, token);
-    await releaseCompletedFixedBlocks(request, token);
+    await deleteAllTasks(request, token);
     await deleteUnusedTimePhases(request, token);
     const nowMs = Date.now();
-    const restoreAwake = await pinAwakeAroundNow(request, token, nowMs);
+    const restoreAwake = await pinAwakeAllDay(request, token);
     const name = uniqueName('E2E skip now');
     const start = new Date(nowMs - 5 * 60_000).toISOString();
     const end = new Date(nowMs + 25 * 60_000).toISOString();
     try {
-      // Seed an overlapping movable slot — create no longer searchHole-overlaps "now".
+      // Fixed create always keeps the clock (mustFitWindow off). Then become movable for Skip.
       const created = await apiJson(request, token, 'post', '/tasks', {
         name,
-        eventType: 'admin',
+        eventType: 'fixed',
         estimatedTimeInMinutes: 30,
-        allowSplit: false,
         scheduledStartTime: start,
         scheduledEndTime: end,
         timeZone: 'Europe/Kyiv',
       });
       expectOk(created);
-      expect(created.body.jobId == null).toBeTruthy();
-      const placed = await apiJson(request, token, 'get', `/tasks/${created.body.id}`);
-      expectOk(placed);
-      expect(placed.body.scheduleState ?? 'none').toBe('none');
-      expect(new Date(placed.body.scheduledStartTime).getTime()).toBeLessThanOrEqual(Date.now());
-      expect(new Date(placed.body.scheduledEndTime).getTime()).toBeGreaterThan(Date.now());
+      const movable = await apiJson(request, token, 'patch', `/tasks/${created.body.id}`, {
+        eventType: 'admin',
+        allowSplit: false,
+      });
+      expectOk(movable);
+      expect(movable.body.scheduleState ?? 'none').toBe('none');
+      expect(new Date(movable.body.scheduledStartTime).getTime()).toBeLessThanOrEqual(Date.now());
+      expect(new Date(movable.body.scheduledEndTime).getTime()).toBeGreaterThan(Date.now());
 
       await openAs(page, auth.onboarded);
       const skipCard = skippableStripCard(page, name);
@@ -340,10 +303,10 @@ test.describe('P0 calendar UI', () => {
 
   test('U-CAL-020 recurring Now block has Skip and no Done', async ({ page, auth, request }) => {
     const token = auth.onboarded.access_token;
-    await completeOpenTasks(request, token);
+    await deleteAllTasks(request, token);
     await deleteUnusedTimePhases(request, token);
     const nowMs = Date.now();
-    const restoreAwake = await pinAwakeAroundNow(request, token, nowMs);
+    const restoreAwake = await pinAwakeAllDay(request, token);
     const name = uniqueName('E2E skip series');
     const start = new Date(nowMs - 5 * 60_000).toISOString();
     const end = new Date(nowMs + 25 * 60_000).toISOString();
@@ -362,7 +325,10 @@ test.describe('P0 calendar UI', () => {
       expectOk(created);
       const placed = await apiJson(request, token, 'get', `/tasks/${created.body.id}`);
       expectOk(placed);
-      expect(placed.body.scheduleState ?? 'none').toBe('none');
+      expect(
+        placed.body.scheduleState ?? 'none',
+        `reason=${placed.body.problematicReason ?? 'none'}`,
+      ).toBe('none');
       expect(placed.body.scheduledStartTime).toBeTruthy();
 
       await openAs(page, auth.onboarded);
