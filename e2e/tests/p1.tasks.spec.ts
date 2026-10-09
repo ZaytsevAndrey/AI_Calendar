@@ -8,6 +8,7 @@ import {
   completeOpenTasks,
   openCreateTaskDialog,
   expectMutationProgressToast,
+  waitForScheduleJob,
 } from '../helpers/fixtures';
 
 test.describe('P1 tasks UI', () => {
@@ -29,41 +30,55 @@ test.describe('P1 tasks UI', () => {
   });
 
   test('U-TSK-014 status filter matches scheduled list', async ({ page, auth, request }) => {
-    await completeOpenTasks(request, auth.onboarded.access_token);
+    const token = auth.onboarded.access_token;
+    await completeOpenTasks(request, token);
     const stamp = Date.now();
     const activeName = `P1 ${stamp} active`;
     const doneName = `P1 ${stamp} done`;
     const canceledName = `P1 ${stamp} canceled`;
+    // Explicit future clocks keep rows in Scheduled when hole-search would park them.
+    const day = new Date();
+    day.setUTCDate(day.getUTCDate() + 2);
+    const ymd = day.toISOString().slice(0, 10);
 
-    expectOk(
-      await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
-        name: activeName,
+    const seedScheduled = async (name: string, startHm: string, endHm: string) => {
+      const created = await apiJson(request, token, 'post', '/tasks', {
+        name,
         eventType: 'admin',
         estimatedTimeInMinutes: 30,
-      }),
-    );
-    const done = await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
-      name: doneName,
-      eventType: 'admin',
-      estimatedTimeInMinutes: 30,
-    });
-    expectOk(done);
+        scheduledStartTime: `${ymd}T${startHm}:00.000Z`,
+        scheduledEndTime: `${ymd}T${endHm}:00.000Z`,
+      });
+      expectOk(created);
+      await waitForScheduleJob(request, token, created.body.jobId);
+      return created.body.id as string;
+    };
+
+    await seedScheduled(activeName, '10:00', '10:30');
+    const doneId = await seedScheduled(doneName, '11:00', '11:30');
     expectOk(
-      await apiJson(request, auth.onboarded.access_token, 'patch', `/tasks/${done.body.id}`, {
+      await apiJson(request, token, 'patch', `/tasks/${doneId}`, {
         status: 'completed',
       }),
     );
-    const canceled = await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
-      name: canceledName,
-      eventType: 'admin',
-      estimatedTimeInMinutes: 30,
-    });
-    expectOk(canceled);
+    const canceledId = await seedScheduled(canceledName, '12:00', '12:30');
     expectOk(
-      await apiJson(request, auth.onboarded.access_token, 'patch', `/tasks/${canceled.body.id}`, {
+      await apiJson(request, token, 'patch', `/tasks/${canceledId}`, {
         status: 'canceled',
       }),
     );
+    await expect
+      .poll(async () => {
+        const listed = await apiJson(request, token, 'get', '/tasks');
+        const row = (Array.isArray(listed.body) ? listed.body : []).find(
+          (task: { id?: string }) => task.id === canceledId,
+        );
+        return {
+          status: row?.status,
+          unscheduled: !!row?.isUnscheduled,
+        };
+      })
+      .toEqual({ status: 'canceled', unscheduled: false });
 
     await openAs(page, auth.onboarded, '/tasks');
     const scheduled = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Scheduled' }) });

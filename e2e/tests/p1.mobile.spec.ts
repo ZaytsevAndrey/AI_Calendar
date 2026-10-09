@@ -71,7 +71,7 @@ test.describe('phone layout', () => {
     await expect(page.getByRole('heading', { name: 'Tasks' })).toBeVisible();
 
     await page.getByRole('link', { name: 'Settings' }).click();
-    const signOut = page.getByRole('button', { name: 'Sign out' });
+    const signOut = page.getByRole('button', { name: 'Log out' });
     await signOut.scrollIntoViewIfNeeded();
     const signBox = await signOut.boundingBox();
     const navBox = await page.getByRole('navigation', { name: 'Main' }).boundingBox();

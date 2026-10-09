@@ -30,7 +30,7 @@ test.describe('P1 voice UI', () => {
     await expect(page.getByRole('heading', { name: 'Voice dentist' }).first()).toBeVisible();
   });
 
-  test('U-VOI-002 sufficient parse opens the wizard prefilled', async ({ page, auth }) => {
+  test('U-VOI-002 sufficient parse creates like complete', async ({ page, auth }) => {
     await mockVoiceCapture(page);
     await stubVoiceApis(page, () => ({
       understanding: 'sufficient',
@@ -45,9 +45,8 @@ test.describe('P1 voice UI', () => {
     await openAs(page, auth.onboarded, '/tasks');
     await page.getByRole('button', { name: 'Add task by voice' }).click();
     await recordOnce(page);
-    const wizard = page.getByRole('dialog');
-    await expect(wizard.getByRole('textbox', { name: /Name/ })).toHaveValue('Voice draft');
-    await expect(wizard.getByLabel(/Duration/)).toHaveValue('45');
+    await expectMutationProgressToast(page, 'Voice draft');
+    await expect(page.getByRole('heading', { name: 'Voice draft' }).first()).toBeVisible();
   });
 
   test('U-VOI-003 clarification is asked only once', async ({ page, auth }) => {

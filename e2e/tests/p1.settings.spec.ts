@@ -26,7 +26,7 @@ test.describe('P1 settings UI', () => {
   });
   test('U-SET-001 changing horizon auto-saves after debounce', async ({ page, auth, request }) => {
     await openAs(page, auth.onboarded, '/settings');
-    const horizon = page.getByLabel('Recurring schedule horizon (days)');
+    const horizon = page.getByLabel('Planning horizon (days)');
     await horizon.scrollIntoViewIfNeeded();
     await expect(horizon).toBeVisible();
     const current = Number((await horizon.inputValue()) || '14');
@@ -37,7 +37,7 @@ test.describe('P1 settings UI', () => {
     expectOk(saved);
     expect(saved.body.recurringScheduleHorizonDays).toBe(next);
 
-    const buffer = page.getByLabel('Buffer around fixed events (minutes)');
+    const buffer = page.getByLabel('Fixed-event buffer (minutes)');
     await expect(buffer).toBeVisible();
     await buffer.fill('15');
     await expect

@@ -30,6 +30,20 @@ test.describe('P1 calendar UI', () => {
 
   test('U-CAL-016 suggestions stay read-only', async ({ page, auth, request }) => {
     await completeOpenTasks(request, auth.onboarded.access_token);
+    await page.route('**/schedule/recommendations**', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          summary: 'Nothing to review yet. Add tasks or generate a schedule first.',
+          suggestions: [],
+        }),
+      });
+    });
 
     await openAs(page, auth.onboarded);
     await page.getByRole('button', { name: 'Schedule' }).click();

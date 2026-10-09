@@ -100,29 +100,38 @@ test.describe('P0 calendar UI', () => {
     test.use({ timezoneId: 'America/New_York' });
 
     test('empty Day slot prefills From/Until in Settings TZ', async ({ page, auth, request }) => {
-      await deleteUnusedTimePhases(request, auth.onboarded.access_token);
-      await openAs(page, auth.onboarded);
-      await page.getByRole('button', { name: 'Day', exact: true }).click();
-      await expect(page.getByRole('button', { name: 'Day', exact: true })).toHaveAttribute(
-        'aria-pressed',
-        'true',
-      );
-      const slot = page.getByRole('button', { name: '08:00', exact: true });
-      await slot.evaluate((node) => {
-        node.scrollIntoView({ block: 'center', inline: 'nearest' });
-        (node as HTMLElement).click();
-      });
-      const dialog = page.getByRole('dialog');
-      await expect(dialog).toBeVisible();
+      const token = auth.onboarded.access_token;
+      await deleteUnusedTimePhases(request, token);
+      const unpin = await pinAwakeAllDay(request, token);
+      try {
+        const settings = await apiJson(request, token, 'get', '/user-settings');
+        expectOk(settings);
+        const wakeHm = String(settings.body.wakeTime || '00:00').slice(0, 5);
+        await openAs(page, auth.onboarded);
+        await page.getByRole('button', { name: 'Day', exact: true }).click();
+        await expect(page.getByRole('button', { name: 'Day', exact: true })).toHaveAttribute(
+          'aria-pressed',
+          'true',
+        );
+        const slot = page.getByRole('button', { name: wakeHm, exact: true });
+        await slot.evaluate((node) => {
+          node.scrollIntoView({ block: 'center', inline: 'nearest' });
+          (node as HTMLElement).click();
+        });
+        const dialog = page.getByRole('dialog');
+        await expect(dialog).toBeVisible();
 
-      const ymd = await page.evaluate(() => {
-        const d = new Date();
-        const pad = (n: number) => String(n).padStart(2, '0');
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-      });
-      await expect(dialog.locator('#task-form-from')).toHaveValue(`${ymd}T00:00`);
-      await expect(dialog.locator('#task-form-deadline')).toHaveValue(`${ymd}T23:59`);
-      await expect(dialog.getByText(/Times use Europe\/Kyiv/)).toBeVisible();
+        const ymd = await page.evaluate(() => {
+          const d = new Date();
+          const pad = (n: number) => String(n).padStart(2, '0');
+          return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        });
+        await expect(dialog.locator('#task-form-from')).toHaveValue(`${ymd}T00:00`);
+        await expect(dialog.locator('#task-form-deadline')).toHaveValue(`${ymd}T23:59`);
+        await expect(dialog.getByText(/Times use Europe\/Kyiv/)).toBeVisible();
+      } finally {
+        await unpin();
+      }
     });
   });
 
@@ -297,9 +306,12 @@ test.describe('P0 calendar UI', () => {
       await expect(skipCard).toBeVisible({ timeout: 15_000 });
       await skipCard.getByRole('button', { name: 'Skip' }).click();
       await expect(
-        page.locator('.Toastify__toast').filter({
-          hasText: /Occurrence skipped|Saving task|Done/,
-        }),
+        page
+          .locator('.Toastify__toast')
+          .filter({
+            hasText: /Occurrence skipped|Saving task|Done/,
+          })
+          .first(),
       ).toBeVisible({ timeout: 15_000 });
       await expect(skipCard).toHaveCount(0);
 
