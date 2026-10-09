@@ -106,9 +106,10 @@
     "eventMoved": "Event moved",
     "recurringInstanceMoved": "Recurring instance moved",
     "seriesDragTitle": "Move repeating task",
-    "seriesDragBody": "Move only this day of “{{name}}”, or this day and every later day?",
-    "seriesDragThisDay": "This day",
-    "seriesDragFollowing": "This and following",
+    "seriesDragBody": "How should “{{name}}” move?",
+    "seriesDragThisDay": "This day only",
+    "seriesDragFollowing": "This day and following",
+    "seriesDragAll": "All days",
     "recurringRescheduled": "Recurring blocks were rescheduled",
     "day": "Day",
     "week": "Week",
@@ -514,7 +515,14 @@
       "updateFailed": "Could not update task",
       "createFailed": "Could not create task",
       "occurrenceSkipped": "Occurrence skipped",
-      "skipFailed": "Could not skip occurrence"
+      "skipFailed": "Could not skip occurrence",
+      "progress": {
+        "saving": "Saving task…",
+        "placing": "Seating on the schedule…",
+        "syncing": "Updating Google Calendar…",
+        "done": "Done",
+        "error": "Something went wrong"
+      }
     },
     "editor": {
       "schedule": "Schedule task",

@@ -35,11 +35,11 @@ export class MoveDisplayedEventDto {
 
   @ApiProperty({
     required: false,
-    enum: ['occurrence', 'series'],
+    enum: ['occurrence', 'series', 'all'],
     description:
-      'Recurring drag only. occurrence detaches that day. series moves that day and every later day.',
+      'Recurring drag only. occurrence = that day; series = that day and later; all = every open day.',
   })
   @IsOptional()
-  @IsIn(['occurrence', 'series'])
-  seriesScope?: 'occurrence' | 'series';
+  @IsIn(['occurrence', 'series', 'all'])
+  seriesScope?: 'occurrence' | 'series' | 'all';
 }

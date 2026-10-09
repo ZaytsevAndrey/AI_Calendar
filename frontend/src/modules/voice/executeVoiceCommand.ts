@@ -8,6 +8,10 @@ import type { VoiceCommandAction } from 'api/voice.api';
 import apiCall from 'modules/common/utils/apiCall';
 import i18n from 'i18n';
 import { settleReplanJob } from 'modules/schedule/settleReplanJob';
+import {
+  startTaskMutationProgress,
+  type TaskMutationProgressHandle,
+} from 'modules/schedule/taskMutationProgress';
 import { showSuccessToast } from 'utils/toast';
 
 type Mutation<T> = (arg: T) => { unwrap: () => Promise<unknown> };
@@ -114,21 +118,18 @@ export async function executeVoiceCommand(
   }
 
   if (command.kind === 'complete') {
+    // Progress toast from eventTasksApi.updateEvent.
     await deps.updateTask({ id: command.taskId, body: { status: 'completed' } }).unwrap();
-    showSuccessToast({ title: i18n.t('voice.taskCompleted'), detail: command.taskName });
     return;
   }
 
   if (command.kind === 'cancel') {
     await deps.updateTask({ id: command.taskId, body: { status: 'canceled' } }).unwrap();
-    showSuccessToast({ title: i18n.t('voice.taskCanceled'), detail: command.taskName });
     return;
   }
 
   if (command.kind === 'delete') {
     await deps.deleteTask(command.taskId).unwrap();
-    refreshCalendar(deps.dispatch);
-    showSuccessToast({ title: i18n.t('voice.taskDeleted'), detail: command.taskName });
     return;
   }
 
@@ -170,8 +171,6 @@ export async function executeVoiceCommand(
       body.phaseIds = patch.phaseId ? [patch.phaseId] : [];
     }
     await deps.updateTask({ id: command.taskId, body }).unwrap();
-    refreshCalendar(deps.dispatch);
-    showSuccessToast({ title: i18n.t('voice.taskUpdated'), detail: command.taskName });
     return;
   }
 
@@ -186,43 +185,74 @@ export async function executeVoiceCommand(
         },
       })
       .unwrap();
-    showSuccessToast({ title: i18n.t('voice.occurrenceSkipped'), detail: command.taskName });
     return;
   }
 
   if (command.kind === 'move') {
-    const moved = await ScheduleApi.moveDisplayedEvent({
-      googleEventId: command.googleEventId,
-      calendarId: command.calendarId ?? undefined,
-      recurringEventId: command.recurringEventId ?? undefined,
-      originalStart: command.originalStart,
-      originalEnd: command.originalEnd,
-      start: command.start,
-      end: command.end,
-    });
-    const { recurringMoved } = await settleReplanJob(moved.jobId);
-    refreshCalendar(deps.dispatch);
-    if (command.recurringEventId) {
-      showSuccessToast({
-        title: i18n.t('calendar.recurringInstanceMoved'),
-        detail: command.taskName,
+    let progress: TaskMutationProgressHandle | null = null;
+    try {
+      const moved = await ScheduleApi.moveDisplayedEvent(
+        {
+          googleEventId: command.googleEventId,
+          calendarId: command.calendarId ?? undefined,
+          recurringEventId: command.recurringEventId ?? undefined,
+          originalStart: command.originalStart,
+          originalEnd: command.originalEnd,
+          start: command.start,
+          end: command.end,
+        },
+        {
+          onMutationStart: () => {
+            progress = startTaskMutationProgress({
+              taskKey: command.googleEventId || command.taskId,
+              title: command.taskName,
+              relatedKeys: [
+                command.googleEventId,
+                command.recurringEventId,
+                command.taskId,
+              ].filter(Boolean) as string[],
+            });
+          },
+        },
+      );
+      if (!progress) {
+        progress = startTaskMutationProgress({
+          taskKey: command.googleEventId || command.taskId,
+          title: command.taskName,
+        });
+      }
+      const { recurringMoved } = await settleReplanJob(moved.jobId, (stage) => {
+        progress?.setStage(stage);
       });
-    } else {
-      showSuccessToast({ title: i18n.t('voice.eventMoved'), detail: command.taskName });
-    }
-    if (recurringMoved.length && !command.recurringEventId) {
-      showSuccessToast({
-        title: i18n.t('calendar.recurringRescheduled'),
-        detail: recurringMoved.slice(0, 3).join(', '),
-      });
+      refreshCalendar(deps.dispatch);
+      progress.finish();
+      if (recurringMoved.length && !command.recurringEventId) {
+        showSuccessToast({
+          title: i18n.t('calendar.recurringRescheduled'),
+          detail: recurringMoved.slice(0, 3).join(', '),
+        });
+      }
+    } catch (err) {
+      progress?.fail(err instanceof Error ? err.message : undefined);
+      throw err;
     }
     return;
   }
 
   if (command.kind === 'shift') {
-    await ScheduleApi.rescheduleTask(command.slotId, command.start, command.end);
-    refreshCalendar(deps.dispatch);
-    showSuccessToast({ title: i18n.t('voice.eventMoved'), detail: command.taskName });
+    const progress = startTaskMutationProgress({
+      taskKey: command.taskId,
+      title: command.taskName,
+    });
+    try {
+      await ScheduleApi.rescheduleTask(command.slotId, command.start, command.end);
+      progress.setStage('syncing');
+      refreshCalendar(deps.dispatch);
+      progress.finish();
+    } catch (err) {
+      progress.fail(err instanceof Error ? err.message : undefined);
+      throw err;
+    }
     return;
   }
 
@@ -233,5 +263,4 @@ export async function executeVoiceCommand(
   if (command.scheduledEndTime) body.scheduledEndTime = command.scheduledEndTime;
   if (command.clearUnscheduled) body.isUnscheduled = false;
   await deps.updateTask({ id: command.taskId, body }).unwrap();
-  showSuccessToast({ title: i18n.t('voice.taskRescheduled'), detail: command.taskName });
 }

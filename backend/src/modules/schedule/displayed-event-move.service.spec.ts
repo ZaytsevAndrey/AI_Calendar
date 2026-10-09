@@ -1,6 +1,11 @@
 import { BadRequestException } from '@nestjs/common';
 import { DisplayedEventMoveService } from './displayed-event-move.service';
 
+async function flushAsyncWork(): Promise<void> {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+}
+
 describe('DisplayedEventMoveService', () => {
   const userId = 'user-1';
   const dto = {
@@ -16,6 +21,7 @@ describe('DisplayedEventMoveService', () => {
     habit?: boolean;
     tasks?: Record<string, unknown>[];
     slots?: Record<string, unknown>[];
+    phases?: Record<string, unknown>[];
     patch?: jest.Mock;
     updateTask?: jest.Mock;
     place?: jest.Mock;
@@ -25,6 +31,7 @@ describe('DisplayedEventMoveService', () => {
     saveTask?: jest.Mock;
     findSlots?: jest.Mock;
     removeSlots?: jest.Mock;
+    failMutationJob?: jest.Mock;
   }) {
     const patch = opts.patch ?? jest.fn().mockResolvedValue(undefined);
     const updateTask =
@@ -45,10 +52,15 @@ describe('DisplayedEventMoveService', () => {
       }));
     const seatOpenHoles = opts.seatOpenHoles ?? jest.fn().mockResolvedValue(undefined);
     const slots = opts.slots ?? [];
+    const tasks = opts.tasks ?? [];
     const taskRepo = {
       save: opts.saveTask ?? jest.fn(async (row) => ({ id: 'series-new', ...row })),
       create: jest.fn((row) => row),
       find: opts.findSlots ?? jest.fn().mockResolvedValue([]),
+      findOne: jest.fn(async ({ where }: { where?: { id?: string } }) => {
+        const id = where?.id;
+        return tasks.find((row) => row.id === id) ?? null;
+      }),
     };
     const move = new DisplayedEventMoveService(
       {
@@ -68,12 +80,27 @@ describe('DisplayedEventMoveService', () => {
         findAll: jest.fn().mockResolvedValue(opts.tasks ?? []),
         update: updateTask,
         skipOccurrence: opts.skipOccurrence ?? jest.fn().mockResolvedValue({}),
-        create: opts.createTask ?? jest.fn().mockResolvedValue({ id: 'copy-1' }),
+        create:
+        opts.createTask ??
+        jest.fn().mockResolvedValue({ id: 'copy-1', jobId: 'job-create' }),
       } as never,
       { patchEventTimes: patch } as never,
+      { syncTask: jest.fn().mockResolvedValue(undefined) } as never,
       { place, seatOpenHoles } as never,
       {
         getSettings: jest.fn().mockResolvedValue({ timeZone: 'UTC' }),
+      } as never,
+      {
+        findAllForScheduling: jest
+          .fn()
+          .mockResolvedValue(opts.phases ?? []),
+      } as never,
+      {
+        beginMutationJob: jest.fn().mockResolvedValue({ id: 'job-1' }),
+        setMutationStage: jest.fn().mockResolvedValue(undefined),
+        completeMutationJob: jest.fn().mockResolvedValue(undefined),
+        failMutationJob:
+          opts.failMutationJob ?? jest.fn().mockResolvedValue(undefined),
       } as never,
     );
     return { move, patch, updateTask, place, seatOpenHoles, taskRepo };
@@ -105,6 +132,7 @@ describe('DisplayedEventMoveService', () => {
       scheduledStartTime: '2026-09-22T11:00:00.000Z',
       scheduledEndTime: '2026-09-22T12:00:00.000Z',
       estimatedTimeInMinutes: 60,
+      phaseIds: [],
     });
     expect(patch).not.toHaveBeenCalled();
     expect(place).not.toHaveBeenCalled();
@@ -134,6 +162,7 @@ describe('DisplayedEventMoveService', () => {
       outcome: 'conflict',
       conflict: { reason: 'preferred_on_fixed' },
     });
+    const failMutationJob = jest.fn().mockResolvedValue(undefined);
     const { move, patch, seatOpenHoles } = service({
       tasks: [
         {
@@ -152,11 +181,17 @@ describe('DisplayedEventMoveService', () => {
         },
       ],
       place,
+      failMutationJob,
     });
 
-    await expect(move.move(userId, dto)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(move.move(userId, dto)).resolves.toEqual({
+      kind: 'slot',
+      jobId: 'job-1',
+    });
+    await flushAsyncWork();
     expect(patch).not.toHaveBeenCalled();
     expect(seatOpenHoles).not.toHaveBeenCalled();
+    expect(failMutationJob).toHaveBeenCalled();
   });
 
   it('seats a flexible drag through the placement step and does not replan', async () => {
@@ -180,8 +215,9 @@ describe('DisplayedEventMoveService', () => {
     });
     await expect(move.move(userId, dto)).resolves.toEqual({
       kind: 'slot',
-      jobId: null,
+      jobId: 'job-1',
     });
+    await flushAsyncWork();
     expect(place).toHaveBeenCalledWith(userId, 'task-flex', {
       preferredStart: new Date('2026-09-22T11:00:00.000Z'),
       durationMinutes: 60,
@@ -247,7 +283,9 @@ describe('DisplayedEventMoveService', () => {
 
   it('detaches one series day into a one-off', async () => {
     const skipOccurrence = jest.fn().mockResolvedValue({});
-    const createTask = jest.fn().mockResolvedValue({ id: 'copy-1' });
+    const createTask = jest
+      .fn()
+      .mockResolvedValue({ id: 'copy-1', jobId: 'job-create' });
     const { move, place } = service({
       tasks: [seriesTask],
       slots: [
@@ -263,7 +301,7 @@ describe('DisplayedEventMoveService', () => {
     });
     await expect(
       move.move(userId, { ...seriesDto, seriesScope: 'occurrence' }),
-    ).resolves.toEqual({ kind: 'slot', jobId: null });
+    ).resolves.toEqual({ kind: 'slot', jobId: 'job-create' });
     expect(skipOccurrence).toHaveBeenCalledWith('series-1', userId, {
       occurrenceStart: seriesDto.originalStart,
       googleEventId: 'evt-1',
@@ -281,6 +319,31 @@ describe('DisplayedEventMoveService', () => {
     expect(place).not.toHaveBeenCalled();
   });
 
+  it('rejects a recurring drag that crosses a local day', async () => {
+    const { move, place } = service({
+      tasks: [seriesTask],
+      findSlots: jest.fn().mockResolvedValue([
+        {
+          id: 'slot-1',
+          taskId: 'series-1',
+          scheduledStartTime: new Date('2026-10-20T09:00:00.000Z'),
+          scheduledEndTime: new Date('2026-10-20T10:00:00.000Z'),
+        },
+      ]),
+    });
+    await expect(
+      move.move(userId, {
+        ...seriesDto,
+        originalStart: '2026-10-20T09:00:00.000Z',
+        originalEnd: '2026-10-20T10:00:00.000Z',
+        start: '2026-10-21T11:00:00.000Z',
+        end: '2026-10-21T12:00:00.000Z',
+        seriesScope: 'all',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(place).not.toHaveBeenCalled();
+  });
+
   it('ends the old series before the dropped day and starts a new series', async () => {
     const future = {
       ...dto,
@@ -289,10 +352,18 @@ describe('DisplayedEventMoveService', () => {
       start: '2026-10-20T11:00:00.000Z',
       end: '2026-10-20T12:00:00.000Z',
     };
+    const evening = {
+      id: 'phase-eve',
+      type: 'time_phase',
+      startTime: '11:00',
+      endTime: '17:00',
+      weekDays: null,
+    };
     const saveTask = jest.fn(async (row) => ({ id: row.id ?? 'series-new', ...row }));
     const removeSlots = jest.fn().mockResolvedValue(undefined);
     const { move, place, seatOpenHoles } = service({
       tasks: [seriesTask],
+      phases: [evening],
       slots: [
         {
           id: 'slot-1',
@@ -305,6 +376,12 @@ describe('DisplayedEventMoveService', () => {
       removeSlots,
       findSlots: jest.fn().mockResolvedValue([
         {
+          id: 'slot-prev',
+          taskId: 'series-1',
+          scheduledStartTime: new Date('2026-10-18T09:00:00.000Z'),
+          scheduledEndTime: new Date('2026-10-18T10:00:00.000Z'),
+        },
+        {
           id: 'slot-1',
           taskId: 'series-1',
           scheduledStartTime: new Date(future.originalStart),
@@ -314,18 +391,150 @@ describe('DisplayedEventMoveService', () => {
     });
     await expect(
       move.move(userId, { ...future, seriesScope: 'series' }),
-    ).resolves.toEqual({ kind: 'slot', jobId: null });
+    ).resolves.toEqual({ kind: 'slot', jobId: 'job-1' });
+    await flushAsyncWork();
     expect(saveTask).toHaveBeenCalled();
     expect(removeSlots).toHaveBeenCalled();
     expect(place).toHaveBeenCalledWith(
       userId,
       'series-new',
       expect.objectContaining({
-        commit: 'preferred',
+        commit: 'always',
         expandSeries: true,
         durationMinutes: 60,
       }),
     );
     expect(seatOpenHoles).toHaveBeenCalledWith(userId);
+    const createdRow = saveTask.mock.calls
+      .map((c) => c[0])
+      .find((row) => row?.name === 'Gym' && row?.scheduledStartTime);
+    expect(createdRow?.phaseId).toBe('phase-eve');
+  });
+
+  it('treats series scope on the first open day as all', async () => {
+    const future = {
+      ...dto,
+      originalStart: '2026-10-20T09:00:00.000Z',
+      originalEnd: '2026-10-20T10:00:00.000Z',
+      start: '2026-10-20T11:00:00.000Z',
+      end: '2026-10-20T12:00:00.000Z',
+    };
+    const saveTask = jest.fn(async (row) => ({ id: row.id ?? 'series-1', ...row }));
+    const removeSlots = jest.fn().mockResolvedValue(undefined);
+    const { move, place } = service({
+      tasks: [{ ...seriesTask, id: 'series-1' }],
+      saveTask,
+      removeSlots,
+      findSlots: jest.fn().mockResolvedValue([
+        {
+          id: 'slot-1',
+          taskId: 'series-1',
+          scheduledStartTime: new Date(future.originalStart),
+          scheduledEndTime: new Date(future.originalEnd),
+        },
+        {
+          id: 'slot-2',
+          taskId: 'series-1',
+          scheduledStartTime: new Date('2026-10-21T09:00:00.000Z'),
+          scheduledEndTime: new Date('2026-10-21T10:00:00.000Z'),
+        },
+      ]),
+    });
+    await expect(
+      move.move(userId, { ...future, seriesScope: 'series' }),
+    ).resolves.toEqual({ kind: 'slot', jobId: 'job-1' });
+    await flushAsyncWork();
+    expect(place).toHaveBeenCalledWith(
+      userId,
+      'series-1',
+      expect.objectContaining({
+        commit: 'always',
+        expandSeries: true,
+      }),
+    );
+    expect(place).not.toHaveBeenCalledWith(
+      userId,
+      'series-new',
+      expect.anything(),
+    );
+  });
+
+  it('rewrites every open day when seriesScope is all', async () => {
+    const dayA = {
+      originalStart: '2026-10-19T09:00:00.000Z',
+      originalEnd: '2026-10-19T10:00:00.000Z',
+      start: '2026-10-19T11:00:00.000Z',
+      end: '2026-10-19T12:00:00.000Z',
+    };
+    const saveTask = jest.fn(async (row) => ({ id: row.id ?? 'series-1', ...row }));
+    const removeSlots = jest.fn().mockResolvedValue(undefined);
+    const { move, place, seatOpenHoles } = service({
+      tasks: [seriesTask],
+      saveTask,
+      removeSlots,
+      findSlots: jest.fn().mockResolvedValue([
+        {
+          id: 'slot-prev',
+          taskId: 'series-1',
+          scheduledStartTime: new Date('2026-10-18T09:00:00.000Z'),
+          scheduledEndTime: new Date('2026-10-18T10:00:00.000Z'),
+        },
+        {
+          id: 'slot-1',
+          taskId: 'series-1',
+          scheduledStartTime: new Date(dayA.originalStart),
+          scheduledEndTime: new Date(dayA.originalEnd),
+        },
+      ]),
+    });
+    await expect(
+      move.move(userId, { ...seriesDto, ...dayA, seriesScope: 'all' }),
+    ).resolves.toEqual({ kind: 'slot', jobId: 'job-1' });
+    await flushAsyncWork();
+    // Seats stay until place/expand rewrites them — wiping first deletes Google.
+    expect(removeSlots).not.toHaveBeenCalled();
+    expect(place).toHaveBeenCalledWith(
+      userId,
+      'series-1',
+      expect.objectContaining({
+        commit: 'always',
+        expandSeries: true,
+        durationMinutes: 60,
+      }),
+    );
+    expect(seatOpenHoles).toHaveBeenCalledWith(userId);
+  });
+
+  it('sets phaseIds from the drop time on a fixed move', async () => {
+    const morning = {
+      id: 'phase-am',
+      type: 'time_phase',
+      startTime: '08:00',
+      endTime: '12:00',
+      weekDays: null,
+    };
+    const { move, updateTask } = service({
+      tasks: [
+        {
+          id: 'task-fixed',
+          eventType: 'fixed',
+          isRecurring: false,
+          googleEventId: 'evt-1',
+        },
+      ],
+      phases: [morning],
+    });
+    await move.move(userId, {
+      ...dto,
+      originalStart: '2026-10-20T09:00:00.000Z',
+      originalEnd: '2026-10-20T10:00:00.000Z',
+      start: '2026-10-20T10:00:00.000Z',
+      end: '2026-10-20T11:00:00.000Z',
+    });
+    expect(updateTask).toHaveBeenCalledWith(
+      'task-fixed',
+      userId,
+      expect.objectContaining({ phaseIds: ['phase-am'] }),
+    );
   });
 });

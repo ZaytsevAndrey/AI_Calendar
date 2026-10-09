@@ -119,6 +119,21 @@ describe('pickNowAndNext', () => {
     expect(canSkipNowBlock(now!)).toBe(true);
   });
 
+  it('hides a recurring task fallback when that civil day was skipped', () => {
+    const gym = task({
+      id: 'r1',
+      name: 'Gym',
+      isRecurring: true,
+      scheduledStartTime: '2026-09-10T10:00:00+03:00',
+      scheduledEndTime: '2026-09-10T10:45:00+03:00',
+      skippedOccurrenceYmds: [TODAY],
+    });
+    const blocks = buildNowBlocks([], [gym], TODAY, TZ);
+    const { now, next } = pickNowAndNext(blocks, nowMs, todayEndMs, yesterdayStartMs);
+    expect(now).toBeNull();
+    expect(next).toBeNull();
+  });
+
   it('prefers a timed overlap over an all-day event', () => {
     const blocks = buildNowBlocks(
       [

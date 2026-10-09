@@ -7,7 +7,9 @@ import {
   dayWakeSleepMs,
   eligibleWindowsForDay,
   mergeIntervals,
+  phaseIdAtFocus,
   phaseWindowMs,
+  phaseWindowsForDay,
   subtractMany,
 } from './free-slots.util';
 
@@ -356,5 +358,42 @@ describe('free-slots.util', () => {
         15,
       ),
     ).toEqual([]);
+  });
+
+  it('phaseIdAtFocus picks the tightest window containing the focus', () => {
+    const windows = phaseWindowsForDay(
+      [
+        {
+          id: 'day',
+          type: 'time_phase',
+          startTime: '09:00',
+          endTime: '17:00',
+          weekDays: null,
+        },
+        {
+          id: 'focus',
+          type: 'time_phase',
+          startTime: '10:00',
+          endTime: '12:00',
+          weekDays: null,
+        },
+        {
+          id: 'sleep',
+          type: 'sleep_time',
+          startTime: '22:00',
+          endTime: '07:00',
+          weekDays: null,
+        },
+      ],
+      ymd,
+      tz,
+    );
+    expect(phaseIdAtFocus(windows, Date.parse('2026-04-21T10:30:00.000Z'))).toBe(
+      'focus',
+    );
+    expect(phaseIdAtFocus(windows, Date.parse('2026-04-21T14:00:00.000Z'))).toBe(
+      'day',
+    );
+    expect(phaseIdAtFocus(windows, Date.parse('2026-04-21T23:00:00.000Z'))).toBeNull();
   });
 });

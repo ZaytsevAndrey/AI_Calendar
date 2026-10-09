@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import { phaseHexToGoogleColorId } from './phase-hex-to-google-color-id.util';
 import { applyTaskGoogleEventFields } from './task-google-event-fields.util';
 import { GoogleCalendarService } from './google-calendar.service';
@@ -14,12 +15,18 @@ import {
   googleEventFieldsFromApi,
 } from './pending-google-write.util';
 import { isProblematicSchedule, Task } from '../tasks/entities/task.entity';
+import { excludeStartsForSkippedYmds } from '../tasks/skipped-occurrence.util';
+import { buildGoogleRecurrenceRules } from '../schedule/google-recurrence.util';
+import { effectiveRecurrenceWeekDays } from '../schedule/recurrence-from-phases.util';
 import { ScheduledTask } from '../schedule/schedule.entity';
+import { localYmd } from '../voice/voice-local-date.util';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 
 @Injectable()
 export class PendingGoogleWriteService {
   private readonly logger = new Logger(PendingGoogleWriteService.name);
+  /** Serialize syncs per task so two createEvent calls cannot race. */
+  private readonly inflight = new Map<string, Promise<void>>();
 
   constructor(
     @InjectRepository(PendingGoogleWrite)
@@ -44,6 +51,15 @@ export class PendingGoogleWriteService {
       return false;
     }
     return true;
+  }
+
+  /** Series with no open seats should only drop Google after it has ended. */
+  private recurringSeriesEnded(task: Task): boolean {
+    if (!task.scheduledStartTime || !task.scheduledEndTime) return true;
+    if (task.deadline && new Date(task.deadline).getTime() <= Date.now()) {
+      return true;
+    }
+    return false;
   }
 
   async enqueue(
@@ -89,10 +105,38 @@ export class PendingGoogleWriteService {
   }
 
   /**
+   * Kick Google sync without blocking the HTTP/placement caller.
+   * Failures still enqueue retries inside `syncTask`.
+   */
+  syncTaskSoon(userId: string, taskId: string): void {
+    void this.syncTask(userId, taskId).catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `Background Google sync failed for task ${taskId}: ${message}`,
+      );
+    });
+  }
+
+  /**
    * Try to write the task to Google now; on failure enqueue a retry.
    * No open seat → delete any linked Google event (and enqueue delete on failure).
+   * Concurrent calls for the same task wait and reload so only one createEvent runs.
    */
   async syncTask(userId: string, taskId: string): Promise<void> {
+    const key = `${userId}:${taskId}`;
+    const previous = this.inflight.get(key) ?? Promise.resolve();
+    const run = previous
+      .catch(() => undefined)
+      .then(() => this.syncTaskUnlocked(userId, taskId));
+    this.inflight.set(key, run);
+    try {
+      await run;
+    } finally {
+      if (this.inflight.get(key) === run) this.inflight.delete(key);
+    }
+  }
+
+  private async syncTaskUnlocked(userId: string, taskId: string): Promise<void> {
     const task = await this.taskRepo.findOne({
       where: { id: taskId, userId },
       relations: ['phase', 'phases'],
@@ -104,10 +148,23 @@ export class PendingGoogleWriteService {
       return;
     }
 
+    // Recurring with no open seats: delete only when the series is ended.
+    // Mid-move rewrites can briefly have zero seats while still active — deleting
+    // then wipes the Google series before place recreates seats.
+    if (task.isRecurring) {
+      const open = await this.openSlots(task.id);
+      if (!open.length) {
+        if (this.recurringSeriesEnded(task)) {
+          await this.deleteTaskGoogle(userId, task);
+        }
+        return;
+      }
+    }
+
     const conn = await this.google.checkConnection(userId);
     if (!conn.connected) return;
 
-    const payload = this.buildPayload(task);
+    const payload = await this.buildPayload(task);
     const calendarId = task.googleEventCalendarId ?? 'primary';
     const syncOpts = { skipSleepWindowCheck: true as const, calendarId };
     try {
@@ -118,6 +175,7 @@ export class PendingGoogleWriteService {
           payload,
           syncOpts,
         );
+        await this.stampOpenSlotGoogle(task);
       } else {
         const ev = await this.google.createEvent(userId, payload, syncOpts);
         if (typeof ev?.id === 'string') {
@@ -209,9 +267,10 @@ export class PendingGoogleWriteService {
         await this.google.updateEvent(
           row.userId,
           eventId,
-          this.buildPayload(task),
+          await this.buildPayload(task),
           { skipSleepWindowCheck: true, calendarId },
         );
+        await this.stampOpenSlotGoogle(task);
         return;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -223,10 +282,14 @@ export class PendingGoogleWriteService {
       }
     }
 
-    const ev = await this.google.createEvent(row.userId, this.buildPayload(task), {
-      skipSleepWindowCheck: true,
-      calendarId,
-    });
+    const ev = await this.google.createEvent(
+      row.userId,
+      await this.buildPayload(task),
+      {
+        skipSleepWindowCheck: true,
+        calendarId,
+      },
+    );
     if (typeof ev?.id === 'string') {
       task.googleEventId = ev.id;
       const appCal = (ev as { appCalendarId?: string }).appCalendarId;
@@ -329,33 +392,82 @@ export class PendingGoogleWriteService {
   }
 
   private async stampOpenSlotGoogle(task: Task): Promise<void> {
-    if (!task.googleEventId || task.isRecurring) return;
+    if (!task.googleEventId) return;
     const now = Date.now();
     const rows = await this.scheduledRepo.find({ where: { taskId: task.id } });
     const open = rows.filter(
       (row) => new Date(row.scheduledEndTime).getTime() > now,
     );
-    if (open.length !== 1) return;
-    open[0].googleEventId = task.googleEventId;
-    open[0].googleEventCalendarId = task.googleEventCalendarId;
-    await this.scheduledRepo.save(open[0]);
+    if (!task.isRecurring) {
+      if (open.length !== 1) return;
+      open[0].googleEventId = task.googleEventId;
+      open[0].googleEventCalendarId = task.googleEventCalendarId;
+      await this.scheduledRepo.save(open[0]);
+      return;
+    }
+    for (const row of open) {
+      row.googleEventId = task.googleEventId;
+      row.googleEventCalendarId = task.googleEventCalendarId;
+      await this.scheduledRepo.save(row);
+    }
   }
 
-  private buildPayload(task: Task): Record<string, unknown> {
+  private async buildPayload(task: Task): Promise<Record<string, unknown>> {
     const phase = task.phases?.[0] ?? task.phase;
     const fallbackColorId = phaseHexToGoogleColorId(phase?.color);
+    const timeZone = resolveIanaTimeZone(task.scheduleTimeZone);
+    const open = await this.openSlots(task.id);
+    const start =
+      open[0]?.scheduledStartTime ?? task.scheduledStartTime ?? null;
+    const end = open[0]?.scheduledEndTime ?? task.scheduledEndTime ?? null;
     const payload: Record<string, unknown> = {
       summary: task.name,
       description: task.description || undefined,
       start: {
-        dateTime: task.scheduledStartTime?.toISOString(),
-        timeZone: task.scheduleTimeZone || 'UTC',
+        dateTime: start?.toISOString(),
+        timeZone,
       },
       end: {
-        dateTime: task.scheduledEndTime?.toISOString(),
-        timeZone: task.scheduleTimeZone || 'UTC',
+        dateTime: end?.toISOString(),
+        timeZone,
       },
     };
-    return applyTaskGoogleEventFields(payload, task, fallbackColorId);
+    applyTaskGoogleEventFields(payload, task, fallbackColorId);
+    if (task.isRecurring && open.length) {
+      const first = open[0];
+      const last = open[open.length - 1];
+      const phases = [
+        ...(task.phases ?? []),
+        ...(task.phase ? [task.phase] : []),
+      ];
+      payload.recurrence = buildGoogleRecurrenceRules({
+        pattern: task.recurrencePattern,
+        firstStart: first.scheduledStartTime,
+        lastStart: last.scheduledStartTime,
+        weekDays: effectiveRecurrenceWeekDays(task.recurrenceWeekDays, phases),
+        excludeStarts: excludeStartsForSkippedYmds({
+          skippedYmds: task.skippedOccurrenceYmds,
+          firstStart: first.scheduledStartTime,
+          lastStart: last.scheduledStartTime,
+          timeZone,
+          placedYmds: open.map((row) =>
+            localYmd(row.scheduledStartTime.toISOString(), timeZone),
+          ),
+        }),
+      });
+    }
+    return payload;
+  }
+
+  private async openSlots(taskId: string): Promise<ScheduledTask[]> {
+    const now = Date.now();
+    const rows = await this.scheduledRepo.find({ where: { taskId } });
+    return rows
+      .filter((row) => new Date(row.scheduledEndTime).getTime() > now)
+      .sort(
+        (a, b) =>
+          new Date(a.scheduledStartTime).getTime() -
+          new Date(b.scheduledStartTime).getTime(),
+      );
   }
 }

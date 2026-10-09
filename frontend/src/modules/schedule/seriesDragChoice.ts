@@ -1,4 +1,4 @@
-export type SeriesDragScope = 'occurrence' | 'series';
+export type SeriesDragScope = 'occurrence' | 'series' | 'all';
 
 export class SeriesMoveCancelled extends Error {
   constructor() {

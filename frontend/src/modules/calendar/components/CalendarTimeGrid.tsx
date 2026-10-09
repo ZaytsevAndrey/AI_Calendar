@@ -4,6 +4,11 @@ import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 import { HabitBlockChip } from '../../habits/habitBlocks';
 import { dateFnsOptions } from '../../../i18n/dateLocale';
 import { ymdFromLocalDate } from '../../../utils/ianaDateTime';
+import {
+  getTaskMutationStage,
+  MUTATION_STAGE_COLORS,
+} from '../../schedule/taskMutationProgress';
+import { useTaskMutationStagesTick } from '../../schedule/useTaskMutationStage';
 import { getEventColor } from '../hooks/useCalendar';
 import {
   chipLabel,
@@ -101,6 +106,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
   const skipClickRef = useRef(false);
   const [live, setLive] = useState<(Placement & { eventId: string }) | null>(null);
   const [pending, setPending] = useState<Record<string, Placement>>({});
+  useTaskMutationStagesTick();
 
   const rangeOnDay = (
     event: GoogleCalendarEvent,
@@ -164,6 +170,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
         dayEndMin,
         dayIndex: origin.dayIndex,
         pointerDayIndex: dayIndexAtX(e.clientX, readColumns()),
+        lockDay: !!event.recurringEventId,
       });
       setLive({ eventId: event.id, ...current });
     };
@@ -416,17 +423,24 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
               const top = ((place.startMin - dayStartMin) / daySpanMin) * gridHeightPx;
               const height = ((place.endMin - place.startMin) / daySpanMin) * gridHeightPx;
               const width = 100 / lane.laneCount;
+              const mutationStage =
+                getTaskMutationStage(event.id) ??
+                getTaskMutationStage(event.recurringEventId);
               return (
                 <div
                   key={event.id}
                   data-testid={`calendar-event-${event.id}`}
-                  className="absolute z-[2] flex flex-col overflow-hidden rounded border border-white/30"
+                  className={`absolute z-[2] flex flex-col overflow-hidden rounded border border-white/30${
+                    mutationStage ? ` calendar-event-stage-${mutationStage}` : ''
+                  }`}
                   style={{
                     top,
                     height: Math.max(height, HANDLE_PX * 2 + 16),
                     left: `calc(${lane.lane * width}% + 2px)`,
                     width: `calc(${width}% - 4px)`,
-                    backgroundColor: getEventColor(event),
+                    backgroundColor: mutationStage
+                      ? MUTATION_STAGE_COLORS[mutationStage]
+                      : getEventColor(event),
                     touchAction: 'none',
                   }}
                   title={tooltipText(event)}

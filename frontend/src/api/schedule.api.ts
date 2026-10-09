@@ -72,12 +72,16 @@ async function pollJobUntilDone(
   const deadline = Date.now() + timeoutMs;
   let status = 'pending';
   let last: ScheduleJobStatusResponse | null = null;
+  let first = true;
 
   while (status === 'pending' || status === 'running') {
     if (Date.now() > deadline) {
       throw new Error('Schedule job timed out');
     }
-    await new Promise((r) => setTimeout(r, 400));
+    if (!first) {
+      await new Promise((r) => setTimeout(r, 350));
+    }
+    first = false;
     const { data } = await axios.get<ScheduleJobStatusResponse>(`/schedule-jobs/${jobId}`);
     last = data;
     status = data.status;
@@ -96,8 +100,9 @@ async function pollJobUntilDone(
 export async function waitForScheduleJob(
   jobId: string,
   timeoutMs = 120_000,
+  onProgress?: (job: ScheduleJobStatusResponse) => void,
 ): Promise<ScheduleJobStatusResponse> {
-  return pollJobUntilDone(jobId, timeoutMs);
+  return pollJobUntilDone(jobId, timeoutMs, onProgress);
 }
 
 export type FreeSlotIntervalDTO = {
@@ -165,16 +170,24 @@ export const ScheduleApi = {
     return response.data as ScheduledTaskDTO[];
   },
 
-  moveDisplayedEvent: async (body: {
-    googleEventId: string;
-    calendarId?: string;
-    recurringEventId?: string;
-    originalStart: string;
-    originalEnd: string;
-    start: string;
-    end: string;
-    seriesScope?: 'occurrence' | 'series';
-  }): Promise<{ kind: 'fixed' | 'slot' | 'google'; jobId: string | null }> => {
+  moveDisplayedEvent: async (
+    body: {
+      googleEventId: string;
+      calendarId?: string;
+      recurringEventId?: string;
+      originalStart: string;
+      originalEnd: string;
+      start: string;
+      end: string;
+      seriesScope?: 'occurrence' | 'series' | 'all';
+    },
+    opts?: {
+      /** Called after the user picks a series scope, before the write request. */
+      onSeriesScopeChosen?: (scope: 'occurrence' | 'series' | 'all') => void;
+      /** Called right before the POST that actually mutates (not the series-choice probe). */
+      onMutationStart?: () => void;
+    },
+  ): Promise<{ kind: 'fixed' | 'slot' | 'google'; jobId: string | null }> => {
     const post = async (payload: typeof body) => {
       const response = await axios.post('/schedule/move-event', payload);
       return response.data as {
@@ -183,12 +196,20 @@ export const ScheduleApi = {
         taskName?: string;
       };
     };
+    // Recurring instance without a chosen scope: first POST is a no-write probe.
+    const needsSeriesProbe =
+      Boolean(body.recurringEventId) && body.seriesScope == null;
+    if (!needsSeriesProbe) {
+      opts?.onMutationStart?.();
+    }
     const first = await post(body);
     if (first.kind !== 'series-choice') {
       return { kind: first.kind, jobId: first.jobId };
     }
     const scope = await askSeriesDragScope(first.taskName ?? '');
     if (!scope) throw new SeriesMoveCancelled();
+    opts?.onSeriesScopeChosen?.(scope);
+    opts?.onMutationStart?.();
     const second = await post({ ...body, seriesScope: scope });
     return { kind: second.kind === 'series-choice' ? 'slot' : second.kind, jobId: second.jobId };
   },

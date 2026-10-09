@@ -14,6 +14,8 @@ export interface TaskDTO {
   isRecurring: boolean;
   recurrencePattern?: string;
   recurrenceWeekDays?: number[] | null;
+  /** Civil days (YYYY-MM-DD) skipped on a recurring series. */
+  skippedOccurrenceYmds?: string[] | null;
   allowSplit: boolean;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   deadline?: string;

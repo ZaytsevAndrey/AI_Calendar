@@ -1,6 +1,21 @@
 import {
+  mutationStageFromJob,
   recurringMovedNamesFromJobResult,
 } from './settleReplanJob';
+
+describe('mutationStageFromJob', () => {
+  it('maps job progress and terminal status', () => {
+    expect(
+      mutationStageFromJob({ status: 'running', progressStage: 'placing' }),
+    ).toBe('placing');
+    expect(mutationStageFromJob({ status: 'done', progressStage: 'syncing' })).toBe(
+      'done',
+    );
+    expect(mutationStageFromJob({ status: 'failed', progressStage: null })).toBe(
+      'error',
+    );
+  });
+});
 
 describe('recurringMovedNamesFromJobResult', () => {
   it('returns names for RECURRING_MOVED warnings', () => {

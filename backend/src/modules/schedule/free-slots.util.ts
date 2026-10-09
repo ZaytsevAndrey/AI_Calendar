@@ -109,6 +109,45 @@ export function phaseWindowMs(
   return { start, end };
 }
 
+export type PhaseFocusWindow = {
+  id: string;
+  startMs: number;
+  endMs: number;
+};
+
+/**
+ * Schedulable phase windows for a civil day (no wake/sleep clip).
+ * Mirrors frontend slotPickPhases.phaseWindowsForDay.
+ */
+export function phaseWindowsForDay(
+  phases: FreeSlotsPhaseLike[],
+  ymd: string,
+  timeZone: string,
+): PhaseFocusWindow[] {
+  const out: PhaseFocusWindow[] = [];
+  for (const phase of phases) {
+    if (!phase?.id || phase.type === 'sleep_time') continue;
+    if (!phaseAppliesOnYmd(phase, ymd)) continue;
+    let startMs = clockOnYmd(ymd, phase.startTime, timeZone);
+    let endMs = clockOnYmd(ymd, phase.endTime, timeZone);
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) continue;
+    if (endMs <= startMs) endMs += 24 * 60 * 60 * 1000;
+    out.push({ id: phase.id, startMs, endMs });
+  }
+  return out;
+}
+
+/** Tightest phase window containing `focusMs`, or null. */
+export function phaseIdAtFocus(
+  windows: PhaseFocusWindow[],
+  focusMs: number,
+): string | null {
+  const hits = windows
+    .filter((w) => focusMs >= w.startMs && focusMs < w.endMs)
+    .sort((a, b) => a.endMs - a.startMs - (b.endMs - b.startMs));
+  return hits[0]?.id ?? null;
+}
+
 /** Eligible placement windows for the day (phase ∩ wake/sleep, or wake/sleep alone). */
 export function eligibleWindowsForDay(
   ymd: string,

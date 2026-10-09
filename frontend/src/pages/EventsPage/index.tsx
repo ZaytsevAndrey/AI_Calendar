@@ -23,7 +23,7 @@ import {
   type TaskStatusFilter,
 } from 'modules/events/utils/taskListFilters';
 import { Modal } from '../../ui/Modal';
-import { showErrorToast, showSuccessToast } from '../../utils/toast';
+import { showErrorToast } from '../../utils/toast';
 import { extractApiErrorMessage } from '../../utils/extractApiErrorMessage';
 import type { TaskDTO } from 'api/tasks.api';
 
@@ -128,9 +128,6 @@ const TasksPage: React.FC = () => {
     setBusyId(task.id);
     void updateEvent({ id: task.id, body: { status: 'completed' } })
       .unwrap()
-      .then(() => {
-        showSuccessToast({ title: t('tasks.completed'), detail: task.name });
-      })
       .catch((err) => {
         showErrorToast({
           title: t('tasks.completeFailed'),
@@ -144,9 +141,6 @@ const TasksPage: React.FC = () => {
     setBusyId(task.id);
     void updateEvent({ id: task.id, body: { status: 'canceled' } })
       .unwrap()
-      .then(() => {
-        showSuccessToast({ title: t('tasks.skipped'), detail: task.name });
-      })
       .catch((err) => {
         showErrorToast({
           title: t('tasks.skipFailed'),
@@ -160,9 +154,6 @@ const TasksPage: React.FC = () => {
     setBusyId(task.id);
     void updateEvent({ id: task.id, body: buildDoNowPatch(timeZone) })
       .unwrap()
-      .then(() => {
-        showSuccessToast({ title: t('tasks.doNowStarted'), detail: task.name });
-      })
       .catch((err) => {
         showErrorToast({
           title: t('tasks.doNowFailed'),
@@ -180,17 +171,9 @@ const TasksPage: React.FC = () => {
   const confirmDelete = () => {
     if (!deleteConfirm.id) return;
     const id = deleteConfirm.id;
-    const name = deleteConfirm.name;
-    const thisTaskLabel = t('tasks.thisTask');
     setDeleteConfirm({ open: false, id: null, name: '' });
     void deleteEvent(id)
       .unwrap()
-      .then(() => {
-        showSuccessToast({
-          title: t('tasks.deleted'),
-          detail: name !== thisTaskLabel ? name : undefined,
-        });
-      })
       .catch((err) => {
         showErrorToast({
           title: t('tasks.deleteFailed'),

@@ -106,9 +106,10 @@
     "eventMoved": "Подію перенесено",
     "recurringInstanceMoved": "Появу серії перенесено",
     "seriesDragTitle": "Перенести повторювану задачу",
-    "seriesDragBody": "Перенести лише цей день «{{name}}» чи цей день і всі наступні?",
+    "seriesDragBody": "Як перенести «{{name}}»?",
     "seriesDragThisDay": "Лише цей день",
     "seriesDragFollowing": "Цей і наступні",
+    "seriesDragAll": "Усі дні",
     "recurringRescheduled": "Повторювані блоки переплановано",
     "day": "День",
     "week": "Тиждень",
@@ -516,7 +517,14 @@
       "updateFailed": "Не вдалося оновити задачу",
       "createFailed": "Не вдалося створити задачу",
       "occurrenceSkipped": "Появу пропущено",
-      "skipFailed": "Не вдалося пропустити появу"
+      "skipFailed": "Не вдалося пропустити появу",
+      "progress": {
+        "saving": "Збереження задачі…",
+        "placing": "Розміщення в розкладі…",
+        "syncing": "Оновлення Google Calendar…",
+        "done": "Готово",
+        "error": "Щось пішло не так"
+      }
     },
     "editor": {
       "schedule": "Запланувати задачу",

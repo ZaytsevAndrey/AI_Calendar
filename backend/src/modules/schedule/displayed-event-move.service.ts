@@ -6,16 +6,26 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { PendingGoogleWriteService } from '../google-calendar/pending-google-write.service';
 import { Habit } from '../habits/entities/habit.entity';
+import { PhasesService } from '../phases/phases.service';
 import { ScheduleState, Task, TaskStatus } from '../tasks/entities/task.entity';
 import { TasksService } from '../tasks/tasks.service';
 import { UserSettingsService } from '../user-settings/user-settings.service';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
-import { localYmd, startOfLocalDayIso } from '../voice/voice-local-date.util';
+import {
+  localDateTimeIso,
+  localHm,
+  localYmd,
+  normalizeClockHm,
+  startOfLocalDayIso,
+} from '../voice/voice-local-date.util';
 import { MoveDisplayedEventDto } from './dto/move-displayed-event.dto';
+import { phaseIdAtFocus, phaseWindowsForDay } from './free-slots.util';
 import { planDisplayedEventMove } from './move-displayed-event.util';
 import { PlacementStepService } from './placement-step.service';
 import type { PlacementPlan } from './placement-step.util';
+import { ScheduleJobService } from './schedule-job.service';
 import { ScheduledTask } from './schedule.entity';
 
 export type MoveDisplayedEventResult = {
@@ -37,8 +47,11 @@ export class DisplayedEventMoveService {
     private readonly habitRepo: Repository<Habit>,
     private readonly tasksService: TasksService,
     private readonly googleCalendarService: GoogleCalendarService,
+    private readonly pendingGoogleWrites: PendingGoogleWriteService,
     private readonly placementStep: PlacementStepService,
     private readonly userSettingsService: UserSettingsService,
+    private readonly phasesService: PhasesService,
+    private readonly scheduleJobs: ScheduleJobService,
   ) {}
 
   async move(
@@ -102,56 +115,189 @@ export class DisplayedEventMoveService {
       1,
       Math.round((end.getTime() - start.getTime()) / 60_000),
     );
+    const phaseIds = await this.phaseIdsForDrop(userId, start);
 
     if (plan.kind === 'fixed') {
       const saved = await this.tasksService.update(plan.taskId, userId, {
         scheduledStartTime: start.toISOString(),
         scheduledEndTime: end.toISOString(),
         estimatedTimeInMinutes: minutes,
+        phaseIds,
       });
       if (!sitsAt(saved.scheduledStartTime, start)) {
         throw new BadRequestException('That time is already taken.');
       }
-      return { kind: 'fixed', jobId: null };
+      return { kind: 'fixed', jobId: saved.jobId ?? null };
     }
 
     const owner = tasks.find((task) => task.id === plan.taskId);
     if (owner?.isRecurring) {
+      const settings = await this.userSettingsService.getSettings(userId);
+      const timeZone = resolveIanaTimeZone(
+        settings.timeZone || owner.scheduleTimeZone,
+      );
+      const fromYmd = localYmd(dto.originalStart, timeZone);
+      const toYmd = localYmd(start.toISOString(), timeZone);
+      if (fromYmd !== toYmd) {
+        throw new BadRequestException(
+          'Recurring tasks can only be moved within the same day.',
+        );
+      }
       if (!dto.seriesScope) {
         return { kind: 'series-choice', jobId: null, taskName: owner.name };
       }
       if (dto.seriesScope === 'occurrence') {
-        await this.moveSeriesDay(userId, owner, dto, minutes);
-      } else {
-        await this.moveSeriesTail(userId, owner, dto, start, end, minutes);
+        const jobId = await this.moveSeriesDay(
+          userId,
+          owner,
+          dto,
+          minutes,
+          phaseIds,
+        );
+        // Client must poll the one-off create job before refetching Google.
+        return { kind: 'slot', jobId };
       }
-      return { kind: 'slot', jobId: null };
+      const job = await this.scheduleJobs.beginMutationJob(userId, {
+        op: 'move-series',
+        taskId: owner.id,
+        seriesScope: dto.seriesScope,
+      });
+      void this.runSeriesMoveJob(
+        job.id,
+        userId,
+        owner,
+        dto,
+        start,
+        end,
+        minutes,
+        phaseIds,
+        timeZone,
+      ).catch((err: unknown) => {
+        this.logger.error(
+          `Series move job ${job.id} failed`,
+          err instanceof Error ? err.stack : undefined,
+        );
+      });
+      return { kind: 'slot', jobId: job.id };
     }
 
-    const placed = await this.placementStep.place(userId, plan.taskId, {
-      preferredStart: start,
-      durationMinutes: minutes,
-      commit: 'preferred',
+    const job = await this.scheduleJobs.beginMutationJob(userId, {
+      op: 'move-slot',
+      taskId: plan.taskId,
     });
-    if (!seatedAt(placed, start)) {
-      throw new BadRequestException('That time is already taken.');
-    }
-    try {
-      await this.googleCalendarService.patchEventTimes(
-        userId,
-        dto.googleEventId,
-        start.toISOString(),
-        end.toISOString(),
-        dto.calendarId,
-      );
-    } catch (err) {
+    void this.runFlexibleMoveJob(
+      job.id,
+      userId,
+      plan.taskId,
+      dto,
+      start,
+      end,
+      minutes,
+      phaseIds,
+    ).catch((err: unknown) => {
       this.logger.error(
-        `Could not update Google event ${dto.googleEventId} after a move`,
+        `Move job ${job.id} failed`,
         err instanceof Error ? err.stack : undefined,
       );
+    });
+    return { kind: 'slot', jobId: job.id };
+  }
+
+  private async runSeriesMoveJob(
+    jobId: string,
+    userId: string,
+    owner: Task,
+    dto: MoveDisplayedEventDto,
+    start: Date,
+    end: Date,
+    minutes: number,
+    phaseIds: string[],
+    timeZone: string,
+  ): Promise<void> {
+    try {
+      await this.scheduleJobs.setMutationStage(jobId, 'placing');
+      if (dto.seriesScope === 'all') {
+        await this.moveSeriesAll(userId, owner, start, end, minutes, phaseIds);
+      } else if (await this.isFirstOpenDay(owner.id, dto.originalStart, timeZone)) {
+        await this.moveSeriesAll(userId, owner, start, end, minutes, phaseIds);
+      } else {
+        await this.moveSeriesTail(
+          userId,
+          owner,
+          dto,
+          start,
+          end,
+          minutes,
+          phaseIds,
+        );
+      }
+      await this.scheduleJobs.setMutationStage(jobId, 'syncing');
+      // Series helpers already awaited syncTask; mark complete.
+      await this.scheduleJobs.completeMutationJob(jobId);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Series move failed';
+      await this.scheduleJobs.failMutationJob(jobId, message);
     }
-    await this.placementStep.seatOpenHoles(userId);
-    return { kind: 'slot', jobId: null };
+  }
+
+  private async runFlexibleMoveJob(
+    jobId: string,
+    userId: string,
+    taskId: string,
+    dto: MoveDisplayedEventDto,
+    start: Date,
+    end: Date,
+    minutes: number,
+    phaseIds: string[],
+  ): Promise<void> {
+    try {
+      await this.scheduleJobs.setMutationStage(jobId, 'placing');
+      const task = await this.taskRepo.findOne({
+        where: { id: taskId, userId },
+        relations: ['phases'],
+      });
+      if (!task) {
+        throw new BadRequestException('Task not found');
+      }
+      const nextPhases = phaseIds.length
+        ? (await this.phasesService.findAllForScheduling(userId)).filter((p) =>
+            phaseIds.includes(p.id),
+          )
+        : [];
+      task.phaseId = nextPhases[0]?.id ?? null;
+      task.phases = nextPhases;
+      await this.taskRepo.save(task);
+
+      const placed = await this.placementStep.place(userId, taskId, {
+        preferredStart: start,
+        durationMinutes: minutes,
+        commit: 'preferred',
+      });
+      if (!seatedAt(placed, start)) {
+        throw new BadRequestException('That time is already taken.');
+      }
+      await this.scheduleJobs.setMutationStage(jobId, 'syncing');
+      try {
+        await this.googleCalendarService.patchEventTimes(
+          userId,
+          dto.googleEventId,
+          start.toISOString(),
+          end.toISOString(),
+          dto.calendarId,
+        );
+      } catch (err) {
+        this.logger.error(
+          `Could not update Google event ${dto.googleEventId} after a move`,
+          err instanceof Error ? err.stack : undefined,
+        );
+        await this.pendingGoogleWrites.syncTask(userId, taskId);
+      }
+      await this.placementStep.seatOpenHoles(userId);
+      await this.scheduleJobs.completeMutationJob(jobId);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Move failed';
+      await this.scheduleJobs.failMutationJob(jobId, message);
+    }
   }
 
   /** Drop one series day and seat an identical one-off at the dropped time. */
@@ -160,16 +306,19 @@ export class DisplayedEventMoveService {
     series: Task,
     dto: MoveDisplayedEventDto,
     minutes: number,
-  ): Promise<void> {
+    phaseIds: string[],
+  ): Promise<string | null> {
     await this.tasksService.skipOccurrence(series.id, userId, {
       occurrenceStart: dto.originalStart,
       googleEventId: dto.googleEventId,
       googleEventCalendarId: dto.calendarId,
     });
-    await this.tasksService.create(userId, {
+    const created = await this.tasksService.create(userId, {
       name: series.name,
       description: series.description ?? undefined,
-      phaseId: series.phaseId ?? undefined,
+      ...(phaseIds.length
+        ? { phaseIds, phaseId: phaseIds[0] }
+        : { phaseIds: [] }),
       eventType: series.eventType,
       estimatedTimeInMinutes: minutes,
       isRecurring: false,
@@ -185,6 +334,7 @@ export class DisplayedEventMoveService {
       parentSeriesId: series.id,
       timeZone: series.scheduleTimeZone ?? undefined,
     });
+    return created.jobId ?? null;
   }
 
   /**
@@ -198,6 +348,7 @@ export class DisplayedEventMoveService {
     start: Date,
     end: Date,
     minutes: number,
+    phaseIds: string[],
   ): Promise<void> {
     const settings = await this.userSettingsService.getSettings(userId);
     const timeZone = resolveIanaTimeZone(settings.timeZone || series.scheduleTimeZone);
@@ -222,13 +373,18 @@ export class DisplayedEventMoveService {
       previousDeadline && previousDeadline.getTime() > splitStart.getTime()
         ? previousDeadline
         : null;
+    const nextPhases = phaseIds.length
+      ? (await this.phasesService.findAllForScheduling(userId)).filter((p) =>
+          phaseIds.includes(p.id),
+        )
+      : [];
     const created = await this.taskRepo.save(
       this.taskRepo.create({
         userId,
         name: series.name,
         description: series.description,
-        phaseId: series.phaseId,
-        phases: series.phases,
+        phaseId: nextPhases[0]?.id ?? null,
+        phases: nextPhases,
         eventType: series.eventType,
         estimatedTimeInMinutes: minutes,
         isRecurring: true,
@@ -253,10 +409,104 @@ export class DisplayedEventMoveService {
     await this.placementStep.place(userId, created.id, {
       preferredStart: start,
       durationMinutes: minutes,
-      commit: 'preferred',
+      commit: 'always',
       expandSeries: true,
     });
+    // Old series may have no open seats left; sync deletes its Google master.
+    // New series must land on Google before the calendar refetch.
+    await this.pendingGoogleWrites.syncTask(userId, series.id);
+    await this.pendingGoogleWrites.syncTask(userId, created.id);
     await this.placementStep.seatOpenHoles(userId);
+  }
+
+  /**
+   * Rewrite every still-open day of the series to the new clock (no split).
+   * Anchor is the earliest open day so earlier horizon days move too.
+   */
+  private async moveSeriesAll(
+    userId: string,
+    series: Task,
+    start: Date,
+    end: Date,
+    minutes: number,
+    phaseIds: string[],
+  ): Promise<void> {
+    const settings = await this.userSettingsService.getSettings(userId);
+    const timeZone = resolveIanaTimeZone(settings.timeZone || series.scheduleTimeZone);
+    const hm = normalizeClockHm(localHm(start.toISOString(), timeZone));
+    const durationMs = Math.max(1, minutes) * 60_000;
+
+    const rows = await this.scheduledRepo.find({ where: { taskId: series.id } });
+    const now = Date.now();
+    const open = rows
+      .filter((row) => new Date(row.scheduledEndTime).getTime() > now)
+      .sort(
+        (a, b) =>
+          new Date(a.scheduledStartTime).getTime() -
+          new Date(b.scheduledStartTime).getTime(),
+      );
+    const anchorYmd = open.length
+      ? localYmd(new Date(open[0].scheduledStartTime).toISOString(), timeZone)
+      : localYmd(start.toISOString(), timeZone);
+    const anchorStart = new Date(localDateTimeIso(anchorYmd, hm, timeZone));
+    const anchorEnd = new Date(anchorStart.getTime() + durationMs);
+
+    series.scheduledStartTime = anchorStart;
+    series.scheduledEndTime = anchorEnd;
+    series.estimatedTimeInMinutes = minutes;
+    const nextPhases = phaseIds.length
+      ? (await this.phasesService.findAllForScheduling(userId)).filter((p) =>
+          phaseIds.includes(p.id),
+        )
+      : [];
+    series.phaseId = nextPhases[0]?.id ?? null;
+    series.phases = nextPhases;
+    await this.taskRepo.save(series);
+    // Do not wipe open seats before place: an empty seat list makes syncTask
+    // delete the Google series mid-move. place + expandSeries rewrite days.
+
+    await this.placementStep.place(userId, series.id, {
+      preferredStart: anchorStart,
+      durationMinutes: minutes,
+      commit: 'always',
+      expandSeries: true,
+    });
+    await this.pendingGoogleWrites.syncTask(userId, series.id);
+    await this.placementStep.seatOpenHoles(userId);
+  }
+
+  private async phaseIdsForDrop(userId: string, start: Date): Promise<string[]> {
+    const settings = await this.userSettingsService.getSettings(userId);
+    const timeZone = resolveIanaTimeZone(settings.timeZone);
+    const ymd = localYmd(start.toISOString(), timeZone);
+    const phases = await this.phasesService.findAllForScheduling(userId);
+    const windows = phaseWindowsForDay(phases, ymd, timeZone);
+    const id = phaseIdAtFocus(windows, start.getTime());
+    return id ? [id] : [];
+  }
+
+  /** True when the drop day is the earliest still-open day of the series. */
+  private async isFirstOpenDay(
+    taskId: string,
+    originalStartIso: string,
+    timeZone: string,
+  ): Promise<boolean> {
+    const splitYmd = localYmd(originalStartIso, timeZone);
+    const rows = await this.scheduledRepo.find({ where: { taskId } });
+    const now = Date.now();
+    const open = rows
+      .filter((row) => new Date(row.scheduledEndTime).getTime() > now)
+      .sort(
+        (a, b) =>
+          new Date(a.scheduledStartTime).getTime() -
+          new Date(b.scheduledStartTime).getTime(),
+      );
+    if (!open.length) return true;
+    const firstYmd = localYmd(
+      new Date(open[0].scheduledStartTime).toISOString(),
+      timeZone,
+    );
+    return firstYmd === splitYmd;
   }
 }
 

@@ -4,6 +4,11 @@ import { TaskDTO, CreateTaskDTO, UpdateTaskDTO, SkipOccurrenceDTO } from './task
 import { eventsApi } from './eventsApi';
 import { emitScheduleConflicts } from 'modules/schedule/conflictChoiceBus';
 import { settleReplanJob } from 'modules/schedule/settleReplanJob';
+import {
+  runTaskMutationProgress,
+  type MutationStage,
+} from 'modules/schedule/taskMutationProgress';
+import i18n from 'i18next';
 
 type TaskWriteResult = TaskDTO & {
   jobId?: string | null;
@@ -19,12 +24,17 @@ type TaskWriteResult = TaskDTO & {
 async function refreshAfterSilentReplan(
   dispatch: (action: unknown) => unknown,
   result: TaskWriteResult,
+  onStage?: (stage: MutationStage) => void,
 ) {
   dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
   if (result.conflicts?.length) {
     emitScheduleConflicts(result.conflicts);
+    onStage?.('done');
+  } else if (result.jobId) {
+    await settleReplanJob(result.jobId, onStage);
   } else {
-    await settleReplanJob(result.jobId);
+    onStage?.('syncing');
+    await settleReplanJob(null);
   }
   dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));
   dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
@@ -52,12 +62,56 @@ export const eventTasksApi = createApi({
     createEvent: builder.mutation<TaskWriteResult, CreateTaskDTO>({
       query: (body) => ({ url: '/tasks', method: 'POST', data: body }),
       invalidatesTags: [{ type: 'EventTask', id: 'LIST' }],
-      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+        const tempId = `temp-${Date.now()}`;
+        const nowIso = new Date().toISOString();
+        const optimistic = {
+          id: tempId,
+          name: arg.name,
+          description: arg.description ?? undefined,
+          eventType: arg.eventType ?? 'admin',
+          estimatedTimeInMinutes: arg.estimatedTimeInMinutes ?? 30,
+          isRecurring: !!arg.isRecurring,
+          isUnscheduled: !!arg.isUnscheduled,
+          scheduleState: arg.scheduleState ?? 'none',
+          status: 'todo' as const,
+          priority: (arg.priority ?? 'medium') as TaskDTO['priority'],
+          allowSplit: !!arg.allowSplit,
+          scheduledStartTime: arg.scheduledStartTime ?? undefined,
+          scheduledEndTime: arg.scheduledEndTime ?? undefined,
+          deadline: arg.deadline ?? undefined,
+          earliestStartTime: arg.earliestStartTime ?? undefined,
+          phaseId: arg.phaseId ?? undefined,
+          phases: [],
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        } satisfies TaskDTO;
+        const patch = dispatch(
+          eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) => {
+            draft.unshift(optimistic);
+          }),
+        );
         try {
-          const { data } = await queryFulfilled;
-          await refreshAfterSilentReplan(dispatch, data);
+          await runTaskMutationProgress({
+            taskKey: tempId,
+            title: arg.name,
+            run: async (progress) => {
+              const { data } = await queryFulfilled;
+              progress.retarget(data.id);
+              dispatch(
+                eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) => {
+                  const index = draft.findIndex((row) => row.id === tempId);
+                  if (index >= 0) draft[index] = data;
+                  else draft.unshift(data);
+                }),
+              );
+              await refreshAfterSilentReplan(dispatch, data, (stage) => {
+                progress.setStage(stage);
+              });
+            },
+          });
         } catch {
-          return;
+          patch.undo();
         }
       },
     }),
@@ -67,10 +121,23 @@ export const eventTasksApi = createApi({
         { type: 'EventTask', id: 'LIST' },
         { type: 'EventTask', id },
       ],
-      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+      async onQueryStarted(arg, { dispatch, queryFulfilled, getState }) {
+        const existing = eventTasksApi.endpoints.getEvents
+          .select()(getState() as never)
+          ?.data?.find((row) => row.id === arg.id);
+        const title = existing?.name ?? i18n.t('tasks.thisTask');
         try {
-          const { data } = await queryFulfilled;
-          await refreshAfterSilentReplan(dispatch, data);
+          await runTaskMutationProgress({
+            taskKey: arg.id,
+            title,
+            relatedKeys: existing?.googleEventId ? [existing.googleEventId] : undefined,
+            run: async (progress) => {
+              const { data } = await queryFulfilled;
+              await refreshAfterSilentReplan(dispatch, data, (stage) => {
+                progress.setStage(stage);
+              });
+            },
+          });
         } catch {
           return;
         }
@@ -82,15 +149,27 @@ export const eventTasksApi = createApi({
         { type: 'EventTask', id: 'LIST' },
         { type: 'EventTask', id },
       ],
-      async onQueryStarted(id, { dispatch, queryFulfilled }) {
+      async onQueryStarted(id, { dispatch, queryFulfilled, getState }) {
+        const existing = eventTasksApi.endpoints.getEvents
+          .select()(getState() as never)
+          ?.data?.find((row) => row.id === id);
+        const title = existing?.name ?? i18n.t('tasks.thisTask');
         const patch = dispatch(
           eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) =>
             draft.filter((task) => task.id !== id),
           ),
         );
         try {
-          await queryFulfilled;
-          dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+          await runTaskMutationProgress({
+            taskKey: id,
+            title,
+            relatedKeys: existing?.googleEventId ? [existing.googleEventId] : undefined,
+            run: async (progress) => {
+              await queryFulfilled;
+              progress.setStage('syncing');
+              dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+            },
+          });
         } catch {
           patch.undo();
         }
@@ -110,6 +189,10 @@ export const eventTasksApi = createApi({
         { type: 'EventTask', id },
       ],
       async onQueryStarted({ id, body }, { dispatch, getState, queryFulfilled }) {
+        const existing = eventTasksApi.endpoints.getEvents
+          .select()(getState() as never)
+          ?.data?.find((row) => row.id === id);
+        const title = existing?.name ?? i18n.t('tasks.thisTask');
         const eventId = body.googleEventId;
         const eventPatches = eventId
           ? eventsApi.util.selectCachedArgsForQuery(getState() as never, 'getEvents').map((args) =>
@@ -125,25 +208,32 @@ export const eventTasksApi = createApi({
         const taskPatch = dispatch(
           eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) => {
             const task = draft.find((item) => item.id === id);
-            if (!task || task.isRecurring) return;
+            if (!task) return;
             task.scheduledStartTime = undefined;
             task.scheduledEndTime = undefined;
           }),
         );
         try {
-          const { data } = await queryFulfilled;
-          dispatch(
-            eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) => {
-              const index = draft.findIndex((item) => item.id === id);
-              if (index < 0) return;
-              draft[index] = { ...draft[index], ...data };
-              if (!draft[index].isRecurring) {
-                draft[index].scheduledStartTime = undefined;
-                draft[index].scheduledEndTime = undefined;
-              }
-            }),
-          );
-          dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+          await runTaskMutationProgress({
+            taskKey: id,
+            title,
+            relatedKeys: eventId ? [eventId] : undefined,
+            run: async (progress) => {
+              const { data } = await queryFulfilled;
+              dispatch(
+                eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) => {
+                  const index = draft.findIndex((item) => item.id === id);
+                  if (index < 0) {
+                    draft.unshift(data);
+                    return;
+                  }
+                  draft[index] = { ...draft[index], ...data };
+                }),
+              );
+              progress.setStage('syncing');
+              dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+            },
+          });
         } catch {
           taskPatch.undo();
           eventPatches.forEach((patch) => patch.undo());

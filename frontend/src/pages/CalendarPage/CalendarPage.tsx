@@ -25,7 +25,10 @@ import { ProblematicInboxSheet } from 'modules/schedule/components/ProblematicIn
 import { ScheduleMenu } from 'modules/schedule/components/ScheduleMenu';
 import { ScheduleSuggestionsDialog } from 'modules/schedule/components/ScheduleSuggestionsDialog';
 import { SeriesDragHost } from 'modules/schedule/components/SeriesDragHost';
-import { SeriesMoveCancelled } from 'modules/schedule/seriesDragChoice';
+import {
+    SeriesMoveCancelled,
+    type SeriesDragScope,
+} from 'modules/schedule/seriesDragChoice';
 import { isActiveProblematicTask, todayYmdInZone } from 'modules/schedule/problematicDays';
 import { NowStrip } from 'modules/now/components/NowStrip';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
@@ -40,6 +43,10 @@ import { VoiceTaskSheet } from 'modules/voice/components/VoiceTaskSheet';
 import { useVoiceTask } from 'modules/voice/hooks/useVoiceTask';
 import { setConflictVoiceOpener } from 'modules/schedule/conflictChoiceBus';
 import { settleReplanJob } from 'modules/schedule/settleReplanJob';
+import {
+    startTaskMutationProgress,
+    type TaskMutationProgressHandle,
+} from 'modules/schedule/taskMutationProgress';
 import { useCoarsePointer, usePhoneLayout } from 'modules/common/hooks/useMediaQuery';
 import { PhoneWeekStrip } from 'modules/calendar/components/PhoneWeekStrip';
 import { Modal } from '../../ui/Modal';
@@ -279,54 +286,112 @@ const CalendarPage: React.FC = () => {
         }
         const startIso = start.toISOString();
         const endIso = end.toISOString();
-        const cachedArgs = eventsApi.util.selectCachedArgsForQuery(
-            store.getState() as never,
-            'getEvents',
-        );
-        const undoPatches = cachedArgs.map((args) =>
-            dispatch(
-                eventsApi.util.updateQueryData('getEvents', args, (draft) => {
-                    if (!Array.isArray(draft?.events)) return;
-                    for (const row of draft.events) {
-                        if (row.id !== event.id) continue;
-                        row.start = {
-                            ...row.start,
-                            dateTime: startIso,
-                            date: undefined,
-                        };
-                        row.end = {
-                            ...row.end,
-                            dateTime: endIso,
-                            date: undefined,
-                        };
-                    }
-                }),
-            ),
-        );
-        try {
-            const moved = await ScheduleApi.moveDisplayedEvent({
-                googleEventId: event.id,
-                calendarId: event.calendarId,
-                recurringEventId: event.recurringEventId,
-                originalStart: originalStart.toISOString(),
-                originalEnd: originalEnd.toISOString(),
-                start: startIso,
-                end: endIso,
-            });
-            const { recurringMoved } = await settleReplanJob(moved.jobId);
-            dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
-            dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));
-            if (event.recurringEventId) {
-                showSuccessToast({
-                    title: t('calendar.recurringInstanceMoved'),
-                    detail: formatDateTimeRange(startIso, endIso),
-                });
-            } else {
-                showSuccessToast({
-                    title: t('calendar.eventMoved'),
-                    detail: formatDateTimeRange(startIso, endIso),
+        const deltaMs = start.getTime() - originalStart.getTime();
+        const durationMs = Math.max(60_000, end.getTime() - start.getTime());
+        const seriesKey = event.recurringEventId || event.id;
+        type UndoPatch = { undo: () => void };
+        const undoPatches: UndoPatch[] = [];
+
+        const applyOptimistic = (scope: SeriesDragScope | 'single') => {
+            const cachedArgs = eventsApi.util.selectCachedArgsForQuery(
+                store.getState() as never,
+                'getEvents',
+            );
+            const patches = cachedArgs.map((args) =>
+                dispatch(
+                    eventsApi.util.updateQueryData('getEvents', args, (draft) => {
+                        if (!Array.isArray(draft?.events)) return;
+                        for (const row of draft.events) {
+                            const rowStart = eventStartDate(row);
+                            if (!rowStart) continue;
+                            const sameSeries =
+                                row.id === event.id ||
+                                (!!seriesKey &&
+                                    (row.id === seriesKey ||
+                                        row.recurringEventId === seriesKey));
+                            if (scope === 'single' || scope === 'occurrence') {
+                                if (row.id !== event.id) continue;
+                            } else if (!sameSeries) {
+                                continue;
+                            } else if (
+                                scope === 'series' &&
+                                rowStart.getTime() < originalStart.getTime()
+                            ) {
+                                continue;
+                            }
+                            const nextStart = new Date(
+                                row.id === event.id
+                                    ? start.getTime()
+                                    : rowStart.getTime() + deltaMs,
+                            );
+                            const nextEnd = new Date(nextStart.getTime() + durationMs);
+                            row.start = {
+                                ...row.start,
+                                dateTime: nextStart.toISOString(),
+                                date: undefined,
+                            };
+                            row.end = {
+                                ...row.end,
+                                dateTime: nextEnd.toISOString(),
+                                date: undefined,
+                            };
+                        }
+                    }) as never,
+                ) as unknown as UndoPatch,
+            );
+            undoPatches.push(...patches);
+        };
+
+        // Immediate feedback on the dragged block; expand after series scope is chosen.
+        applyOptimistic('occurrence');
+        const linkedTask = findTaskForGoogleEvent(tasks, event);
+        const relatedKeys = [
+            event.id,
+            event.recurringEventId,
+            linkedTask?.id,
+        ].filter(Boolean) as string[];
+        const mutationRef: { current: TaskMutationProgressHandle | null } = {
+            current: null,
+        };
+        const ensureProgress = (): TaskMutationProgressHandle => {
+            if (!mutationRef.current) {
+                mutationRef.current = startTaskMutationProgress({
+                    taskKey: event.id,
+                    title: event.summary || linkedTask?.name || t('calendar.eventMoved'),
+                    relatedKeys,
                 });
             }
+            return mutationRef.current;
+        };
+        try {
+            const moved = await ScheduleApi.moveDisplayedEvent(
+                {
+                    googleEventId: event.id,
+                    calendarId: event.calendarId,
+                    recurringEventId: event.recurringEventId,
+                    originalStart: originalStart.toISOString(),
+                    originalEnd: originalEnd.toISOString(),
+                    start: startIso,
+                    end: endIso,
+                },
+                {
+                    onSeriesScopeChosen: (scope) => {
+                        if (scope === 'occurrence') return;
+                        applyOptimistic(scope);
+                    },
+                    // Toast only when a real write starts — not during the series-choice probe/modal.
+                    onMutationStart: () => {
+                        ensureProgress();
+                    },
+                },
+            );
+            const active = ensureProgress();
+            const { recurringMoved } = await settleReplanJob(moved.jobId, (stage) => {
+                active.setStage(stage);
+            });
+            dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));
+            dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+            active.finish(formatDateTimeRange(startIso, endIso) ?? undefined);
             if (recurringMoved.length && !event.recurringEventId) {
                 showSuccessToast({
                     title: t('calendar.recurringRescheduled'),
@@ -336,12 +401,19 @@ const CalendarPage: React.FC = () => {
         } catch (err) {
             undoPatches.forEach((patch) => patch.undo());
             if (err instanceof SeriesMoveCancelled) {
+                mutationRef.current?.dismiss();
                 throw err;
             }
-            showErrorToast({
-                title: t('calendar.eventMoveFailed'),
-                detail: extractApiErrorMessage(err),
-            });
+            if (mutationRef.current) {
+                mutationRef.current.fail(
+                    extractApiErrorMessage(err) || t('calendar.eventMoveFailed'),
+                );
+            } else {
+                showErrorToast({
+                    title: t('calendar.eventMoveFailed'),
+                    detail: extractApiErrorMessage(err),
+                });
+            }
             throw err;
         }
     };

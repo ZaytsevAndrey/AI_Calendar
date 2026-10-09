@@ -50,6 +50,8 @@ export function applyEventDrag(input: {
   dayEndMin: number;
   dayIndex: number;
   pointerDayIndex: number;
+  /** When true, move stays on the origin day (recurring same-day lock). */
+  lockDay?: boolean;
 }): { startMin: number; endMin: number; dayIndex: number } {
   const minDur = EVENT_DRAG_MIN_DURATION_MIN;
   const span = Math.max(input.dayEndMin - input.dayStartMin, minDur);
@@ -65,7 +67,7 @@ export function applyEventDrag(input: {
     return {
       startMin: nextStart,
       endMin: nextStart + duration,
-      dayIndex: input.pointerDayIndex,
+      dayIndex: input.lockDay ? input.dayIndex : input.pointerDayIndex,
     };
   }
 

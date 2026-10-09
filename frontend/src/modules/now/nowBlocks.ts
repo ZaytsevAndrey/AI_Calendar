@@ -155,6 +155,8 @@ export function buildNowBlocks(
     // Split / series rows store first→last; that span is not a Now block.
     if (startYmd < yesterdayYmd) continue;
     if (bounds.endMs - bounds.startMs > 36 * 60 * 60 * 1000) continue;
+    const skipped = task.skippedOccurrenceYmds ?? [];
+    if (skipped.includes(startYmd)) continue;
     blocks.push({
       key: `task:${task.id}`,
       title: task.name,

@@ -445,17 +445,22 @@ export class PlacementStepService {
       return plan;
     }
     await this.persist(task, plan, now, timeZone, opts?.durationMinutes);
+    // Horizon days must exist before the HTTP response — otherwise recurring
+    // create looks like a one-off. Google I/O stays non-blocking.
     if (plan.outcome === 'seated' && this.shouldExpandSeries(task, opts)) {
       await this.expandSeriesDays(userId, task.id);
     }
     if (
-      plan.outcome === 'seated' ||
-      plan.outcome === 'problematic' ||
-      plan.outcome === 'unscheduled'
+      !opts?.seriesDay &&
+      (plan.outcome === 'seated' ||
+        plan.outcome === 'problematic' ||
+        plan.outcome === 'unscheduled')
     ) {
-      await this.pendingGoogleWrites.syncTask(userId, taskId);
-      for (const move of plan.outcome === 'seated' ? plan.moves : []) {
-        await this.pendingGoogleWrites.syncTask(userId, move.taskId);
+      this.pendingGoogleWrites.syncTaskSoon(userId, taskId);
+      if (plan.outcome === 'seated') {
+        for (const move of plan.moves) {
+          this.pendingGoogleWrites.syncTaskSoon(userId, move.taskId);
+        }
       }
     }
     return plan;
@@ -474,7 +479,7 @@ export class PlacementStepService {
       if (isProblematicSchedule(task) || !task.scheduledStartTime) continue;
       if (task.scheduleState === ScheduleState.RESOLVED) continue;
       await this.expandSeriesDays(userId, task.id);
-      await this.pendingGoogleWrites.syncTask(userId, task.id);
+      this.pendingGoogleWrites.syncTaskSoon(userId, task.id);
     }
   }
 

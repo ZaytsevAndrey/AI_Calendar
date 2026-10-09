@@ -18,7 +18,7 @@ import {
   localYmd,
   normalizeClockHm,
 } from '../../../utils/ianaDateTime';
-import { showErrorToast, showSuccessToast } from '../../../utils/toast';
+import { showErrorToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 import {
   buildOneOffFromSeries,
@@ -212,10 +212,6 @@ export function MoveOccurrenceSheet({
           },
         }).unwrap();
         await clearParkedDay();
-        showSuccessToast({
-          title: t('schedule.problematicMovedDay'),
-          detail: `${task.name} · ${placeLabel}`,
-        });
       } else {
         const start = selectedStartIso;
         const end = new Date(
@@ -238,10 +234,6 @@ export function MoveOccurrenceSheet({
         if (updated.conflicts?.length) {
           return;
         }
-        showSuccessToast({
-          title: t('schedule.problematicMoved'),
-          detail: `${task.name} · ${placeLabel}`,
-        });
       }
       onDone();
     } catch (e) {

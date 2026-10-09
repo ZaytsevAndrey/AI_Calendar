@@ -48,7 +48,16 @@ describe('TasksService', () => {
     enqueueReplan: jest.fn().mockResolvedValue({ id: 'job-1' }),
     processNextPendingForUser: jest.fn(),
     deleteSyncedGoogleEventsForTask: jest.fn().mockResolvedValue(undefined),
+    beginMutationJob: jest.fn().mockResolvedValue({ id: 'job-mut-1' }),
+    setMutationStage: jest.fn().mockResolvedValue(undefined),
+    completeMutationJob: jest.fn().mockResolvedValue(undefined),
+    failMutationJob: jest.fn().mockResolvedValue(undefined),
   };
+
+  async function flushMutationFollowUp(): Promise<void> {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
   const googleCalendarService = {
     checkConnection: jest.fn().mockResolvedValue({ connected: false }),
     createEvent: jest.fn(),
@@ -57,6 +66,9 @@ describe('TasksService', () => {
   };
   const pendingGoogleWrites = {
     syncTask: jest.fn().mockResolvedValue(undefined),
+    syncTaskSoon: jest.fn((userId: string, taskId: string) => {
+      void pendingGoogleWrites.syncTask(userId, taskId);
+    }),
   };
   const placementStep = {
     place: jest.fn().mockImplementation(async (_userId: string, _taskId: string, opts) => {
@@ -153,27 +165,29 @@ describe('TasksService', () => {
       eventType: TaskEventType.ADMIN,
       estimatedTimeInMinutes: 60,
     } as any);
+    await flushMutationFollowUp();
 
     expect(placementStep.place).toHaveBeenCalledWith(
       'user-1',
       'task-1',
       expect.objectContaining({ searchHole: true }),
     );
-    expect(created.jobId).toBeNull();
+    expect(created.jobId).toBe('job-mut-1');
+    expect(scheduleJobService.beginMutationJob).toHaveBeenCalled();
     expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
     expect(scheduleJobService.processNextPendingForUser).not.toHaveBeenCalled();
   });
 
-  it('returns a null jobId for flexible create', async () => {
+  it('returns a mutation jobId for flexible create', async () => {
     const created = await service.create('user-1', {
       name: 'Task',
       eventType: TaskEventType.ADMIN,
       estimatedTimeInMinutes: 60,
     } as any);
-    expect(created.jobId).toBeNull();
+    expect(created.jobId).toBe('job-mut-1');
   });
 
-  it('returns a null jobId for fixed create', async () => {
+  it('returns a mutation jobId for fixed create', async () => {
     const created = await service.create('user-1', {
       name: 'Fixed',
       eventType: TaskEventType.FIXED,
@@ -181,7 +195,7 @@ describe('TasksService', () => {
       scheduledEndTime: '2026-04-20T10:00:00.000Z',
       estimatedTimeInMinutes: 60,
     } as any);
-    expect(created.jobId).toBeNull();
+    expect(created.jobId).toBe('job-mut-1');
   });
 
   it('does not start a replan job while seating a create', async () => {
@@ -213,8 +227,9 @@ describe('TasksService', () => {
     } as any);
 
     expect(created.isUnscheduled).toBe(true);
-    expect(created.jobId).toBeNull();
+    expect(created.jobId).toBe('job-mut-1');
     expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
+    await flushMutationFollowUp();
     expect(pendingGoogleWrites.syncTask).toHaveBeenCalled();
   });
 
@@ -231,7 +246,7 @@ describe('TasksService', () => {
     expect(created.scheduleState).toBe('problematic');
     expect(created.problematicDay).toBe('2026-10-06');
     expect(created.parentSeriesId).toBe('11111111-1111-4111-8111-111111111111');
-    expect(created.jobId).toBeNull();
+    expect(created.jobId).toBe('job-mut-1');
     expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
   });
 
@@ -271,14 +286,20 @@ describe('TasksService', () => {
       scheduledStartTime: '2026-10-08T09:00:00.000Z',
       scheduledEndTime: '2026-10-08T10:00:00.000Z',
     } as any);
-
+    expect(created.jobId).toBe('job-mut-1');
     expect(created.scheduleState).toBe('none');
-    expect(created.conflicts).toEqual([
-      expect.objectContaining({
-        reason: 'preferred_on_fixed',
-        taskId: 'task-1',
-      }),
-    ]);
+    await flushMutationFollowUp();
+    expect(scheduleJobService.completeMutationJob).toHaveBeenCalledWith(
+      'job-mut-1',
+      {
+        conflicts: [
+          expect.objectContaining({
+            reason: 'preferred_on_fixed',
+            taskId: 'task-1',
+          }),
+        ],
+      },
+    );
     expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
   });
 
@@ -482,6 +503,7 @@ describe('TasksService', () => {
         deadline: '2026-09-11T23:59:00+03:00',
         timeZone: 'Asia/Nicosia',
       } as any);
+      await flushMutationFollowUp();
 
       expect(order[0]).toBe('save');
       expect(order).toContain('place');
@@ -513,6 +535,7 @@ describe('TasksService', () => {
       expect(row.scheduledEndTime).toBeNull();
       expect(row.location).toBe('Store');
       expect(row.googleColorId).toBe('4');
+      await flushMutationFollowUp();
       expect(pendingGoogleWrites.syncTask).toHaveBeenCalled();
       expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
     });
@@ -532,7 +555,7 @@ describe('TasksService', () => {
         isUnscheduled: true,
       } as any);
 
-      expect(updated.jobId).toBeNull();
+      expect(updated.jobId).toBe('job-mut-1');
       expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
     });
 
@@ -551,9 +574,10 @@ describe('TasksService', () => {
         isUnscheduled: false,
         estimatedTimeInMinutes: 30,
       } as any);
+      await flushMutationFollowUp();
 
       expect(updated.isUnscheduled).toBe(false);
-      expect(updated.jobId).toBeNull();
+      expect(updated.jobId).toBe('job-mut-1');
       expect(placementStep.place).toHaveBeenCalled();
       expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
     });
@@ -573,11 +597,13 @@ describe('TasksService', () => {
       const updated = await service.update('task-1', 'user-1', {
         isUnscheduled: true,
       } as any);
+      await flushMutationFollowUp();
 
       expect(pendingGoogleWrites.syncTask).toHaveBeenCalledWith('user-1', 'task-1');
       expect(updated.googleEventId).toBeNull();
       expect(updated.googleEventCalendarId).toBeNull();
       expect(updated.isUnscheduled).toBe(true);
+      expect(updated.jobId).toBe('job-mut-1');
       expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
       expect(placementStep.seatOpenHoles).toHaveBeenCalledWith('user-1', undefined);
     });
@@ -632,8 +658,9 @@ describe('TasksService', () => {
       const updated = await service.update('task-1', 'user-1', {
         name: 'Write the brief',
       } as any);
+      await flushMutationFollowUp();
 
-      expect(updated.jobId).toBeNull();
+      expect(updated.jobId).toBe('job-mut-1');
       expect(placementStep.place).not.toHaveBeenCalled();
       expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
       expect(pendingGoogleWrites.syncTask).toHaveBeenCalledWith('user-1', 'task-1');
@@ -655,12 +682,19 @@ describe('TasksService', () => {
         scheduledStartTime: '2026-10-08T12:00:00.000Z',
         scheduledEndTime: '2026-10-08T13:00:00.000Z',
       } as any);
+      expect(updated.jobId).toBe('job-mut-1');
+      await flushMutationFollowUp();
 
-      expect(updated.scheduledStartTime).toEqual(seated.scheduledStartTime);
-      expect(updated.scheduledEndTime).toEqual(seated.scheduledEndTime);
-      expect(updated.conflicts).toEqual([
-        expect.objectContaining({ reason: 'preferred_on_fixed' }),
-      ]);
+      expect(lastSaved?.scheduledStartTime).toEqual(seated.scheduledStartTime);
+      expect(lastSaved?.scheduledEndTime).toEqual(seated.scheduledEndTime);
+      expect(scheduleJobService.completeMutationJob).toHaveBeenCalledWith(
+        'job-mut-1',
+        {
+          conflicts: [
+            expect.objectContaining({ reason: 'preferred_on_fixed' }),
+          ],
+        },
+      );
       expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
       expect(placementStep.seatOpenHoles).not.toHaveBeenCalled();
     });
@@ -701,6 +735,7 @@ describe('TasksService', () => {
         problematicOccurrenceYmds: null,
         problematicReason: null,
       } as any);
+      await flushMutationFollowUp();
 
       expect(placementStep.place).toHaveBeenCalledWith(
         'user-1',
@@ -710,9 +745,14 @@ describe('TasksService', () => {
       expect(updated.scheduledStartTime).toEqual(new Date(start));
       expect(updated.scheduledEndTime).toEqual(new Date(end));
       expect(updated.eventType).toBe(TaskEventType.FIXED);
-      expect(updated.conflicts).toEqual([
-        expect.objectContaining({ reason: 'preferred_on_fixed' }),
-      ]);
+      expect(scheduleJobService.completeMutationJob).toHaveBeenCalledWith(
+        'job-mut-1',
+        {
+          conflicts: [
+            expect.objectContaining({ reason: 'preferred_on_fixed' }),
+          ],
+        },
+      );
     });
 
     it('does not replan or fill holes when a task is completed', async () => {
@@ -868,6 +908,8 @@ describe('TasksService', () => {
         status: TaskStatus.TODO,
         googleEventId: 'series-1',
         skippedOccurrenceYmds: null,
+        scheduledStartTime: futureStart,
+        scheduledEndTime: futureEnd,
       };
       const slot = {
         id: 'slot-1',
@@ -876,9 +918,18 @@ describe('TasksService', () => {
         scheduledEndTime: futureEnd,
         googleEventId: 'series-1',
       };
+      const nextStart = new Date('2026-09-23T08:00:00.000Z');
+      const nextEnd = new Date('2026-09-23T08:30:00.000Z');
+      const nextSlot = {
+        id: 'slot-2',
+        taskId: 'task-1',
+        scheduledStartTime: nextStart,
+        scheduledEndTime: nextEnd,
+        googleEventId: 'series-1',
+      };
       scheduledTaskRepository.find
-        .mockResolvedValueOnce([slot])
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([slot, nextSlot])
+        .mockResolvedValueOnce([nextSlot]);
       googleCalendarService.checkConnection.mockResolvedValue({ connected: false });
 
       const result = await service.skipOccurrence('task-1', 'user-1', {
@@ -886,6 +937,8 @@ describe('TasksService', () => {
       });
 
       expect(result.skippedOccurrenceYmds).toEqual(['2026-09-22']);
+      expect(result.scheduledStartTime).toEqual(nextStart);
+      expect(result.scheduledEndTime).toEqual(nextEnd);
       expect(result.jobId).toBeNull();
       expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
       expect(placementStep.seatOpenHoles).toHaveBeenCalledWith('user-1');

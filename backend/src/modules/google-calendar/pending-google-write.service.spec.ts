@@ -62,6 +62,152 @@ describe('PendingGoogleWriteService', () => {
     expect(google.deleteEvent).toHaveBeenCalledWith('u1', 'g-1', 'primary');
   });
 
+  it('creates a Google series with RRULE from open slots', async () => {
+    const day = (offset: number) => {
+      const start = new Date(Date.now() + offset * 86_400_000);
+      start.setUTCHours(9, 0, 0, 0);
+      const end = new Date(start.getTime() + 15 * 60_000);
+      return { start, end };
+    };
+    const d0 = day(1);
+    const d1 = day(2);
+    const d2 = day(3);
+    taskRepo.findOne.mockResolvedValue({
+      id: 't1',
+      userId: 'u1',
+      name: 'Standup',
+      isUnscheduled: false,
+      scheduleState: 'none',
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      recurrenceWeekDays: null,
+      skippedOccurrenceYmds: null,
+      scheduledStartTime: d0.start,
+      scheduledEndTime: d0.end,
+      googleEventId: null,
+      status: 'todo',
+      scheduleTimeZone: 'UTC',
+    });
+    scheduledRepo.find.mockResolvedValue([
+      {
+        taskId: 't1',
+        scheduledStartTime: d0.start,
+        scheduledEndTime: d0.end,
+      },
+      {
+        taskId: 't1',
+        scheduledStartTime: d1.start,
+        scheduledEndTime: d1.end,
+      },
+      {
+        taskId: 't1',
+        scheduledStartTime: d2.start,
+        scheduledEndTime: d2.end,
+      },
+    ]);
+    await service.syncTask('u1', 't1');
+    expect(google.createEvent).toHaveBeenCalledWith(
+      'u1',
+      expect.objectContaining({
+        summary: 'Standup',
+        recurrence: [
+          expect.stringMatching(/^RRULE:FREQ=DAILY;UNTIL=/),
+        ],
+      }),
+      expect.objectContaining({ skipSleepWindowCheck: true }),
+    );
+    expect(scheduledRepo.save).toHaveBeenCalledTimes(3);
+  });
+
+  it('serializes concurrent syncs so only one Google create runs', async () => {
+    let releaseCreate: (() => void) | undefined;
+    const createGate = new Promise<void>((resolve) => {
+      releaseCreate = resolve;
+    });
+    let creates = 0;
+    google.createEvent.mockImplementation(async () => {
+      creates += 1;
+      await createGate;
+      return { id: `g-${creates}`, appCalendarId: 'app-cal' };
+    });
+    taskRepo.findOne.mockImplementation(async () => ({
+      id: 't1',
+      userId: 'u1',
+      name: 'Standup',
+      isUnscheduled: false,
+      scheduleState: 'none',
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      recurrenceWeekDays: null,
+      skippedOccurrenceYmds: null,
+      scheduledStartTime: new Date(Date.now() + 86_400_000),
+      scheduledEndTime: new Date(Date.now() + 86_400_000 + 15 * 60_000),
+      googleEventId: creates === 0 ? null : 'g-1',
+      status: 'todo',
+      scheduleTimeZone: 'UTC',
+    }));
+    const start = new Date(Date.now() + 86_400_000);
+    const end = new Date(start.getTime() + 15 * 60_000);
+    scheduledRepo.find.mockResolvedValue([
+      { taskId: 't1', scheduledStartTime: start, scheduledEndTime: end },
+    ]);
+
+    const first = service.syncTask('u1', 't1');
+    const second = service.syncTask('u1', 't1');
+    await Promise.resolve();
+    releaseCreate?.();
+    await Promise.all([first, second]);
+
+    expect(google.createEvent).toHaveBeenCalledTimes(1);
+    expect(google.updateEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('deletes Google when an ended recurring task has no open seats left', async () => {
+    taskRepo.findOne.mockResolvedValue({
+      id: 't1',
+      userId: 'u1',
+      name: 'Standup',
+      isUnscheduled: false,
+      scheduleState: 'none',
+      isRecurring: true,
+      scheduledStartTime: new Date('2026-10-08T09:00:00.000Z'),
+      scheduledEndTime: new Date('2026-10-08T09:15:00.000Z'),
+      deadline: new Date('2026-10-08T00:00:00.000Z'),
+      googleEventId: 'g-series',
+      googleEventCalendarId: 'primary',
+      status: 'todo',
+      scheduleTimeZone: 'UTC',
+    });
+    scheduledRepo.find.mockResolvedValue([]);
+    await service.syncTask('u1', 't1');
+    expect(google.createEvent).not.toHaveBeenCalled();
+    expect(google.updateEvent).not.toHaveBeenCalled();
+    expect(google.deleteEvent).toHaveBeenCalledWith('u1', 'g-series', 'primary');
+  });
+
+  it('keeps Google when an active recurring task briefly has no open seats', async () => {
+    taskRepo.findOne.mockResolvedValue({
+      id: 't1',
+      userId: 'u1',
+      name: 'Standup',
+      isUnscheduled: false,
+      scheduleState: 'none',
+      isRecurring: true,
+      scheduledStartTime: new Date('2026-10-08T09:00:00.000Z'),
+      scheduledEndTime: new Date('2026-10-08T09:15:00.000Z'),
+      deadline: null,
+      googleEventId: 'g-series',
+      googleEventCalendarId: 'primary',
+      status: 'todo',
+      scheduleTimeZone: 'UTC',
+    });
+    scheduledRepo.find.mockResolvedValue([]);
+    await service.syncTask('u1', 't1');
+    expect(google.deleteEvent).not.toHaveBeenCalled();
+    expect(google.createEvent).not.toHaveBeenCalled();
+    expect(google.updateEvent).not.toHaveBeenCalled();
+  });
+
   it('enqueues an upsert when create fails', async () => {
     taskRepo.findOne.mockResolvedValue({
       id: 't1',

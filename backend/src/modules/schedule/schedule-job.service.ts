@@ -98,6 +98,59 @@ export class ScheduleJobService {
 
   /** Generate / replan / extend jobs no longer enqueue; horizon append uses placement. */
 
+  /**
+   * Start a task-mutation progress job (FE polls GET /schedule-jobs/:id).
+   * Stages: saving → placing → syncing → done | error.
+   */
+  async beginMutationJob(
+    userId: string,
+    payload: Record<string, unknown>,
+  ): Promise<ScheduleJob> {
+    return this.jobRepo.save(
+      this.jobRepo.create({
+        userId,
+        status: 'running',
+        progressStage: 'saving',
+        progressCurrent: null,
+        progressTotal: null,
+        payloadJson: JSON.stringify({ type: 'task_mutation', ...payload }),
+      }),
+    );
+  }
+
+  async setMutationStage(jobId: string, stage: string): Promise<void> {
+    await this.jobRepo.update(
+      { id: jobId },
+      { progressStage: stage, status: 'running' },
+    );
+  }
+
+  async completeMutationJob(
+    jobId: string,
+    result?: Record<string, unknown>,
+  ): Promise<void> {
+    await this.jobRepo.update(
+      { id: jobId },
+      {
+        status: 'done',
+        progressStage: 'done',
+        resultDiffJson: result != null ? JSON.stringify(result) : null,
+        errorMessage: null,
+      },
+    );
+  }
+
+  async failMutationJob(jobId: string, message: string): Promise<void> {
+    await this.jobRepo.update(
+      { id: jobId },
+      {
+        status: 'failed',
+        progressStage: 'error',
+        errorMessage: message.slice(0, 2000),
+      },
+    );
+  }
+
   async getJob(jobId: string, userId: string): Promise<ScheduleJob> {
     const job = await this.jobRepo.findOne({ where: { id: jobId } });
     if (!job || job.userId !== userId) {

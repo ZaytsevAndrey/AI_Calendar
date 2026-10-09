@@ -11,9 +11,8 @@ import { CreateTaskDTO, TaskDTO, UpdateTaskDTO } from 'api/tasks.api';
 import { formValuesFromCreatePayload } from 'modules/tasks/task-wizard/buildPayload';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { Modal } from '../../../ui/Modal';
-import { showErrorToast, showSuccessToast } from '../../../utils/toast';
+import { showErrorToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
-import { describeTaskToastDetail } from '../../../utils/formatDate';
 
 const TaskForm = lazy(
   () => import(/* webpackChunkName: "task-form" */ 'modules/tasks/components/TaskForm'),
@@ -44,11 +43,15 @@ export function useEventEditor() {
   const { data: phases = [] } = useGetAllPhasesQuery();
   const { data: userSettings } = useGetUserSettingsQuery();
   const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
-  const [createEvent] = useCreateEventMutation();
-  const [updateEvent] = useUpdateEventMutation();
+  const [createEvent, createState] = useCreateEventMutation();
+  const [updateEvent, updateState] = useUpdateEventMutation();
   const [skipOccurrence] = useSkipOccurrenceMutation();
+  const [localSubmitting, setLocalSubmitting] = useState(false);
+  const isSubmitting =
+    localSubmitting || createState.isLoading || updateState.isLoading;
 
   const close = () => {
+    if (isSubmitting) return;
     setOpen(false);
     setEditingEvent(null);
     setOccurrence(null);
@@ -108,24 +111,30 @@ export function useEventEditor() {
   };
 
   const submit = (data: CreateTaskDTO | UpdateTaskDTO) => {
+    if (isSubmitting) return;
     const cleanData = cleanPayload(data);
     const editing = editingEvent;
     const onCreated = afterCreate;
-    close();
+    setLocalSubmitting(true);
     const request = editing
       ? updateEvent({ id: editing.id, body: cleanData as UpdateTaskDTO }).unwrap()
       : createEvent(cleanData as CreateTaskDTO).unwrap();
     void request
       .then(async () => {
-        showSuccessToast({
-          title: editing ? t('tasks.toast.updated') : t('tasks.toast.created'),
-          detail: describeTaskToastDetail(editing ? { ...editing, ...cleanData } : cleanData),
-        });
+        // Progress toast (save → place → sync) comes from eventTasksApi.onQueryStarted.
         if (!editing && onCreated) {
           await onCreated();
         }
+        setLocalSubmitting(false);
+        setOpen(false);
+        setEditingEvent(null);
+        setOccurrence(null);
+        setCreateDefaults(undefined);
+        setFormPrefill(undefined);
+        setAfterCreate(null);
       })
       .catch((err) => {
+        setLocalSubmitting(false);
         showErrorToast({
           title: editing ? t('tasks.toast.updateFailed') : t('tasks.toast.createFailed'),
           detail: extractApiErrorMessage(err),
@@ -135,11 +144,8 @@ export function useEventEditor() {
 
   const createFromPayload = async (data: CreateTaskDTO) => {
     const cleanData = cleanPayload(data) as CreateTaskDTO;
+    // Progress toast from eventTasksApi.onQueryStarted.
     await createEvent(cleanData).unwrap();
-    showSuccessToast({
-      title: t('tasks.toast.created'),
-      detail: describeTaskToastDetail(cleanData),
-    });
   };
 
   const canSkipOccurrence = ((): boolean => {
@@ -169,9 +175,6 @@ export function useEventEditor() {
       },
     })
       .unwrap()
-      .then(() => {
-        showSuccessToast({ title: t('tasks.toast.occurrenceSkipped'), detail: task.name });
-      })
       .catch((err) => {
         showErrorToast({
           title: t('tasks.toast.skipFailed'),
@@ -212,7 +215,7 @@ export function useEventEditor() {
           }
           phases={phases}
           onSubmit={submit}
-          isSubmitting={false}
+          isSubmitting={isSubmitting}
           onCancel={close}
           onSkipOccurrence={canSkipOccurrence ? handleSkipOccurrence : undefined}
           mode={editingEvent ? 'edit' : 'create'}

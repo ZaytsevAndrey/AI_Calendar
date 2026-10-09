@@ -3,7 +3,11 @@ import {
   notifyScheduleJobSettled,
   type SchedulingConflictDTO,
 } from './conflictChoiceBus';
-import { waitForScheduleJob, type ScheduleJobStatusResponse } from 'api/schedule.api';
+import {
+  waitForScheduleJob,
+  type ScheduleJobStatusResponse,
+} from 'api/schedule.api';
+import type { MutationStage } from './taskMutationProgress';
 
 function conflictsFromJobResult(result: unknown): SchedulingConflictDTO[] {
   if (!result || typeof result !== 'object') return [];
@@ -29,20 +33,46 @@ export function recurringMovedNamesFromJobResult(result: unknown): string[] {
   return names;
 }
 
-/** Poll a silent replan job: open conflict sheet and report recurring moves. */
+const STAGE_SET = new Set<MutationStage>([
+  'saving',
+  'placing',
+  'syncing',
+  'done',
+  'error',
+]);
+
+export function mutationStageFromJob(
+  job: Pick<ScheduleJobStatusResponse, 'status' | 'progressStage'>,
+): MutationStage | null {
+  if (job.status === 'failed') return 'error';
+  if (job.status === 'done') return 'done';
+  const stage = job.progressStage;
+  if (stage && STAGE_SET.has(stage as MutationStage)) {
+    return stage as MutationStage;
+  }
+  return null;
+}
+
+/** Poll a mutation/replan job: progress stages + conflict sheet + recurring moves. */
 export async function settleReplanJob(
   jobId: string | null | undefined,
+  onStage?: (stage: MutationStage) => void,
 ): Promise<{ recurringMoved: string[] }> {
   if (!jobId) {
     notifyScheduleJobSettled();
     return { recurringMoved: [] };
   }
   try {
-    const job: ScheduleJobStatusResponse = await waitForScheduleJob(jobId);
+    const job = await waitForScheduleJob(jobId, 120_000, (snapshot) => {
+      const stage = mutationStageFromJob(snapshot);
+      if (stage) onStage?.(stage);
+    });
     emitScheduleConflicts(conflictsFromJobResult(job.result));
+    onStage?.('done');
     return { recurringMoved: recurringMovedNamesFromJobResult(job.result) };
-  } catch {
+  } catch (err) {
+    onStage?.('error');
     notifyScheduleJobSettled();
-    return { recurringMoved: [] };
+    throw err;
   }
 }

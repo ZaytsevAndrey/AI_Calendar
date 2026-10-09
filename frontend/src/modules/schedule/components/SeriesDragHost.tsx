@@ -11,7 +11,7 @@ type PendingAsk = {
   resolve: (scope: SeriesDragScope | null) => void;
 };
 
-/** Asks whether a series drag moves one day or this day and every later day. */
+/** Asks whether a series drag moves one day, this+later, or every open day. */
 export function SeriesDragHost() {
   const { t } = useTranslation();
   const [pending, setPending] = useState<PendingAsk | null>(null);
@@ -37,20 +37,37 @@ export function SeriesDragHost() {
       onClose={() => choose(null)}
       title={t('calendar.seriesDragTitle')}
       footer={
-        <>
-          <button type="button" className="ui-btn-secondary" onClick={() => choose(null)}>
-            {t('common.cancel')}
-          </button>
-          <button type="button" className="ui-btn-secondary" onClick={() => choose('occurrence')}>
-            {t('calendar.seriesDragThisDay')}
-          </button>
-          <button type="button" className="ui-btn-primary" onClick={() => choose('series')}>
-            {t('calendar.seriesDragFollowing')}
-          </button>
-        </>
+        <button type="button" className="ui-btn-secondary w-full sm:w-auto" onClick={() => choose(null)}>
+          {t('common.cancel')}
+        </button>
       }
     >
-      <p>{t('calendar.seriesDragBody', { name: pending?.taskName ?? '' })}</p>
+      <p className="mb-4 text-sm text-ide-muted">
+        {t('calendar.seriesDragBody', { name: pending?.taskName ?? '' })}
+      </p>
+      <div className="flex flex-col gap-2">
+        <button
+          type="button"
+          className="ui-btn-secondary w-full justify-center"
+          onClick={() => choose('occurrence')}
+        >
+          {t('calendar.seriesDragThisDay')}
+        </button>
+        <button
+          type="button"
+          className="ui-btn-secondary w-full justify-center"
+          onClick={() => choose('series')}
+        >
+          {t('calendar.seriesDragFollowing')}
+        </button>
+        <button
+          type="button"
+          className="ui-btn-primary w-full justify-center"
+          onClick={() => choose('all')}
+        >
+          {t('calendar.seriesDragAll')}
+        </button>
+      </div>
     </Modal>
   );
 }

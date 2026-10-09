@@ -51,6 +51,22 @@ describe('applyEventDrag', () => {
     expect(next.dayIndex).toBe(3);
   });
 
+  it('keeps the origin day when lockDay is set', () => {
+    const next = applyEventDrag({
+      mode: 'move',
+      startMin: 9 * 60,
+      endMin: 9 * 60 + 30,
+      pointerMin: 11 * 60,
+      grabOffsetMin: 0,
+      ...bounds,
+      dayIndex: 1,
+      pointerDayIndex: 4,
+      lockDay: true,
+    });
+    expect(next.dayIndex).toBe(1);
+    expect(next.startMin).toBe(11 * 60);
+  });
+
   it('resizes the start without changing the day or inverting the block', () => {
     const next = applyEventDrag({
       mode: 'resize-start',

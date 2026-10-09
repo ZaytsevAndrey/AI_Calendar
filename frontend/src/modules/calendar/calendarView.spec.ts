@@ -202,7 +202,8 @@ describe('event times', () => {
   it('tooltip times include the local start and end', () => {
     expect(formatEventTime(standup)).toMatch(/9:00/i);
     expect(formatEventTime(standup)).toMatch(/9:30/i);
-    expect(formatEventTime(review)).toMatch(/2:15/i);
+    // Locale may render 12h (2:15) or 24h (14:15).
+    expect(formatEventTime(review)).toMatch(/(2:15|14:15)/i);
   });
 });
 
