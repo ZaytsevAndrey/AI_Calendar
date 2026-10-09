@@ -122,10 +122,10 @@
     border-left-color: #bc3f3c !important;
 }
 
-/* Timed / month calendar chips — translucent fill + left accent */
+/* Timed / month calendar chips — translucent fill + left accent.
+   No position: this file loads after Tailwind; relative would override absolute timed chips. */
 .calendar-chip {
     --chip-color: #039be5;
-    position: relative;
     overflow: hidden;
     border-radius: 0.375rem;
     border: 1px solid color-mix(in srgb, var(--chip-color) 42%, transparent);
