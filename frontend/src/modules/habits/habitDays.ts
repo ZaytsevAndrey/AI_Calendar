@@ -8,6 +8,11 @@ export function isYmdInRange(date: string, from: string, to: string): boolean {
   return date >= from && date <= to;
 }
 
+/** Check-in / uncheck is allowed for any civil day through today. */
+export function isHabitDateEditable(date: string, today: string): boolean {
+  return Boolean(date && today && date <= today);
+}
+
 export function datesInclusive(from: string, to: string): string[] {
   if (!YMD_RE.test(from) || !YMD_RE.test(to) || from > to) return [];
   const dates: string[] = [];

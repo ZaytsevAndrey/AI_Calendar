@@ -2,9 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useGetEventsQuery } from 'api/eventsApi';
 import { useGetEventsQuery as useGetTasksQuery, useSkipOccurrenceMutation, useUpdateEventMutation } from 'api/eventTasksApi';
+import { useGetHabitsQuery } from 'api/habitsApi';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import type { TaskDTO } from 'api/tasks.api';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
+import { useToggleHabit } from 'modules/habits/useToggleHabit';
 import { localHm } from 'utils/ianaDateTime';
 import { showErrorToast, showSuccessToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
@@ -50,13 +52,14 @@ function BlockRow({
   block: NowBlock | null;
   timeZone: string;
   empty: string;
-  onDone: (task: TaskDTO) => void;
+  onDone: (block: NowBlock) => void;
   onSkip: (block: NowBlock) => void;
   busyId: string | null;
 }) {
   const { t } = useTranslation();
-  const showDone = !!(block && canCompleteNowBlock(block) && block.task);
+  const showDone = !!(block && canCompleteNowBlock(block));
   const showSkip = !!(block && canSkipNowBlock(block) && block.task);
+  const rowBusyId = block?.habit?.habitId ?? block?.task?.id ?? null;
   return (
     <div className="min-w-0 rounded-md border border-ide-border bg-ide-surface px-3 py-2.5">
       <p className="text-xs font-medium uppercase tracking-wide text-ide-muted">{label}</p>
@@ -78,12 +81,12 @@ function BlockRow({
                   {t('common.skip')}
                 </button>
               ) : null}
-              {showDone && block.task ? (
+              {showDone ? (
                 <button
                   type="button"
                   className="ui-btn-secondary px-2.5 py-1 text-xs"
-                  disabled={busyId === block.task.id}
-                  onClick={() => onDone(block.task!)}
+                  disabled={!!rowBusyId && busyId === rowBusyId}
+                  onClick={() => onDone(block)}
                 >
                   {t('common.done')}
                 </button>
@@ -112,13 +115,22 @@ export function NowStrip() {
     timeMax: ctx.fetchTimeMax,
   });
   const { data: tasks = [] } = useGetTasksQuery();
+  const { data: habitsData } = useGetHabitsQuery();
   const [updateTask] = useUpdateEventMutation();
   const [skipOccurrence] = useSkipOccurrenceMutation();
+  const { toggle: toggleHabit } = useToggleHabit();
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const blocks = useMemo(
-    () => buildNowBlocks(todayEvents?.events ?? [], tasks, ctx.todayYmd, ctx.timeZone),
-    [todayEvents?.events, tasks, ctx.todayYmd, ctx.timeZone],
+    () =>
+      buildNowBlocks(
+        todayEvents?.events ?? [],
+        tasks,
+        ctx.todayYmd,
+        ctx.timeZone,
+        habitsData?.habits ?? [],
+      ),
+    [todayEvents?.events, tasks, ctx.todayYmd, ctx.timeZone, habitsData?.habits],
   );
   const { now, next } = useMemo(
     () =>
@@ -143,7 +155,18 @@ export function NowStrip() {
   const phone = usePhoneLayout();
   const [expanded, setExpanded] = useState(false);
 
-  const markDone = async (task: TaskDTO) => {
+  const markDone = async (block: NowBlock) => {
+    if (block.habit) {
+      setBusyId(block.habit.habitId);
+      try {
+        await toggleHabit(block.habit.habitId, block.habit.ymd, block.habit.done);
+      } finally {
+        setBusyId(null);
+      }
+      return;
+    }
+    const task = block.task;
+    if (!task) return;
     setBusyId(task.id);
     try {
       await updateTask({ id: task.id, body: { status: 'completed' } }).unwrap();
@@ -210,7 +233,7 @@ export function NowStrip() {
           block={now}
           timeZone={ctx.timeZone}
           empty={t('now.nothingInProgress')}
-          onDone={markDone}
+          onDone={(block) => void markDone(block)}
           onSkip={markSkip}
           busyId={busyId}
         />
@@ -219,7 +242,7 @@ export function NowStrip() {
           block={next}
           timeZone={ctx.timeZone}
           empty={t('now.nothingElseToday')}
-          onDone={markDone}
+          onDone={(block) => void markDone(block)}
           onSkip={markSkip}
           busyId={busyId}
         />
@@ -237,7 +260,18 @@ export function NowStrip() {
                       type="button"
                       className="ui-btn-secondary shrink-0 px-2.5 py-1 text-xs"
                       disabled={busyId === task.id}
-                      onClick={() => void markDone(task)}
+                      onClick={() =>
+                        void markDone({
+                          key: `task:${task.id}`,
+                          title: task.name,
+                          startMs: 0,
+                          endMs: 0,
+                          allDay: false,
+                          task,
+                          event: null,
+                          habit: null,
+                        })
+                      }
                     >
                       {t('common.done')}
                     </button>

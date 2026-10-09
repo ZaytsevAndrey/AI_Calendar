@@ -240,6 +240,50 @@ export const eventTasksApi = createApi({
         }
       },
     }),
+    endSeriesFrom: builder.mutation<
+      TaskDTO,
+      { id: string; body: SkipOccurrenceDTO }
+    >({
+      query: ({ id, body }) => ({
+        url: `/tasks/${id}/end-series-from`,
+        method: 'POST',
+        data: body,
+      }),
+      invalidatesTags: (_r, _e, { id }) => [
+        { type: 'EventTask', id: 'LIST' },
+        { type: 'EventTask', id },
+      ],
+      async onQueryStarted({ id }, { dispatch, queryFulfilled, getState }) {
+        const existing = eventTasksApi.endpoints.getEvents
+          .select()(getState() as never)
+          ?.data?.find((row) => row.id === id);
+        const title = existing?.name ?? i18n.t('tasks.thisTask');
+        try {
+          await runTaskMutationProgress({
+            taskKey: id,
+            title,
+            relatedKeys: existing?.googleEventId ? [existing.googleEventId] : undefined,
+            run: async (progress) => {
+              const { data } = await queryFulfilled;
+              dispatch(
+                eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) => {
+                  const index = draft.findIndex((item) => item.id === id);
+                  if (index < 0) {
+                    draft.unshift(data);
+                    return;
+                  }
+                  draft[index] = { ...draft[index], ...data };
+                }),
+              );
+              progress.setStage('syncing');
+              dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+            },
+          });
+        } catch {
+          return;
+        }
+      },
+    }),
   }),
 });
 
@@ -250,4 +294,5 @@ export const {
   useUpdateEventMutation,
   useDeleteEventMutation,
   useSkipOccurrenceMutation,
+  useEndSeriesFromMutation,
 } = eventTasksApi;

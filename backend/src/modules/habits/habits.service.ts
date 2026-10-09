@@ -24,7 +24,6 @@ import {
 import { HabitStreakTipService } from './habit-streak-tip.service';
 import { pickStreakTipId } from './habit-streak-tip.util';
 import {
-  CHECK_IN_WINDOW_DAYS,
   checkInEditableFrom,
   computeHabitStats,
   isCheckInDateAllowed,
@@ -320,9 +319,7 @@ export class HabitsService {
       throw new BadRequestException('date must be a valid YYYY-MM-DD');
     }
     if (!isCheckInDateAllowed(date, today)) {
-      throw new BadRequestException(
-        `Check-ins are only allowed for the last ${CHECK_IN_WINDOW_DAYS} days, through today`,
-      );
+      throw new BadRequestException('Check-ins are not allowed for future days');
     }
     return date;
   }

@@ -59,9 +59,9 @@ export class HabitsController {
   }
 
   @Post(':id/check-ins')
-  @ApiOperation({ summary: 'Mark a day in the last 14 days as done' })
+  @ApiOperation({ summary: 'Mark a civil day as done (any day through today)' })
   @ApiResponse({ status: 201, description: 'Check-in saved.' })
-  @ApiResponse({ status: 400, description: 'Date is outside the 14-day window or in the future.' })
+  @ApiResponse({ status: 400, description: 'Date is invalid or in the future.' })
   checkIn(
     @Request() req,
     @Param('id') id: string,
@@ -71,7 +71,7 @@ export class HabitsController {
   }
 
   @Delete(':id/check-ins/:date')
-  @ApiOperation({ summary: 'Clear a check-in in the last 14 days' })
+  @ApiOperation({ summary: 'Clear a check-in (any day through today)' })
   @ApiResponse({ status: 200, description: 'Check-in removed.' })
   uncheck(
     @Request() req,

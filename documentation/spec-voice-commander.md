@@ -80,7 +80,7 @@ flowchart LR
 - TTS, Speak replies setting, mic equalizer UI
 - Hard confirm for delete / cancel even when `confirmVoiceCommands` is off
 
-Key code today: `backend/src/modules/voice/*`, `frontend/src/modules/voice/*` (`VoiceTaskSheet`, `useVoiceTask`, `executeVoiceCommand`).
+Key code today: `backend/src/modules/voice/*`, `frontend/src/modules/voice/*` (`VoiceTaskSheet`, `useVoiceTask`, `executeVoiceCommand`). Opening the sheet auto-starts push-to-talk recording (no Start button); Stop still ends the clip and runs STT.
 
 ---
 

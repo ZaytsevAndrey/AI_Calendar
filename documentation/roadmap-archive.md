@@ -12,6 +12,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ## Shipped (Oct 2026)
 
+- [x] **Calendar cards / Now / voice polish.** Timed cards show title only, thinner resize handles, hover delete; recurring delete asks this day / this+following / entire series (`end-series-from`). Completed tasks stay on the calendar (Google sync keeps the event). Slotted habits toggle check-in on the grid and appear in Now/Next. Voice sheet auto-starts recording (no Start button).
+
 - [x] **Incremental placement: data.** `scheduleState` (`none` | `problematic` | `resolved`) replaces `isProblematic`. A parked copy can store reason, civil day, original interval, and parent series id. `syncGoogleDeletions` defaults off (not applied yet). Failed Google writes have a `pending_google_writes` table; the retry worker is still later. The engine still full-replans.
 
 - [x] **Incremental placement: one step.** `PlacementStepService.place` seats the claimant and only the overlapped days (one-off shifts, series day becomes a non-recurring copy, chain only when everyone fits, `resolved` stays). It does not call `engine.run`. Create and edit still enqueue a full replan.

@@ -304,7 +304,11 @@ export function planPlacement(input: {
   const others = input.seats.filter((seat) => seat.taskId !== claim.taskId);
   const soft = softBusy(others, bufferMinutes);
 
-  if (claim.windowExpired) return { outcome: 'unscheduled' };
+  // Recurring never parks in Unscheduled — overflow / window miss → Problematic.
+  if (claim.windowExpired) {
+    if (claim.recurring) return { outcome: 'problematic', reason: 'deadline_no_fit' };
+    return { outcome: 'unscheduled' };
+  }
 
   const interval = claim.interval;
   if (!interval) {

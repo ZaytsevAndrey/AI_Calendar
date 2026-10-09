@@ -27,14 +27,6 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
     isWorking,
   } = voice;
 
-  const primaryLabel = isRecording
-    ? t('voice.stop')
-    : stage === 'confirm'
-      ? t('voice.confirm')
-      : stage === 'clarifying' || stage === 'needs_conflict_choice'
-        ? t('voice.answer')
-        : t('voice.startSpeaking');
-
   return (
     <Modal
       open={isOpen}
@@ -49,7 +41,7 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
           </button>
           {isRecording ? (
             <button type="button" className="ui-btn-danger" onClick={() => void finishRecording()}>
-              {primaryLabel}
+              {t('voice.stop')}
             </button>
           ) : stage === 'confirm' ? (
             <button
@@ -58,9 +50,9 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
               onClick={confirmCommand}
               disabled={isWorking}
             >
-              {primaryLabel}
+              {t('voice.confirm')}
             </button>
-          ) : (
+          ) : stage === 'error' || error ? (
             <button
               type="button"
               className="ui-btn-primary"
@@ -68,9 +60,9 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
               disabled={isWorking}
             >
               <Mic className="h-4 w-4" aria-hidden />
-              {primaryLabel}
+              {t('common.retry')}
             </button>
-          )}
+          ) : null}
         </>
       }
     >
@@ -100,7 +92,7 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
           <p className="rounded-lg border border-ide-border bg-ide-surface px-3 py-2">
             {clarifyingQuestion}
           </p>
-        ) : !isRecording ? (
+        ) : !isRecording && !isWorking && stage === 'idle' ? (
           <p className="text-ide-muted">{t('voice.hint')}</p>
         ) : null}
         {transcript ? (

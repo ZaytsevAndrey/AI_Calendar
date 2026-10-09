@@ -1,7 +1,9 @@
 import type { GoogleCalendarEvent } from '../../api/google-calendar.api';
+import type { HabitDTO } from '../../api/habits.api';
 import type { TaskDTO } from '../../api/tasks.api';
 import { isCurrentTask } from '../events/utils/isCurrentTask';
 import { eventEndDate, eventStartDate, visibleGoogleEvents } from '../calendar/calendarView';
+import { habitDoneOn } from '../habits/habitDays';
 import {
   addDaysToYmd,
   civilDayQueryRange,
@@ -17,6 +19,12 @@ const PRIORITY_RANK: Record<TaskDTO['priority'], number> = {
   low: 3,
 };
 
+export type NowHabitRef = {
+  habitId: string;
+  ymd: string;
+  done: boolean;
+};
+
 export type NowBlock = {
   key: string;
   title: string;
@@ -25,6 +33,7 @@ export type NowBlock = {
   allDay: boolean;
   task: TaskDTO | null;
   event: GoogleCalendarEvent | null;
+  habit: NowHabitRef | null;
 };
 
 const MAX_UNSCHEDULED = 5;
@@ -35,6 +44,7 @@ export function weekdayIndexUtc(ymd: string): number {
 }
 
 export function canCompleteNowBlock(block: NowBlock): boolean {
+  if (block.habit) return !block.habit.done;
   const task = block.task;
   if (!task) return false;
   if (task.isRecurring || task.isFixedExternal) return false;
@@ -43,6 +53,7 @@ export function canCompleteNowBlock(block: NowBlock): boolean {
 }
 
 export function canSkipNowBlock(block: NowBlock): boolean {
+  if (block.habit) return false;
   const task = block.task;
   if (!task) return false;
   if (block.allDay) return false;
@@ -113,6 +124,7 @@ export function buildNowBlocks(
   tasks: TaskDTO[],
   todayYmd: string,
   timeZone: string,
+  habits: HabitDTO[] = [],
 ): NowBlock[] {
   const zone = resolveIanaTimeZone(timeZone);
   const { timeMin, timeMax } = civilDayQueryRange(todayYmd, zone);
@@ -143,6 +155,7 @@ export function buildNowBlocks(
       allDay: bounds.allDay,
       task,
       event,
+      habit: null,
     });
   }
 
@@ -165,6 +178,30 @@ export function buildNowBlocks(
       allDay: false,
       task,
       event: null,
+      habit: null,
+    });
+  }
+
+  for (const habit of habits) {
+    if (!habit.blockStartTime || !habit.blockMinutes || habit.blockMinutes <= 0) continue;
+    const startIso = localDateTimeIso(todayYmd, habit.blockStartTime, zone);
+    const startMs = new Date(startIso).getTime();
+    if (Number.isNaN(startMs)) continue;
+    const endMs = startMs + habit.blockMinutes * 60 * 1000;
+    if (!(endMs > dayStart && startMs < dayEnd)) continue;
+    blocks.push({
+      key: `habit:${habit.id}:${todayYmd}`,
+      title: habit.name,
+      startMs,
+      endMs,
+      allDay: false,
+      task: null,
+      event: null,
+      habit: {
+        habitId: habit.id,
+        ymd: todayYmd,
+        done: habitDoneOn(habit.checkInDates ?? [], todayYmd),
+      },
     });
   }
 
@@ -207,6 +244,9 @@ export function unscheduledTasksForToday(
 ): TaskDTO[] {
   return tasks
     .filter((task) => isCurrentTask(task))
+    // Recurring no-fit is Problematic only — never the Now / Tasks Unscheduled inbox.
+    .filter((task) => !task.isRecurring)
+    .filter((task) => task.scheduleState !== 'problematic')
     .filter((task) => !occupiedTaskIds.has(task.id))
     .filter((task) => !taskTimedBounds(task))
     .filter(

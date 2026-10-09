@@ -812,6 +812,17 @@ export class PlacementStepService {
       const tasks = manager.getRepository(Task);
       const slots = manager.getRepository(ScheduledTask);
       if (plan.outcome === 'unscheduled') {
+        if (task.isRecurring) {
+          // Spec: recurring cannot land in Unscheduled — park as Problematic instead.
+          task.scheduleState = ScheduleState.PROBLEMATIC;
+          task.problematicReason = 'no_slot';
+          task.isUnscheduled = false;
+          task.scheduledStartTime = null;
+          task.scheduledEndTime = null;
+          await tasks.save(task);
+          await this.deleteOpenSlots(slots, task.id, now);
+          return;
+        }
         clearParkMetadata(task);
         task.isUnscheduled = true;
         task.scheduledStartTime = null;

@@ -268,6 +268,19 @@ describe('TasksService', () => {
     expect(created.problematicDay).toBeNull();
   });
 
+  it('keeps recurring out of the Unscheduled inbox when both flags arrive', async () => {
+    const created = await service.create('user-1', {
+      name: 'Daily stretch',
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      isUnscheduled: true,
+      estimatedTimeInMinutes: 30,
+    } as any);
+
+    expect(created.isRecurring).toBe(true);
+    expect(created.isUnscheduled).toBe(false);
+  });
+
   it('returns a conflict sheet payload instead of parking on create', async () => {
     placementStep.place.mockResolvedValue({
       outcome: 'conflict',

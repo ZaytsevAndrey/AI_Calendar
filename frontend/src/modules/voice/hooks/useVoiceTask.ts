@@ -94,6 +94,30 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     }
   }, [draftTask, onComplete, reset, stage]);
 
+  const beginRecording = useCallback(async () => {
+    setError(null);
+    VoiceSpeech.stop();
+    try {
+      await start();
+      setStage((current) =>
+        current === 'clarifying' || current === 'needs_conflict_choice'
+          ? 'recording_clarification'
+          : 'recording',
+      );
+    } catch (err) {
+      const name = (err as { name?: string })?.name;
+      const message = err instanceof Error ? err.message : '';
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setError(i18n.t('voice.micPermission'));
+      } else if (message === 'unsupported') {
+        setError(i18n.t('voice.micUnsupported'));
+      } else {
+        setError(i18n.t('voice.micFailed'));
+      }
+      setStage('error');
+    }
+  }, [start]);
+
   const open = useCallback(() => {
     VoiceSpeech.stop();
     cancel();
@@ -106,14 +130,19 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       const question = i18n.t('voice.pickConflictOption');
       setClarifyingQuestion(question);
       setStage('needs_conflict_choice');
-      void maybeSpeak(question);
+      setIsOpen(true);
+      void (async () => {
+        await maybeSpeak(question);
+        await beginRecording();
+      })();
     } else {
       setHeldConflict(null);
       setClarifyingQuestion(null);
       setStage('idle');
+      setIsOpen(true);
+      void beginRecording();
     }
-    setIsOpen(true);
-  }, [cancel, maybeSpeak]);
+  }, [beginRecording, cancel, maybeSpeak]);
 
   const runCommand = useCallback(
     async (command: VoiceCommandAction) => {
@@ -201,6 +230,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
         setClarifyingQuestion(question);
         setStage('clarifying');
         await maybeSpeak(question);
+        await beginRecording();
         return;
       }
 
@@ -210,6 +240,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
         setClarifyingQuestion(question);
         setStage('clarifying');
         await maybeSpeak(question);
+        await beginRecording();
         return;
       }
 
@@ -222,32 +253,8 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       reset();
       setIsOpen(false);
     },
-    [confirmCommands, maybeSpeak, onComplete, reset, runCommand, timeZone],
+    [beginRecording, confirmCommands, maybeSpeak, onComplete, reset, runCommand, timeZone],
   );
-
-  const beginRecording = useCallback(async () => {
-    setError(null);
-    VoiceSpeech.stop();
-    try {
-      await start();
-      setStage((current) =>
-        current === 'clarifying' || current === 'needs_conflict_choice'
-          ? 'recording_clarification'
-          : 'recording',
-      );
-    } catch (err) {
-      const name = (err as { name?: string })?.name;
-      const message = err instanceof Error ? err.message : '';
-      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-        setError(i18n.t('voice.micPermission'));
-      } else if (message === 'unsupported') {
-        setError(i18n.t('voice.micUnsupported'));
-      } else {
-        setError(i18n.t('voice.micFailed'));
-      }
-      setStage('error');
-    }
-  }, [start]);
 
   const finishRecording = useCallback(async () => {
     const previousTranscript = transcript;
@@ -271,6 +278,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
           setHeldConflict(conflict);
           setStage('needs_conflict_choice');
           await maybeSpeak(unclear);
+          await beginRecording();
           return;
         }
       }
@@ -288,6 +296,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     }
   }, [
     applySpokenConflict,
+    beginRecording,
     clarifyingQuestion,
     heldConflict,
     maybeSpeak,

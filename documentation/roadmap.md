@@ -101,12 +101,12 @@ Contract: [spec-incremental-placement.md](spec-incremental-placement.md). Do the
 
 ### 14. Delete a task on the calendar and in the edit modal
 
-Voice can already delete a task. The calendar block and the edit modal cannot.
+Voice can already delete a task. Calendar hover-delete ships for app and Google blocks; the edit modal still cannot.
 
-- [ ] **Calendar** — delete on an app task block, with confirm.
+- [x] **Calendar** — hover delete on a timed card, with confirm (one-off) or series scope (recurring).
 - [ ] **Edit modal** — the same action while editing.
-- [ ] **One-off** — delete the task and its linked Google event.
-- [ ] **Recurring** — choose **this event** or **all events**. This event drops that occurrence (existing skip-occurrence, so Generate does not bring it back). All events deletes the series.
+- [x] **One-off** — delete the task (and its linked Google event via sync).
+- [x] **Recurring** — choose **this day** (skip-occurrence), **this day and following** (`POST /tasks/:id/end-series-from`), or **entire series** (delete task).
 
 ### Later (not blocking the queue above)
 
@@ -127,5 +127,5 @@ Voice can already delete a task. The calendar block and the edit modal cannot.
 ## Recommended next steps
 
 1. **§13** — Stronger Unscheduled actions (slot pick / edit constraints) and discoverability chip/banner.
-2. **§14** — Delete a task from the calendar block and the edit modal; recurring asks this event or all events.
+2. **§14** — Delete from the **edit modal** (calendar hover-delete + series scopes already ship).
 3. After each feature ships: tick above, archive a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

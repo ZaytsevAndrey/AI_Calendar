@@ -8,7 +8,7 @@ import { formatClock } from '../../../utils/formatDate';
 import {
   formatHabitDateLabel,
   habitDoneOn,
-  isYmdInRange,
+  isHabitDateEditable,
   showHabitDots,
 } from '../habitDays';
 import type { HabitBlockChip } from '../habitBlocks';
@@ -18,9 +18,8 @@ import i18n from 'i18n';
 
 const MAX_DOTS = 6;
 
-function lockMessage(date: string, today: string): string {
-  if (date > today) return i18n.t('habits.futureLocked');
-  return i18n.t('habits.rangeLocked');
+function lockMessage(): string {
+  return i18n.t('habits.futureLocked');
 }
 
 export function HabitDayChecklist({
@@ -40,7 +39,7 @@ export function HabitDayChecklist({
   );
   if (!data || habits.length === 0) return null;
 
-  const editable = isYmdInRange(date, data.editableFrom, data.editableTo);
+  const editable = isHabitDateEditable(date, data.today);
 
   const row = layout === 'row';
 
@@ -96,7 +95,7 @@ export function HabitDaySection({ date }: { date: string }) {
     (habit) => !habit.blockStartTime || !habit.blockMinutes,
   );
   if (!data || checkInOnly.length === 0) return null;
-  const editable = isYmdInRange(date, data.editableFrom, data.editableTo);
+  const editable = isHabitDateEditable(date, data.today);
 
   return (
     <div className="mb-4 shrink-0 max-md:mb-1">
@@ -105,7 +104,7 @@ export function HabitDaySection({ date }: { date: string }) {
           {t('habits.title')}
         </h3>
         {editable ? null : (
-          <p className="text-xs text-ide-muted">{lockMessage(date, data.today)}</p>
+          <p className="text-xs text-ide-muted">{lockMessage()}</p>
         )}
       </div>
       <HabitDayChecklist date={date} omitTimed layout={phone ? 'row' : 'stack'} />
@@ -182,7 +181,7 @@ export function HabitDayDialog({
   const { t } = useTranslation();
   const { data } = useGetHabitsQuery();
   const editable =
-    date && data ? isYmdInRange(date, data.editableFrom, data.editableTo) : false;
+    date && data ? isHabitDateEditable(date, data.today) : false;
 
   return (
     <Modal
@@ -196,7 +195,7 @@ export function HabitDayDialog({
       maxWidthClass="max-w-md"
     >
       {date && data && !editable ? (
-        <p className="mb-3 text-sm text-ide-muted">{lockMessage(date, data.today)}</p>
+        <p className="mb-3 text-sm text-ide-muted">{lockMessage()}</p>
       ) : null}
       {date ? <HabitDayChecklist date={date} /> : null}
     </Modal>
@@ -206,27 +205,34 @@ export function HabitDayDialog({
 export function HabitBlockButton({
   block,
   showTime,
-  onOpen,
 }: {
   block: HabitBlockChip;
   showTime: boolean;
-  onOpen: (ymd: string) => void;
 }) {
+  const { data } = useGetHabitsQuery();
+  const { toggle, busy } = useToggleHabit();
   const clock = formatClock(block.start);
+  const editable = data ? isHabitDateEditable(block.ymd, data.today) : false;
   return (
     <button
       type="button"
       title={showTime ? `${clock} ${block.name}` : block.name}
-      className="relative mb-1 w-full overflow-hidden text-ellipsis whitespace-nowrap rounded px-1.5 py-1 text-left text-xs text-white"
-      style={{ backgroundColor: block.color, opacity: block.done ? 0.55 : 1 }}
+      disabled={!editable || busy}
+      className={`calendar-chip relative mb-1 w-full whitespace-nowrap px-1.5 py-1 pl-2 text-left text-xs font-medium disabled:opacity-60 ${
+        block.done ? 'calendar-chip--done' : ''
+      }`}
+      style={{ ['--chip-color']: block.color } as React.CSSProperties}
       onClick={(event) => {
         event.stopPropagation();
-        onOpen(block.ymd);
+        if (!editable) return;
+        void toggle(block.habitId, block.ymd, block.done);
       }}
     >
-      {showTime ? `${clock} ` : ''}
-      {block.name}
-      {block.done ? ' ✓' : ''}
+      <span className="block truncate">
+        {block.done ? '✓ ' : ''}
+        {showTime ? `${clock} ` : ''}
+        {block.name}
+      </span>
     </button>
   );
 }

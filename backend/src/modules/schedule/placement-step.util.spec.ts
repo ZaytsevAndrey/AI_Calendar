@@ -263,6 +263,21 @@ describe('planPlacement', () => {
     expect(plan).toEqual({ outcome: 'unscheduled' });
   });
 
+  it('sends an expired recurring window to problematic, not unscheduled', () => {
+    const plan = planPlacement({
+      claim: {
+        ...claim({ start: DAY, end: DAY + HOUR }),
+        recurring: true,
+        windowExpired: true,
+      },
+      seats: [],
+    });
+    expect(plan).toEqual({
+      outcome: 'problematic',
+      reason: 'deadline_no_fit',
+    });
+  });
+
   it('avoids a fixed buffer and uses it only when nothing else fits', () => {
     const avoided = planPlacement({
       claim: claim(null),

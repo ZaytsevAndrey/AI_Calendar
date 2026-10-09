@@ -179,9 +179,9 @@ describe('getDaysInView', () => {
 });
 
 describe('event times', () => {
-  it('chip labels use 24h local start time and the title', () => {
-    expect(chipLabel(standup)).toBe('09:00 Standup');
-    expect(chipLabel(review)).toBe('14:15 Review');
+  it('chip labels use the event title only', () => {
+    expect(chipLabel(standup)).toBe('Standup');
+    expect(chipLabel(review)).toBe('Review');
     expect(chipLabel(fridayOff)).toBe('Friday off');
   });
 
@@ -236,10 +236,10 @@ describe('day view', () => {
     expect(hours).not.toContain('08:00');
   });
 
-  it('shows every waking timed event that starts that day, with times', () => {
+  it('shows every waking timed event that starts that day', () => {
     const visible = eventsVisibleInView('day', focusDay, displayEvents);
     expect(ids(visible)).toEqual(['lunch', 'standup']);
-    expect(visible.map(chipLabel)).toEqual(['09:00 Standup', '12:00 Lunch']);
+    expect(visible.map(chipLabel)).toEqual(['Standup', 'Lunch']);
   });
 });
 
@@ -372,11 +372,11 @@ describe('week view', () => {
     const visible = eventsVisibleInView('week', focusDay, displayEvents);
     expect(ids(visible)).toEqual(['friday-off', 'lunch', 'planning', 'review', 'standup']);
     expect(visible.map(chipLabel).sort()).toEqual([
-      '09:00 Standup',
-      '10:00 Planning',
-      '12:00 Lunch',
-      '14:15 Review',
       'Friday off',
+      'Lunch',
+      'Planning',
+      'Review',
+      'Standup',
     ]);
     expect(ids(visible)).not.toContain('cancelled');
     expect(ids(visible)).not.toContain('late');
@@ -412,9 +412,9 @@ describe('month view', () => {
     ]);
 
     const ninth = gridEventsForDay(displayEvents, focusDay);
-    expect(ninth.map(chipLabel).sort()).toEqual(['09:00 Standup', '12:00 Lunch']);
+    expect(ninth.map(chipLabel).sort()).toEqual(['Lunch', 'Standup']);
     expect(gridEventsForDay(displayEvents, localDate(2026, 9, 1)).map(chipLabel)).toEqual([
-      '09:00 October kickoff',
+      'October kickoff',
     ]);
   });
 });

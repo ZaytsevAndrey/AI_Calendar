@@ -1,6 +1,6 @@
 import { addDaysToYmd } from '../voice/voice-local-date.util';
 
-/** Inclusive window ending today. Older check-ins stay visible but are not editable. */
+/** Inclusive window ending today — used for Habits page grid columns, not as an edit lock. */
 export const CHECK_IN_WINDOW_DAYS = 14;
 
 export type HabitStats = {
@@ -61,7 +61,8 @@ export function checkInEditableFrom(todayYmd: string): string {
   return addDaysToYmd(todayYmd, 1 - CHECK_IN_WINDOW_DAYS);
 }
 
+/** Any civil day through today (settings TZ); future days stay locked. */
 export function isCheckInDateAllowed(date: string, todayYmd: string): boolean {
   if (!isValidYmd(date) || !isValidYmd(todayYmd)) return false;
-  return date >= checkInEditableFrom(todayYmd) && date <= todayYmd;
+  return date <= todayYmd;
 }

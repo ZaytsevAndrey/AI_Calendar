@@ -34,7 +34,7 @@ import { ScheduledTask } from '../schedule/schedule.entity';
 import { hasFullyEnded } from '../schedule/google-segment-sync.util';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { PendingGoogleWriteService } from '../google-calendar/pending-google-write.service';
-import { localYmd } from '../voice/voice-local-date.util';
+import { localYmd, startOfLocalDayIso } from '../voice/voice-local-date.util';
 import {
   addSkippedOccurrenceYmd,
   googleRecurringInstanceId,
@@ -76,6 +76,10 @@ export class TasksService {
   }
 
   private applyUnscheduledConstraints(task: Task): void {
+    // Recurring cannot be the intentional Unscheduled inbox — keep series flags.
+    if (task.isRecurring && task.isUnscheduled) {
+      task.isUnscheduled = false;
+    }
     if (task.isUnscheduled && isProblematicSchedule(task)) {
       // Unscheduled (intentional inbox) wins when both arrive set.
       clearParkMetadata(task);
@@ -944,7 +948,61 @@ export class TasksService {
   ): Promise<Task> {
     const task = await this.findOne(id, userId);
     task.status = status;
-    return this.tasksRepository.save(task);
+    const saved = await this.tasksRepository.save(task);
+    this.pendingGoogleWrites.syncTaskSoon(userId, saved.id);
+    return saved;
+  }
+
+  /**
+   * End a recurring series from the given day onward (keeps earlier days).
+   * Mirrors the “this day and following” half of a series split without creating a tail.
+   */
+  async endSeriesFrom(
+    id: string,
+    userId: string,
+    dto: SkipOccurrenceDto,
+  ): Promise<Task & { jobId: string | null }> {
+    const task = await this.findOne(id, userId);
+    if (!task.isRecurring) {
+      throw new BadRequestException('Only recurring tasks can end from a day');
+    }
+    if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.CANCELED) {
+      throw new BadRequestException('Completed or canceled tasks cannot be edited this way');
+    }
+    const occurrenceStart = new Date(dto.occurrenceStart);
+    if (Number.isNaN(occurrenceStart.getTime())) {
+      throw new BadRequestException('occurrenceStart must be a valid ISO date');
+    }
+    const settings = await this.userSettingsRepository.findOne({ where: { userId } });
+    const timeZone = resolveIanaTimeZone(settings?.timeZone || task.scheduleTimeZone);
+    const splitYmd = localYmd(occurrenceStart.toISOString(), timeZone);
+    const splitStart = new Date(startOfLocalDayIso(splitYmd, timeZone));
+    if (!task.deadline || new Date(task.deadline).getTime() > splitStart.getTime()) {
+      task.deadline = splitStart;
+    }
+
+    const rows = await this.scheduledTaskRepository.find({ where: { taskId: task.id } });
+    const now = Date.now();
+    const tail = rows.filter((row) => {
+      if (new Date(row.scheduledEndTime).getTime() <= now) return false;
+      const ymd = localYmd(new Date(row.scheduledStartTime).toISOString(), timeZone);
+      return ymd >= splitYmd;
+    });
+    if (tail.length) await this.scheduledTaskRepository.remove(tail);
+
+    const remaining = (
+      await this.scheduledTaskRepository.find({ where: { taskId: task.id } })
+    ).sort(
+      (a, b) =>
+        new Date(a.scheduledStartTime).getTime() -
+        new Date(b.scheduledStartTime).getTime(),
+    );
+    this.refreshTaskScheduleAfterSkip(task, remaining);
+    const saved = await this.tasksRepository.save(task);
+    await this.pendingGoogleWrites.syncTask(userId, saved.id);
+    if (tail.length) await this.placementStep.seatOpenHoles(userId);
+    const row = await this.findOne(saved.id, userId);
+    return Object.assign(row, { jobId: null as string | null });
   }
 }
 

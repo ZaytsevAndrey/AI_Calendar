@@ -99,6 +99,22 @@ export class TasksController {
     return this.tasksService.skipOccurrence(id, req.user.userId, dto);
   }
 
+  @Post(':id/end-series-from')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'End a recurring series from the given day onward (keeps earlier days)',
+  })
+  @ApiResponse({ status: 200, description: 'Series ended from that day.' })
+  @ApiResponse({ status: 400, description: 'Not a recurring task or invalid occurrence.' })
+  @ApiResponse({ status: 404, description: 'Task not found.' })
+  endSeriesFrom(
+    @Param('id') id: string,
+    @Body() dto: SkipOccurrenceDto,
+    @Request() req,
+  ) {
+    return this.tasksService.endSeriesFrom(id, req.user.userId, dto);
+  }
+
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a task' })
   @ApiResponse({ status: 200, description: 'Task deleted successfully.' })

@@ -1,4 +1,5 @@
 import type { GoogleCalendarEvent } from '../../api/google-calendar.api';
+import type { HabitDTO } from '../../api/habits.api';
 import type { TaskDTO } from '../../api/tasks.api';
 import {
   buildNowBlocks,
@@ -203,6 +204,34 @@ describe('pickNowAndNext', () => {
     expect(canCompleteNowBlock(now!)).toBe(true);
     expect(canSkipNowBlock(now!)).toBe(true);
   });
+
+  it('includes slotted habits in Next and offers Done as check-in', () => {
+    const habit: HabitDTO = {
+      id: 'h1',
+      name: 'Run',
+      color: '#112233',
+      description: null,
+      checkedToday: false,
+      currentStreak: 0,
+      points: 0,
+      totalCheckIns: 0,
+      checkInDates: [],
+      achievements: {},
+      newlyUnlocked: [],
+      streakTip: null,
+      blockStartTime: '14:00',
+      blockMinutes: 30,
+      googleEventId: null,
+      createdAt: '2026-09-01T00:00:00.000Z',
+      updatedAt: '2026-09-01T00:00:00.000Z',
+    };
+    const blocks = buildNowBlocks([], [], TODAY, TZ, [habit]);
+    const { next } = pickNowAndNext(blocks, nowMs, todayEndMs);
+    expect(next?.title).toBe('Run');
+    expect(next?.habit?.habitId).toBe('h1');
+    expect(canCompleteNowBlock(next!)).toBe(true);
+    expect(canSkipNowBlock(next!)).toBe(false);
+  });
 });
 
 describe('unscheduledTasksForToday', () => {
@@ -259,5 +288,24 @@ describe('unscheduledTasksForToday', () => {
       TZ,
     );
     expect(list.map((item) => item.id)).toEqual(['u', 'h', 'later', 'over']);
+  });
+
+  it('never lists recurring or problematic tasks in the Unscheduled strip', () => {
+    const recurring = task({
+      id: 'r',
+      name: 'Morning series',
+      isRecurring: true,
+      scheduleState: 'problematic',
+      problematicReason: 'no_slot',
+    });
+    const problematicFlex = task({
+      id: 'p',
+      name: 'Parked',
+      scheduleState: 'problematic',
+      problematicReason: 'no_slot',
+    });
+    const inbox = task({ id: 'u', name: 'Buy milk', isUnscheduled: true, priority: 'urgent' });
+    const list = unscheduledTasksForToday([recurring, problematicFlex, inbox], new Set(), TODAY, TZ);
+    expect(list.map((item) => item.id)).toEqual(['u']);
   });
 });

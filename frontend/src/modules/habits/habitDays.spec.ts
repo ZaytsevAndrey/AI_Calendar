@@ -3,6 +3,7 @@ import {
   datesInclusive,
   formatHabitDateLabel,
   habitDoneOn,
+  isHabitDateEditable,
   isYmdInRange,
   showHabitDots,
 } from './habitDays';
@@ -21,11 +22,17 @@ describe('habitDays', () => {
     expect(datesInclusive('2026-09-09', '2026-09-07')).toEqual([]);
   });
 
-  it('treats the editable window as inclusive', () => {
+  it('treats the habits grid window as inclusive', () => {
     expect(isYmdInRange('2026-08-26', '2026-08-26', '2026-09-08')).toBe(true);
     expect(isYmdInRange('2026-09-08', '2026-08-26', '2026-09-08')).toBe(true);
     expect(isYmdInRange('2026-08-25', '2026-08-26', '2026-09-08')).toBe(false);
     expect(isYmdInRange('2026-09-09', '2026-08-26', '2026-09-08')).toBe(false);
+  });
+
+  it('allows check-in edits for any day through today', () => {
+    expect(isHabitDateEditable('2026-09-08', '2026-09-08')).toBe(true);
+    expect(isHabitDateEditable('2020-01-01', '2026-09-08')).toBe(true);
+    expect(isHabitDateEditable('2026-09-09', '2026-09-08')).toBe(false);
   });
 
   it('shows calendar dots for the editable window and older days that were done', () => {

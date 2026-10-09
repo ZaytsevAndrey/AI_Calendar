@@ -26,6 +26,8 @@ import {
 import { dateOnDayAtMinutes } from '../eventDrag';
 import { HabitBlockButton, HabitDayDialog, HabitDayDots, HabitDaySection } from '../../habits/components/CalendarHabits';
 import { habitBlockChips, isHabitGoogleEvent } from '../../habits/habitBlocks';
+import { useToggleHabit } from '../../habits/useToggleHabit';
+import { isHabitDateEditable } from '../../habits/habitDays';
 import { ymdFromLocalDate } from '../../../utils/ianaDateTime';
 import { formatClock } from '../../../utils/formatDate';
 
@@ -47,6 +49,8 @@ interface CalendarGridProps {
         start: Date,
         end: Date,
     ) => Promise<void>;
+    onDeleteEvent?: (event: GoogleCalendarEvent) => void;
+    isEventCompleted?: (event: GoogleCalendarEvent) => boolean;
     /** Phone month: day number and a dot, tap opens that day. */
     phoneMonth?: boolean;
     onPickDay?: (day: Date) => void;
@@ -59,6 +63,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     onEditEvent,
     onCreateForDate,
     onEventTimeChange,
+    onDeleteEvent,
+    isEventCompleted,
     phoneMonth = false,
     onPickDay,
 }) => {
@@ -109,9 +115,19 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
         habitsData?.timeZone ?? 'UTC',
     );
     const [habitDate, setHabitDate] = useState<string | null>(null);
+    const { toggle: toggleHabit, busy: habitBusy } = useToggleHabit();
     const habitDialog = (
         <HabitDayDialog date={habitDate} onClose={() => setHabitDate(null)} />
     );
+    const handleToggleHabit = (habit: {
+        habitId: string;
+        ymd: string;
+        done: boolean;
+    }) => {
+        if (habitBusy || !habitsData) return;
+        if (!isHabitDateEditable(habit.ymd, habitsData.today)) return;
+        void toggleHabit(habit.habitId, habit.ymd, habit.done);
+    };
 
     const weekdayKeys = [
         'calendar.weekdayMon',
@@ -193,19 +209,26 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
             eventPhase = getPhaseForTime(eventTime);
         }
 
+        const completed = isEventCompleted?.(event) ?? false;
         return (
             <div
                 key={event.id}
                 title={tooltipText(event)}
                 role="button"
                 tabIndex={0}
-                className="relative mb-1 cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded px-1.5 py-1 text-xs text-white"
-                style={{
-                    backgroundColor: getEventColor(event),
-                    border: eventPhase
-                        ? `2px solid ${eventPhase.color}`
-                        : '1px solid rgba(255,255,255,0.3)',
-                }}
+                className={`calendar-chip relative mb-1 cursor-pointer whitespace-nowrap px-1.5 py-1 pl-2 text-xs font-medium ${
+                    completed ? 'calendar-chip--done' : ''
+                }`}
+                style={
+                    {
+                        '--chip-color': getEventColor(event),
+                        ...(eventPhase
+                            ? {
+                                  boxShadow: `inset 3px 0 0 0 ${getEventColor(event)}, 0 0 0 1px ${eventPhase.color}`,
+                              }
+                            : null),
+                    } as React.CSSProperties
+                }
                 onClick={(e) => {
                     e.stopPropagation();
                     onEditEvent?.(event.id);
@@ -218,10 +241,17 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                     }
                 }}
             >
-                {chipLabel(event)}
+                <span className="block truncate">
+                    {completed ? (
+                        <span className="calendar-chip__check" aria-hidden>
+                            ✓
+                        </span>
+                    ) : null}
+                    {chipLabel(event)}
+                </span>
                 {eventPhase && (
                     <span
-                        className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-white"
+                        className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-white/80"
                         style={{ backgroundColor: eventPhase.color }}
                     />
                 )}
@@ -330,7 +360,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                         dateOnDayAtMinutes(day, displayToPersonal(axis, minutes))
                     }
                     onEventTimeChange={onEventTimeChange}
-                    onOpenHabit={setHabitDate}
+                    onDeleteEvent={onDeleteEvent}
+                    onToggleHabit={handleToggleHabit}
+                    isEventCompleted={isEventCompleted}
                     renderDayExtra={
                         view === 'week'
                             ? (day) => <HabitDayDots day={day} onOpen={setHabitDate} />
@@ -445,7 +477,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                                         key={item.block.id}
                                                         block={item.block}
                                                         showTime
-                                                        onOpen={setHabitDate}
                                                     />
                                                 ) : (
                                                     renderGridEvent(item.event)

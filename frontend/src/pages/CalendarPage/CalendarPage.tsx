@@ -25,7 +25,9 @@ import { ProblematicInboxSheet } from 'modules/schedule/components/ProblematicIn
 import { ScheduleMenu } from 'modules/schedule/components/ScheduleMenu';
 import { ScheduleSuggestionsDialog } from 'modules/schedule/components/ScheduleSuggestionsDialog';
 import { SeriesDragHost } from 'modules/schedule/components/SeriesDragHost';
+import { SeriesDeleteHost } from 'modules/schedule/components/SeriesDeleteHost';
 import {
+    askSeriesDeleteScope,
     SeriesMoveCancelled,
     type SeriesDragScope,
 } from 'modules/schedule/seriesDragChoice';
@@ -33,8 +35,18 @@ import { isActiveProblematicTask, todayYmdInZone } from 'modules/schedule/proble
 import { NowStrip } from 'modules/now/components/NowStrip';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
-import { findTaskForGoogleEvent } from 'modules/calendar/findTaskForGoogleEvent';
-import { eventTasksApi, useGetEventsQuery as useGetTasksQuery } from 'api/eventTasksApi';
+import {
+    isCompletedCalendarEvent,
+    overlayCompletedTaskEvents,
+    resolveTaskForCalendarEvent,
+} from 'modules/calendar/completedTaskEvents';
+import {
+    eventTasksApi,
+    useDeleteEventMutation as useDeleteTaskMutation,
+    useEndSeriesFromMutation,
+    useGetEventsQuery as useGetTasksQuery,
+    useSkipOccurrenceMutation,
+} from 'api/eventTasksApi';
 import { eventsApi } from 'api/eventsApi';
 import { useGetHabitsQuery } from 'api/habitsApi';
 import { isHabitGoogleEvent } from 'modules/habits/habitBlocks';
@@ -116,12 +128,16 @@ const CalendarPage: React.FC = () => {
     const [eventsOpen, setEventsOpen] = useState(false);
     const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
         open: boolean;
+        mode: 'google' | 'task';
         eventId: string | null;
+        taskId: string | null;
         calendarId?: string;
         eventName: string;
     }>({
         open: false,
+        mode: 'google',
         eventId: null,
+        taskId: null,
         eventName: '',
     });
     const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -150,6 +166,9 @@ const CalendarPage: React.FC = () => {
     const getEventsQuery = queryMap[currentView];
     const [updateEventTrigger] = useUpdateEvent();
     const [deleteEventTrigger] = useDeleteEvent();
+    const [deleteTaskTrigger] = useDeleteTaskMutation();
+    const [skipOccurrenceTrigger] = useSkipOccurrenceMutation();
+    const [endSeriesFromTrigger] = useEndSeriesFromMutation();
     const { parkDayHints } = useScheduleActions();
     const { data: userSettings } = useGetUserSettingsQuery();
     const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
@@ -181,26 +200,143 @@ const CalendarPage: React.FC = () => {
             .map((habit) => habit.googleEventId)
             .filter((id): id is string => !!id),
     );
-    const displayEvents = visibleGoogleEvents(getEventsQuery.data?.events || []).filter(
-        (event) => !isHabitGoogleEvent(habitEventIds, event),
+    const displayEvents = overlayCompletedTaskEvents(
+        visibleGoogleEvents(getEventsQuery.data?.events || []).filter(
+            (event) => !isHabitGoogleEvent(habitEventIds, event),
+        ),
+        tasks,
     );
+
+    const occurrenceStartIso = (event: GoogleCalendarEvent): string | null => {
+        if (event.start.dateTime) return event.start.dateTime;
+        if (event.start.date) {
+            return civilDayStartEndIso(event.start.date, timeZone).start;
+        }
+        return null;
+    };
+
+    const handleDeleteCalendarEvent = async (event: GoogleCalendarEvent) => {
+        const linked = resolveTaskForCalendarEvent(tasks, event);
+        const name = event.summary || t('calendar.event');
+        if (!linked) {
+            setDeleteConfirmDialog({
+                open: true,
+                mode: 'google',
+                eventId: event.id,
+                taskId: null,
+                calendarId: event.calendarId,
+                eventName: name,
+            });
+            return;
+        }
+        if (linked.isRecurring || event.recurringEventId) {
+            const scope = await askSeriesDeleteScope(linked.name);
+            if (!scope) return;
+            const occurrenceStart = occurrenceStartIso(event);
+            if (!occurrenceStart && scope !== 'all') {
+                showErrorToast({ title: t('calendar.taskDeleteFailed') });
+                return;
+            }
+            try {
+                if (scope === 'occurrence') {
+                    await skipOccurrenceTrigger({
+                        id: linked.id,
+                        body: {
+                            occurrenceStart: occurrenceStart!,
+                            googleEventId: event.id.startsWith('local-completed:')
+                                ? undefined
+                                : event.id,
+                            googleEventCalendarId: event.calendarId,
+                        },
+                    }).unwrap();
+                    showSuccessToast({
+                        title: t('now.occurrenceSkipped'),
+                        detail: linked.name,
+                    });
+                    return;
+                }
+                if (scope === 'series') {
+                    await endSeriesFromTrigger({
+                        id: linked.id,
+                        body: {
+                            occurrenceStart: occurrenceStart!,
+                            googleEventId: event.id.startsWith('local-completed:')
+                                ? undefined
+                                : event.id,
+                            googleEventCalendarId: event.calendarId,
+                        },
+                    }).unwrap();
+                    showSuccessToast({
+                        title: t('calendar.seriesEndedFrom'),
+                        detail: linked.name,
+                    });
+                    return;
+                }
+                await deleteTaskTrigger(linked.id).unwrap();
+                showSuccessToast({
+                    title: t('calendar.taskDeleted'),
+                    detail: linked.name,
+                });
+            } catch (err) {
+                showErrorToast({
+                    title: t('calendar.taskDeleteFailed'),
+                    detail: extractApiErrorMessage(err),
+                });
+            }
+            return;
+        }
+        setDeleteConfirmDialog({
+            open: true,
+            mode: 'task',
+            eventId: event.id,
+            taskId: linked.id,
+            calendarId: event.calendarId,
+            eventName: name,
+        });
+    };
 
     const handleDeleteEvent = (eventId: string, eventName: string) => {
         const event = displayEvents.find((item) => item.id === eventId);
+        if (event) {
+            void handleDeleteCalendarEvent(event);
+            return;
+        }
         setDeleteConfirmDialog({
             open: true,
+            mode: 'google',
             eventId,
-            calendarId: event?.calendarId,
+            taskId: null,
             eventName,
         });
     };
 
     const confirmDeleteEvent = () => {
-        if (!deleteConfirmDialog.eventId) return;
-        const eventId = deleteConfirmDialog.eventId;
-        const calendarId = deleteConfirmDialog.calendarId;
-        const eventName = deleteConfirmDialog.eventName;
-        setDeleteConfirmDialog({ open: false, eventId: null, eventName: '' });
+        const { mode, eventId, taskId, calendarId, eventName } = deleteConfirmDialog;
+        setDeleteConfirmDialog({
+            open: false,
+            mode: 'google',
+            eventId: null,
+            taskId: null,
+            eventName: '',
+        });
+        if (mode === 'task' && taskId) {
+            void deleteTaskTrigger(taskId)
+                .unwrap()
+                .then(() => {
+                    showSuccessToast({
+                        title: t('calendar.taskDeleted'),
+                        detail: eventName || undefined,
+                    });
+                })
+                .catch((err) => {
+                    showErrorToast({
+                        title: t('calendar.taskDeleteFailed'),
+                        detail: extractApiErrorMessage(err),
+                    });
+                });
+            return;
+        }
+        if (!eventId) return;
         void deleteEventTrigger({ eventId, calendarId })
             .unwrap()
             .then(() => {
@@ -218,13 +354,19 @@ const CalendarPage: React.FC = () => {
     };
 
     const cancelDeleteEvent = () => {
-        setDeleteConfirmDialog({ open: false, eventId: null, eventName: '' });
+        setDeleteConfirmDialog({
+            open: false,
+            mode: 'google',
+            eventId: null,
+            taskId: null,
+            eventName: '',
+        });
     };
 
     const handleEditEvent = (eventId: string) => {
         const event = displayEvents.find((e: EventType) => e.id === eventId);
         if (!event) return;
-        const linkedTask = findTaskForGoogleEvent(tasks, event);
+        const linkedTask = resolveTaskForCalendarEvent(tasks, event);
         if (linkedTask) {
             const start = eventStartDate(event);
             openEdit(
@@ -344,7 +486,7 @@ const CalendarPage: React.FC = () => {
 
         // Immediate feedback on the dragged block; expand after series scope is chosen.
         applyOptimistic('occurrence');
-        const linkedTask = findTaskForGoogleEvent(tasks, event);
+        const linkedTask = resolveTaskForCalendarEvent(tasks, event);
         const relatedKeys = [
             event.id,
             event.recurringEventId,
@@ -590,6 +732,8 @@ const CalendarPage: React.FC = () => {
                             onEditEvent={handleEditEvent}
                             onCreateForDate={handleCreateForDate}
                             onEventTimeChange={coarse ? undefined : handleEventTimeChange}
+                            onDeleteEvent={(event) => void handleDeleteCalendarEvent(event)}
+                            isEventCompleted={(event) => isCompletedCalendarEvent(event, tasks)}
                             phoneMonth={phone && currentView === 'month'}
                             onPickDay={(day) => {
                                 setCurrentDate(day);
@@ -673,9 +817,20 @@ const CalendarPage: React.FC = () => {
                 }
             >
                 <p className="mb-3 text-ide-text">
-                    {t('calendar.deleteEventConfirm', { name: deleteConfirmDialog.eventName })}
+                    {t(
+                        deleteConfirmDialog.mode === 'task'
+                            ? 'calendar.deleteTaskConfirm'
+                            : 'calendar.deleteEventConfirm',
+                        { name: deleteConfirmDialog.eventName },
+                    )}
                 </p>
-                <p className="text-sm text-ide-muted">{t('calendar.deleteEventHint')}</p>
+                <p className="text-sm text-ide-muted">
+                    {t(
+                        deleteConfirmDialog.mode === 'task'
+                            ? 'calendar.deleteTaskHint'
+                            : 'calendar.deleteEventHint',
+                    )}
+                </p>
             </Modal>
 
             <ScheduleSuggestionsDialog
@@ -694,6 +849,7 @@ const CalendarPage: React.FC = () => {
             />
             <VoiceTaskSheet voice={voice} />
             <SeriesDragHost />
+            <SeriesDeleteHost />
 
             <Modal
                 open={phone && actionsOpen}

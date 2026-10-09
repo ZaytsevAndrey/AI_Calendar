@@ -79,11 +79,12 @@ describe('habit-stats', () => {
     });
   });
 
-  it('allows today through the previous 13 days', () => {
+  it('allows any day through today and rejects the future', () => {
     expect(checkInEditableFrom(TODAY)).toBe('2026-08-26');
     expect(isCheckInDateAllowed(TODAY, TODAY)).toBe(true);
     expect(isCheckInDateAllowed('2026-08-26', TODAY)).toBe(true);
-    expect(isCheckInDateAllowed('2026-08-25', TODAY)).toBe(false);
+    expect(isCheckInDateAllowed('2026-08-25', TODAY)).toBe(true);
+    expect(isCheckInDateAllowed('2020-01-01', TODAY)).toBe(true);
     expect(isCheckInDateAllowed('2026-09-09', TODAY)).toBe(false);
     expect(isCheckInDateAllowed('2026-02-30', TODAY)).toBe(false);
   });

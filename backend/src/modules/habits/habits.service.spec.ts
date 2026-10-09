@@ -161,25 +161,36 @@ describe('HabitsService', () => {
     expect(result.timeZone).toBe('Europe/Kyiv');
   });
 
-  it('rejects check-ins outside the 14-day window', async () => {
+  it('rejects check-ins in the future and allows older days', async () => {
     habitsRepositoryMock.findOne.mockResolvedValue({
       id: 'habit-1',
       userId: 'user-1',
       name: 'Exercise',
       color: '#22c55e',
       description: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
+    checkInsRepositoryMock.findOne.mockResolvedValue(null);
+    checkInsRepositoryMock.find.mockResolvedValue([
+      { habitId: 'habit-1', localDate: '2026-08-25' },
+    ]);
 
-    await expect(
-      service.setCheckIn('user-1', 'habit-1', '2026-08-25', true),
-    ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
       service.setCheckIn('user-1', 'habit-1', '2026-09-09', true),
     ).rejects.toBeInstanceOf(BadRequestException);
-    expect(checkInsRepositoryMock.save).not.toHaveBeenCalled();
+
+    const result = await service.setCheckIn(
+      'user-1',
+      'habit-1',
+      '2026-08-25',
+      true,
+    );
+    expect(checkInsRepositoryMock.save).toHaveBeenCalled();
+    expect(result.checkInDates).toEqual(['2026-08-25']);
   });
 
-  it('saves a check-in on the oldest allowed day', async () => {
+  it('saves a check-in on a day inside the habits grid window', async () => {
     habitsRepositoryMock.findOne.mockResolvedValue({
       id: 'habit-1',
       userId: 'user-1',

@@ -1,5 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { format } from 'date-fns';
+import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 import { HabitBlockChip } from '../../habits/habitBlocks';
 import { dateFnsOptions } from '../../../i18n/dateLocale';
@@ -27,7 +29,7 @@ import {
 } from '../eventDrag';
 
 const PX_PER_HOUR = 48;
-const HANDLE_PX = 8;
+const HANDLE_PX = 4;
 
 type Placement = {
   dayIndex: number;
@@ -63,7 +65,9 @@ interface CalendarTimeGridProps {
     start: Date,
     end: Date,
   ) => Promise<void>;
-  onOpenHabit?: (ymd: string) => void;
+  onDeleteEvent?: (event: GoogleCalendarEvent) => void;
+  onToggleHabit?: (habit: TimedHabit) => void;
+  isEventCompleted?: (event: GoogleCalendarEvent) => boolean;
   renderDayExtra?: (day: Date) => React.ReactNode;
 }
 
@@ -95,9 +99,12 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
   onEditEvent,
   onCreateForDate,
   onEventTimeChange,
-  onOpenHabit,
+  onDeleteEvent,
+  onToggleHabit,
+  isEventCompleted,
   renderDayExtra,
 }) => {
+  const { t } = useTranslation();
   const daySpanMin = Math.max(dayEndMin - dayStartMin, 60);
   const gridHeightPx = (daySpanMin / 60) * PX_PER_HOUR;
   const colRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -302,8 +309,8 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                     key={event.id}
                     type="button"
                     title={tooltipText(event)}
-                    className="truncate rounded px-1.5 py-1 text-left text-xs text-white"
-                    style={{ backgroundColor: getEventColor(event) }}
+                    className="calendar-chip truncate px-1.5 py-1 text-left text-xs font-medium"
+                    style={{ ['--chip-color']: getEventColor(event) } as React.CSSProperties}
                     onClick={() => onEditEvent?.(event.id)}
                   >
                     {chipLabel(event)}
@@ -403,17 +410,22 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                   <button
                     key={habit.id}
                     type="button"
-                    className="absolute left-0.5 right-0.5 z-[1] overflow-hidden rounded px-1 text-left text-[0.65rem] text-white"
-                    style={{
-                      top,
-                      height: Math.max(height, 18),
-                      backgroundColor: habit.color,
-                    }}
+                    className={`calendar-chip absolute left-0.5 right-0.5 z-[1] px-1.5 py-0.5 text-left text-[0.65rem] font-medium leading-tight ${
+                      habit.done ? 'calendar-chip--done' : ''
+                    }`}
+                    style={
+                      {
+                        top,
+                        height: Math.max(height, 18),
+                        '--chip-color': habit.color,
+                      } as React.CSSProperties
+                    }
                     onClick={(e) => {
                       e.stopPropagation();
-                      onOpenHabit?.(habit.ymd);
+                      onToggleHabit?.(habit);
                     }}
                   >
+                    {habit.done ? '✓ ' : ''}
                     {habit.name}
                   </button>
                 );
@@ -426,36 +438,41 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
               const mutationStage =
                 getTaskMutationStage(event.id) ??
                 getTaskMutationStage(event.recurringEventId);
+              const completed = isEventCompleted?.(event) ?? false;
+              const minHeight = onEventTimeChange ? HANDLE_PX * 2 + 14 : 18;
+              const chipColor = mutationStage
+                ? MUTATION_STAGE_COLORS[mutationStage]
+                : getEventColor(event);
               return (
                 <div
                   key={event.id}
                   data-testid={`calendar-event-${event.id}`}
-                  className={`absolute z-[2] flex flex-col overflow-hidden rounded border border-white/30${
+                  className={`calendar-chip group absolute z-[2] flex flex-col${
                     mutationStage ? ` calendar-event-stage-${mutationStage}` : ''
-                  }`}
-                  style={{
-                    top,
-                    height: Math.max(height, HANDLE_PX * 2 + 16),
-                    left: `calc(${lane.lane * width}% + 2px)`,
-                    width: `calc(${width}% - 4px)`,
-                    backgroundColor: mutationStage
-                      ? MUTATION_STAGE_COLORS[mutationStage]
-                      : getEventColor(event),
-                    touchAction: 'none',
-                  }}
+                  }${completed ? ' calendar-chip--done' : ''}`}
+                  style={
+                    {
+                      top,
+                      height: Math.max(height, minHeight),
+                      left: `calc(${lane.lane * width}% + 2px)`,
+                      width: `calc(${width}% - 4px)`,
+                      '--chip-color': chipColor,
+                      touchAction: 'none',
+                    } as React.CSSProperties
+                  }
                   title={tooltipText(event)}
                 >
                   {onEventTimeChange ? (
                     <div
                       onPointerDown={(e) => startDrag(e, event, 'resize-start', place)}
-                      className="shrink-0 cursor-ns-resize bg-black/20"
+                      className="calendar-chip__handle shrink-0 cursor-ns-resize"
                       style={{ height: HANDLE_PX }}
                     />
                   ) : null}
                   <div
                     role="button"
                     tabIndex={0}
-                    className={`min-h-0 flex-1 px-1 text-[0.65rem] leading-tight text-white ${
+                    className={`relative min-h-0 flex-1 px-1.5 py-0.5 pl-2 text-[0.65rem] font-medium leading-tight ${
                       onEventTimeChange ? 'cursor-grab' : 'cursor-pointer'
                     }`}
                     onPointerDown={(e) => startDrag(e, event, 'move', place)}
@@ -471,12 +488,36 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                       }
                     }}
                   >
-                    {chipLabel(event)}
+                    <span className="block truncate pr-4">
+                      {completed ? (
+                        <span className="calendar-chip__check" aria-hidden>
+                          ✓
+                        </span>
+                      ) : null}
+                      {chipLabel(event)}
+                    </span>
+                    {completed ? (
+                      <span className="calendar-chip__badge">{t('calendar.completedBadge')}</span>
+                    ) : null}
+                    {onDeleteEvent ? (
+                      <button
+                        type="button"
+                        className="calendar-chip__delete"
+                        aria-label={t('common.delete')}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteEvent(event);
+                        }}
+                      >
+                        <X strokeWidth={2.5} aria-hidden />
+                      </button>
+                    ) : null}
                   </div>
                   {onEventTimeChange ? (
                     <div
                       onPointerDown={(e) => startDrag(e, event, 'resize-end', place)}
-                      className="shrink-0 cursor-ns-resize bg-black/20"
+                      className="calendar-chip__handle shrink-0 cursor-ns-resize"
                       style={{ height: HANDLE_PX }}
                     />
                   ) : null}

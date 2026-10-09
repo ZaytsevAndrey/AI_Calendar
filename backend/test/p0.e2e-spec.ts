@@ -141,7 +141,7 @@ describe('P0 API e2e', () => {
   });
 
   describe('A-HAB habits', () => {
-    it('A-HAB-002 / A-HAB-011 / A-HAB-013 create, today check-in, reject date outside the window', async () => {
+    it('A-HAB-002 / A-HAB-011 / A-HAB-013 create, today check-in, reject future date', async () => {
       const { token } = await seedOnboardedUser(ctx.app);
       const created = await api(ctx.app, 'POST', '/habits', {
         token,
@@ -163,11 +163,17 @@ describe('P0 API e2e', () => {
       expect(checkIn.statusCode).toBe(201);
       expect(jsonBody(checkIn).checkedToday).toBe(true);
 
+      const older = await api(ctx.app, 'POST', `/habits/${habitId}/check-ins`, {
+        token,
+        payload: { date: addDaysToYmd(today, -14) },
+      });
+      expect(older.statusCode).toBe(201);
+
       const rejected = await api(
         ctx.app,
         'POST',
         `/habits/${habitId}/check-ins`,
-        { token, payload: { date: addDaysToYmd(today, -14) } },
+        { token, payload: { date: addDaysToYmd(today, 1) } },
       );
       expect(rejected.statusCode).toBe(400);
     });

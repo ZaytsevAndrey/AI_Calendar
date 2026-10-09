@@ -44,10 +44,8 @@ export class PendingGoogleWriteService {
   canSyncTask(task: Task): boolean {
     if (task.isUnscheduled || isProblematicSchedule(task)) return false;
     if (!task.scheduledStartTime || !task.scheduledEndTime) return false;
-    if (
-      task.status === 'completed' ||
-      task.status === 'canceled'
-    ) {
+    // Keep completed on the calendar (styled in the app). Canceled drops the event.
+    if (task.status === 'canceled') {
       return false;
     }
     return true;

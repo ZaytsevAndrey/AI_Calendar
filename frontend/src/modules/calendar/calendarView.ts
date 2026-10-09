@@ -496,11 +496,7 @@ export function eventsVisibleInView(
 }
 
 export function chipLabel(event: GoogleCalendarEvent): string {
-  const title = event.summary || i18n.t('calendar.event');
-  if (!event.start.dateTime) return title;
-  const start = new Date(event.start.dateTime);
-  if (Number.isNaN(start.getTime())) return title;
-  return `${formatClock(start)} ${title}`;
+  return event.summary || i18n.t('calendar.event');
 }
 
 export function formatEventTime(event: GoogleCalendarEvent): string {
