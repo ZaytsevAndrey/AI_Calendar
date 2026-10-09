@@ -273,7 +273,7 @@ Mutation jobs: POST/PATCH tasks return a `jobId` for place + Google sync progres
 | ID | Layer | P | Given | When | Then |
 |----|-------|---|-------|------|------|
 | U-TSK-001 | U | P0 | `/tasks` | Open create | Wizard; default Flexible |
-| U-TSK-002 | U | P0 | Flexible | Name + duration submit | Toast `Task created` with name/when; appears in list; calendar refresh after job |
+| U-TSK-002 | U | P0 | Flexible | Name + duration submit | Mutation progress toast (title = name; Saving…→Done); appears in list; calendar refresh after job |
 | U-TSK-003 | U | P0 | Fixed | Missing end | Client error; no POST |
 | U-TSK-004 | U | P0 | Fixed | Valid slot | Created; Google stub event if connected |
 | U-TSK-005 | U | P0 | Recurring | No pattern | Client blocks |
@@ -315,7 +315,7 @@ Do **not** hit real Groq. Stub transcribe + parse.
 | A-VOI-010 | A | P1 | LLM invalid phase ids | parse | Stripped in normalize |
 | A-VOI-011 | A | P1 | Empty transcript | parse | 4xx |
 | A-VOI-012 | A | P2 | LLM non-JSON | parse | Error, not 500 HTML |
-| U-VOI-001 | U | P1 | Mic on Tasks/Calendar | Open sheet, stub complete | Task created immediately; toast |
+| U-VOI-001 | U | P1 | Mic on Tasks/Calendar | Open sheet, stub complete | Task created immediately; mutation progress toast |
 | U-VOI-002 | U | P1 | Stub `sufficient` | After parse | Wizard opens prefilled |
 | U-VOI-003 | U | P1 | Stub `needs_clarification` | Answer once | Completes; no second question UI |
 | U-VOI-004 | U | P2 | Mic permission denied | Start | Error in sheet, no crash |

@@ -189,7 +189,7 @@ test.describe('P1 voice UI', () => {
     const sheet = page.getByRole('dialog');
     await expect(sheet.getByText(`Delete "${name}"?`)).toBeVisible();
     await sheet.getByRole('button', { name: 'Confirm' }).click();
-    await expect(page.getByText('Task deleted')).toBeVisible();
+    await expectMutationProgressToast(page, name);
   });
 
   test('U-VOI-009 listening shows equalizer bars', async ({ page, auth }) => {

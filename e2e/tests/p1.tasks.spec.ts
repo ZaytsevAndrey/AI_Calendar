@@ -126,7 +126,7 @@ test.describe('P1 tasks UI', () => {
 
     await row.getByRole('button', { name: 'Delete' }).click();
     await page.getByRole('dialog').filter({ hasText: 'Delete task' }).getByRole('button', { name: 'Delete' }).click();
-    await expect(page.getByText('Task deleted')).toBeVisible();
+    await expectMutationProgressToast(page, name);
     await expect(page.getByRole('heading', { name })).toHaveCount(0);
   });
 
@@ -229,7 +229,7 @@ test.describe('P1 tasks UI', () => {
     await dialog.locator('#task-form-deadline').fill('');
     await expect(dialog.locator('#task-form-deadline')).toHaveValue('');
     await dialog.getByRole('button', { name: 'Save changes' }).click();
-    await expect(page.getByText('Task updated')).toBeVisible();
+    await expectMutationProgressToast(page, name);
     expect(patches[0]?.phaseIds).toEqual([]);
     expect(patches[0]?.deadline).toBeNull();
 
