@@ -5,6 +5,7 @@ import {
   isOccurrenceYmdSkipped,
   matchScheduledSlotIndex,
   normalizeSkippedOccurrenceYmds,
+  removeSkippedOccurrenceYmd,
 } from './skipped-occurrence.util';
 
 describe('skipped-occurrence.util', () => {
@@ -21,6 +22,13 @@ describe('skipped-occurrence.util', () => {
     expect(addSkippedOccurrenceYmd(null, '2026-09-22')).toEqual(['2026-09-22']);
     expect(isOccurrenceYmdSkipped(['2026-09-22'], '2026-09-22')).toBe(true);
     expect(isOccurrenceYmdSkipped(['2026-09-22'], '2026-09-23')).toBe(false);
+  });
+
+  it('removes a skipped civil day and clears when empty', () => {
+    expect(
+      removeSkippedOccurrenceYmd(['2026-09-21', '2026-09-22'], '2026-09-21'),
+    ).toEqual(['2026-09-22']);
+    expect(removeSkippedOccurrenceYmd(['2026-09-21'], '2026-09-21')).toBeNull();
   });
 
   it('matches a slot that contains the occurrence start', () => {

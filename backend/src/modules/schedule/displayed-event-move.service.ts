@@ -332,6 +332,7 @@ export class DisplayedEventMoveService {
       googleTransparency: series.googleTransparency ?? undefined,
       googleReminders: series.googleReminders ?? undefined,
       parentSeriesId: series.id,
+      seriesGroupId: series.seriesGroupId ?? series.id,
       timeZone: series.scheduleTimeZone ?? undefined,
     });
     return created.jobId ?? null;
@@ -404,8 +405,14 @@ export class DisplayedEventMoveService {
         status: TaskStatus.TODO,
         scheduleState: ScheduleState.NONE,
         isUnscheduled: false,
+        seriesGroupId: series.seriesGroupId ?? series.id,
+        parentSeriesId: series.id,
       }),
     );
+    if (!series.seriesGroupId) {
+      series.seriesGroupId = series.id;
+      await this.taskRepo.save(series);
+    }
     await this.placementStep.place(userId, created.id, {
       preferredStart: start,
       durationMinutes: minutes,

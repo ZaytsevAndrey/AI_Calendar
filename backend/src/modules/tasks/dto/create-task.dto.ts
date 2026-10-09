@@ -237,6 +237,17 @@ export class CreateTaskDto {
 
   @ApiProperty({
     description:
+      'Logical recurring family shared by clock-split siblings and detached one-offs.',
+    required: false,
+    nullable: true,
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @IsUUID()
+  @IsOptional()
+  seriesGroupId?: string | null;
+
+  @ApiProperty({
+    description:
       'Civil days (YYYY-MM-DD) that failed to place when parked as problematic.',
     required: false,
     nullable: true,

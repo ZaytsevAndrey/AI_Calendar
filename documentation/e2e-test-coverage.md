@@ -389,6 +389,9 @@ Generate body `{ startDate, endDate }` is **ignored**. Horizon = today → `recu
 | A-SCH-033p | A | P1 | Flexible task, not problematic | GET | Still lists slots (`scheduleState` need not be `problematic`) |
 | A-SCH-033q | A | P1 | User has timeZone setting | GET | Response `timeZone` matches settings |
 | A-SCH-033r | A | P1 | Task linked to morning phase; evening phase also exists | GET without `phaseId` | Candidates span morning **and** evening; with `phaseId=morning` only morning |
+| A-SCH-034 | A | P0 | Recurring create; peer busy only on day 2 at preferred | Create + wait placement job | Day 1 at preferred; day 2 at a different hole; day 2 is a sibling task with same `seriesGroupId` (or skipped if no hole) |
+| A-SCH-035 | A | P0 | Detached one-off with `seriesGroupId` moved to parent series clock | `POST /schedule/move-event` or PATCH times | One-off gone; series day restored (skip/EXDATE cleared) |
+| A-SCH-036 | A | P1 | Detached one-off; PATCH `name` then move to series clock | Update name, then move | Stays a separate task (`seriesGroupId` null); no re-merge |
 
 ---
 

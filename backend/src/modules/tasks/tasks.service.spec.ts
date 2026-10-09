@@ -81,6 +81,7 @@ describe('TasksService', () => {
       };
     }),
     seatOpenHoles: jest.fn().mockResolvedValue(undefined),
+    runExclusive: jest.fn(async (_userId: string, run: () => Promise<unknown>) => run()),
   };
 
   beforeEach(async () => {

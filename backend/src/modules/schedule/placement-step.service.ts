@@ -18,7 +18,10 @@ import {
   Task,
   TaskStatus,
 } from '../tasks/entities/task.entity';
-import { addSkippedOccurrenceYmd } from '../tasks/skipped-occurrence.util';
+import {
+  addSkippedOccurrenceYmd,
+  removeSkippedOccurrenceYmd,
+} from '../tasks/skipped-occurrence.util';
 import { UserSettingsService } from '../user-settings/user-settings.service';
 import {
   addDaysToYmd,
@@ -26,6 +29,7 @@ import {
   localHm,
   localYmd,
   normalizeClockHm,
+  startOfLocalDayIso,
 } from '../voice/voice-local-date.util';
 import {
   eligibleWindowsForDay,
@@ -40,6 +44,11 @@ import {
   type PlacementPlan,
   type PlacementSeat,
 } from './placement-step.util';
+import {
+  groupYmdsByClockHm,
+  pickPrimaryClockHm,
+  weekDaysFromYmds,
+} from './series-group.util';
 
 export type PlaceOptions = {
   preferredStart?: Date | null;
@@ -56,6 +65,8 @@ export type PlaceOptions = {
   expandSeries?: boolean;
   /** This call is a later day of a series already being expanded. */
   seriesDay?: boolean;
+  /** Restrict hole search / windows to this civil day (YYYY-MM-DD). */
+  windowYmd?: string;
 };
 import { ScheduledTask } from './schedule.entity';
 
@@ -100,6 +111,14 @@ export class PlacementStepService {
     opts?: PlaceOptions,
   ): Promise<PlacementPlan> {
     return withUserLock(userId, () => this.placeUnlocked(userId, taskId, opts));
+  }
+
+  /**
+   * Serialize SQLite writes with placement for one user (single connection).
+   * Task create/update saves must not interleave with `place` transactions.
+   */
+  runExclusive<T>(userId: string, run: () => Promise<T>): Promise<T> {
+    return withUserLock(userId, run);
   }
 
   /**
@@ -373,7 +392,12 @@ export class PlacementStepService {
       1,
       opts?.durationMinutes ?? task.estimatedTimeInMinutes ?? 30,
     );
-    const claimWindows = windowsFor(linkedPhases(task).length ? linkedPhases(task) : phases);
+    let claimWindows = windowsFor(
+      linkedPhases(task).length ? linkedPhases(task) : phases,
+    );
+    if (opts?.windowYmd) {
+      claimWindows = windowsOnCivilDay(claimWindows, opts.windowYmd, timeZone);
+    }
     const windowExpired = isWindowExpired(task, nowMs);
     let interval = opts?.searchHole
       ? null
@@ -444,11 +468,25 @@ export class PlacementStepService {
     ) {
       return plan;
     }
+    // A single series day must never park or wipe the whole master.
+    if (
+      opts?.seriesDay &&
+      (plan.outcome === 'problematic' || plan.outcome === 'unscheduled')
+    ) {
+      return plan;
+    }
     await this.persist(task, plan, now, timeZone, opts?.durationMinutes);
     // Horizon days must exist before the HTTP response — otherwise recurring
     // create looks like a one-off. Google I/O stays non-blocking.
     if (plan.outcome === 'seated' && this.shouldExpandSeries(task, opts)) {
       await this.expandSeriesDays(userId, task.id);
+    }
+    if (
+      !opts?.seriesDay &&
+      plan.outcome === 'seated' &&
+      (await this.tryReMergeSeriesMember(userId, taskId))
+    ) {
+      return plan;
     }
     if (
       !opts?.seriesDay &&
@@ -488,21 +526,43 @@ export class PlacementStepService {
   }
 
   private async expandSeriesDays(userId: string, taskId: string): Promise<void> {
-    const task = await this.taskRepo.findOne({ where: { id: taskId, userId } });
+    const task = await this.taskRepo.findOne({
+      where: { id: taskId, userId },
+      relations: ['phase', 'phases'],
+    });
     if (!task?.isRecurring || !task.scheduledStartTime) return;
+    if (!task.seriesGroupId) {
+      task.seriesGroupId = task.id;
+      await this.taskRepo.save(task);
+    }
     const settings = await this.userSettingsService.getSettings(userId);
     const timeZone = resolveIanaTimeZone(settings.timeZone);
     const horizon = planningHorizonRange(settings, new Date());
-    const anchorYmd = localYmd(
-      new Date(task.scheduledStartTime).toISOString(),
-      timeZone,
-    );
-    const horizonEndYmd = localYmd(horizon.end.toISOString(), timeZone);
-    const hm = normalizeClockHm(
+    const preferredHm = normalizeClockHm(
       localHm(new Date(task.scheduledStartTime).toISOString(), timeZone),
     );
+    const openRows = await this.scheduledRepo.find({ where: { taskId } });
+    const now = Date.now();
+    const openFuture = openRows.filter(
+      (row) => new Date(row.scheduledEndTime).getTime() > now,
+    );
+    const anchorYmd = openFuture.length
+      ? localYmd(
+          new Date(
+            openFuture.sort(
+              (a, b) =>
+                new Date(a.scheduledStartTime).getTime() -
+                new Date(b.scheduledStartTime).getTime(),
+            )[0].scheduledStartTime,
+          ).toISOString(),
+          timeZone,
+        )
+      : localYmd(new Date(task.scheduledStartTime).toISOString(), timeZone);
+    const horizonEndYmd = localYmd(horizon.end.toISOString(), timeZone);
     const durationMs = Math.max(1, task.estimatedTimeInMinutes || 30) * 60_000;
-    const untilMs = task.deadline ? new Date(task.deadline).getTime() : Number.POSITIVE_INFINITY;
+    const untilMs = task.deadline
+      ? new Date(task.deadline).getTime()
+      : Number.POSITIVE_INFINITY;
     const ymds = seriesOccurrenceYmds({
       anchorYmd,
       horizonEndYmd,
@@ -510,24 +570,235 @@ export class PlacementStepService {
       weekDays: task.recurrenceWeekDays,
       skippedYmds: task.skippedOccurrenceYmds,
     }).filter((ymd) => {
-      const startMs = new Date(localDateTimeIso(ymd, hm, timeZone)).getTime();
+      const startMs = new Date(localDateTimeIso(ymd, preferredHm, timeZone)).getTime();
       return startMs + durationMs <= untilMs;
     });
     const wanted = new Set([anchorYmd, ...ymds]);
-    const existing = await this.scheduledRepo.find({ where: { taskId } });
-    const now = Date.now();
-    for (const row of existing) {
+    for (const row of openRows) {
       if (new Date(row.scheduledEndTime).getTime() <= now) continue;
-      const ymd = localYmd(new Date(row.scheduledStartTime).toISOString(), timeZone);
+      const ymd = localYmd(
+        new Date(row.scheduledStartTime).toISOString(),
+        timeZone,
+      );
       if (!wanted.has(ymd)) await this.scheduledRepo.remove(row);
     }
     for (const ymd of ymds) {
-      await this.placeUnlocked(userId, taskId, {
-        preferredStart: new Date(localDateTimeIso(ymd, hm, timeZone)),
+      const preferredStart = new Date(
+        localDateTimeIso(ymd, preferredHm, timeZone),
+      );
+      const preferredPlan = await this.placeUnlocked(userId, taskId, {
+        preferredStart,
         commit: 'preferred',
         seriesDay: true,
       });
+      if (
+        preferredPlan.outcome === 'seated' &&
+        Math.abs(preferredPlan.start - preferredStart.getTime()) < 1000
+      ) {
+        continue;
+      }
+      await this.placeUnlocked(userId, taskId, {
+        searchHole: true,
+        seriesDay: true,
+        windowYmd: ymd,
+      });
     }
+    await this.reconcileSeriesClockGroups(userId, taskId, timeZone);
+  }
+
+  /**
+   * After per-day seating, split divergent clocks into sibling tasks in the
+   * same series group (largest clock group stays on the original task).
+   */
+  private async reconcileSeriesClockGroups(
+    userId: string,
+    taskId: string,
+    timeZone: string,
+  ): Promise<void> {
+    const task = await this.taskRepo.findOne({
+      where: { id: taskId, userId },
+      relations: ['phase', 'phases'],
+    });
+    if (!task?.isRecurring) return;
+    const groupId = task.seriesGroupId ?? task.id;
+    if (!task.seriesGroupId) {
+      task.seriesGroupId = groupId;
+      await this.taskRepo.save(task);
+    }
+    const now = new Date();
+    const rows = await this.scheduledRepo.find({ where: { taskId } });
+    const open = rows.filter(
+      (row) => new Date(row.scheduledEndTime).getTime() > now.getTime(),
+    );
+    if (open.length < 2) return;
+
+    const slotMeta = open.map((row) => ({
+      row,
+      ymd: localYmd(new Date(row.scheduledStartTime).toISOString(), timeZone),
+      hm: normalizeClockHm(
+        localHm(new Date(row.scheduledStartTime).toISOString(), timeZone),
+      ),
+    }));
+    const byHm = groupYmdsByClockHm(
+      slotMeta.map(({ ymd, hm }) => ({ ymd, hm })),
+    );
+    if (byHm.size <= 1) return;
+
+    const preferredHm = task.scheduledStartTime
+      ? normalizeClockHm(
+          localHm(new Date(task.scheduledStartTime).toISOString(), timeZone),
+        )
+      : null;
+    const primaryHm = pickPrimaryClockHm(byHm, preferredHm);
+    const durationMs =
+      Math.max(1, task.estimatedTimeInMinutes || 30) * 60_000;
+    const primaryAnchor = slotMeta.find((s) => s.hm === primaryHm);
+    if (primaryAnchor) {
+      const start = new Date(
+        localDateTimeIso(primaryAnchor.ymd, primaryHm, timeZone),
+      );
+      task.scheduledStartTime = start;
+      task.scheduledEndTime = new Date(start.getTime() + durationMs);
+    }
+
+    const affectedIds = new Set<string>([task.id]);
+    for (const [hm, ymds] of byHm) {
+      if (hm === primaryHm) continue;
+      for (const ymd of ymds) {
+        task.skippedOccurrenceYmds = addSkippedOccurrenceYmd(
+          task.skippedOccurrenceYmds,
+          ymd,
+        );
+      }
+      const hmRows = slotMeta.filter((s) => s.hm === hm).map((s) => s.row);
+      const sibling = await this.createSeriesClockSibling(
+        task,
+        groupId,
+        hm,
+        ymds,
+        hmRows,
+        timeZone,
+        durationMs,
+      );
+      affectedIds.add(sibling.id);
+    }
+    await this.taskRepo.save(task);
+    for (const id of affectedIds) {
+      this.pendingGoogleWrites.syncTaskSoon(userId, id);
+    }
+  }
+
+  private async createSeriesClockSibling(
+    series: Task,
+    groupId: string,
+    hm: string,
+    ymds: string[],
+    rows: ScheduledTask[],
+    timeZone: string,
+    durationMs: number,
+  ): Promise<Task> {
+    const firstYmd = [...ymds].sort()[0];
+    const start = new Date(localDateTimeIso(firstYmd, hm, timeZone));
+    const end = new Date(start.getTime() + durationMs);
+    const multi = ymds.length >= 2;
+    const sibling = this.taskRepo.create({
+      name: series.name,
+      description: series.description,
+      userId: series.userId,
+      phaseId: series.phaseId,
+      eventType: series.eventType,
+      estimatedTimeInMinutes: series.estimatedTimeInMinutes,
+      isRecurring: multi,
+      recurrencePattern: multi ? series.recurrencePattern : null,
+      recurrenceWeekDays: multi ? weekDaysFromYmds(ymds) : null,
+      allowSplit: series.allowSplit,
+      priority: series.priority,
+      deadline: series.deadline,
+      scheduleTimeZone: series.scheduleTimeZone,
+      status: TaskStatus.TODO,
+      scheduledStartTime: start,
+      scheduledEndTime: end,
+      location: series.location,
+      googleColorId: series.googleColorId,
+      googleVisibility: series.googleVisibility,
+      googleTransparency: series.googleTransparency,
+      googleReminders: series.googleReminders,
+      scheduleState: ScheduleState.NONE,
+      parentSeriesId: series.id,
+      seriesGroupId: groupId,
+      isUnscheduled: false,
+    });
+    if (series.phases?.length) sibling.phases = series.phases;
+    const saved = await this.taskRepo.save(sibling);
+    for (const row of rows) {
+      row.taskId = saved.id;
+      await this.scheduledRepo.save(row);
+    }
+    return saved;
+  }
+
+  /**
+   * If a detached group member lands on a sibling series clock, absorb it
+   * back into that series (one recurring event again).
+   */
+  private async tryReMergeSeriesMember(
+    userId: string,
+    taskId: string,
+  ): Promise<boolean> {
+    const task = await this.taskRepo.findOne({ where: { id: taskId, userId } });
+    if (!task?.seriesGroupId || task.isRecurring) return false;
+    if (!task.scheduledStartTime || !task.scheduledEndTime) return false;
+    if (isProblematicSchedule(task)) return false;
+
+    const settings = await this.userSettingsService.getSettings(userId);
+    const timeZone = resolveIanaTimeZone(
+      settings.timeZone || task.scheduleTimeZone,
+    );
+    const hm = normalizeClockHm(
+      localHm(new Date(task.scheduledStartTime).toISOString(), timeZone),
+    );
+    const ymd = localYmd(
+      new Date(task.scheduledStartTime).toISOString(),
+      timeZone,
+    );
+
+    const siblings = await this.taskRepo.find({
+      where: {
+        userId,
+        seriesGroupId: task.seriesGroupId,
+        isRecurring: true,
+        status: TaskStatus.TODO,
+      },
+    });
+    const match = siblings.find((series) => {
+      if (series.id === task.id || !series.scheduledStartTime) return false;
+      const seriesHm = normalizeClockHm(
+        localHm(new Date(series.scheduledStartTime).toISOString(), timeZone),
+      );
+      return seriesHm === hm;
+    });
+    if (!match) return false;
+
+    match.skippedOccurrenceYmds = removeSkippedOccurrenceYmd(
+      match.skippedOccurrenceYmds,
+      ymd,
+    );
+    await this.taskRepo.save(match);
+
+    const memberSlots = await this.scheduledRepo.find({
+      where: { taskId: task.id },
+    });
+    if (memberSlots.length) await this.scheduledRepo.remove(memberSlots);
+    await this.pendingGoogleWrites.syncTask(userId, task.id);
+    await this.taskRepo.remove(task);
+
+    await this.placeUnlocked(userId, match.id, {
+      preferredStart: new Date(localDateTimeIso(ymd, hm, timeZone)),
+      commit: 'preferred',
+      seriesDay: true,
+    });
+    this.pendingGoogleWrites.syncTaskSoon(userId, match.id);
+    return true;
   }
 
   private async persist(
@@ -724,6 +995,7 @@ export class PlacementStepService {
       problematicOriginalStart: new Date(move.originalStart),
       problematicOriginalEnd: new Date(move.originalEnd),
       parentSeriesId: series.id,
+      seriesGroupId: series.seriesGroupId ?? series.id,
       isUnscheduled: false,
     });
     if (series.phases?.length) copy.phases = series.phases;
@@ -883,6 +1155,23 @@ function shouldWritePlan(plan: PlacementPlan, opts?: PlaceOptions): boolean {
   if (opts?.commit !== 'preferred') return true;
   if (plan.outcome !== 'seated' || !opts.preferredStart) return false;
   return Math.abs(plan.start - opts.preferredStart.getTime()) < 1000;
+}
+
+/** Keep only phase windows that overlap the given civil day. */
+function windowsOnCivilDay(
+  windows: MsInterval[],
+  ymd: string,
+  timeZone: string,
+): MsInterval[] {
+  const dayStart = new Date(startOfLocalDayIso(ymd, timeZone)).getTime();
+  const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+  const out: MsInterval[] = [];
+  for (const window of windows) {
+    const start = Math.max(window.start, dayStart);
+    const end = Math.min(window.end, dayEnd);
+    if (end > start) out.push({ start, end });
+  }
+  return out;
 }
 
 function claimInterval(

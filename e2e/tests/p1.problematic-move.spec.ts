@@ -1,11 +1,39 @@
 import { test, expect, openAs, apiJson, expectOk, uniqueName, completeOpenTasks } from '../helpers/fixtures';
 
+/** Future civil days in Europe/Kyiv so park rows stay on the Problematic banner. */
+function futureYmd(daysAhead: number, timeZone = 'Europe/Kyiv'): string {
+  const instant = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(instant);
+}
+
+const Y = {
+  d1: futureYmd(1),
+  d2: futureYmd(2),
+  d3: futureYmd(3),
+  d4: futureYmd(4),
+  d5: futureYmd(5),
+  d6: futureYmd(6),
+  d7: futureYmd(7),
+  d8: futureYmd(8),
+  d9: futureYmd(9),
+  d10: futureYmd(10),
+  d11: futureYmd(11),
+  d12: futureYmd(12),
+  d13: futureYmd(13),
+  d14: futureYmd(14),
+};
+
 async function seedProblematic(
   request: Parameters<typeof apiJson>[0],
   token: string,
   opts?: { ymd?: string; minutes?: number; name?: string },
 ) {
-  const placeYmd = opts?.ymd ?? '2026-10-06';
+  const placeYmd = opts?.ymd ?? Y.d1;
   const name = opts?.name ?? uniqueName('P1 problematic');
   const created = await apiJson(request, token, 'post', '/tasks', {
     name,
@@ -65,7 +93,7 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
       auth.onboarded.access_token,
     );
     const { move } = await openMoveSheet(page, auth, name);
-    await expect(move.getByLabel('Day')).toHaveValue(placeYmd);
+    await expect(move.getByRole('textbox', { name: 'Day' })).toHaveValue(placeYmd);
     await expect(move.getByLabel('Phase')).toBeVisible();
     await expect(move.locator('input[type="time"]')).toBeVisible();
     await expect(move.locator('input[type="time"]')).toHaveCount(1);
@@ -96,14 +124,12 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     const { name, placeYmd, taskId } = await seedProblematic(
       request,
       auth.onboarded.access_token,
-      { ymd: '2026-10-09' },
+      { ymd: Y.d2 },
     );
     const { move } = await openMoveSheet(page, auth, name);
     await expect(move.getByRole('listbox')).toBeVisible({ timeout: 30_000 });
     await move.getByRole('button', { name: 'Place' }).click();
-    await expect(page.getByText('Placed on the calendar')).toBeVisible({
-      timeout: 30_000,
-    });
+    await expect(move).toBeHidden({ timeout: 30_000 });
     await expect
       .poll(async () => {
         const listed = await apiJson(request, auth.onboarded.access_token, 'get', '/tasks');
@@ -140,7 +166,7 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     const { name, taskId } = await seedProblematic(
       request,
       auth.onboarded.access_token,
-      { ymd: '2026-10-10' },
+      { ymd: Y.d3 },
     );
     const { move } = await openMoveSheet(page, auth, name);
     await move.getByRole('button', { name: 'Cancel' }).click();
@@ -162,7 +188,7 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     const { name, placeYmd } = await seedProblematic(
       request,
       auth.onboarded.access_token,
-      { ymd: '2026-10-11' },
+      { ymd: Y.d4 },
     );
     const ymds: string[] = [];
     await page.route('**/schedule/free-slots**', async (route) => {
@@ -172,8 +198,8 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     });
     const { move } = await openMoveSheet(page, auth, name);
     await expect(move.getByRole('listbox')).toBeVisible({ timeout: 30_000 });
-    await move.getByLabel('Day').fill('2026-10-12');
-    await expect.poll(() => ymds.includes('2026-10-12')).toBe(true);
+    await move.getByRole('textbox', { name: 'Day' }).fill(Y.d5);
+    await expect.poll(() => ymds.includes(Y.d5)).toBe(true);
     expect(ymds[0]).toBe(placeYmd);
   });
 
@@ -184,7 +210,7 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
   }) => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const { name } = await seedProblematic(request, auth.onboarded.access_token, {
-      ymd: '2026-10-13',
+      ymd: Y.d6,
       minutes: 30,
     });
     await page.route('**/schedule/free-slots**', async (route) => {
@@ -196,11 +222,11 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          ymd: '2026-10-13',
+          ymd: Y.d6,
           timeZone: 'Europe/Kyiv',
           durationMinutes: 30,
-          dayStart: '2026-10-13T04:00:00.000Z',
-          dayEnd: '2026-10-13T19:00:00.000Z',
+          dayStart: `${Y.d6}T04:00:00.000Z`,
+          dayEnd: `${Y.d6}T19:00:00.000Z`,
           phase: null,
           busy: [],
           free: [],
@@ -222,7 +248,7 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
   }) => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const { name } = await seedProblematic(request, auth.onboarded.access_token, {
-      ymd: '2026-10-14',
+      ymd: Y.d7,
     });
     await page.route('**/schedule/free-slots**', async (route) => {
       if (route.request().method() !== 'GET') {
@@ -257,7 +283,7 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     expectOk(phase);
     const phaseId = phase.body.id as string;
     const { name } = await seedProblematic(request, auth.onboarded.access_token, {
-      ymd: '2026-10-15',
+      ymd: Y.d8,
     });
     const phaseIds: string[] = [];
     await page.route('**/schedule/free-slots**', async (route) => {
@@ -284,7 +310,7 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
   }) => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const { name } = await seedProblematic(request, auth.onboarded.access_token, {
-      ymd: '2026-10-16',
+      ymd: Y.d9,
     });
     const { move } = await openMoveSheet(page, auth, name);
     const slotList = move.getByRole('listbox', { name: /Available slots/i });
@@ -328,7 +354,7 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
   }) => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const { name } = await seedProblematic(request, auth.onboarded.access_token, {
-      ymd: '2026-10-17',
+      ymd: Y.d10,
       minutes: 30,
     });
     await page.route('**/schedule/free-slots**', async (route) => {
@@ -340,35 +366,35 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          ymd: '2026-10-17',
+          ymd: Y.d10,
           timeZone: 'UTC',
           durationMinutes: 30,
-          dayStart: '2026-10-17T06:00:00.000Z',
-          dayEnd: '2026-10-17T18:00:00.000Z',
+          dayStart: `${Y.d10}T06:00:00.000Z`,
+          dayEnd: `${Y.d10}T18:00:00.000Z`,
           phase: null,
           busy: [
             {
-              start: '2026-10-17T10:00:00.000Z',
-              end: '2026-10-17T16:00:00.000Z',
+              start: `${Y.d10}T10:00:00.000Z`,
+              end: `${Y.d10}T16:00:00.000Z`,
             },
           ],
           free: [
             {
-              start: '2026-10-17T06:00:00.000Z',
-              end: '2026-10-17T10:00:00.000Z',
+              start: `${Y.d10}T06:00:00.000Z`,
+              end: `${Y.d10}T10:00:00.000Z`,
             },
             {
-              start: '2026-10-17T16:00:00.000Z',
-              end: '2026-10-17T18:00:00.000Z',
+              start: `${Y.d10}T16:00:00.000Z`,
+              end: `${Y.d10}T18:00:00.000Z`,
             },
           ],
           candidates: [
-            '2026-10-17T06:00:00.000Z',
-            '2026-10-17T07:00:00.000Z',
-            '2026-10-17T08:00:00.000Z',
-            '2026-10-17T09:00:00.000Z',
-            '2026-10-17T16:00:00.000Z',
-            '2026-10-17T16:30:00.000Z',
+            `${Y.d10}T06:00:00.000Z`,
+            `${Y.d10}T07:00:00.000Z`,
+            `${Y.d10}T08:00:00.000Z`,
+            `${Y.d10}T09:00:00.000Z`,
+            `${Y.d10}T16:00:00.000Z`,
+            `${Y.d10}T16:30:00.000Z`,
           ],
         }),
       });
@@ -400,7 +426,7 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
   }) => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const { name } = await seedProblematic(request, auth.onboarded.access_token, {
-      ymd: '2026-10-18',
+      ymd: Y.d11,
       minutes: 30,
     });
     await page.route('**/schedule/free-slots**', async (route) => {
@@ -412,27 +438,27 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          ymd: '2026-10-18',
+          ymd: Y.d11,
           timeZone: 'UTC',
           durationMinutes: 30,
-          dayStart: '2026-10-18T09:00:00.000Z',
-          dayEnd: '2026-10-18T17:00:00.000Z',
+          dayStart: `${Y.d11}T09:00:00.000Z`,
+          dayEnd: `${Y.d11}T17:00:00.000Z`,
           phase: null,
           busy: [],
           free: [
             {
-              start: '2026-10-18T09:00:00.000Z',
-              end: '2026-10-18T17:00:00.000Z',
+              start: `${Y.d11}T09:00:00.000Z`,
+              end: `${Y.d11}T17:00:00.000Z`,
             },
           ],
           candidates: [
-            '2026-10-18T09:00:00.000Z',
-            '2026-10-18T09:15:00.000Z',
-            '2026-10-18T10:00:00.000Z',
-            '2026-10-18T11:00:00.000Z',
-            '2026-10-18T12:00:00.000Z',
-            '2026-10-18T14:00:00.000Z',
-            '2026-10-18T15:00:00.000Z',
+            `${Y.d11}T09:00:00.000Z`,
+            `${Y.d11}T09:15:00.000Z`,
+            `${Y.d11}T10:00:00.000Z`,
+            `${Y.d11}T11:00:00.000Z`,
+            `${Y.d11}T12:00:00.000Z`,
+            `${Y.d11}T14:00:00.000Z`,
+            `${Y.d11}T15:00:00.000Z`,
           ],
         }),
       });
@@ -458,7 +484,7 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
   }) => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const { name } = await seedProblematic(request, auth.onboarded.access_token, {
-      ymd: '2026-10-19',
+      ymd: Y.d12,
       minutes: 30,
     });
     await page.route('**/schedule/free-slots**', async (route) => {
@@ -470,24 +496,24 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          ymd: '2026-10-19',
+          ymd: Y.d12,
           timeZone: 'UTC',
           durationMinutes: 30,
-          dayStart: '2026-10-19T09:00:00.000Z',
-          dayEnd: '2026-10-19T17:00:00.000Z',
+          dayStart: `${Y.d12}T09:00:00.000Z`,
+          dayEnd: `${Y.d12}T17:00:00.000Z`,
           phase: null,
           busy: [],
           free: [
             {
-              start: '2026-10-19T09:00:00.000Z',
-              end: '2026-10-19T17:00:00.000Z',
+              start: `${Y.d12}T09:00:00.000Z`,
+              end: `${Y.d12}T17:00:00.000Z`,
             },
           ],
           candidates: [
-            '2026-10-19T09:00:00.000Z',
-            '2026-10-19T11:00:00.000Z',
-            '2026-10-19T14:00:00.000Z',
-            '2026-10-19T15:30:00.000Z',
+            `${Y.d12}T09:00:00.000Z`,
+            `${Y.d12}T11:00:00.000Z`,
+            `${Y.d12}T14:00:00.000Z`,
+            `${Y.d12}T15:30:00.000Z`,
           ],
         }),
       });
@@ -532,7 +558,7 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     });
     expectOk(afternoon);
     const afternoonId = afternoon.body.id as string;    const { name } = await seedProblematic(request, auth.onboarded.access_token, {
-      ymd: '2026-10-20',
+      ymd: Y.d13,
       minutes: 30,
     });
     await page.route('**/schedule/free-slots**', async (route) => {
@@ -544,24 +570,24 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          ymd: '2026-10-20',
+          ymd: Y.d13,
           timeZone: 'UTC',
           durationMinutes: 30,
-          dayStart: '2026-10-20T09:00:00.000Z',
-          dayEnd: '2026-10-20T17:00:00.000Z',
+          dayStart: `${Y.d13}T09:00:00.000Z`,
+          dayEnd: `${Y.d13}T17:00:00.000Z`,
           phase: null,
           busy: [],
           free: [
             {
-              start: '2026-10-20T09:00:00.000Z',
-              end: '2026-10-20T17:00:00.000Z',
+              start: `${Y.d13}T09:00:00.000Z`,
+              end: `${Y.d13}T17:00:00.000Z`,
             },
           ],
           candidates: [
-            '2026-10-20T09:00:00.000Z',
-            '2026-10-20T10:00:00.000Z',
-            '2026-10-20T14:00:00.000Z',
-            '2026-10-20T15:00:00.000Z',
+            `${Y.d13}T09:00:00.000Z`,
+            `${Y.d13}T10:00:00.000Z`,
+            `${Y.d13}T14:00:00.000Z`,
+            `${Y.d13}T15:00:00.000Z`,
           ],
         }),
       });
@@ -594,7 +620,7 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
   }) => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const { name } = await seedProblematic(request, auth.onboarded.access_token, {
-      ymd: '2026-10-21',
+      ymd: Y.d14,
       minutes: 30,
     });
     await page.route('**/schedule/free-slots**', async (route) => {
@@ -606,34 +632,34 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          ymd: '2026-10-21',
+          ymd: Y.d14,
           timeZone: 'UTC',
           durationMinutes: 30,
-          dayStart: '2026-10-21T09:00:00.000Z',
-          dayEnd: '2026-10-21T17:00:00.000Z',
+          dayStart: `${Y.d14}T09:00:00.000Z`,
+          dayEnd: `${Y.d14}T17:00:00.000Z`,
           phase: null,
           busy: [
             {
-              start: '2026-10-21T12:00:00.000Z',
-              end: '2026-10-21T15:00:00.000Z',
+              start: `${Y.d14}T12:00:00.000Z`,
+              end: `${Y.d14}T15:00:00.000Z`,
             },
           ],
           free: [
             {
-              start: '2026-10-21T09:00:00.000Z',
-              end: '2026-10-21T12:00:00.000Z',
+              start: `${Y.d14}T09:00:00.000Z`,
+              end: `${Y.d14}T12:00:00.000Z`,
             },
             {
-              start: '2026-10-21T15:00:00.000Z',
-              end: '2026-10-21T17:00:00.000Z',
+              start: `${Y.d14}T15:00:00.000Z`,
+              end: `${Y.d14}T17:00:00.000Z`,
             },
           ],
           candidates: [
-            '2026-10-21T09:00:00.000Z',
-            '2026-10-21T10:00:00.000Z',
-            '2026-10-21T11:00:00.000Z',
-            '2026-10-21T15:00:00.000Z',
-            '2026-10-21T16:00:00.000Z',
+            `${Y.d14}T09:00:00.000Z`,
+            `${Y.d14}T10:00:00.000Z`,
+            `${Y.d14}T11:00:00.000Z`,
+            `${Y.d14}T15:00:00.000Z`,
+            `${Y.d14}T16:00:00.000Z`,
           ],
         }),
       });

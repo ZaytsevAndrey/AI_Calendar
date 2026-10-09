@@ -40,6 +40,7 @@ import {
   googleRecurringInstanceId,
   matchScheduledSlotIndex,
 } from './skipped-occurrence.util';
+import { breaksSeriesMembership } from '../schedule/series-group.util';
 
 @Injectable()
 export class TasksService {
@@ -485,7 +486,9 @@ export class TasksService {
       }
     }
 
-    const saved = await this.tasksRepository.save(task);
+    const saved = await this.placementStep.runExclusive(userId, () =>
+      this.tasksRepository.save(task),
+    );
     const row = await this.findOne(saved.id, userId);
     const job = await this.scheduleJobService.beginMutationJob(userId, {
       taskId: row.id,
@@ -557,6 +560,14 @@ export class TasksService {
         task.phases = phases;
         task.phaseId = dto.phaseIds[0];
       }
+    }
+
+    if (
+      (task.seriesGroupId || task.parentSeriesId) &&
+      breaksSeriesMembership(dto as Record<string, unknown>)
+    ) {
+      task.seriesGroupId = null;
+      task.parentSeriesId = null;
     }
 
     const {

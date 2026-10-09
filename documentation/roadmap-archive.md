@@ -28,6 +28,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 - [x] **Unscheduled richer cards.** Tasks inbox cards use icon-only actions and icon meta for phase / earliest / deadline with a clear overdue state. No unscheduled-reason field; duration stays off Unscheduled cards. Schedule pick and Calendar chip are still open.
 
+- [x] **Recurring per-day slots + series group.** Expand searches a slot each civil day (preferred, else hole that day). Divergent clocks split into same-`seriesGroupId` series/one-offs (group-by-clock). Detached members re-merge when they land on a sibling series clock; editing name/description/etc. clears membership permanently. Spec: [spec-incremental-placement.md](spec-incremental-placement.md) §7.
+
 ## Shipped (Sep 2026)
 
 ### Scheduling redesign (engine)

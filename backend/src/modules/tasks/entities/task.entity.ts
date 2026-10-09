@@ -239,6 +239,14 @@ export class Task {
   parentSeriesId: string | null;
 
   /**
+   * Logical recurring family: primary series plus clock-split siblings and
+   * detached one-offs. Survives park clear (unlike `parentSeriesId`).
+   * Cleared when the user edits non-time / non-phase fields.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  seriesGroupId: string | null;
+
+  /**
    * Recurring only: civil days (YYYY-MM-DD in settings IANA) the user skipped.
    * Generate/replan must not place those occurrences again.
    */

@@ -1780,6 +1780,7 @@ function makeTask(partial: Partial<Task>): Task {
     problematicOriginalStart: partial.problematicOriginalStart ?? null,
     problematicOriginalEnd: partial.problematicOriginalEnd ?? null,
     parentSeriesId: partial.parentSeriesId ?? null,
+    seriesGroupId: partial.seriesGroupId ?? null,
     location: partial.location ?? null,
     googleColorId: partial.googleColorId ?? null,
     googleVisibility: partial.googleVisibility ?? null,

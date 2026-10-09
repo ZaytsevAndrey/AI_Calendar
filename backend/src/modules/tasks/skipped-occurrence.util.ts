@@ -31,6 +31,16 @@ export function addSkippedOccurrenceYmd(
   ]);
 }
 
+export function removeSkippedOccurrenceYmd(
+  existing: unknown,
+  ymd: string,
+): string[] | null {
+  const next = normalizeSkippedOccurrenceYmds(existing).filter(
+    (item) => item !== ymd,
+  );
+  return next.length ? next : null;
+}
+
 export function isOccurrenceYmdSkipped(
   existing: unknown,
   ymd: string,

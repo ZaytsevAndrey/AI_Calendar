@@ -21,4 +21,4 @@ Single source of truth for the project. Keep these files in sync with code chang
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** October 2026 (Unscheduled inbox cards: icon meta + overdue; Generate removed).
+**Last documentation update:** October 2026 (Recurring per-day slots + `seriesGroupId` split/re-merge).
