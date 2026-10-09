@@ -92,11 +92,11 @@ describe('P0 API e2e', () => {
       expect(res.statusCode).toBe(201);
       const body = jsonBody(res);
       expect(body.id).toBeTruthy();
-      expect(body.jobId).toBeNull();
+      expect(typeof body.jobId).toBe('string');
       expect(body.eventType).toBe('admin');
     });
 
-    it('A-TSK-006 unscheduled create has null jobId', async () => {
+    it('A-TSK-006 unscheduled create returns a mutation jobId', async () => {
       const { token } = await seedOnboardedUser(ctx.app);
       const res = await api(ctx.app, 'POST', '/tasks', {
         token,
@@ -105,7 +105,7 @@ describe('P0 API e2e', () => {
       expect(res.statusCode).toBe(201);
       const body = jsonBody(res);
       expect(body.isUnscheduled).toBe(true);
-      expect(body.jobId).toBeNull();
+      expect(typeof body.jobId).toBe('string');
     });
   });
 
@@ -118,6 +118,7 @@ describe('P0 API e2e', () => {
       });
       expect(created.statusCode).toBe(201);
       const taskId = String(jsonBody(created).id);
+      await ctx.drainJobs();
 
       const schedule = await api(ctx.app, 'GET', '/schedule', { token });
       expect(schedule.statusCode).toBe(200);

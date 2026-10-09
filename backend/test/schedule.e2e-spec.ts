@@ -122,6 +122,7 @@ describe('Schedule API e2e', () => {
     });
     expect(created.statusCode).toBe(201);
     const taskId = String(jsonBody(created).id);
+    await ctx.drainJobs();
 
     const seated = await api(ctx.app, 'GET', '/schedule', { token });
     expect(seated.statusCode).toBe(200);
@@ -160,6 +161,7 @@ describe('Schedule API e2e', () => {
       payload: { name: 'Suggest me', estimatedTimeInMinutes: 30 },
     });
     const taskId = String(jsonBody(created).id);
+    await ctx.drainJobs();
     const seated = await api(ctx.app, 'GET', '/schedule', { token });
     expect((seated.json() as unknown[]).length).toBeGreaterThan(0);
     ctx.groq.completeJson.mockResolvedValueOnce(

@@ -78,7 +78,7 @@ describe('Tasks API e2e', () => {
       },
     });
     expect(res.statusCode).toBe(201);
-    expect(jsonBody(res).jobId).toBeNull();
+    expect(typeof jsonBody(res).jobId).toBe('string');
     await ctx.drainJobs();
   });
 
@@ -199,7 +199,7 @@ describe('Tasks API e2e', () => {
     });
     expect(patched.statusCode).toBe(200);
     expect(jsonBody(patched).name).toBe('Patched');
-    expect(jsonBody(patched).jobId).toBeNull();
+    expect(typeof jsonBody(patched).jobId).toBe('string');
 
     const fixed = await api(ctx.app, 'POST', '/tasks', {
       token,
@@ -211,13 +211,13 @@ describe('Tasks API e2e', () => {
       },
     });
     expect(fixed.statusCode).toBe(201);
-    expect(jsonBody(fixed).jobId).toBeNull();
+    expect(typeof jsonBody(fixed).jobId).toBe('string');
     const fixedPatch = await api(ctx.app, 'PATCH', `/tasks/${jsonBody(fixed).id}`, {
       token,
       payload: { name: 'Pinned 2' },
     });
     expect(fixedPatch.statusCode).toBe(200);
-    expect(jsonBody(fixedPatch).jobId).toBeNull();
+    expect(typeof jsonBody(fixedPatch).jobId).toBe('string');
 
     const missing = randomUUID();
     expect((await api(ctx.app, 'GET', `/tasks/${missing}`, { token })).statusCode).toBe(
@@ -236,14 +236,14 @@ describe('Tasks API e2e', () => {
     const inbox = jsonBody(toInbox);
     expect(inbox.isUnscheduled).toBe(true);
     expect(inbox.scheduledStartTime == null).toBe(true);
-    expect(inbox.jobId).toBeNull();
+    expect(typeof inbox.jobId).toBe('string');
 
     const back = await api(ctx.app, 'PATCH', `/tasks/${created.body.id}`, {
       token,
       payload: { isUnscheduled: false, estimatedTimeInMinutes: 30 },
     });
     expect(jsonBody(back).isUnscheduled).toBe(false);
-    expect(jsonBody(back).jobId).toBeNull();
+    expect(typeof jsonBody(back).jobId).toBe('string');
   });
 
   it('A-TSK-024 / A-TSK-025 / A-TSK-026 status transitions', async () => {

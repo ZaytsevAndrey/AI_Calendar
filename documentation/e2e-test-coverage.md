@@ -223,7 +223,7 @@ Backend **does not** reject overlapping phases. Frontend `usePhaseValidation` bl
 
 ## 11. Cases — tasks (API)
 
-Silent replan: `jobId` on create/update when `shouldReplanAfterSave`. Unscheduled create → `jobId` null. Unscheduled **from scheduled** → replan (free slot). Fixed → no replan. `completed`/`canceled` → no replan.
+Mutation jobs: POST/PATCH tasks return a `jobId` for place + Google sync progress. Unscheduled create still returns a sync job. Skip-occurrence stays `jobId` null. `completed`/`canceled` do not start placement.
 
 | ID | Layer | P | Given | When | Then |
 |----|-------|---|-------|------|------|
@@ -232,7 +232,7 @@ Silent replan: `jobId` on create/update when `shouldReplanAfterSave`. Unschedule
 | A-TSK-003 | A | P0 | Fixed without start/end | POST `eventType=fixed` | 400 start/end required |
 | A-TSK-004 | A | P0 | Fixed end ≤ start | POST | 400 if service checks; else client-only — **record actual** |
 | A-TSK-005 | A | P0 | Unscheduled + `eventType=fixed` | POST | 400 cannot be fixed |
-| A-TSK-006 | A | P0 | Unscheduled name only | POST `isUnscheduled=true` | 201 inbox; times/recurrence cleared; `jobId` null |
+| A-TSK-006 | A | P0 | Unscheduled name only | POST `isUnscheduled=true` | 201 inbox; times/recurrence cleared; mutation `jobId` string |
 | A-TSK-007 | A | P1 | Recurring DAILY | POST `isRecurring` + pattern | 201 + `jobId` |
 | A-TSK-008 | A | P0 | `phaseIds` length 2 | POST | 400 only one phase |
 | A-TSK-009 | A | P0 | Foreign or unknown phase id | POST | 400 |
@@ -247,7 +247,7 @@ Silent replan: `jobId` on create/update when `shouldReplanAfterSave`. Unschedule
 | A-TSK-018 | A | P0 | Own id | GET/PATCH/DELETE `/tasks/:id` | 200 |
 | A-TSK-019 | A | P0 | Unknown id | same | 404 |
 | A-TSK-020 | A | P0 | Flexible TODO | PATCH times/name | 200 + `jobId` |
-| A-TSK-021 | A | P0 | Fixed | PATCH | 200, `jobId` null |
+| A-TSK-021 | A | P0 | Fixed | PATCH | 200, mutation `jobId` string |
 | A-TSK-022 | A | P0 | Move scheduled → unscheduled | PATCH `isUnscheduled=true` | Times cleared; Google event deleted (stub); `jobId` set (free slot) |
 | A-TSK-023 | A | P0 | Unscheduled → flexible (`isUnscheduled=false`) | PATCH | Becomes schedulable; `jobId` set |
 | A-TSK-024 | A | P0 | `PATCH /tasks/:id/status` `completed` | Done | Status completed; no new Google event for unscheduled/flexible Done |
