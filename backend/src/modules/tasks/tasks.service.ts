@@ -695,6 +695,9 @@ export class TasksService {
 
   async remove(id: string, userId: string): Promise<void> {
     const task = await this.findOne(id, userId);
+    // Stop retries / in-flight sync from recreating the Google event after delete.
+    await this.pendingGoogleWrites.discardPendingUpserts(userId, id);
+    await this.pendingGoogleWrites.waitForInflight(userId, id);
     if (task.googleEventId || task.eventType !== TaskEventType.FIXED) {
       try {
         await this.scheduleJobService.deleteSyncedGoogleEventsForTask(userId, task);
@@ -706,6 +709,7 @@ export class TasksService {
     }
     const freed = !task.isUnscheduled;
     await this.tasksRepository.remove(task);
+    await this.pendingGoogleWrites.discardPendingUpserts(userId, id);
     if (freed) await this.placementStep.seatOpenHoles(userId);
   }
 

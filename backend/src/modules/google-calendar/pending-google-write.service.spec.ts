@@ -233,6 +233,53 @@ describe('PendingGoogleWriteService', () => {
     );
   });
 
+  it('deletes a just-created Google event when the local task was removed', async () => {
+    let finds = 0;
+    taskRepo.findOne.mockImplementation(async () => {
+      finds += 1;
+      // First load for sync; second is the post-create existence check.
+      if (finds === 1) {
+        return {
+          id: 't1',
+          userId: 'u1',
+          name: 'Deep work',
+          isUnscheduled: false,
+          scheduleState: 'none',
+          scheduledStartTime: new Date('2026-10-08T09:00:00.000Z'),
+          scheduledEndTime: new Date('2026-10-08T10:00:00.000Z'),
+          googleEventId: null,
+          status: 'todo',
+          scheduleTimeZone: 'UTC',
+        };
+      }
+      return null;
+    });
+    google.createEvent.mockResolvedValueOnce({ id: 'g-orphan' });
+    await service.syncTask('u1', 't1');
+    expect(google.deleteEvent).toHaveBeenCalledWith('u1', 'g-orphan', 'primary');
+    expect(taskRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('drops a pending upsert for a deleted task and removes its Google event', async () => {
+    pendingRepo.find.mockResolvedValue([
+      {
+        id: 'p1',
+        userId: 'u1',
+        taskId: 't1',
+        operation: 'upsert',
+        googleEventId: 'g-stale',
+        googleCalendarId: 'primary',
+        enqueuedAt: new Date('2026-10-08T08:00:00.000Z'),
+        attempts: 0,
+      },
+    ]);
+    taskRepo.findOne.mockResolvedValue(null);
+    await service.processQueue();
+    expect(google.createEvent).not.toHaveBeenCalled();
+    expect(google.deleteEvent).toHaveBeenCalledWith('u1', 'g-stale', 'primary');
+    expect(pendingRepo.remove).toHaveBeenCalled();
+  });
+
   it('drops a pending upsert and pulls Google when the user edited after enqueue', async () => {
     const enqueuedAt = new Date('2026-10-08T08:00:00.000Z');
     pendingRepo.find.mockResolvedValue([

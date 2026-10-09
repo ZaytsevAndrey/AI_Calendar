@@ -118,6 +118,26 @@ export class PendingGoogleWriteService {
   }
 
   /**
+   * Drop queued upserts for a task that is being removed so the retry worker
+   * cannot recreate its Google event after local delete.
+   */
+  async discardPendingUpserts(userId: string, taskId: string): Promise<void> {
+    const rows = await this.pendingRepo.find({
+      where: { userId, taskId, operation: 'upsert' },
+      take: 50,
+    });
+    if (rows.length) await this.pendingRepo.remove(rows);
+  }
+
+  /** Wait until any in-flight `syncTask` for this id finishes. */
+  async waitForInflight(userId: string, taskId: string): Promise<void> {
+    const key = `${userId}:${taskId}`;
+    const run = this.inflight.get(key);
+    if (!run) return;
+    await run.catch(() => undefined);
+  }
+
+  /**
    * Try to write the task to Google now; on failure enqueue a retry.
    * No open seat → delete any linked Google event (and enqueue delete on failure).
    * Concurrent calls for the same task wait and reload so only one createEvent runs.
@@ -175,18 +195,21 @@ export class PendingGoogleWriteService {
           payload,
           syncOpts,
         );
+        if (!(await this.taskStillExists(userId, taskId))) {
+          await this.deleteGoogleEventQuietly(
+            userId,
+            task.googleEventId,
+            calendarId,
+          );
+          return;
+        }
         await this.stampOpenSlotGoogle(task);
       } else {
         const ev = await this.google.createEvent(userId, payload, syncOpts);
-        if (typeof ev?.id === 'string') {
-          task.googleEventId = ev.id;
-          const appCal = (ev as { appCalendarId?: string }).appCalendarId;
-          if (appCal) task.googleEventCalendarId = appCal;
-          await this.taskRepo.save(task);
-          await this.stampOpenSlotGoogle(task);
-        }
+        await this.attachCreatedGoogleEvent(userId, task, ev, calendarId);
       }
     } catch (err) {
+      if (!(await this.taskStillExists(userId, taskId))) return;
       const message = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Google sync failed for task ${taskId}: ${message}`);
       await this.enqueue(userId, 'upsert', {
@@ -234,8 +257,19 @@ export class PendingGoogleWriteService {
       where: { id: row.taskId, userId: row.userId },
       relations: ['phase', 'phases'],
     });
-    if (!task || !this.canSyncTask(task)) {
-      if (task) await this.deleteTaskGoogle(row.userId, task);
+    if (!task) {
+      // Task was deleted while this upsert was queued — drop any stale Google id.
+      if (row.googleEventId) {
+        await this.deleteGoogleEventQuietly(
+          row.userId,
+          row.googleEventId,
+          row.googleCalendarId ?? 'primary',
+        );
+      }
+      return;
+    }
+    if (!this.canSyncTask(task)) {
+      await this.deleteTaskGoogle(row.userId, task);
       return;
     }
 
@@ -290,12 +324,56 @@ export class PendingGoogleWriteService {
         calendarId,
       },
     );
-    if (typeof ev?.id === 'string') {
-      task.googleEventId = ev.id;
-      const appCal = (ev as { appCalendarId?: string }).appCalendarId;
-      if (appCal) task.googleEventCalendarId = appCal;
-      await this.taskRepo.save(task);
-      await this.stampOpenSlotGoogle(task);
+    await this.attachCreatedGoogleEvent(row.userId, task, ev, calendarId);
+  }
+
+  private async taskStillExists(
+    userId: string,
+    taskId: string,
+  ): Promise<boolean> {
+    const row = await this.taskRepo.findOne({
+      where: { id: taskId, userId },
+      select: ['id'],
+    });
+    return !!row;
+  }
+
+  /**
+   * Persist a newly created Google event only if the local task still exists.
+   * Otherwise delete the orphan so a racing task-delete cannot resurrect it.
+   */
+  private async attachCreatedGoogleEvent(
+    userId: string,
+    task: Task,
+    ev: { id?: string; appCalendarId?: string } | null | undefined,
+    calendarId: string,
+  ): Promise<void> {
+    if (typeof ev?.id !== 'string') return;
+    if (!(await this.taskStillExists(userId, task.id))) {
+      await this.deleteGoogleEventQuietly(userId, ev.id, calendarId);
+      return;
+    }
+    task.googleEventId = ev.id;
+    if (ev.appCalendarId) task.googleEventCalendarId = ev.appCalendarId;
+    await this.taskRepo.save(task);
+    await this.stampOpenSlotGoogle(task);
+  }
+
+  private async deleteGoogleEventQuietly(
+    userId: string,
+    eventId: string,
+    calendarId: string,
+  ): Promise<void> {
+    try {
+      await this.google.deleteEvent(userId, eventId, calendarId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/404|not found|Gone/i.test(message)) return;
+      await this.enqueue(userId, 'delete', {
+        googleEventId: eventId,
+        googleCalendarId: calendarId,
+        error: message,
+      });
     }
   }
 

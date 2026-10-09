@@ -69,6 +69,8 @@ describe('TasksService', () => {
     syncTaskSoon: jest.fn((userId: string, taskId: string) => {
       void pendingGoogleWrites.syncTask(userId, taskId);
     }),
+    discardPendingUpserts: jest.fn().mockResolvedValue(undefined),
+    waitForInflight: jest.fn().mockResolvedValue(undefined),
   };
   const placementStep = {
     place: jest.fn().mockImplementation(async (_userId: string, _taskId: string, opts) => {
@@ -769,6 +771,17 @@ describe('TasksService', () => {
       await service.remove('task-1', 'user-1');
       expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
       expect(placementStep.seatOpenHoles).toHaveBeenCalledWith('user-1');
+      expect(pendingGoogleWrites.discardPendingUpserts).toHaveBeenCalledWith(
+        'user-1',
+        'task-1',
+      );
+      expect(pendingGoogleWrites.waitForInflight).toHaveBeenCalledWith(
+        'user-1',
+        'task-1',
+      );
+      expect(
+        scheduleJobService.deleteSyncedGoogleEventsForTask,
+      ).toHaveBeenCalled();
     });
   });
 

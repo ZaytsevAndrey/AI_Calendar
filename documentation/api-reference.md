@@ -34,7 +34,7 @@ Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWor
 
 **`remindersEnabled`** (default false) turns on Web Push. See [Reminders](#reminders--reminders).
 
-**`syncGoogleDeletions`** (default false): when off, a missing linked Google event during retry only clears local Google ids. When on, that missing event deletes the local task. Failed Google writes sit in `pending_google_writes` and retry in the background; a newer Google edit of time/title/description drops the pending row and pulls into the task.
+**`syncGoogleDeletions`** (default false): when off, a missing linked Google event during retry only clears local Google ids. When on, that missing event deletes the local task. Failed Google writes sit in `pending_google_writes` and retry in the background; a newer Google edit of time/title/description drops the pending row and pulls into the task. **`DELETE /tasks/:id`** discards pending upserts for that task, waits for any in-flight Google sync, deletes linked Google events, then removes the row — so a racing sync cannot recreate the event after delete.
 
 **`hiddenGoogleCalendarIds`** (string array) hides those Google calendars on the Calendar page. Empty means primary, the app calendar, and calendars selected in Google. The stored app calendar id is dropped if sent. A non-array is 400. This does not change which calendars Generate treats as busy.
 
