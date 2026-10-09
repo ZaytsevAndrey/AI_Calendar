@@ -13,8 +13,11 @@ import { showErrorToast, showSuccessToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 import { occurrenceStartIsoForYmd } from '../buildOneOffFromSeries';
 import type { ParkDayHint } from '../parkDayHints';
+import {
+  remainingProblematicDays,
+  todayYmdInZone,
+} from '../problematicDays';
 import { MoveOccurrenceSheet } from './MoveOccurrenceSheet';
-import { localYmd } from '../../../utils/ianaDateTime';
 
 type Props = {
   open: boolean;
@@ -48,44 +51,15 @@ function reasonKey(reason: string | null | undefined): string {
   }
 }
 
-/** API/json columns may arrive as a real array or a JSON string. */
-function normalizeYmdList(raw: unknown): string[] {
-  let value = raw;
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return [];
-    try {
-      value = JSON.parse(trimmed) as unknown;
-    } catch {
-      return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? [trimmed] : [];
-    }
-  }
-  if (!Array.isArray(value)) return [];
-  return [
-    ...new Set(
-      value.filter(
-        (ymd): ymd is string =>
-          typeof ymd === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ymd),
-      ),
-    ),
-  ].sort();
-}
-
-function dayList(task: TaskDTO, hint?: ParkDayHint): string[] {
-  const fromTask = normalizeYmdList(task.problematicOccurrenceYmds);
-  if (fromTask.length) return fromTask;
-  return normalizeYmdList(hint?.occurrenceYmds);
-}
-
-/** Prefer stored/hint days; otherwise today so Skip/Move stay available. */
+/** Prefer remaining today/future days; otherwise today so Skip/Move stay available. */
 function actionDays(
   task: TaskDTO,
   hint: ParkDayHint | undefined,
-  timeZone: string,
+  todayYmd: string,
 ): string[] {
-  const known = dayList(task, hint);
+  const known = remainingProblematicDays(task, hint, todayYmd);
   if (known.length) return known;
-  return [localYmd(new Date().toISOString(), timeZone)];
+  return [todayYmd];
 }
 
 export function ProblematicInboxSheet({
@@ -105,6 +79,8 @@ export function ProblematicInboxSheet({
     occurrenceYmd: string;
   } | null>(null);
 
+  const todayYmd = todayYmdInZone(timeZone);
+
   const clearProblematic = async (task: TaskDTO) => {
     await updateEvent({
       id: task.id,
@@ -113,9 +89,11 @@ export function ProblematicInboxSheet({
   };
 
   const removeParkedDay = async (task: TaskDTO, occurrenceYmd: string) => {
-    const remaining = dayList(task, dayHints[task.id]).filter(
-      (ymd) => ymd !== occurrenceYmd,
-    );
+    const remaining = remainingProblematicDays(
+      task,
+      dayHints[task.id],
+      todayYmd,
+    ).filter((ymd) => ymd !== occurrenceYmd);
     if (remaining.length === 0) {
       await clearProblematic(task);
       return;
@@ -201,9 +179,9 @@ export function ProblematicInboxSheet({
             const phase = task.phase ?? task.phases?.[0];
             const hint = dayHints[task.id];
             const recurring = !!task.isRecurring;
-            const knownDays = dayList(task, hint);
+            const knownDays = remainingProblematicDays(task, hint, todayYmd);
             const days = recurring
-              ? actionDays(task, hint, timeZone)
+              ? actionDays(task, hint, todayYmd)
               : knownDays;
             const reason = task.problematicReason ?? hint?.reason ?? null;
 

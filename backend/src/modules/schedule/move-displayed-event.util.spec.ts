@@ -112,4 +112,22 @@ describe('planDisplayedEventMove', () => {
       }),
     ).toEqual({ kind: 'google' });
   });
+
+  it('asks for series scope when a recurring app task has no close slot', () => {
+    expect(
+      planDisplayedEventMove({
+        googleEventId: 'master-1_20260923T090000Z',
+        recurringEventId: 'master-1',
+        originalStartIso: '2026-09-23T09:00:00.000Z',
+        isHabit: false,
+        tasks: [recurring],
+        slots: [],
+      }),
+    ).toEqual({
+      kind: 'slot',
+      slotId: '',
+      taskId: 'task-rec',
+      updateTaskWindow: false,
+    });
+  });
 });

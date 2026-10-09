@@ -131,7 +131,7 @@ Protected with JWT (`JwtAuthGuard`).
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/schedule` | List scheduled tasks (query: date range, optional `phaseId`) |
-| GET | `/schedule/free-slots` | Query: `taskId`, `ymd` (YYYY-MM-DD), optional `phaseId`. Free gaps + 15‑minute candidate starts for Problematic Move on that civil day (chosen phase or task phases ∩ wake/sleep minus busy). Returns `{ ymd, timeZone, durationMinutes, dayStart, dayEnd, phase, busy, free, candidates }`. 404 if task missing; 400 if `phaseId` is sleep / unknown. |
+| GET | `/schedule/free-slots` | Query: `taskId`, `ymd` (YYYY-MM-DD), optional `phaseId`. Free gaps + 15‑minute candidate starts for Problematic Move on that civil day (chosen phase or task phases ∩ wake/sleep minus busy). Returns `{ ymd, timeZone, durationMinutes, dayStart, dayEnd, phase, busy, free, candidates }`. `busy` is per-source segments (not merged) with optional `label` / `color` for the Move timeline (tasks, habits, Google). Free/candidates still use merged busy. 404 if task missing; 400 if `phaseId` is sleep / unknown. |
 | GET | `/schedule/:id` | Single record |
 | POST | `/schedule` | Create a scheduled slot |
 | PATCH | `/schedule/:id` | Change times |

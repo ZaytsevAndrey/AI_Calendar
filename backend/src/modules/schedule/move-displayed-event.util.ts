@@ -65,6 +65,26 @@ export function planDisplayedEventMove(input: {
     };
   }
 
+  // App recurring series still need occurrence/series scope — never patch Google alone
+  // (that rewrites the whole series master when instance slots are missing).
+  if (task?.isRecurring) {
+    return {
+      kind: 'slot',
+      slotId: '',
+      taskId: task.id,
+      updateTaskWindow: false,
+    };
+  }
+
+  if (task) {
+    return {
+      kind: 'slot',
+      slotId: '',
+      taskId: task.id,
+      updateTaskWindow: !task.isRecurring,
+    };
+  }
+
   return { kind: 'google' };
 }
 

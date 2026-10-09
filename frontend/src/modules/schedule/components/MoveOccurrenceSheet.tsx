@@ -200,7 +200,11 @@ export function MoveOccurrenceSheet({
           hm,
           chosenPhase,
         );
-        await createEvent(payload).unwrap();
+        const created = await createEvent(payload).unwrap();
+        if (created.conflicts?.length) {
+          // Conflict sheet opens via mutation side-effect; keep Move open.
+          return;
+        }
         await skipOccurrence({
           id: task.id,
           body: {
@@ -217,7 +221,7 @@ export function MoveOccurrenceSheet({
         const end = new Date(
           Date.parse(start) + duration * 60_000,
         ).toISOString();
-        await updateEvent({
+        const updated = await updateEvent({
           id: task.id,
           body: {
             eventType: 'fixed',
@@ -231,6 +235,9 @@ export function MoveOccurrenceSheet({
             problematicReason: null,
           },
         }).unwrap();
+        if (updated.conflicts?.length) {
+          return;
+        }
         showSuccessToast({
           title: t('schedule.problematicMoved'),
           detail: `${task.name} · ${placeLabel}`,
@@ -395,7 +402,9 @@ export function MoveOccurrenceSheet({
           taskName={task.name}
           phases={schedulablePhases}
           phaseId={phaseId}
-          preferredStartIso={task.scheduledStartTime}
+          preferredStartIso={
+            task.scheduledStartTime ?? task.problematicOriginalStart
+          }
           settling={settling}
           selectedStartIso={selectedStartIso}
           seekIso={seekIso}

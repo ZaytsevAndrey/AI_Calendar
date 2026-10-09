@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useStore } from 'react-redux';
 import { useTranslation } from 'react-i18next';
 import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Columns3, List, Mic, MoreHorizontal, Plus } from 'lucide-react';
 import {
@@ -26,6 +26,7 @@ import { ScheduleMenu } from 'modules/schedule/components/ScheduleMenu';
 import { ScheduleSuggestionsDialog } from 'modules/schedule/components/ScheduleSuggestionsDialog';
 import { SeriesDragHost } from 'modules/schedule/components/SeriesDragHost';
 import { SeriesMoveCancelled } from 'modules/schedule/seriesDragChoice';
+import { isActiveProblematicTask, todayYmdInZone } from 'modules/schedule/problematicDays';
 import { NowStrip } from 'modules/now/components/NowStrip';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
@@ -99,6 +100,7 @@ function defaultCalendarView(): CalendarView {
 const CalendarPage: React.FC = () => {
     const { t } = useTranslation();
     const dispatch = useDispatch();
+    const store = useStore();
     const phone = usePhoneLayout();
     const coarse = useCoarsePointer();
     const [currentView, setCurrentView] = useState<CalendarView>(defaultCalendarView);
@@ -146,11 +148,9 @@ const CalendarPage: React.FC = () => {
     const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
     const { openCreate, openCreateFromPrefill, openEdit, createFromPayload, editorModal } = useEventEditor();
     const { data: tasks = [] } = useGetTasksQuery();
-    const problematicTasks = tasks.filter(
-        (task) =>
-            task.scheduleState === 'problematic' &&
-            task.status !== 'completed' &&
-            task.status !== 'canceled',
+    const todayYmd = todayYmdInZone(timeZone);
+    const problematicTasks = tasks.filter((task) =>
+        isActiveProblematicTask(task, todayYmd, parkDayHints[task.id]),
     );
     const { data: habitsData } = useGetHabitsQuery();
     const voice = useVoiceTask({
@@ -277,6 +277,32 @@ const CalendarPage: React.FC = () => {
         if (!originalStart || !originalEnd) {
             throw new Error('Event has no time range');
         }
+        const startIso = start.toISOString();
+        const endIso = end.toISOString();
+        const cachedArgs = eventsApi.util.selectCachedArgsForQuery(
+            store.getState() as never,
+            'getEvents',
+        );
+        const undoPatches = cachedArgs.map((args) =>
+            dispatch(
+                eventsApi.util.updateQueryData('getEvents', args, (draft) => {
+                    if (!Array.isArray(draft?.events)) return;
+                    for (const row of draft.events) {
+                        if (row.id !== event.id) continue;
+                        row.start = {
+                            ...row.start,
+                            dateTime: startIso,
+                            date: undefined,
+                        };
+                        row.end = {
+                            ...row.end,
+                            dateTime: endIso,
+                            date: undefined,
+                        };
+                    }
+                }),
+            ),
+        );
         try {
             const moved = await ScheduleApi.moveDisplayedEvent({
                 googleEventId: event.id,
@@ -284,8 +310,8 @@ const CalendarPage: React.FC = () => {
                 recurringEventId: event.recurringEventId,
                 originalStart: originalStart.toISOString(),
                 originalEnd: originalEnd.toISOString(),
-                start: start.toISOString(),
-                end: end.toISOString(),
+                start: startIso,
+                end: endIso,
             });
             const { recurringMoved } = await settleReplanJob(moved.jobId);
             dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
@@ -293,12 +319,12 @@ const CalendarPage: React.FC = () => {
             if (event.recurringEventId) {
                 showSuccessToast({
                     title: t('calendar.recurringInstanceMoved'),
-                    detail: formatDateTimeRange(start.toISOString(), end.toISOString()),
+                    detail: formatDateTimeRange(startIso, endIso),
                 });
             } else {
                 showSuccessToast({
                     title: t('calendar.eventMoved'),
-                    detail: formatDateTimeRange(start.toISOString(), end.toISOString()),
+                    detail: formatDateTimeRange(startIso, endIso),
                 });
             }
             if (recurringMoved.length && !event.recurringEventId) {
@@ -308,6 +334,7 @@ const CalendarPage: React.FC = () => {
                 });
             }
         } catch (err) {
+            undoPatches.forEach((patch) => patch.undo());
             if (err instanceof SeriesMoveCancelled) {
                 throw err;
             }

@@ -2,6 +2,7 @@ import {
   buildFreeSlotsPlan,
   candidateStartsInGaps,
   ceilToStep,
+  clipBusySegmentsToDay,
   clipBusyToDay,
   dayWakeSleepMs,
   eligibleWindowsForDay,
@@ -38,6 +39,55 @@ describe('free-slots.util', () => {
     ).toEqual([
       { start: 0, end: 20 },
       { start: 30, end: 40 },
+    ]);
+  });
+
+  it('clips labeled busy segments without merging overlapping titles', () => {
+    const day = { start: dayStart, end: dayEnd };
+    const segments = clipBusySegmentsToDay(
+      [
+        {
+          start: Date.parse('2026-04-21T11:00:00.000Z'),
+          end: Date.parse('2026-04-21T12:30:00.000Z'),
+          label: 'Standup',
+          color: '#112233',
+        },
+        {
+          start: Date.parse('2026-04-21T12:00:00.000Z'),
+          end: Date.parse('2026-04-21T13:00:00.000Z'),
+          label: 'Deep work',
+        },
+      ],
+      day,
+    );
+    expect(segments).toEqual([
+      {
+        start: Date.parse('2026-04-21T11:00:00.000Z'),
+        end: Date.parse('2026-04-21T12:30:00.000Z'),
+        label: 'Standup',
+        color: '#112233',
+      },
+      {
+        start: Date.parse('2026-04-21T12:00:00.000Z'),
+        end: Date.parse('2026-04-21T13:00:00.000Z'),
+        label: 'Deep work',
+      },
+    ]);
+    const plan = buildFreeSlotsPlan({
+      ymd,
+      wake,
+      sleep,
+      timeZone: tz,
+      phases: [phase],
+      busy: segments,
+      durationMinutes: 30,
+    });
+    expect(plan.busySegments).toEqual(segments);
+    expect(plan.busyInDay).toEqual([
+      {
+        start: Date.parse('2026-04-21T11:00:00.000Z'),
+        end: Date.parse('2026-04-21T13:00:00.000Z'),
+      },
     ]);
   });
 

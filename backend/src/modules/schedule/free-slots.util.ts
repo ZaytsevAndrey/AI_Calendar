@@ -6,6 +6,12 @@ import {
 
 export type MsInterval = { start: number; end: number };
 
+/** Busy segment for the Move timeline UI (labels survive; free calc still merges). */
+export type LabeledBusyInterval = MsInterval & {
+  label?: string;
+  color?: string;
+};
+
 export type FreeSlotsPhaseLike = {
   id?: string;
   name?: string;
@@ -167,13 +173,29 @@ export function clipBusyToDay(
   );
 }
 
+/** Clip busy to the day without merging so each task/habit keeps its label. */
+export function clipBusySegmentsToDay(
+  busy: LabeledBusyInterval[],
+  day: MsInterval,
+): LabeledBusyInterval[] {
+  return busy
+    .map((b) => ({
+      start: Math.max(b.start, day.start),
+      end: Math.min(b.end, day.end),
+      ...(b.label ? { label: b.label } : {}),
+      ...(b.color ? { color: b.color } : {}),
+    }))
+    .filter((b) => b.end > b.start)
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
 export function buildFreeSlotsPlan(input: {
   ymd: string;
   wake: string;
   sleep: string;
   timeZone: string;
   phases: FreeSlotsPhaseLike[];
-  busy: MsInterval[];
+  busy: LabeledBusyInterval[];
   durationMinutes: number;
   weekendOk?: boolean;
   stepMinutes?: number;
@@ -182,7 +204,10 @@ export function buildFreeSlotsPlan(input: {
 }): {
   day: MsInterval;
   free: MsInterval[];
+  /** Merged busy — used only for free/candidate math. */
   busyInDay: MsInterval[];
+  /** Per-source busy clipped to the day (labels for the Move timeline). */
+  busySegments: LabeledBusyInterval[];
   candidates: number[];
   usedWakeSleepFallback: boolean;
 } {
@@ -216,6 +241,7 @@ export function buildFreeSlotsPlan(input: {
       input.weekendOk ?? true,
     );
   }
+  const busySegments = clipBusySegmentsToDay(input.busy, day);
   const busyInDay = clipBusyToDay(input.busy, day);
   const free = subtractMany(eligible, busyInDay);
   const candidates = candidateStartsInGaps(
@@ -223,5 +249,12 @@ export function buildFreeSlotsPlan(input: {
     input.durationMinutes,
     input.stepMinutes ?? 15,
   );
-  return { day, free, busyInDay, candidates, usedWakeSleepFallback };
+  return {
+    day,
+    free,
+    busyInDay,
+    busySegments,
+    candidates,
+    usedWakeSleepFallback,
+  };
 }

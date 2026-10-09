@@ -63,6 +63,56 @@ describe('planPlacement', () => {
     });
   });
 
+  it('allows endpoint-adjacent intervals (9–10 and 10–11) without displacing', () => {
+    const plan = planPlacement({
+      claim: claim({ start: DAY + HOUR, end: DAY + 2 * HOUR }),
+      seats: [
+        seat({ id: 'nine', role: 'flexible', start: DAY, end: DAY + HOUR }),
+      ],
+    });
+    expect(plan).toEqual({
+      outcome: 'seated',
+      start: DAY + HOUR,
+      end: DAY + 2 * HOUR,
+      moves: [],
+    });
+  });
+
+  it('detaches a series day when no hole fits instead of parking the series', () => {
+    const plan = planPlacement({
+      claim: claim({ start: DAY, end: DAY + HOUR }),
+      seats: [
+        seat({
+          id: 'series-day',
+          role: 'series',
+          start: DAY,
+          end: DAY + HOUR,
+          occurrenceYmd: '2026-10-08',
+          windows: [{ start: DAY, end: DAY + HOUR }],
+        }),
+        seat({
+          id: 'wall',
+          role: 'anchor',
+          start: DAY + HOUR,
+          end: DAY + 8 * HOUR,
+        }),
+      ],
+    });
+    expect(plan).toMatchObject({
+      outcome: 'seated',
+      moves: [
+        {
+          kind: 'detach',
+          seatId: 'series-day',
+          occurrenceYmd: '2026-10-08',
+          start: null,
+          end: null,
+          reason: 'no_slot',
+        },
+      ],
+    });
+  });
+
   it('asks and writes nothing when the claim hits an anchor', () => {
     const plan = planPlacement({
       claim: claim({ start: DAY, end: DAY + HOUR }),

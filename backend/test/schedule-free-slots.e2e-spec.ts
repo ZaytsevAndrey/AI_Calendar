@@ -10,7 +10,7 @@ type FreeSlotsBody = {
   dayStart: string;
   dayEnd: string;
   phase: { id: string; name: string; color: string } | null;
-  busy: { start: string; end: string }[];
+  busy: { start: string; end: string; label?: string; color?: string }[];
   free: { start: string; end: string }[];
   candidates: string[];
 };
@@ -227,9 +227,9 @@ describe('Schedule free-slots API e2e (A-SCH-033+)', () => {
 
     const blocked = await freeSlots(token, task.id, '2026-10-07');
     expect(blocked.statusCode).toBe(200);
-    const blockedCount = (jsonBody(blocked) as unknown as FreeSlotsBody)
-      .candidates.length;
-    expect(blockedCount).toBeLessThan(openCount);
+    const body = jsonBody(blocked) as unknown as FreeSlotsBody;
+    expect(body.candidates.length).toBeLessThan(openCount);
+    expect(body.busy.some((b) => b.label === 'Fixed blocker')).toBe(true);
   });
 
   it('A-SCH-033o huge duration yields empty candidates', async () => {

@@ -71,6 +71,20 @@ export const phasesApi = createApi({
         { type: 'Phases', id },
         { type: 'Phases', id: 'LIST' },
       ],
+      async onQueryStarted({ id, phase }, { dispatch, queryFulfilled }) {
+        const patch = dispatch(
+          phasesApi.util.updateQueryData('getAllPhases', undefined, (draft) => {
+            const row = draft.find((item) => item.id === id);
+            if (!row) return;
+            Object.assign(row, phase);
+          }),
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patch.undo();
+        }
+      },
     }),
     deletePhase: builder.mutation<void, string>({
       query: (id) => ({ url: `/phases/${id}`, method: 'DELETE' }),

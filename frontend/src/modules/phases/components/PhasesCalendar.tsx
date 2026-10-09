@@ -98,6 +98,11 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
     startMin: number;
     endMin: number;
   } | null>(null);
+  const [pending, setPending] = useState<{
+    phaseId: string;
+    startMin: number;
+    endMin: number;
+  } | null>(null);
 
   const skipClickAfterDragRef = useRef(false);
 
@@ -175,6 +180,7 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
         if (endMin <= startMin || endMin - startMin < MIN_DURATION_MIN) return;
 
         skipClickAfterDragRef.current = true;
+        setPending({ phaseId, startMin, endMin });
         try {
           await onPhaseTimeChangeRef.current(
             phaseId,
@@ -182,9 +188,11 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
             minutesToTime(endMin),
           );
         } catch {
+          setPending(null);
           skipClickAfterDragRef.current = false;
           return;
         }
+        window.setTimeout(() => setPending(null), 400);
         setTimeout(() => {
           skipClickAfterDragRef.current = false;
         }, 0);
@@ -267,6 +275,9 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
     if (live && live.phaseId === phase.id && live.dayOfWeek === dayOfWeek) {
       startMin = live.startMin;
       endMin = live.endMin;
+    } else if (pending && pending.phaseId === phase.id) {
+      startMin = pending.startMin;
+      endMin = pending.endMin;
     }
     const clippedStart = Math.max(startMin, dayStartMin);
     const clippedEnd = Math.min(endMin, dayEndMin);

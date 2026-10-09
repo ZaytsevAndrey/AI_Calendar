@@ -201,6 +201,18 @@ export class TasksService {
       };
     }
     if (startChanged && task.scheduledStartTime) {
+      // FIXED clocks are user-chosen (calendar drag, Problematic Move Place).
+      // `preferred` + revert would wipe times when leaving Problematic (before
+      // had no seat) or when placement returns a conflict — Place then hung
+      // with no slot. Always commit the chosen interval; soft peers still move.
+      if (task.eventType === TaskEventType.FIXED) {
+        return {
+          commit: 'always',
+          preferredStart: new Date(task.scheduledStartTime),
+          durationMinutes: task.estimatedTimeInMinutes,
+          expandSeries: !!task.isRecurring,
+        };
+      }
       return {
         commit: 'preferred',
         preferredStart: new Date(task.scheduledStartTime),
@@ -229,20 +241,31 @@ export class TasksService {
     if (!opts) return null;
     const plan = await this.placementStep.place(userId, task.id, opts);
     if (opts.commit === 'preferred' && !preferredHonored(plan, opts)) {
-      task.scheduledStartTime = before.scheduledStartTime
-        ? new Date(before.scheduledStartTime)
-        : null;
-      task.scheduledEndTime = before.scheduledEndTime
-        ? new Date(before.scheduledEndTime)
-        : null;
-      task.estimatedTimeInMinutes = before.estimatedTimeInMinutes;
-      await this.tasksRepository.save(task);
+      // Keep an explicit FIXED clock when the previous snapshot had no seat
+      // (Problematic / Unscheduled → Place). Reverting to null left FIXED
+      // without times and the Move sheet looked stuck.
+      if (
+        !(
+          task.eventType === TaskEventType.FIXED &&
+          task.scheduledStartTime &&
+          !before.scheduledStartTime
+        )
+      ) {
+        task.scheduledStartTime = before.scheduledStartTime
+          ? new Date(before.scheduledStartTime)
+          : null;
+        task.scheduledEndTime = before.scheduledEndTime
+          ? new Date(before.scheduledEndTime)
+          : null;
+        task.estimatedTimeInMinutes = before.estimatedTimeInMinutes;
+        await this.tasksRepository.save(task);
+      }
       return plan.outcome === 'conflict' ? plan.conflict : null;
     }
     if (freedAHole(before, plan, opts)) {
       await this.placementStep.seatOpenHoles(userId);
     }
-    return null;
+    return plan.outcome === 'conflict' ? plan.conflict : null;
   }
 
   /** Seat a resolved copy as a second layer on its original interval. */

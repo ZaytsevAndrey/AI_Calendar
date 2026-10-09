@@ -494,19 +494,42 @@ export function SlotPickTimeline({
               );
             })}
 
-            {data.busy.map((b) => {
+            {data.busy.map((b, idx) => {
               const startMin = msToMinOfDay(Date.parse(b.start), dayStartMs);
               const endMin = msToMinOfDay(Date.parse(b.end), dayStartMs);
+              const h = Math.max(4, minToPx(endMin - startMin));
+              const tint = b.color || '#6b7280';
+              const label = b.label?.trim();
               return (
                 <div
-                  key={`busy-${b.start}`}
-                  className="pointer-events-none absolute inset-x-10 overflow-hidden rounded-md bg-white/10"
+                  key={`busy-${b.start}-${b.end}-${idx}`}
+                  className="pointer-events-none absolute inset-x-10 overflow-hidden rounded-md border border-white/10"
                   style={{
                     top: minToPx(startMin),
-                    height: Math.max(4, minToPx(endMin - startMin)),
+                    height: h,
+                    background: `linear-gradient(90deg, ${tint}55, ${tint}22)`,
                   }}
+                  title={
+                    label
+                      ? `${label} · ${formatHmFromIso(b.start, data.timeZone)}–${formatHmFromIso(b.end, data.timeZone)}`
+                      : undefined
+                  }
                 >
-                  <div className="h-full w-full bg-[repeating-linear-gradient(-45deg,transparent,transparent_4px,rgba(0,0,0,0.18)_4px,rgba(0,0,0,0.18)_8px)]" />
+                  {label ? (
+                    <div className="flex h-full min-h-0 flex-col justify-center gap-0.5 px-2 py-1">
+                      <p className="truncate text-[11px] font-semibold leading-tight text-white/95 drop-shadow">
+                        {label}
+                      </p>
+                      {h >= 36 ? (
+                        <p className="truncate text-[10px] tabular-nums leading-tight text-white/75">
+                          {formatHmFromIso(b.start, data.timeZone)}–
+                          {formatHmFromIso(b.end, data.timeZone)}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="h-full w-full bg-[repeating-linear-gradient(-45deg,transparent,transparent_4px,rgba(0,0,0,0.18)_4px,rgba(0,0,0,0.18)_8px)]" />
+                  )}
                 </div>
               );
             })}

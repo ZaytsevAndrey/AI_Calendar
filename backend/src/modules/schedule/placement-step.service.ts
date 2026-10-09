@@ -117,14 +117,17 @@ export class PlacementStepService {
     return withUserLock(userId, () => this.appendMissingSeriesDaysUnlocked(userId));
   }
 
-  /** Delete problematic copies whose civil day is already past (settings TZ). */
+  /**
+   * Drop past problematic copies and trim past days from parked series masters.
+   * Settings TZ defines "today".
+   */
   async purgePastProblematicCopies(limit = 50): Promise<number> {
     const parked = await this.taskRepo.find({
       where: { scheduleState: ScheduleState.PROBLEMATIC },
       take: limit * 4,
       order: { createdAt: 'ASC' },
     });
-    let removed = 0;
+    let changed = 0;
     const byUser = new Map<string, Task[]>();
     for (const task of parked) {
       const list = byUser.get(task.userId) ?? [];
@@ -132,20 +135,58 @@ export class PlacementStepService {
       byUser.set(task.userId, list);
     }
     for (const [userId, tasks] of byUser) {
-      if (removed >= limit) break;
+      if (changed >= limit) break;
       const settings = await this.userSettingsService.getSettings(userId);
       const timeZone = resolveIanaTimeZone(settings.timeZone);
       const today = localYmd(new Date().toISOString(), timeZone);
       for (const task of tasks) {
-        if (removed >= limit) break;
+        if (changed >= limit) break;
         const day = task.problematicDay;
-        if (!day || day >= today) continue;
-        await this.pendingGoogleWrites.syncTask(userId, task.id);
-        await this.taskRepo.remove(task);
-        removed += 1;
+        const ymds = (task.problematicOccurrenceYmds ?? []).filter(
+          (ymd) => typeof ymd === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ymd),
+        );
+        const futureYmds = ymds.filter((ymd) => ymd >= today);
+        const dayPast = !!day && day < today;
+
+        // One-off / detached copy whose day is past — delete the row.
+        if (!task.isRecurring && dayPast) {
+          await this.pendingGoogleWrites.syncTask(userId, task.id);
+          await this.taskRepo.remove(task);
+          changed += 1;
+          continue;
+        }
+
+        // Series (or multi-day) park: drop past occurrence days.
+        if (ymds.length && futureYmds.length < ymds.length) {
+          if (futureYmds.length === 0 && (!day || dayPast)) {
+            clearParkMetadata(task);
+            await this.taskRepo.save(task);
+            changed += 1;
+            continue;
+          }
+          task.problematicOccurrenceYmds = futureYmds;
+          if (dayPast) {
+            task.problematicDay = futureYmds[0] ?? null;
+          }
+          await this.taskRepo.save(task);
+          changed += 1;
+          continue;
+        }
+
+        // Legacy single-day park with only problematicDay in the past.
+        if (dayPast && !ymds.length) {
+          if (task.isRecurring) {
+            clearParkMetadata(task);
+            await this.taskRepo.save(task);
+          } else {
+            await this.pendingGoogleWrites.syncTask(userId, task.id);
+            await this.taskRepo.remove(task);
+          }
+          changed += 1;
+        }
       }
     }
-    return removed;
+    return changed;
   }
 
   private async seatOpenHolesUnlocked(
@@ -594,6 +635,37 @@ export class PlacementStepService {
     if (move.kind === 'park') {
       const owner = await tasks.findOne({ where: { id: move.taskId, userId } });
       if (!owner) return;
+      // Never wipe an entire recurring series when a single seat cannot reseat.
+      if (owner.isRecurring) {
+        const settings = await this.userSettingsService.getSettings(userId);
+        const timeZone = resolveIanaTimeZone(settings.timeZone || owner.scheduleTimeZone);
+        const row = await slots.findOne({ where: { id: move.seatId } });
+        const startMs = row
+          ? new Date(row.scheduledStartTime).getTime()
+          : NaN;
+        const endMs = row ? new Date(row.scheduledEndTime).getTime() : NaN;
+        const occurrenceYmd = Number.isFinite(startMs)
+          ? localYmd(new Date(startMs).toISOString(), timeZone)
+          : localYmd(now.toISOString(), timeZone);
+        await this.applyMove(
+          userId,
+          tasks,
+          slots,
+          {
+            kind: 'detach',
+            seatId: move.seatId,
+            taskId: move.taskId,
+            occurrenceYmd,
+            start: null,
+            end: null,
+            originalStart: Number.isFinite(startMs) ? startMs : now.getTime(),
+            originalEnd: Number.isFinite(endMs) ? endMs : now.getTime(),
+            reason: move.reason,
+          },
+          now,
+        );
+        return;
+      }
       owner.scheduleState = ScheduleState.PROBLEMATIC;
       owner.problematicReason = move.reason;
       owner.isUnscheduled = false;
@@ -609,6 +681,7 @@ export class PlacementStepService {
       relations: ['phase', 'phases'],
     });
     if (!series) return;
+    if (!move.occurrenceYmd) return;
     series.skippedOccurrenceYmds = addSkippedOccurrenceYmd(
       series.skippedOccurrenceYmds,
       move.occurrenceYmd,

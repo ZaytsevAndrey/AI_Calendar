@@ -188,17 +188,28 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
       skipClickRef.current = true;
       const placed = current;
       setPending((prev) => ({ ...prev, [event.id]: placed }));
+      // Keep pending until events refetch matches (or error / timeout) to avoid snap-back.
+      const clearPending = () => {
+        setPending((prev) => {
+          if (!(event.id in prev)) return prev;
+          const next = { ...prev };
+          delete next[event.id];
+          return next;
+        });
+        window.setTimeout(() => {
+          skipClickRef.current = false;
+        }, 0);
+      };
+      const safety = window.setTimeout(clearPending, 12_000);
       void onChangeRef.current(event, start, end)
-        .catch(() => undefined)
+        .then(() => {
+          window.setTimeout(clearPending, 400);
+        })
+        .catch(() => {
+          clearPending();
+        })
         .finally(() => {
-          setPending((prev) => {
-            const next = { ...prev };
-            delete next[event.id];
-            return next;
-          });
-          window.setTimeout(() => {
-            skipClickRef.current = false;
-          }, 0);
+          window.clearTimeout(safety);
         });
     };
 

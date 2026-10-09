@@ -384,7 +384,7 @@ Generate body `{ startDate, endDate }` is **ignored**. Horizon = today → `recu
 | A-SCH-033k | A | P1 | Valid schedulable `phaseId` | GET | Candidates clipped to that phase ∩ wake/sleep |
 | A-SCH-033l | A | P1 | `phaseId` is `sleep_time` | GET | 400 |
 | A-SCH-033m | A | P1 | Unknown `phaseId` | GET | 400 |
-| A-SCH-033n | A | P1 | Fixed peer busy on same day | GET | Fewer / later candidates than empty day |
+| A-SCH-033n | A | P1 | Fixed peer busy on same day | GET | Fewer / later candidates than empty day; `busy[].label` names the blocker |
 | A-SCH-033o | A | P1 | Duration larger than any gap | GET | `candidates: []` |
 | A-SCH-033p | A | P1 | Flexible task, not problematic | GET | Still lists slots (`scheduleState` need not be `problematic`) |
 | A-SCH-033q | A | P1 | User has timeZone setting | GET | Response `timeZone` matches settings |

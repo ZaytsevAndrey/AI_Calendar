@@ -157,12 +157,15 @@ function moveFor(
   hole: MsInterval | null,
   reason: string,
 ): PlacementMove {
-  if (seat.role === 'series' && seat.occurrenceYmd) {
+  // Series masters must never be parked wholesale — only the overlapped day detaches.
+  if (seat.role === 'series') {
     return {
       kind: 'detach',
       seatId: seat.id,
       taskId: seat.taskId,
-      occurrenceYmd: seat.occurrenceYmd,
+      occurrenceYmd:
+        seat.occurrenceYmd ||
+        new Date(seat.start).toISOString().slice(0, 10),
       start: hole?.start ?? null,
       end: hole?.end ?? null,
       originalStart: seat.start,

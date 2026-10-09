@@ -104,6 +104,7 @@ export type FreeSlotIntervalDTO = {
   start: string;
   end: string;
   label?: string;
+  color?: string;
 };
 
 export type FreeSlotsResponse = {

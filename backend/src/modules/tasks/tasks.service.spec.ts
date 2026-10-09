@@ -665,6 +665,56 @@ describe('TasksService', () => {
       expect(placementStep.seatOpenHoles).not.toHaveBeenCalled();
     });
 
+    it('keeps the chosen FIXED clock when Place leaves Problematic even on conflict', async () => {
+      const start = '2026-10-09T10:00:00.000Z';
+      const end = '2026-10-09T10:30:00.000Z';
+      lastSaved = {
+        id: 'task-1',
+        userId: 'user-1',
+        name: 'Parked work',
+        isUnscheduled: false,
+        eventType: TaskEventType.ADMIN,
+        status: TaskStatus.TODO,
+        scheduleState: 'problematic',
+        estimatedTimeInMinutes: 30,
+        scheduledStartTime: null,
+        scheduledEndTime: null,
+        isRecurring: false,
+        allowSplit: false,
+      };
+      placementStep.place.mockResolvedValue({
+        outcome: 'conflict',
+        conflict: {
+          taskId: 'task-1',
+          taskName: 'Parked work',
+          reason: 'preferred_on_fixed',
+          options: ['move_new', 'leave_problematic'],
+        },
+      });
+
+      const updated = await service.update('task-1', 'user-1', {
+        eventType: TaskEventType.FIXED,
+        scheduledStartTime: start,
+        scheduledEndTime: end,
+        scheduleState: 'none',
+        isUnscheduled: false,
+        problematicOccurrenceYmds: null,
+        problematicReason: null,
+      } as any);
+
+      expect(placementStep.place).toHaveBeenCalledWith(
+        'user-1',
+        'task-1',
+        expect.objectContaining({ commit: 'always' }),
+      );
+      expect(updated.scheduledStartTime).toEqual(new Date(start));
+      expect(updated.scheduledEndTime).toEqual(new Date(end));
+      expect(updated.eventType).toBe(TaskEventType.FIXED);
+      expect(updated.conflicts).toEqual([
+        expect.objectContaining({ reason: 'preferred_on_fixed' }),
+      ]);
+    });
+
     it('does not replan or fill holes when a task is completed', async () => {
       lastSaved = { ...seated };
       await service.updateStatus('task-1', 'user-1', TaskStatus.COMPLETED);

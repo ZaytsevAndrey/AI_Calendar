@@ -22,6 +22,7 @@ import { ScheduledTask } from './schedule.entity';
 import {
   buildFreeSlotsPlan,
   FreeSlotsPhaseLike,
+  LabeledBusyInterval,
   MsInterval,
 } from './free-slots.util';
 
@@ -29,6 +30,7 @@ export type FreeSlotIntervalDto = {
   start: string;
   end: string;
   label?: string;
+  color?: string;
 };
 
 export type FreeSlotsResponse = {
@@ -146,9 +148,11 @@ export class FreeSlotsService {
             color: primaryPhase.color ?? '#808080',
           }
         : null,
-      busy: plan.busyInDay.map((iv) => ({
+      busy: plan.busySegments.map((iv) => ({
         start: new Date(iv.start).toISOString(),
         end: new Date(iv.end).toISOString(),
+        ...(iv.label ? { label: iv.label } : {}),
+        ...(iv.color ? { color: iv.color } : {}),
       })),
       free: plan.free.map((iv) => ({
         start: new Date(iv.start).toISOString(),
@@ -208,35 +212,50 @@ export class FreeSlotsService {
     ymd: string,
     timeZone: string,
     opts?: { includeGoogle?: boolean },
-  ): Promise<MsInterval[]> {
-    const busy: MsInterval[] = [];
+  ): Promise<LabeledBusyInterval[]> {
+    const busy: LabeledBusyInterval[] = [];
     const ourGoogleIds = new Set<string>();
     if (task.googleEventId) ourGoogleIds.add(task.googleEventId);
 
     const habits = await this.habitRepo.find({
       where: { userId },
-      select: ['blockStartTime', 'blockMinutes', 'googleEventId'],
+      select: ['name', 'color', 'blockStartTime', 'blockMinutes', 'googleEventId'],
     });
     for (const h of habits) {
       if (h.googleEventId) ourGoogleIds.add(h.googleEventId);
+      const blocks = habitBlockIntervals(
+        [h],
+        ymd,
+        addDaysToYmd(ymd, 1),
+        timeZone,
+      );
+      for (const iv of blocks) {
+        busy.push({
+          ...iv,
+          label: h.name,
+          color: h.color || undefined,
+        });
+      }
     }
-    busy.push(
-      ...habitBlockIntervals(habits, ymd, addDaysToYmd(ymd, 1), timeZone),
-    );
 
     const slots = await this.scheduledRepo
       .createQueryBuilder('st')
       .innerJoinAndSelect('st.task', 't')
+      .leftJoinAndSelect('t.phase', 'phase')
       .where('t.userId = :userId', { userId })
       .andWhere('st.scheduledEndTime > :dayStart', { dayStart })
       .andWhere('st.scheduledStartTime < :dayEnd', { dayEnd })
       .getMany();
+    const seatedTaskIds = new Set<string>();
     for (const slot of slots) {
       if (slot.taskId === task.id) continue;
+      seatedTaskIds.add(slot.taskId);
       if (slot.googleEventId) ourGoogleIds.add(slot.googleEventId);
       busy.push({
         start: slot.scheduledStartTime.getTime(),
         end: slot.scheduledEndTime.getTime(),
+        label: slot.task?.name || undefined,
+        color: slot.task?.phase?.color || undefined,
       });
     }
 
@@ -246,15 +265,23 @@ export class FreeSlotsService {
         eventType: TaskEventType.FIXED,
         status: In([TaskStatus.TODO, TaskStatus.IN_PROGRESS]),
       },
+      relations: ['phase'],
     });
     for (const peer of fixedPeers) {
       if (peer.id === task.id) continue;
+      // Already drawn from scheduled_tasks — avoid a second anonymous/labeled chip.
+      if (seatedTaskIds.has(peer.id)) continue;
       if (peer.googleEventId) ourGoogleIds.add(peer.googleEventId);
       if (!peer.scheduledStartTime || !peer.scheduledEndTime) continue;
       const start = new Date(peer.scheduledStartTime).getTime();
       const end = new Date(peer.scheduledEndTime).getTime();
       if (end <= dayStart.getTime() || start >= dayEnd.getTime()) continue;
-      busy.push({ start, end });
+      busy.push({
+        start,
+        end,
+        label: peer.name,
+        color: peer.phase?.color || undefined,
+      });
     }
 
     if (opts?.includeGoogle === false) {
@@ -287,8 +314,8 @@ export class FreeSlotsService {
     rangeEnd: Date,
     excludeIds: Set<string>,
     timeZone: string,
-  ): Promise<MsInterval[]> {
-    const busy: MsInterval[] = [];
+  ): Promise<LabeledBusyInterval[]> {
+    const busy: LabeledBusyInterval[] = [];
     const calendarIds = ['primary'];
     const appCalId =
       await this.googleCalendarService.getStoredAppCalendarId(userId);
@@ -312,7 +339,14 @@ export class FreeSlotsService {
             continue;
           }
           const iv = this.googleEventToInterval(ev, timeZone);
-          if (iv) busy.push(iv);
+          if (iv) {
+            const summary =
+              typeof ev.summary === 'string' ? ev.summary.trim() : '';
+            busy.push({
+              ...iv,
+              ...(summary ? { label: summary } : {}),
+            });
+          }
         }
         pageToken = page.nextPageToken ?? undefined;
       } while (pageToken);
