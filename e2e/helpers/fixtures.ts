@@ -106,12 +106,13 @@ export async function waitForScheduleJob(
   token: string,
   jobId?: string | null,
 ): Promise<void> {
-  if (!jobId) return;
-  for (let i = 0; i < 40; i++) {
+  if (!jobId || typeof jobId !== 'string') return;
+  for (let i = 0; i < 80; i++) {
     const job = await apiJson(request, token, 'get', `/schedule-jobs/${jobId}`);
     if (job.body?.status === 'done' || job.body?.status === 'failed') return;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
+  throw new Error(`Schedule job ${jobId} did not finish in time`);
 }
 
 /** Task create/update/do-now/done/skip use staged progress toasts (title = task name). */

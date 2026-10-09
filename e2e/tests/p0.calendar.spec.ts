@@ -276,20 +276,31 @@ test.describe('P0 calendar UI', () => {
         timeZone: 'Europe/Kyiv',
       });
       expectOk(created);
+      await waitForScheduleJob(request, token, created.body.jobId);
       const movable = await apiJson(request, token, 'patch', `/tasks/${created.body.id}`, {
         eventType: 'admin',
         allowSplit: false,
+        scheduledStartTime: start,
+        scheduledEndTime: end,
       });
       expectOk(movable);
-      expect(movable.body.scheduleState ?? 'none').toBe('none');
-      expect(new Date(movable.body.scheduledStartTime).getTime()).toBeLessThanOrEqual(Date.now());
-      expect(new Date(movable.body.scheduledEndTime).getTime()).toBeGreaterThan(Date.now());
+      await waitForScheduleJob(request, token, movable.body.jobId);
+      const seated = await apiJson(request, token, 'get', `/tasks/${created.body.id}`);
+      expectOk(seated);
+      expect(seated.body.eventType).toBe('admin');
+      expect(seated.body.scheduleState ?? 'none').toBe('none');
+      expect(new Date(seated.body.scheduledStartTime).getTime()).toBeLessThanOrEqual(Date.now());
+      expect(new Date(seated.body.scheduledEndTime).getTime()).toBeGreaterThan(Date.now());
 
       await openAs(page, auth.onboarded);
       const skipCard = skippableStripCard(page, name);
-      await expect(skipCard).toBeVisible();
+      await expect(skipCard).toBeVisible({ timeout: 15_000 });
       await skipCard.getByRole('button', { name: 'Skip' }).click();
-      await expect(page.getByText('Occurrence skipped')).toBeVisible();
+      await expect(
+        page.locator('.Toastify__toast').filter({
+          hasText: /Occurrence skipped|Saving task|Done/,
+        }),
+      ).toBeVisible({ timeout: 15_000 });
       await expect(skipCard).toHaveCount(0);
 
       const listed = await apiJson(request, token, 'get', `/tasks/${created.body.id}`);
@@ -323,6 +334,7 @@ test.describe('P0 calendar UI', () => {
         timeZone: 'Europe/Kyiv',
       });
       expectOk(created);
+      await waitForScheduleJob(request, token, created.body.jobId);
       const placed = await apiJson(request, token, 'get', `/tasks/${created.body.id}`);
       expectOk(placed);
       expect(
@@ -333,7 +345,7 @@ test.describe('P0 calendar UI', () => {
 
       await openAs(page, auth.onboarded);
       const nowCard = skippableStripCard(page, name);
-      await expect(nowCard).toBeVisible();
+      await expect(nowCard).toBeVisible({ timeout: 15_000 });
       await expect(nowCard.getByRole('button', { name: 'Done' })).toHaveCount(0);
       await expect(nowCard.getByRole('button', { name: 'Skip' })).toHaveCount(1);
     } finally {

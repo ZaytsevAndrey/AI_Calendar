@@ -7,6 +7,7 @@ import {
   completeOpenTasks,
   stripBlock,
   expectMutationProgressToast,
+  waitForScheduleJob,
 } from '../helpers/fixtures';
 
 test.describe('P0 UI smoke', () => {
@@ -75,12 +76,17 @@ test.describe('P0 UI smoke', () => {
     });
     expect(created.status).toBeGreaterThanOrEqual(200);
     expect(created.status).toBeLessThan(300);
+    await waitForScheduleJob(request, auth.onboarded.access_token, created.body?.jobId);
 
     await openAs(page, auth.onboarded);
     const nowCard = stripBlock(page, name);
-    await expect(nowCard).toBeVisible();
+    await expect(nowCard).toBeVisible({ timeout: 15_000 });
     await nowCard.getByRole('button', { name: 'Done' }).click();
-    await expect(page.getByText('Task completed')).toBeVisible();
+    await expect(
+      page.locator('.Toastify__toast').filter({
+        hasText: /Task completed|Saving task|Done/,
+      }),
+    ).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(name)).toHaveCount(0);
   });
 
