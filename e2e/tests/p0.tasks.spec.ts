@@ -6,6 +6,7 @@ import {
   expectOk,
   uniqueName,
   openCreateTaskDialog,
+  expectMutationProgressToast,
 } from '../helpers/fixtures';
 
 test.describe('P0 tasks UI', () => {
@@ -46,7 +47,7 @@ test.describe('P0 tasks UI', () => {
     await dialog.locator('#task-form-start').fill('2030-06-15T10:00');
     await dialog.locator('#task-form-end').fill('2030-06-15T11:00');
     await dialog.getByRole('button', { name: 'Create task' }).click();
-    await expect(page.getByText('Task created')).toBeVisible();
+    await expectMutationProgressToast(page, name);
     await expect(page.getByRole('heading', { name })).toBeVisible();
     const card = page.locator('.task-item').filter({ hasText: name });
     await expect(card.getByText('To Do', { exact: true })).toBeVisible();
@@ -68,7 +69,7 @@ test.describe('P0 tasks UI', () => {
     const name = uniqueName('E2E recurring');
     await dialog.getByRole('textbox', { name: /Name/ }).fill(name);
     await dialog.getByRole('button', { name: 'Create task' }).click();
-    await expect(page.getByText('Task created')).toBeVisible();
+    await expectMutationProgressToast(page, name);
     await expect(page.getByRole('heading', { name })).toBeVisible();
   });
 
@@ -103,7 +104,7 @@ test.describe('P0 tasks UI', () => {
     await openAs(page, auth.onboarded, '/tasks');
     const row = page.locator('.task-item').filter({ hasText: name });
     await row.getByRole('button', { name: 'Do now' }).click();
-    await expect(page.getByText('Scheduling now')).toBeVisible();
+    await expectMutationProgressToast(page, name);
 
     const scheduled = page.locator('section').filter({ hasText: 'Scheduled' });
     await expect(scheduled.getByRole('heading', { name })).toBeVisible({ timeout: 15_000 });
@@ -121,7 +122,7 @@ test.describe('P0 tasks UI', () => {
     await openAs(page, auth.onboarded, '/tasks');
     const row = page.locator('.task-item').filter({ hasText: name });
     await row.getByRole('button', { name: 'Done' }).click();
-    await expect(page.getByText('Task completed')).toBeVisible();
+    await expectMutationProgressToast(page, name);
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(row).toHaveCount(0);
   });
@@ -137,7 +138,7 @@ test.describe('P0 tasks UI', () => {
     await openAs(page, auth.onboarded, '/tasks');
     const row = page.locator('.task-item').filter({ hasText: name });
     await row.getByRole('button', { name: 'Skip' }).click();
-    await expect(page.getByText('Task skipped')).toBeVisible();
+    await expectMutationProgressToast(page, name);
     await expect(row).toHaveCount(0);
   });
 

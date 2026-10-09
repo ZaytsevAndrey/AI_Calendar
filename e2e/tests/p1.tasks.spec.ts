@@ -7,6 +7,7 @@ import {
   uniqueName,
   completeOpenTasks,
   openCreateTaskDialog,
+  expectMutationProgressToast,
 } from '../helpers/fixtures';
 
 test.describe('P1 tasks UI', () => {
@@ -250,7 +251,7 @@ test.describe('P1 tasks UI', () => {
     await dialog.locator('#google-event-visibility').selectOption('private');
     await dialog.getByLabel('Use calendar defaults').uncheck();
     await dialog.getByRole('button', { name: 'Create task' }).click();
-    await expect(page.getByText('Task created')).toBeVisible();
+    await expectMutationProgressToast(page, name);
 
     const listed = await apiJson(request, auth.onboarded.access_token, 'get', '/tasks');
     expectOk(listed);

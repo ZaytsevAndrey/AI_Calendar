@@ -114,3 +114,22 @@ export async function waitForScheduleJob(
   }
 }
 
+/** Task create/update/do-now/done/skip use staged progress toasts (title = task name). */
+export async function expectMutationProgressToast(
+  page: Page,
+  title?: string | RegExp,
+): Promise<void> {
+  const toast = page.locator('.Toastify__toast').filter({
+    has: page.locator('.app-toast-body'),
+  });
+  await expect(toast.first()).toBeVisible({ timeout: 15_000 });
+  if (title) {
+    await expect(toast.locator('.app-toast-title').filter({ hasText: title })).toBeVisible();
+  }
+  await expect(
+    toast.locator('.app-toast-detail').filter({
+      hasText: /Saving task|Seating on the schedule|Updating Google Calendar|Done/,
+    }),
+  ).toBeVisible({ timeout: 15_000 });
+}
+

@@ -1,4 +1,12 @@
-import { test, expect, openAs, apiJson, expectOk, uniqueName } from '../helpers/fixtures';
+import {
+  test,
+  expect,
+  openAs,
+  apiJson,
+  expectOk,
+  uniqueName,
+  expectMutationProgressToast,
+} from '../helpers/fixtures';
 import { mockVoiceCapture, stubVoiceApis, recordOnce } from '../helpers/voice';
 
 test.describe('P1 voice UI', () => {
@@ -18,7 +26,7 @@ test.describe('P1 voice UI', () => {
     await page.getByRole('button', { name: 'Add task by voice' }).click();
     await expect(page.getByRole('dialog').getByText('Add task by voice')).toBeVisible();
     await recordOnce(page);
-    await expect(page.getByText('Task created')).toBeVisible();
+    await expectMutationProgressToast(page, 'Voice dentist');
     await expect(page.getByRole('heading', { name: 'Voice dentist' }).first()).toBeVisible();
   });
 
@@ -69,7 +77,7 @@ test.describe('P1 voice UI', () => {
     const sheet = page.getByRole('dialog');
     await expect(sheet.getByText('What should I call this task?')).toBeVisible();
     await recordOnce(page);
-    await expect(page.getByText('Task created')).toBeVisible();
+    await expectMutationProgressToast(page, 'Clarified walk');
     await expect(page.getByRole('heading', { name: 'Clarified walk' }).first()).toBeVisible();
     await expect(page.getByText('What should I call this task?')).toHaveCount(0);
   });
@@ -122,7 +130,7 @@ test.describe('P1 voice UI', () => {
     await openAs(page, auth.onboarded, '/tasks');
     await page.getByRole('button', { name: 'Add task by voice' }).click();
     await recordOnce(page);
-    await expect(page.getByText('Task completed')).toBeVisible();
+    await expectMutationProgressToast(page, immediateName);
 
     const turnedOn = await apiJson(request, token, 'patch', '/user-settings', {
       confirmVoiceCommands: true,
@@ -135,7 +143,7 @@ test.describe('P1 voice UI', () => {
     const sheet = page.getByRole('dialog');
     await expect(sheet.getByText(`Mark "${confirmedName}" done?`)).toBeVisible();
     await sheet.getByRole('button', { name: 'Confirm' }).click();
-    await expect(page.getByText('Task completed')).toBeVisible();
+    await expectMutationProgressToast(page, confirmedName);
 
     const restored = await apiJson(request, token, 'patch', '/user-settings', {
       confirmVoiceCommands: false,
@@ -203,7 +211,7 @@ test.describe('P1 voice UI', () => {
     await expect(sheet.getByText('Listening…', { exact: true })).toBeVisible();
     await expect(sheet.getByRole('img', { name: 'Microphone level' })).toBeVisible();
     await sheet.getByRole('button', { name: 'Stop' }).click();
-    await expect(page.getByText('Task created')).toBeVisible();
+    await expectMutationProgressToast(page, 'Equalizer task');
   });
 
   test('U-VOI-010 Speak replies toggle is in Settings', async ({ page, auth, request }) => {

@@ -1,4 +1,13 @@
-import { test, expect, openAs, apiJson, uniqueName, completeOpenTasks, stripBlock } from '../helpers/fixtures';
+import {
+  test,
+  expect,
+  openAs,
+  apiJson,
+  uniqueName,
+  completeOpenTasks,
+  stripBlock,
+  expectMutationProgressToast,
+} from '../helpers/fixtures';
 
 test.describe('P0 UI smoke', () => {
   test('U-AUTH-001 logged-out / redirects to login', async ({ page }) => {
@@ -38,7 +47,7 @@ test.describe('P0 UI smoke', () => {
     await expect(dialog).toBeVisible();
     await dialog.getByRole('textbox', { name: /Name/ }).fill('E2E flexible task');
     await dialog.getByRole('button', { name: 'Create task' }).click();
-    await expect(page.getByText('Task created')).toBeVisible();
+    await expectMutationProgressToast(page, 'E2E flexible task');
   });
 
   test('U-CAL-004 Schedule Suggestions', async ({ page, auth }) => {
