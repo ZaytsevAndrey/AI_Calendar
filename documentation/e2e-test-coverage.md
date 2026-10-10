@@ -455,7 +455,7 @@ Civil today from **settings `timeZone`**. Check-in for any day through today; fu
 | A-HAB-014 | A | P1 | Invalid YMD `2026-13-40` | check-in | 400 |
 | A-HAB-015 | A | P1 | Idempotent today twice | check-in | Still one row; stats unchanged |
 | A-HAB-016 | A | P0 | Uncheck today | `DELETE .../check-ins/:today` | Flag false; streak may fall back to yesterday |
-| A-HAB-017 | A | P1 | Uncheck too-old date | DELETE | 400 |
+| A-HAB-017 | A | P1 | Uncheck date older than grid (`today-14`) | DELETE | 200 (14-day window is display-only; future still 400) |
 | A-HAB-018 | A | P1 | 7 consecutive days in history | GET | points include +1 bonus |
 | A-HAB-019 | A | P1 | Today unchecked, yesterday checked | GET | streak counts from yesterday |
 | A-HAB-020 | A | P1 | TZ `Pacific/Auckland` near midnight UTC | GET today | Civil date in that TZ, not UTC |

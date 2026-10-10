@@ -153,9 +153,24 @@ describe('Habits and voice API e2e', () => {
     expect(unchecked.statusCode).toBe(200);
     expect(jsonBody(unchecked).checkedToday).toBe(false);
 
+    // 14-day window is display-only; any day through today may be unchecked.
+    const oldIn = await api(ctx.app, 'POST', `/habits/${id}/check-ins`, {
+      token,
+      payload: { date: tooOld },
+    });
+    expect(oldIn.statusCode).toBe(201);
     expect(
       (
         await api(ctx.app, 'DELETE', `/habits/${id}/check-ins/${tooOld}`, {
+          token,
+        })
+      ).statusCode,
+    ).toBe(200);
+
+    const future = addDaysYmd(today, 1);
+    expect(
+      (
+        await api(ctx.app, 'DELETE', `/habits/${id}/check-ins/${future}`, {
           token,
         })
       ).statusCode,
