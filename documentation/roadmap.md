@@ -96,15 +96,15 @@ Contract: [spec-incremental-placement.md](spec-incremental-placement.md). Do the
 §7 shipped basic Done / Skip / Do now / Open. Cards still feel thin next to Problematic.
 
 - [x] **Richer card info** — Unscheduled cards use icon-only actions and icon meta for inbox / phase / earliest / deadline (accessible labels + tooltips). Overdue gets a red edge and ring. No reason field; duration stays off these cards.
-- [ ] **Stronger actions** — schedule into a real slot (reuse §11 visual pick where it fits), edit constraints without hunting, clearer Do now / Skip outcomes.
-- [ ] **Discoverability** — banner/chip or empty-state copy so Unscheduled is as obvious as Problematic when items pile up.
+- [x] **Stronger actions** — **Schedule** opens the schedule form (`scheduleIntent`: phase / duration / window); Do now / Skip copy clarified.
+- [x] **Discoverability** — Calendar banner when active Unscheduled count &gt; 0; CTA opens Tasks inbox.
 
 ### 14. Delete a task on the calendar and in the edit modal
 
-Voice can already delete a task. Calendar hover-delete ships for app and Google blocks; the edit modal still cannot.
+Voice can already delete a task. Calendar hover-delete and edit-modal delete both ship.
 
 - [x] **Calendar** — hover delete on a timed card, with confirm (one-off) or series scope (recurring).
-- [ ] **Edit modal** — the same action while editing.
+- [x] **Edit modal** — Delete in TaskForm; with occurrence context asks this day / this+following / entire series; without occurrence, entire series (or one-off) confirm only.
 - [x] **One-off** — delete the task (and its linked Google event via sync).
 - [x] **Recurring** — choose **this day** (skip-occurrence), **this day and following** (`POST /tasks/:id/end-series-from`), or **entire series** (delete task).
 
@@ -126,6 +126,5 @@ Voice can already delete a task. Calendar hover-delete ships for app and Google 
 
 ## Recommended next steps
 
-1. **§13** — Stronger Unscheduled actions (slot pick / edit constraints) and discoverability chip/banner.
-2. **§14** — Delete from the **edit modal** (calendar hover-delete + series scopes already ship).
-3. After each feature ships: tick above, archive a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.
+1. Live queue is empty for Now / Later above — pick a new feature or polish from chat / [BUGS-AND-IMPROVEMENTS.md](../BUGS-AND-IMPROVEMENTS.md).
+2. After each feature ships: tick above, archive a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

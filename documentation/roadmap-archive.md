@@ -31,7 +31,11 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 - [x] **Incremental placement: remove Generate / Clear / Undo.** Calendar Review, preview, Clear, and Undo are gone. `POST /schedule/generate`, preview, clear, undo, and `POST /schedule-jobs/replan` are removed. Leftover jobs fail without calling `engine.run`. Horizon append stays on the hourly placement tick.
 
-- [x] **Unscheduled richer cards.** Tasks inbox cards use icon-only actions and icon meta for phase / earliest / deadline with a clear overdue state. No unscheduled-reason field; duration stays off Unscheduled cards. Schedule pick and Calendar chip are still open.
+- [x] **Unscheduled richer cards.** Tasks inbox cards use icon-only actions and icon meta for phase / earliest / deadline with a clear overdue state. No unscheduled-reason field; duration stays off Unscheduled cards.
+
+- [x] **§13 Unscheduled Schedule + discoverability.** Inbox **Schedule** opens the schedule form (full constraints). Calendar shows an Unscheduled banner that navigates to Tasks.
+
+- [x] **§14 Edit-modal delete.** TaskForm Delete matches calendar scopes when an occurrence is open; without occurrence, one-off or entire-series confirm only. `SeriesDeleteHost` lives with the task editor.
 
 - [x] **Recurring per-day slots + series group.** Expand searches a slot each civil day (preferred, else hole that day). Divergent clocks split into same-`seriesGroupId` series/one-offs (group-by-clock). Detached members re-merge when they land on a sibling series clock; editing name/description/etc. clears membership permanently. Spec: [spec-incremental-placement.md](spec-incremental-placement.md) §7.
 - [x] **Series-horizon harden.** Recurring claim does not shift other series masters (flexibles only); shifted peers keep home clock / interior-gap pack; Google RRULE DTSTART uses majority local clock among open seats (not chronological `open[0]`).

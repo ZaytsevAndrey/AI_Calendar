@@ -43,6 +43,8 @@ interface TaskFormProps {
   isSubmitting: boolean;
   onCancel: () => void;
   onSkipOccurrence?: () => void;
+  onDelete?: () => void;
+  isDeleting?: boolean;
   mode: 'create' | 'edit';
 }
 
@@ -54,6 +56,8 @@ const TaskForm: React.FC<TaskFormProps> = ({
   isSubmitting,
   onCancel,
   onSkipOccurrence,
+  onDelete,
+  isDeleting = false,
   mode,
 }) => {
   const { t } = useTranslation();
@@ -719,12 +723,24 @@ const TaskForm: React.FC<TaskFormProps> = ({
       </div>
 
       <div className="mt-4 flex flex-col-reverse gap-2 border-t border-ide-border pt-3 sm:flex-row sm:items-center sm:justify-end">
+        {mode === 'edit' && onDelete ? (
+          <button
+            type="button"
+            onClick={onDelete}
+            className="ui-btn-danger w-full sm:mr-auto sm:w-auto"
+            disabled={isSubmitting || isDeleting}
+          >
+            {isDeleting ? t('common.deleting') : t('common.delete')}
+          </button>
+        ) : null}
         {onSkipOccurrence ? (
           <button
             type="button"
             onClick={onSkipOccurrence}
-            className="ui-btn-secondary w-full sm:mr-auto sm:w-auto"
-            disabled={isSubmitting}
+            className={`ui-btn-secondary w-full sm:w-auto${
+              mode === 'edit' && onDelete ? '' : ' sm:mr-auto'
+            }`}
+            disabled={isSubmitting || isDeleting}
           >
             {t('tasks.form.skipOccurrence')}
           </button>
@@ -733,11 +749,15 @@ const TaskForm: React.FC<TaskFormProps> = ({
           type="button"
           onClick={onCancel}
           className="ui-btn-secondary w-full sm:w-auto"
-          disabled={isSubmitting}
+          disabled={isSubmitting || isDeleting}
         >
           {t('common.cancel')}
         </button>
-        <button type="submit" className="ui-btn-primary w-full sm:w-auto" disabled={isSubmitting}>
+        <button
+          type="submit"
+          className="ui-btn-primary w-full sm:w-auto"
+          disabled={isSubmitting || isDeleting}
+        >
           {isSubmitting
             ? t('common.saving')
             : mode === 'create'

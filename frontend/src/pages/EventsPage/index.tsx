@@ -105,7 +105,7 @@ const TasksPage: React.FC = () => {
   const [deleteEvent] = useDeleteEventMutation();
   const [updateEvent] = useUpdateEventMutation();
   const [busyId, setBusyId] = useState<string | null>(null);
-  const { openCreate, openCreateFromPrefill, openEdit, createFromPayload, editorModal } =
+  const { openCreate, openCreateFromPrefill, openEdit, openSchedule, createFromPayload, editorModal } =
     useEventEditor();
   const voice = useVoiceTask({
     onComplete: createFromPayload,
@@ -264,6 +264,7 @@ const TasksPage: React.FC = () => {
               onDone={markDone}
               onSkip={markSkipped}
               onDoNow={doNow}
+              onSchedule={openSchedule}
               openLabel={t('tasks.item.open')}
               busyId={busyId}
               isLoading={false}

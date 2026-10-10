@@ -156,4 +156,40 @@ test.describe('P0 tasks UI', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('textbox', { name: /Name/ })).toHaveValue(name);
   });
+
+  test('U-TSK-024 inbox Schedule opens the schedule form', async ({ page, auth, request }) => {
+    const name = uniqueName('E2E inbox schedule');
+    const created = await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
+      name,
+      isUnscheduled: true,
+    });
+    expectOk(created);
+
+    await openAs(page, auth.onboarded, '/tasks');
+    const row = page.locator('.task-item').filter({ hasText: name });
+    await row.getByRole('button', { name: 'Schedule' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Schedule task' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('textbox', { name: /Name/ })).toHaveValue(name);
+    await expect(dialog.getByText('Phase', { exact: true })).toBeVisible();
+  });
+
+  test('U-TSK-025 edit modal delete removes a one-off task', async ({ page, auth, request }) => {
+    const name = uniqueName('E2E edit delete');
+    const created = await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
+      name,
+      isUnscheduled: true,
+    });
+    expectOk(created);
+
+    await openAs(page, auth.onboarded, '/tasks');
+    const row = page.locator('.task-item').filter({ hasText: name });
+    await row.getByRole('button', { name: 'Open' }).click();
+    const editor = page.getByRole('dialog', { name: 'Edit task' });
+    await editor.getByRole('button', { name: 'Delete' }).click();
+    const confirm = page.getByRole('dialog', { name: 'Delete task' });
+    await confirm.getByRole('button', { name: 'Delete' }).click();
+    await expectMutationProgressToast(page, name);
+    await expect(row).toHaveCount(0);
+  });
 });

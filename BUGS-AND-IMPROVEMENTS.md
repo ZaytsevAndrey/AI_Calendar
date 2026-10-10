@@ -6,7 +6,7 @@
 
 ## Черга
 
-Порожньо. Наступний крок у roadmap — §13, Unscheduled cards.
+Порожньо. Live roadmap queue (§13–§14) is done — see [documentation/roadmap.md](documentation/roadmap.md).
 
 ---
 

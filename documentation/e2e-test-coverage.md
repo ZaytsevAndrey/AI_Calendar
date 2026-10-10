@@ -284,6 +284,8 @@ Mutation jobs: POST/PATCH tasks return a `jobId` for place + Google sync progres
 | U-TSK-010 | U | P0 | Inbox **Done** | Confirm path | `completed`; disappears from inbox; **no** calendar block |
 | U-TSK-011 | U | P0 | Inbox **Skip** | Cancels | `canceled`; disappears from active inbox |
 | U-TSK-012 | U | P0 | Inbox **Open** | Opens editor | Prefills name; edit form |
+| U-TSK-024 | U | P0 | Inbox **Schedule** | Opens schedule form | Title Schedule task; phase fields visible; name prefilled |
+| U-TSK-025 | U | P0 | Edit modal **Delete** (one-off) | Confirm then delete | Task leaves inbox; progress toast |
 | U-TSK-011 | U | P1 | Uncheck Fixed | Form | Allow split restored (preset rules) |
 | U-TSK-012 | U | P1 | Clear phase / deadline on edit | Phase chips → **Any time**; clear deadline; Save | PATCH `phaseIds: []` / `deadline: null`. Deadline clears. **Current:** GET still returns previous `phaseId` after `phaseIds: []` |
 | U-TSK-023 | U | P1 | Completed/canceled Unscheduled | Status filter completed / all | Not listed in Unscheduled; no local-completed calendar chip (unit: `taskListFilters`, `completedTaskEvents`) |
@@ -518,6 +520,7 @@ Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day,
 | U-CAL-010 | U | P0 | Now overlapping block | Strip | Now title; Done if `canCompleteNowBlock` |
 | U-CAL-011 | U | P0 | Next start later today | Strip | Next shown |
 | U-CAL-012 | U | P0 | Flexible window already expired | Strip Unscheduled | Placement parks as `isUnscheduled` (not Problematic `no_slot`) |
+| U-CAL-026 | U | P0 | Active Unscheduled inbox (`isUnscheduled`) | Calendar banner → Open inbox | Navigates to `/tasks`; task visible |
 | U-CAL-013 | U | P0 | Now **Done** on non-recurring app task | Click | `completed`; block leaves Now; **no** new Google event |
 | U-CAL-014 | U | P0 | Recurring / external Google in Now | Strip | **No** Done; Skip on recurring; no Skip on external |
 | U-CAL-015 | U | P1 | All-day event today | Now | Eligible for Now if no timed current |
