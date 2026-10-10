@@ -74,6 +74,7 @@ import {
     shiftPeriod,
     eventStartDate,
     eventEndDate,
+    eventsVisibleInView,
 } from 'modules/calendar/calendarView';
 
 const toggleBtn = (active: boolean) =>
@@ -200,6 +201,10 @@ const CalendarPage: React.FC = () => {
             .map((habit) => habit.googleEventId)
             .filter((id): id is string => !!id),
     );
+    const sleepWindow = {
+        sleepTime: userSettings?.sleepTime,
+        wakeTime: userSettings?.wakeTime,
+    };
     const displayEvents = overlayCompletedTaskEvents(
         visibleGoogleEvents(getEventsQuery.data?.events || []).filter(
             (event) => {
@@ -211,6 +216,13 @@ const CalendarPage: React.FC = () => {
             },
         ),
         tasks,
+    );
+    // Overlay keeps every completed seat for the grid; the side list is period-scoped.
+    const listEvents = eventsVisibleInView(
+        currentView,
+        currentDate,
+        displayEvents,
+        sleepWindow,
     );
 
     const occurrenceStartIso = (event: GoogleCalendarEvent): string | null => {
@@ -735,7 +747,7 @@ const CalendarPage: React.FC = () => {
                     </div>
                     <div className="hidden h-80 w-full shrink-0 flex-col overflow-hidden md:flex lg:h-[min(18rem,38vh)] xl:h-auto xl:min-h-0 xl:w-[24rem]">
                         <CalendarEvents
-                            events={displayEvents}
+                            events={listEvents}
                             isLoading={getEventsQuery.isLoading}
                             error={getEventsQuery.error}
                             title={t('calendar.viewEvents', { view: t(`calendar.${currentView}`) })}
@@ -870,7 +882,7 @@ const CalendarPage: React.FC = () => {
             >
                 <div className="max-h-[60dvh]">
                     <CalendarEvents
-                        events={displayEvents}
+                        events={listEvents}
                         isLoading={getEventsQuery.isLoading}
                         error={getEventsQuery.error}
                         title={t('calendar.viewEvents', { view: t(`calendar.${currentView}`) })}

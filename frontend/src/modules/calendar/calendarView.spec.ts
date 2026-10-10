@@ -383,6 +383,32 @@ describe('week view', () => {
     expect(ids(visible)).not.toContain('prev-sun');
     expect(ids(visible)).not.toContain('oct');
   });
+
+  it('keeps completed overlay chips out of the side list when they fall outside the open week', () => {
+    const oldDone = {
+      id: 'local-completed:old',
+      summary: 'Оплатити за квартиру',
+      start: { dateTime: '2026-08-11T10:00:00.000Z' },
+      end: { dateTime: '2026-08-11T10:30:00.000Z' },
+      status: 'confirmed' as const,
+      isAppGenerated: true,
+    };
+    const thisWeekDone = {
+      id: 'local-completed:week',
+      summary: 'Done this week',
+      start: { dateTime: '2026-09-09T11:00:00.000Z' },
+      end: { dateTime: '2026-09-09T11:30:00.000Z' },
+      status: 'confirmed' as const,
+      isAppGenerated: true,
+    };
+    const visible = eventsVisibleInView('week', focusDay, [
+      ...displayEvents,
+      oldDone,
+      thisWeekDone,
+    ]);
+    expect(ids(visible)).toContain('local-completed:week');
+    expect(ids(visible)).not.toContain('local-completed:old');
+  });
 });
 
 describe('month view', () => {
