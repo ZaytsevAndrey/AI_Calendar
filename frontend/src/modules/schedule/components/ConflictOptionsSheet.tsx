@@ -7,7 +7,7 @@ import {
 } from 'api/eventTasksApi';
 import type { SkipOccurrenceDTO, UpdateTaskDTO } from 'api/tasks.api';
 import { Modal } from '../../../ui/Modal';
-import { showErrorToast, showSuccessToast } from '../../../utils/toast';
+import { showErrorToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 import { applyConflictOption } from '../applyConflictOption';
 import {
@@ -92,13 +92,13 @@ export function ConflictOptionsSheet({ conflict, onClose }: Props) {
   const pick = async (optionId: ConflictOptionId) => {
     setBusyId(optionId);
     try {
+      // Progress toast from eventTasksApi update/skip.
       await applyConflictOption(conflict, optionId, {
         updateTask: (id: string, body: UpdateTaskDTO) =>
           updateEvent({ id, body }).unwrap(),
         skipOccurrence: (id: string, body: SkipOccurrenceDTO) =>
           skipOccurrence({ id, body }).unwrap(),
       });
-      showSuccessToast({ title: t('schedule.conflictApplied') });
       onClose(true);
     } catch (e) {
       showErrorToast({

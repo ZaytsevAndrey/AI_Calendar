@@ -8,7 +8,7 @@ import type { TaskDTO } from 'api/tasks.api';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { useToggleHabit } from 'modules/habits/useToggleHabit';
 import { localHm } from 'utils/ianaDateTime';
-import { showErrorToast, showSuccessToast } from 'utils/toast';
+import { showErrorToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
 import i18n from 'i18n';
 import {
@@ -169,8 +169,8 @@ export function NowStrip() {
     if (!task) return;
     setBusyId(task.id);
     try {
+      // Progress toast from eventTasksApi.updateEvent.
       await updateTask({ id: task.id, body: { status: 'completed' } }).unwrap();
-      showSuccessToast({ title: t('tasks.completed'), detail: task.name });
     } catch (err) {
       showErrorToast({
         title: t('tasks.completeFailed'),
@@ -186,6 +186,7 @@ export function NowStrip() {
     if (!task) return;
     setBusyId(task.id);
     try {
+      // Progress toast from eventTasksApi.skipOccurrence.
       await skipOccurrence({
         id: task.id,
         body: {
@@ -194,7 +195,6 @@ export function NowStrip() {
           googleEventCalendarId: block.event?.calendarId,
         },
       }).unwrap();
-      showSuccessToast({ title: t('now.occurrenceSkipped'), detail: task.name });
     } catch (err) {
       showErrorToast({
         title: t('now.skipFailed'),

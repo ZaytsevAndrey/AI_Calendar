@@ -277,20 +277,27 @@ export class DisplayedEventMoveService {
         throw new BadRequestException('That time is already taken.');
       }
       await this.scheduleJobs.setMutationStage(jobId, 'syncing');
-      try {
-        await this.googleCalendarService.patchEventTimes(
-          userId,
-          dto.googleEventId,
-          start.toISOString(),
-          end.toISOString(),
-          dto.calendarId,
-        );
-      } catch (err) {
-        this.logger.error(
-          `Could not update Google event ${dto.googleEventId} after a move`,
-          err instanceof Error ? err.stack : undefined,
-        );
-        await this.pendingGoogleWrites.syncTask(userId, taskId);
+      const mergedIntoTaskId =
+        placed.outcome === 'seated' ? placed.mergedIntoTaskId : undefined;
+      if (mergedIntoTaskId) {
+        // One-off was deleted and re-merged; do not patch its Google event.
+        await this.pendingGoogleWrites.syncTask(userId, mergedIntoTaskId);
+      } else {
+        try {
+          await this.googleCalendarService.patchEventTimes(
+            userId,
+            dto.googleEventId,
+            start.toISOString(),
+            end.toISOString(),
+            dto.calendarId,
+          );
+        } catch (err) {
+          this.logger.error(
+            `Could not update Google event ${dto.googleEventId} after a move`,
+            err instanceof Error ? err.stack : undefined,
+          );
+          await this.pendingGoogleWrites.syncTask(userId, taskId);
+        }
       }
       await this.placementStep.seatOpenHoles(userId);
       await this.scheduleJobs.completeMutationJob(jobId);

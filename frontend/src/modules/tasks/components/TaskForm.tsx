@@ -283,27 +283,68 @@ const TaskForm: React.FC<TaskFormProps> = ({
         {!isUnscheduled ? (
         <>
         <div>
-          <label htmlFor="task-form-phase" className={lbl}>
+          <span id="task-form-phase-label" className={lbl}>
             {t('tasks.form.phase')}
-          </label>
+          </span>
           <Controller
             name="phaseId"
             control={control}
-            render={({ field }) => (
-              <select
-                {...field}
-                id="task-form-phase"
-                className={inp}
-                value={field.value ?? ''}
-              >
-                <option value="">{t('tasks.form.anyTime')}</option>
-                {schedulingPhases.map((phase) => (
-                  <option key={phase.id} value={phase.id}>
-                    {phase.name} ({phase.startTime}–{phase.endTime})
-                  </option>
-                ))}
-              </select>
-            )}
+            render={({ field }) => {
+              const selected = field.value ?? '';
+              return (
+                <div
+                  id="task-form-phase"
+                  role="listbox"
+                  aria-labelledby="task-form-phase-label"
+                  className="flex flex-wrap gap-1.5"
+                >
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={selected === ''}
+                    className={`filter-chip h-8 px-2.5 text-xs ${
+                      selected === '' ? 'filter-chip-on' : ''
+                    }`}
+                    onClick={() => field.onChange('')}
+                  >
+                    {t('tasks.form.anyTime')}
+                  </button>
+                  {schedulingPhases.map((phase) => {
+                    const on = selected === phase.id;
+                    const color = phase.color || '#808080';
+                    return (
+                      <button
+                        type="button"
+                        key={phase.id}
+                        role="option"
+                        aria-selected={on}
+                        title={`${phase.name} (${phase.startTime}–${phase.endTime})`}
+                        className={`filter-chip h-8 max-w-full px-2.5 text-xs ${
+                          on ? 'filter-chip-on' : ''
+                        }`}
+                        style={
+                          on
+                            ? {
+                                borderColor: color,
+                                backgroundColor: `${color}33`,
+                              }
+                            : {
+                                borderColor: `${color}88`,
+                                boxShadow: `inset 3px 0 0 ${color}`,
+                              }
+                        }
+                        onClick={() => field.onChange(phase.id)}
+                      >
+                        <span className="truncate">{phase.name}</span>
+                        <span className="shrink-0 text-ide-muted">
+                          {phase.startTime}–{phase.endTime}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            }}
           />
         </div>
 

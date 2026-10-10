@@ -97,6 +97,8 @@ export type PlacementPlan =
        * do not dominate the recurring primary clock vote.
        */
       lane?: 'busy' | 'open';
+      /** Set when a detached one-off was absorbed back into this series. */
+      mergedIntoTaskId?: string;
     }
   | { outcome: 'conflict'; conflict: SchedulingConflict }
   | { outcome: 'problematic'; reason: string }

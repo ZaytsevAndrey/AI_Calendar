@@ -202,7 +202,13 @@ const CalendarPage: React.FC = () => {
     );
     const displayEvents = overlayCompletedTaskEvents(
         visibleGoogleEvents(getEventsQuery.data?.events || []).filter(
-            (event) => !isHabitGoogleEvent(habitEventIds, event),
+            (event) => {
+                if (isHabitGoogleEvent(habitEventIds, event)) return false;
+                const linked = resolveTaskForCalendarEvent(tasks, event);
+                if (linked?.isUnscheduled && linked.status === 'completed') return false;
+                if (linked?.isUnscheduled && linked.status === 'canceled') return false;
+                return true;
+            },
         ),
         tasks,
     );
@@ -239,6 +245,7 @@ const CalendarPage: React.FC = () => {
             }
             try {
                 if (scope === 'occurrence') {
+                    // Progress toast from eventTasksApi.skipOccurrence.
                     await skipOccurrenceTrigger({
                         id: linked.id,
                         body: {
@@ -249,13 +256,10 @@ const CalendarPage: React.FC = () => {
                             googleEventCalendarId: event.calendarId,
                         },
                     }).unwrap();
-                    showSuccessToast({
-                        title: t('now.occurrenceSkipped'),
-                        detail: linked.name,
-                    });
                     return;
                 }
                 if (scope === 'series') {
+                    // Progress toast from eventTasksApi.endSeriesFrom.
                     await endSeriesFromTrigger({
                         id: linked.id,
                         body: {
@@ -266,17 +270,10 @@ const CalendarPage: React.FC = () => {
                             googleEventCalendarId: event.calendarId,
                         },
                     }).unwrap();
-                    showSuccessToast({
-                        title: t('calendar.seriesEndedFrom'),
-                        detail: linked.name,
-                    });
                     return;
                 }
+                // Progress toast from eventTasksApi.deleteEvent.
                 await deleteTaskTrigger(linked.id).unwrap();
-                showSuccessToast({
-                    title: t('calendar.taskDeleted'),
-                    detail: linked.name,
-                });
             } catch (err) {
                 showErrorToast({
                     title: t('calendar.taskDeleteFailed'),
@@ -320,14 +317,9 @@ const CalendarPage: React.FC = () => {
             eventName: '',
         });
         if (mode === 'task' && taskId) {
+            // Progress toast from eventTasksApi.deleteEvent.
             void deleteTaskTrigger(taskId)
                 .unwrap()
-                .then(() => {
-                    showSuccessToast({
-                        title: t('calendar.taskDeleted'),
-                        detail: eventName || undefined,
-                    });
-                })
                 .catch((err) => {
                     showErrorToast({
                         title: t('calendar.taskDeleteFailed'),

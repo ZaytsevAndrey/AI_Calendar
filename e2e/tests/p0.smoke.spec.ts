@@ -82,11 +82,7 @@ test.describe('P0 UI smoke', () => {
     const nowCard = stripBlock(page, name);
     await expect(nowCard).toBeVisible({ timeout: 15_000 });
     await nowCard.getByRole('button', { name: 'Done' }).click();
-    await expect(
-      page.locator('.Toastify__toast').filter({
-        hasText: /Task completed|Saving task|Done/,
-      }),
-    ).toBeVisible({ timeout: 15_000 });
+    await expectMutationProgressToast(page, name);
     await expect(page.getByText(name)).toHaveCount(0);
   });
 

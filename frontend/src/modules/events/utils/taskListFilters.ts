@@ -77,7 +77,12 @@ export function filterUnscheduledTasks(
   filters: TaskNameStatusFilters,
   now = new Date(),
 ): TaskDTO[] {
-  return tasks.filter((task) => !!task.isUnscheduled && matchesNameStatus(task, filters, now));
+  return tasks.filter((task) => {
+    if (!task.isUnscheduled) return false;
+    // Completed / canceled inbox rows are noise on Tasks and Calendar — drop them.
+    if (task.status === 'completed' || task.status === 'canceled') return false;
+    return matchesNameStatus(task, filters, now);
+  });
 }
 
 export function filterScheduledTasks(

@@ -58,6 +58,8 @@ export interface TaskDTO {
   updatedAt: string;
   /** Present on create/update when a silent replan was enqueued. */
   jobId?: string | null;
+  /** Skip of a non-recurring Problematic copy deletes the row; client must drop cache. */
+  deleted?: boolean;
   /** Anchor conflict from the placement step — open the shared conflict sheet. */
   conflicts?: Array<{
     taskId: string;

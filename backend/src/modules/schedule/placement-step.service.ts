@@ -725,12 +725,11 @@ export class PlacementStepService {
     if (plan.outcome === 'seated' && this.shouldExpandSeries(task, opts)) {
       await this.expandSeriesDays(userId, task.id);
     }
-    if (
-      !opts?.seriesDay &&
-      plan.outcome === 'seated' &&
-      (await this.tryReMergeSeriesMember(userId, taskId))
-    ) {
-      return plan;
+    if (!opts?.seriesDay && plan.outcome === 'seated') {
+      const mergedIntoTaskId = await this.tryReMergeSeriesMember(userId, taskId);
+      if (mergedIntoTaskId) {
+        return { ...plan, mergedIntoTaskId };
+      }
     }
     if (
       !opts?.seriesDay &&
@@ -1662,14 +1661,15 @@ export class PlacementStepService {
    * If a detached group member lands on a sibling series clock, absorb it
    * back into that series (one recurring event again).
    */
+  /** @returns series task id absorbed into, or null when no re-merge. */
   private async tryReMergeSeriesMember(
     userId: string,
     taskId: string,
-  ): Promise<boolean> {
+  ): Promise<string | null> {
     const task = await this.taskRepo.findOne({ where: { id: taskId, userId } });
-    if (!task?.seriesGroupId || task.isRecurring) return false;
-    if (!task.scheduledStartTime || !task.scheduledEndTime) return false;
-    if (isProblematicSchedule(task)) return false;
+    if (!task?.seriesGroupId || task.isRecurring) return null;
+    if (!task.scheduledStartTime || !task.scheduledEndTime) return null;
+    if (isProblematicSchedule(task)) return null;
 
     const settings = await this.userSettingsService.getSettings(userId);
     const timeZone = resolveIanaTimeZone(
@@ -1691,14 +1691,19 @@ export class PlacementStepService {
         status: TaskStatus.TODO,
       },
     });
-    const match = siblings.find((series) => {
+    const clockMatch = (series: Task): boolean => {
       if (series.id === task.id || !series.scheduledStartTime) return false;
       const seriesHm = normalizeClockHm(
         localHm(new Date(series.scheduledStartTime).toISOString(), timeZone),
       );
       return seriesHm === hm;
-    });
-    if (!match) return false;
+    };
+    // Prefer the parent series this one-off was detached from.
+    const match =
+      (task.parentSeriesId
+        ? siblings.find((series) => series.id === task.parentSeriesId && clockMatch(series))
+        : undefined) ?? siblings.find(clockMatch);
+    if (!match) return null;
 
     match.skippedOccurrenceYmds = removeSkippedOccurrenceYmd(
       match.skippedOccurrenceYmds,
@@ -1719,7 +1724,7 @@ export class PlacementStepService {
       seriesDay: true,
     });
     this.pendingGoogleWrites.syncTaskSoon(userId, match.id);
-    return true;
+    return match.id;
   }
 
   /**

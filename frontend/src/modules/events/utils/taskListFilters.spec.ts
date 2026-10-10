@@ -50,14 +50,23 @@ describe('filterUnscheduledTasks', () => {
     ]);
   });
 
-  it('can show a completed inbox item without touching scheduled tasks', () => {
+  it('hides completed and canceled inbox items even when the status filter asks for them', () => {
     const completedInbox = task({ id: 'old', name: 'Old idea', isUnscheduled: true, status: 'completed' });
-    const listed = filterUnscheduledTasks(
-      [completedInbox, flexible],
-      { query: '', status: 'completed', overdueOnly: false },
-      now,
-    );
-    expect(listed.map((item) => item.id)).toEqual(['old']);
+    const canceledInbox = task({ id: 'drop', name: 'Dropped', isUnscheduled: true, status: 'canceled' });
+    expect(
+      filterUnscheduledTasks(
+        [completedInbox, canceledInbox, flexible],
+        { query: '', status: 'completed', overdueOnly: false },
+        now,
+      ),
+    ).toEqual([]);
+    expect(
+      filterUnscheduledTasks(
+        [completedInbox, canceledInbox],
+        { query: '', status: 'all', overdueOnly: false },
+        now,
+      ),
+    ).toEqual([]);
   });
 });
 

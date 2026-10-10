@@ -32,6 +32,8 @@ export function overlayCompletedTaskEvents(
   const extras: GoogleCalendarEvent[] = [];
   for (const task of tasks) {
     if (task.status !== 'completed') continue;
+    // Unscheduled inbox completions never get a calendar chip.
+    if (task.isUnscheduled) continue;
     if (!task.scheduledStartTime || !task.scheduledEndTime) continue;
     if (coveredTaskIds.has(task.id)) continue;
     if (task.googleEventId && coveredEventIds.has(task.googleEventId)) continue;

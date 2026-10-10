@@ -744,6 +744,14 @@ export class TasksService {
   }
 
   async remove(id: string, userId: string): Promise<void> {
+    // Park copies keep parentSeriesId; deleting the series must clear Problematic too.
+    const parkCopies = await this.tasksRepository.find({
+      where: { userId, parentSeriesId: id },
+    });
+    for (const copy of parkCopies) {
+      await this.remove(copy.id, userId);
+    }
+
     const task = await this.findOne(id, userId);
     // Stop retries / in-flight sync from recreating the Google event after delete.
     await this.pendingGoogleWrites.discardPendingUpserts(userId, id);
@@ -811,7 +819,12 @@ export class TasksService {
         });
       }
       await this.remove(task.id, userId);
-      return Object.assign(task, { jobId: null as string | null });
+      // Do not return the removed entity — clients must drop it from cache.
+      return {
+        id: task.id,
+        deleted: true,
+        jobId: null,
+      } as Task & { jobId: string | null; deleted: true };
     }
 
     const occurrenceStart = new Date(dto.occurrenceStart);

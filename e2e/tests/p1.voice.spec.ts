@@ -343,7 +343,7 @@ test.describe('P1 voice UI', () => {
     await expect(voice.getByText('Listening…', { exact: true })).toBeVisible();
     await voice.getByRole('button', { name: 'Stop' }).click();
 
-    await expect(page.getByText('Conflict choice applied')).toBeVisible();
+    await expectMutationProgressToast(page, 'Voice conflict task');
     await expect(page.getByRole('dialog', { name: 'Schedule conflict' })).toHaveCount(0);
   });
 });

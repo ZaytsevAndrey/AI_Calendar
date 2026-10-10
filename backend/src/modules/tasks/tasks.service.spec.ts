@@ -90,6 +90,7 @@ describe('TasksService', () => {
     jest.clearAllMocks();
     lastSaved = null;
     userSettingsRepository.findOne.mockResolvedValue(null);
+    tasksRepository.find.mockResolvedValue([]);
     scheduledTaskRepository.find.mockResolvedValue([]);
     placementStep.place.mockImplementation(async (_userId: string, _taskId: string, opts) => {
       const start = opts?.preferredStart ? new Date(opts.preferredStart).getTime() : 0;
@@ -796,6 +797,46 @@ describe('TasksService', () => {
         scheduleJobService.deleteSyncedGoogleEventsForTask,
       ).toHaveBeenCalled();
     });
+
+    it('deletes Problematic park copies when the parent series is removed', async () => {
+      const series = {
+        id: 'series-1',
+        userId: 'user-1',
+        name: 'Gym',
+        isUnscheduled: false,
+        eventType: TaskEventType.ADMIN,
+        googleEventId: 'g-series',
+      };
+      const copy = {
+        id: 'copy-1',
+        userId: 'user-1',
+        name: 'Gym',
+        isUnscheduled: false,
+        eventType: TaskEventType.ADMIN,
+        parentSeriesId: 'series-1',
+        scheduleState: 'problematic',
+        googleEventId: null,
+      };
+      tasksRepository.find.mockImplementation(((opts: { where?: { parentSeriesId?: string } }) => {
+        if (opts?.where?.parentSeriesId === 'series-1') return Promise.resolve([{ ...copy }]);
+        return Promise.resolve([]);
+      }) as never);
+      tasksRepository.findOne.mockImplementation(((opts: { where?: { id?: string } }) => {
+        if (opts?.where?.id === 'copy-1') return Promise.resolve({ ...copy });
+        if (opts?.where?.id === 'series-1') return Promise.resolve({ ...series });
+        return Promise.resolve(null);
+      }) as never);
+      tasksRepository.remove.mockResolvedValue(undefined);
+
+      await service.remove('series-1', 'user-1');
+
+      expect(tasksRepository.remove).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'copy-1' }),
+      );
+      expect(tasksRepository.remove).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'series-1' }),
+      );
+    });
   });
 
   describe('skipOccurrence', () => {
@@ -858,7 +899,7 @@ describe('TasksService', () => {
       tasksRepository.remove.mockResolvedValue(undefined);
       scheduledTaskRepository.find.mockResolvedValue([]);
 
-      await service.skipOccurrence('copy-1', 'user-1', {
+      const skipped = await service.skipOccurrence('copy-1', 'user-1', {
         occurrenceStart: '2026-09-22T09:00:00.000Z',
       });
 
@@ -866,6 +907,7 @@ describe('TasksService', () => {
       expect(tasksRepository.remove).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'copy-1' }),
       );
+      expect(skipped).toMatchObject({ id: 'copy-1', deleted: true, jobId: null });
       tasksRepository.findOne.mockImplementation(async () => lastSaved);
       tasksRepository.save.mockImplementation(async (entity) => {
         lastSaved = { ...entity, id: entity.id ?? 'task-1' };

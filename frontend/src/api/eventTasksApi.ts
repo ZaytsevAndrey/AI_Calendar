@@ -155,9 +155,13 @@ export const eventTasksApi = createApi({
           ?.data?.find((row) => row.id === id);
         const title = existing?.name ?? i18n.t('tasks.thisTask');
         const patch = dispatch(
-          eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) =>
-            draft.filter((task) => task.id !== id),
-          ),
+          eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) => {
+            // Match backend: deleting a series also drops Problematic park copies.
+            const next = draft.filter(
+              (task) => task.id !== id && task.parentSeriesId !== id,
+            );
+            draft.splice(0, draft.length, ...next);
+          }),
         );
         try {
           await runTaskMutationProgress({
@@ -194,6 +198,8 @@ export const eventTasksApi = createApi({
           ?.data?.find((row) => row.id === id);
         const title = existing?.name ?? i18n.t('tasks.thisTask');
         const eventId = body.googleEventId;
+        const deletesParkCopy =
+          existing?.scheduleState === 'problematic' && !existing?.isRecurring;
         const eventPatches = eventId
           ? eventsApi.util.selectCachedArgsForQuery(getState() as never, 'getEvents').map((args) =>
               dispatch(
@@ -207,6 +213,11 @@ export const eventTasksApi = createApi({
           : [];
         const taskPatch = dispatch(
           eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) => {
+            if (deletesParkCopy) {
+              const next = draft.filter((task) => task.id !== id);
+              draft.splice(0, draft.length, ...next);
+              return;
+            }
             const task = draft.find((item) => item.id === id);
             if (!task) return;
             task.scheduledStartTime = undefined;
@@ -222,6 +233,11 @@ export const eventTasksApi = createApi({
               const { data } = await queryFulfilled;
               dispatch(
                 eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) => {
+                  if (data?.deleted || deletesParkCopy) {
+                    const next = draft.filter((task) => task.id !== id);
+                    draft.splice(0, draft.length, ...next);
+                    return;
+                  }
                   const index = draft.findIndex((item) => item.id === id);
                   if (index < 0) {
                     draft.unshift(data);

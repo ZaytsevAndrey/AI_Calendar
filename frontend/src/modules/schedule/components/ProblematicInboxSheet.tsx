@@ -9,7 +9,7 @@ import {
 import { Modal } from '../../../ui/Modal';
 import { Spinner } from '../../../ui/Spinner';
 import { formatCivilYmd, formatMinutes } from '../../../utils/formatDate';
-import { showErrorToast, showSuccessToast } from '../../../utils/toast';
+import { showErrorToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 import { occurrenceStartIsoForYmd } from '../buildOneOffFromSeries';
 import type { ParkDayHint } from '../parkDayHints';
@@ -112,11 +112,11 @@ export function ProblematicInboxSheet({
   const resolve = async (task: TaskDTO) => {
     setBusyKey(`${task.id}:resolve`);
     try {
+      // Progress toast from eventTasksApi.updateEvent.
       await updateEvent({
         id: task.id,
         body: { scheduleState: 'resolved' },
       }).unwrap();
-      showSuccessToast({ title: t('schedule.problematicResolved') });
     } catch (e) {
       showErrorToast({
         title: t('schedule.problematicActionFailed'),
@@ -130,6 +130,7 @@ export function ProblematicInboxSheet({
   const skipDay = async (task: TaskDTO, occurrenceYmd: string) => {
     setBusyKey(`${task.id}:skip:${occurrenceYmd}`);
     try {
+      // Progress toast from eventTasksApi.skipOccurrence / updateEvent.
       await skipOccurrence({
         id: task.id,
         body: {
@@ -140,7 +141,6 @@ export function ProblematicInboxSheet({
       if (task.isRecurring) {
         await removeParkedDay(task, occurrenceYmd);
       }
-      showSuccessToast({ title: t('schedule.problematicSkipped') });
     } catch (e) {
       showErrorToast({
         title: t('schedule.problematicActionFailed'),

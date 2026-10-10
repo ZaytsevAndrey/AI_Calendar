@@ -239,8 +239,10 @@ test.describe('P1 tasks UI', () => {
     await row.getByRole('button', { name: 'Edit' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByText('Edit task')).toBeVisible();
-    await dialog.locator('#task-form-phase').selectOption({ label: 'Any time' });
-    await expect(dialog.locator('#task-form-phase')).toHaveValue('');
+    await dialog.locator('#task-form-phase').getByRole('option', { name: 'Any time' }).click();
+    await expect(
+      dialog.locator('#task-form-phase').getByRole('option', { name: 'Any time' }),
+    ).toHaveAttribute('aria-selected', 'true');
     await dialog.locator('#task-form-deadline').fill('');
     await expect(dialog.locator('#task-form-deadline')).toHaveValue('');
     await dialog.getByRole('button', { name: 'Save changes' }).click();

@@ -14,7 +14,6 @@ import { applyConflictOption } from 'modules/schedule/applyConflictOption';
 import { SeriesMoveCancelled } from 'modules/schedule/seriesDragChoice';
 import { resolveSpokenConflictOption } from 'modules/schedule/resolveSpokenConflictOption';
 import i18n from 'i18n';
-import { showSuccessToast } from 'utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 import { executeVoiceCommand } from '../executeVoiceCommand';
 import { VoiceSpeech } from '../speech';
@@ -176,13 +175,13 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       setBusyLabel(i18n.t('voice.saving'));
       setStage('working');
       try {
+        // Progress toast from eventTasksApi update/skip.
         await applyConflictOption(conflict, optionId, {
           updateTask: (id, body) => updateTask({ id, body }).unwrap(),
           skipOccurrence: (id, body) => skipOccurrence({ id, body }).unwrap(),
         });
         notifyConflictChoiceConsumed(conflict.taskId);
         const title = i18n.t('schedule.conflictApplied');
-        showSuccessToast({ title });
         await maybeSpeak(title);
         close();
         return 'applied';

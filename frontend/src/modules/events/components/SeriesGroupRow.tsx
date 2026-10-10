@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronRight, Repeat, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { TaskDTO } from '../../../api/tasks.api';
 import type { SeriesMemberKind } from '../utils/groupTasksBySeriesGroup';
 import EventItem from './EventItem';
@@ -19,12 +19,15 @@ interface SeriesGroupRowProps {
   busyId?: string | null;
 }
 
-const priorityColors = {
-  low: '#8bc34a',
-  medium: '#03a9f4',
-  high: '#ff9800',
-  urgent: '#f44336',
-};
+function pickHead(
+  members: Array<{ task: TaskDTO; memberKind: SeriesMemberKind }>,
+): { head: { task: TaskDTO; memberKind: SeriesMemberKind }; rest: typeof members } {
+  const seriesIdx = members.findIndex((m) => m.memberKind === 'series');
+  const idx = seriesIdx >= 0 ? seriesIdx : 0;
+  const head = members[idx]!;
+  const rest = members.filter((_, i) => i !== idx);
+  return { head, rest };
+}
 
 const SeriesGroupRow: React.FC<SeriesGroupRowProps> = ({
   title,
@@ -41,62 +44,61 @@ const SeriesGroupRow: React.FC<SeriesGroupRowProps> = ({
 }) => {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(true);
-  const primary = members[0]?.task;
-  const color = primary ? priorityColors[primary.priority] : priorityColors.medium;
+  const { head, rest } = pickHead(members);
   const countLabel = t('tasks.group.memberCount', { count: members.length });
   const toggleLabel = expanded ? t('tasks.group.collapse') : t('tasks.group.expand');
-  const deleteLabel = t('tasks.group.deleteAll');
+  const deleteAllLabel = t('tasks.group.deleteAll');
   const groupBusy = members.some((m) => busyId === m.task.id);
 
   return (
-    <div
-      className="task-series-group overflow-hidden rounded-xl border border-ide-border border-l-4 shadow-ide"
-      style={{
-        borderLeftColor: color,
-        backgroundColor: '#3C3F41',
-        backgroundImage: `linear-gradient(135deg, ${color}28, ${color}10 46%, transparent)`,
-      }}
-    >
-      <div className="flex items-center gap-2 px-3 py-2.5 sm:px-4">
+    <div className="task-series-group space-y-1.5">
+      {/* Head uses the same card as a lone task so series parents stay consistent. */}
+      <EventItem
+        event={head.task}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onDone={onDone}
+        onSchedule={onSchedule}
+        onSkip={onSkip}
+        onDoNow={onDoNow}
+        openLabel={openLabel}
+        busyId={busyId}
+      />
+
+      <div className="flex flex-wrap items-center gap-2 px-0.5">
         <button
           type="button"
-          className="flex min-w-0 flex-1 items-center gap-2 text-left hover:opacity-90"
+          className="inline-flex h-8 items-center gap-1 rounded-lg border border-ide-link/40 bg-ide-link/15 px-2.5 text-xs font-medium text-ide-link hover:bg-ide-link/25"
           onClick={() => setExpanded((open) => !open)}
           aria-expanded={expanded}
           aria-label={toggleLabel}
+          title={title}
         >
-          <span className="shrink-0 text-ide-muted" aria-hidden>
-            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          </span>
-          <h3 className="line-clamp-1 min-w-0 text-base font-semibold leading-snug text-ide-text">
-            {title}
-          </h3>
-          <span
-            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-ide-link/40 bg-ide-link/15 px-2 py-0.5 text-xs font-medium text-ide-link"
-            title={t('tasks.item.repeats')}
-          >
-            <Repeat className="h-3 w-3" aria-hidden />
-            {countLabel}
-          </span>
+          {expanded ? (
+            <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+          )}
+          {countLabel}
         </button>
         <button
           type="button"
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-ide-error/80 hover:bg-white/10 hover:text-ide-error disabled:opacity-50"
-          onClick={() => onDeleteGroup(
-            members.map((m) => m.task.id),
-            title,
-          )}
+          className="text-xs text-ide-error/80 hover:text-ide-error hover:underline disabled:opacity-50"
+          onClick={() =>
+            onDeleteGroup(
+              members.map((m) => m.task.id),
+              title,
+            )
+          }
           disabled={groupBusy}
-          aria-label={deleteLabel}
-          title={deleteLabel}
         >
-          <Trash2 className="h-4 w-4" aria-hidden />
+          {deleteAllLabel}
         </button>
       </div>
 
-      {expanded ? (
-        <div className="space-y-1.5 border-t border-white/10 px-2.5 pb-2.5 pt-2 sm:pl-6">
-          {members.map(({ task, memberKind }) => (
+      {expanded && rest.length > 0 ? (
+        <div className="space-y-1.5 border-l-2 border-ide-border/80 pl-2 sm:pl-3">
+          {rest.map(({ task, memberKind }) => (
             <EventItem
               key={task.id}
               event={task}

@@ -34,6 +34,7 @@ describe('DisplayedEventMoveService', () => {
     failMutationJob?: jest.Mock;
   }) {
     const patch = opts.patch ?? jest.fn().mockResolvedValue(undefined);
+    const syncTask = jest.fn().mockResolvedValue(undefined);
     const updateTask =
       opts.updateTask ??
       jest.fn().mockImplementation(async (_id: string, _userId: string, body) => ({
@@ -85,7 +86,7 @@ describe('DisplayedEventMoveService', () => {
         jest.fn().mockResolvedValue({ id: 'copy-1', jobId: 'job-create' }),
       } as never,
       { patchEventTimes: patch } as never,
-      { syncTask: jest.fn().mockResolvedValue(undefined) } as never,
+      { syncTask } as never,
       { place, seatOpenHoles } as never,
       {
         getSettings: jest.fn().mockResolvedValue({ timeZone: 'UTC' }),
@@ -103,7 +104,7 @@ describe('DisplayedEventMoveService', () => {
           opts.failMutationJob ?? jest.fn().mockResolvedValue(undefined),
       } as never,
     );
-    return { move, patch, updateTask, place, seatOpenHoles, taskRepo };
+    return { move, patch, syncTask, updateTask, place, seatOpenHoles, taskRepo };
   }
 
   it('does not change a habit block', async () => {
@@ -192,6 +193,45 @@ describe('DisplayedEventMoveService', () => {
     expect(patch).not.toHaveBeenCalled();
     expect(seatOpenHoles).not.toHaveBeenCalled();
     expect(failMutationJob).toHaveBeenCalled();
+  });
+
+  it('skips Google patch when a flexible drag re-merges into a series', async () => {
+    const place = jest.fn().mockResolvedValue({
+      outcome: 'seated',
+      start: new Date(dto.start).getTime(),
+      end: new Date(dto.end).getTime(),
+      moves: [],
+      mergedIntoTaskId: 'series-1',
+    });
+    const { move, patch, syncTask, seatOpenHoles } = service({
+      tasks: [
+        {
+          id: 'copy-1',
+          eventType: 'admin',
+          isRecurring: false,
+          googleEventId: 'evt-1',
+          seriesGroupId: 'series-1',
+          parentSeriesId: 'series-1',
+        },
+      ],
+      slots: [
+        {
+          id: 'slot-1',
+          taskId: 'copy-1',
+          googleEventId: 'evt-1',
+          scheduledStartTime: new Date('2026-09-22T09:00:00.000Z'),
+        },
+      ],
+      place,
+    });
+    await expect(move.move(userId, dto)).resolves.toEqual({
+      kind: 'slot',
+      jobId: 'job-1',
+    });
+    await flushAsyncWork();
+    expect(patch).not.toHaveBeenCalled();
+    expect(syncTask).toHaveBeenCalledWith(userId, 'series-1');
+    expect(seatOpenHoles).toHaveBeenCalledWith(userId);
   });
 
   it('seats a flexible drag through the placement step and does not replan', async () => {

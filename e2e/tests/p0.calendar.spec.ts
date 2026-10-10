@@ -1,4 +1,4 @@
-import { test, expect, openAs, apiJson, expectOk, uniqueName, completeOpenTasks, stripBlock, skippableStripCard, waitForScheduleJob, deleteUnusedTimePhases } from '../helpers/fixtures';
+import { test, expect, openAs, apiJson, expectOk, uniqueName, completeOpenTasks, stripBlock, skippableStripCard, waitForScheduleJob, deleteUnusedTimePhases, expectMutationProgressToast } from '../helpers/fixtures';
 import type { APIRequestContext } from '@playwright/test';
 
 const KYIV = 'Europe/Kyiv';
@@ -305,14 +305,7 @@ test.describe('P0 calendar UI', () => {
       const skipCard = skippableStripCard(page, name);
       await expect(skipCard).toBeVisible({ timeout: 15_000 });
       await skipCard.getByRole('button', { name: 'Skip' }).click();
-      await expect(
-        page
-          .locator('.Toastify__toast')
-          .filter({
-            hasText: /Occurrence skipped|Saving task|Done/,
-          })
-          .first(),
-      ).toBeVisible({ timeout: 15_000 });
+      await expectMutationProgressToast(page, name);
       await expect(skipCard).toHaveCount(0);
 
       const listed = await apiJson(request, token, 'get', `/tasks/${created.body.id}`);

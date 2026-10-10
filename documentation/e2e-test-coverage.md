@@ -144,7 +144,7 @@ Email/password (`POST /auth/register`, `/login`, forgot/reset) **do not exist**.
 | U-AUTH-011 | U | P0 | Any auth | Open `/events`, `/schedule`, `/calendar` | Canonical `/tasks` or `/` |
 | U-AUTH-012 | U | P1 | Unknown path | Open `/nope` | `/` (then ProtectedRoute gates) |
 | U-AUTH-013 | U | P1 | Access 401 then refresh fails | Any API call | Logout + `/login` |
-| U-AUTH-014 | U | P1 | Access 401, refresh OK | Any API call | Retries once, stays logged in |
+| U-AUTH-014 | U | P1 | Access 401, refresh OK | Any API call (RTK/`apiCall` **and** raw axios such as schedule job poll / `move-event`) | Single-flight refresh, retry once, stays logged in |
 | U-AUTH-015 | U | P1 | Settings Sign out | Click | `POST /auth/logout`, toast, `/login` |
 | U-AUTH-016 | U | P1 | `GET /user-settings/required` fails | Protected page | Retry UI, no silent blank calendar |
 
@@ -285,15 +285,16 @@ Mutation jobs: POST/PATCH tasks return a `jobId` for place + Google sync progres
 | U-TSK-011 | U | P0 | Inbox **Skip** | Cancels | `canceled`; disappears from active inbox |
 | U-TSK-012 | U | P0 | Inbox **Open** | Opens editor | Prefills name; edit form |
 | U-TSK-011 | U | P1 | Uncheck Fixed | Form | Allow split restored (preset rules) |
-| U-TSK-012 | U | P1 | Clear phase / deadline on edit | Save `phaseIds: []` / `deadline: null` | Deadline clears. **Current:** GET still returns previous `phaseId` after `phaseIds: []` |
+| U-TSK-012 | U | P1 | Clear phase / deadline on edit | Phase chips → **Any time**; clear deadline; Save | PATCH `phaseIds: []` / `deadline: null`. Deadline clears. **Current:** GET still returns previous `phaseId` after `phaseIds: []` |
+| U-TSK-023 | U | P1 | Completed/canceled Unscheduled | Status filter completed / all | Not listed in Unscheduled; no local-completed calendar chip (unit: `taskListFilters`, `completedTaskEvents`) |
 | U-TSK-013 | U | P1 | Expand Google options | location/color/visibility/reminders | Persisted |
 | U-TSK-014 | U | P1 | Filter active / todo / in_progress / completed / canceled / all | Change filter | List matches |
 | U-TSK-015 | U | P1 | Sort name / priority / deadline / duration | Change sort | Order matches |
 | U-TSK-020 | U | P1 | Search inside Unscheduled or Scheduled | Type in one box | The other section is unchanged |
-| U-TSK-021 | U | P1 | Two+ tasks same `seriesGroupId` on `/tasks` | Open Scheduled list | One collapsible group; nested Series / One-off / Problematic; expand shows members (unit: `groupTasksBySeriesGroup`) |
+| U-TSK-021 | U | P1 | Two+ tasks same `seriesGroupId` on `/tasks` | Open Scheduled list | Primary series uses a full task card; expand shows nested One-off / Problematic / siblings; Delete all parts removes the group (unit: `groupTasksBySeriesGroup`) |
 | U-TSK-022 | U | P1 | Detached one-off with `seriesGroupId` | Recurring schedule filter | Member listed (unit: `taskListFilters`) |
 | U-TSK-016 | U | P1 | Delete confirm | Cancel | Still there |
-| U-TSK-017 | U | P1 | Delete confirm | Confirm | Toast `Task deleted`; gone |
+| U-TSK-017 | U | P1 | Delete confirm | Confirm | Mutation progress toast (title = name); gone |
 | U-TSK-018 | U | P1 | API error on save | Fail POST | Toast `Could not create task` + API detail |
 | U-TSK-019 | U | P2 | Empty list | No tasks | Empty state, not a spinner forever |
 
@@ -392,7 +393,7 @@ Generate body `{ startDate, endDate }` is **ignored**. Horizon = today → `recu
 | A-SCH-033q | A | P1 | User has timeZone setting | GET | Response `timeZone` matches settings |
 | A-SCH-033r | A | P1 | Task linked to morning phase; evening phase also exists | GET without `phaseId` | Candidates span morning **and** evening; with `phaseId=morning` only morning |
 | A-SCH-034 | A | P0 | Recurring create; peer busy only on day 2 at preferred | Create + wait placement job | Day 1 at preferred; day 2 at a different hole; day 2 is a sibling task with same `seriesGroupId` (or skipped if no hole) |
-| A-SCH-035 | A | P0 | Detached one-off with `seriesGroupId` moved to parent series clock | `POST /schedule/move-event` or PATCH times | One-off gone; series day restored (skip/EXDATE cleared) |
+| A-SCH-035 | A | P0 | Detached one-off with `seriesGroupId` moved to parent series clock | `POST /schedule/move-event` or PATCH times | One-off gone; series day restored (skip/EXDATE cleared); move job must not patch the deleted one-off Google event (`mergedIntoTaskId`; unit: `displayed-event-move.service`) |
 | A-SCH-036 | A | P0 | Morning phase; series peers leave day0 hole at 09:00 and majority later at 10:00 | Create recurring without preferred + drain | Horizon unifies to one clock (`10:00` or `10:30`); day0 not skipped |
 | A-SCH-037 | A | P0 | Three stacked recurring peers 09:00/09:30/10:00 | Create 4th recurring without preferred | One clock for all horizon days of #4; no one-off siblings |
 | A-SCH-038 | A | P0 | Series peer shifted to 10:15 (home 10:00); false 09:30 gap | Create recurring without preferred | New series does **not** seat at 09:30; lands `10:00`/`10:15`/`10:30` |
