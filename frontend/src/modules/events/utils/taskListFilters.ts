@@ -58,9 +58,9 @@ export function taskPhaseIds(task: Pick<TaskDTO, 'phaseId' | 'phase' | 'phases'>
 }
 
 export function scheduleModeOf(
-  task: Pick<TaskDTO, 'isRecurring' | 'eventType'>,
+  task: Pick<TaskDTO, 'isRecurring' | 'eventType' | 'seriesGroupId'>,
 ): Exclude<ScheduleModeFilter, 'any'> {
-  if (task.isRecurring) return 'recurring';
+  if (task.isRecurring || !!task.seriesGroupId) return 'recurring';
   if (task.eventType === 'fixed') return 'fixed';
   return 'flexible';
 }

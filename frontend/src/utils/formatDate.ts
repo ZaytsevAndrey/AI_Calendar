@@ -34,6 +34,36 @@ export function formatDateTime(value?: string | null): string | null {
   return format(d, 'd MMM yyyy, HH:mm', loc());
 }
 
+export function formatClockHm(value?: string | null): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return format(d, 'HH:mm', loc());
+}
+
+/** Series from→to (+ clock), or a single occurrence day for one-offs. */
+export function formatSeriesSpanSummary(opts: {
+  seriesSpanStart?: string | null;
+  seriesSpanEnd?: string | null;
+  scheduledStartTime?: string | null;
+  isRecurring?: boolean;
+}): string | null {
+  const clock = formatClockHm(opts.scheduledStartTime);
+  const from = opts.seriesSpanStart ? new Date(opts.seriesSpanStart) : null;
+  const to = opts.seriesSpanEnd ? new Date(opts.seriesSpanEnd) : null;
+  const fromOk = Boolean(from && !Number.isNaN(from.getTime()));
+  const toOk = Boolean(to && !Number.isNaN(to.getTime()));
+  if (opts.isRecurring && fromOk && toOk) {
+    const range = formatWeekRange(from!, to!);
+    return clock ? `${range} · ${clock}` : range;
+  }
+  if (fromOk) {
+    const day = format(from!, 'EEE d MMM yyyy', loc());
+    return clock ? `${day} · ${clock}` : day;
+  }
+  return formatDateTime(opts.scheduledStartTime);
+}
+
 function isSameLocalDay(a: Date, b: Date): boolean {
   return (
     a.getFullYear() === b.getFullYear() &&

@@ -30,11 +30,12 @@ import { phaseHexToGoogleColorId } from '../google-calendar/phase-hex-to-google-
 import { applyTaskGoogleEventFields } from '../google-calendar/task-google-event-fields.util';
 import { effectiveRecurrenceWeekDays } from './recurrence-from-phases.util';
 import { buildGoogleRecurrenceRules } from './google-recurrence.util';
+import { pickMajorityClockSlot } from './series-group.util';
 import {
   excludeStartsForSkippedYmds,
   isOccurrenceYmdSkipped,
 } from '../tasks/skipped-occurrence.util';
-import { localYmd } from '../voice/voice-local-date.util';
+import { localHm, localYmd } from '../voice/voice-local-date.util';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import {
   GoogleEventRef,
@@ -718,11 +719,16 @@ export class ScheduleJobService {
     reuse: GoogleEventRef | null,
   ): Promise<GoogleEventRef | null> {
     if (!futureDesired.length) return null;
-    const first = futureDesired[0];
+    const timeZone = resolveIanaTimeZone(task.scheduleTimeZone);
+    const preferredHm = task.scheduledStartTime
+      ? localHm(new Date(task.scheduledStartTime).toISOString(), timeZone)
+      : null;
+    const first =
+      pickMajorityClockSlot(futureDesired, timeZone, preferredHm) ??
+      futureDesired[0];
     const last = futureDesired[futureDesired.length - 1];
     const phases =
       task.phases?.length ? task.phases : task.phase ? [task.phase] : [];
-    const timeZone = resolveIanaTimeZone(task.scheduleTimeZone);
     const placedYmds = futureDesired.map((seg) =>
       localYmd(seg.scheduledStartTime.toISOString(), timeZone),
     );
@@ -739,7 +745,7 @@ export class ScheduleJobService {
         weekDays: effectiveRecurrenceWeekDays(task.recurrenceWeekDays, phases),
         excludeStarts: excludeStartsForSkippedYmds({
           skippedYmds: task.skippedOccurrenceYmds,
-          firstStart: first.scheduledStartTime,
+          firstStart: futureDesired[0].scheduledStartTime,
           lastStart: last.scheduledStartTime,
           timeZone,
           placedYmds,

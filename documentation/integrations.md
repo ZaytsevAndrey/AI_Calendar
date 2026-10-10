@@ -49,6 +49,8 @@ Full list: Swagger (`/api`).
 
 **`DELETE /schedule`** removes **still-open** app-generated local slots through the **Recurring schedule horizon** in Settings (fully ended blocks, including earlier today, stay). Then it deletes leftover **upcoming** events on the **app Google calendar** in that window. Recurring series that still have ended instances are capped with `UNTIL` instead of deleting the master. If Google is disconnected, local rows are still removed.
 
+App recurring tasks sync as one Google RRULE whose **DTSTART** uses the **majority local clock** among open seats (not the chronologically first skewed day). See [spec-intelligent-scheduling.md](spec-intelligent-scheduling.md) and [spec-incremental-placement.md](spec-incremental-placement.md) §7.
+
 ## Error `redirect_uri_mismatch`
 
 The URI sent to Google does **not** match any **Authorized redirect URI** in the console.

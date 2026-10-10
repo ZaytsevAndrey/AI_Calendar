@@ -98,6 +98,22 @@ describe('filterScheduledTasks', () => {
     expect(filterScheduledTasks(tasks, { ...open, overdueOnly: true }, now).map((item) => item.id)).toEqual(['late']);
   });
 
+  it('includes detached series-group members in the recurring mode filter', () => {
+    const detached = task({
+      id: 'det',
+      name: 'Weekly review (moved)',
+      eventType: 'admin',
+      seriesGroupId: 'series',
+      parentSeriesId: 'series',
+    });
+    expect(
+      filterScheduledTasks([...tasks, detached], { ...open, mode: 'recurring' }, now).map((item) => item.id),
+    ).toEqual(['series', 'det']);
+    expect(
+      filterScheduledTasks([...tasks, detached], { ...open, mode: 'flexible' }, now).map((item) => item.id),
+    ).toEqual(['flex', 'late']);
+  });
+
   it('does not treat a completed task with a past deadline as overdue', () => {
     const closed = task({
       id: 'closed',

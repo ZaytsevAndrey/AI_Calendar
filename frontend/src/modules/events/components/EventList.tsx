@@ -1,12 +1,15 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { TaskDTO } from '../../../api/tasks.api';
+import { groupTasksBySeriesGroup } from '../utils/groupTasksBySeriesGroup';
 import EventItem from './EventItem';
+import SeriesGroupRow from './SeriesGroupRow';
 
 interface EventListProps {
   events: TaskDTO[];
   onEdit: (event: TaskDTO) => void;
   onDelete: (eventId: string) => void;
+  onDeleteGroup: (ids: string[], name: string) => void;
   onCreate: () => void;
   isLoading: boolean;
   onDone?: (event: TaskDTO) => void;
@@ -22,6 +25,7 @@ const EventList: React.FC<EventListProps> = ({
   events,
   onEdit,
   onDelete,
+  onDeleteGroup,
   onCreate,
   isLoading,
   onDone,
@@ -49,22 +53,41 @@ const EventList: React.FC<EventListProps> = ({
     );
   }
 
+  const entries = groupTasksBySeriesGroup(events);
+
   return (
     <div className="task-list space-y-4">
-      {events.map((event) => (
-        <EventItem
-          key={event.id}
-          event={event}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          onDone={onDone}
-          onSchedule={onSchedule}
-          onSkip={onSkip}
-          onDoNow={onDoNow}
-          openLabel={openLabel}
-          busyId={busyId}
-        />
-      ))}
+      {entries.map((entry) =>
+        entry.kind === 'group' ? (
+          <SeriesGroupRow
+            key={`group-${entry.seriesGroupId}`}
+            title={entry.title}
+            members={entry.members}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onDeleteGroup={onDeleteGroup}
+            onDone={onDone}
+            onSchedule={onSchedule}
+            onSkip={onSkip}
+            onDoNow={onDoNow}
+            openLabel={openLabel}
+            busyId={busyId}
+          />
+        ) : (
+          <EventItem
+            key={entry.task.id}
+            event={entry.task}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onDone={onDone}
+            onSchedule={onSchedule}
+            onSkip={onSkip}
+            onDoNow={onDoNow}
+            openLabel={openLabel}
+            busyId={busyId}
+          />
+        ),
+      )}
     </div>
   );
 };

@@ -119,6 +119,62 @@ describe('PendingGoogleWriteService', () => {
     expect(scheduledRepo.save).toHaveBeenCalledTimes(3);
   });
 
+  it('anchors Google RRULE on majority clock, not a skewed open[0]', async () => {
+    // One shifted day at 09:30 must not rewrite the series DTSTART off 10:00.
+    const skewedStart = new Date('2026-10-12T06:30:00.000Z');
+    const skewedEnd = new Date('2026-10-12T07:00:00.000Z');
+    const aStart = new Date('2026-10-17T07:00:00.000Z');
+    const aEnd = new Date('2026-10-17T07:30:00.000Z');
+    const bStart = new Date('2026-10-19T07:00:00.000Z');
+    const bEnd = new Date('2026-10-19T07:30:00.000Z');
+    taskRepo.findOne.mockResolvedValue({
+      id: 't1',
+      userId: 'u1',
+      name: 'Three',
+      isUnscheduled: false,
+      scheduleState: 'none',
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      recurrenceWeekDays: null,
+      skippedOccurrenceYmds: null,
+      scheduledStartTime: aStart,
+      scheduledEndTime: aEnd,
+      googleEventId: null,
+      status: 'todo',
+      scheduleTimeZone: 'Asia/Nicosia',
+    });
+    scheduledRepo.find.mockResolvedValue([
+      {
+        taskId: 't1',
+        scheduledStartTime: skewedStart,
+        scheduledEndTime: skewedEnd,
+      },
+      {
+        taskId: 't1',
+        scheduledStartTime: aStart,
+        scheduledEndTime: aEnd,
+      },
+      {
+        taskId: 't1',
+        scheduledStartTime: bStart,
+        scheduledEndTime: bEnd,
+      },
+    ]);
+    await service.syncTask('u1', 't1');
+    expect(google.createEvent).toHaveBeenCalledWith(
+      'u1',
+      expect.objectContaining({
+        start: expect.objectContaining({
+          dateTime: aStart.toISOString(),
+        }),
+        end: expect.objectContaining({
+          dateTime: aEnd.toISOString(),
+        }),
+      }),
+      expect.any(Object),
+    );
+  });
+
   it('serializes concurrent syncs so only one Google create runs', async () => {
     let releaseCreate: (() => void) | undefined;
     const createGate = new Promise<void>((resolve) => {

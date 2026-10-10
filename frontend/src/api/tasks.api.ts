@@ -40,6 +40,12 @@ export interface TaskDTO {
   problematicOriginalEnd?: string | null;
   /** Series this copy was detached from. */
   parentSeriesId?: string | null;
+  /** Logical recurring family (clock-split siblings + detached one-offs). */
+  seriesGroupId?: string | null;
+  /** First open occurrence start (Tasks UI series span). */
+  seriesSpanStart?: string | null;
+  /** Last open occurrence start (Tasks UI series span). */
+  seriesSpanEnd?: string | null;
   location?: string | null;
   googleColorId?: string | null;
   googleVisibility?: string | null;

@@ -19,7 +19,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand --forceExit",
-    "copy-db:prod": "ts-node src/scripts/copy-sqlite-to-postgres.ts"
+    "copy-db:prod": "ts-node src/scripts/copy-sqlite-to-postgres.ts",
+    "purge:orphan-google": "ts-node src/scripts/purge-orphan-app-calendar-events.ts"
   },
   "dependencies": {
     "@fastify/cors": "^8.5.0",

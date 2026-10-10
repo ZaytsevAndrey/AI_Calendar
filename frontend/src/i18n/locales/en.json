@@ -590,6 +590,19 @@
       "loading": "Loading tasks…",
       "empty": "No tasks found. Create one to get started.",
       "createTask": "Create task"
+    },
+    "group": {
+      "memberCount": "{{count}} parts",
+      "expand": "Expand series group",
+      "collapse": "Collapse series group",
+      "deleteAll": "Delete all parts",
+      "deleteTitle": "Delete series group",
+      "deleteConfirm": "Delete \"{{name}}\" and all {{count}} parts? This cannot be undone.",
+      "kind": {
+        "series": "Series",
+        "oneOff": "One-off",
+        "problematic": "Problematic"
+      }
     }
   },
   "habits": {

@@ -85,10 +85,16 @@ const TasksPage: React.FC = () => {
   const [inboxQuery, setInboxQuery] = useState('');
   const [inboxStatus, setInboxStatus] = useState<TaskStatusFilter>('active');
   const [inboxOverdue, setInboxOverdue] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string | null; name: string }>({
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    open: boolean;
+    ids: string[];
+    name: string;
+    group: boolean;
+  }>({
     open: false,
-    id: null,
+    ids: [],
     name: '',
+    group: false,
   });
   const phone = usePhoneLayout();
 
@@ -165,21 +171,40 @@ const TasksPage: React.FC = () => {
 
   const requestDelete = (id: string) => {
     const task = events.find((item) => item.id === id);
-    setDeleteConfirm({ open: true, id, name: task?.name || t('tasks.thisTask') });
+    setDeleteConfirm({
+      open: true,
+      ids: [id],
+      name: task?.name || t('tasks.thisTask'),
+      group: false,
+    });
+  };
+
+  const requestDeleteGroup = (ids: string[], name: string) => {
+    if (ids.length === 0) return;
+    setDeleteConfirm({
+      open: true,
+      ids,
+      name: name || t('tasks.thisTask'),
+      group: true,
+    });
   };
 
   const confirmDelete = () => {
-    if (!deleteConfirm.id) return;
-    const id = deleteConfirm.id;
-    setDeleteConfirm({ open: false, id: null, name: '' });
-    void deleteEvent(id)
-      .unwrap()
-      .catch((err) => {
+    if (deleteConfirm.ids.length === 0) return;
+    const ids = deleteConfirm.ids;
+    setDeleteConfirm({ open: false, ids: [], name: '', group: false });
+    void (async () => {
+      try {
+        for (const id of ids) {
+          await deleteEvent(id).unwrap();
+        }
+      } catch (err) {
         showErrorToast({
           title: t('tasks.deleteFailed'),
           detail: extractApiErrorMessage(err),
         });
-      });
+      }
+    })();
   };
 
   const unscheduledInbox = sortUnscheduled(filterUnscheduledTasks(events, inboxFilters));
@@ -234,6 +259,7 @@ const TasksPage: React.FC = () => {
               events={unscheduledInbox}
               onEdit={openEdit}
               onDelete={requestDelete}
+              onDeleteGroup={requestDeleteGroup}
               onCreate={() => openCreate({ unscheduled: true })}
               onDone={markDone}
               onSkip={markSkipped}
@@ -269,6 +295,7 @@ const TasksPage: React.FC = () => {
             events={sortedEvents}
             onEdit={openEdit}
             onDelete={requestDelete}
+            onDeleteGroup={requestDeleteGroup}
             onCreate={() => openCreate()}
             isLoading={isLoadingEvents}
             emptyTitle={t('tasks.noScheduledFilter')}
@@ -278,13 +305,13 @@ const TasksPage: React.FC = () => {
 
       <Modal
         open={deleteConfirm.open}
-        onClose={() => setDeleteConfirm({ open: false, id: null, name: '' })}
-        title={t('tasks.deleteTitle')}
+        onClose={() => setDeleteConfirm({ open: false, ids: [], name: '', group: false })}
+        title={deleteConfirm.group ? t('tasks.group.deleteTitle') : t('tasks.deleteTitle')}
         footer={
           <>
             <button
               type="button"
-              onClick={() => setDeleteConfirm({ open: false, id: null, name: '' })}
+              onClick={() => setDeleteConfirm({ open: false, ids: [], name: '', group: false })}
               className="ui-btn-secondary w-full sm:w-auto"
             >
               {t('common.cancel')}
@@ -300,7 +327,12 @@ const TasksPage: React.FC = () => {
         }
       >
         <p className="text-ide-text">
-          {t('tasks.deleteConfirm', { name: deleteConfirm.name })}
+          {deleteConfirm.group
+            ? t('tasks.group.deleteConfirm', {
+                name: deleteConfirm.name,
+                count: deleteConfirm.ids.length,
+              })
+            : t('tasks.deleteConfirm', { name: deleteConfirm.name })}
         </p>
       </Modal>
 

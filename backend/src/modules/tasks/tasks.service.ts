@@ -199,6 +199,18 @@ export class TasksService {
           !after.scheduledStartTime));
 
     if (!before || (leftInbox && !startChanged && !task.scheduledStartTime)) {
+      // Create / leave-inbox: claim the preferred clock when the form set one so
+      // overlapped flexibles can be shifted (searchHole never moves anyone).
+      if (
+        task.scheduledStartTime &&
+        task.eventType !== TaskEventType.FIXED
+      ) {
+        return {
+          preferredStart: new Date(task.scheduledStartTime),
+          durationMinutes: task.estimatedTimeInMinutes,
+          expandSeries: !!task.isRecurring,
+        };
+      }
       return {
         searchHole:
           !task.scheduledStartTime && task.eventType !== TaskEventType.FIXED,
@@ -511,13 +523,14 @@ export class TasksService {
   }
 
   async findAll(userId: string): Promise<Task[]> {
-    return this.tasksRepository.find({
+    const tasks = await this.tasksRepository.find({
       where: { userId },
       relations: ['phase', 'phases'],
       order: {
         createdAt: 'DESC',
       },
     });
+    return this.withSeriesSpans(tasks);
   }
 
   async findOne(id: string, userId: string): Promise<Task> {
@@ -531,6 +544,39 @@ export class TasksService {
     }
 
     return task;
+  }
+
+  /**
+   * First/last open occurrence starts for Tasks UI (series from→to).
+   * Past-ended slots are ignored.
+   */
+  private async withSeriesSpans(tasks: Task[]): Promise<Task[]> {
+    if (!tasks.length) return tasks;
+    const now = new Date();
+    const rows = await this.scheduledTaskRepository.find({
+      where: { taskId: In(tasks.map((task) => task.id)) },
+    });
+    const spanByTask = new Map<string, { first: Date; last: Date }>();
+    for (const row of rows) {
+      if (new Date(row.scheduledEndTime).getTime() <= now.getTime()) continue;
+      const start = new Date(row.scheduledStartTime);
+      if (Number.isNaN(start.getTime())) continue;
+      const cur = spanByTask.get(row.taskId);
+      if (!cur) {
+        spanByTask.set(row.taskId, { first: start, last: start });
+        continue;
+      }
+      if (start.getTime() < cur.first.getTime()) cur.first = start;
+      if (start.getTime() > cur.last.getTime()) cur.last = start;
+    }
+    for (const task of tasks) {
+      const span = spanByTask.get(task.id);
+      Object.assign(task, {
+        seriesSpanStart: span ? span.first.toISOString() : null,
+        seriesSpanEnd: span ? span.last.toISOString() : null,
+      });
+    }
+    return tasks;
   }
 
   async update(
@@ -718,23 +764,25 @@ export class TasksService {
   }
 
   async findByStatus(userId: string, status: TaskStatus): Promise<Task[]> {
-    return this.tasksRepository.find({
+    const tasks = await this.tasksRepository.find({
       where: { userId, status },
       relations: ['phase', 'phases'],
       order: {
         createdAt: 'DESC',
       },
     });
+    return this.withSeriesSpans(tasks);
   }
 
   async findByPhase(userId: string, phaseId: string): Promise<Task[]> {
-    return this.tasksRepository.find({
+    const tasks = await this.tasksRepository.find({
       where: { userId, phaseId },
       relations: ['phase', 'phases'],
       order: {
         createdAt: 'DESC',
       },
     });
+    return this.withSeriesSpans(tasks);
   }
 
   async skipOccurrence(

@@ -1,4 +1,8 @@
-import { weekdayIndex } from '../voice/voice-local-date.util';
+import {
+  localHm,
+  localYmd,
+  weekdayIndex,
+} from '../voice/voice-local-date.util';
 
 /**
  * User-facing fields other than time / phase. Touching any of these drops
@@ -78,6 +82,38 @@ export function pickPrimaryClockHm(
     if (hm < bestHm || !bestHm) bestHm = hm;
   }
   return bestHm;
+}
+
+/**
+ * Google RRULE DTSTART must follow the majority local clock among open seats,
+ * not chronological open[0] (a single shifted day used to rewrite the series).
+ * Returns the earliest seat on that majority clock; falls back to slots[0].
+ */
+export function pickMajorityClockSlot<
+  T extends { scheduledStartTime: Date; scheduledEndTime: Date },
+>(
+  slots: T[],
+  timeZone: string,
+  preferredHm?: string | null,
+): T | null {
+  if (!slots.length) return null;
+  const stamped = slots.map((slot) => {
+    const iso = new Date(slot.scheduledStartTime).toISOString();
+    return {
+      slot,
+      ymd: localYmd(iso, timeZone),
+      hm: localHm(iso, timeZone),
+      startMs: new Date(slot.scheduledStartTime).getTime(),
+    };
+  });
+  const byHm = groupYmdsByClockHm(
+    stamped.map(({ ymd, hm }) => ({ ymd, hm })),
+  );
+  const primaryHm = pickPrimaryClockHm(byHm, preferredHm);
+  const onPrimary = stamped
+    .filter((row) => row.hm === primaryHm)
+    .sort((a, b) => a.startMs - b.startMs);
+  return onPrimary[0]?.slot ?? slots[0];
 }
 
 export function weekDaysFromYmds(ymds: string[]): number[] {

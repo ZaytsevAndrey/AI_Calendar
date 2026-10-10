@@ -15,9 +15,15 @@ import {
   Zap,
 } from 'lucide-react';
 import { TaskDTO } from '../../../api/tasks.api';
-import { formatDateTime, formatDateTimeRange, formatMinutes } from '../../../utils/formatDate';
+import {
+  formatDateTime,
+  formatDateTimeRange,
+  formatMinutes,
+  formatSeriesSpanSummary,
+} from '../../../utils/formatDate';
 import { buildUnscheduledIconMeta } from '../unscheduledCardMeta';
 import { deadlineTone } from '../utils/deadlineTone';
+import type { SeriesMemberKind } from '../utils/groupTasksBySeriesGroup';
 
 interface EventItemProps {
   event: TaskDTO;
@@ -29,6 +35,9 @@ interface EventItemProps {
   onDoNow?: (event: TaskDTO) => void;
   openLabel?: string;
   busyId?: string | null;
+  /** Nested under a series group — show kind instead of repeating the family name. */
+  nested?: boolean;
+  memberKind?: SeriesMemberKind;
 }
 
 const priorityColors = {
@@ -94,6 +103,8 @@ const EventItem: React.FC<EventItemProps> = ({
   onDoNow,
   openLabel,
   busyId,
+  nested = false,
+  memberKind,
 }) => {
   const { t } = useTranslation();
   const deadline = formatDateTime(event.deadline);
@@ -107,7 +118,14 @@ const EventItem: React.FC<EventItemProps> = ({
   const editLabel = openLabel || t('common.edit');
   const EditIcon = openLabel ? ExternalLink : Pencil;
   const overdue = unscheduled && tone === 'overdue';
-
+  const kindLabel =
+    memberKind === 'series'
+      ? t('tasks.group.kind.series')
+      : memberKind === 'problematic'
+        ? t('tasks.group.kind.problematic')
+        : memberKind === 'oneOff'
+          ? t('tasks.group.kind.oneOff')
+          : null;
   const tonePrefix =
     tone === 'overdue'
       ? t('tasks.item.overduePrefix')
@@ -239,6 +257,100 @@ const EventItem: React.FC<EventItemProps> = ({
       )}
     </>
   );
+
+  if (nested) {
+    const kindTone =
+      memberKind === 'problematic'
+        ? 'border-ide-error/50 bg-ide-error/20 text-ide-error'
+        : memberKind === 'series'
+          ? 'border-ide-link/40 bg-ide-link/15 text-ide-link'
+          : 'border-white/10 bg-white/5 text-ide-muted';
+    const compactBtn =
+      'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/5 text-ide-text hover:bg-white/10 disabled:opacity-50';
+    const summary =
+      formatSeriesSpanSummary({
+        seriesSpanStart: event.seriesSpanStart,
+        seriesSpanEnd: event.seriesSpanEnd,
+        scheduledStartTime: event.scheduledStartTime,
+        isRecurring: event.isRecurring,
+      }) ||
+      when ||
+      dueText ||
+      formatMinutes(event.estimatedTimeInMinutes);
+    const compactAction = (
+      label: string,
+      onClick: () => void,
+      icon: React.ReactNode,
+      className = compactBtn,
+    ) => (
+      <button
+        type="button"
+        onClick={onClick}
+        className={className}
+        disabled={busy}
+        aria-label={label}
+        title={label}
+      >
+        {icon}
+      </button>
+    );
+
+    return (
+      <div
+        className="flex items-center gap-2 rounded-lg border border-white/10 px-2.5 py-1.5"
+        style={{
+          borderLeftWidth: 3,
+          borderLeftColor: overdue ? '#f44336' : color,
+          backgroundColor: '#35383A',
+        }}
+      >
+        <span className="sr-only">{event.name}</span>
+        {kindLabel ? (
+          <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[11px] font-medium leading-none ${kindTone}`}>
+            {kindLabel}
+          </span>
+        ) : null}
+        <span className="min-w-0 flex-1 truncate text-xs text-ide-muted" title={summary || undefined}>
+          {summary || '—'}
+        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          {onDone
+            ? compactAction(t('tasks.item.done'), () => onDone(event), <Check className="h-3.5 w-3.5" aria-hidden />)
+            : null}
+          {onSkip
+            ? compactAction(
+                t('tasks.item.skip'),
+                () => onSkip(event),
+                <SkipForward className="h-3.5 w-3.5" aria-hidden />,
+              )
+            : null}
+          {onDoNow
+            ? compactAction(
+                t('tasks.item.doNow'),
+                () => onDoNow(event),
+                <Zap className="h-3.5 w-3.5" aria-hidden />,
+                `${compactBtn} text-ide-link`,
+              )
+            : null}
+          {onSchedule
+            ? compactAction(
+                t('tasks.item.schedule'),
+                () => onSchedule(event),
+                <CalendarPlus className="h-3.5 w-3.5" aria-hidden />,
+                `${compactBtn} text-ide-link`,
+              )
+            : null}
+          {compactAction(editLabel, () => onEdit(event), <EditIcon className="h-3.5 w-3.5" aria-hidden />)}
+          {compactAction(
+            t('common.delete'),
+            () => onDelete(event.id),
+            <Trash2 className="h-3.5 w-3.5" aria-hidden />,
+            `${compactBtn} text-ide-error/80 hover:text-ide-error`,
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

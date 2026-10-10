@@ -31,6 +31,7 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 - [x] **Unscheduled richer cards.** Tasks inbox cards use icon-only actions and icon meta for phase / earliest / deadline with a clear overdue state. No unscheduled-reason field; duration stays off Unscheduled cards. Schedule pick and Calendar chip are still open.
 
 - [x] **Recurring per-day slots + series group.** Expand searches a slot each civil day (preferred, else hole that day). Divergent clocks split into same-`seriesGroupId` series/one-offs (group-by-clock). Detached members re-merge when they land on a sibling series clock; editing name/description/etc. clears membership permanently. Spec: [spec-incremental-placement.md](spec-incremental-placement.md) §7.
+- [x] **Series-horizon harden.** Recurring claim does not shift other series masters (flexibles only); shifted peers keep home clock / interior-gap pack; Google RRULE DTSTART uses majority local clock among open seats (not chronological `open[0]`).
 
 ## Shipped (Sep 2026)
 
@@ -99,6 +100,7 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 - [x] **PWA reminders.** Settings opt-in (off by default). Web Push once in the half hour before each timed Now/Next block, the same window for a habit with a clock time, and one wake-time note for habits without a block. Already checked habits stay quiet. `POST /reminders/tick` about every 30 minutes wakes the free API. A start that already passed is not sent. iPhone needs Add to Home Screen.
 - [x] **Voice beyond create.** The same mic completes, skips, or reschedules the current or named task (uk/en/ru). Done on a series skips today's occurrence. An open slot moves like a drag; no slot updates the window and replans. One question, then a refusal. Settings **Ask before voice commands** (off by default) confirms first. Create stays immediate.
 - [x] **Search / filters on tasks.** Tasks page only, client-side, and the two sections do not share controls. **Unscheduled:** name search, status, overdue. **Scheduled:** name search, status, phase, schedule type, overdue, and sort. Filters combine. Overdue means a past deadline on a task that is not completed or canceled.
+- [x] **Tasks series grouping.** Tasks that share `seriesGroupId` show as one collapsible group with nested Series / One-off / Problematic rows. Recurring filter includes group members. Actions stay per member.
 - [x] **Soft buffers.** Settings **Buffer around fixed events** (0–180 minutes, default 0). Generate keeps that gap before and after each fixed task and external Google event. Habits and ended flexible slots are not padded. The gap is used only when the task would not fit otherwise. Dragging a block can still land in it.
 
 ### Quality

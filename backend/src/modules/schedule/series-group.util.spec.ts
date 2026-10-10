@@ -1,6 +1,7 @@
 import {
   breaksSeriesMembership,
   groupYmdsByClockHm,
+  pickMajorityClockSlot,
   pickPrimaryClockHm,
   weekDaysFromYmds,
 } from './series-group.util';
@@ -67,6 +68,29 @@ describe('series-group.util', () => {
       expect(
         weekDaysFromYmds(['2026-04-20', '2026-04-22', '2026-04-20']),
       ).toEqual([1, 3]);
+    });
+  });
+
+  describe('pickMajorityClockSlot', () => {
+    it('ignores a single skewed earliest day and anchors on majority HM', () => {
+      const skewed = {
+        scheduledStartTime: new Date('2026-10-12T06:30:00.000Z'), // 09:30 Nicosia
+        scheduledEndTime: new Date('2026-10-12T07:00:00.000Z'),
+      };
+      const majorityA = {
+        scheduledStartTime: new Date('2026-10-17T07:00:00.000Z'), // 10:00
+        scheduledEndTime: new Date('2026-10-17T07:30:00.000Z'),
+      };
+      const majorityB = {
+        scheduledStartTime: new Date('2026-10-19T07:00:00.000Z'),
+        scheduledEndTime: new Date('2026-10-19T07:30:00.000Z'),
+      };
+      const pick = pickMajorityClockSlot(
+        [skewed, majorityA, majorityB],
+        'Asia/Nicosia',
+        '10:00',
+      );
+      expect(pick).toBe(majorityA);
     });
   });
 });

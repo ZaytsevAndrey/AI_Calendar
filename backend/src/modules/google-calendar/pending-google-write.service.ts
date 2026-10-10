@@ -18,8 +18,9 @@ import { isProblematicSchedule, Task } from '../tasks/entities/task.entity';
 import { excludeStartsForSkippedYmds } from '../tasks/skipped-occurrence.util';
 import { buildGoogleRecurrenceRules } from '../schedule/google-recurrence.util';
 import { effectiveRecurrenceWeekDays } from '../schedule/recurrence-from-phases.util';
+import { pickMajorityClockSlot } from '../schedule/series-group.util';
 import { ScheduledTask } from '../schedule/schedule.entity';
-import { localYmd } from '../voice/voice-local-date.util';
+import { localHm, localYmd } from '../voice/voice-local-date.util';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 
 @Injectable()
@@ -493,9 +494,16 @@ export class PendingGoogleWriteService {
     const fallbackColorId = phaseHexToGoogleColorId(phase?.color);
     const timeZone = resolveIanaTimeZone(task.scheduleTimeZone);
     const open = await this.openSlots(task.id);
+    const preferredHm = task.scheduledStartTime
+      ? localHm(new Date(task.scheduledStartTime).toISOString(), timeZone)
+      : null;
+    const anchor =
+      task.isRecurring && open.length
+        ? pickMajorityClockSlot(open, timeZone, preferredHm)
+        : open[0] ?? null;
     const start =
-      open[0]?.scheduledStartTime ?? task.scheduledStartTime ?? null;
-    const end = open[0]?.scheduledEndTime ?? task.scheduledEndTime ?? null;
+      anchor?.scheduledStartTime ?? task.scheduledStartTime ?? null;
+    const end = anchor?.scheduledEndTime ?? task.scheduledEndTime ?? null;
     const payload: Record<string, unknown> = {
       summary: task.name,
       description: task.description || undefined,
@@ -510,7 +518,7 @@ export class PendingGoogleWriteService {
     };
     applyTaskGoogleEventFields(payload, task, fallbackColorId);
     if (task.isRecurring && open.length) {
-      const first = open[0];
+      const first = anchor ?? open[0];
       const last = open[open.length - 1];
       const phases = [
         ...(task.phases ?? []),
@@ -523,7 +531,7 @@ export class PendingGoogleWriteService {
         weekDays: effectiveRecurrenceWeekDays(task.recurrenceWeekDays, phases),
         excludeStarts: excludeStartsForSkippedYmds({
           skippedYmds: task.skippedOccurrenceYmds,
-          firstStart: first.scheduledStartTime,
+          firstStart: open[0].scheduledStartTime,
           lastStart: last.scheduledStartTime,
           timeZone,
           placedYmds: open.map((row) =>

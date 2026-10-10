@@ -30,6 +30,13 @@ export type PlacementSeat = {
   notBefore: number;
   /** Fixed tasks and external Google events. Buffer is soft around these only. */
   buffered?: boolean;
+  /**
+   * Series home interval on this civil day for a detached / clock-split member
+   * (`parentSeriesId` / group master). Hole search treats home∪actual as busy so
+   * a shifted one-off does not open a false gap at the series clock.
+   */
+  homeStart?: number;
+  homeEnd?: number;
 };
 
 export type PlacementClaim = {
@@ -41,6 +48,11 @@ export type PlacementClaim = {
   windows: MsInterval[];
   /** When omitted, the claimant takes the nearest free hole and nobody else moves. */
   interval?: MsInterval | null;
+  /**
+   * When searching without `interval`, prefer a start closest to this instant
+   * (series preferred clock). Ties keep the earlier start.
+   */
+  preferNearMs?: number | null;
   /** Deadline or From–Until is already over. */
   windowExpired?: boolean;
   /** Fixed clocks may sit outside a phase window. */
@@ -79,6 +91,12 @@ export type PlacementPlan =
       start: number;
       end: number;
       moves: PlacementMove[];
+      /**
+       * Hole-search only: `busy` = phase day already had flexibles/series;
+       * `open` = empty window (phase-start hole). Used so empty horizon days
+       * do not dominate the recurring primary clock vote.
+       */
+      lane?: 'busy' | 'open';
     }
   | { outcome: 'conflict'; conflict: SchedulingConflict }
   | { outcome: 'problematic'; reason: string }
@@ -106,16 +124,35 @@ function findHole(opts: {
   windows: MsInterval[];
   hard: MsInterval[];
   soft: MsInterval[];
+  /** Prefer the start closest to this ms (spec: nearest hole to preferred). */
+  preferNearMs?: number | null;
 }): MsInterval | null {
   const durationMs = Math.max(1, opts.durationMinutes) * 60_000;
+  const preferNear =
+    opts.preferNearMs != null && Number.isFinite(opts.preferNearMs)
+      ? opts.preferNearMs
+      : null;
   const search = (blocked: MsInterval[]): MsInterval | null => {
     let best: number | null = null;
+    let bestDist = Number.POSITIVE_INFINITY;
     for (const window of opts.windows) {
       const free = subtractMany([window], blocked);
       for (const start of candidateStartsInGaps(free, opts.durationMinutes)) {
         if (start < opts.notBefore) continue;
         if (start + durationMs > window.end) continue;
-        if (best === null || start < best) best = start;
+        if (preferNear == null) {
+          if (best === null || start < best) best = start;
+          continue;
+        }
+        const dist = Math.abs(start - preferNear);
+        if (
+          best === null ||
+          dist < bestDist ||
+          (dist === bestDist && start < best)
+        ) {
+          best = start;
+          bestDist = dist;
+        }
       }
     }
     if (best === null) return null;
@@ -157,8 +194,18 @@ function moveFor(
   hole: MsInterval | null,
   reason: string,
 ): PlacementMove {
-  // Series masters must never be parked wholesale — only the overlapped day detaches.
+  // Series: slide that day's slot in place when a hole exists. Only detach the
+  // overlapped day when it cannot reseat — never park the whole master.
   if (seat.role === 'series') {
+    if (hole) {
+      return {
+        kind: 'shift',
+        seatId: seat.id,
+        taskId: seat.taskId,
+        start: hole.start,
+        end: hole.end,
+      };
+    }
     return {
       kind: 'detach',
       seatId: seat.id,
@@ -166,11 +213,11 @@ function moveFor(
       occurrenceYmd:
         seat.occurrenceYmd ||
         new Date(seat.start).toISOString().slice(0, 10),
-      start: hole?.start ?? null,
-      end: hole?.end ?? null,
+      start: null,
+      end: null,
       originalStart: seat.start,
       originalEnd: seat.end,
-      reason: hole ? null : reason,
+      reason,
     };
   }
   if (!hole) {
@@ -196,6 +243,8 @@ function reseat(
   seats: PlacementSeat[],
   soft: MsInterval[],
   pullThirds: boolean,
+  /** When true, third-party pulls are flexibles only (other series are walls). */
+  claimRecurring = false,
 ): Map<string, MsInterval> | null {
   const vacated = new Set(people.map((seat) => seat.id));
   const pending = [...people];
@@ -222,9 +271,7 @@ function reseat(
     if (!pullThirds || pulls >= MAX_CHAIN_PULLS) return null;
     const relaxedHard = blockedIntervals(
       claimant,
-      seats.filter(
-        (seat) => seat.role !== 'flexible' && seat.role !== 'series',
-      ),
+      seats.filter((seat) => !isMovableRole(seat.role, claimRecurring)),
       vacated,
       assigned,
     );
@@ -238,7 +285,7 @@ function reseat(
     if (!relaxed) return null;
     const blockers = seats.filter(
       (seat) =>
-        (seat.role === 'flexible' || seat.role === 'series') &&
+        isMovableRole(seat.role, claimRecurring) &&
         !vacated.has(seat.id) &&
         overlaps(seat, relaxed),
     );
@@ -289,6 +336,208 @@ function reseatDirectOnly(
   return assigned;
 }
 
+function intersectWindows(a: MsInterval[], b: MsInterval[]): MsInterval[] {
+  const out: MsInterval[] = [];
+  for (const left of a) {
+    for (const right of b) {
+      const start = Math.max(left.start, right.start);
+      const end = Math.min(left.end, right.end);
+      if (end > start) out.push({ start, end });
+    }
+  }
+  return out;
+}
+
+function clipToWindow(seat: MsInterval, window: MsInterval): MsInterval | null {
+  const start = Math.max(seat.start, window.start);
+  const end = Math.min(seat.end, window.end);
+  return end > start ? { start, end } : null;
+}
+
+/**
+ * Free minutes in the phase window after every seat (fixed + flexible + …).
+ * Plan-only: does not write the calendar.
+ */
+export function freeMinutesInPhaseWindow(
+  window: MsInterval,
+  seats: PlacementSeat[],
+): number {
+  const clipped: MsInterval[] = [];
+  for (const seat of seats) {
+    const piece = clipToWindow(seat, window);
+    if (piece) clipped.push(piece);
+  }
+  const busy = mergeIntervals(clipped);
+  let used = 0;
+  for (const piece of busy) used += piece.end - piece.start;
+  const span = window.end - window.start;
+  return Math.max(0, Math.floor((span - used) / 60_000));
+}
+
+/**
+ * Who packing / reseat may displace for this claim.
+ * Recurring claims never shift another series master (that poisoned Google
+ * DTSTART via open[0] when one day was slid). One-offs may still detach/shift
+ * a single series day.
+ */
+function isMovableRole(
+  role: PlacementSeatRole,
+  claimRecurring: boolean,
+): boolean {
+  if (role === 'flexible') return true;
+  if (role === 'series') return !claimRecurring;
+  return false;
+}
+
+/**
+ * Plan-only rearrange: fixed seats stay; movables are compacted between
+ * them so a hole opens for the claim. Then each movable is pulled toward its
+ * current start (soft preferred). Returns null if capacity is too small or
+ * no layout fits.
+ */
+function packMovablesForHole(
+  claim: PlacementClaim,
+  seats: PlacementSeat[],
+  soft: MsInterval[],
+  window: MsInterval,
+): PlacementPlan | null {
+  if (freeMinutesInPhaseWindow(window, seats) < claim.durationMinutes) {
+    return null;
+  }
+
+  const recurring = !!claim.recurring;
+  const dayPeople = seats
+    .filter(
+      (seat) => isMovableRole(seat.role, recurring) && overlaps(seat, window),
+    )
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+  if (!dayPeople.length) return null;
+
+  const fixedHard = seats
+    .filter((seat) => !isMovableRole(seat.role, recurring))
+    .map((seat) => ({ start: seat.start, end: seat.end }));
+  const vacated = new Set(dayPeople.map((seat) => seat.id));
+  const outsideHard = seats
+    .filter((seat) => !vacated.has(seat.id))
+    .map((seat) => ({ start: seat.start, end: seat.end }));
+
+  // Pass 1: tight left pack between fixed walls (proves a layout exists).
+  const packed = new Map<string, MsInterval>();
+  let cursor = Math.max(window.start, claim.notBefore);
+  for (const person of dayPeople) {
+    const personWindows = intersectWindows(
+      person.windows.length ? person.windows : [window],
+      [window],
+    );
+    if (!personWindows.length) return null;
+    const hole = findHole({
+      durationMinutes: minutesOf(person),
+      notBefore: Math.max(cursor, person.notBefore, claim.notBefore),
+      windows: personWindows,
+      hard: [...fixedHard, ...outsideHard, ...packed.values()],
+      soft,
+    });
+    if (!hole) return null;
+    packed.set(person.id, hole);
+    cursor = hole.end;
+  }
+
+  // Recurring without a preferred clock: keep the claim at the trailing edge of
+  // the packed stack. Otherwise pass-2 peer pull recreates an interior gap and
+  // the claim falls into the hole a shifted series peer opened (live day 15).
+  const preferNear =
+    claim.preferNearMs ??
+    claim.interval?.start ??
+    (claim.recurring ? window.end : null);
+  let claimHole = findHole({
+    durationMinutes: claim.durationMinutes,
+    notBefore: claim.notBefore,
+    windows: [window],
+    hard: [...fixedHard, ...outsideHard, ...packed.values()],
+    soft,
+    preferNearMs: preferNear,
+  });
+  if (!claimHole) return null;
+
+  // Pass 2: soft preferred — pull each movable toward its original start
+  // (or series home when shifted).
+  const assigned = new Map(packed);
+  for (const person of dayPeople) {
+    const personWindows = intersectWindows(
+      person.windows.length ? person.windows : [window],
+      [window],
+    );
+    const othersAssigned = [...assigned.entries()]
+      .filter(([id]) => id !== person.id)
+      .map(([, interval]) => interval);
+    const pullToward =
+      person.homeStart != null ? person.homeStart : person.start;
+    const hole = findHole({
+      durationMinutes: minutesOf(person),
+      notBefore: Math.max(window.start, person.notBefore, claim.notBefore),
+      windows: personWindows,
+      hard: [...fixedHard, ...outsideHard, claimHole, ...othersAssigned],
+      soft,
+      preferNearMs: pullToward,
+    });
+    if (hole) assigned.set(person.id, hole);
+  }
+
+  // Claim may move after peers slid toward their original starts.
+  const finalClaim = findHole({
+    durationMinutes: claim.durationMinutes,
+    notBefore: claim.notBefore,
+    windows: [window],
+    hard: [...fixedHard, ...outsideHard, ...assigned.values()],
+    soft,
+    preferNearMs: preferNear,
+  });
+  if (!finalClaim) return null;
+
+  const moves: PlacementMove[] = [];
+  for (const person of dayPeople) {
+    const hole = assigned.get(person.id)!;
+    if (hole.start === person.start && hole.end === person.end) continue;
+    moves.push(moveFor(person, hole, 'no_slot'));
+  }
+  return {
+    outcome: 'seated',
+    start: finalClaim.start,
+    end: finalClaim.end,
+    moves,
+  };
+}
+
+/**
+ * True when `hole` sits strictly inside the span of movable peers (actual∪home)
+ * in `window` — a gap opened by a shifted series day, not a trailing free slot.
+ */
+export function isInteriorClusterHole(
+  hole: MsInterval,
+  movables: PlacementSeat[],
+  window: MsInterval,
+): boolean {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  for (const seat of movables) {
+    const spans: MsInterval[] = [{ start: seat.start, end: seat.end }];
+    if (
+      seat.homeStart != null &&
+      seat.homeEnd != null &&
+      seat.homeEnd > seat.homeStart
+    ) {
+      spans.push({ start: seat.homeStart, end: seat.homeEnd });
+    }
+    for (const span of spans) {
+      if (!overlaps(span, window)) continue;
+      min = Math.min(min, span.start);
+      max = Math.max(max, span.end);
+    }
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return false;
+  return hole.start > min && hole.end < max;
+}
+
 /**
  * One placement step. Writes the claimant and only the days that must move
  * for every touched event to keep a seat. A chain that cannot seat everyone
@@ -312,15 +561,80 @@ export function planPlacement(input: {
 
   const interval = claim.interval;
   if (!interval) {
-    const hole = findHole({
+    // Busy = actual seat plus series-home ghost (shifted one-offs still own home).
+    const hard = mergeIntervals(
+      others.flatMap((seat) => {
+        const rows: MsInterval[] = [{ start: seat.start, end: seat.end }];
+        if (
+          seat.homeStart != null &&
+          seat.homeEnd != null &&
+          seat.homeEnd > seat.homeStart
+        ) {
+          rows.push({ start: seat.homeStart, end: seat.homeEnd });
+        }
+        return rows;
+      }),
+    );
+    const movables = others.filter(
+      (seat) => seat.role === 'flexible' || seat.role === 'series',
+    );
+    const busyWindows: MsInterval[] = [];
+    const emptyWindows: MsInterval[] = [];
+    for (const window of claim.windows) {
+      if (movables.some((seat) => overlaps(seat, window))) {
+        busyWindows.push(window);
+      } else {
+        emptyWindows.push(window);
+      }
+    }
+    const holeOpts = {
       durationMinutes: claim.durationMinutes,
       notBefore: claim.notBefore,
-      windows: claim.windows,
-      hard: others.map((seat) => ({ start: seat.start, end: seat.end })),
+      hard,
       soft,
-    });
-    if (!hole) return { outcome: 'problematic', reason: 'no_slot' };
-    return { outcome: 'seated', start: hole.start, end: hole.end, moves: [] };
+      preferNearMs: claim.preferNearMs,
+    };
+    // Stay on days that already have flexibles: try a raw hole, then left-pack
+    // (10:15→10:00). Only after every busy day fails, use an empty later day.
+    // Recurring: skip holes strictly inside the movable cluster (false gap when
+    // a series peer was shifted) — pack the stack instead.
+    for (const window of busyWindows) {
+      const hole = findHole({ ...holeOpts, windows: [window] });
+      if (
+        hole &&
+        !(
+          claim.recurring &&
+          isInteriorClusterHole(hole, movables, window)
+        )
+      ) {
+        return {
+          outcome: 'seated',
+          start: hole.start,
+          end: hole.end,
+          moves: [],
+          lane: 'busy',
+        };
+      }
+    }
+    for (const window of busyWindows) {
+      const packed = packMovablesForHole(claim, others, soft, window);
+      if (packed?.outcome === 'seated') {
+        return { ...packed, lane: 'busy' };
+      }
+    }
+    for (const window of emptyWindows) {
+      const hole = findHole({ ...holeOpts, windows: [window] });
+      if (hole) {
+        return {
+          outcome: 'seated',
+          start: hole.start,
+          end: hole.end,
+          moves: [],
+          lane: 'open',
+        };
+      }
+    }
+    return { outcome: 'problematic', reason: 'no_slot' };
   }
 
   const blocking = others.filter(
@@ -351,6 +665,98 @@ export function planPlacement(input: {
     return { outcome: 'seated', start: hole.start, end: hole.end, moves: [] };
   }
 
+  const claimantInterval = { start: interval.start, end: interval.end };
+
+  // Recurring create/expand never displaces another series master — those seats
+  // are walls. Prefer flex-only reseat/pack, else the next free hole in-phase.
+  if (claim.recurring) {
+    const seriesHits = others.filter(
+      (seat) => seat.role === 'series' && overlaps(seat, interval),
+    );
+    const direct = others.filter(
+      (seat) => seat.role === 'flexible' && overlaps(seat, interval),
+    );
+
+    const fallbackOffSeries = (): PlacementPlan => {
+      for (const window of claim.windows) {
+        if (interval.end <= window.start || interval.start >= window.end) {
+          continue;
+        }
+        const packed = packMovablesForHole(
+          { ...claim, preferNearMs: interval.start },
+          others,
+          soft,
+          window,
+        );
+        if (packed) return packed;
+      }
+      const hole = findHole({
+        durationMinutes: claim.durationMinutes,
+        notBefore: claim.notBefore,
+        windows: claim.windows,
+        hard: others.map((seat) => ({ start: seat.start, end: seat.end })),
+        soft,
+        preferNearMs: interval.start,
+      });
+      if (hole) {
+        return {
+          outcome: 'seated',
+          start: hole.start,
+          end: hole.end,
+          moves: [],
+        };
+      }
+      return { outcome: 'problematic', reason: 'no_slot' };
+    };
+
+    if (seriesHits.length) {
+      return fallbackOffSeries();
+    }
+    if (!direct.length) {
+      return {
+        outcome: 'seated',
+        start: interval.start,
+        end: interval.end,
+        moves: [],
+      };
+    }
+    const chained = reseat(
+      direct,
+      claimantInterval,
+      others,
+      soft,
+      true,
+      true,
+    );
+    const directOnly = chained
+      ? null
+      : reseatDirectOnly(direct, claimantInterval, others, soft);
+    const assigned =
+      chained ??
+      (directOnly && direct.every((seat) => directOnly.has(seat.id))
+        ? directOnly
+        : null);
+    if (!assigned) {
+      return fallbackOffSeries();
+    }
+    const moves: PlacementMove[] = [];
+    for (const seat of others) {
+      if (!assigned.has(seat.id)) continue;
+      if (seat.role !== 'flexible') continue;
+      const hole = assigned.get(seat.id)!;
+      if (overlaps(hole, claimantInterval)) {
+        return { outcome: 'problematic', reason: 'no_slot' };
+      }
+      moves.push(moveFor(seat, hole, 'no_slot'));
+    }
+    return {
+      outcome: 'seated',
+      start: interval.start,
+      end: interval.end,
+      moves,
+    };
+  }
+
   const direct = others.filter(
     (seat) =>
       (seat.role === 'flexible' || seat.role === 'series') &&
@@ -365,11 +771,12 @@ export function planPlacement(input: {
     };
   }
 
-  const claimantInterval = { start: interval.start, end: interval.end };
-  const chained = reseat(direct, claimantInterval, others, soft, true);
+  const chained = reseat(direct, claimantInterval, others, soft, true, false);
   const assigned =
     chained ?? reseatDirectOnly(direct, claimantInterval, others, soft);
-  const movedIds = new Set(chained ? chained.keys() : direct.map((seat) => seat.id));
+  const movedIds = new Set(
+    chained ? chained.keys() : direct.map((seat) => seat.id),
+  );
   const moves: PlacementMove[] = [];
   for (const seat of others) {
     if (!movedIds.has(seat.id)) continue;
@@ -412,6 +819,27 @@ export function seriesOccurrenceYmds(input: {
     ymd = stepSeriesYmd(ymd, pattern, stepDaily);
   }
   return out;
+}
+
+/** Horizon days including a valid `anchorYmd` (plan-all-days before write). */
+export function seriesHorizonYmds(input: {
+  anchorYmd: string;
+  horizonEndYmd: string;
+  pattern?: string | null;
+  weekDays?: number[] | null;
+  skippedYmds?: string[] | null;
+}): string[] {
+  const pattern = (input.pattern ?? 'DAILY').toUpperCase();
+  const weekDays = input.weekDays?.length ? input.weekDays : null;
+  const skipped = new Set(input.skippedYmds ?? []);
+  const later = seriesOccurrenceYmds(input);
+  if (input.anchorYmd >= input.horizonEndYmd) return later;
+  if (skipped.has(input.anchorYmd)) return later;
+  const weekdayOk =
+    !weekDays || weekDays.includes(weekdayIndex(input.anchorYmd));
+  const biweeklyOk = pattern !== 'BIWEEKLY' || true;
+  if (!weekdayOk || !biweeklyOk) return later;
+  return [input.anchorYmd, ...later];
 }
 
 function stepSeriesYmd(ymd: string, pattern: string, stepDaily: boolean): string {
