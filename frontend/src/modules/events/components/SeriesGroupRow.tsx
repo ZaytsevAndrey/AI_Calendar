@@ -47,22 +47,24 @@ const SeriesGroupRow: React.FC<SeriesGroupRowProps> = ({
   const { head, rest } = pickHead(members);
   const countLabel = t('tasks.group.memberCount', { count: members.length });
   const toggleLabel = expanded ? t('tasks.group.collapse') : t('tasks.group.expand');
-  const deleteAllLabel = t('tasks.group.deleteAll');
   const groupBusy = members.some((m) => busyId === m.task.id);
+  const allIds = members.map((m) => m.task.id);
+  // Parent trash must remove every group member (series + one-offs + park copies).
+  const deleteWholeGroup = (_id: string) => onDeleteGroup(allIds, title);
 
   return (
     <div className="task-series-group space-y-1.5">
-      {/* Head uses the same card as a lone task so series parents stay consistent. */}
+      {/* Head uses the same card as a lone task; its Delete removes the whole group. */}
       <EventItem
         event={head.task}
         onEdit={onEdit}
-        onDelete={onDelete}
+        onDelete={deleteWholeGroup}
         onDone={onDone}
         onSchedule={onSchedule}
         onSkip={onSkip}
         onDoNow={onDoNow}
         openLabel={openLabel}
-        busyId={busyId}
+        busyId={groupBusy ? head.task.id : busyId}
       />
 
       <div className="flex flex-wrap items-center gap-2 px-0.5">
@@ -80,19 +82,6 @@ const SeriesGroupRow: React.FC<SeriesGroupRowProps> = ({
             <ChevronRight className="h-3.5 w-3.5" aria-hidden />
           )}
           {countLabel}
-        </button>
-        <button
-          type="button"
-          className="text-xs text-ide-error/80 hover:text-ide-error hover:underline disabled:opacity-50"
-          onClick={() =>
-            onDeleteGroup(
-              members.map((m) => m.task.id),
-              title,
-            )
-          }
-          disabled={groupBusy}
-        >
-          {deleteAllLabel}
         </button>
       </div>
 

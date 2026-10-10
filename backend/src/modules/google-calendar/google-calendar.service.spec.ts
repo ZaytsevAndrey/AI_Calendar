@@ -436,4 +436,44 @@ describe('GoogleCalendarService', () => {
     const result = await service.deleteEvent(userId, eventId);
     expect(result).toEqual({ success: true });
   });
+
+  it('treats Google 404 as already deleted', async () => {
+    const user = {
+      googleAccessToken: 'valid-token',
+      googleRefreshToken: 'refresh-token',
+      googleTokenExpiry: new Date(Date.now() + 10000),
+    };
+    jest.spyOn(userRepo, 'findOne').mockResolvedValue(user as User);
+    jest.spyOn(userSettingsRepo, 'findOne').mockResolvedValue({
+      appGoogleCalendarId: 'app-cal@test.google.com',
+    } as UserSettings);
+    g().eventsDelete.mockRejectedValue({
+      response: { status: 404, data: { error: { code: 404, message: 'Not Found' } } },
+    });
+
+    await expect(
+      service.deleteEvent('123', 'missing-event', 'app-cal@test.google.com'),
+    ).resolves.toEqual({ success: true });
+  });
+
+  it('treats Google 410 Gone as already deleted', async () => {
+    const user = {
+      googleAccessToken: 'valid-token',
+      googleRefreshToken: 'refresh-token',
+      googleTokenExpiry: new Date(Date.now() + 10000),
+    };
+    jest.spyOn(userRepo, 'findOne').mockResolvedValue(user as User);
+    jest.spyOn(userSettingsRepo, 'findOne').mockResolvedValue({
+      appGoogleCalendarId: 'app-cal@test.google.com',
+    } as UserSettings);
+    g().eventsDelete.mockRejectedValue({
+      code: 410,
+      message: 'Resource has been deleted',
+      errors: [{ reason: 'deleted', message: 'Resource has been deleted' }],
+    });
+
+    await expect(
+      service.deleteEvent('123', 'gone-event', 'primary'),
+    ).resolves.toEqual({ success: true });
+  });
 });

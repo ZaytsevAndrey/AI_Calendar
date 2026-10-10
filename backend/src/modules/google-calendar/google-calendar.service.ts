@@ -1267,19 +1267,47 @@ export class GoogleCalendarService {
     }
   }
 
+  /** Already gone / never existed — treat delete as success (local cleanup only). */
   private isGoogleNotFound(err: unknown): boolean {
     if (!err || typeof err !== 'object') return false;
     const e = err as {
       code?: number | string;
-      status?: number;
-      response?: { status?: number };
+      status?: number | string;
+      message?: string;
+      errors?: Array<{ reason?: string; message?: string }>;
+      response?: {
+        status?: number | string;
+        data?: {
+          error?: {
+            code?: number | string;
+            message?: string;
+            errors?: Array<{ reason?: string; message?: string }>;
+          };
+        };
+      };
     };
-    return (
-      e.code === 404 ||
-      e.code === '404' ||
-      e.status === 404 ||
-      e.response?.status === 404
-    );
+    const statuses = [e.status, e.code, e.response?.status, e.response?.data?.error?.code];
+    if (statuses.some((s) => s === 404 || s === '404' || s === 410 || s === '410')) {
+      return true;
+    }
+    const reasons = [
+      ...(e.errors ?? []),
+      ...(e.response?.data?.error?.errors ?? []),
+    ]
+      .map((x) => x?.reason)
+      .filter(Boolean);
+    if (reasons.some((r) => r === 'notFound' || r === 'deleted')) {
+      return true;
+    }
+    const message = [
+      e.message,
+      e.response?.data?.error?.message,
+      ...(e.errors ?? []).map((x) => x?.message),
+      ...(e.response?.data?.error?.errors ?? []).map((x) => x?.message),
+    ]
+      .filter(Boolean)
+      .join(' ');
+    return /not\s*found|has been deleted|\bgone\b/i.test(message);
   }
 
   async deleteEvent(userId: string, eventId: string, calendarId?: string) {
@@ -1327,14 +1355,14 @@ export class GoogleCalendarService {
     const pushId = (id?: string | null) => {
       if (id && !calendarIds.includes(id)) calendarIds.push(id);
     };
+    // Prefer the known calendar, then fall back — a stale calendarId must not
+    // surface as a hard error when the event is already gone elsewhere.
     pushId(calendarId);
-    if (!calendarId) {
-      pushId(storedApp);
-      if (!calendarIds.length) {
-        pushId(await this.ensureAppCalendarIdWithClient(calendar, userId));
-      }
-      pushId('primary');
+    pushId(storedApp);
+    if (!calendarIds.length) {
+      pushId(await this.ensureAppCalendarIdWithClient(calendar, userId));
     }
+    pushId('primary');
 
     let deleted = false;
     for (const calId of calendarIds) {

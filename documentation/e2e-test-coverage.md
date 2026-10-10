@@ -291,7 +291,7 @@ Mutation jobs: POST/PATCH tasks return a `jobId` for place + Google sync progres
 | U-TSK-014 | U | P1 | Filter active / todo / in_progress / completed / canceled / all | Change filter | List matches |
 | U-TSK-015 | U | P1 | Sort name / priority / deadline / duration | Change sort | Order matches |
 | U-TSK-020 | U | P1 | Search inside Unscheduled or Scheduled | Type in one box | The other section is unchanged |
-| U-TSK-021 | U | P1 | Two+ tasks same `seriesGroupId` on `/tasks` | Open Scheduled list | Primary series uses a full task card; expand shows nested One-off / Problematic / siblings; Delete all parts removes the group (unit: `groupTasksBySeriesGroup`) |
+| U-TSK-021 | U | P1 | Two+ tasks same `seriesGroupId` on `/tasks` | Open Scheduled list | Primary series uses a full task card; expand shows nested One-off / Problematic / siblings; parent Delete removes all members with no confirm (unit: `groupTasksBySeriesGroup`) |
 | U-TSK-022 | U | P1 | Detached one-off with `seriesGroupId` | Recurring schedule filter | Member listed (unit: `taskListFilters`) |
 | U-TSK-016 | U | P1 | Delete confirm | Cancel | Still there |
 | U-TSK-017 | U | P1 | Delete confirm | Confirm | Mutation progress toast (title = name); gone |

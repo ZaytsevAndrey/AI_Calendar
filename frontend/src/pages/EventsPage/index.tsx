@@ -179,20 +179,8 @@ const TasksPage: React.FC = () => {
     });
   };
 
-  const requestDeleteGroup = (ids: string[], name: string) => {
+  const deleteIds = (ids: string[]) => {
     if (ids.length === 0) return;
-    setDeleteConfirm({
-      open: true,
-      ids,
-      name: name || t('tasks.thisTask'),
-      group: true,
-    });
-  };
-
-  const confirmDelete = () => {
-    if (deleteConfirm.ids.length === 0) return;
-    const ids = deleteConfirm.ids;
-    setDeleteConfirm({ open: false, ids: [], name: '', group: false });
     void (async () => {
       try {
         for (const id of ids) {
@@ -205,6 +193,18 @@ const TasksPage: React.FC = () => {
         });
       }
     })();
+  };
+
+  // Series group parent Delete: remove every member with no confirm step.
+  const requestDeleteGroup = (ids: string[]) => {
+    deleteIds(ids);
+  };
+
+  const confirmDelete = () => {
+    if (deleteConfirm.ids.length === 0) return;
+    const ids = deleteConfirm.ids;
+    setDeleteConfirm({ open: false, ids: [], name: '', group: false });
+    deleteIds(ids);
   };
 
   const unscheduledInbox = sortUnscheduled(filterUnscheduledTasks(events, inboxFilters));
