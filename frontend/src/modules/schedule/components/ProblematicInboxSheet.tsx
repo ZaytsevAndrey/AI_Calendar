@@ -74,13 +74,26 @@ export function ProblematicInboxSheet({
   const { t } = useTranslation();
   const [updateEvent] = useUpdateEventMutation();
   const [skipOccurrence] = useSkipOccurrenceMutation();
-  const [busyKey, setBusyKey] = useState<string | null>(null);
+  /** Per-task busy keys so concurrent resolve/skip keep their own loaders. */
+  const [busyByTask, setBusyByTask] = useState<Record<string, string>>({});
   const [moveTarget, setMoveTarget] = useState<{
     task: TaskDTO;
     occurrenceYmd: string;
   } | null>(null);
 
   const todayYmd = todayYmdInZone(timeZone);
+
+  const setTaskBusy = (taskId: string, key: string | null) => {
+    setBusyByTask((prev) => {
+      if (key === null) {
+        if (!(taskId in prev)) return prev;
+        const next = { ...prev };
+        delete next[taskId];
+        return next;
+      }
+      return { ...prev, [taskId]: key };
+    });
+  };
 
   const clearProblematic = async (task: TaskDTO) => {
     await updateEvent({
@@ -110,7 +123,7 @@ export function ProblematicInboxSheet({
   };
 
   const resolve = async (task: TaskDTO) => {
-    setBusyKey(`${task.id}:resolve`);
+    setTaskBusy(task.id, `${task.id}:resolve`);
     try {
       // Progress toast from eventTasksApi.updateEvent.
       await updateEvent({
@@ -123,12 +136,12 @@ export function ProblematicInboxSheet({
         detail: extractApiErrorMessage(e),
       });
     } finally {
-      setBusyKey(null);
+      setTaskBusy(task.id, null);
     }
   };
 
   const skipDay = async (task: TaskDTO, occurrenceYmd: string) => {
-    setBusyKey(`${task.id}:skip:${occurrenceYmd}`);
+    setTaskBusy(task.id, `${task.id}:skip:${occurrenceYmd}`);
     try {
       // Progress toast from eventTasksApi.skipOccurrence / updateEvent.
       await skipOccurrence({
@@ -147,7 +160,7 @@ export function ProblematicInboxSheet({
         detail: extractApiErrorMessage(e),
       });
     } finally {
-      setBusyKey(null);
+      setTaskBusy(task.id, null);
     }
   };
 
@@ -176,7 +189,8 @@ export function ProblematicInboxSheet({
       ) : (
         <ul className="flex flex-col gap-4">
           {tasks.map((task) => {
-            const rowBusy = busyKey?.startsWith(`${task.id}:`) ?? false;
+            const taskBusyKey = busyByTask[task.id] ?? null;
+            const rowBusy = !!taskBusyKey;
             const phase = task.phase ?? task.phases?.[0];
             const hint = dayHints[task.id];
             const recurring = !!task.isRecurring;
@@ -251,7 +265,7 @@ export function ProblematicInboxSheet({
                   <ul className="flex flex-col gap-2">
                     {days.map((ymd) => {
                       const label = formatCivilYmd(ymd) ?? ymd;
-                      const skipBusy = busyKey === `${task.id}:skip:${ymd}`;
+                      const skipBusy = taskBusyKey === `${task.id}:skip:${ymd}`;
                       return (
                         <li
                           key={ymd}
@@ -299,7 +313,7 @@ export function ProblematicInboxSheet({
                         disabled={rowBusy}
                         onClick={() => void skipDay(task, days[0])}
                       >
-                        {busyKey === `${task.id}:skip:${days[0]}` ? (
+                        {taskBusyKey === `${task.id}:skip:${days[0]}` ? (
                           <Spinner className="h-4 w-4" />
                         ) : (
                           <SkipForward className="h-4 w-4" aria-hidden />
@@ -353,7 +367,7 @@ export function ProblematicInboxSheet({
                     disabled={rowBusy}
                     onClick={() => void resolve(task)}
                   >
-                    {busyKey === `${task.id}:resolve` ? (
+                    {taskBusyKey === `${task.id}:resolve` ? (
                       <Spinner className="h-4 w-4" />
                     ) : (
                       <CheckCircle2 className="h-4 w-4" aria-hidden />

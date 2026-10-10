@@ -6,12 +6,16 @@ const RULES: { id: ConflictOptionId; re: RegExp }[] = [
     re: /\b(skip(?:\s+(?:it|this|occurrence|today))?|пропусти(?:ти)?|пропустить)\b/iu,
   },
   {
+    id: 'place_on_top',
+    re: /\b(on\s+top|second\s+layer|keep\s+(?:this|my)\s+time|поверх|другий\s+шар|залиш(?:и)?\s+(?:цей\s+)?час)\b/iu,
+  },
+  {
     id: 'leave_problematic',
     re: /\b(leave|park|problematic|inbox|залиши|паркуй|проблем)\b/iu,
   },
   {
     id: 'move_other',
-    re: /\b(move\s+(?:the\s+)?other|other\s+task|keep\s+(?:this|my)\s+time|інш[уюа]|друг[уюа]\s+задач)\b/iu,
+    re: /\b(move\s+(?:the\s+)?other|other\s+task|інш[уюа]|друг[уюа]\s+задач)\b/iu,
   },
   {
     id: 'move_new',

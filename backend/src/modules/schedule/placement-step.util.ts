@@ -177,8 +177,8 @@ function softBusy(seats: PlacementSeat[], bufferMinutes: number): MsInterval[] {
 
 function conflictFor(claim: PlacementClaim, interval: MsInterval): SchedulingConflict {
   const options: ConflictOptionId[] = claim.recurring
-    ? ['move_new', 'skip_occurrence', 'leave_problematic']
-    : ['move_new', 'leave_problematic'];
+    ? ['place_on_top', 'move_new', 'skip_occurrence', 'leave_problematic']
+    : ['place_on_top', 'move_new', 'leave_problematic'];
   return {
     taskId: claim.taskId,
     taskName: claim.taskName,

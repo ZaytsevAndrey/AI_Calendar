@@ -356,6 +356,36 @@ describe('TasksService', () => {
     expect(cleared.problematicReason).toBeNull();
   });
 
+  it('invents a default slot when resolving without an original interval', async () => {
+    userSettingsRepository.findOne.mockResolvedValue({
+      timeZone: 'UTC',
+    });
+    await service.create('user-1', {
+      name: 'No slot',
+      scheduleState: 'problematic',
+      problematicOccurrenceYmds: ['2026-10-06'],
+      estimatedTimeInMinutes: 30,
+    } as any);
+
+    const resolved = await service.update('task-1', 'user-1', {
+      scheduleState: 'resolved',
+    } as any);
+    expect(resolved.scheduleState).toBe('resolved');
+    expect(resolved.scheduledStartTime).toEqual(
+      new Date('2026-10-06T09:00:00.000Z'),
+    );
+    expect(resolved.scheduledEndTime).toEqual(
+      new Date('2026-10-06T09:30:00.000Z'),
+    );
+    expect(scheduledTaskRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-1',
+        scheduledStartTime: new Date('2026-10-06T09:00:00.000Z'),
+        scheduledEndTime: new Date('2026-10-06T09:30:00.000Z'),
+      }),
+    );
+  });
+
   it('rejects unscheduled + fixed', async () => {
     await expect(
       service.create('user-1', {

@@ -5,6 +5,7 @@ const ALL: ConflictOptionId[] = [
   'move_other',
   'move_new',
   'skip_occurrence',
+  'place_on_top',
   'leave_problematic',
 ];
 
@@ -15,6 +16,10 @@ describe('resolveSpokenConflictOption', () => {
 
   it('matches skip', () => {
     expect(resolveSpokenConflictOption('skip this occurrence', ALL)).toBe('skip_occurrence');
+  });
+
+  it('matches place on top', () => {
+    expect(resolveSpokenConflictOption('keep this time on top', ALL)).toBe('place_on_top');
   });
 
   it('matches park / leave', () => {

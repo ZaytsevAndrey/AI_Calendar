@@ -123,14 +123,20 @@ export async function expectMutationProgressToast(
   const toast = page.locator('.Toastify__toast').filter({
     has: page.locator('.app-toast-body'),
   });
-  await expect(toast.first()).toBeVisible({ timeout: 15_000 });
-  if (title) {
-    await expect(toast.locator('.app-toast-title').filter({ hasText: title })).toBeVisible();
-  }
+  // Prefer the toast for this task — leftovers from prior mutations can still be open.
+  const scoped = title
+    ? toast.filter({
+        has: page.locator('.app-toast-title').filter({ hasText: title }),
+      })
+    : toast;
+  await expect(scoped.first()).toBeVisible({ timeout: 15_000 });
   await expect(
-    toast.locator('.app-toast-detail').filter({
-      hasText: /Saving task|Seating on the schedule|Updating Google Calendar|Done/,
-    }),
+    scoped
+      .locator('.app-toast-detail')
+      .filter({
+        hasText: /Saving task|Seating on the schedule|Updating Google Calendar|Done/,
+      })
+      .first(),
   ).toBeVisible({ timeout: 15_000 });
 }
 

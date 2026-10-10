@@ -654,7 +654,11 @@ describe('planPlacement', () => {
     });
     expect(plan.outcome).toBe('conflict');
     if (plan.outcome !== 'conflict') return;
-    expect(plan.conflict.options).toEqual(['move_new', 'leave_problematic']);
+    expect(plan.conflict.options).toEqual([
+      'place_on_top',
+      'move_new',
+      'leave_problematic',
+    ]);
     expect(plan.conflict.reason).toBe('preferred_on_fixed');
   });
 

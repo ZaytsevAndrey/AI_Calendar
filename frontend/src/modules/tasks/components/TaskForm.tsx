@@ -20,6 +20,7 @@ import {
 import {
   buildPreferredStartSlotOptions,
   getPhaseSchedulingTimeBounds,
+  isPreferredStartOutsidePhaseWindow,
   mergeSavedPreferredStartIntoOptions,
 } from '../task-wizard/phaseSchedulingBounds';
 import { GoogleEventSettingsFields } from '../../calendar/components/GoogleEventSettingsFields';
@@ -157,6 +158,19 @@ const TaskForm: React.FC<TaskFormProps> = ({
     [phaseTimeBounds],
   );
 
+  const prevPhaseIdRef = useRef(phaseId);
+  useEffect(() => {
+    if (prevPhaseIdRef.current === phaseId) return;
+    prevPhaseIdRef.current = phaseId;
+    const current = getValues('preferredStartTime')?.trim();
+    if (
+      current &&
+      isPreferredStartOutsidePhaseWindow(current, phaseTimeBounds)
+    ) {
+      setValue('preferredStartTime', '');
+    }
+  }, [phaseId, phaseTimeBounds, getValues, setValue]);
+
   const activePreset = matchPreset({
     isFixed: !!isFixed,
     isUnscheduled: !!isUnscheduled,
@@ -187,7 +201,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
     <form onSubmit={handleSubmit((data) => onSubmit(buildTaskPayload(data, timeZone)))} className="task-form">
       <div className="space-y-3">
         <div className="inline-flex rounded-lg border border-ide-border p-0.5">
-          {TASK_PRESETS.filter((preset) => preset.id !== 'unscheduled').map((preset) => {
+          {TASK_PRESETS.map((preset) => {
             const active = preset.id === activePreset;
             return (
               <button
@@ -537,22 +551,22 @@ const TaskForm: React.FC<TaskFormProps> = ({
                       field.value,
                       phaseTimeBounds,
                     );
+                    const selected = field.value ?? '';
+                    const displayValue = options.some((o) => o.value === selected)
+                      ? selected
+                      : '';
                     return (
                       <select
                         id="task-form-preferred-start"
                         className={inp}
-                        value={field.value ?? ''}
+                        value={displayValue}
                         onChange={(e) => field.onChange(e.target.value)}
                         onBlur={field.onBlur}
                         ref={field.ref}
                         name={field.name}
                       >
                         {options.map((opt) => (
-                          <option
-                            key={opt.value || '__none__'}
-                            value={opt.value}
-                            disabled={opt.disabled}
-                          >
+                          <option key={opt.value || '__none__'} value={opt.value}>
                             {opt.value === '' ? t('tasks.form.noPreference') : opt.label}
                           </option>
                         ))}

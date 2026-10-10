@@ -127,9 +127,13 @@ test.describe('P1 voice UI', () => {
       'done',
     );
     await openAs(page, auth.onboarded, '/tasks');
+    // Reload so the sheet picks up confirmVoiceCommands=false from the API patch.
+    await page.reload();
+    await expect(page.getByRole('heading', { name: immediateName })).toBeVisible();
     await page.getByRole('button', { name: 'Add task by voice' }).click();
     await recordOnce(page);
     await expectMutationProgressToast(page, immediateName);
+    await expect(page.getByRole('heading', { name: immediateName })).toHaveCount(0);
 
     const turnedOn = await apiJson(request, token, 'patch', '/user-settings', {
       confirmVoiceCommands: true,
@@ -137,12 +141,14 @@ test.describe('P1 voice UI', () => {
     expectOk(turnedOn);
     command = { taskId: confirmed.body.id as string, taskName: confirmedName };
     await page.reload();
+    await expect(page.getByRole('heading', { name: confirmedName })).toBeVisible();
     await page.getByRole('button', { name: 'Add task by voice' }).click();
     await recordOnce(page);
     const sheet = page.getByRole('dialog');
     await expect(sheet.getByText(`Mark "${confirmedName}" done?`)).toBeVisible();
     await sheet.getByRole('button', { name: 'Confirm' }).click();
     await expectMutationProgressToast(page, confirmedName);
+    await expect(page.getByRole('heading', { name: confirmedName })).toHaveCount(0);
 
     const restored = await apiJson(request, token, 'patch', '/user-settings', {
       confirmVoiceCommands: false,
@@ -206,7 +212,6 @@ test.describe('P1 voice UI', () => {
     await openAs(page, auth.onboarded, '/tasks');
     await page.getByRole('button', { name: 'Add task by voice' }).click();
     const sheet = page.getByRole('dialog');
-    await sheet.getByRole('button', { name: /Start speaking|Answer/ }).click();
     await expect(sheet.getByText('Listening…', { exact: true })).toBeVisible();
     await expect(sheet.getByRole('img', { name: 'Microphone level' })).toBeVisible();
     await sheet.getByRole('button', { name: 'Stop' }).click();
@@ -298,7 +303,7 @@ test.describe('P1 voice UI', () => {
                 taskId,
                 taskName: 'Voice conflict task',
                 reason: 'preferred_on_fixed',
-                options: ['move_new', 'leave_problematic'],
+                options: ['place_on_top', 'move_new', 'leave_problematic'],
               },
             ],
           },
@@ -326,9 +331,7 @@ test.describe('P1 voice UI', () => {
     await openAs(page, auth.onboarded, '/tasks');
     await page.getByRole('button', { name: 'Add task by voice' }).click();
     const voice = page.getByRole('dialog', { name: 'Add task by voice' });
-    await voice.getByRole('button', { name: /Start speaking|Answer/ }).click();
-    await expect(voice.getByText('Listening…', { exact: true })).toBeVisible();
-    await voice.getByRole('button', { name: 'Stop' }).click();
+    await recordOnce(page);
 
     await expect(page.getByRole('dialog', { name: 'Schedule conflict' })).toBeVisible({
       timeout: 15_000,
@@ -339,9 +342,8 @@ test.describe('P1 voice UI', () => {
     const conflict = page.getByRole('dialog', { name: 'Schedule conflict' });
     await conflict.getByRole('button', { name: 'Answer by voice' }).click();
     await expect(voice.getByText(/How should we resolve the schedule conflict/)).toBeVisible();
-    await voice.getByRole('button', { name: /Answer|Start speaking/ }).click();
-    await expect(voice.getByText('Listening…', { exact: true })).toBeVisible();
-    await voice.getByRole('button', { name: 'Stop' }).click();
+    // Conflict answer re-opens the sheet and auto-starts Listening again.
+    await recordOnce(page);
 
     await expectMutationProgressToast(page, 'Voice conflict task');
     await expect(page.getByRole('dialog', { name: 'Schedule conflict' })).toHaveCount(0);

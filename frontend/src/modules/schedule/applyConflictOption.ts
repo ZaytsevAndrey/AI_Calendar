@@ -54,6 +54,34 @@ export async function applyConflictOption(
     case 'leave_problematic':
       await deps.updateTask(conflict.taskId, parkPayload(conflict));
       return;
+    case 'place_on_top': {
+      const preferredStart =
+        typeof conflict.meta?.preferredStart === 'string'
+          ? conflict.meta.preferredStart
+          : null;
+      const preferredEnd =
+        typeof conflict.meta?.preferredEnd === 'string'
+          ? conflict.meta.preferredEnd
+          : null;
+      const parked = parkPayload(conflict);
+      await deps.updateTask(conflict.taskId, {
+        ...parked,
+        scheduleState: 'resolved',
+        ...(preferredStart
+          ? {
+              scheduledStartTime: preferredStart,
+              problematicOriginalStart: preferredStart,
+            }
+          : {}),
+        ...(preferredEnd
+          ? {
+              scheduledEndTime: preferredEnd,
+              problematicOriginalEnd: preferredEnd,
+            }
+          : {}),
+      });
+      return;
+    }
     case 'move_new':
       await deps.updateTask(conflict.taskId, {
         scheduleState: 'none',

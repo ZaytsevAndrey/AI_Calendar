@@ -83,7 +83,8 @@ test.describe('P0 UI smoke', () => {
     await expect(nowCard).toBeVisible({ timeout: 15_000 });
     await nowCard.getByRole('button', { name: 'Done' }).click();
     await expectMutationProgressToast(page, name);
-    await expect(page.getByText(name)).toHaveCount(0);
+    // Completed stays on the calendar grid; Now strip drops it.
+    await expect(stripBlock(page, name)).toHaveCount(0);
   });
 
   test('U-HAB-004 calendar habit chip toggles today', async ({ page, auth, request }) => {

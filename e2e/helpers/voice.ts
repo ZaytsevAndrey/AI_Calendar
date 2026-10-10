@@ -90,9 +90,9 @@ export async function stubVoiceApis(
   });
 }
 
+/** Finish one auto-started recording (sheet begins Listening on open). */
 export async function recordOnce(page: Page): Promise<void> {
   const dialog = page.getByRole('dialog');
-  await dialog.getByRole('button', { name: /Start speaking|Answer/ }).click();
   await expect(dialog.getByText('Listening…', { exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: 'Stop' }).click();
 }

@@ -95,6 +95,7 @@ export type ConflictOptionId =
   | 'move_other'
   | 'move_new'
   | 'skip_occurrence'
+  | 'place_on_top'
   | 'leave_problematic';
 
 export type SchedulingConflict = {
@@ -831,8 +832,8 @@ export class IntelligentSchedulingEngine {
     preferred: MsInterval,
   ): SchedulingConflict {
     const options: ConflictOptionId[] = task.isRecurring
-      ? ['move_new', 'skip_occurrence', 'leave_problematic']
-      : ['move_new', 'leave_problematic'];
+      ? ['place_on_top', 'move_new', 'skip_occurrence', 'leave_problematic']
+      : ['place_on_top', 'move_new', 'leave_problematic'];
     return {
       taskId: task.id,
       taskName: task.name,

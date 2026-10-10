@@ -278,7 +278,7 @@ Mutation jobs: POST/PATCH tasks return a `jobId` for place + Google sync progres
 | U-TSK-004 | U | P0 | Fixed | Valid slot | Created; Google stub event if connected |
 | U-TSK-005 | U | P0 | Recurring | No pattern | Client blocks |
 | U-TSK-006 | U | P0 | Recurring Daily Mon–Fri | Submit | Created |
-| U-TSK-007 | U | P0 | Unscheduled | Name only | Inbox section; Unscheduled icon (`aria-label`) |
+| U-TSK-007 | U | P0 | Unscheduled | Name only | Inbox section; Unscheduled icon (`aria-label`); create dialog shows Unscheduled preset |
 | U-TSK-008 | U | P1 | Unscheduled with phase + earliest + overdue deadline | List | Icon meta labels for Unscheduled / phase / From / Overdue; icon-only Done/Do now; no duration text |
 | U-TSK-009 | U | P0 | Inbox **Do now** | Clears `isUnscheduled`, from-now window | Lands in Scheduled after placement |
 | U-TSK-010 | U | P0 | Inbox **Done** | Confirm path | `completed`; disappears from inbox; **no** calendar block |
@@ -517,7 +517,7 @@ Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day,
 | U-CAL-024 | U | P1 | Phone 390×844 | Calendar action bar, then Tasks | Create task and voice each open in one tap. More schedule actions still has Suggestions. Scheduled task card shows To Do and Medium pills. Search and Filters share a row |
 | U-CAL-010 | U | P0 | Now overlapping block | Strip | Now title; Done if `canCompleteNowBlock` |
 | U-CAL-011 | U | P0 | Next start later today | Strip | Next shown |
-| U-CAL-012 | U | P0 | Flexible waiting for slot **today** | Strip Unscheduled | Transitional inbox (not `isUnscheduled` Tasks inbox) |
+| U-CAL-012 | U | P0 | Flexible window already expired | Strip Unscheduled | Placement parks as `isUnscheduled` (not Problematic `no_slot`) |
 | U-CAL-013 | U | P0 | Now **Done** on non-recurring app task | Click | `completed`; block leaves Now; **no** new Google event |
 | U-CAL-014 | U | P0 | Recurring / external Google in Now | Strip | **No** Done; Skip on recurring; no Skip on external |
 | U-CAL-015 | U | P1 | All-day event today | Now | Eligible for Now if no timed current |

@@ -16,14 +16,33 @@ export class PhraseConflictOptionsDto {
 
   @ApiProperty({
     type: [String],
-    enum: ['move_other', 'move_new', 'skip_occurrence', 'leave_problematic'],
+    enum: [
+      'move_other',
+      'move_new',
+      'skip_occurrence',
+      'place_on_top',
+      'leave_problematic',
+    ],
   })
   @IsArray()
-  @IsIn(['move_other', 'move_new', 'skip_occurrence', 'leave_problematic'], {
-    each: true,
-  })
+  @IsIn(
+    [
+      'move_other',
+      'move_new',
+      'skip_occurrence',
+      'place_on_top',
+      'leave_problematic',
+    ],
+    {
+      each: true,
+    },
+  )
   options: Array<
-    'move_other' | 'move_new' | 'skip_occurrence' | 'leave_problematic'
+    | 'move_other'
+    | 'move_new'
+    | 'skip_occurrence'
+    | 'place_on_top'
+    | 'leave_problematic'
   >;
 
   @ApiProperty({ required: false })

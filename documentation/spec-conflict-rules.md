@@ -99,6 +99,7 @@ Engine/API returns structured options; Groq (or copy) only **phrases** them. App
 
 | Id | Intent |
 |----|--------|
+| `place_on_top` | Keep the preferred time as a second-layer (`resolved`) seat |
 | `move_other` | Keep the new/target placement; relocate the other movable |
 | `move_new` | Keep the other; place the new item elsewhere (or cancel its preferred claim) |
 | `skip_occurrence` | Skip this occurrence / day for a recurring series |

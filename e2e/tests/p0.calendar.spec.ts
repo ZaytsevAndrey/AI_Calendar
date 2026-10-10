@@ -182,17 +182,25 @@ test.describe('P0 calendar UI', () => {
     auth,
     request,
   }) => {
+    await completeOpenTasks(request, auth.onboarded.access_token);
     const name = uniqueName('E2E waiting');
-    expectOk(
-      await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
-        name,
-        eventType: 'admin',
-        estimatedTimeInMinutes: 1440,
-        allowSplit: false,
-        isUnscheduled: false,
-        timeZone: 'Europe/Kyiv',
-      }),
-    );
+    // Past From/Until → placement parks as Unscheduled (strip), not Problematic.
+    // A huge duration alone parks as Problematic (no_slot), which the strip hides.
+    const now = Date.now();
+    const from = new Date(now - 48 * 60 * 60_000).toISOString();
+    const until = new Date(now - 24 * 60 * 60_000).toISOString();
+    const created = await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
+      name,
+      eventType: 'admin',
+      estimatedTimeInMinutes: 30,
+      allowSplit: false,
+      isUnscheduled: false,
+      earliestStartTime: from,
+      deadline: until,
+      timeZone: 'Europe/Kyiv',
+    });
+    expectOk(created);
+    await waitForScheduleJob(request, auth.onboarded.access_token, created.body?.jobId);
 
     await openAs(page, auth.onboarded);
     const inbox = page
@@ -200,7 +208,7 @@ test.describe('P0 calendar UI', () => {
       .filter({ has: page.getByText('Unscheduled', { exact: true }) })
       .filter({ hasText: name })
       .first();
-    await expect(inbox).toBeVisible();
+    await expect(inbox).toBeVisible({ timeout: 15_000 });
   });
 
   test('U-CAL-014 recurring and external Google blocks have no Done', async ({ page, auth, request }) => {
@@ -208,11 +216,15 @@ test.describe('P0 calendar UI', () => {
     const recurringName = uniqueName('E2E series');
     const now = Date.now();
     const dayEnd = kyivDayEndMs(now);
-    let seriesStart = now + 20 * 60_000;
-    if (seriesStart >= dayEnd) seriesStart = Math.min(now + 2 * 60_000, dayEnd - 1000);
+    // Keep clear of the mock Google block (+ buffer): dentist ends ~now+8m.
+    let seriesStart = now + 90 * 60_000;
+    if (seriesStart >= dayEnd) seriesStart = Math.min(now + 45 * 60_000, dayEnd - 16 * 60_000);
+    if (seriesStart <= now + 30 * 60_000) {
+      seriesStart = Math.min(now + 45 * 60_000, dayEnd - 16 * 60_000);
+    }
     if (seriesStart <= now) seriesStart = now + 1000;
     const seriesEnd = seriesStart + 15 * 60_000;
-    const dentistEnd = Math.min(now + 8 * 60_000, seriesStart - 1000);
+    const dentistEnd = Math.min(now + 8 * 60_000, seriesStart - 30 * 60_000);
     const created = await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
       name: recurringName,
       eventType: 'admin',

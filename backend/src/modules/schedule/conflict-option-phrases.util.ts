@@ -22,6 +22,10 @@ const FALLBACK: Record<
     title: 'Skip this occurrence',
     detail: 'Skip today’s occurrence for this series and keep the preferred clock.',
   },
+  place_on_top: {
+    title: 'Keep this time on top of others',
+    detail: 'Seat this task as a second layer on the preferred slot.',
+  },
   leave_problematic: {
     title: 'Park as problematic',
     detail: 'Leave it out of the schedule until you resolve it later.',

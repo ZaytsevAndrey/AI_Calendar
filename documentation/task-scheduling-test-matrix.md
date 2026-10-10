@@ -629,7 +629,7 @@ Generate / full replan write path removed. Ended-slot keep semantics no longer a
 
 **Then**
 
-- Options use ids: `move_other`, `move_new`, `skip_occurrence`, `leave_problematic` (subset allowed).
+- Options use ids: `place_on_top`, `move_other`, `move_new`, `skip_occurrence`, `leave_problematic` (subset allowed).
 - Groq/copy only phrases labels; apply uses existing APIs.
 
 ---

@@ -65,7 +65,13 @@ export interface TaskDTO {
     taskId: string;
     taskName: string;
     reason: 'preferred_on_fixed' | 'phase_full';
-    options: Array<'move_other' | 'move_new' | 'skip_occurrence' | 'leave_problematic'>;
+    options: Array<
+      | 'move_other'
+      | 'move_new'
+      | 'skip_occurrence'
+      | 'place_on_top'
+      | 'leave_problematic'
+    >;
     meta?: Record<string, unknown>;
   }>;
   phase?: {

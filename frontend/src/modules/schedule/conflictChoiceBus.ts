@@ -2,6 +2,7 @@ export type ConflictOptionId =
   | 'move_other'
   | 'move_new'
   | 'skip_occurrence'
+  | 'place_on_top'
   | 'leave_problematic';
 
 export type SchedulingConflictDTO = {

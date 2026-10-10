@@ -322,7 +322,7 @@
     "problematicSlotPhaseAny": "Any phase",
     "problematicSlotTime": "Start time",
     "problematicSkipDay": "Skip",
-    "problematicResolve": "Resolve",
+    "problematicResolve": "Place on top",
     "problematicDidNotFit": "Did not fit on {{date}}",
     "problematicDidNotFitMany": "Did not fit on {{dates}}",
     "problematicDayActions": "{{date}}",
@@ -335,7 +335,7 @@
       "conflict": "Preferred time conflict",
       "unknown": "Could not place on the schedule"
     },
-    "problematicResolved": "Marked resolved — scheduling will retry",
+    "problematicResolved": "Seated on top of other events",
     "problematicSkipped": "Occurrence skipped and flag cleared",
     "problematicActionFailed": "Could not update problematic task",
     "conflictTitle": "Schedule conflict",
@@ -357,6 +357,10 @@
       "skip_occurrence": {
         "title": "Skip this occurrence",
         "detail": "Skip this day for the series and keep the preferred clock."
+      },
+      "place_on_top": {
+        "title": "Keep this time on top of others",
+        "detail": "Seat this task as a second layer on the preferred slot."
       },
       "leave_problematic": {
         "title": "Park as problematic",
@@ -757,7 +761,7 @@
     "clarifyMore": "Could you add a bit more detail?",
     "askName": "What should I call this task?",
     "pickConflictOption": "How should we resolve the schedule conflict? Say an option, or tap one on the sheet.",
-    "conflictOptionUnclear": "I didn’t catch which option. Try “place elsewhere”, “skip”, or “park as problematic”.",
+    "conflictOptionUnclear": "I didn’t catch which option. Try “on top”, “place elsewhere”, “skip”, or “park as problematic”.",
     "micPermission": "Microphone permission is required. Allow it in the browser, then try again.",
     "micUnsupported": "This browser cannot record audio. Try Chrome on Android, or Safari 14.3+.",
     "micFailed": "Could not start the microphone.",

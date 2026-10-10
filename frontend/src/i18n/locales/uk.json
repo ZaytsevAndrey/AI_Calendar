@@ -326,7 +326,7 @@
     "problematicSlotPhaseAny": "Будь-яка фаза",
     "problematicSlotTime": "Час початку",
     "problematicSkipDay": "Пропустити",
-    "problematicResolve": "Вирішити",
+    "problematicResolve": "Поставити поверх",
     "problematicDidNotFit": "Не вмістилось {{date}}",
     "problematicDidNotFitMany": "Не вмістилось: {{dates}}",
     "problematicDayActions": "{{date}}",
@@ -339,7 +339,7 @@
       "conflict": "Конфлікт бажаного часу",
       "unknown": "Не вдалося поставити в розклад"
     },
-    "problematicResolved": "Позначено вирішеним — планування спробує знову",
+    "problematicResolved": "Поставлено поверх інших подій",
     "problematicSkipped": "Появу пропущено, позначку знято",
     "problematicActionFailed": "Не вдалося оновити проблемну задачу",
     "conflictTitle": "Конфлікт розкладу",
@@ -361,6 +361,10 @@
       "skip_occurrence": {
         "title": "Пропустити цю появу",
         "detail": "Пропустити цей день у серії й зберегти бажаний час."
+      },
+      "place_on_top": {
+        "title": "Залишити цей час поверх інших",
+        "detail": "Поставити задачу другим шаром на бажаному слоті."
       },
       "leave_problematic": {
         "title": "Залишити як проблемну",
@@ -759,7 +763,7 @@
     "clarifyMore": "Можете додати трохи деталей?",
     "askName": "Як назвати цю задачу?",
     "pickConflictOption": "Як вирішити конфлікт розкладу? Назвіть варіант або торкніться аркуша.",
-    "conflictOptionUnclear": "Не зрозумів варіант. Скажіть «в інше місце», «пропусти» або «залиши як проблемну».",
+    "conflictOptionUnclear": "Не зрозумів варіант. Скажіть «поверх», «в інше місце», «пропусти» або «залиши як проблемну».",
     "micPermission": "Потрібен доступ до мікрофона. Дозвольте його в браузері й спробуйте знову.",
     "micUnsupported": "Цей браузер не може записувати аудіо. Спробуйте Chrome на Android або Safari 14.3+.",
     "micFailed": "Не вдалося запустити мікрофон.",

@@ -90,7 +90,7 @@ test.describe('P0 tasks UI', () => {
     await expect(row.getByLabel('Unscheduled', { exact: true })).toBeVisible();
 
     const dialog = await openCreateTaskDialog(page);
-    await expect(dialog.getByRole('button', { name: 'Unscheduled', exact: true })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'Unscheduled', exact: true })).toBeVisible();
   });
 
   test('U-TSK-009 inbox Do now clears unscheduled', async ({ page, auth, request }) => {

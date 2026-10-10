@@ -5,14 +5,13 @@ export type PhaseSchedulingTimeBounds = {
   timeMax: string;
   startHHMM: string;
   endHHMM: string;
-  /** Phase crosses midnight (e.g. 22:00–06:00); all slots stay enabled */
+  /** Phase crosses midnight (e.g. 22:00–06:00) */
   overnight: boolean;
 };
 
 export type PreferredTimeSlotOption = {
   value: string;
   label: string;
-  disabled: boolean;
 };
 
 function padHHMM(raw: string): string {
@@ -49,45 +48,42 @@ export function getPhaseSchedulingTimeBounds(
 
 const DEFAULT_SLOT_STEP = 15;
 
-/** Options for preferred-start `<select>`; slots outside phase are `disabled` when bounds apply */
+/** Whether `hhmm` falls outside the phase window (inclusive ends). */
+export function isPreferredStartOutsidePhaseWindow(
+  hhmm: string,
+  phaseBounds: PhaseSchedulingTimeBounds | null,
+): boolean {
+  if (!phaseBounds) return false;
+  const m = toMinutes(padHHMM(hhmm));
+  const sm = toMinutes(phaseBounds.startHHMM);
+  const em = toMinutes(phaseBounds.endHHMM);
+  if (phaseBounds.overnight) {
+    return !(m >= sm || m <= em);
+  }
+  return m < sm || m > em;
+}
+
+/** Options for preferred-start `<select>`; only slots inside the phase when bounds apply. */
 export function buildPreferredStartSlotOptions(
   phaseBounds: PhaseSchedulingTimeBounds | null,
   stepMinutes: number = DEFAULT_SLOT_STEP,
 ): PreferredTimeSlotOption[] {
-  const opts: PreferredTimeSlotOption[] = [
-    { value: '', label: 'No preference', disabled: false },
-  ];
-
-  let sm: number | null = null;
-  let em: number | null = null;
-  if (phaseBounds && !phaseBounds.overnight) {
-    sm = toMinutes(phaseBounds.startHHMM);
-    em = toMinutes(phaseBounds.endHHMM);
-  }
+  const opts: PreferredTimeSlotOption[] = [{ value: '', label: 'No preference' }];
 
   for (let m = 0; m < 24 * 60; m += stepMinutes) {
     const hh = String(Math.floor(m / 60)).padStart(2, '0');
     const mm = String(m % 60).padStart(2, '0');
     const value = `${hh}:${mm}`;
-    const disabled = sm !== null && em !== null && (m < sm || m > em);
-    opts.push({ value, label: value, disabled });
+    if (phaseBounds && isPreferredStartOutsidePhaseWindow(value, phaseBounds)) {
+      continue;
+    }
+    opts.push({ value, label: value });
   }
 
   return opts;
 }
 
-export function isPreferredStartOutsidePhaseWindow(
-  hhmm: string,
-  phaseBounds: PhaseSchedulingTimeBounds | null,
-): boolean {
-  if (!phaseBounds || phaseBounds.overnight) return false;
-  const m = toMinutes(padHHMM(hhmm));
-  const sm = toMinutes(phaseBounds.startHHMM);
-  const em = toMinutes(phaseBounds.endHHMM);
-  return m < sm || m > em;
-}
-
-/** Ensure current form value appears in the list (e.g. odd minute from API) */
+/** Ensure current form value appears in the list (e.g. odd minute from API) when still in-phase. */
 export function mergeSavedPreferredStartIntoOptions(
   options: PreferredTimeSlotOption[],
   savedValue: string | undefined,
@@ -96,8 +92,8 @@ export function mergeSavedPreferredStartIntoOptions(
   const v = savedValue?.trim();
   if (!v) return options;
   if (options.some((o) => o.value === v)) return options;
-  const disabled = isPreferredStartOutsidePhaseWindow(v, phaseBounds);
+  if (isPreferredStartOutsidePhaseWindow(v, phaseBounds)) return options;
   const next = [...options];
-  next.splice(1, 0, { value: v, label: v, disabled });
+  next.splice(1, 0, { value: v, label: v });
   return next;
 }

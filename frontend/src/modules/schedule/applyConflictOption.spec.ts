@@ -51,4 +51,28 @@ describe('applyConflictOption', () => {
     });
     expect(updateTask).toHaveBeenCalledWith('t1', { scheduleState: 'none' });
   });
+
+  it('place_on_top seats as resolved on the preferred slot', async () => {
+    const updateTask = jest.fn().mockResolvedValue({});
+    const withEnd: SchedulingConflictDTO = {
+      ...conflict,
+      meta: {
+        preferredStart: '2026-04-20T09:00:00.000Z',
+        preferredEnd: '2026-04-20T10:00:00.000Z',
+      },
+    };
+    await applyConflictOption(withEnd, 'place_on_top', {
+      updateTask,
+      skipOccurrence: jest.fn(),
+    });
+    expect(updateTask).toHaveBeenCalledWith('t1', {
+      scheduleState: 'resolved',
+      problematicReason: 'preferred_on_fixed',
+      problematicOccurrenceYmds: ['2026-04-20'],
+      problematicOriginalStart: '2026-04-20T09:00:00.000Z',
+      problematicOriginalEnd: '2026-04-20T10:00:00.000Z',
+      scheduledStartTime: '2026-04-20T09:00:00.000Z',
+      scheduledEndTime: '2026-04-20T10:00:00.000Z',
+    });
+  });
 });

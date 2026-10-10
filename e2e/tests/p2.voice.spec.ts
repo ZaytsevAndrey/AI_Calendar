@@ -7,7 +7,7 @@ test.describe('P2 voice UI', () => {
     await openAs(page, auth.onboarded, '/tasks');
     await page.getByRole('button', { name: 'Add task by voice' }).click();
     const sheet = page.getByRole('dialog');
-    await sheet.getByRole('button', { name: 'Start speaking' }).click();
+    // Recording starts on open; denied mic surfaces immediately.
     await expect(
       sheet.getByText('Microphone permission is required. Allow it in the browser, then try again.'),
     ).toBeVisible();

@@ -21,4 +21,4 @@ Single source of truth for the project. Keep these files in sync with code chang
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** October 2026 (toast dedupe + axios JWT refresh; Problematic delete/cascade; phase chips; hide completed Unscheduled; one-off re-merge Google skip; series group head card).
+**Last documentation update:** October 2026 (preferred-start phase filter; Place on top / `place_on_top`; Unscheduled preset restored; Problematic per-row busy).
