@@ -2,8 +2,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { blobToBase64, pickRecorderMimeType, recorderMimeToContentType } from '../audio';
 
 const MAX_MS = 60_000;
+/** Require speech energy before silence can end the utterance. */
+const SPEECH_THRESHOLD = 0.045;
+// Long enough that "Створи…. [pause] З'їздити…" stays one utterance.
+const SILENCE_MS = 2800;
+const MIN_SPEECH_MS = 350;
+/** Ignore trailing room / TTS bleed right after the mic opens. */
+const LISTEN_GRACE_MS = 1600;
 
 type RecorderStatus = 'idle' | 'recording' | 'stopping';
+
+type StartOptions = {
+  /** When true, stop automatically after sustained silence following speech. */
+  silenceEnd?: boolean;
+  onSilenceEnd?: () => void;
+};
 
 export function useAudioRecorder() {
   const [status, setStatus] = useState<RecorderStatus>('idle');
@@ -17,6 +30,13 @@ export function useAudioRecorder() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const rafRef = useRef<number | null>(null);
+  const silenceEndRef = useRef(false);
+  const onSilenceEndRef = useRef<(() => void) | null>(null);
+  const heardSpeechRef = useRef(false);
+  const speechStartedAtRef = useRef<number | null>(null);
+  const silenceSinceRef = useRef<number | null>(null);
+  const autoStoppingRef = useRef(false);
+  const listenArmedAtRef = useRef<number>(0);
 
   const stopLevelMeter = () => {
     if (rafRef.current != null) {
@@ -33,6 +53,11 @@ export function useAudioRecorder() {
 
   const startLevelMeter = (stream: MediaStream) => {
     stopLevelMeter();
+    heardSpeechRef.current = false;
+    speechStartedAtRef.current = null;
+    silenceSinceRef.current = null;
+    autoStoppingRef.current = false;
+    listenArmedAtRef.current = performance.now() + LISTEN_GRACE_MS;
     try {
       const AudioCtx =
         window.AudioContext ||
@@ -58,7 +83,36 @@ export function useAudioRecorder() {
           sum += v * v;
         }
         const rms = Math.sqrt(sum / data.length);
-        setLevel(Math.min(1, rms * 3.5));
+        const nextLevel = Math.min(1, rms * 3.5);
+        setLevel(nextLevel);
+
+        if (silenceEndRef.current && recorderRef.current?.state === 'recording') {
+          const now = performance.now();
+          if (now < listenArmedAtRef.current) {
+            // Warm-up: do not arm speech/silence yet.
+          } else if (nextLevel >= SPEECH_THRESHOLD) {
+            if (!heardSpeechRef.current) {
+              heardSpeechRef.current = true;
+              speechStartedAtRef.current = now;
+            }
+            silenceSinceRef.current = null;
+          } else if (heardSpeechRef.current && speechStartedAtRef.current != null) {
+            if (now - speechStartedAtRef.current >= MIN_SPEECH_MS) {
+              if (silenceSinceRef.current == null) silenceSinceRef.current = now;
+              else if (
+                now - silenceSinceRef.current >= SILENCE_MS &&
+                !autoStoppingRef.current
+              ) {
+                autoStoppingRef.current = true;
+                silenceEndRef.current = false;
+                const end = onSilenceEndRef.current;
+                onSilenceEndRef.current = null;
+                end?.();
+              }
+            }
+          }
+        }
+
         rafRef.current = requestAnimationFrame(tick);
       };
       rafRef.current = requestAnimationFrame(tick);
@@ -88,19 +142,35 @@ export function useAudioRecorder() {
     };
   }, []);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (options?: StartOptions) => {
     setError(null);
+    silenceEndRef.current = Boolean(options?.silenceEnd);
+    onSilenceEndRef.current = options?.onSilenceEnd ?? null;
     if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       setError('This browser cannot record audio. Try Chrome on Android, or Safari 14.3+.');
       throw new Error('unsupported');
     }
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+      },
+    });
     streamRef.current = stream;
     try {
       const mimeType = pickRecorderMimeType();
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
+      let recorder: MediaRecorder;
+      try {
+        recorder = mimeType
+          ? new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 128_000 })
+          : new MediaRecorder(stream, { audioBitsPerSecond: 128_000 });
+      } catch {
+        recorder = mimeType
+          ? new MediaRecorder(stream, { mimeType })
+          : new MediaRecorder(stream);
+      }
       chunksRef.current = [];
       recorder.ondataavailable = (event) => {
         if (event.data.size) chunksRef.current.push(event.data);
@@ -114,13 +184,18 @@ export function useAudioRecorder() {
         stopResolverRef.current = null;
       };
       recorderRef.current = recorder;
-      recorder.start();
+      // Timeslice keeps short WebM blobs valid for Whisper (empty/corrupt without it).
+      recorder.start(250);
       startLevelMeter(stream);
       setStatus('recording');
       stopTimerRef.current = window.setTimeout(() => {
         if (recorderRef.current?.state === 'recording') {
-          recorderRef.current.stop();
-          setStatus('stopping');
+          if (silenceEndRef.current && onSilenceEndRef.current) {
+            onSilenceEndRef.current();
+          } else {
+            recorderRef.current.stop();
+            setStatus('stopping');
+          }
         }
       }, MAX_MS);
     } catch (err) {
@@ -134,6 +209,10 @@ export function useAudioRecorder() {
     if (!recorder || recorder.state === 'inactive') {
       throw new Error('Not recording');
     }
+    // Prevent a second silence/Done callback from racing the same blob.
+    silenceEndRef.current = false;
+    onSilenceEndRef.current = null;
+    autoStoppingRef.current = true;
     clearStopTimer();
     stopLevelMeter();
     setStatus('stopping');
@@ -153,6 +232,8 @@ export function useAudioRecorder() {
 
   const cancel = useCallback(() => {
     clearStopTimer();
+    silenceEndRef.current = false;
+    onSilenceEndRef.current = null;
     stopResolverRef.current = null;
     if (recorderRef.current && recorderRef.current.state !== 'inactive') {
       recorderRef.current.onstop = () => {

@@ -4,13 +4,46 @@ Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Produ
 
 **How we work:** one chat = **one feature** below (top open item, or name it). Say *«давай наступну фічу»* / *«next feature»*. Finish → check it off here and move a short done note into the archive.
 
-Design decisions for this queue: [spec-incremental-placement.md](spec-incremental-placement.md) (seat once, move only the overlapped day, no Generate); [spec-conflict-rules.md](spec-conflict-rules.md) (when to ask, option ids, Unscheduled vs Problematic); [spec-voice-commander.md](spec-voice-commander.md) (Voice Commander §13). Habits achievements + AI streak tips are done.
+Design decisions for this queue: [spec-voice-agent.md](spec-voice-agent.md) (hybrid Voice Agent); [spec-incremental-placement.md](spec-incremental-placement.md); [spec-conflict-rules.md](spec-conflict-rules.md); [spec-voice-commander.md](spec-voice-commander.md) (shipped commander baseline).
 
 ---
 
 ## Now (ordered)
 
 Do in order unless you explicitly skip ahead.
+
+### 15. Voice Agent — orchestrator + read tools
+
+Contract: [spec-voice-agent.md](spec-voice-agent.md).
+
+- [x] `POST /voice/turn` + in-memory session (new session per widget open; clear on close; per-tab `sessionId`).
+- [x] Server read tools (now/next, agenda, unscheduled, problematic, gaps, match task/habit, habit status, get task).
+- [x] Outcomes: `answer` / `clarify` (max 2) / `refuse`; client thread + TTS for Q&A answers.
+- [x] New voice UI calls `/voice/turn` only (not parse-task happy path).
+
+### 16. Voice Agent — write intents + confirm + fallback
+
+- [x] Write intents reuse commander shapes; client executes (batch sequential).
+- [x] Confirm policy: always delete/cancel/habit_delete; others `confirmVoiceCommands`.
+- [x] One orchestrator failure → fallback `parse-task`; stay open after write; close discards.
+- [x] Conflict / Problematic stay on existing client path (no feed-back into agent session in v1).
+
+### 17. Voice Agent — day-plan propose / apply
+
+- [x] Propose without write; visual list of slots + short spoken one-liner.
+- [x] Confirm → sequential placement applies; same Unscheduled / Problematic / conflict rules.
+
+### 18. Voice Agent — hero UX
+
+- [x] Phone near full-screen; scrollable thread; design-system hero (not a separate theme).
+- [x] Silence/VAD end-of-speech (Done remains as fallback); auto-listen when input expected.
+- [x] Mic gated while speaking; `skip_speak` vs `cancel`; agent `actions[]` (`confirm`/`cancel`/`retry`/`skip_speak`).
+- [x] Replace current equalizer with polished listening + speaking visual.
+
+### 19. Voice Agent — tests + docs wrap-up
+
+- [x] Unit tests for intents + day-plan; Playwright stubs updated for `/voice/turn`.
+- [x] Update overview, api-reference; archive shipped §15–§19 notes.
 
 ### 1. Conflict rules spec + test matrix
 
@@ -108,6 +141,15 @@ Voice can already delete a task. Calendar hover-delete and edit-modal delete bot
 - [x] **One-off** — delete the task (and its linked Google event via sync).
 - [x] **Recurring** — choose **this day** (skip-occurrence), **this day and following** (`POST /tasks/:id/end-series-from`), or **entire series** (delete task).
 
+### 20. Voice prompts — specialists + when policy
+
+Handoff (open a **new chat per bullet**): [voice-prompt-next.md](voice-prompt-next.md).
+
+- [ ] Fix wake-day “tomorrow” before wake (`scheduleTodayYmd` / sleep).
+- [ ] Optional create `prompt-modules/` compose (one LLM call).
+- [ ] Fatten specialist stubs: `reschedule` + `update`, then complete/skip/delete, then habits.
+- [ ] Golden utterance tests for kind/when; archive [voice-prompt-next.md](voice-prompt-next.md) when done.
+
 ### Later (not blocking the queue above)
 
 - [x] **UI language (uk / en)** — chrome and dates follow settings `language`; voice already multilingual.
@@ -126,5 +168,5 @@ Voice can already delete a task. Calendar hover-delete and edit-modal delete bot
 
 ## Recommended next steps
 
-1. Live queue is empty for Now / Later above — pick a new feature or polish from chat / [BUGS-AND-IMPROVEMENTS.md](../BUGS-AND-IMPROVEMENTS.md).
+1. Next live item: roadmap **§20** — start from [voice-prompt-next.md](voice-prompt-next.md) (one chat per specialist/bug).
 2. After each feature ships: tick above, archive a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

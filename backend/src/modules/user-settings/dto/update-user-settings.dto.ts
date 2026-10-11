@@ -256,4 +256,16 @@ export class UpdateUserSettingsDto {
   @IsOptional()
   @IsIn([...APP_LANGUAGES])
   language?: string;
+
+  @ApiProperty({
+    example: 'uk',
+    description:
+      'Spoken language for voice STT, TTS, and agent replies (independent of UI language)',
+    enum: APP_LANGUAGES,
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  @IsIn([...APP_LANGUAGES])
+  speechLanguage?: string;
 }

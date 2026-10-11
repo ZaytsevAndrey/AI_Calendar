@@ -39,6 +39,13 @@ export const uk: Record<MessageKey, string> = {
   'voice.uncheckHabit': 'Зняти сьогоднішню відмітку «{{name}}»?',
   'voice.habitName': 'Як назвати цю звичку?',
   'voice.whatToChangeHabit': 'Що змінити в цій звичці?',
+  'voice.createdTask': 'Створив задачу «{{name}}».',
+  'voice.createdTaskFor': 'Створив задачу «{{name}}» на {{when}}.',
+  'voice.whenToday': 'сьогодні',
+  'voice.whenTomorrow': 'завтра',
+  'voice.whenOrUnscheduled':
+    'На який день і о котрій поставити, чи в Незаплановані?',
+  'voice.whatTaskName': 'Як назвати цю задачу?',
 
   'schedule.emptySummary':
     'Поки нічого переглядати. Додайте задачі або згенеруйте розклад.',

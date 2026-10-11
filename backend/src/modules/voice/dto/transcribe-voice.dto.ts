@@ -15,4 +15,14 @@ export class TranscribeVoiceDto {
   @IsString()
   @IsOptional()
   mimeType?: string;
+
+  @ApiProperty({
+    example: 'uk',
+    required: false,
+    description:
+      'Optional speech language hint (en|uk|ru). Server prefers settings.speechLanguage when set.',
+  })
+  @IsString()
+  @IsOptional()
+  language?: string;
 }

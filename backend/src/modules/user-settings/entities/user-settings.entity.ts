@@ -119,6 +119,13 @@ export class UserSettings {
   @Column({ type: 'varchar', length: 8, default: 'en' })
   language: string;
 
+  /**
+   * Spoken language for voice STT / TTS / agent replies (`en` | `uk`).
+   * Independent of UI `language`.
+   */
+  @Column({ type: 'varchar', length: 8, default: 'en' })
+  speechLanguage: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -3,12 +3,19 @@ export type VoiceUnderstanding =
   | 'sufficient'
   | 'needs_clarification';
 
+export type VoiceTaskKind =
+  | 'fixed'
+  | 'flexible'
+  | 'unscheduled'
+  | 'recurring';
+
 export type VoiceParsedTask = {
   name: string;
   description?: string;
   eventType: 'fixed' | 'admin';
   estimatedTimeInMinutes: number;
   isRecurring: boolean;
+  isUnscheduled?: boolean;
   recurrencePattern?: string | null;
   recurrenceWeekDays?: number[] | null;
   allowSplit: boolean;
@@ -20,6 +27,8 @@ export type VoiceParsedTask = {
   scheduledEndTime?: string | null;
   phaseId?: string | null;
   phaseIds?: string[];
+  /** Settings IANA zone used for From/Until / placement. */
+  timeZone?: string;
   location?: string | null;
   googleColorId?: string | null;
   googleVisibility?: string | null;

@@ -81,6 +81,11 @@ export class UserSettingsService {
       if (!userSettings.language) {
         userSettings.language = defaults.language;
       }
+      // Seed speech from UI language once so existing users keep prior behavior.
+      if (!userSettings.speechLanguage) {
+        userSettings.speechLanguage =
+          userSettings.language || defaults.speechLanguage;
+      }
 
       // Save updated settings if any defaults were applied
       await this.userSettingsRepository.save(userSettings);
@@ -160,6 +165,7 @@ export class UserSettingsService {
       confirmVoiceCommands: false,
       speakVoiceReplies: true,
       language: 'en',
+      speechLanguage: 'en',
     };
   }
 

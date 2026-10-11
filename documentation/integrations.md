@@ -67,7 +67,7 @@ Older examples in the wild used port **3000** for the callback; that is misleadi
 
 Voice task creation and Calendar **Suggestions** use a **free Groq API key** (no credit card). Create one at [console.groq.com/keys](https://console.groq.com/keys) and set `GROQ_API_KEY` in `backend/.env` (and on Render for production).
 
-- Speech-to-text: `whisper-large-v3-turbo` (auto-detects Ukrainian, English, Russian). Do not send audio to the LLM.
+- Speech-to-text: `whisper-large-v3` by default (override with `GROQ_STT_MODEL`; turbo is faster but weaker on short uk/ru). Language comes from Settings; a Whisper vocabulary prompt + light transcript cleanup help calendar phrases. Do not send audio to the LLM.
 - Task parse and schedule suggestions: `openai/gpt-oss-20b` with JSON mode; falls back to `openai/gpt-oss-120b` on rate limit or if the model is unavailable. Llama 3.x IDs on Groq are enterprise-only and will 503 on a free key. Suggestions are not stored.
 - Audio and transcripts are not persisted.
 

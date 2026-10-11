@@ -2,6 +2,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { closeTestApp, createTestApp, E2eApp } from './helpers/create-test-app';
 import { seedOnboardedUser } from './helpers/auth';
+import { mockVoiceParseTurn } from './helpers/groq.stub';
 import { api, jsonBody } from './helpers/http';
 import { HabitCheckIn } from '../src/modules/habits/entities/habit-check-in.entity';
 import { ServiceUnavailableException } from '@nestjs/common';
@@ -324,38 +325,48 @@ describe('Habits and voice API e2e', () => {
     const { token } = await seedOnboardedUser(ctx.app);
     const complete = await api(ctx.app, 'POST', '/voice/parse-task', {
       token,
-      payload: { transcript: 'buy milk', timeZone: 'Europe/Kyiv' },
+      payload: { transcript: 'buy milk tomorrow', timeZone: 'Europe/Kyiv' },
     });
     expect(complete.statusCode).toBe(201);
     expect(jsonBody(complete).understanding).toBe('complete');
     expect((jsonBody(complete).task as Record<string, unknown>).name).toBe('Buy milk');
 
-    ctx.groq.completeJson.mockResolvedValueOnce(
-      JSON.stringify({
+    mockVoiceParseTurn(
+      ctx.groq,
+      {
         understanding: 'needs_clarification',
         clarifyingQuestion: 'What is the task name?',
-        task: null,
-      }),
+        task: { name: '', kind: 'flexible' },
+      },
+      { intent: 'create', language: 'en' },
     );
+    // Create boilerplate with no title → still clarify name (not Unscheduled).
     const clarify = await api(ctx.app, 'POST', '/voice/parse-task', {
       token,
-      payload: { transcript: 'umm', timeZone: 'Europe/Kyiv' },
+      payload: { transcript: 'create a task', timeZone: 'Europe/Kyiv' },
     });
     expect(jsonBody(clarify).understanding).toBe('needs_clarification');
 
-    ctx.groq.completeJson.mockResolvedValueOnce(
-      JSON.stringify({
-        understanding: 'needs_clarification',
-        clarifyingQuestion: 'Still unclear?',
-        task: { name: 'Gym' },
-      }),
+    mockVoiceParseTurn(
+      ctx.groq,
+      {
+        understanding: 'complete',
+        clarifyingQuestion: null,
+        task: {
+          name: 'Gym',
+          kind: 'flexible',
+          earliestStartTime: '2026-09-08T00:00:00+03:00',
+          deadline: '2026-09-08T23:59:00+03:00',
+        },
+      },
+      { intent: 'create', language: 'en' },
     );
     const after = await api(ctx.app, 'POST', '/voice/parse-task', {
       token,
       payload: {
         transcript: 'gym',
         timeZone: 'Europe/Kyiv',
-        previousTranscript: 'umm',
+        previousTranscript: 'create a task',
         clarificationAnswer: 'gym',
       },
     });
@@ -373,17 +384,18 @@ describe('Habits and voice API e2e', () => {
 
   it('A-VOI-010 / A-VOI-012 invalid phase ids and non-JSON', async () => {
     const { token } = await seedOnboardedUser(ctx.app);
-    ctx.groq.completeJson.mockResolvedValueOnce(
-      JSON.stringify({
-        understanding: 'complete',
-        task: {
-          name: 'Walk',
-          eventType: 'admin',
-          estimatedTimeInMinutes: 30,
-          phaseIds: ['11111111-1111-4111-8111-111111111111'],
-        },
-      }),
-    );
+    mockVoiceParseTurn(ctx.groq, {
+      understanding: 'complete',
+      task: {
+        name: 'Walk',
+        kind: 'flexible',
+        eventType: 'admin',
+        estimatedTimeInMinutes: 30,
+        phaseId: '11111111-1111-4111-8111-111111111111',
+        earliestStartTime: '2026-09-08T00:00:00+03:00',
+        deadline: '2026-09-08T23:59:00+03:00',
+      },
+    });
     const parsed = await api(ctx.app, 'POST', '/voice/parse-task', {
       token,
       payload: { transcript: 'walk', timeZone: 'Europe/Kyiv' },
@@ -411,13 +423,15 @@ describe('Habits and voice API e2e', () => {
     });
     expect(created.statusCode).toBe(201);
     const id = jsonBody(created).id;
-    ctx.groq.completeJson.mockResolvedValueOnce(
-      JSON.stringify({
+    mockVoiceParseTurn(
+      ctx.groq,
+      {
         intent: 'complete',
         understanding: 'complete',
         command: { target: 'named', taskName: 'Report', start: null, end: null },
         task: null,
-      }),
+      },
+      { intent: 'complete', language: 'en' },
     );
     const parsed = await api(ctx.app, 'POST', '/voice/parse-task', {
       token,
@@ -438,13 +452,15 @@ describe('Habits and voice API e2e', () => {
     expect(created.statusCode).toBe(201);
     const id = String(jsonBody(created).id);
     const today = String(jsonBody(await api(ctx.app, 'GET', '/habits', { token })).today);
-    ctx.groq.completeJson.mockResolvedValueOnce(
-      JSON.stringify({
+    mockVoiceParseTurn(
+      ctx.groq,
+      {
         intent: 'habit_check_in',
         understanding: 'complete',
         command: { target: 'named', taskName: 'Stretch', start: null, end: null },
         task: null,
-      }),
+      },
+      { intent: 'habit_check_in', language: 'en' },
     );
     const parsed = await api(ctx.app, 'POST', '/voice/parse-task', {
       token,
@@ -473,13 +489,15 @@ describe('Habits and voice API e2e', () => {
     });
     expect(created.statusCode).toBe(201);
     const id = jsonBody(created).id;
-    ctx.groq.completeJson.mockResolvedValueOnce(
-      JSON.stringify({
+    mockVoiceParseTurn(
+      ctx.groq,
+      {
         intent: 'update',
         understanding: 'complete',
         command: { target: 'named', taskName: 'Report', start: null, end: null },
         task: { estimatedTimeInMinutes: 45 },
-      }),
+      },
+      { intent: 'update', language: 'en' },
     );
     const parsed = await api(ctx.app, 'POST', '/voice/parse-task', {
       token,
@@ -507,13 +525,15 @@ describe('Habits and voice API e2e', () => {
     });
     expect(created.statusCode).toBe(201);
     const id = jsonBody(created).id;
-    ctx.groq.completeJson.mockResolvedValueOnce(
-      JSON.stringify({
+    mockVoiceParseTurn(
+      ctx.groq,
+      {
         intent: 'delete',
         understanding: 'complete',
         command: { target: 'named', taskName: 'Temp', start: null, end: null },
         task: null,
-      }),
+      },
+      { intent: 'delete', language: 'en' },
     );
     const parsed = await api(ctx.app, 'POST', '/voice/parse-task', {
       token,
@@ -525,14 +545,16 @@ describe('Habits and voice API e2e', () => {
 
   it('A-VOI-017 habit create and uncheck resolve', async () => {
     const { token } = await seedOnboardedUser(ctx.app);
-    ctx.groq.completeJson.mockResolvedValueOnce(
-      JSON.stringify({
+    mockVoiceParseTurn(
+      ctx.groq,
+      {
         intent: 'habit_create',
         understanding: 'complete',
         command: { target: 'named', taskName: 'Meditation', start: null, end: null },
         habit: { name: 'Meditation', color: '#22c55e' },
         task: null,
-      }),
+      },
+      { intent: 'habit_create', language: 'en' },
     );
     const created = await api(ctx.app, 'POST', '/voice/parse-task', {
       token,
@@ -551,13 +573,15 @@ describe('Habits and voice API e2e', () => {
     expect(habit.statusCode).toBe(201);
     const habitId = String(jsonBody(habit).id);
     const today = String(jsonBody(await api(ctx.app, 'GET', '/habits', { token })).today);
-    ctx.groq.completeJson.mockResolvedValueOnce(
-      JSON.stringify({
+    mockVoiceParseTurn(
+      ctx.groq,
+      {
         intent: 'habit_uncheck',
         understanding: 'complete',
         command: { target: 'named', taskName: 'Stretch', start: null, end: null },
         task: null,
-      }),
+      },
+      { intent: 'habit_uncheck', language: 'en' },
     );
     const unchecked = await api(ctx.app, 'POST', '/voice/parse-task', {
       token,

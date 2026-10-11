@@ -3,7 +3,6 @@ import { googleRecurringInstanceId } from '../tasks/skipped-occurrence.util';
 import { isAppLanguage, t, type AppLanguage, type MessageKey } from '../../i18n';
 import {
   endOfLocalDayIso,
-  inferScheduleWindow,
   localDateTimeIso,
   localHm,
   localYmd,
@@ -220,6 +219,7 @@ export function resolveVoiceCommand(input: {
   slots: VoiceCommandSlot[];
   habits?: VoiceCommandHabit[];
   language?: string;
+  wakeTime?: string | null;
 }): VoiceCommandResolveResult {
   const lang = resolveLang(input.language);
   const draft = normalizeDraft(input.draft, input.transcript);
@@ -760,6 +760,7 @@ function rescheduleCommand(
     nowIso: string;
     alreadyClarified: boolean;
     language: AppLanguage;
+    wakeTime?: string | null;
   },
   task: VoiceCommandTask,
   slot: VoiceCommandSlot | null,
@@ -792,7 +793,7 @@ function rescheduleCommand(
     };
   }
 
-  const when = planWhen(input.transcript, input.draft, input.timeZone, input.nowIso, slot);
+  const when = planWhen(input.draft, input.timeZone, slot);
   if (!when) {
     const question = vt(lang, 'voice.whenMove');
     return input.alreadyClarified
@@ -937,51 +938,20 @@ type PlannedWhen =
   | { kind: 'move'; startIso: string; endIso: string; explicitEnd: boolean }
   | { kind: 'window'; earliest: string; deadline: string };
 
+/** Prefer LLM ISO from parse draft; do not re-parse the transcript for days/times. */
 function planWhen(
-  transcript: string,
   draft: VoiceCommandDraft,
   timeZone: string,
-  nowIso: string,
   slot: VoiceCommandSlot | null,
 ): PlannedWhen | null {
-  const today = localYmd(nowIso, timeZone);
-  const window = inferScheduleWindow(transcript, today);
-  const clocks = clockRange(transcript);
   const durationMs = slot
     ? Math.max(60_000, Date.parse(slot.endIso) - Date.parse(slot.startIso))
     : 30 * 60_000;
-  const dayYmd = window?.startYmd ?? (slot ? localYmd(slot.startIso, timeZone) : today);
-
-  if (clocks) {
-    const startIso = localDateTimeIso(window?.startYmd ?? dayYmd, clocks.startHm, timeZone);
-    const endIso =
-      clocks.endHm !== clocks.startHm
-        ? localDateTimeIso(window?.startYmd ?? dayYmd, clocks.endHm, timeZone)
-        : new Date(Date.parse(startIso) + durationMs).toISOString();
-    return { kind: 'move', startIso, endIso, explicitEnd: clocks.endHm !== clocks.startHm };
-  }
-
-  if (window && slot) {
-    const hm = localHm(slot.startIso, timeZone);
-    const startIso = localDateTimeIso(window.startYmd, hm, timeZone);
-    return {
-      kind: 'move',
-      startIso,
-      endIso: new Date(Date.parse(startIso) + durationMs).toISOString(),
-      explicitEnd: false,
-    };
-  }
-
-  if (window) {
-    return {
-      kind: 'window',
-      earliest: startOfLocalDayIso(window.startYmd, timeZone),
-      deadline: endOfLocalDayIso(window.endYmd, timeZone),
-    };
-  }
 
   const spokenStart = draft.spokenStart;
-  if (spokenStart && !isMidnight(spokenStart)) {
+  if (!spokenStart) return null;
+
+  if (!isMidnight(spokenStart)) {
     const startIso = spokenStart;
     const spokenEnd = draft.spokenEnd;
     const endIso =
@@ -996,27 +966,23 @@ function planWhen(
     };
   }
 
-  if (spokenStart && isMidnight(spokenStart)) {
-    const startYmd = localYmd(spokenStart, timeZone);
-    const endYmd = draft.spokenEnd ? localYmd(draft.spokenEnd, timeZone) : startYmd;
-    if (slot) {
-      const hm = localHm(slot.startIso, timeZone);
-      const startIso = localDateTimeIso(startYmd, hm, timeZone);
-      return {
-        kind: 'move',
-        startIso,
-        endIso: new Date(Date.parse(startIso) + durationMs).toISOString(),
-        explicitEnd: false,
-      };
-    }
+  const startYmd = localYmd(spokenStart, timeZone);
+  const endYmd = draft.spokenEnd ? localYmd(draft.spokenEnd, timeZone) : startYmd;
+  if (slot) {
+    const hm = localHm(slot.startIso, timeZone);
+    const startIso = localDateTimeIso(startYmd, hm, timeZone);
     return {
-      kind: 'window',
-      earliest: startOfLocalDayIso(startYmd, timeZone),
-      deadline: endOfLocalDayIso(endYmd, timeZone),
+      kind: 'move',
+      startIso,
+      endIso: new Date(Date.parse(startIso) + durationMs).toISOString(),
+      explicitEnd: false,
     };
   }
-
-  return null;
+  return {
+    kind: 'window',
+    earliest: startOfLocalDayIso(startYmd, timeZone),
+    deadline: endOfLocalDayIso(endYmd, timeZone),
+  };
 }
 
 function pickTask(input: {
@@ -1244,39 +1210,6 @@ function googleIdsForOccurrence(
     };
   }
   return { googleEventId: slotId || master };
-}
-
-function clockRange(transcript: string): { startHm: string; endHm: string } | null {
-  const text = transcript.toLowerCase();
-  const stamped = [...text.matchAll(/\b(\d{1,2})[:.](\d{2})\b/g)];
-  if (stamped.length >= 2) {
-    const start = minutes(stamped[0][1], stamped[0][2]);
-    const end = minutes(stamped[1][1], stamped[1][2]);
-    if (start != null && end != null && end > start) {
-      return { startHm: hm(start), endHm: hm(end) };
-    }
-  }
-  if (stamped.length === 1) {
-    const start = minutes(stamped[0][1], stamped[0][2]);
-    if (start != null) {
-      const value = hm(start);
-      return { startHm: value, endHm: value };
-    }
-  }
-  return null;
-}
-
-function minutes(hourRaw: string, minuteRaw: string): number | null {
-  const hour = Number(hourRaw);
-  const minute = Number(minuteRaw);
-  if (hour > 23 || minute > 59) return null;
-  return hour * 60 + minute;
-}
-
-function hm(total: number): string {
-  const hour = Math.floor(total / 60);
-  const minute = total % 60;
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
 function isMidnight(iso: string): boolean {

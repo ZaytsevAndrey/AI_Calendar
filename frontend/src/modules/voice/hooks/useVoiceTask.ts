@@ -1,7 +1,15 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { useSkipOccurrenceMutation, useUpdateEventMutation, useDeleteEventMutation } from 'api/eventTasksApi';
-import { VoiceApi, type VoiceCommandAction, type VoiceParsedTask } from 'api/voice.api';
+import {
+  VoiceApi,
+  type DayPlanProposal,
+  type VoiceAgentActionId,
+  type VoiceCommandAction,
+  type VoiceParseResult,
+  type VoiceParsedTask,
+  type VoiceWriteIntent,
+} from 'api/voice.api';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import {
@@ -15,7 +23,7 @@ import { SeriesMoveCancelled } from 'modules/schedule/seriesDragChoice';
 import { resolveSpokenConflictOption } from 'modules/schedule/resolveSpokenConflictOption';
 import i18n from 'i18n';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
-import { executeVoiceCommand } from '../executeVoiceCommand';
+import { executeVoiceIntents } from '../executeVoiceIntents';
 import { VoiceSpeech } from '../speech';
 import { useAudioRecorder } from './useAudioRecorder';
 
@@ -23,15 +31,22 @@ export type VoiceStage =
   | 'idle'
   | 'recording'
   | 'working'
+  | 'speaking'
   | 'clarifying'
   | 'recording_clarification'
   | 'needs_conflict_choice'
   | 'confirm'
+  | 'ready'
   | 'error';
+
+export type VoiceThreadMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+};
 
 type UseVoiceTaskOptions = {
   onComplete: (task: VoiceParsedTask) => Promise<void>;
-  /** @deprecated Sufficient creates like complete; kept for call-site compat. */
   onSufficient?: (task: VoiceParsedTask) => void;
 };
 
@@ -39,65 +54,114 @@ function requiresAlwaysConfirm(kind: VoiceCommandAction['kind']): boolean {
   return kind === 'cancel' || kind === 'delete' || kind === 'habit_delete';
 }
 
+function newSessionId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `voice-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function msg(role: 'user' | 'assistant', text: string): VoiceThreadMessage {
+  return {
+    id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    role,
+    text,
+  };
+}
+
 export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
   const { start, stop, cancel, error: recorderError, level: micLevel } = useAudioRecorder();
   const { data: userSettings } = useGetUserSettingsQuery();
   const confirmCommands = !!userSettings?.confirmVoiceCommands;
   const speakReplies = userSettings?.speakVoiceReplies !== false;
-  const speechLang = userSettings?.language || i18n.language || 'en';
+  const speechLang =
+    userSettings?.speechLanguage || userSettings?.language || i18n.language || 'en';
   const [updateTask] = useUpdateEventMutation();
   const [skipOccurrence] = useSkipOccurrenceMutation();
   const [deleteTask] = useDeleteEventMutation();
   const dispatch = useDispatch();
-  // Same IANA as the task form / engine, not the browser zone.
   const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
   const [isOpen, setIsOpen] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [stage, setStage] = useState<VoiceStage>('idle');
   const [transcript, setTranscript] = useState('');
+  const [messages, setMessages] = useState<VoiceThreadMessage[]>([]);
   const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
-  const [draftTask, setDraftTask] = useState<VoiceParsedTask | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyLabel, setBusyLabel] = useState(() => i18n.t('voice.working'));
-  const [pendingCommand, setPendingCommand] = useState<VoiceCommandAction | null>(null);
+  const [pendingIntents, setPendingIntents] = useState<VoiceWriteIntent[] | null>(null);
+  const [pendingSummary, setPendingSummary] = useState<string | null>(null);
+  const [proposal, setProposal] = useState<DayPlanProposal | null>(null);
+  const [actions, setActions] = useState<VoiceAgentActionId[]>([]);
   const [heldConflict, setHeldConflict] = useState<SchedulingConflictDTO | null>(null);
+  const finishingRef = useRef(false);
+  const turnLockRef = useRef(false);
+  const lastCreateKeyRef = useRef<string | null>(null);
 
-  const maybeSpeak = useCallback(
-    async (text: string | null | undefined) => {
-      if (!speakReplies || !text?.trim()) return;
+  const pushMessages = useCallback((...next: VoiceThreadMessage[]) => {
+    setMessages((prev) => [...prev, ...next.filter((row) => row.text.trim())]);
+  }, []);
+
+  const speakAndStage = useCallback(
+    async (text: string | null | undefined, nextAfterSpeak: VoiceStage) => {
+      if (!speakReplies || !text?.trim()) {
+        setStage(nextAfterSpeak);
+        return;
+      }
+      setStage('speaking');
       await VoiceSpeech.speak(text, { lang: speechLang });
+      setStage(nextAfterSpeak);
     },
     [speakReplies, speechLang],
   );
 
-  const reset = useCallback(() => {
+  const resetLocal = useCallback(() => {
     VoiceSpeech.stop();
     cancel();
+    finishingRef.current = false;
     setStage('idle');
     setTranscript('');
     setClarifyingQuestion(null);
-    setDraftTask(null);
-    setPendingCommand(null);
+    setPendingIntents(null);
+    setPendingSummary(null);
+    setProposal(null);
+    setActions([]);
     setHeldConflict(null);
     setError(null);
   }, [cancel]);
 
   const close = useCallback(() => {
-    const shouldCreate =
-      (stage === 'clarifying' || stage === 'recording_clarification') &&
-      Boolean(draftTask?.name);
-    const payload = draftTask;
-    reset();
+    const id = sessionId;
+    resetLocal();
+    setMessages([]);
+    setSessionId(null);
     setIsOpen(false);
-    if (shouldCreate && payload) {
-      void onComplete(payload);
-    }
-  }, [draftTask, onComplete, reset, stage]);
+    if (id) void VoiceApi.endSession(id).catch(() => undefined);
+  }, [resetLocal, sessionId]);
+
+  const dismissForConflictSheet = useCallback(() => {
+    const id = sessionId;
+    resetLocal();
+    setMessages([]);
+    setSessionId(null);
+    setIsOpen(false);
+    if (id) void VoiceApi.endSession(id).catch(() => undefined);
+  }, [resetLocal, sessionId]);
+
+  const finishRecordingRef = useRef<() => Promise<void>>(async () => undefined);
 
   const beginRecording = useCallback(async () => {
     setError(null);
     VoiceSpeech.stop();
     try {
-      await start();
+      await start({
+        silenceEnd: true,
+        onSilenceEnd: () => {
+          void finishRecordingRef.current();
+        },
+      });
+      // Arm only after the mic is actually open (avoids a raced second finish).
+      finishingRef.current = false;
       setStage((current) =>
         current === 'clarifying' || current === 'needs_conflict_choice'
           ? 'recording_clarification'
@@ -117,12 +181,33 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     }
   }, [start]);
 
+  const stayReady = useCallback(
+    async (opts?: { listen?: boolean }) => {
+      setPendingIntents(null);
+      setPendingSummary(null);
+      setProposal(null);
+      setClarifyingQuestion(null);
+      setActions(['skip_speak']);
+      setError(null);
+      setStage('ready');
+      // After a write, wait for an explicit mic tap — auto-listen often
+      // catches TTS bleed / the same phrase again and creates a duplicate.
+      if (opts?.listen === false) return;
+      await beginRecording();
+    },
+    [beginRecording],
+  );
+
   const open = useCallback(() => {
     VoiceSpeech.stop();
     cancel();
     setTranscript('');
-    setPendingCommand(null);
+    setPendingIntents(null);
+    setPendingSummary(null);
+    setProposal(null);
     setError(null);
+    setMessages([]);
+    setSessionId(newSessionId());
     const pending = getPendingConflictChoice();
     if (pending) {
       setHeldConflict(pending);
@@ -131,7 +216,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       setStage('needs_conflict_choice');
       setIsOpen(true);
       void (async () => {
-        await maybeSpeak(question);
+        await speakAndStage(question, 'needs_conflict_choice');
         await beginRecording();
       })();
     } else {
@@ -141,31 +226,62 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       setIsOpen(true);
       void beginRecording();
     }
-  }, [beginRecording, cancel, maybeSpeak]);
+  }, [beginRecording, cancel, speakAndStage]);
 
-  const runCommand = useCallback(
-    async (command: VoiceCommandAction) => {
+  const runIntents = useCallback(
+    async (intents: VoiceWriteIntent[], summary?: string) => {
       setBusyLabel(i18n.t('voice.saving'));
       setStage('working');
+      const hasCreate = intents.some((intent) => intent.type === 'create');
       try {
-        const waitConflict =
-          command.kind === 'window' ? waitForScheduleConflict(12_000) : Promise.resolve(null);
-        await executeVoiceCommand(command, { updateTask, skipOccurrence, deleteTask, dispatch });
-        if (command.kind === 'window') {
-          await waitConflict;
+        const { conflict } = await executeVoiceIntents(intents, {
+          updateTask,
+          skipOccurrence,
+          deleteTask,
+          dispatch,
+          onCreate: async (task) => {
+            const key = [
+              task.name.trim().toLowerCase(),
+              task.earliestStartTime || '',
+              task.deadline || '',
+            ].join('|');
+            if (lastCreateKeyRef.current === key) {
+              return;
+            }
+            lastCreateKeyRef.current = key;
+            window.setTimeout(() => {
+              if (lastCreateKeyRef.current === key) lastCreateKeyRef.current = null;
+            }, 15_000);
+            await onComplete(task);
+          },
+        });
+        if (summary) pushMessages(msg('assistant', summary));
+        if (conflict) {
+          dismissForConflictSheet();
+          return;
         }
-        await maybeSpeak(command.summary);
-        close();
+        await speakAndStage(summary, 'ready');
+        await stayReady({ listen: !hasCreate });
       } catch (err) {
         if (err instanceof SeriesMoveCancelled) {
-          close();
+          await stayReady({ listen: !hasCreate });
           return;
         }
         setError(extractApiErrorMessage(err));
         setStage('error');
       }
     },
-    [close, deleteTask, dispatch, maybeSpeak, skipOccurrence, updateTask],
+    [
+      deleteTask,
+      dismissForConflictSheet,
+      dispatch,
+      onComplete,
+      pushMessages,
+      skipOccurrence,
+      speakAndStage,
+      stayReady,
+      updateTask,
+    ],
   );
 
   const applySpokenConflict = useCallback(
@@ -175,15 +291,15 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       setBusyLabel(i18n.t('voice.saving'));
       setStage('working');
       try {
-        // Progress toast from eventTasksApi update/skip.
         await applyConflictOption(conflict, optionId, {
           updateTask: (id, body) => updateTask({ id, body }).unwrap(),
           skipOccurrence: (id, body) => skipOccurrence({ id, body }).unwrap(),
         });
         notifyConflictChoiceConsumed(conflict.taskId);
         const title = i18n.t('schedule.conflictApplied');
-        await maybeSpeak(title);
-        close();
+        pushMessages(msg('assistant', title));
+        await speakAndStage(title, 'ready');
+        await stayReady();
         return 'applied';
       } catch (err) {
         setError(extractApiErrorMessage(err));
@@ -191,83 +307,177 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
         return 'error';
       }
     },
-    [close, maybeSpeak, skipOccurrence, updateTask],
+    [pushMessages, skipOccurrence, speakAndStage, stayReady, updateTask],
   );
 
-  const parseAndRoute = useCallback(
-    async (text: string, clarification?: { previous: string; answer: string }) => {
-      setBusyLabel(i18n.t('voice.understanding'));
-      setStage('working');
-      const result = await VoiceApi.parseTask({
-        transcript: clarification?.answer ?? text,
-        timeZone,
-        clientNowIso: new Date().toISOString(),
-        previousTranscript: clarification?.previous,
-        clarificationAnswer: clarification?.answer,
-      });
-
+  const routeLegacyParse = useCallback(
+    async (result: VoiceParseResult) => {
       if (result.command) {
         if (result.command.kind === 'refuse') {
+          pushMessages(msg('assistant', result.command.message));
           setError(result.command.message);
           setStage('error');
-          await maybeSpeak(result.command.message);
+          await speakAndStage(result.command.message, 'error');
           return;
         }
+        const intent: VoiceWriteIntent = {
+          type: 'command',
+          summary: result.command.summary,
+          command: result.command,
+        };
         if (confirmCommands || requiresAlwaysConfirm(result.command.kind)) {
-          setPendingCommand(result.command);
+          setPendingIntents([intent]);
+          setPendingSummary(result.command.summary);
+          setActions(['confirm', 'cancel', 'skip_speak']);
           setStage('confirm');
-          await maybeSpeak(result.command.summary);
+          await speakAndStage(result.command.summary, 'confirm');
           return;
         }
-        await runCommand(result.command);
+        await runIntents([intent], result.command.summary);
         return;
       }
 
-      if (result.understanding === 'needs_clarification') {
+      if (result.understanding === 'needs_clarification' || !result.task?.name) {
         const question = result.clarifyingQuestion || i18n.t('voice.clarifyMore');
-        setDraftTask(result.task?.name ? result.task : null);
         setClarifyingQuestion(question);
+        pushMessages(msg('assistant', question));
         setStage('clarifying');
-        await maybeSpeak(question);
+        await speakAndStage(question, 'clarifying');
         await beginRecording();
         return;
       }
 
-      if (!result.task?.name) {
-        const question = i18n.t('voice.askName');
-        setDraftTask(null);
-        setClarifyingQuestion(question);
-        setStage('clarifying');
-        await maybeSpeak(question);
-        await beginRecording();
-        return;
+      {
+        const createIntent: VoiceWriteIntent = {
+          type: 'create',
+          summary: result.task.name,
+          task: result.task,
+        };
+        // Prefer server-shaped summary when present on a prior turn; legacy
+        // parse only returns the task — build a short created line locally.
+        const summary = i18n.t('voice.createdTask', { name: result.task.name });
+        await runIntents([{ ...createIntent, summary }], summary);
       }
-
-      // complete and sufficient both create through the normal placement path.
-      const waitConflict = waitForScheduleConflict(12_000);
-      await onComplete(result.task);
-      await waitConflict;
-      await maybeSpeak(result.task.name);
-      setDraftTask(null);
-      reset();
-      setIsOpen(false);
     },
-    [beginRecording, confirmCommands, maybeSpeak, onComplete, reset, runCommand, timeZone],
+    [beginRecording, confirmCommands, pushMessages, runIntents, speakAndStage],
+  );
+
+  const turnAndRoute = useCallback(
+    async (text: string, actionId?: VoiceAgentActionId) => {
+      const activeSession = sessionId || newSessionId();
+      if (!sessionId) setSessionId(activeSession);
+      setBusyLabel(i18n.t('voice.understanding'));
+      setStage('working');
+      if (text) pushMessages(msg('user', text));
+
+      const result = await VoiceApi.turn({
+        transcript: text || undefined,
+        sessionId: activeSession,
+        timeZone,
+        clientNowIso: new Date().toISOString(),
+        actionId,
+      });
+
+      setActions(result.actions?.length ? result.actions : []);
+      setProposal(result.proposal);
+
+      if (result.intents?.length && result.outcome === 'act') {
+        await runIntents(result.intents, result.assistantMessage);
+        return;
+      }
+
+      if (result.outcome === 'confirm') {
+        setPendingIntents(result.intents?.length ? result.intents : null);
+        // Server holds pending; client may only have proposal. Confirm via actionId.
+        if (!result.intents?.length && result.proposal) {
+          setPendingIntents([]); // marker that confirm goes to server
+        }
+        setPendingSummary(result.assistantMessage);
+        setActions(
+          result.actions?.length ? result.actions : ['confirm', 'cancel', 'skip_speak'],
+        );
+        if (result.assistantMessage) pushMessages(msg('assistant', result.assistantMessage));
+        await speakAndStage(result.assistantMessage, 'confirm');
+        return;
+      }
+
+      if (result.outcome === 'legacy_parse' && result.legacyParse) {
+        await routeLegacyParse(result.legacyParse);
+        return;
+      }
+
+      const assistantText = result.assistantMessage?.trim() || '';
+      if (assistantText) pushMessages(msg('assistant', assistantText));
+
+      if (result.outcome === 'clarify') {
+        setClarifyingQuestion(assistantText || i18n.t('voice.clarifyMore'));
+        await speakAndStage(assistantText, 'clarifying');
+        await beginRecording();
+        return;
+      }
+
+      if (result.outcome === 'refuse') {
+        setError(assistantText || i18n.t('voice.agentRefuse'));
+        await speakAndStage(assistantText, 'error');
+        return;
+      }
+
+      // Empty answer = ignored noise; keep listening without TTS spam.
+      setClarifyingQuestion(null);
+      if (!assistantText) {
+        await stayReady();
+        return;
+      }
+      await speakAndStage(assistantText, 'ready');
+      await beginRecording();
+    },
+    [
+      beginRecording,
+      pushMessages,
+      routeLegacyParse,
+      runIntents,
+      sessionId,
+      speakAndStage,
+      stayReady,
+      timeZone,
+    ],
   );
 
   const finishRecording = useCallback(async () => {
-    const previousTranscript = transcript;
+    if (finishingRef.current || turnLockRef.current) return;
+    finishingRef.current = true;
+    turnLockRef.current = true;
     const wasConflictTurn = stage === 'needs_conflict_choice' || Boolean(heldConflict);
     const wasClarifying = Boolean(clarifyingQuestion) && !wasConflictTurn;
     try {
       setBusyLabel(i18n.t('voice.transcribing'));
       setStage('working');
       const { base64, mimeType } = await stop();
-      const { transcript: spoken } = await VoiceApi.transcribe(base64, mimeType);
+      const { transcript: spoken } = await VoiceApi.transcribe(
+        base64,
+        mimeType,
+        speechLang,
+      );
       setTranscript(spoken);
+
+      // Server strips Whisper silence hallucinations («дякую», «thank you»).
+      if (!spoken.trim()) {
+        setError(null);
+        if (wasConflictTurn) {
+          setStage('needs_conflict_choice');
+          await beginRecording();
+        } else if (wasClarifying) {
+          setStage('clarifying');
+          await beginRecording();
+        } else {
+          await stayReady();
+        }
+        return;
+      }
 
       const conflict = heldConflict ?? getPendingConflictChoice();
       if (conflict) {
+        pushMessages(msg('user', spoken));
         const outcome = await applySpokenConflict(spoken, conflict);
         if (outcome === 'applied' || outcome === 'error') return;
         if (wasConflictTurn) {
@@ -276,34 +486,84 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
           setClarifyingQuestion(i18n.t('voice.pickConflictOption'));
           setHeldConflict(conflict);
           setStage('needs_conflict_choice');
-          await maybeSpeak(unclear);
+          await speakAndStage(unclear, 'needs_conflict_choice');
           await beginRecording();
           return;
         }
       }
 
-      if (wasClarifying) {
-        await parseAndRoute(spoken, { previous: previousTranscript, answer: spoken });
-      } else {
-        await parseAndRoute(spoken);
-      }
+      await turnAndRoute(spoken);
     } catch (err) {
       setError(extractApiErrorMessage(err));
       if (wasConflictTurn) setStage('needs_conflict_choice');
       else if (wasClarifying) setStage('clarifying');
       else setStage('error');
+    } finally {
+      turnLockRef.current = false;
+      // Stay locked until beginRecording arms the next listen (or user taps mic).
     }
   }, [
     applySpokenConflict,
     beginRecording,
     clarifyingQuestion,
     heldConflict,
-    maybeSpeak,
-    parseAndRoute,
+    pushMessages,
+    speakAndStage,
     stage,
+    stayReady,
     stop,
-    transcript,
+    turnAndRoute,
   ]);
+
+  finishRecordingRef.current = finishRecording;
+
+  const runAction = useCallback(
+    async (actionId: VoiceAgentActionId) => {
+      if (actionId === 'skip_speak') {
+        VoiceSpeech.stop();
+        if (stage === 'speaking') {
+          setStage(pendingSummary ? 'confirm' : clarifyingQuestion ? 'clarifying' : 'ready');
+        }
+        return;
+      }
+      if (actionId === 'cancel') {
+        VoiceSpeech.stop();
+        setPendingIntents(null);
+        setPendingSummary(null);
+        setProposal(null);
+        await turnAndRoute('', 'cancel');
+        return;
+      }
+      if (actionId === 'retry') {
+        setError(null);
+        await beginRecording();
+        return;
+      }
+      if (actionId === 'confirm') {
+        VoiceSpeech.stop();
+        if (pendingIntents && pendingIntents.length > 0) {
+          const intents = pendingIntents;
+          const summary = pendingSummary || undefined;
+          setPendingIntents(null);
+          setPendingSummary(null);
+          setProposal(null);
+          await runIntents(intents, summary);
+          return;
+        }
+        // Server-held pending (day-plan / confirm)
+        await turnAndRoute('', 'confirm');
+      }
+    },
+    [
+      beginRecording,
+      clarifyingQuestion,
+      pendingIntents,
+      pendingSummary,
+      runIntents,
+      stage,
+      turnAndRoute,
+    ],
+  );
 
   return {
     isOpen,
@@ -311,17 +571,22 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     close,
     stage,
     transcript,
+    messages,
     clarifyingQuestion,
-    pendingSummary: pendingCommand?.summary ?? null,
+    pendingSummary,
+    proposal,
+    actions,
     error: error || recorderError,
     busyLabel,
     micLevel,
     beginRecording,
     finishRecording,
+    runAction,
     confirmCommand: () => {
-      if (pendingCommand) void runCommand(pendingCommand);
+      void runAction('confirm');
     },
     isRecording: stage === 'recording' || stage === 'recording_clarification',
     isWorking: stage === 'working',
+    isSpeaking: stage === 'speaking',
   };
 }

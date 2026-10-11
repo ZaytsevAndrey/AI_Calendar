@@ -511,6 +511,13 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             <VoiceSettingsSection
               confirmVoiceCommands={!!initialData.confirmVoiceCommands}
               speakVoiceReplies={initialData.speakVoiceReplies !== false}
+              speechLanguage={
+                isAppLanguage(initialData.speechLanguage)
+                  ? initialData.speechLanguage
+                  : isAppLanguage(initialData.language)
+                    ? initialData.language
+                    : defaultLanguage
+              }
             />
         </div>
     );

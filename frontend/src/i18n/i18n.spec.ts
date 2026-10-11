@@ -14,11 +14,12 @@ describe('frontend i18n', () => {
   it('returns Ukrainian nav labels', async () => {
     await i18n.changeLanguage('uk');
     expect(i18n.t('nav.calendar')).toBe('Календар');
-    expect(i18n.t('settings.language')).toBe('Мова');
+    expect(i18n.t('settings.language')).toBe('Мова додатку');
   });
 
   it('returns English nav labels', async () => {
     await i18n.changeLanguage('en');
     expect(i18n.t('nav.calendar')).toBe('Calendar');
+    expect(i18n.t('settings.language')).toBe('App language');
   });
 });

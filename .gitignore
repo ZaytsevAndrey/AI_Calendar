@@ -42,6 +42,7 @@ yarn-error.log*
 # backend specific
 backend/dist/
 backend/node_modules/
+backend/_tmp*
 
 # frontend specific
 frontend/build/

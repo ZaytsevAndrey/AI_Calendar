@@ -36,6 +36,13 @@ export const en = {
   'voice.uncheckHabit': 'Clear today\'s check-in for "{{name}}"?',
   'voice.habitName': 'What should I call this habit?',
   'voice.whatToChangeHabit': 'What should I change on that habit?',
+  'voice.createdTask': 'Created task "{{name}}".',
+  'voice.createdTaskFor': 'Created task "{{name}}" for {{when}}.',
+  'voice.whenToday': 'today',
+  'voice.whenTomorrow': 'tomorrow',
+  'voice.whenOrUnscheduled':
+    'Which day and time should I use, or put it in Unscheduled?',
+  'voice.whatTaskName': 'What should I call this task?',
 
   'schedule.emptySummary':
     'Nothing to review yet. Add tasks or generate a schedule first.',

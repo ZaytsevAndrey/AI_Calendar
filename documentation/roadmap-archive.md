@@ -12,6 +12,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ## Shipped (Oct 2026)
 
+- [x] **Voice Agent (hybrid).** `POST /voice/turn` + in-memory session; read tools for grounded Q&A; write intents (create/command) executed on the client through existing APIs; day-plan propose → confirm → sequential window applies; hero sheet (thread, silence end-of-speech, skip speak / dismiss, polished audio visual). Parse is router → per-intent specialist (create full; others stubs); no-when → Unscheduled; placement respects `earliestStartTime`. Next prompt work: [voice-prompt-next.md](voice-prompt-next.md). Contract: [spec-voice-agent.md](spec-voice-agent.md).
+
 - [x] **TaskForm / Problematic / conflict polish.** Preferred-start `<select>` lists only in-phase times (overnight included) and clears when a phase change leaves the time out of range. Unscheduled preset restored on create/edit. Problematic Place on top keeps per-row busy; resolve invents a default slot when none exists. Conflict sheet offers `place_on_top` (second layer on the preferred interval).
 - [x] **UX polish backlog (toasts, Problematic, phases, JWT, series UI).** Task mutations use only the staged progress toast. Skip/delete of Problematic park copies clears the inbox (and deleting a series cascades park copies). TaskForm phase picker is clickable chips. Completed/canceled Unscheduled stay off Tasks and Calendar. Axios 401 refresh covers schedule polls/`move-event`. One-off re-merge into a series skips patching the deleted Google event. Series groups show a full task card for the primary member with nested parts below.
 

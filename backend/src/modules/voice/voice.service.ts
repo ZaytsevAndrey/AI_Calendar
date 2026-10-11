@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Phase } from '../phases/entities/phase.entity';
@@ -9,6 +9,7 @@ import { UserSettingsService } from '../user-settings/user-settings.service';
 import { GroqClient } from './groq.client';
 import { ParseVoiceTaskDto } from './dto/parse-voice-task.dto';
 import { TranscribeVoiceDto } from './dto/transcribe-voice.dto';
+import { VoiceTurnDto } from './dto/voice-turn.dto';
 import {
   commandDraftFromRaw,
   readVoiceIntent,
@@ -20,13 +21,26 @@ import type {
   VoiceCommandSlot,
   VoiceCommandTask,
 } from './voice-command.types';
+import { buildVoiceIntentPrompt } from './voice-parse.intent-prompts';
 import {
-  buildVoiceParseSystemPrompt,
-  buildVoiceParseUserPrompt,
-} from './voice-parse.prompt';
+  buildVoiceRouterSystemPrompt,
+  buildVoiceRouterUserPrompt,
+} from './voice-parse.router.prompt';
+import {
+  VOICE_PARSE_INTENTS,
+  type VoiceParseIntentId,
+} from './voice-parse.shared.prompt';
 import { extractJsonObject, normalizeVoiceParse } from './voice-parse.util';
+import {
+  buildWhisperPrompt,
+  cleanupVoiceTranscript,
+  isNoiseOrEmptyTranscript,
+} from './voice-stt.util';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import type { VoiceParseResult } from './voice-parse.types';
+import { VoiceAgentOrchestrator } from './voice-agent.orchestrator';
+import type { VoiceTurnResponse } from './voice-agent.types';
+import { logVoiceLlm } from './voice-llm-log.util';
 
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
 
@@ -43,9 +57,12 @@ const MIME_EXTENSION: Record<string, string> = {
 
 @Injectable()
 export class VoiceService {
+  private readonly logger = new Logger(VoiceService.name);
+
   constructor(
     private readonly groq: GroqClient,
     private readonly userSettingsService: UserSettingsService,
+    private readonly agentOrchestrator: VoiceAgentOrchestrator,
     @InjectRepository(Phase)
     private readonly phasesRepository: Repository<Phase>,
     @InjectRepository(Task)
@@ -56,7 +73,29 @@ export class VoiceService {
     private readonly habitsRepository: Repository<Habit>,
   ) {}
 
+  turn(userId: string, dto: VoiceTurnDto): Promise<VoiceTurnResponse> {
+    return this.agentOrchestrator.turn(userId, dto, (ctx) => {
+      const transcript = (ctx.transcript || '').trim();
+      if (!transcript) {
+        throw new BadRequestException('transcript is required');
+      }
+      return this.parseTask(userId, {
+        transcript,
+        timeZone: dto.timeZone,
+        clientNowIso: dto.clientNowIso,
+        previousTranscript: ctx.previousTranscript,
+        clarificationAnswer: ctx.clarificationAnswer,
+      });
+    });
+  }
+
+  endVoiceSession(userId: string, sessionId: string): { ok: true } {
+    this.agentOrchestrator.endSession(userId, sessionId);
+    return { ok: true };
+  }
+
   async transcribe(
+    userId: string,
     dto: TranscribeVoiceDto,
   ): Promise<{ transcript: string; language?: string }> {
     const base64 = stripDataUrl(dto.audioBase64 || '');
@@ -78,12 +117,28 @@ export class VoiceService {
 
     const mimeType = (dto.mimeType || 'audio/webm').split(';')[0].trim();
     const ext = MIME_EXTENSION[mimeType] || 'webm';
+    const settings = await this.userSettingsService.getSettings(userId);
+    // Prefer speech language (not UI language) so Whisper does not guess.
+    const sttLanguage = whisperLanguageFromSettings(
+      dto.language || settings.speechLanguage || settings.language,
+    );
     const result = await this.groq.transcribe(
       buffer,
       `voice.${ext}`,
       mimeType,
+      sttLanguage,
+      buildWhisperPrompt(sttLanguage),
     );
-    return { transcript: result.text, language: result.language };
+    const cleaned = cleanupVoiceTranscript(
+      result.text,
+      result.language || sttLanguage,
+    );
+    // Whisper often invents «дякую» / «thank you» on silence — drop it.
+    const transcript = isNoiseOrEmptyTranscript(cleaned) ? '' : cleaned;
+    this.logger.log(
+      `voice.stt raw=${JSON.stringify(result.text)} cleaned=${JSON.stringify(cleaned)} kept=${JSON.stringify(transcript)}`,
+    );
+    return { transcript, language: result.language || sttLanguage };
   }
 
   async parseTask(
@@ -125,20 +180,58 @@ export class VoiceService {
       .map((task) => task.name)
       .slice(0, 40);
     const habitNames = habits.map((habit) => habit.name).slice(0, 40);
-    const content = await this.groq.completeJson(
-      buildVoiceParseSystemPrompt(),
-      buildVoiceParseUserPrompt({
+    const speech = alreadyClarified
+      ? `${dto.previousTranscript || ''} ${transcript}`.trim()
+      : transcript;
+
+    this.logger.log(`voice.parse transcript=${JSON.stringify(transcript)}`);
+    const routerRaw = await this.groq.completeJson(
+      buildVoiceRouterSystemPrompt(),
+      buildVoiceRouterUserPrompt({
         transcript,
-        timeZone,
-        nowIso,
-        phases,
-        settings,
         previousTranscript: dto.previousTranscript,
         clarificationAnswer: dto.clarificationAnswer,
         openTaskNames,
         habitNames,
       }),
     );
+    logVoiceLlm(this.logger, 'parse.router', routerRaw);
+
+    let routerParsed: unknown;
+    try {
+      routerParsed = extractJsonObject(routerRaw);
+    } catch {
+      throw new BadRequestException('Could not classify the voice request');
+    }
+
+    const sniffed = sniffCommandIntent(speech) ?? sniffCommandIntent(transcript);
+    let intent = readVoiceIntent(routerParsed);
+    if (sniffed && (intent === 'create' || intent === 'needs_clarification')) {
+      intent = sniffed;
+    }
+    const speechLanguage = readRouterLanguage(routerParsed) ||
+      whisperLangToApp(settings.speechLanguage || settings.language);
+
+    const promptCtx = {
+      transcript,
+      timeZone,
+      nowIso,
+      phases,
+      settings,
+      previousTranscript: dto.previousTranscript,
+      clarificationAnswer: dto.clarificationAnswer,
+      openTaskNames,
+      habitNames,
+      language: speechLanguage,
+    };
+
+    const specialistIntent = normalizeParseIntent(intent);
+    const specialist = buildVoiceIntentPrompt(specialistIntent, promptCtx);
+    const content = await this.groq.completeJson(
+      specialist.system,
+      specialist.user,
+    );
+    logVoiceLlm(this.logger, `parse.${specialistIntent}`, content);
 
     let parsed: unknown;
     try {
@@ -146,37 +239,21 @@ export class VoiceService {
     } catch {
       throw new BadRequestException('Could not parse the voice request into a task');
     }
-
-    const speech = alreadyClarified
-      ? `${dto.previousTranscript || ''} ${dto.clarificationAnswer || ''} ${transcript}`.trim()
-      : transcript;
-    const sniffed = sniffCommandIntent(speech) ?? sniffCommandIntent(transcript);
-    let intent = readVoiceIntent(parsed);
-    if (sniffed && (intent === 'create' || intent === 'needs_clarification')) {
-      intent = sniffed;
+    // Specialist may omit intent; keep router/sniffed intent authoritative.
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      (parsed as { intent?: string }).intent = intent;
     }
 
-    if (intent === 'create') {
+    if (intent === 'create' || intent === 'needs_clarification') {
       return {
         ...normalizeVoiceParse(parsed, {
           validPhaseIds: new Set(phases.map((phase) => phase.id)),
           alreadyClarified,
           timeZone,
           nowIso,
+          wakeTime: settings.wakeTime,
           transcript: speech,
-        }),
-        command: null,
-      };
-    }
-
-    if (intent === 'needs_clarification') {
-      return {
-        ...normalizeVoiceParse(parsed, {
-          validPhaseIds: new Set(phases.map((phase) => phase.id)),
-          alreadyClarified,
-          timeZone,
-          nowIso,
-          transcript: speech,
+          language: speechLanguage,
         }),
         command: null,
       };
@@ -191,7 +268,8 @@ export class VoiceService {
       tasks: tasks.map(toCommandTask),
       slots: slots.map(toCommandSlot),
       habits: habits.map(toCommandHabit),
-      language: settings.language,
+      language: speechLanguage || settings.speechLanguage || settings.language,
+      wakeTime: settings.wakeTime,
     });
     if (resolved.type === 'clarify') {
       return {
@@ -208,6 +286,31 @@ export class VoiceService {
       command: resolved.command,
     };
   }
+}
+
+function normalizeParseIntent(
+  intent: ReturnType<typeof readVoiceIntent>,
+): VoiceParseIntentId {
+  if ((VOICE_PARSE_INTENTS as readonly string[]).includes(intent)) {
+    return intent as VoiceParseIntentId;
+  }
+  return 'create';
+}
+
+function readRouterLanguage(raw: unknown): 'uk' | 'en' | 'ru' | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const lang = String((raw as { language?: unknown }).language || '')
+    .trim()
+    .toLowerCase()
+    .slice(0, 2);
+  if (lang === 'uk' || lang === 'en' || lang === 'ru') return lang;
+  return undefined;
+}
+
+function whisperLangToApp(value?: string | null): 'uk' | 'en' | 'ru' | undefined {
+  const lang = (value || '').trim().toLowerCase().slice(0, 2);
+  if (lang === 'uk' || lang === 'en' || lang === 'ru') return lang;
+  return undefined;
 }
 
 function toCommandTask(task: Task): VoiceCommandTask {
@@ -253,4 +356,13 @@ function stripDataUrl(value: string): string {
     return trimmed.slice(comma + 1);
   }
   return trimmed;
+}
+
+/** Map app language to Whisper ISO-639-1. */
+function whisperLanguageFromSettings(value?: string | null): string | undefined {
+  const lang = (value || '').trim().toLowerCase();
+  if (lang.startsWith('uk')) return 'uk';
+  if (lang.startsWith('ru')) return 'ru';
+  if (lang.startsWith('en')) return 'en';
+  return undefined;
 }

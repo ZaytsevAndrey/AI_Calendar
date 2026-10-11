@@ -20,6 +20,7 @@ import { habitBlockIntervals } from '../habits/habit-blocks.util';
 import { effectiveRecurrenceWeekDays } from './recurrence-from-phases.util';
 import { isOccurrenceYmdSkipped } from '../tasks/skipped-occurrence.util';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
+import { placementNotBefore } from './placement-bounds.util';
 import {
   addDaysToYmd,
   addMonthsToYmd,
@@ -331,41 +332,6 @@ function normalizeRecurrencePattern(value?: string | null): RecurrencePattern | 
     return upper;
   }
   return null;
-}
-
-/**
- * Movable non-recurring: do not search before earliestStartTime.
- * Day-only From (00:00 in the user zone) snaps to wake that local day so a
- * +03:00 midnight is not treated as "this evening" on a UTC host.
- */
-function placementNotBefore(
-  task: Task,
-  startDay: Date,
-  timeZone?: string | null,
-  wakeTime?: string,
-): Date {
-  if (task.isRecurring || task.eventType === TaskEventType.FIXED) {
-    return startDay;
-  }
-  if (!task.earliestStartTime) return startDay;
-  const bound = new Date(task.earliestStartTime);
-  let effective = bound;
-  if (timeZone) {
-    const iso = bound.toISOString();
-    if (localHm(iso, timeZone) === '00:00') {
-      const snapped = new Date(
-        localDateTimeIso(
-          localYmd(iso, timeZone),
-          normalizeClockHm(wakeTime),
-          timeZone,
-        ),
-      );
-      if (!Number.isNaN(snapped.getTime())) {
-        effective = snapped;
-      }
-    }
-  }
-  return effective > startDay ? effective : startDay;
 }
 
 function taskPreferredIntervalOnYmd(

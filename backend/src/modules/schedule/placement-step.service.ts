@@ -38,6 +38,7 @@ import {
   type MsInterval,
 } from './free-slots.util';
 import { normalizeFixedEventBufferMinutes, planningHorizonRange } from './intelligent-scheduling.engine';
+import { placementNotBefore } from './placement-bounds.util';
 import {
   planPlacement,
   seriesHorizonYmds,
@@ -606,13 +607,33 @@ export class PlacementStepService {
       );
     }
 
+    const claimNotBefore = placementNotBefore(
+      task,
+      now,
+      timeZone,
+      settings.wakeTime,
+    ).getTime();
+    if (
+      !task.isRecurring &&
+      task.eventType !== TaskEventType.FIXED &&
+      task.deadline
+    ) {
+      const untilMs = new Date(task.deadline).getTime();
+      claimWindows = claimWindows
+        .map((window) => ({
+          start: window.start,
+          end: Math.min(window.end, untilMs),
+        }))
+        .filter((window) => window.end > window.start && window.end > claimNotBefore);
+    }
+
     const plan = planPlacement({
       claim: {
         taskId: task.id,
         taskName: task.name,
         recurring: task.isRecurring,
         durationMinutes,
-        notBefore: nowMs,
+        notBefore: claimNotBefore,
         windows: claimWindows,
         interval,
         preferNearMs:

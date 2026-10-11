@@ -6,7 +6,7 @@
 
 ## Черга
 
-Порожньо. Live roadmap queue (§13–§14) is done — see [documentation/roadmap.md](documentation/roadmap.md).
+Порожньо. Voice Agent §15–§19 shipped — see [documentation/roadmap.md](documentation/roadmap.md) / [spec-voice-agent.md](documentation/spec-voice-agent.md).
 
 ---
 

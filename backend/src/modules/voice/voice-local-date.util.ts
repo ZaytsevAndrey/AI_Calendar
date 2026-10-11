@@ -35,6 +35,25 @@ export function localYmd(nowIso: string, timeZone: string): string {
   }).format(instant);
 }
 
+/**
+ * Wake-day "today" for speech (сьогодні / tomorrow).
+ * Before wakeTime (incl. after midnight while still awake until a late sleep),
+ * the schedule day is still the previous civil date — so "завтра" at 01:00
+ * with sleep at 02:00 means the coming calendar morning, not calendar+1 from
+ * the already-rolled civil date.
+ */
+export function scheduleTodayYmd(
+  nowIso: string,
+  timeZone: string,
+  wakeTime?: string | null,
+): string {
+  const cal = localYmd(nowIso, timeZone);
+  const wake = normalizeClockHm(wakeTime || '08:00');
+  const hm = localHm(nowIso, timeZone);
+  if (hm < wake) return addDaysToYmd(cal, -1);
+  return cal;
+}
+
 export function addDaysToYmd(ymd: string, days: number): string {
   const [year, month, day] = ymd.split('-').map(Number);
   const utc = new Date(Date.UTC(year, month - 1, day + days));
@@ -220,6 +239,79 @@ export function inferClockHmRange(
   return null;
 }
 
+const UK_ORDINAL_HOUR: Array<[RegExp, number]> = [
+  [/на\s+перш|о\s+перш/, 1],
+  [/на\s+друг|о\s+друг/, 2],
+  [/на\s+трет|о\s+трет/, 3],
+  [/на\s+четверт|о\s+четверт/, 4],
+  [/на\s+п'?ят|о\s+п'?ят/, 5],
+  [/на\s+шост|о\s+шост/, 6],
+  [/на\s+сьом|о\s+сьом/, 7],
+  [/на\s+восьм|о\s+восьм/, 8],
+  [/на\s+дев'?ят|о\s+дев'?ят/, 9],
+  [/на\s+десят|о\s+десят/, 10],
+  [/на\s+одинадцят|о\s+одинадцят/, 11],
+  [/на\s+дванадцят|о\s+дванадцят/, 12],
+];
+
+/**
+ * Single preferred clock from speech (e.g. "на другу дня" → 14:00, "at 3pm" → 15:00).
+ * Not a From–Until range.
+ */
+export function inferPreferredClockHm(transcript: string): string | null {
+  const text = transcript.toLowerCase().replace(/[’']/g, "'");
+  const stamped = text.match(/\b(\d{1,2})[:.](\d{2})\b/);
+  if (stamped) {
+    const hour = Number(stamped[1]);
+    const minute = Number(stamped[2]);
+    if (hour <= 23 && minute <= 59) return `${pad2(hour)}:${pad2(minute)}`;
+  }
+
+  const digit = text.match(
+    /(?:^|[^\p{L}])(?:о|at|в|на)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|ранку|дня|вечора)?(?:[^\p{L}]|$)/u,
+  );
+  if (digit) {
+    let hour = Number(digit[1]);
+    const minute = digit[2] ? Number(digit[2]) : 0;
+    const meridiem = digit[3] || '';
+    if (meridiem === 'pm' || meridiem === 'дня' || meridiem === 'вечора') {
+      if (hour > 0 && hour < 12) hour += 12;
+    } else if (meridiem === 'am' || meridiem === 'ранку') {
+      if (hour === 12) hour = 0;
+    } else if (!meridiem && hour >= 1 && hour <= 7 && /дня|після\s+обід/i.test(text)) {
+      hour += 12;
+    }
+    if (hour <= 23 && minute <= 59) return `${pad2(hour)}:${pad2(minute)}`;
+  }
+
+  for (const [pattern, hour12] of UK_ORDINAL_HOUR) {
+    if (!pattern.test(text)) continue;
+    let hour = hour12;
+    if (/дня|вечора|після\s+обід|\bpm\b/i.test(text) && hour < 12) {
+      hour += 12;
+    } else if (/ранку|\bam\b/i.test(text) && hour === 12) {
+      hour = 0;
+    } else if (
+      hour >= 1 &&
+      hour <= 7 &&
+      !/ранку|\bam\b/i.test(text) &&
+      /дня|вечора|після\s+обід/i.test(text)
+    ) {
+      hour += 12;
+    }
+    // Bare "на другу" without meridiem: prefer afternoon for 1–7 (common spoken habit).
+    if (
+      hour >= 1 &&
+      hour <= 7 &&
+      !/ранку|\bam\b|дня|вечора|після\s+обід|\bpm\b/i.test(text)
+    ) {
+      hour += 12;
+    }
+    return `${pad2(hour)}:00`;
+  }
+  return null;
+}
+
 export function inferScheduleWindow(
   transcript: string,
   todayYmd: string,
@@ -256,12 +348,35 @@ export function inferDueYmd(transcript: string, todayYmd: string): string | null
   return inferScheduleWindow(transcript, todayYmd)?.startYmd ?? null;
 }
 
-export function buildLocalCalendarContext(nowIso: string, timeZone: string): string {
-  const today = localYmd(nowIso, timeZone);
-  const tomorrow = addDaysToYmd(today, 1);
-  const weekday = WEEKDAY_NAMES[weekdayIndex(today)];
+export function buildLocalCalendarContext(
+  nowIso: string,
+  timeZone: string,
+  wakeTime?: string | null,
+): string {
+  const calendarToday = localYmd(nowIso, timeZone);
+  const scheduleToday = scheduleTodayYmd(nowIso, timeZone, wakeTime);
+  const scheduleTomorrow = addDaysToYmd(scheduleToday, 1);
+  const inThreeDays = addDaysToYmd(scheduleToday, 3);
+  const clock = localHm(nowIso, timeZone);
+  const weekday = WEEKDAY_NAMES[weekdayIndex(scheduleToday)];
   return `Local calendar (${timeZone}):
-- today: ${today} (${weekday})
-- tomorrow: ${tomorrow}
-If the speaker names a calendar day or range without a clock time, set earliestStartTime to 00:00 of the first day and deadline to 23:59 of the last day (this timezone). Keep eventType admin. Do not set scheduledStartTime for day-only speech.`;
+- now ISO: ${nowIso}
+- now local clock: ${clock}
+- schedule today: ${scheduleToday} (${weekday}) = "today" / "сьогодні"
+- schedule tomorrow: ${scheduleTomorrow} = "tomorrow" / "завтра"
+- schedule +3 days: ${inThreeDays} = "in 3 days" / "через три дні"
+- civil date: ${calendarToday}${
+    calendarToday !== scheduleToday
+      ? ' (before wake = still previous wake-day)'
+      : ''
+  }
+
+Resolve all dates yourself into ISO-8601 with numeric offset:
+- today/tomorrow use schedule today/tomorrow above (wake-day), not civil date before wake.
+- "in N hours" / "через N годин": now ISO + N hours.
+- "in N days" / "через N днів": schedule today + N days.
+- day + clock ("завтра о другій дня", "tomorrow at 2pm"): clock on that schedule day (never on schedule today when they said tomorrow).
+- day without clock: admin; earliest 00:00, deadline 23:59 that day; scheduledStart/End null.
+- no day and no clock (and not a clear recurring pattern): unscheduled inbox; do not invent a day.
+- New tasks: scheduledStart must be >= now ISO (do not place in the past).`;
 }

@@ -24,7 +24,7 @@ test.describe('P1 voice UI', () => {
     }));
     await openAs(page, auth.onboarded, '/tasks');
     await page.getByRole('button', { name: 'Add task by voice' }).click();
-    await expect(page.getByRole('dialog').getByText('Add task by voice')).toBeVisible();
+    await expect(page.getByRole('dialog').getByText('Voice agent')).toBeVisible();
     await recordOnce(page);
     await expectMutationProgressToast(page, 'Voice dentist');
     await expect(page.getByRole('heading', { name: 'Voice dentist' }).first()).toBeVisible();
@@ -78,7 +78,7 @@ test.describe('P1 voice UI', () => {
     await recordOnce(page);
     await expectMutationProgressToast(page, 'Clarified walk');
     await expect(page.getByRole('heading', { name: 'Clarified walk' }).first()).toBeVisible();
-    await expect(page.getByText('What should I call this task?')).toHaveCount(0);
+    // Sheet stays open for follow-up; clarify line may remain in the thread.
   });
 
   test('U-VOI-006 voice complete follows the confirmation setting', async ({ page, auth, request }) => {
@@ -212,9 +212,9 @@ test.describe('P1 voice UI', () => {
     await openAs(page, auth.onboarded, '/tasks');
     await page.getByRole('button', { name: 'Add task by voice' }).click();
     const sheet = page.getByRole('dialog');
-    await expect(sheet.getByText('Listening…', { exact: true })).toBeVisible();
+    await expect(sheet.getByText(/Listening/)).toBeVisible();
     await expect(sheet.getByRole('img', { name: 'Microphone level' })).toBeVisible();
-    await sheet.getByRole('button', { name: 'Stop' }).click();
+    await sheet.getByRole('button', { name: 'Done' }).click();
     await expectMutationProgressToast(page, 'Equalizer task');
   });
 
@@ -250,6 +250,17 @@ test.describe('P1 voice UI', () => {
         body: JSON.stringify({ transcript: spoken, language: 'en' }),
       });
     });
+    const legacyParse = {
+      understanding: 'complete',
+      clarifyingQuestion: null,
+      task: {
+        name: 'Voice conflict task',
+        eventType: 'admin',
+        estimatedTimeInMinutes: 30,
+        priority: 'medium',
+      },
+      command: null,
+    };
     await page.route('**/voice/parse-task', async (route) => {
       if (route.request().method() !== 'POST') {
         await route.continue();
@@ -258,17 +269,39 @@ test.describe('P1 voice UI', () => {
       await route.fulfill({
         status: 201,
         contentType: 'application/json',
+        body: JSON.stringify(legacyParse),
+      });
+    });
+    await page.route('**/voice/turn', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      const body = route.request().postDataJSON() as { sessionId?: string };
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
         body: JSON.stringify({
-          understanding: 'complete',
-          clarifyingQuestion: null,
-          task: {
-            name: 'Voice conflict task',
-            eventType: 'admin',
-            estimatedTimeInMinutes: 30,
-            priority: 'medium',
-          },
-          command: null,
+          sessionId: body.sessionId || 'e2e-session',
+          outcome: 'legacy_parse',
+          assistantMessage: '',
+          intents: [],
+          actions: [],
+          proposal: null,
+          clarifyCount: 0,
+          legacyParse,
         }),
+      });
+    });
+    await page.route('**/voice/session/**', async (route) => {
+      if (route.request().method() !== 'DELETE') {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true }),
       });
     });
     await page.route('**/tasks', async (route) => {
@@ -330,13 +363,13 @@ test.describe('P1 voice UI', () => {
 
     await openAs(page, auth.onboarded, '/tasks');
     await page.getByRole('button', { name: 'Add task by voice' }).click();
-    const voice = page.getByRole('dialog', { name: 'Add task by voice' });
+    const voice = page.getByRole('dialog', { name: 'Voice agent' });
     await recordOnce(page);
 
     await expect(page.getByRole('dialog', { name: 'Schedule conflict' })).toBeVisible({
       timeout: 15_000,
     });
-    await expect(page.getByRole('dialog', { name: 'Add task by voice' })).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: 'Voice agent' })).toHaveCount(0);
 
     spoken = 'place this task elsewhere';
     const conflict = page.getByRole('dialog', { name: 'Schedule conflict' });

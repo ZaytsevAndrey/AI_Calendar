@@ -146,12 +146,54 @@ export type TranscribeVoiceResult = {
   language?: string;
 };
 
+export type VoiceTurnOutcome =
+  | 'answer'
+  | 'clarify'
+  | 'confirm'
+  | 'act'
+  | 'refuse'
+  | 'legacy_parse';
+
+export type VoiceAgentActionId = 'confirm' | 'cancel' | 'retry' | 'skip_speak';
+
+export type VoiceWriteIntent =
+  | { type: 'create'; summary: string; task: VoiceParsedTask }
+  | { type: 'command'; summary: string; command: VoiceCommandAction };
+
+export type DayPlanProposalItem = {
+  taskId: string;
+  name: string;
+  start: string;
+  end: string;
+  durationMinutes: number;
+};
+
+export type DayPlanProposal = {
+  day: string;
+  items: DayPlanProposalItem[];
+};
+
+export type VoiceTurnResult = {
+  sessionId: string;
+  outcome: VoiceTurnOutcome;
+  assistantMessage: string;
+  intents: VoiceWriteIntent[];
+  actions: VoiceAgentActionId[];
+  proposal: DayPlanProposal | null;
+  clarifyCount: number;
+  legacyParse: VoiceParseResult | null;
+};
+
 export const VoiceApi = {
-  transcribe: async (audioBase64: string, mimeType: string): Promise<TranscribeVoiceResult> => {
+  transcribe: async (
+    audioBase64: string,
+    mimeType: string,
+    language?: string,
+  ): Promise<TranscribeVoiceResult> => {
     const response = await apiCall({
       method: 'POST',
       url: '/voice/transcribe',
-      data: { audioBase64, mimeType },
+      data: { audioBase64, mimeType, language },
     });
     if (!response) throw new Error('No response from server');
     return response.data as TranscribeVoiceResult;
@@ -171,5 +213,28 @@ export const VoiceApi = {
     });
     if (!response) throw new Error('No response from server');
     return response.data as VoiceParseResult;
+  },
+
+  turn: async (body: {
+    transcript?: string;
+    sessionId: string;
+    timeZone: string;
+    clientNowIso?: string;
+    actionId?: string;
+  }): Promise<VoiceTurnResult> => {
+    const response = await apiCall({
+      method: 'POST',
+      url: '/voice/turn',
+      data: body,
+    });
+    if (!response) throw new Error('No response from server');
+    return response.data as VoiceTurnResult;
+  },
+
+  endSession: async (sessionId: string): Promise<void> => {
+    await apiCall({
+      method: 'DELETE',
+      url: `/voice/session/${encodeURIComponent(sessionId)}`,
+    });
   },
 };

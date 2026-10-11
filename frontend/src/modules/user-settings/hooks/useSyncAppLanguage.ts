@@ -31,6 +31,12 @@ export function useSyncAppLanguage(enabled: boolean): void {
     const guessed: AppLanguage = detectBrowserLanguage();
     writeStoredLanguage(guessed);
     void i18n.changeLanguage(guessed);
-    void updateSettings({ language: guessed });
+    void updateSettings({
+      language: guessed,
+      // Seed speech separately; user can change it later without moving the UI.
+      speechLanguage: isAppLanguage(settings.speechLanguage)
+        ? settings.speechLanguage
+        : guessed,
+    });
   }, [enabled, settings, i18n, updateSettings]);
 }

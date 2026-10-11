@@ -28,7 +28,9 @@ Additional routes may exist in `auth.controller.ts` (email verification, etc.).
 
 Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWorkEnabled`, `allowSplitScheduling`, `minSplitMinutes`, **`timeZone`** (IANA, e.g. `Asia/Nicosia` / `Europe/Kyiv`). Empty `timeZone` is filled **once** from the browser on first login; the user can change it in Settings. Invalid IANA names are rejected. Postgres stores `wakeTime` / `sleepTime` as `time` (`HH:mm:ss`); the engine normalizes them to `HH:mm` and interprets those clocks **in `timeZone`** (fallback `UTC`).
 
-**`language`** (`en` | `uk`, default `en`) is the UI and notification language. Empty/`null` is seeded once from the browser (`uk*` → `uk`, else `en`). Push titles, voice refuse/confirm copy, schedule-suggestion language, and localized API error messages follow this setting. The frontend also sends `Accept-Language` matching the active locale.
+**`language`** (`en` | `uk`, default `en`) is the UI and notification language. Empty/`null` is seeded once from the browser (`uk*` → `uk`, else `en`). Push titles, schedule-suggestion language, and localized API error messages follow this setting. The frontend also sends `Accept-Language` matching the active locale.
+
+**`speechLanguage`** (`en` | `uk`, default `en`) is the spoken language for voice STT, TTS, and agent reply copy. Independent of UI `language`. Empty/`null` is seeded once from the current UI `language` for existing users.
 
 **`confirmVoiceCommands`** (default false) asks before a voice command completes, skips, or moves a task. Voice create is not affected. **Delete** and **cancel** always confirm. **`speakVoiceReplies`** (default true) has the client speak clarifying questions, confirm summaries, and success/refuse results via Web Speech.
 
@@ -74,10 +76,14 @@ JWT. Free Groq backend (`GROQ_API_KEY`). Audio is **not** stored.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/voice/transcribe` | Body `{ audioBase64, mimeType? }` → `{ transcript, language? }` (Whisper, auto language) |
-| POST | `/voice/parse-task` | Body `{ transcript, timeZone, clientNowIso?, previousTranscript?, clarificationAnswer? }` → `{ understanding, clarifyingQuestion, task, command }` |
+| POST | `/voice/transcribe` | Body `{ audioBase64, mimeType?, language? }` → `{ transcript, language? }` (Whisper; language hint from settings `language` / body improves accuracy) |
+| POST | `/voice/turn` | Voice Agent turn. Body `{ transcript, sessionId, timeZone, clientNowIso?, actionId? }` → `{ sessionId, outcome, assistantMessage, intents, actions, proposal, clarifyCount, legacyParse }` |
+| DELETE | `/voice/session/:sessionId` | Discard in-memory agent session (widget close) |
+| POST | `/voice/parse-task` | Legacy / fallback / tests. Body `{ transcript, timeZone, clientNowIso?, previousTranscript?, clarificationAnswer? }` → `{ understanding, clarifyingQuestion, task, command }` |
 
-`understanding`: `complete` (client creates immediately when a name exists; defaults fill the rest), `sufficient` (treated as complete if a name exists), `needs_clarification` (no usable name — one follow-up question). After a clarification reply the API will not ask a second question. The client sends Settings IANA `timeZone`. Calendar-day parsing uses **settings `timeZone`** when set, otherwise the request `timeZone`, otherwise `UTC`.
+**`/voice/turn`:** the new UI always uses this path. Read tools ground `answer` / `clarify` / `refuse`. Mutations return `act` or `confirm` with `intents[]` (`create` | `command` shapes for the client executor). Day-plan uses `propose_plan` → `proposal` + confirm → batch `window` intents. On LLM failure, one parse-task fallback may still populate `legacyParse`. Session is in-memory; new `sessionId` per widget open; clear on DELETE / close. Max two clarifications. See [spec-voice-agent.md](spec-voice-agent.md).
+
+`understanding` (parse-task / legacyParse): `complete` (client creates immediately when a name exists; defaults fill the rest), `sufficient` (treated as complete if a name exists), `needs_clarification` (no usable name — one follow-up question). After a clarification reply the API will not ask a second question. The client sends Settings IANA `timeZone`. Calendar-day parsing uses **settings `timeZone`** when set, otherwise the request `timeZone`, otherwise `UTC`.
 
 `command` is `null` for create. Otherwise it is a resolved action (`complete`, `skip`, `move`, `shift`, `window`, `update`, `delete`, `habit_check_in`, `habit_create`, `habit_update`, `habit_delete`, `habit_uncheck`) or `{ kind: "refuse", message }`. The client writes through the existing task, skip, move, and habit APIs. **Now / this** is the app task whose open slot overlaps now. A named match is among incomplete tasks (or habits for habit intents). Done on a recurring task skips today's open occurrence. Saying a habit was done (or “check in …”) marks that habit for today in settings TZ. If a “done” command names a habit and no matching task, it checks in the habit. An open slot is moved like a calendar drag; a task with no open slot gets a new From/Until window and a silent replan. One clarifying question, then a refusal. When `confirmVoiceCommands` is on, the sheet asks before that write; delete/cancel/habit_delete always ask. See [spec-voice-commander.md](spec-voice-commander.md).
 

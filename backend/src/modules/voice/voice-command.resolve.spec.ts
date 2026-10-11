@@ -163,9 +163,13 @@ describe('resolveVoiceCommand', () => {
     expect(second).toMatchObject({ type: 'command', command: { kind: 'refuse' } });
   });
 
-  it('moves an open slot to the spoken clock', () => {
+  it('moves an open slot using LLM spokenStart ISO', () => {
     const result = resolveVoiceCommand({
-      draft: draft({ intent: 'reschedule', taskName: 'Dentist' }),
+      draft: draft({
+        intent: 'reschedule',
+        taskName: 'Dentist',
+        spokenStart: '2026-09-23T15:00:00+03:00',
+      }),
       transcript: 'move dentist to tomorrow at 15:00',
       timeZone: ZONE,
       nowIso: NOW,
@@ -182,9 +186,14 @@ describe('resolveVoiceCommand', () => {
     expect(result.command.googleEventId).toBe('evt-1');
   });
 
-  it('updates the window when the task has no open slot', () => {
+  it('updates the window from LLM day-only spokenStart when there is no open slot', () => {
     const result = resolveVoiceCommand({
-      draft: draft({ intent: 'reschedule', taskName: 'Dentist' }),
+      draft: draft({
+        intent: 'reschedule',
+        taskName: 'Dentist',
+        spokenStart: '2026-09-23T00:00:00+03:00',
+        spokenEnd: '2026-09-23T23:59:00+03:00',
+      }),
       transcript: 'move dentist to tomorrow',
       timeZone: ZONE,
       nowIso: NOW,
@@ -201,6 +210,19 @@ describe('resolveVoiceCommand', () => {
         deadline: expect.stringContaining('2026-09-23T23:59:00'),
       },
     });
+  });
+
+  it('asks when to move if the LLM draft has no start', () => {
+    const result = resolveVoiceCommand({
+      draft: draft({ intent: 'reschedule', taskName: 'Dentist' }),
+      transcript: 'move dentist to tomorrow at 15:00',
+      timeZone: ZONE,
+      nowIso: NOW,
+      alreadyClarified: false,
+      tasks: [dentist],
+      slots: [slot({ id: 's1', taskId: 't1' })],
+    });
+    expect(result.type).toBe('clarify');
   });
 
   it('do now clears unscheduled and opens a from-now window', () => {

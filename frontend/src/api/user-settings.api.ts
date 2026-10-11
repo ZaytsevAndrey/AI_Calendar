@@ -23,6 +23,8 @@ export interface UserSettingsDTO {
   recurringScheduleHorizonDays: number;
   timeZone?: string | null;
   language?: string;
+  /** Spoken language for voice STT / TTS (independent of UI `language`). */
+  speechLanguage?: string;
   remindersEnabled?: boolean;
   /** When true, a Google delete of an app event also removes it in the app. */
   syncGoogleDeletions?: boolean;
@@ -56,6 +58,7 @@ export interface UpdateUserSettingsDTO {
   recurringScheduleHorizonDays?: number;
   timeZone?: string;
   language?: string;
+  speechLanguage?: string;
   remindersEnabled?: boolean;
   syncGoogleDeletions?: boolean;
   confirmVoiceCommands?: boolean;

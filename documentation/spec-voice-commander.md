@@ -2,7 +2,7 @@
 
 **Status:** product contract for Voice Commander (roadmap §13 shipped).  
 **Language:** English  
-**Last updated:** September 2026  
+**Last updated:** October 2026  
 
 Voice becomes the **primary controller** for tasks and habits: full create / edit / delete plus the operational actions already supported. Placement and conflict choice stay on the shared decision layer in [spec-conflict-rules.md](spec-conflict-rules.md). HTTP details for today’s endpoints live in [api-reference.md](api-reference.md); Groq keys in [integrations.md](integrations.md).
 
@@ -140,6 +140,8 @@ Keep `POST /voice/transcribe` and `POST /voice/parse-task`. Extend the parse res
 - Settings: persist **`speakVoiceReplies`** (boolean, default sensible — prefer `true` when Web Speech is available is a product default; document the shipped default in api-reference when implemented).
 
 The client continues to perform writes through existing task / habit / schedule APIs (`executeVoiceCommand` and create path). Parse does not mutate the database except via those client calls.
+
+**Dates/times:** the parse prompt supplies Local calendar anchors (now ISO, wake-day today/tomorrow, wake/sleep). The model returns final ISO fields; the server does not rewrite days/clocks from the transcript. Create still requires a usable task name.
 
 ---
 

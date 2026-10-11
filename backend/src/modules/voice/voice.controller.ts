@@ -1,4 +1,12 @@
-import { Body, Controller, Post, Request, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Param,
+  Post,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -8,6 +16,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ParseVoiceTaskDto } from './dto/parse-voice-task.dto';
 import { TranscribeVoiceDto } from './dto/transcribe-voice.dto';
+import { VoiceTurnDto } from './dto/voice-turn.dto';
 import { VoiceService } from './voice.service';
 
 @ApiTags('voice')
@@ -20,8 +29,8 @@ export class VoiceController {
   @Post('transcribe')
   @ApiOperation({ summary: 'Transcribe recorded audio with Groq Whisper' })
   @ApiResponse({ status: 201, description: 'Transcript text' })
-  transcribe(@Body() dto: TranscribeVoiceDto) {
-    return this.voiceService.transcribe(dto);
+  transcribe(@Request() req, @Body() dto: TranscribeVoiceDto) {
+    return this.voiceService.transcribe(req.user.userId, dto);
   }
 
   @Post('parse-task')
@@ -32,5 +41,22 @@ export class VoiceController {
   @ApiResponse({ status: 201, description: 'Parse result with understanding' })
   parseTask(@Request() req, @Body() dto: ParseVoiceTaskDto) {
     return this.voiceService.parseTask(req.user.userId, dto);
+  }
+
+  @Post('turn')
+  @ApiOperation({
+    summary:
+      'Voice Agent turn: grounded Q&A via tools, or legacy parse for mutations',
+  })
+  @ApiResponse({ status: 201, description: 'Agent turn result' })
+  turn(@Request() req, @Body() dto: VoiceTurnDto) {
+    return this.voiceService.turn(req.user.userId, dto);
+  }
+
+  @Delete('session/:sessionId')
+  @ApiOperation({ summary: 'Discard an in-memory voice agent session' })
+  @ApiResponse({ status: 200, description: 'Session cleared' })
+  endSession(@Request() req, @Param('sessionId') sessionId: string) {
+    return this.voiceService.endVoiceSession(req.user.userId, sessionId);
   }
 }

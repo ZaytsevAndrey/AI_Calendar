@@ -88,11 +88,44 @@ export async function stubVoiceApis(
       body: JSON.stringify(parse(body)),
     });
   });
+  await page.route('**/voice/turn', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    const legacyParse = parse(body);
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        sessionId: body.sessionId || 'e2e-session',
+        outcome: 'legacy_parse',
+        assistantMessage: '',
+        intents: [],
+        actions: [],
+        proposal: null,
+        clarifyCount: 0,
+        legacyParse,
+      }),
+    });
+  });
+  await page.route('**/voice/session/**', async (route) => {
+    if (route.request().method() !== 'DELETE') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    });
+  });
 }
 
 /** Finish one auto-started recording (sheet begins Listening on open). */
 export async function recordOnce(page: Page): Promise<void> {
   const dialog = page.getByRole('dialog');
-  await expect(dialog.getByText('Listening…', { exact: true })).toBeVisible();
-  await dialog.getByRole('button', { name: 'Stop' }).click();
+  await expect(dialog.getByText(/Listening/)).toBeVisible();
+  await dialog.getByRole('button', { name: 'Done' }).click();
 }

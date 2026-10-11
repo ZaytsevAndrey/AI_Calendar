@@ -1,14 +1,9 @@
-import {
-  endOfLocalDayIso,
-  inferClockHmRange,
-  inferScheduleWindow,
-  localDateTimeIso,
-  localYmd,
-  startOfLocalDayIso,
-} from './voice-local-date.util';
+import { isAppLanguage, type AppLanguage } from '../../i18n/types';
+import { t } from '../../i18n/t';
 import type {
   VoiceParsedTask,
   VoiceParseResult,
+  VoiceTaskKind,
   VoiceUnderstanding,
 } from './voice-parse.types';
 
@@ -97,67 +92,157 @@ function isIsoLike(value: string | null): value is string {
 }
 
 function fallbackNameFromTranscript(transcript: string): string {
+  return (
+    inferTaskNameFromTranscript(transcript) ||
+    compactTranscript(transcript) ||
+    'New task'
+  );
+}
+
+function looksLikeCreateSpeech(transcript: string): boolean {
+  return /^(?:please\s+|будь\s+ласка\s+)?(?:створи(?:ти)?|додай(?:ти)?|создай|добавь|create|add|new)(?=[^\p{L}]|$)/iu.test(
+    transcript.replace(/\s+/g, ' ').trim(),
+  );
+}
+
+function isWeakTaskName(name: string): boolean {
+  const compact = name.replace(/\s+/g, ' ').trim();
+  if (!compact) return true;
+  return /^(?:(?:нова|новую|a|an|the)\s+)?(?:задач[уаіи]?|task|event|подію|событие|new task)(?:\s+на\s+(?:завтра|tomorrow|сьогодні|сегодня|today))?$/iu.test(
+    compact,
+  );
+}
+
+function compactTranscript(transcript: string): string {
   const compact = transcript.replace(/\s+/g, ' ').trim();
-  if (!compact) return 'New task';
+  if (!compact) return '';
   return compact.length > 80 ? `${compact.slice(0, 77)}…` : compact;
 }
 
-function isMidnightIso(iso: string): boolean {
-  return /T00:00/.test(iso);
+/**
+ * Strip create / day / time boilerplate so "Створи задачу на завтра. З'їздити в магазин на другу дня"
+ * → "З'їздити в магазин".
+ */
+export function inferTaskNameFromTranscript(transcript: string): string | null {
+  let text = transcript.replace(/\s+/g, ' ').trim().replace(/[’']/g, "'");
+  if (!text) return null;
+
+  text = text.replace(
+    /^(?:please\s+|будь\s+ласка\s+)?(?:створи(?:ти)?|додай(?:ти)?|создай|добавь|create|add|new)\s+(?:мені\s+|мне\s+|me\s+)?(?:(?:нову|новую|a|an|the)\s+)?(?:задач[уаіи]?|task|event|подію|событие)?\s*/iu,
+    '',
+  );
+  text = text.replace(/^(?:задач[уаіи]?|task|event)\s*[:\-]?\s*/iu, '');
+
+  // Use \p{L} boundaries — JS \b/\w do not treat Cyrillic as word chars.
+  text = text.replace(
+    /(?:^|[^\p{L}])(?:на\s+)?(?:післязавтра|послезавтра|day after tomorrow|завтра|tomorrow|сьогодні|сегодня|today)(?=[^\p{L}]|$)/giu,
+    ' ',
+  );
+  text = text.replace(
+    /(?:^|[^\p{L}])(?:в|у|на)\s+(?:понеділок|вівторок|середу|четвер|п'?ятницю|суботу|неділю|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?=[^\p{L}]|$)/giu,
+    ' ',
+  );
+
+  text = text.replace(
+    /(?:^|[^\p{L}])(?:о|на|at|в|у)\s+(?:перш\p{L}*|друг\p{L}*|трет\p{L}*|четверт\p{L}*|п'?ят\p{L}*|шост\p{L}*|сьом\p{L}*|восьм\p{L}*|дев'?ят\p{L}*|десят\p{L}*|одинадцят\p{L}*|дванадцят\p{L}*|\d{1,2}(?::\d{2})?)\s*(?:годині?|часа?|дня|ранку|вечора|am|pm)?(?=[^\p{L}]|$)/giu,
+    ' ',
+  );
+  text = text.replace(/(?:^|[^\d])\d{1,2}[:.]\d{2}(?=[^\d]|$)/g, ' ');
+  text = text.replace(
+    /(?:^|[^\p{L}])(?:на|for)\s+\d{1,2}\s*(?:хвилин(?:и|у)?|минут(?:ы|у)?|min(?:utes?)?)(?=[^\p{L}]|$)/giu,
+    ' ',
+  );
+  text = text.replace(
+    /(?:^|[^\p{L}])(?:з|с|from)\s+\d{1,2}(?::\d{2})?\s+(?:до|по|to)\s+\d{1,2}(?::\d{2})?(?=[^\p{L}]|$)/giu,
+    ' ',
+  );
+
+  text = text
+    .replace(/[.!?,;:]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (text.length < 2) return null;
+  if (
+    /^(?:задач[уаіи]?|task|please|будь ласка|new task|нову задачу)$/iu.test(text)
+  ) {
+    return null;
+  }
+  return text.length > 80 ? `${text.slice(0, 77)}…` : text;
 }
 
-function applyInferredScheduleWindow(
-  task: VoiceParsedTask,
-  ctx: {
-    transcript: string;
-    timeZone: string;
-    nowIso: string;
-    eventType: 'fixed' | 'admin';
-  },
-): void {
-  const window = inferScheduleWindow(
-    ctx.transcript,
-    localYmd(ctx.nowIso, ctx.timeZone),
-  );
-  const clocks = inferClockHmRange(ctx.transcript);
+/** Drop past preferred/fixed slots so the placer starts from now, not history. */
+function rejectPastScheduleSlot(task: VoiceParsedTask, nowIso: string): void {
+  const nowMs = Date.parse(nowIso);
+  if (Number.isNaN(nowMs)) return;
 
-  if (window) {
-    if (!task.earliestStartTime) {
-      task.earliestStartTime = clocks
-        ? localDateTimeIso(window.startYmd, clocks.startHm, ctx.timeZone)
-        : startOfLocalDayIso(window.startYmd, ctx.timeZone);
-    }
-    if (!task.deadline) {
-      task.deadline =
-        clocks && window.startYmd === window.endYmd
-          ? localDateTimeIso(window.endYmd, clocks.endHm, ctx.timeZone)
-          : endOfLocalDayIso(window.endYmd, ctx.timeZone);
-    }
-    if (
-      ctx.eventType !== 'fixed' &&
-      !task.isRecurring &&
-      window.weekDays?.length &&
-      !task.eligibleWeekDays?.length
-    ) {
-      task.eligibleWeekDays = window.weekDays;
-    }
-  } else if (clocks && !task.earliestStartTime && !task.deadline) {
-    const today = localYmd(ctx.nowIso, ctx.timeZone);
-    task.earliestStartTime = localDateTimeIso(today, clocks.startHm, ctx.timeZone);
-    task.deadline = localDateTimeIso(today, clocks.endHm, ctx.timeZone);
-  }
-
-  if (
-    ctx.eventType !== 'fixed' &&
-    task.scheduledStartTime &&
-    isMidnightIso(task.scheduledStartTime)
-  ) {
-    if (!task.earliestStartTime) {
-      task.earliestStartTime = task.scheduledStartTime;
-    }
+  const startMs = task.scheduledStartTime
+    ? Date.parse(task.scheduledStartTime)
+    : NaN;
+  if (!Number.isNaN(startMs) && startMs < nowMs) {
     task.scheduledStartTime = null;
     task.scheduledEndTime = null;
   }
+
+  const earliestMs = task.earliestStartTime
+    ? Date.parse(task.earliestStartTime)
+    : NaN;
+  if (!Number.isNaN(earliestMs) && earliestMs < nowMs) {
+    task.earliestStartTime = nowIso;
+  }
+
+  const deadlineMs = task.deadline ? Date.parse(task.deadline) : NaN;
+  if (!Number.isNaN(deadlineMs) && deadlineMs < nowMs) {
+    task.deadline = null;
+  }
+}
+
+function readTaskKind(root: Record<string, unknown>, taskRaw: Record<string, unknown>): VoiceTaskKind | null {
+  const raw = asString(taskRaw.kind || root.kind).toLowerCase();
+  if (
+    raw === 'fixed' ||
+    raw === 'flexible' ||
+    raw === 'unscheduled' ||
+    raw === 'recurring'
+  ) {
+    return raw;
+  }
+  return null;
+}
+
+function looksLikeUnscheduledSpeech(transcript: string): boolean {
+  return /(?:незапланован|без\s+дат|unscheduled|\binbox\b|без\s+слот)/iu.test(
+    transcript,
+  );
+}
+
+function hasScheduleWhen(task: VoiceParsedTask): boolean {
+  if (task.isUnscheduled) return true;
+  if (task.isRecurring && task.recurrencePattern) return true;
+  if (task.scheduledStartTime) return true;
+  if (task.deadline || task.earliestStartTime) return true;
+  return false;
+}
+
+/** Named task with no when → inbox; never block create on day/time. */
+function markUnscheduledInbox(task: VoiceParsedTask): void {
+  task.isUnscheduled = true;
+  task.eventType = 'admin';
+  task.isRecurring = false;
+  task.recurrencePattern = null;
+  task.recurrenceWeekDays = [];
+  task.scheduledStartTime = null;
+  task.scheduledEndTime = null;
+  task.deadline = null;
+  task.earliestStartTime = null;
+  task.allowSplit = true;
+}
+
+function resolveLang(value?: string | null): AppLanguage {
+  if (value && isAppLanguage(value)) return value;
+  const short = (value || '').trim().toLowerCase().slice(0, 2);
+  if (short === 'uk') return 'uk';
+  return 'en';
 }
 
 export function normalizeVoiceParse(
@@ -168,17 +253,36 @@ export function normalizeVoiceParse(
     transcript: string;
     timeZone?: string;
     nowIso?: string;
+    wakeTime?: string | null;
+    language?: string | null;
   },
 ): VoiceParseResult {
   const root = asRecord(raw);
   const taskRaw = asRecord(root.task);
+  const lang = resolveLang(ctx.language);
 
   let understanding = UNDERSTANDING.has(root.understanding as VoiceUnderstanding)
     ? (root.understanding as VoiceUnderstanding)
     : 'sufficient';
 
-  const eventType = asString(taskRaw.eventType) === 'fixed' ? 'fixed' : 'admin';
-  const isRecurring = eventType === 'fixed' ? false : asBool(taskRaw.isRecurring, false);
+  const kind = readTaskKind(root, taskRaw);
+  let isUnscheduled =
+    asBool(taskRaw.isUnscheduled, false) || kind === 'unscheduled';
+  if (ctx.alreadyClarified && looksLikeUnscheduledSpeech(ctx.transcript)) {
+    isUnscheduled = true;
+  }
+
+  let eventType: 'fixed' | 'admin' =
+    kind === 'fixed' || asString(taskRaw.eventType) === 'fixed' ? 'fixed' : 'admin';
+  let isRecurring =
+    kind === 'recurring' ||
+    (eventType !== 'fixed' && asBool(taskRaw.isRecurring, false));
+  if (isUnscheduled) {
+    eventType = 'admin';
+    isRecurring = false;
+  }
+  if (eventType === 'fixed') isRecurring = false;
+
   const patternRaw = asString(taskRaw.recurrencePattern).toUpperCase();
   const recurrencePattern =
     isRecurring && PATTERNS.has(patternRaw) ? patternRaw : null;
@@ -188,18 +292,25 @@ export function normalizeVoiceParse(
       ? phaseCandidate
       : null;
 
-  const scheduledStartTime = isIsoLike(asNullableString(taskRaw.scheduledStartTime))
+  let scheduledStartTime = isIsoLike(asNullableString(taskRaw.scheduledStartTime))
     ? asNullableString(taskRaw.scheduledStartTime)
     : null;
-  const scheduledEndTime = isIsoLike(asNullableString(taskRaw.scheduledEndTime))
+  let scheduledEndTime = isIsoLike(asNullableString(taskRaw.scheduledEndTime))
     ? asNullableString(taskRaw.scheduledEndTime)
     : null;
-  const deadline = isIsoLike(asNullableString(taskRaw.deadline))
+  let deadline = isIsoLike(asNullableString(taskRaw.deadline))
     ? asNullableString(taskRaw.deadline)
     : null;
-  const earliestStartTime = isIsoLike(asNullableString(taskRaw.earliestStartTime))
+  let earliestStartTime = isIsoLike(asNullableString(taskRaw.earliestStartTime))
     ? asNullableString(taskRaw.earliestStartTime)
     : null;
+
+  if (isUnscheduled) {
+    scheduledStartTime = null;
+    scheduledEndTime = null;
+    deadline = null;
+    earliestStartTime = null;
+  }
 
   let name = asString(taskRaw.name);
   const task: VoiceParsedTask = {
@@ -208,6 +319,7 @@ export function normalizeVoiceParse(
     eventType,
     estimatedTimeInMinutes: clampDuration(taskRaw.estimatedTimeInMinutes),
     isRecurring,
+    isUnscheduled: isUnscheduled || undefined,
     recurrencePattern,
     recurrenceWeekDays: isRecurring ? asWeekDays(taskRaw.recurrenceWeekDays) : [],
     allowSplit: eventType === 'fixed' ? false : asBool(taskRaw.allowSplit, true),
@@ -224,21 +336,13 @@ export function normalizeVoiceParse(
     scheduledEndTime,
     phaseId,
     phaseIds: phaseId ? [phaseId] : undefined,
+    timeZone: ctx.timeZone,
     location: asNullableString(taskRaw.location),
     googleColorId: asNullableString(taskRaw.googleColorId),
     googleVisibility: asNullableString(taskRaw.googleVisibility),
     googleTransparency: asNullableString(taskRaw.googleTransparency),
     googleReminders: normalizeGoogleReminders(taskRaw.googleReminders),
   };
-
-  if (ctx.timeZone && ctx.nowIso) {
-    applyInferredScheduleWindow(task, {
-      transcript: ctx.transcript,
-      timeZone: ctx.timeZone,
-      nowIso: ctx.nowIso,
-      eventType,
-    });
-  }
 
   if (
     eventType === 'fixed' &&
@@ -247,6 +351,10 @@ export function normalizeVoiceParse(
     Date.parse(scheduledEndTime) <= Date.parse(scheduledStartTime)
   ) {
     task.scheduledEndTime = null;
+  }
+
+  if (ctx.nowIso && !isUnscheduled) {
+    rejectPastScheduleSlot(task, ctx.nowIso);
   }
 
   if (
@@ -267,6 +375,14 @@ export function normalizeVoiceParse(
 
   let clarifyingQuestion = asNullableString(root.clarifyingQuestion);
 
+  const inferredName = inferTaskNameFromTranscript(ctx.transcript);
+  if (looksLikeCreateSpeech(ctx.transcript) && !inferredName) {
+    name = '';
+    task.name = '';
+  } else if (!name || isWeakTaskName(name)) {
+    name = inferredName || '';
+    task.name = name;
+  }
   if (!name && ctx.alreadyClarified) {
     name = fallbackNameFromTranscript(ctx.transcript);
     task.name = name;
@@ -274,9 +390,12 @@ export function normalizeVoiceParse(
 
   if (!name) {
     understanding = 'needs_clarification';
-    if (!clarifyingQuestion) {
-      clarifyingQuestion = 'What should I call this task?';
-    }
+    clarifyingQuestion =
+      clarifyingQuestion || t(lang, 'voice.whatTaskName');
+  } else if (!hasScheduleWhen(task)) {
+    markUnscheduledInbox(task);
+    understanding = 'complete';
+    clarifyingQuestion = null;
   } else {
     understanding = 'complete';
     clarifyingQuestion = null;
