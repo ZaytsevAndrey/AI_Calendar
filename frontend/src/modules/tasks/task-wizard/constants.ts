@@ -166,7 +166,11 @@ export const WEEKDAY_OPTIONS = [
   },
 ];
 
-export function presetPatch(id: TaskPresetId): Partial<TaskFormValues> {
+export function presetPatch(
+  id: TaskPresetId,
+  defaultMinutes = 30,
+): Partial<TaskFormValues> {
+  const minutes = defaultMinutes >= 5 ? defaultMinutes : 30;
   if (id === 'unscheduled') {
     return {
       isUnscheduled: true,
@@ -197,7 +201,7 @@ export function presetPatch(id: TaskPresetId): Partial<TaskFormValues> {
       isFixed: false,
       isRecurring: true,
       allowSplit: true,
-      estimatedTimeInMinutes: 30,
+      estimatedTimeInMinutes: minutes,
       recurrencePattern: 'DAILY',
       recurrenceWeekDays: [1, 2, 3, 4, 5],
       scheduledStartTime: '',
@@ -206,6 +210,7 @@ export function presetPatch(id: TaskPresetId): Partial<TaskFormValues> {
   }
   return {
     ...FLEXIBLE_DEFAULTS,
+    estimatedTimeInMinutes: minutes,
     scheduledStartTime: '',
     scheduledEndTime: '',
   };

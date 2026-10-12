@@ -37,6 +37,13 @@ export class UserSettingsService {
         userSettings.defaultBreakDuration = defaults.defaultBreakDuration;
       if (userSettings.defaultLunchDuration === undefined)
         userSettings.defaultLunchDuration = defaults.defaultLunchDuration;
+      if (
+        userSettings.defaultTaskDurationMinutes == null ||
+        userSettings.defaultTaskDurationMinutes < 5
+      ) {
+        userSettings.defaultTaskDurationMinutes =
+          defaults.defaultTaskDurationMinutes;
+      }
       if (!userSettings.preferredLunchTime)
         userSettings.preferredLunchTime = defaults.preferredLunchTime;
       if (userSettings.weekendWorkEnabled === undefined)
@@ -152,6 +159,7 @@ export class UserSettingsService {
       defaultWorkBlockDuration: 25,
       defaultBreakDuration: 5,
       defaultLunchDuration: 60,
+      defaultTaskDurationMinutes: 30,
       preferredLunchTime: '12:00',
       weekendWorkEnabled: false,
       allowSplitScheduling: true,

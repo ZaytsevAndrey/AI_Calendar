@@ -219,6 +219,7 @@ export function initialFormValues(
     scheduleIntent?: boolean;
   },
   timeZone: string = 'UTC',
+  defaultTaskDurationMinutes = 30,
 ): TaskFormValues {
   if (defaults?.formPrefill) {
     return defaults.formPrefill;
@@ -230,7 +231,8 @@ export function initialFormValues(
       description: '',
       isFixed: false,
       phaseId: '',
-      estimatedTimeInMinutes: 30,
+      estimatedTimeInMinutes:
+        defaultTaskDurationMinutes >= 5 ? defaultTaskDurationMinutes : 30,
       isRecurring: false,
       recurrenceWeekDays: [],
       allowSplit: true,

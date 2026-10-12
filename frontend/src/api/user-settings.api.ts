@@ -8,6 +8,8 @@ export interface UserSettingsDTO {
   defaultWorkBlockDuration: number;
   defaultBreakDuration: number;
   defaultLunchDuration: number;
+  /** Length of a new task when the user does not name one. */
+  defaultTaskDurationMinutes?: number;
   preferredLunchTime: string;
   weekendWorkEnabled: boolean;
   googleCalendarLinked: boolean;
@@ -47,6 +49,7 @@ export interface UpdateUserSettingsDTO {
   defaultWorkBlockDuration?: number;
   defaultBreakDuration?: number;
   defaultLunchDuration?: number;
+  defaultTaskDurationMinutes?: number;
   preferredLunchTime?: string;
   weekendWorkEnabled?: boolean;
   googleCalendarLinked?: boolean;

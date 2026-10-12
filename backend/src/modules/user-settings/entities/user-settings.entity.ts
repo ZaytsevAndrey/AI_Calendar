@@ -36,6 +36,10 @@ export class UserSettings {
   @Column({ default: 120 })
   defaultLunchDuration: number;
 
+  /** Length of a new task when the user does not name one. Not the focus-block length. */
+  @Column({ type: 'int', default: 30 })
+  defaultTaskDurationMinutes: number;
+
   @Column({ type: 'time', default: '12:00' })
   preferredLunchTime: string;
 

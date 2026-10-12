@@ -103,6 +103,24 @@ describe('UserSettingsService', () => {
     expect(service.getDefaultSettings().syncGoogleDeletions).toBe(false);
   });
 
+  it('defaults a new task duration to 30 minutes', () => {
+    expect(service.getDefaultSettings().defaultTaskDurationMinutes).toBe(30);
+  });
+
+  it('fills a missing task duration when loading settings', async () => {
+    const existing = {
+      userId: 'user-1',
+      wakeTime: '07:00',
+      sleepTime: '22:00',
+      defaultTaskDurationMinutes: null,
+    };
+    repo.findOne.mockResolvedValue(existing);
+    repo.save.mockImplementation(async (entity) => entity);
+
+    const settings = await service.getSettings('user-1');
+    expect(settings.defaultTaskDurationMinutes).toBe(30);
+  });
+
   it('stores hidden calendar ids and drops the app calendar', async () => {
     const existing = {
       userId: 'user-1',

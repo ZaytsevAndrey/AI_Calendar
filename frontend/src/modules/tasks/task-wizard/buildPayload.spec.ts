@@ -3,6 +3,7 @@ import {
   initialFormValues,
   windowSpansMultipleDays,
 } from './buildPayload';
+import { presetPatch } from './constants';
 import type { TaskFormValues } from './schema';
 
 const NICOSIA = 'Asia/Nicosia';
@@ -109,6 +110,18 @@ describe('windowSpansMultipleDays', () => {
   it('compares civil dates on datetime-local strings', () => {
     expect(windowSpansMultipleDays('2026-09-11T00:00', '2026-09-11T23:59')).toBe(false);
     expect(windowSpansMultipleDays('2026-09-11T00:00', '2026-09-13T23:59')).toBe(true);
+  });
+});
+
+describe('default task duration', () => {
+  it('starts a new task at the settings duration', () => {
+    const values = initialFormValues(undefined, undefined, NICOSIA, 45);
+    expect(values.estimatedTimeInMinutes).toBe(45);
+  });
+
+  it('applies the settings duration when switching to flexible or recurring', () => {
+    expect(presetPatch('flexible', 45).estimatedTimeInMinutes).toBe(45);
+    expect(presetPatch('recurring', 45).estimatedTimeInMinutes).toBe(45);
   });
 });
 

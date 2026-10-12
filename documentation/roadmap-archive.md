@@ -14,6 +14,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ## Shipped (Oct 2026)
 
+- [x] **Default task duration setting.** Settings `defaultTaskDurationMinutes` (default 30, 5–480) is the length of a new task when none is named. The create form starts there, voice parse sends it as `defaultTaskDurationMinutes`, and `POST /tasks` uses it when the body omits duration. `defaultWorkBlockDuration` stays the focus block.
+
 - [x] **Create kind decision tree.** The create prompt picks kind in a fixed order (recurring, then a concrete clock, a soft clock, a placement window, a day, otherwise Unscheduled). A span that is the event itself sets duration; a span that is when to do the work is a window. One question when the length is missing on a clearly long task, or when those two spans are easy to mix up. Default length is the duration number in the prompt.
 
 - [x] **Voice update + reschedule prompts.** Update specialist sends only changed task fields (`command.newName` for a rename, `phaseId` from the phase list). Reschedule specialist sends `command.start` / `command.end`: a clock is a move, a day with no clock is 00:00–23:59, “do now” uses now. Confirm and placement stay on the existing resolver.

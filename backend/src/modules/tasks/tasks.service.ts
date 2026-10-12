@@ -22,7 +22,7 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { SkipOccurrenceDto } from './dto/skip-occurrence.dto';
 import { Phase } from '../phases/entities/phase.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
-import { TaskEventType, getEventTypeRules } from '../scheduling/event-type.enum';
+import { TaskEventType } from '../scheduling/event-type.enum';
 import { ScheduleJobService } from '../schedule/schedule-job.service';
 import {
   PlacementStepService,
@@ -116,6 +116,15 @@ export class TasksService {
       task.isUnscheduled = false;
     }
     rememberSingleProblematicDay(task);
+  }
+
+  private async defaultTaskDurationMinutes(userId: string): Promise<number> {
+    const settings = await this.userSettingsRepository.findOne({
+      where: { userId },
+    });
+    const minutes = settings?.defaultTaskDurationMinutes;
+    if (typeof minutes === 'number' && minutes >= 5) return minutes;
+    return 30;
   }
 
   private async resolveTaskTimeZone(
@@ -491,7 +500,6 @@ export class TasksService {
     const eventType = isUnscheduled
       ? TaskEventType.ADMIN
       : (createTaskDto.eventType ?? TaskEventType.ADMIN);
-    const rules = getEventTypeRules(eventType);
 
     if (isUnscheduled && createTaskDto.eventType === TaskEventType.FIXED) {
       throw new BadRequestException('Unscheduled tasks cannot be fixed');
@@ -506,7 +514,8 @@ export class TasksService {
     }
 
     const estimatedTimeInMinutes =
-      createTaskDto.estimatedTimeInMinutes ?? rules.defaultDurationMinutes;
+      createTaskDto.estimatedTimeInMinutes ??
+      (await this.defaultTaskDurationMinutes(userId));
 
     const {
       phaseIds,

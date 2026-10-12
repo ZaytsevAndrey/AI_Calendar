@@ -26,7 +26,7 @@ Additional routes may exist in `auth.controller.ts` (email verification, etc.).
 
 `GET` (and the logic that creates default settings) also triggers **default phase creation** for the user when they have no phases yet (see Phases below).
 
-Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWorkEnabled`, `allowSplitScheduling`, `minSplitMinutes`, **`timeZone`** (IANA, e.g. `Asia/Nicosia` / `Europe/Kyiv`). Empty `timeZone` is filled **once** from the browser on first login; the user can change it in Settings. Invalid IANA names are rejected. Postgres stores `wakeTime` / `sleepTime` as `time` (`HH:mm:ss`); the engine normalizes them to `HH:mm` and interprets those clocks **in `timeZone`** (fallback `UTC`).
+Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWorkEnabled`, `allowSplitScheduling`, `minSplitMinutes`, **`defaultTaskDurationMinutes`** (default 30; new tasks and voice use it when duration is omitted), **`timeZone`** (IANA, e.g. `Asia/Nicosia` / `Europe/Kyiv`). Empty `timeZone` is filled **once** from the browser on first login; the user can change it in Settings. Invalid IANA names are rejected. Postgres stores `wakeTime` / `sleepTime` as `time` (`HH:mm:ss`); the engine normalizes them to `HH:mm` and interprets those clocks **in `timeZone`** (fallback `UTC`).
 
 **`language`** (`en` | `uk`, default `en`) is the UI and notification language. Empty/`null` is seeded once from the browser (`uk*` → `uk`, else `en`). Push titles, schedule-suggestion language, and localized API error messages follow this setting. The frontend also sends `Accept-Language` matching the active locale.
 

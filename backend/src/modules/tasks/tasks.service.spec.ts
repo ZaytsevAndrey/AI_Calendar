@@ -153,6 +153,17 @@ describe('TasksService', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
+  it('uses the settings default duration when the payload omits it', async () => {
+    userSettingsRepository.findOne.mockResolvedValue({
+      defaultTaskDurationMinutes: 45,
+    });
+    await service.create('user-1', {
+      name: 'Task',
+      eventType: TaskEventType.ADMIN,
+    } as any);
+    expect(createdRow(tasksRepository).estimatedTimeInMinutes).toBe(45);
+  });
+
   it('throws when more than one phase is passed', async () => {
     await expect(
       service.create('user-1', {

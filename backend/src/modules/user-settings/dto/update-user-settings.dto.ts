@@ -88,6 +88,18 @@ export class UpdateUserSettingsDto {
   defaultLunchDuration?: number;
 
   @ApiProperty({
+    example: 30,
+    description:
+      'Default length of a new task in minutes, used when the user does not specify one',
+    required: false,
+  })
+  @IsInt()
+  @IsOptional()
+  @Min(5)
+  @Max(480)
+  defaultTaskDurationMinutes?: number;
+
+  @ApiProperty({
     example: '12:00',
     description: 'Preferred lunch time in 24h format (HH:MM)',
     required: false,

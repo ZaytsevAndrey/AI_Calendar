@@ -23,4 +23,4 @@ Single source of truth for the project. Keep these files in sync with code chang
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** October 2026 (create/update/reschedule voice prompts; live roadmap is §20).
+**Last documentation update:** October 2026 (settings default task duration; live roadmap is the rest of §20).

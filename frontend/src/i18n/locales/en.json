@@ -69,6 +69,8 @@
     "maxSplit": "Max split chunk (minutes)",
     "horizon": "Planning horizon (days)",
     "horizonHint": "How far ahead recurring tasks stay scheduled. The app extends this window in the background; you do not need Review schedule to keep series alive.",
+    "defaultTaskDuration": "Default task length (minutes)",
+    "defaultTaskDurationHint": "Used for a new task when you do not set a length. Voice uses the same value.",
     "buffer": "Fixed-event buffer (minutes)",
     "language": "App language",
     "languageEn": "English",

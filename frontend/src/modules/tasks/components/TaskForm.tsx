@@ -63,9 +63,20 @@ const TaskForm: React.FC<TaskFormProps> = ({
   const { t } = useTranslation();
   const { data: userSettings } = useGetUserSettingsQuery();
   const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
+  const defaultTaskDurationMinutes =
+    typeof userSettings?.defaultTaskDurationMinutes === 'number' &&
+    userSettings.defaultTaskDurationMinutes >= 5
+      ? userSettings.defaultTaskDurationMinutes
+      : 30;
   const defaultValues = useMemo(
-    () => initialFormValues(initialData, createDefaults, timeZone),
-    [initialData, createDefaults, timeZone],
+    () =>
+      initialFormValues(
+        initialData,
+        createDefaults,
+        timeZone,
+        defaultTaskDurationMinutes,
+      ),
+    [initialData, createDefaults, timeZone, defaultTaskDurationMinutes],
   );
   const [showDescription, setShowDescription] = useState(
     !!initialData?.description || !!createDefaults?.formPrefill?.description,
@@ -94,9 +105,16 @@ const TaskForm: React.FC<TaskFormProps> = ({
   });
 
   useEffect(() => {
-    reset(initialFormValues(initialData, createDefaults, timeZone));
+    reset(
+      initialFormValues(
+        initialData,
+        createDefaults,
+        timeZone,
+        defaultTaskDurationMinutes,
+      ),
+    );
     setShowDescription(!!initialData?.description || !!createDefaults?.formPrefill?.description);
-  }, [initialData, createDefaults, reset, timeZone]);
+  }, [initialData, createDefaults, reset, timeZone, defaultTaskDurationMinutes]);
 
   const isFixed = useWatch({ control, name: 'isFixed' });
   const isUnscheduled = useWatch({ control, name: 'isUnscheduled' });
@@ -184,7 +202,10 @@ const TaskForm: React.FC<TaskFormProps> = ({
   });
 
   const applyPreset = (id: TaskPresetId) => {
-    reset({ ...getValues(), ...presetPatch(id) }, { keepDirty: true });
+    reset(
+      { ...getValues(), ...presetPatch(id, defaultTaskDurationMinutes) },
+      { keepDirty: true },
+    );
   };
 
   const toggleDay = (day: number) => {

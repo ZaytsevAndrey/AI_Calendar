@@ -31,6 +31,7 @@ interface UserSettingsFormData {
     maxSplitMinutes: number;
     recurringScheduleHorizonDays: number;
     fixedEventBufferMinutes: number;
+    defaultTaskDurationMinutes: number;
 }
 
 const fieldClass = 'ui-input max-w-xs';
@@ -49,6 +50,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
         maxSplitMinutes: number;
         recurringScheduleHorizonDays: number;
         fixedEventBufferMinutes: number;
+        defaultTaskDurationMinutes: number;
     } | null>(null);
 
     const defaultLanguage: AppLanguage = isAppLanguage(initialData?.language)
@@ -84,6 +86,10 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                 typeof initialData?.fixedEventBufferMinutes === 'number'
                     ? initialData.fixedEventBufferMinutes
                     : 0,
+            defaultTaskDurationMinutes:
+                typeof initialData?.defaultTaskDurationMinutes === 'number'
+                    ? initialData.defaultTaskDurationMinutes
+                    : 30,
         },
     });
 
@@ -95,6 +101,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
     const maxSplitMinutes = watch('maxSplitMinutes');
     const recurringScheduleHorizonDays = watch('recurringScheduleHorizonDays');
     const fixedEventBufferMinutes = watch('fixedEventBufferMinutes');
+    const defaultTaskDurationMinutes = watch('defaultTaskDurationMinutes');
     const appGoogleCalendarName = watch('appGoogleCalendarName');
 
     const sleepTimeController = useController({
@@ -155,6 +162,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             maxSplit: number | null | undefined,
             horizonDays: number | null | undefined,
             bufferMinutes: number | null | undefined,
+            taskDurationMinutes: number | null | undefined,
         ) => {
             if (!st || !wt || st === '' || wt === '' || typeof st !== 'string' || typeof wt !== 'string') {
                 return;
@@ -190,6 +198,14 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             ) {
                 return;
             }
+            if (
+                typeof taskDurationMinutes !== 'number' ||
+                Number.isNaN(taskDurationMinutes) ||
+                taskDurationMinutes < 5 ||
+                taskDurationMinutes > 480
+            ) {
+                return;
+            }
 
             try {
                 await updateUserSettings({
@@ -202,6 +218,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                     maxSplitMinutes: Math.max(minSplit, maxSplit),
                     recurringScheduleHorizonDays: horizonDays,
                     fixedEventBufferMinutes: bufferMinutes,
+                    defaultTaskDurationMinutes: taskDurationMinutes,
                 }).unwrap();
                 showSuccessToast({
                     title: t('settings.saved'),
@@ -241,6 +258,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             typeof maxSplitMinutes === 'number' &&
             typeof recurringScheduleHorizonDays === 'number' &&
             typeof fixedEventBufferMinutes === 'number' &&
+            typeof defaultTaskDurationMinutes === 'number' &&
             !initialValues
         ) {
             setInitialValues({
@@ -252,9 +270,10 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                 maxSplitMinutes,
                 recurringScheduleHorizonDays,
                 fixedEventBufferMinutes,
+                defaultTaskDurationMinutes,
             });
         }
-    }, [sleepTime, wakeTime, timeZone, language, minSplitMinutes, maxSplitMinutes, recurringScheduleHorizonDays, fixedEventBufferMinutes, initialValues]);
+    }, [sleepTime, wakeTime, timeZone, language, minSplitMinutes, maxSplitMinutes, recurringScheduleHorizonDays, fixedEventBufferMinutes, defaultTaskDurationMinutes, initialValues]);
 
     useEffect(() => {
         const hasChanged =
@@ -267,7 +286,8 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                 minSplitMinutes !== initialValues.minSplitMinutes ||
                 maxSplitMinutes !== initialValues.maxSplitMinutes ||
                 recurringScheduleHorizonDays !== initialValues.recurringScheduleHorizonDays ||
-                fixedEventBufferMinutes !== initialValues.fixedEventBufferMinutes
+                fixedEventBufferMinutes !== initialValues.fixedEventBufferMinutes ||
+                defaultTaskDurationMinutes !== initialValues.defaultTaskDurationMinutes
             );
 
         if (
@@ -282,6 +302,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             typeof maxSplitMinutes === 'number' &&
             typeof recurringScheduleHorizonDays === 'number' &&
             typeof fixedEventBufferMinutes === 'number' &&
+            typeof defaultTaskDurationMinutes === 'number' &&
             hasChanged
         ) {
             const timeoutId = setTimeout(() => {
@@ -294,12 +315,13 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                     maxSplitMinutes,
                     recurringScheduleHorizonDays,
                     fixedEventBufferMinutes,
+                    defaultTaskDurationMinutes,
                 );
             }, 1000);
 
             return () => clearTimeout(timeoutId);
         }
-    }, [sleepTime, wakeTime, timeZone, language, minSplitMinutes, maxSplitMinutes, recurringScheduleHorizonDays, fixedEventBufferMinutes, autoSaveTimeSettings, initialValues]);
+    }, [sleepTime, wakeTime, timeZone, language, minSplitMinutes, maxSplitMinutes, recurringScheduleHorizonDays, fixedEventBufferMinutes, defaultTaskDurationMinutes, autoSaveTimeSettings, initialValues]);
 
     const onLanguageChange = (next: string) => {
         if (!isAppLanguage(next)) return;
@@ -422,6 +444,29 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                                 setValue('maxSplitMinutes', Math.max(minSplitMinutes || 30, nextMax));
                             }}
                         />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <label htmlFor="default-task-duration-minutes" className="ui-label">
+                            {t('settings.defaultTaskDuration')}
+                        </label>
+                        <input
+                            id="default-task-duration-minutes"
+                            type="number"
+                            min={5}
+                            max={480}
+                            className={fieldClass}
+                            value={defaultTaskDurationMinutes || 30}
+                            onChange={(e) => {
+                                const parsed = parseInt(e.target.value, 10);
+                                const next = Number.isNaN(parsed)
+                                    ? 30
+                                    : Math.min(480, Math.max(5, parsed));
+                                setValue('defaultTaskDurationMinutes', next);
+                            }}
+                        />
+                        <p className="max-w-xs text-xs text-ide-muted">
+                            {t('settings.defaultTaskDurationHint')}
+                        </p>
                     </div>
                     <div className="flex flex-col gap-1">
                         <label htmlFor="fixed-event-buffer-minutes" className="ui-label">
