@@ -1,10 +1,16 @@
 # Task Scheduling Test Matrix (Given/When/Then)
 
-Live write path is `PlacementStepService.place` (create / edit / drag / append). Generate, Clear, Undo, and preview APIs are removed; `engine.run` is not used to write slots.  
-Conflict-rule cases still document intended placement behavior: [spec-conflict-rules.md](spec-conflict-rules.md). Incremental write-set: [spec-incremental-placement.md](spec-incremental-placement.md).  
+Live write path is `PlacementStepService.place` → `planPlacement` (create / geometric edit / drag / horizon append). Generate, Clear, Undo, and preview APIs are removed; `engine.run` must not be used to assert live slot writes.  
+Conflict-rule cases: [spec-conflict-rules.md](spec-conflict-rules.md). Incremental write-set: [spec-incremental-placement.md](spec-incremental-placement.md).  
 Format is aimed at direct transfer into unit/integration tests.
 
-**Target behavior** for remaining UI/inbox cases (roadmap §3+). Placement cases marked **Covered** match unit tests for the placement step / conflict rules after §2.
+**Markers**
+
+- **Covered** — green on the **placement** path (`placement-step.util.spec.ts`, `placement-step.service.spec.ts`, and/or Nest/Playwright e2e that call `place`).
+- **Covered (engine only)** — still proven on `IntelligentSchedulingEngine.run` but not yet on the live write path; do not treat as CI proof of seating.
+- **Target** — product does not claim this yet, or UI/notify glue is unfinished.
+
+Crowded-day user families (**CD\***) are the §22 priority: free hole, pack/shift, immovable walls, no capacity, deadline → Unscheduled, fixed vs fixed, conflict apply/dismiss, series under load.
 
 ## Conventions
 
@@ -12,7 +18,7 @@ Format is aimed at direct transfer into unit/integration tests.
 - **W\*** (From/Until): client TZ (`Asia/Nicosia`), host UTC as on Render.
 - Slot step: 15 minutes.
 - Default phase: `09:00-17:00` unless noted.
-- **Placement algorithm (what these cases assert):** type + preferred-first; **priority ignored**; already-seated flexible keeps its slot; silent dodge of fixed/Google unless preferred lands exactly on busy fixed; ask / Problematic / Unscheduled per conflict-rules spec. The target rule (claimant takes the interval) is not asserted here yet.
+- **Placement algorithm (what these cases assert):** type + preferred-first; **priority ignored**; preferred/claim on seated flexible may shift peers per incremental placement; silent dodge of fixed/Google/habit unless preferred lands exactly on that busy interval; ask / Problematic / Unscheduled per conflict-rules spec.
 - Warnings asserted by `code`, not message text.
 
 Recommended codes (use real backend enums if names differ):
@@ -102,7 +108,67 @@ Recommended codes (use real backend enums if names differ):
 
 ---
 
-## T10 — Seated flexible keeps slot; new flexible finds next free (**Covered**)
+## Crowded-day families (CD) — §22 priority
+
+These describe a busy phase day. Prefer Nest e2e + Playwright for the HTTP/UI loop; util/service for planner outcomes.
+
+### CD01 — Free hole (**Covered**)
+
+**Given** seated flexibles leave a contiguous hole ≥ claim duration.  
+**When** create flexible with no preferred (or preferred on the hole).  
+**Then** silent seat in that hole; peers unchanged; no conflict UI.
+
+### CD02 — Pack / shift flexibles (**Covered**)
+
+**Given** fragmented flexibles with enough free minutes after left-pack.  
+**When** create / place without preferred (or preferred on a peer).  
+**Then** peers shift within the phase; claim seated; anchors untouched.
+
+### CD03 — Preferred on seated flexible (**Covered**)
+
+**Given** flexible `A` seated on `09:00–10:00`.  
+**When** new flexible claims that interval.  
+**Then** claim takes the interval (or next hole per planner); `A` shifts or parks per incremental rules; no conflict sheet (conflict is for anchors only).
+
+### CD04 — Immovable wall (fixed / Google / habit) (**Covered**)
+
+**Given** fixed, stub Google busy, or habit block on `09:00–10:00`.  
+**When** flexible preferred exactly on that interval.  
+**Then** `conflict` with `place_on_top`, `move_new`, `leave_problematic` (+ `skip_occurrence` if recurring); wall never moves. See **T14**, **C01**, **C02**.
+
+### CD05 — No capacity → Problematic (**Covered**)
+
+**Given** phase full (0 free minutes, or only immovable fragments).  
+**When** create flexible / recurring day that cannot fit.  
+**Then** `scheduleState=problematic` (or park copy for a series day); not Unscheduled; not silent drop. See **T22**, A-SCH-035.
+
+### CD06 — Deadline / From–Until miss → Unscheduled (**Covered**)
+
+**Given** flexible window expired or no fit before deadline.  
+**When** place.  
+**Then** `unscheduled` outcome / inbox; not Problematic solely for that miss. Recurring uses Problematic instead (`deadline_no_fit`).
+
+### CD07 — Fixed vs fixed (**Covered**)
+
+**Given** fixed `F1` seated.  
+**When** create or drag fixed `F2` overlapping `F1`.  
+**Then** always `conflict` (never silent overlap); dismiss → Problematic. See **T15**.
+
+### CD08 — Conflict apply / dismiss (**Covered**)
+
+**Given** job result includes `conflicts[]` after create/place.  
+**When** user picks `leave_problematic` / dismiss, `move_new`, or `place_on_top`.  
+**Then** PATCH applies; dismiss parks Problematic; sheet options are structured ids. See **C01**, **C02**.
+
+### CD09 — Series under load (**Covered** Nest A-SCH-033–039)
+
+**Given** multi-day landscape (holes, swiss cheese, fixed mosaic, solid fill).  
+**When** recurring create without preferred.  
+**Then** per-day seat or park; horizon append does not rewrite past days; other series masters are not stolen into gaps.
+
+---
+
+## T10 — Seated flexible; new flexible finds next free (**Covered**)
 
 **Given**
 
@@ -112,16 +178,15 @@ Recommended codes (use real backend enums if names differ):
 
 **When**
 
-- Scheduling runs for `B`.
+- `PlacementStepService.place` for `B`.
 
 **Then**
 
-- `A` stays `09:00-10:00`.
-- `B` gets next free slot `10:00-11:00`.
-- No overlap.
-- No conflict UI.
+- Claimant / peer outcome per `planPlacement` (preferred claim may shift `A`; no-preferred nearest-hole leaves `A` and seats `B` at `10:00–11:00`).
+- No overlap after writes.
+- No conflict UI (peers are movable).
 
-## T11 — Two new flexibles, same preferred, same create pass (**Covered**)
+## T11 — Two new flexibles, same preferred, same create pass (**Covered (engine only)**)
 
 **Given**
 
@@ -139,7 +204,9 @@ Recommended codes (use real backend enums if names differ):
 - `B`: `10:00-11:00`.
 - Priority values on either task do not change this order.
 
-## T12 — Fixed anchor is never moved
+Live product seats one create at a time via `place`; sequential creates cover the same order.
+
+## T12 — Fixed anchor is never moved (**Covered**)
 
 **Given**
 
@@ -148,7 +215,7 @@ Recommended codes (use real backend enums if names differ):
 
 **When**
 
-- Scheduling.
+- `place` for `X`.
 
 **Then**
 
@@ -165,7 +232,7 @@ Recommended codes (use real backend enums if names differ):
 
 **When**
 
-- Scheduling.
+- `place` for `X`.
 
 **Then**
 
@@ -173,7 +240,7 @@ Recommended codes (use real backend enums if names differ):
 - `X` at `10:00-11:00` (or earliest free).
 - No conflict UI.
 
-## T14 — Flexible preferred exactly on fixed → ask (**Covered** engine; UI §4)
+## T14 — Flexible preferred exactly on fixed → ask (**Covered**)
 
 **Given**
 
@@ -186,11 +253,11 @@ Recommended codes (use real backend enums if names differ):
 
 **Then**
 
-- Structured conflict with option ids including at least `move_new`, `leave_problematic` (and `move_other` only if the other side is movable — here fixed is not).
+- Structured conflict with option ids including at least `place_on_top`, `move_new`, `leave_problematic` (and `move_other` only if the other side is movable — here fixed is not).
 - `X` is not silently placed on `09:00-10:00`.
-- Dismiss / no-reply → `X` (or the unresolved work) marked **Problematic**, not Unscheduled.
+- Dismiss / no-reply → `X` marked **Problematic**, not Unscheduled.
 
-## T15 — Fixed vs fixed → always ask (**Target**)
+## T15 — Fixed vs fixed → always ask (**Covered**)
 
 **Given**
 
@@ -199,22 +266,22 @@ Recommended codes (use real backend enums if names differ):
 
 **When**
 
-- Conflict detected.
+- Conflict detected via `place`.
 
 **Then**
 
 - Conflict options (never silent overlap).
-- No-reply → Problematic for the unresolved fixed create/move as defined by API.
+- No-reply / dismiss → Problematic for the unresolved fixed create/move.
 
-## T16 — Deadline with no fit → Unscheduled, not Problematic (**Target**)
+## T16 — Deadline with no fit → Unscheduled, not Problematic (**Covered**)
 
 **Given**
 
-- Flexible task with deadline such that no valid slot fits before deadline (or user left it unscheduled with a deadline).
+- Flexible task with deadline such that no valid slot fits before deadline (or expired From–Until window).
 
 **When**
 
-- Scheduling / create path for that window.
+- `place` / create path for that window.
 
 **Then**
 
@@ -224,7 +291,7 @@ Recommended codes (use real backend enums if names differ):
 
 ---
 
-## T20 — Two recurring, same preferred, enough capacity (**Covered**)
+## T20 — Two recurring, same preferred, enough capacity (**Covered (engine only)**; Nest A-SCH covers sequential create)
 
 **Given**
 
@@ -259,7 +326,7 @@ Recommended codes (use real backend enums if names differ):
 - Each day: `09:00`, `10:00`, `11:00` respectively.
 - No overlap.
 
-## T22 — Three recurring, not enough capacity → Problematic overflow (**Covered** engine overflow meta; inbox §3)
+## T22 — Three recurring, not enough capacity → Problematic overflow (**Covered** util + Nest A-SCH-035)
 
 **Given**
 
@@ -602,26 +669,26 @@ Generate / full replan write path removed. Ended-slot keep semantics no longer a
 
 ---
 
-## C01 — No-reply on conflict → Problematic (**Target**)
+## C01 — No-reply on conflict → Problematic (**Covered**)
 
 **Given**
 
-- Conflict options shown (e.g. T14 / T15).
+- Conflict options shown (e.g. T14 / T15 / CD04).
 
 **When**
 
-- User dismisses sheet / leaves / Voice does not pick an option.
+- User dismisses sheet / closes modal (applies `leave_problematic`) / Voice does not pick an option.
 
 **Then**
 
 - Unresolved work is **Problematic**.
 - Not deleted; not Unscheduled.
 
-## C02 — Conflict option ids are structured (**Target**)
+## C02 — Conflict option ids are structured (**Covered**)
 
 **Given**
 
-- Engine returns a conflict payload.
+- `planPlacement` / mutation job returns a conflict payload.
 
 **When**
 
@@ -629,11 +696,11 @@ Generate / full replan write path removed. Ended-slot keep semantics no longer a
 
 **Then**
 
-- Options use ids: `place_on_top`, `move_other`, `move_new`, `skip_occurrence`, `leave_problematic` (subset allowed).
+- Options use ids: `place_on_top`, `move_other`, `move_new`, `skip_occurrence`, `leave_problematic` (subset allowed; fixed blockers omit `move_other`).
 - Groq/copy only phrases labels; apply uses existing APIs.
 
 ---
 
 ## Minimal smoke set for CI (fast)
 
-- `T05`, `T10`, `T12`, `T14`, `T20`, `T22`, `T30`, `T33`, `T40`, `T50`, `T55`, `W01`, `W03`, `W04`, `C01`.
+- `CD01`–`CD08`, `T05`, `T12`, `T14`, `T15`, `T16`, `T22`, `T50`, `T55`, `W01`, `W03`, `C01`, `C02`.

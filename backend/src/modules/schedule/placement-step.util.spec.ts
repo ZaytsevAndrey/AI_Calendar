@@ -662,6 +662,65 @@ describe('planPlacement', () => {
     expect(plan.conflict.reason).toBe('preferred_on_fixed');
   });
 
+  it('fixed vs fixed overlap always asks (T15 / CD07)', () => {
+    const plan = planPlacement({
+      claim: {
+        ...claim({ start: DAY + 30 * 60_000, end: DAY + 90 * 60_000 }),
+        mustFitWindow: false,
+      },
+      seats: [
+        seat({
+          id: 'fixed-1',
+          role: 'anchor',
+          start: DAY,
+          end: DAY + HOUR,
+        }),
+      ],
+    });
+    expect(plan.outcome).toBe('conflict');
+    if (plan.outcome !== 'conflict') return;
+    expect(plan.conflict.options).toContain('leave_problematic');
+    expect(plan.conflict.options).not.toContain('move_other');
+  });
+
+  it('Google and habit anchors block preferred the same as fixed (CD04)', () => {
+    for (const id of ['google:evt-1', 'habit:0'] as const) {
+      const plan = planPlacement({
+        claim: claim({ start: DAY, end: DAY + HOUR }),
+        seats: [
+          seat({
+            id,
+            taskId: id,
+            role: 'anchor',
+            start: DAY,
+            end: DAY + HOUR,
+          }),
+        ],
+      });
+      expect(plan.outcome).toBe('conflict');
+      if (plan.outcome !== 'conflict') return;
+      expect(plan.conflict.reason).toBe('preferred_on_fixed');
+    }
+  });
+
+  it('recurring preferred on anchor includes skip_occurrence (C02)', () => {
+    const plan = planPlacement({
+      claim: {
+        ...claim({ start: DAY, end: DAY + HOUR }),
+        recurring: true,
+      },
+      seats: [seat({ id: 'fixed', role: 'anchor', start: DAY, end: DAY + HOUR })],
+    });
+    expect(plan.outcome).toBe('conflict');
+    if (plan.outcome !== 'conflict') return;
+    expect(plan.conflict.options).toEqual([
+      'place_on_top',
+      'move_new',
+      'skip_occurrence',
+      'leave_problematic',
+    ]);
+  });
+
   it('shifts a one-off off the claimed interval', () => {
     const plan = planPlacement({
       claim: claim({ start: DAY, end: DAY + HOUR }),

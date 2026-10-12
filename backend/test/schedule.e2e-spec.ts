@@ -28,6 +28,12 @@ function kyivWallIso(ymd: string, hm: string): string {
   return localDateTimeIso(ymd, hm, 'Europe/Kyiv');
 }
 
+/** API may return Z or offset; compare instants. */
+function expectSameInstant(actual: unknown, expectedIso: string): void {
+  expect(typeof actual).toBe('string');
+  expect(Date.parse(String(actual))).toBe(Date.parse(expectedIso));
+}
+
 describe('Schedule API e2e', () => {
   let ctx: E2eApp;
 
@@ -1058,5 +1064,275 @@ describe('Schedule API e2e', () => {
 
     const schedule = await api(ctx.app, 'GET', '/schedule', { token });
     expect(schedule.json()).toEqual(seated.json());
+  });
+
+  it('A-SCH-040 create preferred on fixed → job conflicts → leave_problematic / move_new / place_on_top (CD04/CD08)', async () => {
+    const { token } = await seedOnboardedUser(ctx.app);
+    const phase = await createTimePhase(ctx.app, token, {
+      name: 'Conflict morning',
+      startTime: '09:00',
+      endTime: '12:00',
+    });
+    const phaseId = String(phase.id);
+    const day = kyivFirstFreeMorningYmd();
+    const at = (hm: string) => kyivWallIso(day, hm);
+
+    const fixed = await api(ctx.app, 'POST', '/tasks', {
+      token,
+      payload: {
+        name: 'Anchor fixed',
+        eventType: 'fixed',
+        estimatedTimeInMinutes: 60,
+        phaseId,
+        scheduledStartTime: at('09:00'),
+        scheduledEndTime: at('10:00'),
+      },
+    });
+    expect(fixed.statusCode).toBe(201);
+    await ctx.drainJobs();
+    const fixedId = String(jsonBody(fixed).id);
+
+    const created = await api(ctx.app, 'POST', '/tasks', {
+      token,
+      payload: {
+        name: 'Claim preferred',
+        eventType: 'admin',
+        estimatedTimeInMinutes: 60,
+        phaseId,
+        scheduledStartTime: at('09:00'),
+        scheduledEndTime: at('10:00'),
+        timeZone: 'Europe/Kyiv',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const claim = jsonBody(created) as { id: string; jobId: string };
+    expect(claim.jobId).toBeTruthy();
+    await ctx.drainJobs();
+
+    const job = await api(ctx.app, 'GET', `/schedule-jobs/${claim.jobId}`, {
+      token,
+    });
+    expect(job.statusCode).toBe(200);
+    const jobBody = jsonBody(job) as {
+      status: string;
+      result?: { conflicts?: Array<{ reason: string; options: string[]; taskId: string }> };
+    };
+    expect(jobBody.status).toBe('done');
+    expect(jobBody.result?.conflicts?.length).toBe(1);
+    const conflict = jobBody.result!.conflicts![0];
+    expect(conflict.reason).toBe('preferred_on_fixed');
+    expect(conflict.taskId).toBe(claim.id);
+    expect(conflict.options).toEqual(
+      expect.arrayContaining([
+        'place_on_top',
+        'move_new',
+        'leave_problematic',
+      ]),
+    );
+    expect(conflict.options).not.toContain('move_other');
+
+    const fixedAfter = await api(ctx.app, 'GET', `/tasks/${fixedId}`, { token });
+    expectSameInstant(jsonBody(fixedAfter).scheduledStartTime, at('09:00'));
+
+    // leave_problematic parks the claimant.
+    const parked = await api(ctx.app, 'PATCH', `/tasks/${claim.id}`, {
+      token,
+      payload: {
+        scheduleState: 'problematic',
+        problematicReason: 'preferred_on_fixed',
+        problematicOccurrenceYmds: [day],
+        problematicOriginalStart: at('09:00'),
+        problematicOriginalEnd: at('10:00'),
+      },
+    });
+    expect(parked.statusCode).toBe(200);
+    await ctx.drainJobs();
+    expect(jsonBody(parked).scheduleState).toBe('problematic');
+
+    // Fresh claim for move_new: seat elsewhere (clear preferred clock).
+    const created2 = await api(ctx.app, 'POST', '/tasks', {
+      token,
+      payload: {
+        name: 'Claim move_new',
+        eventType: 'admin',
+        estimatedTimeInMinutes: 60,
+        phaseId,
+        scheduledStartTime: at('09:00'),
+        scheduledEndTime: at('10:00'),
+        timeZone: 'Europe/Kyiv',
+      },
+    });
+    expect(created2.statusCode).toBe(201);
+    const claim2 = jsonBody(created2) as { id: string; jobId: string };
+    await ctx.drainJobs();
+    const job2 = await api(ctx.app, 'GET', `/schedule-jobs/${claim2.jobId}`, {
+      token,
+    });
+    expect(
+      (jsonBody(job2) as { result?: { conflicts?: unknown[] } }).result?.conflicts
+        ?.length,
+    ).toBe(1);
+
+    const moved = await api(ctx.app, 'PATCH', `/tasks/${claim2.id}`, {
+      token,
+      payload: {
+        scheduleState: 'none',
+        scheduledStartTime: null,
+        scheduledEndTime: null,
+      },
+    });
+    expect(moved.statusCode).toBe(200);
+    await ctx.drainJobs();
+    const movedRow = jsonBody(
+      await api(ctx.app, 'GET', `/tasks/${claim2.id}`, { token }),
+    ) as { scheduleState: string; scheduledStartTime: string | null };
+    expect(movedRow.scheduleState).not.toBe('problematic');
+    expect(movedRow.scheduledStartTime).toBeTruthy();
+    expect(Date.parse(String(movedRow.scheduledStartTime))).not.toBe(
+      Date.parse(at('09:00')),
+    );
+
+    // place_on_top → resolved on preferred.
+    const created3 = await api(ctx.app, 'POST', '/tasks', {
+      token,
+      payload: {
+        name: 'Claim on top',
+        eventType: 'admin',
+        estimatedTimeInMinutes: 60,
+        phaseId,
+        scheduledStartTime: at('09:00'),
+        scheduledEndTime: at('10:00'),
+        timeZone: 'Europe/Kyiv',
+      },
+    });
+    expect(created3.statusCode).toBe(201);
+    const claim3 = jsonBody(created3) as { id: string; jobId: string };
+    await ctx.drainJobs();
+
+    const onTop = await api(ctx.app, 'PATCH', `/tasks/${claim3.id}`, {
+      token,
+      payload: {
+        scheduleState: 'resolved',
+        scheduledStartTime: at('09:00'),
+        scheduledEndTime: at('10:00'),
+        problematicOriginalStart: at('09:00'),
+        problematicOriginalEnd: at('10:00'),
+        problematicReason: 'preferred_on_fixed',
+      },
+    });
+    expect(onTop.statusCode).toBe(200);
+    await ctx.drainJobs();
+    expect(jsonBody(onTop).scheduleState).toBe('resolved');
+    expectSameInstant(jsonBody(onTop).scheduledStartTime, at('09:00'));
+
+    const fixedFinal = await api(ctx.app, 'GET', `/tasks/${fixedId}`, { token });
+    expectSameInstant(jsonBody(fixedFinal).scheduledStartTime, at('09:00'));
+  });
+
+  it('A-SCH-041 fixed vs fixed overlap returns conflict on job (CD07 / T15)', async () => {
+    const { token } = await seedOnboardedUser(ctx.app);
+    const phase = await createTimePhase(ctx.app, token, {
+      name: 'Fixed clash',
+      startTime: '09:00',
+      endTime: '12:00',
+    });
+    const phaseId = String(phase.id);
+    const day = kyivFirstFreeMorningYmd();
+    const at = (hm: string) => kyivWallIso(day, hm);
+
+    const f1 = await api(ctx.app, 'POST', '/tasks', {
+      token,
+      payload: {
+        name: 'Fixed A',
+        eventType: 'fixed',
+        estimatedTimeInMinutes: 60,
+        phaseId,
+        scheduledStartTime: at('09:00'),
+        scheduledEndTime: at('10:00'),
+      },
+    });
+    expect(f1.statusCode).toBe(201);
+    await ctx.drainJobs();
+
+    const f2 = await api(ctx.app, 'POST', '/tasks', {
+      token,
+      payload: {
+        name: 'Fixed B',
+        eventType: 'fixed',
+        estimatedTimeInMinutes: 60,
+        phaseId,
+        scheduledStartTime: at('09:30'),
+        scheduledEndTime: at('10:30'),
+      },
+    });
+    expect(f2.statusCode).toBe(201);
+    const body = jsonBody(f2) as { id: string; jobId: string };
+    await ctx.drainJobs();
+
+    const job = await api(ctx.app, 'GET', `/schedule-jobs/${body.jobId}`, {
+      token,
+    });
+    const result = jsonBody(job).result as {
+      conflicts?: Array<{ reason: string }>;
+    };
+    expect(result?.conflicts?.length).toBe(1);
+    expect(result.conflicts![0].reason).toBe('preferred_on_fixed');
+
+    const a = jsonBody(
+      await api(ctx.app, 'GET', `/tasks/${jsonBody(f1).id}`, { token }),
+    );
+    expectSameInstant(a.scheduledStartTime, at('09:00'));
+  });
+
+  it('A-SCH-042 free hole create seats silently on the busy day (CD01)', async () => {
+    const { token } = await seedOnboardedUser(ctx.app);
+    const phase = await createTimePhase(ctx.app, token, {
+      name: 'Pack day',
+      startTime: '09:00',
+      endTime: '11:00',
+    });
+    const phaseId = String(phase.id);
+    const day = kyivFirstFreeMorningYmd();
+    const at = (hm: string) => kyivWallIso(day, hm);
+
+    await api(ctx.app, 'POST', '/tasks', {
+      token,
+      payload: {
+        name: 'Peer morning',
+        eventType: 'admin',
+        estimatedTimeInMinutes: 60,
+        phaseId,
+        scheduledStartTime: at('09:00'),
+        scheduledEndTime: at('10:00'),
+      },
+    });
+    await ctx.drainJobs();
+
+    const hole = await api(ctx.app, 'POST', '/tasks', {
+      token,
+      payload: {
+        name: 'Takes hole',
+        eventType: 'admin',
+        estimatedTimeInMinutes: 60,
+        phaseId,
+      },
+    });
+    expect(hole.statusCode).toBe(201);
+    const holeTask = jsonBody(hole) as { id: string; jobId: string };
+    await ctx.drainJobs();
+    const seated = jsonBody(
+      await api(ctx.app, 'GET', `/tasks/${holeTask.id}`, { token }),
+    ) as { scheduleState: string; scheduledStartTime: string | null };
+    expect(seated.scheduleState).toBe('none');
+    expectSameInstant(seated.scheduledStartTime, at('10:00'));
+
+    const job = await api(ctx.app, 'GET', `/schedule-jobs/${holeTask.jobId}`, {
+      token,
+    });
+    expect(
+      (jsonBody(job) as { result?: { conflicts?: unknown[] } }).result?.conflicts
+        ?? [],
+    ).toEqual([]);
+    // Solid-fill → Problematic across the horizon: A-SCH-035 day3/day4.
   });
 });

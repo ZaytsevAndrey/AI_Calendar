@@ -2,15 +2,15 @@
 
 Complete inventory of **existing** product behavior to cover with automated tests. Cases describe **current code** (September 2026), not the roadmap.
 
-Related docs: [task-scheduling-test-matrix.md](task-scheduling-test-matrix.md) (engine Given/When/Then → unit), [task-creation-rules.md](task-creation-rules.md), [api-reference.md](api-reference.md), [overview.md](overview.md).
+Related docs: [task-scheduling-test-matrix.md](task-scheduling-test-matrix.md) (placement Given/When/Then → unit + Nest/Playwright), [task-creation-rules.md](task-creation-rules.md), [api-reference.md](api-reference.md), [overview.md](overview.md).
 
 ---
 
 ## 1. Goal
 
-Protect the daily loop: **sign in → settings/phases gate → capture a task → Generate / Undo / Clear → Now/Done → habits**. Every live HTTP route and every user-facing screen has named cases. Engine placement math stays in unit tests; E2E asserts the HTTP/UI contract around that math.
+Protect the daily loop: **sign in (JWT seed in CI) → settings/phases gate → capture a task → placement seats it → conflict sheet when needed → Now/Done → habits**. Every live HTTP route and every user-facing screen has named cases. Placement math stays in unit tests on `PlacementStepService.place` / `planPlacement`; E2E asserts the HTTP/UI contract around that math. Generate / Clear / Undo APIs are removed.
 
-Out of scope until a later cycle: snooze, text-add, in-app guide, real Google OAuth in CI, real Groq in CI. Day/week drag-and-drop math and the move plan are unit-tested (`eventDrag.spec.ts`, `move-displayed-event.util.spec.ts`, `displayed-event-move.service.spec.ts` — app moves enqueue replan + `jobId`). A browser drag needs a live Google event, which CI does not have.
+Out of scope until a later cycle: snooze, text-add, in-app guide, real Google OAuth in CI, real Groq in CI. Day/week drag-and-drop math and the move plan are unit-tested (`eventDrag.spec.ts`, `move-displayed-event.util.spec.ts`, `displayed-event-move.service.spec.ts` — app moves use placement + `jobId`). A browser drag needs a live Google event, which CI does not have.
 
 ---
 
@@ -400,6 +400,9 @@ Generate body `{ startDate, endDate }` is **ignored**. Horizon = today → `recu
 | A-SCH-037 | A | P0 | Three stacked recurring peers 09:00/09:30/10:00 | Create 4th recurring without preferred | One clock for all horizon days of #4; no one-off siblings |
 | A-SCH-038 | A | P0 | Series peer shifted to 10:15 (home 10:00); false 09:30 gap | Create recurring without preferred | New series does **not** seat at 09:30; lands `10:00`/`10:15`/`10:30` |
 | A-SCH-039 | A | P0 | Stack 1/2/3; day0 series-1 skipped + one-off at 10:30 (home 09:00) | Create 4th recurring | Series 2 stays `09:30`, series 3 stays `10:00` on day0 (not shifted); #4 at trailing `10:30`; only flexibles may move |
+| A-SCH-040 | A | P0 | Fixed at 09:00; flexible create preferred 09:00 | Create + `drainJobs` + PATCH options | Job `conflicts[]` with `preferred_on_fixed`; `leave_problematic` / `move_new` / `place_on_top`; fixed never moves (`schedule.e2e-spec.ts`) |
+| A-SCH-041 | A | P0 | Fixed A 09:00–10:00; fixed B 09:30–10:30 | Create B + drain | Job conflict; A stays put |
+| A-SCH-042 | A | P0 | Flexible peer 09:00–10:00 in 09–11 phase | Create no-preferred 60m | Seats 10:00 same day; no conflicts |
 | A-SCH-040 | A | P1 | Detached one-off; PATCH `name` then move to series clock | Update name, then move | Stays a separate task (`seriesGroupId` null); no re-merge |
 
 ---
@@ -520,7 +523,7 @@ Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day,
 | U-CAL-010 | U | P0 | Now overlapping block | Strip | Now title; Done if `canCompleteNowBlock` |
 | U-CAL-011 | U | P0 | Next start later today | Strip | Next shown |
 | U-CAL-012 | U | P0 | Flexible window already expired | Strip Unscheduled | Placement parks as `isUnscheduled` (not Problematic `no_slot`) |
-| U-CAL-026 | U | P0 | Active Unscheduled inbox (`isUnscheduled`) | Calendar banner → Open inbox | Navigates to `/tasks`; task visible |
+| U-CAL-026 | U | P0 | Active Unscheduled inbox (`isUnscheduled`) | Calendar | No inbox banner; task stays in the Now strip Unscheduled column |
 | U-CAL-013 | U | P0 | Now **Done** on non-recurring app task | Click | `completed`; block leaves Now; **no** new Google event |
 | U-CAL-014 | U | P0 | Recurring / external Google in Now | Strip | **No** Done; Skip on recurring; no Skip on external |
 | U-CAL-015 | U | P1 | All-day event today | Now | Eligible for Now if no timed current |
@@ -547,6 +550,9 @@ Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day,
 | U-CAL-025m | U | P1 | Move timeline open | Fill Start time `14:00` | Range 14:00–14:30; Place enabled |
 | U-CAL-025n | U | P1 | Morning + afternoon phases | Seek to 14:00 | Phase select auto-switches to afternoon |
 | U-CAL-025o | U | P1 | Free / busy / free bands | Fill 10:00 → 13:00 → 15:30 | Place enabled → disabled + busy copy → enabled again |
+| U-SCH-001 | U | P0 | Fixed wall + UI create preferred on it | Real placement job (JWT `openAs`, no Google OAuth) | Conflict sheet; dismiss / Park → Problematic banner (`p1.scheduling-conflict.spec.ts`) |
+| U-SCH-002 | U | P0 | Same setup | Conflict → Place elsewhere | Task seats off the wall; not problematic |
+| U-SCH-003 | U | P0 | Fixed in Now window | Done on Now strip | Progress toast; strip drops the card |
 
 `canCompleteNowBlock`: has linked task, not recurring, not `isFixedExternal`, not completed/canceled.
 

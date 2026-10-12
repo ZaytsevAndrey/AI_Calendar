@@ -16,11 +16,12 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Spec: Conflict rules](spec-conflict-rules.md) | Unscheduled vs Problematic, conflict option ids; who moves defers to incremental placement |
 | [Spec: Voice Commander](spec-voice-commander.md) | Shipped one-shot commander: task/habit CRUD by voice, TTS, confirm delete/cancel |
 | [Spec: Voice Agent](spec-voice-agent.md) | Hybrid orchestrator, `/voice/turn`, Q&A + write intents, hero UX (shipped; archive) |
-| [Voice prompts — next](voice-prompt-next.md) | Handoff: golden utterance tests. Specialists are full |
+| [Voice prompts — next](voice-prompt-next.md) | Handoff for roadmap **§23**: golden utterance tests. Specialists are full |
+| [Local TTS](tts-local.md) | Piper on the home API (`npm run start:piper`); browser voice when it is down |
 | [Spec: Intelligent scheduling](spec-intelligent-scheduling.md) | Unified items, settings, phases, queue, diff/undo, Google anchors (defers placement to conflict rules) |
 | [Task scheduling test matrix](task-scheduling-test-matrix.md) | Given/When/Then cases mapped to unit tests |
 | [E2E test coverage plan](e2e-test-coverage.md) | All live API/UI cases and edge cases, layers, P0 smoke, implementation waves |
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** October 2026 (voice specialist prompts; live roadmap is §20 golden utterances).
+**Last documentation update:** October 2026 (§22 scheduling trust shipped; next §23 voice goldens).

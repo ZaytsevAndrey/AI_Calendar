@@ -1,6 +1,6 @@
 # Voice prompts — next work (handoff)
 
-**Status:** working queue after hybrid Voice Agent (§15–§19) shipped in code.  
+**Status:** working queue for roadmap **§23** (after hybrid Voice Agent §15–§19 and scheduling trust **§22**).  
 **Use:** open a **new chat per item** below. Product contract: [spec-voice-agent.md](spec-voice-agent.md). Architecture plan (Cursor): `voice_prompt_architecture_3d81fe7a`.
 
 ## Already shipped (do not redo)

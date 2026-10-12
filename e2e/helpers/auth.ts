@@ -32,7 +32,11 @@ export function persistRootValue(tokens: TokenPair): string {
   });
 }
 
-/** Seed JWT into localStorage before the app boots (Redux persist + axios). */
+/**
+ * CI login for Playwright: seed JWTs from `e2e/.tmp/auth.json` (written when the
+ * backend starts with `E2E_BOOTSTRAP=1`). Skips real Google OAuth; Google Calendar
+ * API stays stubbed via `E2E_STUB_EXTERNAL=1`.
+ */
 export async function seedBrowserAuth(page: Page, tokens: TokenPair): Promise<void> {
   const persistRoot = persistRootValue(tokens);
   await page.addInitScript(
