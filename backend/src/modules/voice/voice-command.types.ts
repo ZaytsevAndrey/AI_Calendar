@@ -100,6 +100,16 @@ export type VoiceCommand =
       originalEnd: string;
       start: string;
       end: string;
+      seriesScope?: VoiceSeriesScope;
+    }
+  | {
+      kind: 'end_series';
+      taskId: string;
+      taskName: string;
+      summary: string;
+      occurrenceStart: string;
+      googleEventId: string | null;
+      googleEventCalendarId: string | null;
     }
   | {
       kind: 'shift';
@@ -167,6 +177,8 @@ export type VoiceCommand =
       summary: string;
     };
 
+export type VoiceSeriesScope = 'occurrence' | 'series' | 'all';
+
 export type VoiceCommandDraft = {
   intent: VoiceCommandIntent;
   target: 'current' | 'named';
@@ -175,4 +187,6 @@ export type VoiceCommandDraft = {
   spokenEnd: string | null;
   patch: VoiceTaskPatch | null;
   habitFields: VoiceHabitFields | null;
+  /** Set when the speaker already chose one day, this and following, or the whole series. */
+  seriesScope: VoiceSeriesScope | null;
 };

@@ -11,6 +11,8 @@ export type VoiceParsePromptContext = {
   previousTranscript?: string;
   clarificationAnswer?: string;
   openTaskNames?: string[];
+  /** Same tasks as openTaskNames, with the series flag the specialists must ask about. */
+  openTasks?: { name: string; recurring: boolean }[];
   habitNames?: string[];
   /** From router; used so specialist prompts answer in the same language. */
   language?: 'uk' | 'en' | 'ru';
@@ -47,6 +49,20 @@ export function languageInstruction(language?: string | null): string {
     return 'Write any clarifyingQuestion in English.';
   }
   return 'Write any clarifyingQuestion in the same language as the transcript.';
+}
+
+function formatOpenTasks(input: VoiceParsePromptContext): string {
+  const rows = input.openTasks?.length
+    ? input.openTasks
+    : (input.openTaskNames ?? []).map((name) => ({ name, recurring: false }));
+  if (!rows.length) return '(none)';
+  return rows
+    .map((task) =>
+      task.recurring
+        ? `- ${JSON.stringify(task.name)} recurring`
+        : `- ${JSON.stringify(task.name)}`,
+    )
+    .join('\n');
 }
 
 export function buildVoiceParseSharedUserPrompt(
@@ -92,11 +108,7 @@ ${phaseLines}
     : ''
 }
 Open tasks (incomplete):
-${
-  input.openTaskNames?.length
-    ? input.openTaskNames.map((name) => `- ${JSON.stringify(name)}`).join('\n')
-    : '(none)'
-}
+${formatOpenTasks(input)}
 
 Habits:
 ${

@@ -1,16 +1,13 @@
+import { CLOCK_ISO_MODULE } from './prompt-modules/clock-speech';
+import { SERIES_SCOPE_MODULE } from './prompt-modules/series-scope';
+import { TASK_TARGET_MODULE } from './prompt-modules/task-target';
 import {
   buildVoiceParseSharedUserPrompt,
   languageInstruction,
   type VoiceParsePromptContext,
 } from './voice-parse.shared.prompt';
 
-/** Specialist: move / do-now / day window. Resolver reads command.start and command.end only. */
-export function buildVoiceRescheduleSystemPrompt(language?: string | null): string {
-  return `You move an EXISTING app task. Do not create a task and do not edit its name, phase, or priority.
-${languageInstruction(language)}
-Reply with a single JSON object only. No markdown.
-
-{
+const RESCHEDULE_SCHEMA = `{
   "intent": "reschedule",
   "understanding": "complete" | "needs_clarification",
   "clarifyingQuestion": string | null,
@@ -18,24 +15,41 @@ Reply with a single JSON object only. No markdown.
     "target": "current" | "named",
     "taskName": string | null,
     "start": string | null,
-    "end": string | null
+    "end": string | null,
+    "seriesScope": "occurrence" | "series" | "all" | null
   },
   "task": null,
   "habit": null
-}
+}`;
 
-Target:
-- Named task: command.target "named" and command.taskName copied from Open tasks.
-- Current / this / it / зараз / цю, with no name: command.target "current", taskName null.
-- No task you can point at: understanding needs_clarification, one short question which task. start and end null.
+const RESCHEDULE_RULES = `When. First match wins. Times go on command.start and command.end only.
+1. "do now" / "schedule it now" / "зроби зараз" / "заплануй зараз" / "сделай сейчас" → command.start = now ISO, command.end null.
+2. A start and an end ("між 14 і 18", "between 2 and 6", "until 4", "до 16:00") → start at the start, end at the end, on the schedule day they named (or schedule today when they named no day and the start is still ahead).
+3. A day and no clock ("tomorrow", "завтра", "у п'ятницю") → command.start 00:00 and command.end 23:59 on that schedule day. That pair is a whole-day window, not midnight.
+4. A clock or "in N hours" and no end → command.start at that instant, command.end null. The app keeps the current duration.
+5. No day, no clock, and not do-now — or a clock that is already past and no day → needs_clarification, one question when. start and end null. Do not invent tomorrow.
 
-When (ISO-8601 with the numeric offset from Local calendar; copy schedule today/tomorrow, including after sleep):
-- Clock or "in N hours": command.start at that instant. command.end only when they named an end ("until 4", "до 16:00"). Otherwise end null — duration stays as it is.
-- Day with no clock ("tomorrow", "завтра", "on Friday"): command.start 00:00 and command.end 23:59 on that schedule day. That pair means a day window, not midnight.
-- "do now" / "schedule it now" / "зроби зараз" / "заплануй зараз" / "сделай сейчас": command.start = now ISO, command.end null.
-- No day and no clock and not do-now: needs_clarification, one question when. Do not invent a day.
+Do not rename the task, change its phase, priority, or duration. Leave task null.
+Do not invent a day. Do not ask to confirm.
 
-Leave task null. Times belong on command.start and command.end only.`;
+Examples:
+- "перенеси звіт на завтра" → start 00:00, end 23:59, schedule tomorrow
+- "перенеси на 15:00" → start 15:00 on schedule today if that clock is still ahead, end null
+- "зроби зараз" → start = now ISO, end null
+- "перенеси між 14 і 18" → start 14:00, end 18:00`;
+
+/** Specialist: move / do-now / day window. The resolver reads command.start and command.end only. */
+export function buildVoiceRescheduleSystemPrompt(language?: string | null): string {
+  return [
+    'You move an EXISTING app task. Do not create a task and do not edit its name, phase, or priority.',
+    languageInstruction(language),
+    'Reply with a single JSON object only. No markdown.',
+    RESCHEDULE_SCHEMA,
+    TASK_TARGET_MODULE,
+    SERIES_SCOPE_MODULE,
+    RESCHEDULE_RULES,
+    CLOCK_ISO_MODULE,
+  ].join('\n\n');
 }
 
 export function buildVoiceRescheduleUserPrompt(
@@ -43,5 +57,5 @@ export function buildVoiceRescheduleUserPrompt(
 ): string {
   return `${buildVoiceParseSharedUserPrompt(input, { includePhases: false })}
 
-Return reschedule JSON (target + start/end).`;
+Return reschedule JSON (target + start/end). Leave task null.`;
 }

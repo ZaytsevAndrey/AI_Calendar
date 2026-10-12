@@ -7,7 +7,7 @@
 
 - Orchestrator `/voice/turn` + session + read tools + day-plan + hero UI.
 - Parse: **router** (`intent` + `language`) → **per-intent specialist** → normalize / `resolveVoiceCommand`.
-- Create specialist is **full**, assembled from [prompt-modules/](../backend/src/modules/voice/prompt-modules/) into one system string. Spoken today/tomorrow follow sleep (after sleep = civil date, even before wake). Update and reschedule specialists are **full** ([voice-parse.update.prompt.ts](../backend/src/modules/voice/voice-parse.update.prompt.ts), [voice-parse.reschedule.prompt.ts](../backend/src/modules/voice/voice-parse.reschedule.prompt.ts)). Other intents are **lean stubs** in [voice-parse.intent-prompts.ts](../backend/src/modules/voice/voice-parse.intent-prompts.ts).
+- Every intent has a **full** specialist: one system string (schema, first-match rules, fields the resolver reads). Create is assembled from [prompt-modules/](../backend/src/modules/voice/prompt-modules/). The other intents are one file each and share the task-target, habit-target, and clock fragments inside that same call. Spoken today/tomorrow follow sleep (after sleep = civil date, even before wake). `needs_clarification` returns a question only and does not create a task.
 - Create when: day window OK; recurring with pattern OK without clock; **no usable when → Unscheduled** (no day/time clarify loop). Clarify only if **name** missing.
 - Placement honors `earliestStartTime` via [placement-bounds.util.ts](../backend/src/modules/schedule/placement-bounds.util.ts).
 - Logs: `[llm:parse.router]`, `[llm:parse.create]`, … via `voice-llm-log.util.ts`.
@@ -25,24 +25,27 @@ STT → Orchestrator (answer | mutate | propose_plan | …)
 
 ## Specialists checklist
 
-| Intent | Prompt state | Next chat focus |
-|--------|--------------|-----------------|
-| `create` | full (modules + kind tree) | Done for this queue |
-| `update` | full | Done: target + changed fields only |
-| `reschedule` | full | Done: move / do now; day window vs clock |
-| `complete` | stub | Target + recurring occurrence |
-| `skip` | stub | One occurrence; unscheduled cancel path |
-| `delete` | stub | Target; confirm stays orchestrator |
-| `habit_*` (5) | stubs | When habit voice flow hurts in logs |
-| `needs_clarification` | stub | Keep thin |
+| Intent | Prompt state | What the prompt is for |
+|--------|--------------|---------------------|
+| `create` | full (modules + kind tree) | Kind, name, when |
+| `update` | full | Changed fields only. A series asks for scope; name, priority, and phase apply to the whole series |
+| `reschedule` | full | Move / do now; day window vs clock. A series asks this day, this and following, or the whole series |
+| `complete` | full | One-off marks done. A series asks: this day, this and following, or the whole series |
+| `skip` | full | Next open occurrence only; unscheduled cancels; another day asks |
+| `delete` | full | A series asks this day / this and following / whole series. Confirm stays on the orchestrator |
+| `habit_check_in` | full | Civil today only |
+| `habit_create` | full | Name; daily block needs time and length |
+| `habit_update` | full | Current title in `command.taskName`; changed habit fields only |
+| `habit_delete` | full | Habit title; confirm stays orchestrator |
+| `habit_uncheck` | full | Clear today's check-in only |
+| `needs_clarification` | full | One question; `task` null |
 
 Router: [voice-parse.router.prompt.ts](../backend/src/modules/voice/voice-parse.router.prompt.ts) — keep tiny; create follow-ups must stay `create`, not `update`.
 
 ## Open bugs / follow-ups (separate chats)
 
 1. **Golden utterances** — freeze kind/when decision tree with normalize + prompt snapshot tests from real log failures.
-2. **Fatten stubs in priority order:** `complete` / `skip` / `delete` → habits.
-3. **Unused i18n** — `voice.whenOrUnscheduled` may be unused after no-when→Unscheduled; remove or keep for rare spoken UX later.
+2. **Unused i18n** — `voice.whenOrUnscheduled` may be unused after no-when→Unscheduled; remove or keep for rare spoken UX later.
 
 ## How to verify in a new chat
 

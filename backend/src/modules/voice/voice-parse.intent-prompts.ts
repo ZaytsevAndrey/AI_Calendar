@@ -1,17 +1,48 @@
+import { buildVoiceClarifySystemPrompt, buildVoiceClarifyUserPrompt } from './voice-parse.clarify.prompt';
 import {
-  buildVoiceParseSharedUserPrompt,
-  languageInstruction,
-  type VoiceParseIntentId,
-  type VoiceParsePromptContext,
-} from './voice-parse.shared.prompt';
+  buildVoiceCompleteSystemPrompt,
+  buildVoiceCompleteUserPrompt,
+} from './voice-parse.complete.prompt';
 import {
   buildVoiceCreateSystemPrompt,
   buildVoiceCreateUserPrompt,
 } from './voice-parse.create.prompt';
 import {
+  buildVoiceDeleteSystemPrompt,
+  buildVoiceDeleteUserPrompt,
+} from './voice-parse.delete.prompt';
+import {
+  buildVoiceHabitCheckInSystemPrompt,
+  buildVoiceHabitCheckInUserPrompt,
+} from './voice-parse.habit-check-in.prompt';
+import {
+  buildVoiceHabitCreateSystemPrompt,
+  buildVoiceHabitCreateUserPrompt,
+} from './voice-parse.habit-create.prompt';
+import {
+  buildVoiceHabitDeleteSystemPrompt,
+  buildVoiceHabitDeleteUserPrompt,
+} from './voice-parse.habit-delete.prompt';
+import {
+  buildVoiceHabitUncheckSystemPrompt,
+  buildVoiceHabitUncheckUserPrompt,
+} from './voice-parse.habit-uncheck.prompt';
+import {
+  buildVoiceHabitUpdateSystemPrompt,
+  buildVoiceHabitUpdateUserPrompt,
+} from './voice-parse.habit-update.prompt';
+import {
   buildVoiceRescheduleSystemPrompt,
   buildVoiceRescheduleUserPrompt,
 } from './voice-parse.reschedule.prompt';
+import {
+  buildVoiceSkipSystemPrompt,
+  buildVoiceSkipUserPrompt,
+} from './voice-parse.skip.prompt';
+import type {
+  VoiceParseIntentId,
+  VoiceParsePromptContext,
+} from './voice-parse.shared.prompt';
 import {
   buildVoiceUpdateSystemPrompt,
   buildVoiceUpdateUserPrompt,
@@ -23,9 +54,8 @@ export type VoiceIntentPromptPair = {
 };
 
 /**
- * Specialist prompts per intent. Create, update, and reschedule are fully
- * specified. Other intents stay lean stubs that still return the JSON
- * resolveVoiceCommand expects.
+ * One specialist prompt per intent. Each system string is a single LLM call:
+ * schema, a first-match decision list, and the fields the resolver actually reads.
  */
 export function buildVoiceIntentPrompt(
   intent: VoiceParseIntentId,
@@ -44,105 +74,59 @@ export function buildVoiceIntentPrompt(
         user: buildVoiceUpdateUserPrompt(ctx),
       };
     case 'delete':
-      return stub(intent, language, ctx, DELETE_RULES);
+      return {
+        system: buildVoiceDeleteSystemPrompt(language),
+        user: buildVoiceDeleteUserPrompt(ctx),
+      };
     case 'complete':
-      return stub(intent, language, ctx, COMPLETE_RULES);
+      return {
+        system: buildVoiceCompleteSystemPrompt(language),
+        user: buildVoiceCompleteUserPrompt(ctx),
+      };
     case 'skip':
-      return stub(intent, language, ctx, SKIP_RULES);
+      return {
+        system: buildVoiceSkipSystemPrompt(language),
+        user: buildVoiceSkipUserPrompt(ctx),
+      };
     case 'reschedule':
       return {
         system: buildVoiceRescheduleSystemPrompt(language),
         user: buildVoiceRescheduleUserPrompt(ctx),
       };
     case 'habit_check_in':
-      return stub(intent, language, ctx, HABIT_CHECK_IN_RULES);
+      return {
+        system: buildVoiceHabitCheckInSystemPrompt(language),
+        user: buildVoiceHabitCheckInUserPrompt(ctx),
+      };
     case 'habit_create':
-      return stub(intent, language, ctx, HABIT_CREATE_RULES);
+      return {
+        system: buildVoiceHabitCreateSystemPrompt(language),
+        user: buildVoiceHabitCreateUserPrompt(ctx),
+      };
     case 'habit_update':
-      return stub(intent, language, ctx, HABIT_UPDATE_RULES);
+      return {
+        system: buildVoiceHabitUpdateSystemPrompt(language),
+        user: buildVoiceHabitUpdateUserPrompt(ctx),
+      };
     case 'habit_delete':
-      return stub(intent, language, ctx, HABIT_DELETE_RULES);
+      return {
+        system: buildVoiceHabitDeleteSystemPrompt(language),
+        user: buildVoiceHabitDeleteUserPrompt(ctx),
+      };
     case 'habit_uncheck':
-      return stub(intent, language, ctx, HABIT_UNCHECK_RULES);
+      return {
+        system: buildVoiceHabitUncheckSystemPrompt(language),
+        user: buildVoiceHabitUncheckUserPrompt(ctx),
+      };
     case 'needs_clarification':
-      return stub(intent, language, ctx, CLARIFY_RULES);
+      return {
+        system: buildVoiceClarifySystemPrompt(language),
+        user: buildVoiceClarifyUserPrompt(ctx),
+      };
     default:
-      return stub('needs_clarification', language, ctx, CLARIFY_RULES);
+      return {
+        system: buildVoiceClarifySystemPrompt(language),
+        user: buildVoiceClarifyUserPrompt(ctx),
+      };
   }
 }
-
-function stub(
-  intent: VoiceParseIntentId,
-  language: string | undefined,
-  ctx: VoiceParsePromptContext,
-  rules: string,
-): VoiceIntentPromptPair {
-  return {
-    system: `You interpret a spoken calendar "${intent}" request.
-${languageInstruction(language)}
-Reply with a single JSON object only. No markdown.
-
-{
-  "intent": "${intent}",
-  "understanding": "complete" | "needs_clarification",
-  "clarifyingQuestion": string | null,
-  "command": {
-    "target": "current" | "named",
-    "taskName": string | null,
-    "newName": string | null,
-    "rename": boolean | null,
-    "status": "todo" | "in_progress" | "completed" | "canceled" | null,
-    "start": string | null,
-    "end": string | null
-  } | null,
-  "habit": {
-    "name": string | null,
-    "color": string | null,
-    "description": string | null,
-    "blockStartTime": string | null,
-    "blockMinutes": number | null
-  } | null,
-  "task": { } | null
-}
-
-${rules}
-
-Native Google meetings are not app tasks — clarify which app task, in the transcript language.
-Dates/times: ISO-8601 with offset from Local calendar. Never invent a new create task here.`,
-    user: `${buildVoiceParseSharedUserPrompt(ctx, { includePhases: true })}
-
-Return ${intent} JSON.`,
-  };
-}
-
-const DELETE_RULES = `Delete rules:
-- command.taskName identifies the task. Leave task null or minimal.
-- If no target → needs_clarification asking which task.`;
-
-const COMPLETE_RULES = `Complete rules:
-- Mark an existing task done. command.taskName or target current.
-- Repeating tasks still use complete (app skips today's occurrence).`;
-
-const SKIP_RULES = `Skip rules:
-- Skip one occurrence. command.taskName or target current.
-- Unscheduled skip cancels the task (resolver handles).`;
-
-const HABIT_CHECK_IN_RULES = `Habit check-in:
-- command.taskName = habit title from habits list when possible.`;
-
-const HABIT_CREATE_RULES = `Habit create:
-- habit.name required (or command.taskName). Optional color (#rrggbb), description, blockStartTime HH:mm + blockMinutes.
-- Missing name → needs_clarification.`;
-
-const HABIT_UPDATE_RULES = `Habit update:
-- command.taskName = existing habit; changed fields in habit.* (habit.name when renaming).`;
-
-const HABIT_DELETE_RULES = `Habit delete:
-- command.taskName = habit to delete.`;
-
-const HABIT_UNCHECK_RULES = `Habit uncheck:
-- Clear today's check-in. command.taskName = habit title.`;
-
-const CLARIFY_RULES = `Clarification:
-- Ask ONE short clarifyingQuestion in the transcript language.
-- Prefer guessing a concrete intent when possible; use this only when truly unclear.`;

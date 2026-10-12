@@ -41,6 +41,7 @@ function draft(partial: Partial<VoiceCommandDraft> & Pick<VoiceCommandDraft, 'in
     spokenEnd: null,
     patch: null,
     habitFields: null,
+    seriesScope: null,
     ...partial,
   };
 }
@@ -91,10 +92,23 @@ describe('resolveVoiceCommand', () => {
     });
   });
 
-  it('skips today when a recurring task is marked done', () => {
+  it('asks which part of a recurring task to mark done', () => {
     const result = resolveVoiceCommand({
       draft: draft({ intent: 'complete', taskName: 'Gym' }),
       transcript: 'закінчив gym',
+      timeZone: ZONE,
+      nowIso: NOW,
+      alreadyClarified: false,
+      tasks: [gym],
+      slots: [slot({ id: 's2', taskId: 't2', googleEventId: 'series-1' })],
+    });
+    expect(result).toMatchObject({ type: 'clarify' });
+  });
+
+  it('skips today when a recurring task is marked done for this day', () => {
+    const result = resolveVoiceCommand({
+      draft: draft({ intent: 'complete', taskName: 'Gym' }),
+      transcript: 'закінчив gym лише цей день',
       timeZone: ZONE,
       nowIso: NOW,
       alreadyClarified: false,
@@ -358,6 +372,50 @@ describe('resolveVoiceCommand', () => {
       type: 'command',
       command: { kind: 'delete', taskId: 't1' },
     });
+  });
+
+  it('asks before deleting a recurring task', () => {
+    const result = resolveVoiceCommand({
+      draft: draft({ intent: 'delete', taskName: 'Gym' }),
+      transcript: 'delete gym',
+      timeZone: ZONE,
+      nowIso: NOW,
+      alreadyClarified: false,
+      tasks: [gym],
+      slots: [slot({ id: 's2', taskId: 't2' })],
+    });
+    expect(result).toMatchObject({ type: 'clarify' });
+  });
+
+  it('maps a recurring delete to one day, the following days, or the whole series', () => {
+    const base = {
+      timeZone: ZONE,
+      nowIso: NOW,
+      alreadyClarified: false,
+      tasks: [gym],
+      slots: [slot({ id: 's2', taskId: 't2' })],
+    };
+    expect(
+      resolveVoiceCommand({
+        ...base,
+        draft: draft({ intent: 'delete', taskName: 'Gym' }),
+        transcript: 'delete gym this day only',
+      }),
+    ).toMatchObject({ type: 'command', command: { kind: 'skip', taskId: 't2' } });
+    expect(
+      resolveVoiceCommand({
+        ...base,
+        draft: draft({ intent: 'delete', taskName: 'Gym' }),
+        transcript: 'delete gym this day and following',
+      }),
+    ).toMatchObject({ type: 'command', command: { kind: 'end_series', taskId: 't2' } });
+    expect(
+      resolveVoiceCommand({
+        ...base,
+        draft: draft({ intent: 'delete', taskName: 'Gym' }),
+        transcript: 'delete the whole series gym',
+      }),
+    ).toMatchObject({ type: 'command', command: { kind: 'delete', taskId: 't2' } });
   });
 
   it('creates a habit from a name', () => {

@@ -8,7 +8,7 @@ import {
   scheduleTodayYmd,
 } from './voice-local-date.util';
 
-const ALWAYS_CONFIRM = new Set(['cancel', 'delete', 'habit_delete']);
+const ALWAYS_CONFIRM = new Set(['cancel', 'delete', 'habit_delete', 'end_series']);
 
 export function intentsFromParseResult(
   parsed: VoiceParseResult,

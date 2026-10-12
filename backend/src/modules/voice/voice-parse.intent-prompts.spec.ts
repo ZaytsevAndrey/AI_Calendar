@@ -46,6 +46,7 @@ describe('voice parse prompt split', () => {
         expect(pair.system).toMatch(/ONLY fields the speaker changed/);
         expect(pair.system).toMatch(/command\.newName/);
         expect(pair.system).toMatch(/phaseId/);
+        expect(pair.system).toMatch(/Do not invent/);
         expect(pair.system).not.toMatch(/Habit create/);
         expect(pair.user).toContain('Phases:');
       }
@@ -54,10 +55,31 @@ describe('voice parse prompt split', () => {
         expect(pair.system).toMatch(/00:00/);
         expect(pair.system).toMatch(/23:59/);
         expect(pair.system).toMatch(/зроби зараз/);
+        expect(pair.system).toMatch(/First match wins/);
         expect(pair.system).toMatch(/task null/i);
         expect(pair.user).toContain('schedule tomorrow:');
         expect(pair.user).not.toContain('Phases:');
       }
+      if (intent !== 'create' && intent !== 'update') {
+        expect(pair.system).toMatch(/Do not invent/);
+        expect(pair.system).toMatch(/"intent": "/);
+        expect(pair.user).not.toContain('Phases:');
+      }
     }
+  });
+
+  it('tells each specialist which app rule to follow', () => {
+    const expectSystem = (intent: (typeof VOICE_PARSE_INTENTS)[number], pattern: RegExp) => {
+      expect(buildVoiceIntentPrompt(intent, ctx).system).toMatch(pattern);
+    };
+    expectSystem('complete', /skips today's open occurrence/);
+    expectSystem('skip', /next open time/);
+    expectSystem('delete', /whole series/);
+    expectSystem('habit_check_in', /civil date/);
+    expectSystem('habit_create', /check-in only/);
+    expectSystem('habit_update', /command\.taskName stays the current title/);
+    expectSystem('habit_delete', /are you sure/);
+    expectSystem('habit_uncheck', /only today can be cleared/);
+    expectSystem('needs_clarification', /task stays null/);
   });
 });

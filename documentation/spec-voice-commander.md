@@ -66,7 +66,7 @@ flowchart LR
 | Area | Behavior |
 |------|----------|
 | Create | Immediate create when a name exists (defaults: 30 min, medium, no phase); one clarification for missing name |
-| Complete | Named or “now/this” task; recurring “done” → skip today’s open occurrence |
+| Complete | Named or “now/this” task. A repeating task asks: this day (skip), this day and following (end the series), or the whole series (mark completed). |
 | Skip / cancel | Skip occurrence or cancel task (confirm when `confirmVoiceCommands` is on) |
 | Reschedule | `move` / `shift` / `window` / do-now style window + silent replan |
 | Habit | `habit_check_in` by name for today in settings TZ |

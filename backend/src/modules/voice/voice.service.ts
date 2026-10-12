@@ -30,7 +30,11 @@ import {
   VOICE_PARSE_INTENTS,
   type VoiceParseIntentId,
 } from './voice-parse.shared.prompt';
-import { extractJsonObject, normalizeVoiceParse } from './voice-parse.util';
+import {
+  clarificationOnlyResult,
+  extractJsonObject,
+  normalizeVoiceParse,
+} from './voice-parse.util';
 import {
   buildWhisperPrompt,
   cleanupVoiceTranscript,
@@ -172,13 +176,14 @@ export class VoiceService {
     const timeZone = resolveIanaTimeZone(settings.timeZone || dto.timeZone);
     const nowIso = dto.clientNowIso?.trim() || new Date().toISOString();
     const alreadyClarified = Boolean(dto.clarificationAnswer?.trim());
-    const openTaskNames = tasks
+    const openTasks = tasks
       .filter(
         (task) =>
           task.status !== TaskStatus.COMPLETED && task.status !== TaskStatus.CANCELED,
       )
-      .map((task) => task.name)
-      .slice(0, 40);
+      .slice(0, 40)
+      .map((task) => ({ name: task.name, recurring: task.isRecurring }));
+    const openTaskNames = openTasks.map((task) => task.name);
     const habitNames = habits.map((habit) => habit.name).slice(0, 40);
     const speech = alreadyClarified
       ? `${dto.previousTranscript || ''} ${transcript}`.trim()
@@ -224,6 +229,7 @@ export class VoiceService {
       habitNames,
       language: speechLanguage,
       defaultTaskDurationMinutes: taskDurationMinutes(settings),
+      openTasks,
     };
 
     const specialistIntent = normalizeParseIntent(intent);
@@ -245,7 +251,11 @@ export class VoiceService {
       (parsed as { intent?: string }).intent = intent;
     }
 
-    if (intent === 'create' || intent === 'needs_clarification') {
+    if (intent === 'needs_clarification') {
+      return clarificationOnlyResult(parsed, speechLanguage);
+    }
+
+    if (intent === 'create') {
       return {
         ...normalizeVoiceParse(parsed, {
           validPhaseIds: new Set(phases.map((phase) => phase.id)),

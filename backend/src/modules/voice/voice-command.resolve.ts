@@ -16,6 +16,7 @@ import type {
   VoiceCommandSlot,
   VoiceCommandTask,
   VoiceHabitFields,
+  VoiceSeriesScope,
   VoiceTaskPatch,
 } from './voice-command.types';
 
@@ -34,6 +35,63 @@ function vt(
   params?: Record<string, string | number>,
 ): string {
   return t(lang, key, params);
+}
+
+/** This day, this day and following, or the whole series. Following is checked first. */
+export function sniffSeriesScope(text: string): VoiceSeriesScope | null {
+  const speech = text.toLowerCase();
+  if (
+    /this day and following|this and following|цей і наступ|этот и следующ/.test(
+      speech,
+    )
+  ) {
+    return 'series';
+  }
+  if (
+    /entire series|whole series|all days|ус[ію] сері|всю сері|усі дн|всі дн|вс[её] сери|все дни|ціл[ую] сері/.test(
+      speech,
+    )
+  ) {
+    return 'all';
+  }
+  if (
+    /this day only|just this|only this day|лише цей|тільки цей|только этот|цей день|этот день|лише сьогодні|один день|one day|this occurrence|just today/.test(
+      speech,
+    )
+  ) {
+    return 'occurrence';
+  }
+  return null;
+}
+
+function readSeriesScope(value: unknown): VoiceSeriesScope | null {
+  const text = String(value ?? '')
+    .trim()
+    .toLowerCase();
+  if (text === 'occurrence' || text === 'series' || text === 'all') return text;
+  return null;
+}
+
+function seriesScopeFor(
+  draft: VoiceCommandDraft,
+  transcript: string,
+  alreadyClarified: boolean,
+): VoiceSeriesScope | null {
+  const sniffed = sniffSeriesScope(transcript);
+  if (sniffed) return sniffed;
+  if (alreadyClarified) return draft.seriesScope;
+  return null;
+}
+
+function missingSeriesScope(
+  taskName: string,
+  lang: AppLanguage,
+  alreadyClarified: boolean,
+): VoiceCommandResolveResult {
+  const question = vt(lang, 'voice.whichSeriesScope', { name: taskName });
+  return alreadyClarified
+    ? { type: 'command', command: { kind: 'refuse', message: question } }
+    : { type: 'clarify', question };
 }
 
 function resolveLang(value?: string): AppLanguage {
@@ -206,6 +264,7 @@ export function commandDraftFromRaw(
     spokenEnd: asIso(command.end) || asIso(task.scheduledEndTime) || asIso(task.deadline),
     patch: extractTaskPatch(task, command),
     habitFields: extractHabitFields(habit, task, command),
+    seriesScope: readSeriesScope(command.seriesScope),
   };
 }
 
@@ -276,6 +335,20 @@ export function resolveVoiceCommand(input: {
       };
     }
     if (draft.intent === 'delete') {
+      if (picked.task.isRecurring) {
+        const scope = seriesScopeFor(draft, input.transcript, input.alreadyClarified);
+        if (!scope) {
+          return missingSeriesScope(picked.task.name, lang, input.alreadyClarified);
+        }
+        const slot = pickOpenSlot(
+          picked.task,
+          input.slots,
+          Date.parse(input.nowIso),
+          draft.target === 'current',
+        );
+        if (scope === 'occurrence') return skipCommand(picked.task, slot, lang);
+        if (scope === 'series') return endSeriesCommand(picked.task, slot, lang);
+      }
       return {
         type: 'command',
         command: {
@@ -292,6 +365,18 @@ export function resolveVoiceCommand(input: {
       return input.alreadyClarified
         ? { type: 'command', command: { kind: 'refuse', message: question } }
         : { type: 'clarify', question };
+    }
+    if (picked.task.isRecurring) {
+      const scope = seriesScopeFor(draft, input.transcript, input.alreadyClarified);
+      if (!scope) {
+        return missingSeriesScope(picked.task.name, lang, input.alreadyClarified);
+      }
+      if (scope !== 'all') {
+        return {
+          type: 'command',
+          command: { kind: 'refuse', message: vt(lang, 'voice.seriesFieldWholeOnly') },
+        };
+      }
     }
     return {
       type: 'command',
@@ -339,6 +424,28 @@ export function resolveVoiceCommand(input: {
 
   const task = picked.task;
   const slot = pickOpenSlot(task, input.slots, nowMs, draft.target === 'current');
+
+  if (draft.intent === 'complete' && task.isRecurring) {
+    const scope = seriesScopeFor(draft, input.transcript, input.alreadyClarified);
+    if (!scope) return missingSeriesScope(task.name, lang, input.alreadyClarified);
+    if (scope === 'occurrence') return skipCommand(task, slot, lang);
+    if (scope === 'series') return endSeriesCommand(task, slot, lang);
+    if (task.isFixedExternal) {
+      return {
+        type: 'command',
+        command: { kind: 'refuse', message: vt(lang, 'voice.notAppTask') },
+      };
+    }
+    return {
+      type: 'command',
+      command: {
+        kind: 'complete',
+        taskId: task.id,
+        taskName: task.name,
+        summary: vt(lang, 'voice.markDone', { name: task.name }),
+      },
+    };
+  }
 
   if (draft.intent === 'complete' && !task.isRecurring) {
     if (task.isFixedExternal) {
@@ -752,6 +859,38 @@ function skipCommand(
   };
 }
 
+function endSeriesCommand(
+  task: VoiceCommandTask,
+  slot: VoiceCommandSlot | null,
+  lang: AppLanguage,
+): VoiceCommandResolveResult {
+  if (task.isFixedExternal || isFixedEventType(task.eventType)) {
+    return {
+      type: 'command',
+      command: { kind: 'refuse', message: vt(lang, 'voice.fixedCannotSkip') },
+    };
+  }
+  if (!slot) {
+    return {
+      type: 'command',
+      command: { kind: 'refuse', message: vt(lang, 'voice.noOpenTimeToSkip') },
+    };
+  }
+  const ids = googleIdsForOccurrence(task, slot);
+  return {
+    type: 'command',
+    command: {
+      kind: 'end_series',
+      taskId: task.id,
+      taskName: task.name,
+      summary: vt(lang, 'voice.endSeries', { name: task.name }),
+      occurrenceStart: slot.startIso,
+      googleEventId: ids.googleEventId,
+      googleEventCalendarId: slot.googleEventCalendarId || task.googleEventCalendarId,
+    },
+  };
+}
+
 function rescheduleCommand(
   input: {
     draft: VoiceCommandDraft;
@@ -767,9 +906,20 @@ function rescheduleCommand(
   nowMs: number,
 ): VoiceCommandResolveResult {
   const lang = input.language;
+  let seriesScope: VoiceSeriesScope | null = null;
+  if (task.isRecurring) {
+    seriesScope = seriesScopeFor(input.draft, input.transcript, input.alreadyClarified);
+    if (!seriesScope) {
+      return missingSeriesScope(task.name, lang, input.alreadyClarified);
+    }
+  }
 
   if (sniffDoNow(input.transcript)) {
-    if (task.isFixedExternal || isFixedEventType(task.eventType)) {
+    if (
+      task.isFixedExternal ||
+      isFixedEventType(task.eventType) ||
+      (task.isRecurring && seriesScope !== 'all')
+    ) {
       return {
         type: 'command',
         command: { kind: 'refuse', message: vt(lang, 'voice.noOpenTimeToMove') },
@@ -802,10 +952,18 @@ function rescheduleCommand(
   }
 
   if (when.kind === 'move' && slot && Date.parse(slot.endIso) > nowMs) {
-    return moveSlot(task, slot, when.startIso, when.endIso, input.timeZone, lang);
+    return moveSlot(
+      task,
+      slot,
+      when.startIso,
+      when.endIso,
+      input.timeZone,
+      lang,
+      seriesScope ?? undefined,
+    );
   }
 
-  if (task.isRecurring || task.isFixedExternal) {
+  if ((task.isRecurring && seriesScope !== 'all') || task.isFixedExternal) {
     return {
       type: 'command',
       command: { kind: 'refuse', message: vt(lang, 'voice.noOpenTimeToMove') },
@@ -871,6 +1029,7 @@ function moveSlot(
   endIso: string,
   timeZone: string,
   lang: AppLanguage,
+  seriesScope?: VoiceSeriesScope,
 ): VoiceCommandResolveResult {
   if (!(Date.parse(endIso) > Date.parse(startIso))) {
     return {
@@ -930,6 +1089,7 @@ function moveSlot(
       originalEnd: slot.endIso,
       start: startIso,
       end: endIso,
+      ...(seriesScope ? { seriesScope } : {}),
     },
   };
 }

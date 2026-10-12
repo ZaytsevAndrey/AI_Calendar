@@ -46,6 +46,12 @@ export const uk: Record<MessageKey, string> = {
   'voice.whenOrUnscheduled':
     'На який день і о котрій поставити, чи в Незаплановані?',
   'voice.whatTaskName': 'Як назвати цю задачу?',
+  'voice.didNotUnderstand': 'Не зрозумів. Що зробити?',
+  'voice.whichSeriesScope':
+    'Для «{{name}}»: лише цей день, цей і наступні, чи всю серію?',
+  'voice.endSeries': 'Закінчити «{{name}}» з цього дня?',
+  'voice.seriesFieldWholeOnly':
+    'Ця зміна стосується всієї серії. Скажіть «усю серію», щоб застосувати.',
 
   'schedule.emptySummary':
     'Поки нічого переглядати. Додайте задачі або згенеруйте розклад.',

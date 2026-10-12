@@ -1,6 +1,6 @@
 # Roadmap archive
 
-Shipped work, moved out of [roadmap](roadmap.md). The live queue is only what is still open (§20, voice prompt specialists). Product behavior: [overview](overview.md).
+Shipped work, moved out of [roadmap](roadmap.md). The live queue is only what is still open (§20, golden utterance tests). Product behavior: [overview](overview.md).
 
 On 11 Oct 2026 the checked live-queue items left [roadmap](roadmap.md): scheduling redesign §1–§8, habits §9–§10, problematic slot pick §11, incremental placement §12, Unscheduled §13, calendar/edit delete §14, Voice Agent §15–§19, and Later polish (UI language, voice habit check-in, problematic sheet). Behavior notes are the bullets below.
 
@@ -13,6 +13,10 @@ Sign-in is **Google only**. Password register, login, reset, and email verificat
 Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-coverage.md)). Each route screen is its own lazy chunk (`splitChunks`); production is no longer one `bundle.js`.
 
 ## Shipped (Oct 2026)
+
+- [x] **Voice series scope.** Delete, complete, reschedule, and a field edit of a repeating task ask: this day, this day and following, or the whole series. This day skips that occurrence. This and following ends the series from that day. The whole series deletes, completes, or moves as one task. A name, priority, or phase change applies only to the whole series.
+
+- [x] **Voice specialist prompts.** Every parse intent has a create-style prompt: JSON the resolver reads, a first-match list, and an explicit do-not-invent rule. `complete` / `skip` / `delete`, the five habit intents, and `needs_clarification` are no longer stubs. A clarification returns a question only and does not create a task.
 
 - [x] **Default task duration setting.** Settings `defaultTaskDurationMinutes` (default 30, 5–480) is the length of a new task when none is named. The create form starts there, voice parse sends it as `defaultTaskDurationMinutes`, and `POST /tasks` uses it when the body omits duration. `defaultWorkBlockDuration` stays the focus block.
 

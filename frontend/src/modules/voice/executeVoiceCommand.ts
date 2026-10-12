@@ -133,6 +133,25 @@ export async function executeVoiceCommand(
     return;
   }
 
+  if (command.kind === 'end_series') {
+    await apiCall({
+      url: `/tasks/${command.taskId}/end-series-from`,
+      method: 'POST',
+      data: {
+        occurrenceStart: command.occurrenceStart,
+        googleEventId: command.googleEventId ?? undefined,
+        googleEventCalendarId: command.googleEventCalendarId ?? undefined,
+      },
+    });
+    refreshCalendar(deps.dispatch);
+    deps.dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));
+    showSuccessToast({
+      title: i18n.t('calendar.seriesEndedFrom'),
+      detail: command.taskName,
+    });
+    return;
+  }
+
   if (command.kind === 'update') {
     const patch = command.patch;
     const body: UpdateTaskDTO = {};
@@ -200,6 +219,7 @@ export async function executeVoiceCommand(
           originalEnd: command.originalEnd,
           start: command.start,
           end: command.end,
+          seriesScope: command.seriesScope,
         },
         {
           onMutationStart: () => {

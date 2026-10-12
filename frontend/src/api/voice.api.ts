@@ -61,6 +61,15 @@ export type VoiceCommand =
       googleEventCalendarId: string | null;
     }
   | {
+      kind: 'end_series';
+      taskId: string;
+      taskName: string;
+      summary: string;
+      occurrenceStart: string;
+      googleEventId: string | null;
+      googleEventCalendarId: string | null;
+    }
+  | {
       kind: 'move';
       taskId: string;
       taskName: string;
@@ -72,6 +81,7 @@ export type VoiceCommand =
       originalEnd: string;
       start: string;
       end: string;
+      seriesScope?: 'occurrence' | 'series' | 'all';
     }
   | {
       kind: 'shift';

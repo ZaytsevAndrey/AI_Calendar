@@ -110,7 +110,7 @@ Clarify count is per open session. After **2** clarifications without resolution
 
 ### 6.1 Dates and times (LLM-first, split prompts)
 
-Parse is **two LLM steps**: (1) router → `intent` + `language`; (2) per-intent specialist prompt (create is fully specified; other intents have lean stubs). Clarifying questions use the transcript language.
+Parse is **two LLM steps**: (1) router → `intent` + `language`; (2) one specialist prompt per intent. Each specialist states the JSON the resolver reads, a first-match decision list, and what not to invent. Clarifying questions use the transcript language. Router intent `needs_clarification` returns a question only (`task` and `command` null) and does not create a task.
 
 Create specialist focuses on **kind** (`fixed` / `flexible` / `unscheduled` / `recurring`), **name**, and **when**. Day without clock → flexible with `deadline` (end of day). Recurring with a clear pattern may omit clock. No usable day/clock/window (and no clear recurring pattern) → **Unscheduled** inbox (`complete`), not a day/time clarify loop. Relative speech (“in 3 hours”) resolves from Local calendar anchors. The server does **not** re-parse the transcript for days/clocks beyond contract guards (name required; past slots dropped; no-when → Unscheduled).
 

@@ -51,7 +51,7 @@ type UseVoiceTaskOptions = {
 };
 
 function requiresAlwaysConfirm(kind: VoiceCommandAction['kind']): boolean {
-  return kind === 'cancel' || kind === 'delete' || kind === 'habit_delete';
+  return kind === 'cancel' || kind === 'delete' || kind === 'habit_delete' || kind === 'end_series';
 }
 
 function newSessionId(): string {

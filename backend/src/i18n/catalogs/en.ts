@@ -43,6 +43,12 @@ export const en = {
   'voice.whenOrUnscheduled':
     'Which day and time should I use, or put it in Unscheduled?',
   'voice.whatTaskName': 'What should I call this task?',
+  'voice.didNotUnderstand': 'I did not understand. What should I do?',
+  'voice.whichSeriesScope':
+    'For "{{name}}": this day only, this day and following, or the whole series?',
+  'voice.endSeries': 'End "{{name}}" from this day?',
+  'voice.seriesFieldWholeOnly':
+    'That change applies to the whole series. Say the whole series to apply it.',
 
   'schedule.emptySummary':
     'Nothing to review yet. Add tasks or generate a schedule first.',

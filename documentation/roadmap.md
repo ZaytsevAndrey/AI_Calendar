@@ -12,11 +12,10 @@ Design decisions for this queue: [spec-voice-agent.md](spec-voice-agent.md) (hyb
 
 Do in order unless you explicitly skip ahead.
 
-### 20. Voice prompts — remaining specialists
+### 20. Voice prompts — golden utterances
 
-Handoff: [voice-prompt-next.md](voice-prompt-next.md). Create modules and the wake-day/sleep when rule already shipped.
+Handoff: [voice-prompt-next.md](voice-prompt-next.md). Specialists are full (create-style decision lists). Remaining:
 
-- [ ] Fatten specialist stubs: `complete` / `skip` / `delete`, then habits.
 - [ ] Golden utterance tests for kind/when; archive [voice-prompt-next.md](voice-prompt-next.md) when done.
 
 ---
@@ -31,5 +30,5 @@ Handoff: [voice-prompt-next.md](voice-prompt-next.md). Create modules and the wa
 
 ## Recommended next steps
 
-1. Next live item: roadmap **§20** — fatten `complete` / `skip` / `delete` stubs ([voice-prompt-next.md](voice-prompt-next.md)).
+1. Next live item: roadmap **§20** — golden utterance tests for kind/when ([voice-prompt-next.md](voice-prompt-next.md)).
 2. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

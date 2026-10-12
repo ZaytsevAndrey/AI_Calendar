@@ -11,6 +11,7 @@ import {
   scheduleTodayYmd,
 } from './voice-local-date.util';
 import {
+  clarificationOnlyResult,
   extractJsonObject,
   inferTaskNameFromTranscript,
   normalizeVoiceParse,
@@ -429,6 +430,29 @@ describe('normalizeVoiceParse', () => {
     expect(result.task?.name).toBe("З'їздити в магазин");
     expect(result.understanding).toBe('complete');
     expect(result.task?.isUnscheduled).toBe(true);
+  });
+});
+
+describe('clarificationOnlyResult', () => {
+  it('keeps the model question and does not build a task', () => {
+    const result = clarificationOnlyResult(
+      {
+        understanding: 'needs_clarification',
+        clarifyingQuestion: 'Яку задачу?',
+        task: { name: 'Молоко' },
+      },
+      'uk',
+    );
+    expect(result.understanding).toBe('needs_clarification');
+    expect(result.clarifyingQuestion).toBe('Яку задачу?');
+    expect(result.task).toBeNull();
+    expect(result.command).toBeNull();
+  });
+
+  it('asks what to do when the model omitted the question', () => {
+    const result = clarificationOnlyResult({}, 'en');
+    expect(result.clarifyingQuestion).toBe('I did not understand. What should I do?');
+    expect(result.task).toBeNull();
   });
 });
 

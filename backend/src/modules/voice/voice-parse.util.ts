@@ -424,3 +424,18 @@ export function normalizeVoiceParse(
     task: understanding === 'needs_clarification' && !task.name ? null : task,
   };
 }
+
+/** Router chose needs_clarification. Do not let name inference create a task. */
+export function clarificationOnlyResult(
+  raw: unknown,
+  language?: string | null,
+): VoiceParseResult {
+  const question = asNullableString(asRecord(raw).clarifyingQuestion);
+  return {
+    understanding: 'needs_clarification',
+    clarifyingQuestion:
+      question || t(resolveLang(language), 'voice.didNotUnderstand'),
+    task: null,
+    command: null,
+  };
+}
