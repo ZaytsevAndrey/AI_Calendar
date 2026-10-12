@@ -164,7 +164,12 @@ export class VoiceAgentOrchestrator {
 
     const timeZone = resolveIanaTimeZone(settings.timeZone || dto.timeZone);
     const nowIso = dto.clientNowIso?.trim() || new Date().toISOString();
-    const todayYmd = scheduleTodayYmd(nowIso, timeZone, settings.wakeTime);
+    const todayYmd = scheduleTodayYmd(
+      nowIso,
+      timeZone,
+      settings.wakeTime,
+      settings.sleepTime,
+    );
     const ctx: VoiceToolContext = {
       userId,
       timeZone,
@@ -181,6 +186,7 @@ export class VoiceAgentOrchestrator {
       timeZone,
       nowIso,
       wakeTime: settings.wakeTime,
+      sleepTime: settings.sleepTime,
     };
 
     // Spoken yes while pending confirm
@@ -431,6 +437,7 @@ export class VoiceAgentOrchestrator {
       timeZone?: string;
       nowIso?: string;
       wakeTime?: string | null;
+      sleepTime?: string | null;
     },
   ): VoiceTurnResponse {
     const mapped = intentsFromParseResult(parsed, ctx);

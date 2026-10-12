@@ -1,6 +1,8 @@
 # Roadmap archive
 
-Shipped work, moved out of [roadmap](roadmap.md) in September 2026. The live queue is only what is still open. Product behavior: [overview](overview.md).
+Shipped work, moved out of [roadmap](roadmap.md). The live queue is only what is still open (§20, voice prompt specialists). Product behavior: [overview](overview.md).
+
+On 11 Oct 2026 the checked live-queue items left [roadmap](roadmap.md): scheduling redesign §1–§8, habits §9–§10, problematic slot pick §11, incremental placement §12, Unscheduled §13, calendar/edit delete §14, Voice Agent §15–§19, and Later polish (UI language, voice habit check-in, problematic sheet). Behavior notes are the bullets below.
 
 ## Status when archived
 
@@ -11,6 +13,12 @@ Sign-in is **Google only**. Password register, login, reset, and email verificat
 Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-coverage.md)). Each route screen is its own lazy chunk (`splitChunks`); production is no longer one `bundle.js`.
 
 ## Shipped (Oct 2026)
+
+- [x] **Create kind decision tree.** The create prompt picks kind in a fixed order (recurring, then a concrete clock, a soft clock, a placement window, a day, otherwise Unscheduled). A span that is the event itself sets duration; a span that is when to do the work is a window. One question when the length is missing on a clearly long task, or when those two spans are easy to mix up. Default length is the duration number in the prompt.
+
+- [x] **Voice update + reschedule prompts.** Update specialist sends only changed task fields (`command.newName` for a rename, `phaseId` from the phase list). Reschedule specialist sends `command.start` / `command.end`: a clock is a move, a day with no clock is 00:00–23:59, “do now” uses now. Confirm and placement stay on the existing resolver.
+
+- [x] **Create prompt modules + wake-day after sleep.** The create specialist is one LLM call assembled from `prompt-modules/` (schema, kind-when, recurring, phase, name-language). Spoken today/tomorrow follow sleep: after sleep the civil date is today even before wake, so “завтра” at 03:00 is the next civil day. The previous wake-day continues only before an overnight sleep.
 
 - [x] **Voice Agent (hybrid).** `POST /voice/turn` + in-memory session; read tools for grounded Q&A; write intents (create/command) executed on the client through existing APIs; day-plan propose → confirm → sequential window applies; hero sheet (thread, silence end-of-speech, skip speak / dismiss, polished audio visual). Parse is router → per-intent specialist (create full; others stubs); no-when → Unscheduled; placement respects `earliestStartTime`. Next prompt work: [voice-prompt-next.md](voice-prompt-next.md). Contract: [spec-voice-agent.md](spec-voice-agent.md).
 

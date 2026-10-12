@@ -8,6 +8,14 @@ import {
   buildVoiceCreateSystemPrompt,
   buildVoiceCreateUserPrompt,
 } from './voice-parse.create.prompt';
+import {
+  buildVoiceRescheduleSystemPrompt,
+  buildVoiceRescheduleUserPrompt,
+} from './voice-parse.reschedule.prompt';
+import {
+  buildVoiceUpdateSystemPrompt,
+  buildVoiceUpdateUserPrompt,
+} from './voice-parse.update.prompt';
 
 export type VoiceIntentPromptPair = {
   system: string;
@@ -15,9 +23,9 @@ export type VoiceIntentPromptPair = {
 };
 
 /**
- * Specialist prompts per intent. Create is fully specified; others are lean
- * stubs that still return the JSON resolveVoiceCommand expects. Expand stubs
- * when a family needs richer fields.
+ * Specialist prompts per intent. Create, update, and reschedule are fully
+ * specified. Other intents stay lean stubs that still return the JSON
+ * resolveVoiceCommand expects.
  */
 export function buildVoiceIntentPrompt(
   intent: VoiceParseIntentId,
@@ -31,7 +39,10 @@ export function buildVoiceIntentPrompt(
         user: buildVoiceCreateUserPrompt(ctx),
       };
     case 'update':
-      return stub(intent, language, ctx, UPDATE_RULES);
+      return {
+        system: buildVoiceUpdateSystemPrompt(language),
+        user: buildVoiceUpdateUserPrompt(ctx),
+      };
     case 'delete':
       return stub(intent, language, ctx, DELETE_RULES);
     case 'complete':
@@ -39,7 +50,10 @@ export function buildVoiceIntentPrompt(
     case 'skip':
       return stub(intent, language, ctx, SKIP_RULES);
     case 'reschedule':
-      return stub(intent, language, ctx, RESCHEDULE_RULES);
+      return {
+        system: buildVoiceRescheduleSystemPrompt(language),
+        user: buildVoiceRescheduleUserPrompt(ctx),
+      };
     case 'habit_check_in':
       return stub(intent, language, ctx, HABIT_CHECK_IN_RULES);
     case 'habit_create':
@@ -101,11 +115,6 @@ Return ${intent} JSON.`,
   };
 }
 
-const UPDATE_RULES = `Update rules:
-- command.taskName = existing task (from open tasks when possible).
-- Put ONLY changed fields into task (name via command.newName/rename, duration, phaseId, priority, status, description, recurrence, schedule fields, Google metadata if asked).
-- status "todo" for reopen.`;
-
 const DELETE_RULES = `Delete rules:
 - command.taskName identifies the task. Leave task null or minimal.
 - If no target → needs_clarification asking which task.`;
@@ -117,11 +126,6 @@ const COMPLETE_RULES = `Complete rules:
 const SKIP_RULES = `Skip rules:
 - Skip one occurrence. command.taskName or target current.
 - Unscheduled skip cancels the task (resolver handles).`;
-
-const RESCHEDULE_RULES = `Reschedule rules:
-- Move / do now. command.start = new start ISO with offset; command.end only for an explicit clock range.
-- Day with no clock: start 00:00 and end 23:59 of that schedule day.
-- "do now" / "зроби зараз": still intent reschedule; start can be now ISO.`;
 
 const HABIT_CHECK_IN_RULES = `Habit check-in:
 - command.taskName = habit title from habits list when possible.`;

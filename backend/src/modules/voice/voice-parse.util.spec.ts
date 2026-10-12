@@ -125,6 +125,26 @@ describe('normalizeVoiceParse', () => {
     expect(result.task?.scheduledStartTime).toBeNull();
   });
 
+  it('uses the settings default duration when the model omits a length', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'Buy milk',
+          kind: 'flexible',
+          ...dayWindow,
+        },
+      },
+      {
+        ...ctx,
+        transcript: 'buy milk tomorrow',
+        defaultTaskDurationMinutes: 45,
+      },
+    );
+    expect(result.understanding).toBe('complete');
+    expect(result.task?.estimatedTimeInMinutes).toBe(45);
+  });
+
   it('creates immediately from a name when a day window is present', () => {
     const result = normalizeVoiceParse(
       {
@@ -210,6 +230,26 @@ describe('normalizeVoiceParse', () => {
     );
     expect(result.task?.phaseId).toBe(phaseId);
     expect(result.task?.phaseIds).toEqual([phaseId]);
+  });
+
+  it('keeps one duration question when the name and a when already exist', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'needs_clarification',
+        clarifyingQuestion: 'Скільки це триватиме?',
+        task: {
+          name: 'Прибирання',
+          kind: 'flexible',
+          estimatedTimeInMinutes: null,
+          earliestStartTime: '2026-09-08T00:00:00+03:00',
+          deadline: '2026-09-08T23:59:00+03:00',
+        },
+      },
+      { ...ctx, alreadyClarified: false, transcript: 'завтра прибрати квартиру' },
+    );
+    expect(result.understanding).toBe('needs_clarification');
+    expect(result.clarifyingQuestion).toBe('Скільки це триватиме?');
+    expect(result.task?.name).toBe('Прибирання');
   });
 
   it('after one clarification, does not ask again when a name and when exist', () => {
@@ -471,6 +511,36 @@ describe('scheduleTodayYmd', () => {
       ),
     ).toBe('2026-09-07');
   });
+
+  it('keeps civil today after sleep and before wake', () => {
+    expect(
+      scheduleTodayYmd(
+        '2026-09-08T00:00:00.000Z', // 03:00 +03 Sep 8
+        'Asia/Nicosia',
+        '08:00',
+        '02:00',
+      ),
+    ).toBe('2026-09-08');
+    expect(
+      scheduleTodayYmd(
+        '2026-09-08T00:00:00.000Z',
+        'Asia/Nicosia',
+        '08:00',
+        '22:00',
+      ),
+    ).toBe('2026-09-08');
+  });
+
+  it('rolls back only before an overnight sleep', () => {
+    expect(
+      scheduleTodayYmd(
+        '2026-09-07T22:30:00.000Z', // 01:30 +03 Sep 8
+        'Asia/Nicosia',
+        '08:00',
+        '02:00',
+      ),
+    ).toBe('2026-09-07');
+  });
 });
 
 describe('buildLocalCalendarContext', () => {
@@ -485,6 +555,19 @@ describe('buildLocalCalendarContext', () => {
     expect(text).toContain('schedule +3 days: 2026-09-10');
     expect(text).toContain('must be >= now ISO');
     expect(text).toContain('через N годин');
+    expect(text).toContain('After sleep');
+  });
+
+  it('maps tomorrow to the next civil day after sleep and before wake', () => {
+    const text = buildLocalCalendarContext(
+      '2026-09-08T00:00:00.000Z', // 03:00 +03 Sep 8
+      'Asia/Nicosia',
+      '08:00',
+      '22:00',
+    );
+    expect(text).toContain('schedule today: 2026-09-08');
+    expect(text).toContain('schedule tomorrow: 2026-09-09');
+    expect(text).not.toContain('before wake = still previous');
   });
 });
 

@@ -7,7 +7,7 @@
 
 - Orchestrator `/voice/turn` + session + read tools + day-plan + hero UI.
 - Parse: **router** (`intent` + `language`) → **per-intent specialist** → normalize / `resolveVoiceCommand`.
-- Create specialist is **full**; other intents are **lean stubs** in [voice-parse.intent-prompts.ts](../backend/src/modules/voice/voice-parse.intent-prompts.ts).
+- Create specialist is **full**, assembled from [prompt-modules/](../backend/src/modules/voice/prompt-modules/) into one system string. Spoken today/tomorrow follow sleep (after sleep = civil date, even before wake). Update and reschedule specialists are **full** ([voice-parse.update.prompt.ts](../backend/src/modules/voice/voice-parse.update.prompt.ts), [voice-parse.reschedule.prompt.ts](../backend/src/modules/voice/voice-parse.reschedule.prompt.ts)). Other intents are **lean stubs** in [voice-parse.intent-prompts.ts](../backend/src/modules/voice/voice-parse.intent-prompts.ts).
 - Create when: day window OK; recurring with pattern OK without clock; **no usable when → Unscheduled** (no day/time clarify loop). Clarify only if **name** missing.
 - Placement honors `earliestStartTime` via [placement-bounds.util.ts](../backend/src/modules/schedule/placement-bounds.util.ts).
 - Logs: `[llm:parse.router]`, `[llm:parse.create]`, … via `voice-llm-log.util.ts`.
@@ -27,9 +27,9 @@ STT → Orchestrator (answer | mutate | propose_plan | …)
 
 | Intent | Prompt state | Next chat focus |
 |--------|--------------|-----------------|
-| `create` | full | Polish kind/when/phase; optional `prompt-modules/` compose |
-| `update` | stub | Target task + patch fields only |
-| `reschedule` | stub | Move / do now; day window vs clock |
+| `create` | full (modules + kind tree) | Done for this queue |
+| `update` | full | Done: target + changed fields only |
+| `reschedule` | full | Done: move / do now; day window vs clock |
 | `complete` | stub | Target + recurring occurrence |
 | `skip` | stub | One occurrence; unscheduled cancel path |
 | `delete` | stub | Target; confirm stays orchestrator |
@@ -40,11 +40,9 @@ Router: [voice-parse.router.prompt.ts](../backend/src/modules/voice/voice-parse.
 
 ## Open bugs / follow-ups (separate chats)
 
-1. **Wake-day “tomorrow” before wake** — at ~03:xx with wake 08:00, calendar context sets `schedule tomorrow` = civil **today**, so LLM puts “завтра о 14:00” on today. Revisit `scheduleTodayYmd` vs sleep (after sleep → new wake-day). Files: `voice-local-date.util.ts`, create prompt anchors.
-2. **Create prompt modules** — extract `kind-when`, `phase`, `recurring`, `name-language`, `schema` under e.g. `backend/src/modules/voice/prompt-modules/`; assemble in `voice-parse.create.prompt.ts`.
-3. **Golden utterances** — freeze kind/when decision tree with normalize + prompt snapshot tests from real log failures.
-4. **Fatten stubs in priority order:** `reschedule` + `update` → `complete` / `skip` / `delete` → habits.
-5. **Unused i18n** — `voice.whenOrUnscheduled` may be unused after no-when→Unscheduled; remove or keep for rare spoken UX later.
+1. **Golden utterances** — freeze kind/when decision tree with normalize + prompt snapshot tests from real log failures.
+2. **Fatten stubs in priority order:** `complete` / `skip` / `delete` → habits.
+3. **Unused i18n** — `voice.whenOrUnscheduled` may be unused after no-when→Unscheduled; remove or keep for rare spoken UX later.
 
 ## How to verify in a new chat
 
@@ -52,7 +50,7 @@ Router: [voice-parse.router.prompt.ts](../backend/src/modules/voice/voice-parse.
 Logs: [llm:parse.router] then [llm:parse.<intent>]
 Create no-when → task.isUnscheduled, understanding complete
 Recurring + WEEKLY Mon–Fri, no clock → complete recurring
-Tomorrow+clock after wake → correct schedule day (wake-day bug still open before wake)
+Tomorrow+clock after sleep (even before wake) → next civil day; before an overnight sleep → coming morning is “tomorrow”
 ```
 
 Delete or archive this file into [roadmap-archive.md](roadmap-archive.md) when the queue above is done.

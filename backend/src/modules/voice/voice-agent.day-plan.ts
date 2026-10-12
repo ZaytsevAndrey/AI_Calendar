@@ -23,6 +23,7 @@ export function buildDayPlanProposal(
     ctx.nowIso,
     ctx.timeZone,
     ctx.settings.wakeTime,
+    ctx.settings.sleepTime,
   );
   const day =
     gapsResult.day ||

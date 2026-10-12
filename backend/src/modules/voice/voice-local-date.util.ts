@@ -37,19 +37,27 @@ export function localYmd(nowIso: string, timeZone: string): string {
 
 /**
  * Wake-day "today" for speech (сьогодні / tomorrow).
- * Before wakeTime (incl. after midnight while still awake until a late sleep),
- * the schedule day is still the previous civil date — so "завтра" at 01:00
- * with sleep at 02:00 means the coming calendar morning, not calendar+1 from
- * the already-rolled civil date.
+ * After sleep, the civil date is the schedule day even when the clock is
+ * still before wake — so "завтра" at 03:00 with sleep at 02:00 or 22:00 is
+ * the next civil date. The previous wake-day continues only before an
+ * overnight sleep (sleep after midnight, clock still before that sleep).
+ * With no sleep time, a clock before wake still belongs to the previous civil date.
  */
 export function scheduleTodayYmd(
   nowIso: string,
   timeZone: string,
   wakeTime?: string | null,
+  sleepTime?: string | null,
 ): string {
   const cal = localYmd(nowIso, timeZone);
   const wake = normalizeClockHm(wakeTime || '08:00');
   const hm = localHm(nowIso, timeZone);
+  const sleep = sleepTime?.trim() ? normalizeClockHm(sleepTime) : null;
+  if (sleep && sleep < wake) {
+    if (hm < sleep) return addDaysToYmd(cal, -1);
+    return cal;
+  }
+  if (sleep) return cal;
   if (hm < wake) return addDaysToYmd(cal, -1);
   return cal;
 }
@@ -352,9 +360,15 @@ export function buildLocalCalendarContext(
   nowIso: string,
   timeZone: string,
   wakeTime?: string | null,
+  sleepTime?: string | null,
 ): string {
   const calendarToday = localYmd(nowIso, timeZone);
-  const scheduleToday = scheduleTodayYmd(nowIso, timeZone, wakeTime);
+  const scheduleToday = scheduleTodayYmd(
+    nowIso,
+    timeZone,
+    wakeTime,
+    sleepTime,
+  );
   const scheduleTomorrow = addDaysToYmd(scheduleToday, 1);
   const inThreeDays = addDaysToYmd(scheduleToday, 3);
   const clock = localHm(nowIso, timeZone);
@@ -367,12 +381,14 @@ export function buildLocalCalendarContext(
 - schedule +3 days: ${inThreeDays} = "in 3 days" / "через три дні"
 - civil date: ${calendarToday}${
     calendarToday !== scheduleToday
-      ? ' (before wake = still previous wake-day)'
+      ? ' (before overnight sleep = still previous wake-day)'
       : ''
   }
 
 Resolve all dates yourself into ISO-8601 with numeric offset:
-- today/tomorrow use schedule today/tomorrow above (wake-day), not civil date before wake.
+- today/tomorrow use schedule today/tomorrow above.
+- After sleep, those anchors are the civil date even when the clock is still before wake. "завтра"/"tomorrow" is schedule tomorrow, not civil today.
+- Before an overnight sleep (clock still before sleep, sleep after midnight), schedule today is the previous civil date.
 - "in N hours" / "через N годин": now ISO + N hours.
 - "in N days" / "через N днів": schedule today + N days.
 - day + clock ("завтра о другій дня", "tomorrow at 2pm"): clock on that schedule day (never on schedule today when they said tomorrow).

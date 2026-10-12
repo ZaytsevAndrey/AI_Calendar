@@ -17,6 +17,7 @@ export function intentsFromParseResult(
     timeZone?: string;
     nowIso?: string;
     wakeTime?: string | null;
+    sleepTime?: string | null;
   },
 ): {
   intents: VoiceWriteIntent[];
@@ -105,6 +106,7 @@ function summarizeCreate(
     timeZone?: string;
     nowIso?: string;
     wakeTime?: string | null;
+    sleepTime?: string | null;
   },
 ): string {
   const name = task.name;
@@ -114,7 +116,12 @@ function summarizeCreate(
     return vt(lang, 'voice.createdTask', { name });
   }
   const day = localYmd(task.earliestStartTime, timeZone);
-  const today = scheduleTodayYmd(nowIso, timeZone, opts?.wakeTime);
+  const today = scheduleTodayYmd(
+    nowIso,
+    timeZone,
+    opts?.wakeTime,
+    opts?.sleepTime,
+  );
   const tomorrow = addDaysToYmd(today, 1);
   if (day === tomorrow) {
     return vt(lang, 'voice.createdTaskFor', {

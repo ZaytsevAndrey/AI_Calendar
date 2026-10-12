@@ -255,6 +255,7 @@ export function normalizeVoiceParse(
     nowIso?: string;
     wakeTime?: string | null;
     language?: string | null;
+    defaultTaskDurationMinutes?: number;
   },
 ): VoiceParseResult {
   const root = asRecord(raw);
@@ -317,7 +318,10 @@ export function normalizeVoiceParse(
     name,
     description: asNullableString(taskRaw.description) ?? undefined,
     eventType,
-    estimatedTimeInMinutes: clampDuration(taskRaw.estimatedTimeInMinutes),
+    estimatedTimeInMinutes: clampDuration(
+      taskRaw.estimatedTimeInMinutes,
+      ctx.defaultTaskDurationMinutes ?? 30,
+    ),
     isRecurring,
     isUnscheduled: isUnscheduled || undefined,
     recurrencePattern,
@@ -388,10 +392,18 @@ export function normalizeVoiceParse(
     task.name = name;
   }
 
+  const askedBesideARealName =
+    understanding === 'needs_clarification' &&
+    Boolean(clarifyingQuestion) &&
+    Boolean(asString(taskRaw.name)) &&
+    !isWeakTaskName(asString(taskRaw.name));
+
   if (!name) {
     understanding = 'needs_clarification';
     clarifyingQuestion =
       clarifyingQuestion || t(lang, 'voice.whatTaskName');
+  } else if (!ctx.alreadyClarified && askedBesideARealName) {
+    understanding = 'needs_clarification';
   } else if (!hasScheduleWhen(task)) {
     markUnscheduledInbox(task);
     understanding = 'complete';

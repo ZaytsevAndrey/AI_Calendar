@@ -14,6 +14,8 @@ export type VoiceParsePromptContext = {
   habitNames?: string[];
   /** From router; used so specialist prompts answer in the same language. */
   language?: 'uk' | 'en' | 'ru';
+  /** User setting: default length of a new task, in minutes. */
+  defaultTaskDurationMinutes?: number;
 };
 
 export const VOICE_PARSE_INTENTS = [
@@ -73,9 +75,13 @@ export function buildVoiceParseSharedUserPrompt(
     ? `Speech language (from router): ${input.language}\n`
     : '';
 
-  return `${langLine}${buildLocalCalendarContext(input.nowIso, input.timeZone, input.settings.wakeTime)}
+  return `${langLine}${buildLocalCalendarContext(
+    input.nowIso,
+    input.timeZone,
+    input.settings.wakeTime,
+    input.settings.sleepTime,
+  )}
 Wake: ${input.settings.wakeTime}  Sleep: ${input.settings.sleepTime}
-(Schedule day follows wake→sleep: before wakeTime, "today" is still the previous wake-day.)
 Weekend work: ${input.settings.weekendWorkEnabled ? 'yes' : 'no'}
 ${
   includePhases

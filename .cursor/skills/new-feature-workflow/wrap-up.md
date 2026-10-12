@@ -4,7 +4,7 @@
 
 1. **Confirm Phase 5** — new/changed behavior is covered by tests and the relevant commands passed (or the user explicitly waived tests).
 2. **Update product documentation** in `documentation/` so it matches what shipped. Do this in the same change as the feature, before the commit. Touch only files the feature actually changed:
-   - `roadmap.md` — remove the shipped item from the live queue; point **Recommended next steps** at what is still open.
+   - `roadmap.md` — **delete** the shipped item from the live queue. Do not leave it checked (`[x]`). This file is open work only. Point **Recommended next steps** at what is still open.
    - `roadmap-archive.md` — add the done item with a short behavior note.
    - `overview.md` — user-visible behavior in **Features**.
    - `api-reference.md` — only when routes or payload fields changed.
@@ -28,6 +28,7 @@
 - **Simplification** pass completed or explicitly skipped with reason
 - **Tests** for the feature exist and pass (Phase 5), unless explicitly waived
 - **`documentation/`** matches the shipped behavior (roadmap, overview, and any API/spec/e2e files the feature changed)
+- **`roadmap.md` has no `[x]` items** for work that already has an archive note
 - **Build** still succeeds from the project root (or standard CI build)—re-run if there were late edits after Phase 2. Run that build alone, after tests have exited ([machine load](testing.md#machine-load)).
 
 ## Push

@@ -223,6 +223,7 @@ export class VoiceService {
       openTaskNames,
       habitNames,
       language: speechLanguage,
+      defaultTaskDurationMinutes: taskDurationMinutes(settings),
     };
 
     const specialistIntent = normalizeParseIntent(intent);
@@ -254,6 +255,7 @@ export class VoiceService {
           wakeTime: settings.wakeTime,
           transcript: speech,
           language: speechLanguage,
+          defaultTaskDurationMinutes: taskDurationMinutes(settings),
         }),
         command: null,
       };
@@ -286,6 +288,14 @@ export class VoiceService {
       command: resolved.command,
     };
   }
+}
+
+function taskDurationMinutes(settings: {
+  defaultTaskDurationMinutes?: number | null;
+}): number {
+  const minutes = settings.defaultTaskDurationMinutes;
+  if (typeof minutes === 'number' && minutes >= 5) return minutes;
+  return 30;
 }
 
 function normalizeParseIntent(

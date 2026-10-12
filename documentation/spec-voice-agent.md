@@ -1,6 +1,6 @@
 # Specification: Voice Agent (hybrid)
 
-**Status:** shipped (roadmap §15–§19).  
+**Status:** shipped (see [roadmap archive](roadmap-archive.md)).  
 **Language:** English  
 **Last updated:** October 2026  
 

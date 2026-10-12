@@ -164,6 +164,7 @@ export class VoiceAgentTools {
       ctx.nowIso,
       ctx.timeZone,
       ctx.settings.wakeTime,
+      ctx.settings.sleepTime,
     );
     if (!trimmed || /today|сьогодні|сегодня/i.test(trimmed)) return today;
     if (/tomorrow|завтра/i.test(trimmed)) return addDaysToYmd(today, 1);
