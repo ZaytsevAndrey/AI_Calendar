@@ -24,4 +24,4 @@ Single source of truth for the project. Keep these files in sync with code chang
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** October 2026 (§23.1–§23.2 logging + kind/when goldens; `/voice/speak` + home Ollama/Piper docs; next §23.3 harvest/router).
+**Last documentation update:** October 2026 (first-run wake/sleep then phases; lifestyle presets tile the awake day; next §23.3 harvest/router).

@@ -137,7 +137,7 @@ Email/password (`POST /auth/register`, `/login`, forgot/reset) **do not exist**.
 | U-AUTH-004 | U | P0 | Callback `?ticket=` | GoogleCallbackPage | Redeems, stores tokens, leaves `/login` |
 | U-AUTH-005 | U | P0 | Authenticated, required filled, has phases | Open `/login` | PublicRoute → `/` |
 | U-AUTH-006 | U | P0 | Authenticated, `requiredFilled=false` | Open `/` | Redirect `/settings` |
-| U-AUTH-007 | U | P0 | Required filled, `hasPhases=false` | Open `/` | Redirect `/setup/phases` |
+| U-AUTH-007 | U | P0 | Required filled, `hasPhases=false` | Open `/` | Redirect `/setup/phases`, wake/sleep step, no main nav |
 | U-AUTH-008 | U | P1 | Required not filled | Open `/settings` | Stays (exempt) |
 | U-AUTH-009 | U | P1 | Has settings, no phases | Open `/setup/phases` | Stays (exempt) |
 | U-AUTH-010 | U | P0 | Authenticated | Open `/register`, `/forgot-password`, `/reset-password` | `/login` or `/` per PublicRoute |
@@ -152,7 +152,7 @@ Email/password (`POST /auth/register`, `/login`, forgot/reset) **do not exist**.
 
 ## 9. Cases — user settings and onboarding
 
-`requiredFilled` = `wakeTime` && `sleepTime` && `googleCalendarLinked`. Default phases are **not** created on `GET /user-settings`; only `POST /phases/setup-defaults`.
+`requiredFilled` = `wakeTime` && `sleepTime` && `googleCalendarLinked`. Google sign-in sets all three, so a new account is not held on Settings to connect a calendar. `requiredFilled=false` is the unlinked case (U-AUTH-006). Phases are **not** created on `GET /user-settings` or `GET /phases`; only `POST /phases/setup-defaults` or `POST /phases/apply-preset`. Until that write, the client stays on `/setup/phases` (wake/sleep first, then day shape or skip) and does not render app navigation.
 
 | ID | Layer | P | Given | When | Then |
 |----|-------|---|-------|------|------|
@@ -179,8 +179,8 @@ Email/password (`POST /auth/register`, `/login`, forgot/reset) **do not exist**.
 | U-SET-003 | U | P1 | TZ already set | Reload | No overwrite |
 | U-SET-004 | U | P1 | Google status | Settings | Shows connected from `check-connection` (no disconnect button — feature missing) |
 | U-SET-005 | U | P2 | Settings loading / error | Slow/fail API | Loading then retry |
-| U-ONB-001 | U | P0 | `/setup/phases` | Save with ≥1 weekday | PATCH settings + `setup-defaults` → calendar |
-| U-ONB-002 | U | P0 | `/setup/phases` | Skip | `setup-defaults` all days → calendar |
+| U-ONB-001 | U | P0 | `/setup/phases` | Continue (saves wake/sleep), then Save with ≥1 weekday | `setup-defaults` or `apply-preset` → calendar |
+| U-ONB-002 | U | P0 | `/setup/phases` | Continue, then Skip | `setup-defaults` all days → calendar |
 | U-ONB-003 | U | P1 | Weekday picker empty | Save | Blocked (client: ≥1 day) |
 | U-ONB-004 | U | P1 | Phases already exist | Save/skip again | API 400; UI surfaces error |
 
@@ -209,7 +209,7 @@ Backend **does not** reject overlapping phases. Frontend `usePhaseValidation` bl
 | A-PH-015 | A | P0 | Phase with assigned task | `DELETE /phases/:id` | **409** |
 | A-PH-016 | A | P0 | Phase with no tasks | DELETE | 200; gone from list |
 | A-PH-017 | A | P1 | `weekDays` with duplicates | POST | Deduped sorted |
-| A-PH-018 | A | P1 | Settings, no phases | `POST /phases/apply-preset` `working` | 201; Deep work / Meetings / Life admin; Focus hidden |
+| A-PH-018 | A | P1 | Settings, no phases | `POST /phases/apply-preset` `working` | 201; Deep work / Meetings / Work / Life admin with no gap; Focus hidden |
 | A-PH-019 | A | P1 | Phases exist, then a task on one | apply `student`, then apply again | First replace succeeds; second is 400 and phases stay |
 | A-PH-020 | A | P1 | No settings, or unknown preset id | `POST /phases/apply-preset` | 400 |
 | U-PH-001 | U | P1 | `/phases` | List + weekly grid | Sleep/custom visible; Focus hours hidden |

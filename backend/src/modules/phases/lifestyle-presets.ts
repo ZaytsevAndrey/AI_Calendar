@@ -45,6 +45,12 @@ const PRESETS: Record<PhasePresetId, BlockSpec[]> = {
       durationMin: 180,
     },
     {
+      place: 'fill',
+      nameKey: 'preset.working.work.name',
+      descriptionKey: 'preset.working.work.description',
+      color: '#0369a1',
+    },
+    {
       place: 'beforeSleep',
       nameKey: 'preset.working.lifeAdmin.name',
       descriptionKey: 'preset.working.lifeAdmin.description',
@@ -62,12 +68,10 @@ const PRESETS: Record<PhasePresetId, BlockSpec[]> = {
       durationMin: 240,
     },
     {
-      place: 'afterWake',
+      place: 'fill',
       nameKey: 'preset.student.study.name',
       descriptionKey: 'preset.student.study.description',
       color: '#15803d',
-      offsetMin: 240,
-      durationMin: 180,
     },
     {
       place: 'beforeSleep',
@@ -153,17 +157,20 @@ export function buildLifestylePresetBlocks(
   const { wakeMin, duration } = awakeDurationMinutes(wakeTime, sleepTime);
   const specs = PRESETS[presetId];
   const placed: { start: number; end: number; place: BlockSpec['place'] }[] = [];
-  const blocks: LifestylePhaseBlock[] = [];
+  const blocks: { start: number; block: LifestylePhaseBlock }[] = [];
 
   const push = (spec: BlockSpec, start: number, end: number) => {
     if (end - start < MIN_BLOCK_MINUTES) return;
     placed.push({ start, end, place: spec.place });
     blocks.push({
-      name: t(lang, spec.nameKey),
-      color: spec.color,
-      description: t(lang, spec.descriptionKey),
-      startTime: formatClock(wakeMin + start),
-      endTime: formatClock(wakeMin + end),
+      start,
+      block: {
+        name: t(lang, spec.nameKey),
+        color: spec.color,
+        description: t(lang, spec.descriptionKey),
+        startTime: formatClock(wakeMin + start),
+        endTime: formatClock(wakeMin + end),
+      },
     });
   };
 
@@ -203,5 +210,5 @@ export function buildLifestylePresetBlocks(
     push(spec, start, end);
   }
 
-  return blocks;
+  return blocks.sort((a, b) => a.start - b.start).map((item) => item.block);
 }

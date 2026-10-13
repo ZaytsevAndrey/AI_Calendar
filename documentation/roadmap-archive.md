@@ -14,6 +14,10 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ## Shipped (Oct 2026)
 
+- [x] **First-run wake/sleep, then phases.** After Google sign-in, a user with no phases stays on `/setup/phases` with no app nav. Wake and sleep are saved first. Then they pick a day shape or skip to Sleep + Focus. `googleCalendarLinked` is set by that same sign-in, not by a second connect step.
+
+- [x] **Lifestyle presets tile the awake day.** Working adds Work between Meetings and Life admin. Student Study fills from the end of Classes until Free time. Open was already contiguous. Blocks under 30 minutes are still dropped.
+
 - [x] **§23.2 Golden harness + create kind/when baseline.** Table fixtures without live LLM for all six `kind-when` branches (+ event-span fixed example): frozen specialist JSON → `normalizeVoiceParse` + harvest `kind`. Prompt stays aligned with `CREATE_KIND_WHEN_MODULE` examples. Files: `voice-create-kind-when.goldens.ts` / `.spec.ts`.
 
 - [x] **§23.1 Structured voice parse logging.** Each `parseTask` (including `/voice/turn` mutate) logs one unclipped `voice.parse.result` JSON line after normalize/resolve: `parseId`, transcript, router vs final intent, sniff override, language, understanding, inferred kind / command fields, key when ISOs, clarify question. Helper: `voice-parse-result-log.util.ts`. Harvest notes in [voice-prompt-next.md](voice-prompt-next.md). Raw `[llm:parse.*]` lines unchanged for prompt debug.

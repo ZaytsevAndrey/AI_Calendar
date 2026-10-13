@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Connect a Google account to read/manage events via the Google Calendar API. Tokens are stored on the backend; after successful OAuth the user is redirected to the frontend (usually settings with query `googleCalendar=success|error`).
+Google sign-in is the only login. One OAuth consent covers the account (`openid`, `email`, `profile`) and Calendar scopes. Tokens are stored on the backend. The callback redirects the browser to the frontend `/auth/google/callback?ticket=…` (or `/login?error=…`). That sign-in marks `googleCalendarLinked`; there is no separate “connect calendar before you can enter” step.
 
 ## Google Cloud Console setup
 
@@ -38,8 +38,9 @@ FRONTEND_URL=http://localhost:3000
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/google-calendar/auth-url` | Get Google sign-in URL |
-| GET | `/google-calendar/callback` | Exchange `code` for tokens |
+| GET | `/auth/google` | Google sign-in URL (login or register) |
+| GET | `/google-calendar/auth-url` | Same sign-in URL (older alias) |
+| GET | `/google-calendar/callback` | Exchange `code`, then redirect to the frontend with a one-time ticket |
 | GET | `/google-calendar/check-connection` | Whether connected |
 | POST | `/google-calendar/disconnect` | Disconnect |
 

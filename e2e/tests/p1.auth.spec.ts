@@ -15,7 +15,8 @@ test.describe('P1 auth and phases UI', () => {
   test('U-AUTH-009 phase setup stays reachable without phases', async ({ page, auth }) => {
     await openAs(page, auth.needsPhases, '/setup/phases');
     await expect(page).toHaveURL(/\/setup\/phases/);
-    await expect(page.getByRole('heading', { name: 'Set up your phases' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'When do you wake and sleep?' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
   });
 
   test('U-PH-001 phases list hides Focus hours', async ({ page, auth }) => {
@@ -27,6 +28,8 @@ test.describe('P1 auth and phases UI', () => {
 
   test('U-ONB-003 empty weekday picker blocks Save', async ({ page, auth }) => {
     await openAs(page, auth.needsPhases, '/setup/phases');
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page.getByRole('heading', { name: 'Set up your phases' })).toBeVisible();
     for (const day of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']) {
       await page.getByRole('button', { name: day, exact: true }).click();
     }
@@ -47,6 +50,7 @@ test.describe('P1 auth and phases UI', () => {
       });
     });
     await openAs(page, auth.needsPhases, '/setup/phases');
+    await page.getByRole('button', { name: 'Continue' }).click();
     await page.getByRole('button', { name: 'Skip — default phases' }).click();
     await expect(page.getByText('Could not create phases')).toBeVisible();
   });

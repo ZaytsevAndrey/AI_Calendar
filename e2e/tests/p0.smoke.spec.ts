@@ -27,7 +27,8 @@ test.describe('P0 UI smoke', () => {
   test('U-AUTH-007 required filled without phases redirects to setup', async ({ page, auth }) => {
     await openAs(page, auth.needsPhases);
     await expect(page).toHaveURL(/\/setup\/phases/);
-    await expect(page.getByRole('heading', { name: 'Set up your phases' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'When do you wake and sleep?' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
   });
 
   test('U-CAL-001 onboarded user sees calendar chrome', async ({ page, auth }) => {

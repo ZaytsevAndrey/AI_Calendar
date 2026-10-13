@@ -6,16 +6,16 @@ Request/response shapes: **Swagger** after the server starts — `/api`.
 
 ## Auth — `/auth`
 
+Sign-in is Google only. There is no email/password register, login, or reset.
+
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/auth/register` | Register |
-| POST | `/auth/login` | Login |
+| GET | `/auth/google` | Start Google sign-in (login or register). The same consent includes Calendar scopes. |
+| POST | `/auth/google/session` | Exchange the one-time `ticket` for JWT `{ access_token, refresh_token }` |
 | POST | `/auth/refresh` | Refresh tokens |
 | POST | `/auth/logout` | Logout |
-| POST | `/auth/forgot-password` | Request password reset |
-| POST | `/auth/reset-password` | Reset password |
 
-Additional routes may exist in `auth.controller.ts` (email verification, etc.).
+The Google redirect (`GET /google-calendar/callback`) sends the browser to the frontend `/auth/google/callback?ticket=…`. That sign-in writes wake `07:00`, sleep `22:00`, and `googleCalendarLinked: true`. It does not create phases.
 
 ## User settings — `/user-settings`
 
@@ -24,7 +24,7 @@ Additional routes may exist in `auth.controller.ts` (email verification, etc.).
 | GET | `/user-settings` | Current settings |
 | PATCH | `/user-settings` | Update settings |
 
-`GET` (and the logic that creates default settings) also triggers **default phase creation** for the user when they have no phases yet (see Phases below).
+`GET` creates a settings row when the user has none. It does **not** create phases.
 
 Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWorkEnabled`, `allowSplitScheduling`, `minSplitMinutes`, **`defaultTaskDurationMinutes`** (default 30; new tasks and voice use it when duration is omitted), **`timeZone`** (IANA, e.g. `Asia/Nicosia` / `Europe/Kyiv`). Empty `timeZone` is filled **once** from the browser on first login; the user can change it in Settings. Invalid IANA names are rejected. Postgres stores `wakeTime` / `sleepTime` as `time` (`HH:mm:ss`); the engine normalizes them to `HH:mm` and interprets those clocks **in `timeZone`** (fallback `UTC`).
 
@@ -46,21 +46,21 @@ Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWor
 
 **Bearer JWT required** for all routes in this controller.
 
-Phases are **per user** (`userId` on each row). When a user has **no phases**, the backend creates two defaults (idempotent):
+Phases are **per user** (`userId` on each row). Nothing creates them on `GET /phases` or `GET /user-settings`. The first-run screen calls one of the two writes below. Skip (`setup-defaults`) creates:
 
 | Name | `type` | Window |
 |------|--------|--------|
 | Sleep | `sleep_time` | `sleepTime` → `wakeTime` (overnight, from user settings) |
-| Focus hours | `time_phase` | `wakeTime` → `sleepTime` |
+| Focus hours | `main_phase` | `wakeTime` → `sleepTime` (hidden on the phase list) |
 
-Defaults are created on first **`GET /phases`** (using stored settings, or `07:00` / `22:00` if settings row is missing) and again from **`GET /user-settings`** after settings are ensured.
+Routes:
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/phases` | All phases for current user |
 | POST | `/phases` | Create (overlap rules apply within the user’s phases) |
 | POST | `/phases/setup-defaults` | Sleep + hidden Focus when the user has no phases yet |
-| POST | `/phases/apply-preset` | Replace all phases with Sleep, hidden Focus, and a lifestyle preset (`working`, `student`, or `open`). Hours are offsets from wake/sleep (blocks under 30 minutes are dropped). 400 if settings are missing, the preset id is unknown, or any phase still has tasks |
+| POST | `/phases/apply-preset` | Replace all phases with Sleep, hidden Focus, and a lifestyle preset (`working`, `student`, or `open`). Morning blocks are fixed lengths from wake; the evening block is a fixed length before sleep; a fill block closes the gap between them. Blocks under 30 minutes are dropped. 400 if settings are missing, the preset id is unknown, or any phase still has tasks |
 | GET | `/phases/time-phases` | `time_phase` only |
 | GET | `/phases/time-phases/date/:date` | Time phases applicable on that date |
 | GET | `/phases/sleep-time` | `sleep_time` only |

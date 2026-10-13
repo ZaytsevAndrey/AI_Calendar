@@ -14,23 +14,12 @@ function block(
 describe('buildLifestylePresetBlocks', () => {
   it('places a working day inside a long awake window', () => {
     const blocks = buildLifestylePresetBlocks('working', '08:00', '23:00');
-    expect(blocks.map((item) => item.name)).toEqual([
-      'Deep work',
-      'Meetings',
-      'Life admin',
+    expect(blocks.map((item) => [item.name, item.startTime, item.endTime])).toEqual([
+      ['Deep work', '08:00', '11:00'],
+      ['Meetings', '11:00', '14:00'],
+      ['Work', '14:00', '21:00'],
+      ['Life admin', '21:00', '23:00'],
     ]);
-    expect(block('working', '08:00', '23:00', 'Deep work')).toMatchObject({
-      startTime: '08:00',
-      endTime: '11:00',
-    });
-    expect(block('working', '08:00', '23:00', 'Meetings')).toMatchObject({
-      startTime: '11:00',
-      endTime: '14:00',
-    });
-    expect(block('working', '08:00', '23:00', 'Life admin')).toMatchObject({
-      startTime: '21:00',
-      endTime: '23:00',
-    });
   });
 
   it('drops the block before sleep when earlier blocks already fill the window', () => {
@@ -54,8 +43,8 @@ describe('buildLifestylePresetBlocks', () => {
     expect(blocks.map((item) => [item.name, item.startTime, item.endTime])).toEqual([
       ['Morning focus', '08:00', '11:00'],
       ['Errands', '11:00', '13:00'],
-      ['Wind down', '14:00', '16:00'],
       ['Personal projects', '13:00', '14:00'],
+      ['Wind down', '14:00', '16:00'],
     ]);
   });
 
@@ -69,8 +58,8 @@ describe('buildLifestylePresetBlocks', () => {
     const blocks = buildLifestylePresetBlocks('student', '22:00', '06:00');
     expect(blocks.map((item) => [item.name, item.startTime, item.endTime])).toEqual([
       ['Classes', '22:00', '02:00'],
-      ['Study', '02:00', '05:00'],
-      ['Free time', '05:00', '06:00'],
+      ['Study', '02:00', '04:00'],
+      ['Free time', '04:00', '06:00'],
     ]);
   });
 });
