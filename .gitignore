@@ -46,6 +46,7 @@ yarn-error.log*
 backend/dist/
 backend/node_modules/
 backend/_tmp*
+backend/.tmp/
 
 # frontend specific
 frontend/build/

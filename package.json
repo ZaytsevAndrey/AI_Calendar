@@ -11,6 +11,7 @@
     "start:frontend": "npm run start --workspace=frontend",
     "start:backend": "npm run start:dev --workspace=backend",
     "start:piper": "node tools/piper-http.mjs",
+    "voice:eval:create": "npm run voice:eval:create --workspace=backend",
     "build": "npm run build --workspaces",
     "build:frontend": "npm run build --workspace=frontend",
     "build:backend": "npm run build --workspace=backend",

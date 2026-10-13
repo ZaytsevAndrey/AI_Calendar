@@ -1,0 +1,330 @@
+/**
+ * Live intent-eval for non-create specialists.
+ *
+ *   npm run voice:eval:intent -- --local --intent=update
+ *   npm run voice:eval:intent -- --local --all
+ *   npm run voice:eval:intent -- --local --block=0
+ */
+import 'reflect-metadata';
+import 'dotenv/config';
+import { mkdirSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { INestApplicationContext } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { AppModule } from '../app.module';
+import { User } from '../modules/users/user.entity';
+import { UserSettingsService } from '../modules/user-settings/user-settings.service';
+import {
+  Task,
+  TaskStatus,
+} from '../modules/tasks/entities/task.entity';
+import { TaskEventType } from '../modules/scheduling/event-type.enum';
+import { Habit } from '../modules/habits/entities/habit.entity';
+import { VoiceService } from '../modules/voice/voice.service';
+import {
+  INTENT_EVAL_ANCHORS,
+  INTENT_EVAL_BLOCK_SIZE,
+  INTENT_EVAL_FIXTURES,
+  INTENT_EVAL_SCENARIOS,
+  intentEvalBlockCount,
+  selectIntentEvalBlock,
+  selectIntentEvalByIntent,
+  type IntentEvalIntent,
+  type IntentEvalScenario,
+} from '../modules/voice/voice-intent-eval.scenarios';
+import {
+  matchIntentEvalScenario,
+  type IntentEvalActual,
+} from '../modules/voice/voice-intent-eval.match';
+
+const EVAL_EMAIL = 'voice-eval@local';
+const CASE_PAUSE_MS = process.argv.includes('--local') ? 300 : 2000;
+const RATE_LIMIT_RETRIES = 3;
+const RATE_LIMIT_WAIT_MS = 8000;
+
+type CaseReport = {
+  id: string;
+  intent: IntentEvalScenario['intent'];
+  transcript: string;
+  ok: boolean;
+  failures: string[];
+  actual: IntentEvalActual | null;
+  error?: string;
+};
+
+async function main(): Promise<void> {
+  const useLocal = process.argv.includes('--local');
+  if (!useLocal && !process.env.GROQ_API_KEY?.trim()) {
+    console.error('GROQ_API_KEY missing (or pass --local).');
+    process.exit(1);
+  }
+  if (useLocal) {
+    if (!process.env.LLM_BASE_URL?.trim()) {
+      console.error('LLM_BASE_URL missing for --local.');
+      process.exit(1);
+    }
+    console.log(
+      `Using local LLM at ${process.env.LLM_BASE_URL} model=${process.env.LLM_MODEL || 'calendar-voice'}`,
+    );
+  } else {
+    delete process.env.LLM_BASE_URL;
+  }
+
+  const app = await NestFactory.createApplicationContext(AppModule, {
+    logger: ['error', 'warn', 'log'],
+  });
+
+  try {
+    const userId = await ensureEvalUser(app);
+    await seedFixtures(app, userId);
+    const voice = app.get(VoiceService);
+    const selection = selectScenarios(useLocal);
+    const cases: CaseReport[] = [];
+
+    console.log(
+      `voice:eval:intent — ${selection.label} via ${useLocal ? 'local LLM' : 'Groq'} (user=${userId})`,
+    );
+
+    for (let i = 0; i < selection.scenarios.length; i++) {
+      const scenario = selection.scenarios[i];
+      process.stdout.write(
+        `[${i + 1}/${selection.scenarios.length}] ${scenario.id} … `,
+      );
+      const report = await runOne(voice, userId, scenario);
+      cases.push(report);
+      if (report.ok) console.log('PASS');
+      else if (report.error) console.log(`ERROR ${report.error}`);
+      else console.log(`FAIL ${report.failures.join('; ')}`);
+      if (i < selection.scenarios.length - 1) await sleep(CASE_PAUSE_MS);
+    }
+
+    const passed = cases.filter((c) => c.ok).length;
+    const failed = cases.length - passed;
+    const outDir = join(process.cwd(), '.tmp');
+    mkdirSync(outDir, { recursive: true });
+    const outPath = join(outDir, 'voice-intent-eval-report.json');
+    writeFileSync(
+      outPath,
+      JSON.stringify(
+        {
+          ranAt: new Date().toISOString(),
+          anchors: INTENT_EVAL_ANCHORS,
+          block: selection.block,
+          summary: { total: cases.length, passed, failed },
+          cases,
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+    console.log('');
+    console.log(`Summary: ${passed} passed, ${failed} failed / ${cases.length}`);
+    console.log(`Report: ${outPath}`);
+    if (failed > 0) {
+      for (const c of cases.filter((x) => !x.ok)) {
+        console.log(`  - ${c.id}: ${c.error || c.failures.join('; ')}`);
+      }
+      process.exitCode = 1;
+    }
+  } finally {
+    await app.close();
+  }
+}
+
+async function runOne(
+  voice: VoiceService,
+  userId: string,
+  scenario: IntentEvalScenario,
+): Promise<CaseReport> {
+  try {
+    const result = await withRateLimitRetry(() =>
+      voice.parseTask(userId, {
+        transcript: scenario.transcript,
+        timeZone: INTENT_EVAL_ANCHORS.timeZone,
+        clientNowIso: INTENT_EVAL_ANCHORS.nowIso,
+      }),
+    );
+    const match = matchIntentEvalScenario(scenario, result);
+    return {
+      id: scenario.id,
+      intent: scenario.intent,
+      transcript: scenario.transcript,
+      ok: match.ok,
+      failures: match.failures,
+      actual: match.actual,
+    };
+  } catch (err) {
+    return {
+      id: scenario.id,
+      intent: scenario.intent,
+      transcript: scenario.transcript,
+      ok: false,
+      failures: [],
+      actual: null,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+async function ensureEvalUser(app: INestApplicationContext): Promise<string> {
+  const users = app.get<Repository<User>>(getRepositoryToken(User));
+  let user = await users.findOne({ where: { email: EVAL_EMAIL } });
+  if (!user) {
+    user = await users.save(
+      users.create({
+        email: EVAL_EMAIL,
+        username: 'voice-eval',
+        password: 'unused-eval-only',
+        isEmailVerified: true,
+      }),
+    );
+  }
+  const settingsService = app.get(UserSettingsService);
+  await settingsService.getSettings(user.id);
+  await settingsService.updateSettings(user.id, {
+    timeZone: INTENT_EVAL_ANCHORS.timeZone,
+    wakeTime: INTENT_EVAL_ANCHORS.wakeTime,
+    sleepTime: INTENT_EVAL_ANCHORS.sleepTime,
+    speechLanguage: 'uk',
+    language: 'uk',
+  });
+  return user.id;
+}
+
+/** Idempotent fixture tasks/habits for named targeting (not "mutating under test"). */
+async function seedFixtures(
+  app: INestApplicationContext,
+  userId: string,
+): Promise<void> {
+  const tasks = app.get<Repository<Task>>(getRepositoryToken(Task));
+  const habits = app.get<Repository<Habit>>(getRepositoryToken(Habit));
+
+  for (const fixture of INTENT_EVAL_FIXTURES.tasks) {
+    const existing = await tasks.findOne({
+      where: { userId, name: fixture.name },
+    });
+    if (existing) {
+      if (existing.status !== TaskStatus.TODO) {
+        existing.status = TaskStatus.TODO;
+        await tasks.save(existing);
+      }
+      continue;
+    }
+    await tasks.save(
+      tasks.create({
+        userId,
+        name: fixture.name,
+        status: TaskStatus.TODO,
+        isRecurring: fixture.isRecurring,
+        estimatedTimeInMinutes: 30,
+        eventType: TaskEventType.ADMIN,
+        isUnscheduled: true,
+      }),
+    );
+  }
+
+  for (const fixture of INTENT_EVAL_FIXTURES.habits) {
+    const existing = await habits.findOne({
+      where: { userId, name: fixture.name },
+    });
+    if (existing) continue;
+    await habits.save(
+      habits.create({
+        userId,
+        name: fixture.name,
+        color: '#3b82f6',
+        description: null,
+        blockStartTime: null,
+        blockMinutes: null,
+      }),
+    );
+  }
+}
+
+function selectScenarios(useLocal: boolean): {
+  scenarios: IntentEvalScenario[];
+  block: 'all' | 'latest' | number | string;
+  label: string;
+} {
+  const intentArg = process.argv.find((a) => a.startsWith('--intent='));
+  if (intentArg) {
+    const intent = intentArg.slice('--intent='.length) as IntentEvalIntent;
+    const scenarios = selectIntentEvalByIntent(intent);
+    if (scenarios.length === 0) {
+      console.error(`No scenarios for --intent=${intent}`);
+      process.exit(1);
+    }
+    return {
+      scenarios,
+      block: intent,
+      label: `${scenarios.length} scenarios (intent=${intent})`,
+    };
+  }
+
+  const onlyArg = process.argv.find((a) => a.startsWith('--only='));
+  if (onlyArg) {
+    const ids = new Set(
+      onlyArg
+        .slice('--only='.length)
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    );
+    const scenarios = INTENT_EVAL_SCENARIOS.filter((s) => ids.has(s.id));
+    return {
+      scenarios,
+      block: 'all',
+      label: `${scenarios.length} scenarios (--only)`,
+    };
+  }
+
+  const blockArg = process.argv.find((a) => a.startsWith('--block='));
+  const runAll = !blockArg && (!useLocal || process.argv.includes('--all'));
+  if (runAll) {
+    return {
+      scenarios: [...INTENT_EVAL_SCENARIOS],
+      block: 'all',
+      label: `${INTENT_EVAL_SCENARIOS.length} scenarios (all)`,
+    };
+  }
+
+  const raw = blockArg ? blockArg.slice('--block='.length) : 'latest';
+  const which: number | 'latest' = raw === 'latest' ? 'latest' : Number(raw);
+  const scenarios = selectIntentEvalBlock(which);
+  const count = intentEvalBlockCount();
+  const index = which === 'latest' ? count - 1 : which;
+  return {
+    scenarios,
+    block: which,
+    label: `block ${index + 1}/${count} (${scenarios.length}, size ${INTENT_EVAL_BLOCK_SIZE})`,
+  };
+}
+
+async function withRateLimitRetry<T>(fn: () => Promise<T>): Promise<T> {
+  let last: unknown;
+  for (let attempt = 0; attempt <= RATE_LIMIT_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      last = err;
+      if (attempt < RATE_LIMIT_RETRIES && /rate limit|429|VOICE_RATE_LIMIT/i.test(String(err))) {
+        await sleep(RATE_LIMIT_WAIT_MS);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw last;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
