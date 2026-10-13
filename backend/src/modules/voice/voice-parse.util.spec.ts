@@ -1,9 +1,5 @@
 import {
   buildLocalCalendarContext,
-  inferClockHmRange,
-  inferDueYmd,
-  inferPreferredClockHm,
-  inferScheduleWindow,
   localDateTimeIso,
   localHm,
   localYmd,
@@ -13,9 +9,6 @@ import {
 import {
   clarificationOnlyResult,
   extractJsonObject,
-  inferTaskNameFromTranscript,
-  isBareCreateRequest,
-  nameFromClarification,
   normalizeVoiceParse,
 } from './voice-parse.util';
 
@@ -290,7 +283,7 @@ describe('normalizeVoiceParse', () => {
     expect(result.task?.name).toBe('call the bank about the card');
   });
 
-  it('treats unscheduled clarify answer as inbox create', () => {
+  it('marks inbox when clarify answer left no schedule fields', () => {
     const result = normalizeVoiceParse(
       {
         understanding: 'complete',
@@ -359,7 +352,6 @@ describe('normalizeVoiceParse', () => {
         nowIso,
       },
     );
-    // 14:00+03 = 11:00Z, before 18:00Z now → drop slot; fixed without times → admin
     expect(result.task?.scheduledStartTime).toBeNull();
     expect(result.task?.scheduledEndTime).toBeNull();
     expect(result.task?.eventType).toBe('admin');
@@ -367,7 +359,242 @@ describe('normalizeVoiceParse', () => {
     expect(result.task?.deadline).toBe('2026-09-07T23:59:00+03:00');
   });
 
-  it('infers a task name from uk create speech when the model left name empty', () => {
+  it('keeps WEEKLY weekdays from the model (no transcript rewrite)', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'ретро',
+          kind: 'recurring',
+          isRecurring: true,
+          recurrencePattern: 'WEEKLY',
+          recurrenceWeekDays: [5],
+          scheduledStartTime: '2026-10-13T16:00:00+03:00',
+          scheduledEndTime: '2026-10-13T16:30:00+03:00',
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: "кожну пʼятницю ретро о 16",
+        timeZone: 'Europe/Kyiv',
+        nowIso: '2026-10-13T10:00:00.000Z',
+        language: 'uk',
+      },
+    );
+    expect(result.task?.recurrenceWeekDays).toEqual([5]);
+  });
+
+  it('does not force fixed from the transcript when the model chose flexible', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'зустріч з клієнтом',
+          kind: 'flexible',
+          scheduledStartTime: '2026-10-13T10:00:00+03:00',
+          scheduledEndTime: '2026-10-13T10:30:00+03:00',
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'зустріч з клієнтом о 10',
+        timeZone: 'Europe/Kyiv',
+        nowIso: '2026-10-13T06:00:00.000Z',
+        language: 'uk',
+      },
+    );
+    expect(result.task?.eventType).toBe('admin');
+    expect(result.task?.scheduledStartTime).toBe('2026-10-13T10:00:00+03:00');
+  });
+
+  it('keeps clarify when the model asks again even with a title (no lexical drop)', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'needs_clarification',
+        clarifyingQuestion: 'How long will this take?',
+        task: {
+          name: 'Полагодити кран',
+          kind: 'unscheduled',
+          isUnscheduled: true,
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'полагодити кран якщо можна',
+        timeZone: 'Europe/Kyiv',
+        nowIso: '2026-10-13T10:00:00.000Z',
+        language: 'uk',
+      },
+    );
+    expect(result.understanding).toBe('needs_clarification');
+    expect(result.clarifyingQuestion).toBe('How long will this take?');
+  });
+
+  it('drops clarifyingQuestion only when it exactly equals the title', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'needs_clarification',
+        clarifyingQuestion: 'Полагодити кран',
+        task: {
+          name: 'Полагодити кран',
+          kind: 'unscheduled',
+          isUnscheduled: true,
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'полагодити кран',
+        language: 'uk',
+      },
+    );
+    expect(result.understanding).toBe('complete');
+    expect(result.clarifyingQuestion).toBeNull();
+  });
+
+  it('clears a past soft preferred from the model (LLM must place tomorrow)', () => {
+    const nowIso = '2026-10-13T10:00:00.000Z'; // 13:00 Kyiv — noon already past
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'Prepare lunch',
+          kind: 'flexible',
+          estimatedTimeInMinutes: 30,
+          scheduledStartTime: '2026-10-13T12:00:00+03:00',
+          scheduledEndTime: '2026-10-13T12:30:00+03:00',
+          earliestStartTime: '2026-10-13T12:00:00+03:00',
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'about noon prepare lunch',
+        timeZone: 'Europe/Kyiv',
+        nowIso,
+        language: 'en',
+      },
+    );
+    expect(result.understanding).toBe('complete');
+    expect(result.task?.scheduledStartTime).toBeNull();
+    // Past earliest is clamped to now; day envelope completed structurally.
+    expect(result.task?.earliestStartTime).toBe(nowIso);
+    expect(result.task?.deadline).toBe('2026-10-13T23:59:00+03:00');
+  });
+
+  it('passes through a preferred clock the model set inside a window', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'Купити продукти',
+          kind: 'flexible',
+          estimatedTimeInMinutes: 30,
+          earliestStartTime: '2026-10-13T14:00:00+03:00',
+          deadline: '2026-10-13T18:00:00+03:00',
+          scheduledStartTime: '2026-10-13T15:00:00+03:00',
+          scheduledEndTime: '2026-10-13T15:30:00+03:00',
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'між 14 і 18 купити продукти краще о 15',
+        timeZone: 'Europe/Kyiv',
+        nowIso: '2026-10-13T10:00:00.000Z',
+        language: 'uk',
+      },
+    );
+    expect(result.understanding).toBe('complete');
+    expect(result.task?.earliestStartTime).toBe('2026-10-13T14:00:00+03:00');
+    expect(result.task?.deadline).toBe('2026-10-13T18:00:00+03:00');
+    expect(result.task?.scheduledStartTime).toBe('2026-10-13T15:00:00+03:00');
+  });
+
+  it('passes through a wide from–until the model already treated as a window', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'Сходити в магазин',
+          kind: 'flexible',
+          estimatedTimeInMinutes: 30,
+          earliestStartTime: '2026-10-13T14:00:00+03:00',
+          deadline: '2026-10-13T18:00:00+03:00',
+          scheduledStartTime: null,
+          scheduledEndTime: null,
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'з 14 до 18 сходити в магазин',
+        timeZone: 'Europe/Kyiv',
+        nowIso: '2026-10-13T10:00:00.000Z',
+        language: 'uk',
+      },
+    );
+    expect(result.understanding).toBe('complete');
+    expect(result.task?.eventType).toBe('admin');
+    expect(result.task?.scheduledStartTime).toBeNull();
+    expect(result.task?.earliestStartTime).toBe('2026-10-13T14:00:00+03:00');
+    expect(result.task?.deadline).toBe('2026-10-13T18:00:00+03:00');
+  });
+
+  it('ignores clarifyingQuestion that duplicates the task name', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'needs_clarification',
+        clarifyingQuestion: 'Plan the week',
+        task: {
+          name: 'Plan the week',
+          kind: 'flexible',
+          earliestStartTime: '2026-10-19T00:00:00+03:00',
+          deadline: '2026-10-19T23:59:00+03:00',
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'on Monday plan the week',
+        timeZone: 'Europe/Kyiv',
+        nowIso: '2026-10-13T10:00:00.000Z',
+        language: 'en',
+      },
+    );
+    expect(result.understanding).toBe('complete');
+    expect(result.clarifyingQuestion).toBeNull();
+  });
+
+  it('completes a partial day envelope without reading the transcript', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'Прибирання квартири',
+          kind: 'flexible',
+          earliestStartTime: '2026-10-17T00:00:00+03:00',
+          deadline: null,
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'у суботу прибрати квартиру',
+        timeZone: 'Europe/Kyiv',
+        nowIso: '2026-10-13T10:00:00.000Z',
+        language: 'uk',
+      },
+    );
+    expect(result.understanding).toBe('complete');
+    expect(result.task?.earliestStartTime).toBe('2026-10-17T00:00:00+03:00');
+    expect(result.task?.deadline).toBe('2026-10-17T23:59:00+03:00');
+  });
+
+  it('asks for a name when the model left it empty', () => {
     const result = normalizeVoiceParse(
       {
         understanding: 'needs_clarification',
@@ -389,17 +616,15 @@ describe('normalizeVoiceParse', () => {
         wakeTime: '08:00',
       },
     );
-    expect(result.understanding).toBe('complete');
-    expect(result.task?.name).toBe("З'їздити в магазин");
-    expect(result.task?.timeZone).toBe('Asia/Nicosia');
-    expect(result.task?.scheduledStartTime).toBe('2026-09-08T14:00:00+03:00');
+    expect(result.understanding).toBe('needs_clarification');
+    expect(result.task).toBeNull();
   });
 
-  it('clarifies incomplete create and ignores a model-invented boilerplate name', () => {
+  it('trusts a non-empty model name (LLM decides weak/boilerplate titles)', () => {
     const result = normalizeVoiceParse(
       {
         understanding: 'complete',
-        task: { name: 'Задача', eventType: 'admin' },
+        task: { name: 'Задача', kind: 'unscheduled', isUnscheduled: true },
       },
       {
         validPhaseIds: new Set(),
@@ -409,59 +634,63 @@ describe('normalizeVoiceParse', () => {
         nowIso: '2026-09-07T16:00:00.000Z',
       },
     );
-    expect(result.understanding).toBe('needs_clarification');
-    expect(result.task?.name).toBeFalsy();
+    expect(result.understanding).toBe('complete');
+    expect(result.task?.name).toBe('Задача');
+    expect(result.task?.isUnscheduled).toBe(true);
   });
 
-  it('asks for a name when the utterance only asks to create a task', () => {
+  it('keeps the model clarify when name is present and understanding asks', () => {
     const result = normalizeVoiceParse(
       {
-        understanding: 'complete',
-        task: { name: 'Треба задачу створити', eventType: 'admin' },
+        understanding: 'needs_clarification',
+        clarifyingQuestion: 'How long will this take?',
+        task: {
+          name: 'Прибирання',
+          kind: 'flexible',
+          earliestStartTime: '2026-09-08T00:00:00+03:00',
+          deadline: '2026-09-08T23:59:00+03:00',
+        },
       },
       {
         validPhaseIds: new Set(),
         alreadyClarified: false,
-        transcript: 'Треба задачу створити.',
-        timeZone: 'Europe/Kyiv',
-        nowIso: '2026-09-07T16:00:00.000Z',
-        language: 'uk',
+        transcript: 'tomorrow clean the flat',
+        language: 'en',
       },
     );
     expect(result.understanding).toBe('needs_clarification');
-    expect(result.clarifyingQuestion).toBe('Як назвати цю задачу?');
-    expect(result.task).toBeNull();
+    expect(result.clarifyingQuestion).toBe('How long will this take?');
   });
 
-  it('uses only the clarification answer as the title', () => {
+  it('uses the clarification answer as the title when name is empty', () => {
     const result = normalizeVoiceParse(
       {
         understanding: 'complete',
         task: {
-          name: 'Треба створити задачу Назви її задачу',
+          name: '',
           eventType: 'admin',
         },
       },
       {
         validPhaseIds: new Set(),
         alreadyClarified: true,
-        transcript: 'Треба створити задачу. Назви її задачу.',
-        clarificationAnswer: 'Назви її задачу.',
+        transcript: 'Треба створити задачу.',
+        clarificationAnswer: 'Купити молоко',
         timeZone: 'Europe/Kyiv',
         nowIso: '2026-09-07T16:00:00.000Z',
         language: 'uk',
       },
     );
     expect(result.understanding).toBe('complete');
-    expect(result.task?.name).toBe('Задача');
+    expect(result.task?.name).toBe('Купити молоко');
     expect(result.task?.isUnscheduled).toBe(true);
   });
 
-  it('salvages a title and defaults to Unscheduled when model omitted when', () => {
+  it('after clarification, does not invent schedule from the transcript', () => {
     const result = normalizeVoiceParse(
       {
         understanding: 'complete',
-        task: { name: '', eventType: 'admin' },
+        task: { name: "З'їздити в магазин", eventType: 'admin' },
       },
       {
         validPhaseIds: new Set(),
@@ -476,6 +705,76 @@ describe('normalizeVoiceParse', () => {
     expect(result.task?.name).toBe("З'їздити в магазин");
     expect(result.understanding).toBe('complete');
     expect(result.task?.isUnscheduled).toBe(true);
+    expect(result.task?.scheduledStartTime).toBeNull();
+  });
+
+  it('rezones wrong offsets and does not invent relative hours from speech', () => {
+    const relative = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'коротка перерва',
+          kind: 'fixed',
+          eventType: 'fixed',
+          scheduledStartTime: '2026-10-13T15:00:00+03:00',
+          scheduledEndTime: '2026-10-13T15:30:00+03:00',
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'через дві години коротка перерва',
+        timeZone: 'Europe/Kyiv',
+        nowIso: '2026-10-13T10:00:00.000Z',
+        language: 'uk',
+      },
+    );
+    expect(relative.task?.eventType).toBe('fixed');
+    expect(relative.task?.scheduledStartTime).toContain('T15:00:00+03:00');
+
+    const day = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'clean the desk',
+          kind: 'flexible',
+          earliestStartTime: '2026-10-13T00:00:00+02:00',
+          deadline: '2026-10-13T23:59:00+02:00',
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'clean the desk today',
+        timeZone: 'Europe/Kyiv',
+        nowIso: '2026-10-13T10:00:00.000Z',
+        language: 'en',
+      },
+    );
+    expect(day.task?.deadline).toBe('2026-10-13T23:59:00+03:00');
+  });
+
+  it('keeps model needs_clarification when a title and question are both present', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'needs_clarification',
+        clarifyingQuestion: 'What should this task be called?',
+        task: {
+          name: 'buy milk',
+          kind: 'unscheduled',
+          isUnscheduled: true,
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'buy milk',
+        language: 'en',
+      },
+    );
+    expect(result.understanding).toBe('needs_clarification');
+    expect(result.clarifyingQuestion).toBe('What should this task be called?');
+    expect(result.task?.name).toBe('buy milk');
   });
 });
 
@@ -499,65 +798,6 @@ describe('clarificationOnlyResult', () => {
     const result = clarificationOnlyResult({}, 'en');
     expect(result.clarifyingQuestion).toBe('I did not understand. What should I do?');
     expect(result.task).toBeNull();
-  });
-});
-
-describe('inferDueYmd', () => {
-  const today = '2026-09-07';
-
-  it('maps tomorrow in uk/en', () => {
-    expect(inferDueYmd('завтра треба помити машину', today)).toBe('2026-09-08');
-    expect(inferDueYmd('wash the car tomorrow', today)).toBe('2026-09-08');
-  });
-
-  it('maps the next named weekday', () => {
-    expect(inferDueYmd("в п'ятницю в зал", today)).toBe('2026-09-11');
-    expect(inferDueYmd('on Monday', today)).toBe('2026-09-07');
-  });
-});
-
-describe('inferScheduleWindow', () => {
-  const today = '2026-09-07';
-
-  it('maps a contiguous spoken range', () => {
-    expect(inferScheduleWindow("з п'ятниці по неділю", today)).toEqual({
-      startYmd: '2026-09-11',
-      endYmd: '2026-09-13',
-    });
-    expect(inferScheduleWindow('Friday to Sunday', today)).toEqual({
-      startYmd: '2026-09-11',
-      endYmd: '2026-09-13',
-    });
-  });
-
-  it('keeps non-contiguous weekdays as a filter', () => {
-    expect(inferScheduleWindow('в понеділок і середу', today)).toEqual({
-      startYmd: '2026-09-07',
-      endYmd: '2026-09-09',
-      weekDays: [1, 3],
-    });
-  });
-});
-
-describe('inferClockHmRange', () => {
-  it('reads stamped and loose hour ranges', () => {
-    expect(inferClockHmRange('з 14:00 до 18:00')).toEqual({
-      startHm: '14:00',
-      endHm: '18:00',
-    });
-    expect(inferClockHmRange('from 9 to 11')).toEqual({
-      startHm: '09:00',
-      endHm: '11:00',
-    });
-  });
-});
-
-describe('inferPreferredClockHm', () => {
-  it('maps на другу дня to 14:00', () => {
-    expect(inferPreferredClockHm('на другу дня')).toBe('14:00');
-    expect(inferPreferredClockHm("З'їздити в магазин на другу дня")).toBe(
-      '14:00',
-    );
   });
 });
 
@@ -624,7 +864,7 @@ describe('buildLocalCalendarContext', () => {
     expect(text).toContain('schedule tomorrow: 2026-09-08');
     expect(text).toContain('schedule +3 days: 2026-09-10');
     expect(text).toContain('must be >= now ISO');
-    expect(text).toContain('через N годин');
+    expect(text).toContain('in N hours');
     expect(text).toContain('After sleep');
   });
 
@@ -638,30 +878,6 @@ describe('buildLocalCalendarContext', () => {
     expect(text).toContain('schedule today: 2026-09-08');
     expect(text).toContain('schedule tomorrow: 2026-09-09');
     expect(text).not.toContain('before wake = still previous');
-  });
-});
-
-describe('isBareCreateRequest', () => {
-  it('treats a create request with no errand as unnamed', () => {
-    expect(isBareCreateRequest('Треба задачу створити.')).toBe(true);
-    expect(isBareCreateRequest('Хочу створити задачу')).toBe(true);
-    expect(isBareCreateRequest('create a task')).toBe(true);
-    expect(isBareCreateRequest('треба купити молоко')).toBe(false);
-  });
-
-  it('reads a title out of a naming answer', () => {
-    expect(nameFromClarification('Назви її задачу.')).toBe('Задача');
-    expect(nameFromClarification('Назви її купити молоко')).toBe('Купити молоко');
-  });
-});
-
-describe('inferTaskNameFromTranscript', () => {
-  it('strips create / day / time boilerplate in uk', () => {
-    expect(
-      inferTaskNameFromTranscript(
-        "Створи задачу на завтра. З'їздити в магазин на другу дня.",
-      ),
-    ).toBe("З'їздити в магазин");
   });
 });
 
@@ -689,12 +905,5 @@ describe('localDateTimeIso', () => {
     expect(localDateTimeIso('2026-09-08', '09:00:00', 'Asia/Nicosia')).toBe(
       '2026-09-08T09:00:00+03:00',
     );
-    expect(
-      Number.isNaN(
-        new Date(
-          localDateTimeIso('2026-09-08', '09:00:00', 'Asia/Nicosia'),
-        ).getTime(),
-      ),
-    ).toBe(false);
   });
 });

@@ -1,0 +1,34 @@
+---
+description: Voice parse — LLM owns speech meaning; no language-specific TS crutches
+globs: backend/src/modules/voice/**
+alwaysApply: false
+---
+
+# Voice: no lexical crutches
+
+Speech meaning (clock, AM/PM, relative time, weekdays, recurring, titles, empty create) is decided by the **LLM** via prompts. TypeScript must not re-parse the transcript with language word lists.
+
+## Allowed in TypeScript (`normalizeVoiceParse`, calendar helpers)
+
+- Clamp / validate structured fields the model already emitted (duration, phase id, weekdays arrays, ISO parseability)
+- Rezone wrong numeric offsets using the user’s IANA zone
+- Drop past `scheduledStart` / clamp past `earliest` to now
+- Finish a half day-envelope (`00:00`–`23:59`) from an existing ISO civil day
+- Inbox when there is a name but no when
+- Require a non-empty `name` (fallback i18n clarify string is OK — not speech parsing)
+
+## Forbidden
+
+- Regex / stem dictionaries for UK/EN/RU (or any language) to infer clock, morning, ordinals, “tomorrow”, weekdays, relative hours, recurring days, or titles from `transcript`
+- “Trust the transcript over the model” align/fill/force helpers that re-derive schedule fields from speech
+- Growing per-language word lists to green an eval — fix the **prompt** or the **model**, not normalize
+
+```typescript
+// ❌ BAD — language-specific override
+if (/щоранку|вранці|\bam\b/i.test(transcript)) hour = 7;
+
+// ✅ GOOD — model already emitted ISO; only rezone/clamp
+task.scheduledStartTime = rezoneWallClockIso(modelIso, timeZone);
+```
+
+When an eval fails: strengthen specialist prompts (conceptual, multilingual). Do not add transcript regex “fixes”.

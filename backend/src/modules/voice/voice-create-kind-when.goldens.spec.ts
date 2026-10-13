@@ -25,16 +25,19 @@ describe('create kind/when goldens (§23.2)', () => {
       /1\. Recurring[\s\S]*2\. Fixed[\s\S]*3\. Flexible preferred[\s\S]*4\. Flexible window[\s\S]*5\. Day only[\s\S]*6\. No day/,
     );
     // Documented examples stay in the prompt (calibration source for goldens).
+    expect(CREATE_KIND_WHEN_MODULE).toContain('tomorrow at 15:00 dentist');
     expect(CREATE_KIND_WHEN_MODULE).toContain(
-      'завтра о 15:00 до стоматолога',
+      'every Tuesday at 15:00 dentist',
     );
+    expect(CREATE_KIND_WHEN_MODULE).toContain('around 3 go to the shop');
     expect(CREATE_KIND_WHEN_MODULE).toContain(
-      'щовівторка о 15:00 до стоматолога',
+      'between 14 and 18 buy groceries',
     );
-    expect(CREATE_KIND_WHEN_MODULE).toContain('десь о третій зайти в магазин');
-    expect(CREATE_KIND_WHEN_MODULE).toContain('між 14 і 18 купити продукти');
-    expect(CREATE_KIND_WHEN_MODULE).toContain('зустріч з 15 до 16');
-    expect(CREATE_KIND_WHEN_MODULE).toContain('треба купити молоко');
+    expect(CREATE_KIND_WHEN_MODULE).toContain('meeting from 15 to 16');
+    expect(CREATE_KIND_WHEN_MODULE).toContain('need to buy milk');
+    expect(CREATE_KIND_WHEN_MODULE).toContain(
+      'every morning stretch at 7',
+    );
   });
 
   it.each(CREATE_KIND_WHEN_GOLDENS)(

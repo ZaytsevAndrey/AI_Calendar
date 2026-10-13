@@ -1,11 +1,7 @@
 import { TaskStatus } from '../tasks/entities/task.entity';
 import type { VoiceToolContext } from './voice-agent.tools';
 import type { DayPlanProposal, VoiceWriteIntent } from './voice-agent.types';
-import {
-  addDaysToYmd,
-  inferDueYmd,
-  scheduleTodayYmd,
-} from './voice-local-date.util';
+import { scheduleTodayYmd } from './voice-local-date.util';
 
 /**
  * Seat open unscheduled tasks into free gaps for a civil day (preview only).
@@ -27,10 +23,7 @@ export function buildDayPlanProposal(
   );
   const day =
     gapsResult.day ||
-    (/^\d{4}-\d{2}-\d{2}$/.test(dayRaw.trim())
-      ? dayRaw.trim()
-      : inferDueYmd(dayRaw, today) ||
-        (/tomorrow|завтра/i.test(dayRaw) ? addDaysToYmd(today, 1) : today));
+    (/^\d{4}-\d{2}-\d{2}$/.test(dayRaw.trim()) ? dayRaw.trim() : today);
 
   const candidates = ctx.tasks
     .filter(

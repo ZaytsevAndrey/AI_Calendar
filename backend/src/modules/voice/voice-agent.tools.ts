@@ -14,9 +14,7 @@ import {
 } from '../tasks/entities/task.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import {
-  addDaysToYmd,
   endOfLocalDayIso,
-  inferDueYmd,
   localHm,
   localYmd,
   normalizeClockHm,
@@ -157,18 +155,16 @@ export class VoiceAgentTools {
     };
   }
 
+  /** Tool args must be YYYY-MM-DD (LLM resolves speech). Empty → schedule today. */
   private resolveDayYmd(ctx: VoiceToolContext, raw: string): string {
     const trimmed = raw.trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-    const today = scheduleTodayYmd(
+    return scheduleTodayYmd(
       ctx.nowIso,
       ctx.timeZone,
       ctx.settings.wakeTime,
       ctx.settings.sleepTime,
     );
-    if (!trimmed || /today|сьогодні|сегодня/i.test(trimmed)) return today;
-    if (/tomorrow|завтра/i.test(trimmed)) return addDaysToYmd(today, 1);
-    return inferDueYmd(trimmed, today) ?? today;
   }
 
   private getDayAgenda(ctx: VoiceToolContext, dayRaw: string) {

@@ -1,7 +1,9 @@
-export const CREATE_RECURRING_MODULE = `Recurring pattern (only on branch 1):
-- щодня / daily → DAILY, recurrenceWeekDays null.
-- по буднях / weekdays → WEEKLY, days 1,2,3,4,5.
-- по вихідних / weekends → WEEKLY, days 6 and 0. Sunday is 0.
-- one named weekday ("щовівторка" / "every Tuesday") → WEEKLY and that day (Sunday 0 … Saturday 6).
-- every other week → BIWEEKLY. щомісяця / monthly → MONTHLY.
-Do not ask for a clock. If they spoke one, it is a preferred scheduledStart/End, and the kind stays recurring.`;
+export const CREATE_RECURRING_MODULE = `Recurring pattern (only on branch 1). Interpret the speaker's language yourself:
+- daily / every day → DAILY, recurrenceWeekDays null.
+- weekdays / workdays → WEEKLY, days 1,2,3,4,5.
+- weekends → WEEKLY, days 6 and 0. Sunday is 0.
+- one named weekday → WEEKLY and that day (Sunday 0 … Saturday 6).
+- two named weekdays → WEEKLY and BOTH days.
+- A short "from A to B" clock span on a recurring errand (≤90 minutes) is preferred start A with duration to B — still recurring, not a placement window.
+- every other week → BIWEEKLY. monthly → MONTHLY.
+Do not ask for a clock. If they spoke one, kind stays recurring AND scheduledStart/End MUST be that preferred clock (+ duration) using schedule today's date and the zone offset from the user message. Morning/AM wording keeps bare 1–7 as morning.`;

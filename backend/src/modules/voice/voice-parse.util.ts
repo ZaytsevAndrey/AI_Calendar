@@ -1,5 +1,11 @@
 import { isAppLanguage, type AppLanguage } from '../../i18n/types';
 import { t } from '../../i18n/t';
+import {
+  endOfLocalDayIso,
+  localYmd,
+  rezoneWallClockIso,
+  startOfLocalDayIso,
+} from './voice-local-date.util';
 import type {
   VoiceParsedTask,
   VoiceParseResult,
@@ -91,125 +97,16 @@ function isIsoLike(value: string | null): value is string {
   return !Number.isNaN(time);
 }
 
-function fallbackNameFromTranscript(transcript: string): string {
-  return (
-    inferTaskNameFromTranscript(transcript) ||
-    compactTranscript(transcript) ||
-    'New task'
-  );
-}
-
-function looksLikeCreateSpeech(transcript: string): boolean {
-  return /^(?:please\s+|будь\s+ласка\s+)?(?:створи(?:ти)?|додай(?:ти)?|создай|добавь|create|add|new)(?=[^\p{L}]|$)/iu.test(
-    transcript.replace(/\s+/g, ' ').trim(),
-  );
-}
-
-function isWeakTaskName(name: string): boolean {
-  const compact = name.replace(/\s+/g, ' ').trim();
-  if (!compact) return true;
-  if (isBareCreateRequest(compact)) return true;
-  return /^(?:(?:нова|новую|a|an|the)\s+)?(?:задач[уаіи]?|task|event|подію|событие|new task)(?:\s+на\s+(?:завтра|tomorrow|сьогодні|сегодня|today))?$/iu.test(
-    compact,
-  );
-}
-
-/**
- * "Треба задачу створити" / "create a task" names no errand.
- * "Треба купити молоко" keeps the errand.
- */
-export function isBareCreateRequest(text: string): boolean {
-  const tokens = text
-    .replace(/[’']/g, "'")
-    .replace(/[^\p{L}\p{N}\s']/gu, ' ')
-    .split(/\s+/)
-    .filter(Boolean);
-  if (!tokens.length) return false;
-  const filler =
-    /^(?:please|будь|ласка|мені|мне|me|i|want|need|to|a|an|the|треба|потрібно|нужно|надо|хочу|хотів|хотіла|давай|просто|нову|новая|новую|новий|new)$/iu;
-  const verb =
-    /^(?:створити|створи|створимо|створю|створіть|додай|додайте|додати|добавь|добавить|создать|создай|create|add|make)$/iu;
-  const noun =
-    /^(?:задач[а-яіїєґ]*|завдання|task|tasks|подію|подія|событие|event)$/iu;
-  return tokens.every((token) => filler.test(token) || verb.test(token) || noun.test(token));
-}
-
-function compactTranscript(transcript: string): string {
-  const compact = transcript.replace(/\s+/g, ' ').trim();
+function compactText(value: string): string {
+  const compact = value.replace(/\s+/g, ' ').trim();
   if (!compact) return '';
   return compact.length > 80 ? `${compact.slice(0, 77)}…` : compact;
 }
 
-/**
- * Strip create / day / time boilerplate so "Створи задачу на завтра. З'їздити в магазин на другу дня"
- * → "З'їздити в магазин".
- */
-export function inferTaskNameFromTranscript(transcript: string): string | null {
-  let text = transcript.replace(/\s+/g, ' ').trim().replace(/[’']/g, "'");
-  if (!text) return null;
-
-  text = text.replace(
-    /^(?:please\s+|будь\s+ласка\s+)?(?:створи(?:ти)?|додай(?:ти)?|создай|добавь|create|add|new)\s+(?:мені\s+|мне\s+|me\s+)?(?:(?:нову|новую|a|an|the)\s+)?(?:задач[уаіи]?|task|event|подію|событие)?\s*/iu,
-    '',
-  );
-  text = text.replace(/^(?:задач[уаіи]?|task|event)\s*[:\-]?\s*/iu, '');
-
-  // Use \p{L} boundaries — JS \b/\w do not treat Cyrillic as word chars.
-  text = text.replace(
-    /(?:^|[^\p{L}])(?:на\s+)?(?:післязавтра|послезавтра|day after tomorrow|завтра|tomorrow|сьогодні|сегодня|today)(?=[^\p{L}]|$)/giu,
-    ' ',
-  );
-  text = text.replace(
-    /(?:^|[^\p{L}])(?:в|у|на)\s+(?:понеділок|вівторок|середу|четвер|п'?ятницю|суботу|неділю|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?=[^\p{L}]|$)/giu,
-    ' ',
-  );
-
-  text = text.replace(
-    /(?:^|[^\p{L}])(?:о|на|at|в|у)\s+(?:перш\p{L}*|друг\p{L}*|трет\p{L}*|четверт\p{L}*|п'?ят\p{L}*|шост\p{L}*|сьом\p{L}*|восьм\p{L}*|дев'?ят\p{L}*|десят\p{L}*|одинадцят\p{L}*|дванадцят\p{L}*|\d{1,2}(?::\d{2})?)\s*(?:годині?|часа?|дня|ранку|вечора|am|pm)?(?=[^\p{L}]|$)/giu,
-    ' ',
-  );
-  text = text.replace(/(?:^|[^\d])\d{1,2}[:.]\d{2}(?=[^\d]|$)/g, ' ');
-  text = text.replace(
-    /(?:^|[^\p{L}])(?:на|for)\s+\d{1,2}\s*(?:хвилин(?:и|у)?|минут(?:ы|у)?|min(?:utes?)?)(?=[^\p{L}]|$)/giu,
-    ' ',
-  );
-  text = text.replace(
-    /(?:^|[^\p{L}])(?:з|с|from)\s+\d{1,2}(?::\d{2})?\s+(?:до|по|to)\s+\d{1,2}(?::\d{2})?(?=[^\p{L}]|$)/giu,
-    ' ',
-  );
-
-  text = text
-    .replace(/[.!?,;:]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
+/** Clarification answer used as title when the model left name empty. */
+function titleFromAnswer(answer: string): string | null {
+  let text = answer.replace(/\s+/g, ' ').trim().replace(/[.!?]+$/g, '').trim();
   if (text.length < 2) return null;
-  if (
-    /^(?:задач[уаіи]?|task|please|будь ласка|new task|нову задачу)$/iu.test(text)
-  ) {
-    return null;
-  }
-  return text.length > 80 ? `${text.slice(0, 77)}…` : text;
-}
-
-/**
- * The clarification answer is the title. "Назви її задачу" → "Задача".
- * Do not keep the earlier "create a task" sentence.
- */
-export function nameFromClarification(answer: string): string | null {
-  let text = answer.replace(/\s+/g, ' ').trim().replace(/[’']/g, "'");
-  if (!text) return null;
-  text = text.replace(
-    /^(?:please\s+|будь\s+ласка\s+)?(?:назви(?:\s+(?:її|його|це|цю|this|it))?|call\s+it|name\s+it|the\s+name\s+is|назва)\s+/iu,
-    '',
-  );
-  text = text.replace(/[.!?]+$/g, '').trim();
-  if (text.length < 2) return null;
-  if (isBareCreateRequest(text) && !/^(?:задач|завдання|task)/iu.test(text)) {
-    return null;
-  }
-  if (/^(?:задач[а-яіїєґ]*|завдання)$/iu.test(text)) return 'Задача';
-  if (/^tasks?$/iu.test(text)) return 'Task';
   const titled = text.charAt(0).toLocaleUpperCase() + text.slice(1);
   return titled.length > 80 ? `${titled.slice(0, 77)}…` : titled;
 }
@@ -253,12 +150,6 @@ function readTaskKind(root: Record<string, unknown>, taskRaw: Record<string, unk
   return null;
 }
 
-function looksLikeUnscheduledSpeech(transcript: string): boolean {
-  return /(?:незапланован|без\s+дат|unscheduled|\binbox\b|без\s+слот)/iu.test(
-    transcript,
-  );
-}
-
 function hasScheduleWhen(task: VoiceParsedTask): boolean {
   if (task.isUnscheduled) return true;
   if (task.isRecurring && task.recurrencePattern) return true;
@@ -281,6 +172,32 @@ function markUnscheduledInbox(task: VoiceParsedTask): void {
   task.allowSplit = true;
 }
 
+/**
+ * Language-agnostic: if the model left only one side of a day envelope,
+ * finish 00:00–23:59 on that civil day (using the IANA zone).
+ */
+function completePartialDayEnvelope(
+  task: VoiceParsedTask,
+  timeZone?: string,
+  nowIso?: string,
+): void {
+  const zone = timeZone?.trim();
+  if (!zone || task.isRecurring || task.isUnscheduled || task.scheduledStartTime) {
+    return;
+  }
+  const one = task.earliestStartTime || task.deadline;
+  if (!one || (task.earliestStartTime && task.deadline)) return;
+  const ymd = localYmd(one, zone);
+  let earliest = startOfLocalDayIso(ymd, zone);
+  if (nowIso && Date.parse(earliest) < Date.parse(nowIso)) {
+    earliest = nowIso;
+  }
+  task.earliestStartTime = earliest;
+  task.deadline = endOfLocalDayIso(ymd, zone);
+  task.eventType = 'admin';
+  task.allowSplit = true;
+}
+
 function resolveLang(value?: string | null): AppLanguage {
   if (value && isAppLanguage(value)) return value;
   const short = (value || '').trim().toLowerCase().slice(0, 2);
@@ -288,6 +205,12 @@ function resolveLang(value?: string | null): AppLanguage {
   return 'en';
 }
 
+/**
+ * Normalize LLM create JSON.
+ * Meaning of speech (when, title, empty create) is the model's job.
+ * TypeScript only: clamp fields, rezone offsets, drop past slots, structural inbox,
+ * and require a non-empty name (fallback i18n question — not speech parsing).
+ */
 export function normalizeVoiceParse(
   raw: unknown,
   ctx: {
@@ -314,9 +237,6 @@ export function normalizeVoiceParse(
   const kind = readTaskKind(root, taskRaw);
   let isUnscheduled =
     asBool(taskRaw.isUnscheduled, false) || kind === 'unscheduled';
-  if (ctx.alreadyClarified && looksLikeUnscheduledSpeech(ctx.transcript)) {
-    isUnscheduled = true;
-  }
 
   let eventType: 'fixed' | 'admin' =
     kind === 'fixed' || asString(taskRaw.eventType) === 'fixed' ? 'fixed' : 'admin';
@@ -338,18 +258,29 @@ export function normalizeVoiceParse(
       ? phaseCandidate
       : null;
 
-  let scheduledStartTime = isIsoLike(asNullableString(taskRaw.scheduledStartTime))
-    ? asNullableString(taskRaw.scheduledStartTime)
-    : null;
-  let scheduledEndTime = isIsoLike(asNullableString(taskRaw.scheduledEndTime))
-    ? asNullableString(taskRaw.scheduledEndTime)
-    : null;
-  let deadline = isIsoLike(asNullableString(taskRaw.deadline))
-    ? asNullableString(taskRaw.deadline)
-    : null;
-  let earliestStartTime = isIsoLike(asNullableString(taskRaw.earliestStartTime))
-    ? asNullableString(taskRaw.earliestStartTime)
-    : null;
+  const zone = ctx.timeZone?.trim() || '';
+  const rezone = (value: string | null): string | null =>
+    zone && value ? rezoneWallClockIso(value, zone) || value : value;
+  let scheduledStartTime = rezone(
+    isIsoLike(asNullableString(taskRaw.scheduledStartTime))
+      ? asNullableString(taskRaw.scheduledStartTime)
+      : null,
+  );
+  let scheduledEndTime = rezone(
+    isIsoLike(asNullableString(taskRaw.scheduledEndTime))
+      ? asNullableString(taskRaw.scheduledEndTime)
+      : null,
+  );
+  let deadline = rezone(
+    isIsoLike(asNullableString(taskRaw.deadline))
+      ? asNullableString(taskRaw.deadline)
+      : null,
+  );
+  let earliestStartTime = rezone(
+    isIsoLike(asNullableString(taskRaw.earliestStartTime))
+      ? asNullableString(taskRaw.earliestStartTime)
+      : null,
+  );
 
   if (isUnscheduled) {
     scheduledStartTime = null;
@@ -422,44 +353,43 @@ export function normalizeVoiceParse(
     task.recurrenceWeekDays = [];
   }
 
+  completePartialDayEnvelope(task, ctx.timeZone, ctx.nowIso);
+  if (ctx.nowIso && !isUnscheduled) {
+    rejectPastScheduleSlot(task, ctx.nowIso);
+  }
+
   let clarifyingQuestion = asNullableString(root.clarifyingQuestion);
 
-  const inferredName = inferTaskNameFromTranscript(ctx.transcript);
-  const fromAnswer = ctx.clarificationAnswer?.trim()
-    ? nameFromClarification(ctx.clarificationAnswer)
-    : null;
-  if (fromAnswer) {
-    name = fromAnswer;
-    task.name = fromAnswer;
-  } else if (
-    isBareCreateRequest(ctx.transcript) ||
-    (looksLikeCreateSpeech(ctx.transcript) && !inferredName)
-  ) {
-    name = '';
-    task.name = '';
-    clarifyingQuestion = t(lang, 'voice.whatTaskName');
-  } else if (!name || isWeakTaskName(name)) {
-    name = inferredName || '';
+  // Prefer model name; after a clarify turn, allow the answer text as title.
+  if (!name && ctx.clarificationAnswer?.trim()) {
+    name = titleFromAnswer(ctx.clarificationAnswer) || '';
     task.name = name;
   }
   if (!name && ctx.alreadyClarified) {
-    name = ctx.clarificationAnswer?.trim()
-      ? 'New task'
-      : fallbackNameFromTranscript(ctx.transcript);
+    name =
+      titleFromAnswer(ctx.clarificationAnswer || '') ||
+      compactText(ctx.clarificationAnswer || ctx.transcript) ||
+      'New task';
     task.name = name;
   }
 
-  const askedBesideARealName =
-    understanding === 'needs_clarification' &&
-    Boolean(clarifyingQuestion) &&
-    Boolean(asString(taskRaw.name)) &&
-    !isWeakTaskName(asString(taskRaw.name));
+  // Model sometimes copies the title into clarifyingQuestion — ignore that.
+  if (
+    clarifyingQuestion &&
+    name &&
+    clarifyingQuestion.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase()
+  ) {
+    clarifyingQuestion = null;
+  }
+
+  const modelWantsClarify =
+    understanding === 'needs_clarification' && Boolean(clarifyingQuestion);
 
   if (!name) {
     understanding = 'needs_clarification';
     clarifyingQuestion =
       clarifyingQuestion || t(lang, 'voice.whatTaskName');
-  } else if (!ctx.alreadyClarified && askedBesideARealName) {
+  } else if (!ctx.alreadyClarified && modelWantsClarify) {
     understanding = 'needs_clarification';
   } else if (!hasScheduleWhen(task)) {
     markUnscheduledInbox(task);
@@ -471,7 +401,7 @@ export function normalizeVoiceParse(
   }
 
   if (understanding !== 'needs_clarification' && !task.name) {
-    task.name = fallbackNameFromTranscript(ctx.transcript);
+    task.name = compactText(ctx.transcript) || 'New task';
   }
 
   return {
@@ -482,7 +412,7 @@ export function normalizeVoiceParse(
   };
 }
 
-/** Router chose needs_clarification. Do not let name inference create a task. */
+/** Router chose needs_clarification. Do not invent a task from the transcript. */
 export function clarificationOnlyResult(
   raw: unknown,
   language?: string | null,
