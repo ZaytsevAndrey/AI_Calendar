@@ -211,9 +211,9 @@ test.describe('P0 calendar UI', () => {
     await expect(inbox).toBeVisible({ timeout: 15_000 });
   });
 
-  test('U-CAL-026 unscheduled inbox banner opens Tasks', async ({ page, auth, request }) => {
+  test('U-CAL-026 unscheduled inbox has no calendar banner', async ({ page, auth, request }) => {
     await completeOpenTasks(request, auth.onboarded.access_token);
-    const name = uniqueName('E2E unscheduled banner');
+    const name = uniqueName('E2E unscheduled inbox');
     const created = await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
       name,
       isUnscheduled: true,
@@ -221,11 +221,13 @@ test.describe('P0 calendar UI', () => {
     expectOk(created);
 
     await openAs(page, auth.onboarded);
-    const banner = page.getByLabel('Tasks waiting for a time slot');
-    await expect(banner).toBeVisible({ timeout: 15_000 });
-    await banner.getByRole('button', { name: 'Open inbox' }).click();
-    await expect(page).toHaveURL(/\/tasks/);
-    await expect(page.getByRole('heading', { name })).toBeVisible();
+    await expect(page.getByLabel('Tasks waiting for a time slot')).toHaveCount(0);
+    const inbox = page
+      .locator('div')
+      .filter({ has: page.getByText('Unscheduled', { exact: true }) })
+      .filter({ hasText: name })
+      .first();
+    await expect(inbox).toBeVisible({ timeout: 15_000 });
   });
 
   test('U-CAL-014 recurring and external Google blocks have no Done', async ({ page, auth, request }) => {

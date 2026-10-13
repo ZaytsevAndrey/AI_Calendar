@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -45,6 +46,10 @@ import type { VoiceParseResult } from './voice-parse.types';
 import { VoiceAgentOrchestrator } from './voice-agent.orchestrator';
 import type { VoiceTurnResponse } from './voice-agent.types';
 import { logVoiceLlm } from './voice-llm-log.util';
+import {
+  buildVoiceParseResultLog,
+  formatVoiceParseResultLog,
+} from './voice-parse-result-log.util';
 
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
 
@@ -189,7 +194,10 @@ export class VoiceService {
       ? `${dto.previousTranscript || ''} ${transcript}`.trim()
       : transcript;
 
-    this.logger.log(`voice.parse transcript=${JSON.stringify(transcript)}`);
+    const parseId = randomUUID();
+    this.logger.log(
+      `voice.parse transcript=${JSON.stringify(transcript)} parseId=${parseId}`,
+    );
     const routerRaw = await this.groq.completeJson(
       buildVoiceRouterSystemPrompt(),
       buildVoiceRouterUserPrompt({
@@ -210,7 +218,8 @@ export class VoiceService {
     }
 
     const sniffed = sniffCommandIntent(speech) ?? sniffCommandIntent(transcript);
-    let intent = readVoiceIntent(routerParsed);
+    const routerIntent = readVoiceIntent(routerParsed);
+    let intent = routerIntent;
     if (sniffed && (intent === 'create' || intent === 'needs_clarification')) {
       intent = sniffed;
     }
@@ -251,12 +260,11 @@ export class VoiceService {
       (parsed as { intent?: string }).intent = intent;
     }
 
+    let result: VoiceParseResult;
     if (intent === 'needs_clarification') {
-      return clarificationOnlyResult(parsed, speechLanguage);
-    }
-
-    if (intent === 'create') {
-      return {
+      result = clarificationOnlyResult(parsed, speechLanguage);
+    } else if (intent === 'create') {
+      result = {
         ...normalizeVoiceParse(parsed, {
           validPhaseIds: new Set(phases.map((phase) => phase.id)),
           alreadyClarified,
@@ -264,39 +272,61 @@ export class VoiceService {
           nowIso,
           wakeTime: settings.wakeTime,
           transcript: speech,
+          clarificationAnswer: dto.clarificationAnswer,
           language: speechLanguage,
           defaultTaskDurationMinutes: taskDurationMinutes(settings),
         }),
         command: null,
       };
+    } else {
+      const resolved = resolveVoiceCommand({
+        draft: commandDraftFromRaw(parsed, intent),
+        transcript: speech,
+        timeZone,
+        nowIso,
+        alreadyClarified,
+        tasks: tasks.map(toCommandTask),
+        slots: slots.map(toCommandSlot),
+        habits: habits.map(toCommandHabit),
+        language: speechLanguage || settings.speechLanguage || settings.language,
+        wakeTime: settings.wakeTime,
+      });
+      if (resolved.type === 'clarify') {
+        result = {
+          understanding: 'needs_clarification',
+          clarifyingQuestion: resolved.question,
+          task: null,
+          command: null,
+        };
+      } else {
+        result = {
+          understanding: 'complete',
+          clarifyingQuestion: null,
+          task: null,
+          command: resolved.command,
+        };
+      }
     }
 
-    const resolved = resolveVoiceCommand({
-      draft: commandDraftFromRaw(parsed, intent),
-      transcript: speech,
-      timeZone,
-      nowIso,
-      alreadyClarified,
-      tasks: tasks.map(toCommandTask),
-      slots: slots.map(toCommandSlot),
-      habits: habits.map(toCommandHabit),
-      language: speechLanguage || settings.speechLanguage || settings.language,
-      wakeTime: settings.wakeTime,
-    });
-    if (resolved.type === 'clarify') {
-      return {
-        understanding: 'needs_clarification',
-        clarifyingQuestion: resolved.question,
-        task: null,
-        command: null,
-      };
-    }
-    return {
-      understanding: 'complete',
-      clarifyingQuestion: null,
-      task: null,
-      command: resolved.command,
-    };
+    this.logger.log(
+      formatVoiceParseResultLog(
+        buildVoiceParseResultLog({
+          parseId,
+          transcript: speech,
+          previousTranscript: dto.previousTranscript,
+          clarificationAnswer: dto.clarificationAnswer,
+          timeZone,
+          nowIso,
+          routerIntent,
+          sniffed,
+          intent,
+          specialistIntent,
+          language: speechLanguage ?? null,
+          result,
+        }),
+      ),
+    );
+    return result;
   }
 }
 

@@ -12,17 +12,24 @@ Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Produ
 
 Do in order unless you explicitly skip ahead.
 
-### 23. Voice agent — make it understand
+### 23. Voice agent — make it understand (split)
 
-Handoff: [voice-prompt-next.md](voice-prompt-next.md). Specialists are full in code; behavior is not frozen.
+Handoff: [voice-prompt-next.md](voice-prompt-next.md). Specialists are full in code; behavior is not frozen. Work **logging-first**: structured parse logs → harvest failures → golden fixtures → prompt/normalize fixes. One mini-item per chat.
 
-Goal: spoken create/command lands on the right intent and when/kind tree often enough that the agent feels usable.
+#### 23.3 Harvest + router goldens
 
-- [ ] Golden utterance tests for router + kind/when (and the other high-traffic intents that fail in real logs): normalize + prompt snapshot / fixture tests from real failures.
-- [ ] Fix prompt or normalize bugs those fixtures expose (no new intents, no STT rewrite).
-- [ ] Archive [voice-prompt-next.md](voice-prompt-next.md) when the open queue there is done.
+- [ ] Add goldens from real `voice.parse.result` failures: create vs update vs command misroutes.
 
-Done when: golden set is in CI and the known log failures that seeded it pass.
+Done when: known router misroutes from logs are fixtures in CI.
+
+#### 23.4+ Fix loops by cluster
+
+Separate chats as failures appear: create edges (after-sleep, past clock, duration), update/reschedule, series scope, habits. Each chat = failing goldens → prompt or normalize fix → CI green. No new intents, no STT rewrite.
+
+#### 23.n Cleanup + archive
+
+- [ ] Resolve unused `voice.whenOrUnscheduled` i18n.
+- [ ] Archive [voice-prompt-next.md](voice-prompt-next.md) when the open queue there is empty.
 
 ### 24. Personal-computer build, then local TTS
 
@@ -44,6 +51,6 @@ Handoff: [tts-local.md](tts-local.md). After §23, in this order:
 
 ## Recommended next steps
 
-1. Next live item: roadmap **§23** — voice golden utterances ([voice-prompt-next.md](voice-prompt-next.md)).
-2. After §23: roadmap **§24** — personal-computer build, then Piper TTS ([tts-local.md](tts-local.md)).
+1. Next live item: roadmap **§23.3** — harvest + router goldens from real `voice.parse.result` lines ([voice-prompt-next.md](voice-prompt-next.md)).
+2. Then **§23.4+** fix loops; then **§24** Piper ([tts-local.md](tts-local.md)).
 3. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

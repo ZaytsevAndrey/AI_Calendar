@@ -108,9 +108,30 @@ function looksLikeCreateSpeech(transcript: string): boolean {
 function isWeakTaskName(name: string): boolean {
   const compact = name.replace(/\s+/g, ' ').trim();
   if (!compact) return true;
+  if (isBareCreateRequest(compact)) return true;
   return /^(?:(?:нова|новую|a|an|the)\s+)?(?:задач[уаіи]?|task|event|подію|событие|new task)(?:\s+на\s+(?:завтра|tomorrow|сьогодні|сегодня|today))?$/iu.test(
     compact,
   );
+}
+
+/**
+ * "Треба задачу створити" / "create a task" names no errand.
+ * "Треба купити молоко" keeps the errand.
+ */
+export function isBareCreateRequest(text: string): boolean {
+  const tokens = text
+    .replace(/[’']/g, "'")
+    .replace(/[^\p{L}\p{N}\s']/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!tokens.length) return false;
+  const filler =
+    /^(?:please|будь|ласка|мені|мне|me|i|want|need|to|a|an|the|треба|потрібно|нужно|надо|хочу|хотів|хотіла|давай|просто|нову|новая|новую|новий|new)$/iu;
+  const verb =
+    /^(?:створити|створи|створимо|створю|створіть|додай|додайте|додати|добавь|добавить|создать|создай|create|add|make)$/iu;
+  const noun =
+    /^(?:задач[а-яіїєґ]*|завдання|task|tasks|подію|подія|событие|event)$/iu;
+  return tokens.every((token) => filler.test(token) || verb.test(token) || noun.test(token));
 }
 
 function compactTranscript(transcript: string): string {
@@ -169,6 +190,28 @@ export function inferTaskNameFromTranscript(transcript: string): string | null {
     return null;
   }
   return text.length > 80 ? `${text.slice(0, 77)}…` : text;
+}
+
+/**
+ * The clarification answer is the title. "Назви її задачу" → "Задача".
+ * Do not keep the earlier "create a task" sentence.
+ */
+export function nameFromClarification(answer: string): string | null {
+  let text = answer.replace(/\s+/g, ' ').trim().replace(/[’']/g, "'");
+  if (!text) return null;
+  text = text.replace(
+    /^(?:please\s+|будь\s+ласка\s+)?(?:назви(?:\s+(?:її|його|це|цю|this|it))?|call\s+it|name\s+it|the\s+name\s+is|назва)\s+/iu,
+    '',
+  );
+  text = text.replace(/[.!?]+$/g, '').trim();
+  if (text.length < 2) return null;
+  if (isBareCreateRequest(text) && !/^(?:задач|завдання|task)/iu.test(text)) {
+    return null;
+  }
+  if (/^(?:задач[а-яіїєґ]*|завдання)$/iu.test(text)) return 'Задача';
+  if (/^tasks?$/iu.test(text)) return 'Task';
+  const titled = text.charAt(0).toLocaleUpperCase() + text.slice(1);
+  return titled.length > 80 ? `${titled.slice(0, 77)}…` : titled;
 }
 
 /** Drop past preferred/fixed slots so the placer starts from now, not history. */
@@ -256,6 +299,8 @@ export function normalizeVoiceParse(
     wakeTime?: string | null;
     language?: string | null;
     defaultTaskDurationMinutes?: number;
+    /** The follow-up utterance, when this turn answers a clarifying question. */
+    clarificationAnswer?: string | null;
   },
 ): VoiceParseResult {
   const root = asRecord(raw);
@@ -380,15 +425,27 @@ export function normalizeVoiceParse(
   let clarifyingQuestion = asNullableString(root.clarifyingQuestion);
 
   const inferredName = inferTaskNameFromTranscript(ctx.transcript);
-  if (looksLikeCreateSpeech(ctx.transcript) && !inferredName) {
+  const fromAnswer = ctx.clarificationAnswer?.trim()
+    ? nameFromClarification(ctx.clarificationAnswer)
+    : null;
+  if (fromAnswer) {
+    name = fromAnswer;
+    task.name = fromAnswer;
+  } else if (
+    isBareCreateRequest(ctx.transcript) ||
+    (looksLikeCreateSpeech(ctx.transcript) && !inferredName)
+  ) {
     name = '';
     task.name = '';
+    clarifyingQuestion = t(lang, 'voice.whatTaskName');
   } else if (!name || isWeakTaskName(name)) {
     name = inferredName || '';
     task.name = name;
   }
   if (!name && ctx.alreadyClarified) {
-    name = fallbackNameFromTranscript(ctx.transcript);
+    name = ctx.clarificationAnswer?.trim()
+      ? 'New task'
+      : fallbackNameFromTranscript(ctx.transcript);
     task.name = name;
   }
 

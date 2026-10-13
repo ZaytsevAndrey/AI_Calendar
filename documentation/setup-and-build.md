@@ -43,7 +43,10 @@ Create `backend/.env` from `backend/.env.example`.
 | `DATABASE_SSL` | Postgres SSL is on by default (`rejectUnauthorized: false` for Neon). Set `false` only for local Postgres without SSL |
 | `GROQ_API_KEY` | Free Groq API key for voice STT + task parse ([console.groq.com/keys](https://console.groq.com/keys)). Voice buttons fail with 503 if unset |
 | `GROQ_STT_MODEL` | Optional. Default `whisper-large-v3-turbo` |
-| `GROQ_LLM_MODEL` | Optional. Default `openai/gpt-oss-20b` (Llama 3.x on Groq is enterprise-only) |
+| `GROQ_LLM_MODEL` | Optional. Default `openai/gpt-oss-20b` when chat stays on Groq |
+| `LLM_BASE_URL` | Optional. Local Ollama, `http://127.0.0.1:11434`. When set, chat uses `LLM_MODEL` and Groq is only speech-to-text |
+| `LLM_MODEL` | Optional. Default `calendar-voice` (Qwen3 14B, 8192 context; see `tools/calendar-voice.Modelfile`) |
+| `PIPER_URL` | Optional. Local Piper, `http://127.0.0.1:5510`. Voice replies use it; if it is down the browser voice is used |
 
 ### Frontend
 

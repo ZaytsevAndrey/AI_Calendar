@@ -21,7 +21,7 @@ Voice becomes the **primary controller** for tasks and habits: full create / edi
 - Phases CRUD or Settings changes by voice.
 - Calendar Q&A (“what’s next?”, “list today’s tasks”) as free-form query — only a short confirmation after a write.
 - True streaming STT / live word-by-word captions (deferred).
-- Server-side TTS (deferred; client abstraction must allow a later swap).
+- Server-side TTS on Render. Local Piper is queued in [tts-local.md](tts-local.md); the `speak()` abstraction stays the swap point.
 - Equalizer on TTS playback (deferred).
 - Continuous listen / wake word (push-to-talk stays).
 - Rewriting mic capture or replacing Groq Whisper for final transcripts.

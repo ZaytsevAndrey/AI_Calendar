@@ -7,6 +7,7 @@ import { ScheduledTask } from '../schedule/schedule.entity';
 import { Task } from '../tasks/entities/task.entity';
 import { UserSettingsModule } from '../user-settings/user-settings.module';
 import { GroqClient } from './groq.client';
+import { PiperSpeechService } from './piper-speech.service';
 import { VoiceAgentOrchestrator } from './voice-agent.orchestrator';
 import { VoiceAgentTools } from './voice-agent.tools';
 import { VoiceController } from './voice.controller';
@@ -28,6 +29,7 @@ import { VoiceSessionStore } from './voice-session.store';
   providers: [
     VoiceService,
     GroqClient,
+    PiperSpeechService,
     VoiceSessionStore,
     VoiceAgentTools,
     VoiceAgentOrchestrator,

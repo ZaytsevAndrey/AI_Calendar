@@ -21,7 +21,7 @@ Voice becomes a **hybrid agent**: multi-turn dialogue, grounded Q&A, and write i
 - Second scheduler brain or inventing free slots outside placement helpers.
 - Phases CRUD or Settings changes by voice.
 - Piping conflict-sheet or Problematic outcomes back into the agent session (deferred).
-- Server-side TTS (keep client `VoiceSpeech` abstraction for a later swap).
+- Server-side TTS on Render. Local Piper is queued in [tts-local.md](tts-local.md); keep the `VoiceSpeech` abstraction for that swap.
 - Streaming STT / word-by-word captions.
 - Rewriting Whisper / mic capture stack beyond silence detection + UI.
 - `undo` action (no product undo API after Generate removal).

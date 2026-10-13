@@ -88,6 +88,7 @@ export const en = {
   'errors.UNAUTHORIZED': 'Unauthorized.',
   'errors.INTERNAL': 'Internal server error.',
   'errors.GENERIC': 'Something went wrong. Please try again.',
+  'errors.VOICE_RATE_LIMIT': 'Voice is busy. Try again in a few seconds.',
 } as const;
 
 export type MessageKey = keyof typeof en;

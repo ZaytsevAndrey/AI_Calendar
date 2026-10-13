@@ -1,10 +1,15 @@
 /**
- * Client TTS for voice replies. Web Speech Synthesis today; swap the body later for server TTS.
+ * Client TTS for voice replies. Local Piper when the API can synthesize,
+ * otherwise the browser's Web Speech voice.
  */
+import { VoiceApi } from 'api/voice.api';
 
 export type SpeakOptions = {
   lang?: string;
 };
+
+let activeAudio: HTMLAudioElement | null = null;
+let activeUrl: string | null = null;
 
 function speechLang(lang?: string): string {
   const normalized = (lang || 'en').toLowerCase();
@@ -24,7 +29,6 @@ function scoreVoice(voice: SpeechSynthesisVoice, lang: string): number {
   const name = voice.name.toLowerCase();
   if (/(neural|natural|premium|enhanced|online)/.test(name)) score += 25;
   if (voice.localService) score += 10;
-  // Prefer female/clear voices lightly when names are generic — skip gender bias.
   if (/microsoft|google|apple/.test(name)) score += 5;
   return score;
 }
@@ -45,6 +49,46 @@ function pickVoice(lang: string): SpeechSynthesisVoice | null {
   return best;
 }
 
+function stopPlayback(): void {
+  if (activeAudio) {
+    activeAudio.pause();
+    activeAudio.src = '';
+    activeAudio = null;
+  }
+  if (activeUrl) {
+    URL.revokeObjectURL(activeUrl);
+    activeUrl = null;
+  }
+  if (typeof window !== 'undefined' && window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
+}
+
+function playWav(blob: Blob): Promise<void> {
+  stopPlayback();
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  activeAudio = audio;
+  activeUrl = url;
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (activeUrl === url) {
+        URL.revokeObjectURL(url);
+        activeUrl = null;
+        activeAudio = null;
+      }
+      resolve();
+    };
+    audio.onended = finish;
+    audio.onerror = finish;
+    window.setTimeout(finish, Math.min(60_000, 2_000 + blob.size / 8));
+    audio.play().catch(finish);
+  });
+}
+
 function ensureVoices(): Promise<void> {
   if (typeof window === 'undefined' || !window.speechSynthesis) {
     return Promise.resolve();
@@ -57,8 +101,34 @@ function ensureVoices(): Promise<void> {
       resolve();
     };
     window.speechSynthesis.addEventListener('voiceschanged', done);
-    // Chrome sometimes populates sync after a tick.
     window.setTimeout(done, 400);
+  });
+}
+
+function speakWithBrowser(text: string, lang: string): Promise<void> {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return Promise.resolve();
+  return new Promise((resolve) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = lang;
+    utterance.rate = 0.92;
+    utterance.pitch = 1;
+    const voice = pickVoice(lang);
+    if (voice) utterance.voice = voice;
+
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    utterance.onend = finish;
+    utterance.onerror = finish;
+    window.setTimeout(finish, Math.min(20_000, 2_000 + text.length * 90));
+    try {
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      finish();
+    }
   });
 }
 
@@ -68,47 +138,25 @@ export const VoiceSpeech = {
   },
 
   stop(): void {
-    if (!VoiceSpeech.supported()) return;
-    window.speechSynthesis.cancel();
+    stopPlayback();
   },
 
   /**
-   * Speaks `text` when synthesis is available. Resolves when utterance ends or after a timeout.
-   * Silent no-op when unsupported or empty.
+   * Speaks `text`. Prefers local Piper audio from the API.
+   * Falls back to the browser voice when Piper is not running.
    */
   async speak(text: string, options: SpeakOptions = {}): Promise<void> {
     const trimmed = text.trim();
-    if (!trimmed || !VoiceSpeech.supported()) return;
+    if (!trimmed || typeof window === 'undefined') return;
 
     VoiceSpeech.stop();
+    const wav = await VoiceApi.speak(trimmed, options.lang);
+    if (wav) {
+      await playWav(wav);
+      return;
+    }
+
     await ensureVoices();
-
-    return new Promise((resolve) => {
-      const utterance = new SpeechSynthesisUtterance(trimmed);
-      const lang = speechLang(options.lang);
-      utterance.lang = lang;
-      utterance.rate = 0.92;
-      utterance.pitch = 1;
-      const voice = pickVoice(lang);
-      if (voice) utterance.voice = voice;
-
-      let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        resolve();
-      };
-
-      utterance.onend = finish;
-      utterance.onerror = finish;
-      // Some browsers never fire end; do not hang the sheet forever.
-      window.setTimeout(finish, Math.min(20_000, 2_000 + trimmed.length * 90));
-
-      try {
-        window.speechSynthesis.speak(utterance);
-      } catch {
-        finish();
-      }
-    });
+    await speakWithBrowser(trimmed, speechLang(options.lang));
   },
 };

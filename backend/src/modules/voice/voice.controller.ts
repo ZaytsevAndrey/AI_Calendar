@@ -2,9 +2,12 @@ import {
   Body,
   Controller,
   Delete,
+  Header,
+  HttpCode,
   Param,
   Post,
   Request,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -17,6 +20,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ParseVoiceTaskDto } from './dto/parse-voice-task.dto';
 import { TranscribeVoiceDto } from './dto/transcribe-voice.dto';
 import { VoiceTurnDto } from './dto/voice-turn.dto';
+import { SpeakVoiceDto } from './dto/speak-voice.dto';
+import { PiperSpeechService } from './piper-speech.service';
 import { VoiceService } from './voice.service';
 
 @ApiTags('voice')
@@ -24,7 +29,10 @@ import { VoiceService } from './voice.service';
 @UseGuards(JwtAuthGuard)
 @Controller('voice')
 export class VoiceController {
-  constructor(private readonly voiceService: VoiceService) {}
+  constructor(
+    private readonly voiceService: VoiceService,
+    private readonly piper: PiperSpeechService,
+  ) {}
 
   @Post('transcribe')
   @ApiOperation({ summary: 'Transcribe recorded audio with Groq Whisper' })
@@ -51,6 +59,16 @@ export class VoiceController {
   @ApiResponse({ status: 201, description: 'Agent turn result' })
   turn(@Request() req, @Body() dto: VoiceTurnDto) {
     return this.voiceService.turn(req.user.userId, dto);
+  }
+
+  @Post('speak')
+  @HttpCode(200)
+  @Header('Content-Type', 'audio/wav')
+  @ApiOperation({ summary: 'Synthesize a voice reply with local Piper' })
+  @ApiResponse({ status: 200, description: 'WAV audio' })
+  async speak(@Body() dto: SpeakVoiceDto): Promise<StreamableFile> {
+    const wav = await this.piper.synthesize(dto.text, dto.language);
+    return new StreamableFile(wav);
   }
 
   @Delete('session/:sessionId')

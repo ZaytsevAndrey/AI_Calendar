@@ -39,6 +39,9 @@ yarn-error.log*
 *.sqlite3
 *.db
 
+# local voice engines (Piper binary and voice weights)
+/local/
+
 # backend specific
 backend/dist/
 backend/node_modules/

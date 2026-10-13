@@ -72,3 +72,22 @@ services:
           name: ai-calendar-api
           type: web
           envVarKey: RENDER_EXTERNAL_URL
+
+  # Same frontend, second free hostname. Points at the home API (local LLM + Piper).
+  # Set REACT_APP_API_BASE_URL in the dashboard to that public API origin.
+  - type: web
+    name: ai-calendar-web-home
+    runtime: static
+    branch: master
+    autoDeployTrigger: commit
+    buildCommand: npm ci --workspace=frontend --include-workspace-root --include=dev && npm run build:frontend
+    staticPublishPath: frontend/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: NODE_VERSION
+        value: 18.18.0
+      - key: REACT_APP_API_BASE_URL
+        sync: false

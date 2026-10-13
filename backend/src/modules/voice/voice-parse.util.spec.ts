@@ -14,6 +14,8 @@ import {
   clarificationOnlyResult,
   extractJsonObject,
   inferTaskNameFromTranscript,
+  isBareCreateRequest,
+  nameFromClarification,
   normalizeVoiceParse,
 } from './voice-parse.util';
 
@@ -411,6 +413,50 @@ describe('normalizeVoiceParse', () => {
     expect(result.task?.name).toBeFalsy();
   });
 
+  it('asks for a name when the utterance only asks to create a task', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: { name: 'Треба задачу створити', eventType: 'admin' },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'Треба задачу створити.',
+        timeZone: 'Europe/Kyiv',
+        nowIso: '2026-09-07T16:00:00.000Z',
+        language: 'uk',
+      },
+    );
+    expect(result.understanding).toBe('needs_clarification');
+    expect(result.clarifyingQuestion).toBe('Як назвати цю задачу?');
+    expect(result.task).toBeNull();
+  });
+
+  it('uses only the clarification answer as the title', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'Треба створити задачу Назви її задачу',
+          eventType: 'admin',
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: true,
+        transcript: 'Треба створити задачу. Назви її задачу.',
+        clarificationAnswer: 'Назви її задачу.',
+        timeZone: 'Europe/Kyiv',
+        nowIso: '2026-09-07T16:00:00.000Z',
+        language: 'uk',
+      },
+    );
+    expect(result.understanding).toBe('complete');
+    expect(result.task?.name).toBe('Задача');
+    expect(result.task?.isUnscheduled).toBe(true);
+  });
+
   it('salvages a title and defaults to Unscheduled when model omitted when', () => {
     const result = normalizeVoiceParse(
       {
@@ -592,6 +638,20 @@ describe('buildLocalCalendarContext', () => {
     expect(text).toContain('schedule today: 2026-09-08');
     expect(text).toContain('schedule tomorrow: 2026-09-09');
     expect(text).not.toContain('before wake = still previous');
+  });
+});
+
+describe('isBareCreateRequest', () => {
+  it('treats a create request with no errand as unnamed', () => {
+    expect(isBareCreateRequest('Треба задачу створити.')).toBe(true);
+    expect(isBareCreateRequest('Хочу створити задачу')).toBe(true);
+    expect(isBareCreateRequest('create a task')).toBe(true);
+    expect(isBareCreateRequest('треба купити молоко')).toBe(false);
+  });
+
+  it('reads a title out of a naming answer', () => {
+    expect(nameFromClarification('Назви її задачу.')).toBe('Задача');
+    expect(nameFromClarification('Назви її купити молоко')).toBe('Купити молоко');
   });
 });
 

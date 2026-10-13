@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
@@ -242,6 +242,7 @@ export class VoiceAgentOrchestrator {
         break;
       }
     } catch (err) {
+      if (isVoiceRateLimit(err)) throw err;
       this.logger.warn(
         `Orchestrator LLM failed; falling back to parse-task: ${
           err instanceof Error ? err.message : String(err)
@@ -538,6 +539,16 @@ export class VoiceAgentOrchestrator {
       legacyParse: input.legacyParse ?? null,
     };
   }
+}
+
+function isVoiceRateLimit(err: unknown): boolean {
+  if (!(err instanceof ServiceUnavailableException)) return false;
+  const response = err.getResponse();
+  return (
+    typeof response === 'object' &&
+    response !== null &&
+    (response as { code?: string }).code === 'VOICE_RATE_LIMIT'
+  );
 }
 
 function parseDecision(raw: string): LlmDecision {

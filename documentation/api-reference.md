@@ -72,12 +72,13 @@ Task `phaseIds` must reference phases owned by the same user.
 
 ## Voice — `/voice`
 
-JWT. Free Groq backend (`GROQ_API_KEY`). Audio is **not** stored.
+JWT. STT needs `GROQ_API_KEY`. Chat uses local Ollama when `LLM_BASE_URL` is set, otherwise Groq. Spoken replies use Piper when `PIPER_URL` is up (`POST /voice/speak`), otherwise the browser voice. Audio is **not** stored. Each parse logs one structured `voice.parse.result` line (see [voice-prompt-next.md](voice-prompt-next.md)).
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/voice/transcribe` | Body `{ audioBase64, mimeType?, language? }` → `{ transcript, language? }` (Whisper; language hint from settings `language` / body improves accuracy) |
+| POST | `/voice/transcribe` | Body `{ audioBase64, mimeType?, language? }` → `{ transcript, language? }` (Whisper; language hint from settings `speechLanguage` / body improves accuracy) |
 | POST | `/voice/turn` | Voice Agent turn. Body `{ transcript, sessionId, timeZone, clientNowIso?, actionId? }` → `{ sessionId, outcome, assistantMessage, intents, actions, proposal, clarifyCount, legacyParse }` |
+| POST | `/voice/speak` | Body `{ text, language? }` → WAV (`audio/wav`). Local Piper when `PIPER_URL` is set; 503 if Piper is down |
 | DELETE | `/voice/session/:sessionId` | Discard in-memory agent session (widget close) |
 | POST | `/voice/parse-task` | Legacy / fallback / tests. Body `{ transcript, timeZone, clientNowIso?, previousTranscript?, clarificationAnswer? }` → `{ understanding, clarifyingQuestion, task, command }` |
 

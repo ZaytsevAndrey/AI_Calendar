@@ -13,6 +13,10 @@ const DEFAULT_STT_MODEL = 'whisper-large-v3';
 /** Free-tier production chat model. Llama 3.3/3.1 on Groq are enterprise-only. */
 const DEFAULT_LLM_MODEL = 'openai/gpt-oss-20b';
 const FALLBACK_LLM_MODEL = 'openai/gpt-oss-120b';
+/** Free-tier TPM is 8000. One voice prompt is ~3000, so a short wait usually fits. */
+const RATE_LIMIT_RETRIES = 2;
+const RATE_LIMIT_WAIT_MIN_MS = 400;
+const RATE_LIMIT_WAIT_MAX_MS = 6000;
 
 type GroqChatPayload = {
   choices?: Array<{ message?: { content?: string } }>;
@@ -93,6 +97,9 @@ export class GroqClient {
   }
 
   async completeJson(systemPrompt: string, userPrompt: string): Promise<string> {
+    const localBase = this.localLlmBase();
+    if (localBase) return this.completeLocalJson(localBase, systemPrompt, userPrompt);
+
     const models = [this.llmModel(), FALLBACK_LLM_MODEL].filter(
       (model, index, list) => list.indexOf(model) === index,
     );
@@ -102,7 +109,7 @@ export class GroqClient {
       const model = models[i];
       const hasNext = i < models.length - 1;
 
-      const strict = await this.chatCompletion(
+      const strict = await this.chatWithRateLimitRetry(
         model,
         systemPrompt,
         userPrompt,
@@ -114,7 +121,7 @@ export class GroqClient {
 
       // json_object mode is flaky on longer voice prompts — retry same model without it.
       if (isFailedJsonGeneration(lastError)) {
-        const soft = await this.chatCompletion(
+        const soft = await this.chatWithRateLimitRetry(
           model,
           systemPrompt,
           userPrompt,
@@ -135,10 +142,127 @@ export class GroqClient {
         continue;
       }
       this.logger.warn(lastError);
-      throw new ServiceUnavailableException(lastError);
+      throw this.llmUnavailable(lastError, strict.status);
     }
 
-    throw new ServiceUnavailableException(lastError);
+    throw this.llmUnavailable(lastError, 503);
+  }
+
+  private localLlmBase(): string {
+    return this.config.get<string>('LLM_BASE_URL')?.trim().replace(/\/$/, '') || '';
+  }
+
+  /** Home Ollama. Speech-to-text stays on Groq. */
+  private async completeLocalJson(
+    base: string,
+    systemPrompt: string,
+    userPrompt: string,
+  ): Promise<string> {
+    const model = this.config.get<string>('LLM_MODEL')?.trim() || 'calendar-voice';
+    const strict = await this.ollamaChat(base, model, systemPrompt, userPrompt, true);
+    if (strict.ok && looksLikeJson(strict.content)) return strict.content;
+    const soft = await this.ollamaChat(base, model, systemPrompt, userPrompt, false);
+    if (soft.ok) {
+      this.logger.warn(`Local JSON mode failed on ${model}; recovered without format`);
+      return soft.content;
+    }
+    const error = strict.ok ? soft.error : strict.error;
+    this.logger.warn(error);
+    throw new ServiceUnavailableException(error);
+  }
+
+  private async ollamaChat(
+    base: string,
+    model: string,
+    systemPrompt: string,
+    userPrompt: string,
+    jsonFormat: boolean,
+  ): Promise<{ ok: true; content: string } | { ok: false; error: string; status: number }> {
+    let response: Response;
+    try {
+      response = await fetch(`${base}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          stream: false,
+          think: false,
+          ...(jsonFormat ? { format: 'json' } : {}),
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          options: { temperature: 0.1, num_ctx: 8192 },
+        }),
+        signal: AbortSignal.timeout(120_000),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: `Local LLM failed: ${message}`, status: 503 };
+    }
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      message?: { content?: string };
+    };
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: payload.error || `Local LLM failed (${response.status})`,
+        status: response.status,
+      };
+    }
+    const content = stripThink(payload.message?.content || '');
+    if (!content) {
+      return { ok: false, error: 'Local LLM returned an empty response', status: 502 };
+    }
+    return { ok: true, content };
+  }
+
+  private llmUnavailable(message: string, status: number): ServiceUnavailableException {
+    if (isRateLimit(status, message)) {
+      return new ServiceUnavailableException({
+        code: 'VOICE_RATE_LIMIT',
+        message: 'Voice is busy. Try again in a few seconds.',
+      });
+    }
+    return new ServiceUnavailableException(message);
+  }
+
+  /** TPM 429: wait out the window Groq names, then repeat the same model. */
+  private async chatWithRateLimitRetry(
+    model: string,
+    systemPrompt: string,
+    userPrompt: string,
+    jsonObject: boolean,
+  ) {
+    let result = await this.chatCompletion(
+      model,
+      systemPrompt,
+      userPrompt,
+      jsonObject,
+    );
+    for (
+      let attempt = 0;
+      attempt < RATE_LIMIT_RETRIES && !result.ok && result.status === 429;
+      attempt += 1
+    ) {
+      const wait = result.retryAfterMs ?? 4000;
+      this.logger.warn(
+        `Groq rate limit on ${model}; retrying in ${wait}ms`,
+      );
+      await this.sleep(wait);
+      result = await this.chatCompletion(
+        model,
+        systemPrompt,
+        userPrompt,
+        jsonObject,
+      );
+    }
+    return result;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private async chatCompletion(
@@ -152,6 +276,7 @@ export class GroqClient {
         ok: false;
         error: string;
         status: number;
+        retryAfterMs?: number;
         failedGeneration?: string;
       }
   > {
@@ -177,10 +302,15 @@ export class GroqClient {
     });
     const payload = (await response.json().catch(() => ({}))) as GroqChatPayload;
     if (!response.ok) {
+      const error = groqErrorMessage(payload, response.status, 'LLM');
       return {
         ok: false,
-        error: groqErrorMessage(payload, response.status, 'LLM'),
+        error,
         status: response.status,
+        retryAfterMs:
+          response.status === 429
+            ? rateLimitWaitMs(error, response.headers.get('retry-after'))
+            : undefined,
         failedGeneration: readFailedGeneration(payload),
       };
     }
@@ -194,6 +324,15 @@ export class GroqClient {
     }
     return { ok: true, content };
   }
+}
+
+function stripThink(content: string): string {
+  return content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+}
+
+function looksLikeJson(content: string): boolean {
+  const trimmed = content.trim();
+  return trimmed.startsWith('{') || trimmed.startsWith('```');
 }
 
 function groqErrorMessage(
@@ -243,6 +382,34 @@ function isFailedJsonGeneration(message: string): boolean {
     lower.includes('failed to generate json') ||
     lower.includes('failed_generation')
   );
+}
+
+/** Free-tier "try again in 3.645s" or a Retry-After header, capped so a turn stays short. */
+export function rateLimitWaitMs(
+  message: string,
+  retryAfterHeader: string | null,
+): number {
+  let seconds: number | null = null;
+  if (retryAfterHeader) {
+    const header = Number(retryAfterHeader);
+    if (Number.isFinite(header) && header >= 0) seconds = header;
+  }
+  if (seconds == null) {
+    const match = message.match(/try again in\s+([\d.]+)\s*s/i);
+    if (match) {
+      const parsed = Number(match[1]);
+      if (Number.isFinite(parsed) && parsed >= 0) seconds = parsed;
+    }
+  }
+  if (seconds == null) return 4000;
+  return Math.min(
+    RATE_LIMIT_WAIT_MAX_MS,
+    Math.max(RATE_LIMIT_WAIT_MIN_MS, Math.ceil(seconds * 1000) + 250),
+  );
+}
+
+function isRateLimit(status: number, message: string): boolean {
+  return status === 429 || /rate limit reached/i.test(message);
 }
 
 function shouldTryNextModel(status: number, message: string): boolean {

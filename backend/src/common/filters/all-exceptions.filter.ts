@@ -18,6 +18,7 @@ const API_ERROR_KEYS: Record<string, MessageKey> = {
   USER_ALREADY_EXISTS: 'errors.USER_ALREADY_EXISTS',
   PASSWORDS_DO_NOT_MATCH: 'errors.PASSWORDS_DO_NOT_MATCH',
   INVALID_RESET_TOKEN: 'errors.INVALID_RESET_TOKEN',
+  VOICE_RATE_LIMIT: 'errors.VOICE_RATE_LIMIT',
 };
 
 function statusForApiError(code: string): number {

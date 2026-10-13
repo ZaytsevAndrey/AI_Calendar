@@ -247,4 +247,24 @@ export const VoiceApi = {
       url: `/voice/session/${encodeURIComponent(sessionId)}`,
     });
   },
+
+  /** WAV from local Piper, or null when that process is not running. */
+  speak: async (text: string, language?: string): Promise<Blob | null> => {
+    try {
+      const response = await apiCall({
+        method: 'POST',
+        url: '/voice/speak',
+        data: { text, language },
+        responseType: 'blob',
+        validateStatus: () => true,
+      });
+      if (!response || response.status !== 200) return null;
+      const blob = response.data as Blob;
+      if (!blob || blob.size < 44) return null;
+      if (blob.type.includes('json')) return null;
+      return blob;
+    } catch {
+      return null;
+    }
+  },
 };

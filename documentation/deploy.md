@@ -49,9 +49,22 @@ Do not use `https://ai-calendar-web.onrender.com` or `https://ai-calendar-api.on
 | Branch | CI | Deploy |
 |--------|----|--------|
 | `develop` (PRs and pushes) | GitHub Actions: tests + build | No |
-| `master` | Same CI | Render rebuilds API + frontend |
+| `master` | Same CI, and both frontend bundles | Render rebuilds the API and both static sites |
 
 Merge to `master` when you want production updated.
+
+## Two frontends
+
+The API service stays the Render web service. There are two static sites:
+
+| Site | Hostname | `REACT_APP_API_BASE_URL` | Voice text / speech |
+|------|----------|--------------------------|---------------------|
+| `ai-calendar-web` | `https://ai-calendar-web-o81n.onrender.com` | Render API, wired in the blueprint | Groq on the Render API, browser voice |
+| `ai-calendar-web-home` | assigned when the blueprint is synced | Dashboard value: public origin of the home API | Ollama and Piper on the home machine |
+
+GitHub Actions builds both bundles on every pull request and push (`frontend-sites` in `.github/workflows/ci.yml`). The home build uses the repository variable `LOCAL_API_PUBLIC_URL` when it is set. Render is what publishes each bundle to its `onrender.com` hostname after a push to `master`.
+
+The home API is this repo's backend on the PC (`LLM_BASE_URL`, `PIPER_URL`, `npm run start:piper`). Its `FRONTEND_URL` is the home site origin, and `GOOGLE_REDIRECT_URI` is `https://<home-api>/google-calendar/callback`. Do not point the existing site at the home API.
 
 ## Environment (production)
 
@@ -73,7 +86,7 @@ Frontend **build-time** variable:
 
 | Variable | Purpose |
 |----------|---------|
-| `REACT_APP_API_BASE_URL` | Axios base URL (from the API service) |
+| `REACT_APP_API_BASE_URL` | Axios base URL. On `ai-calendar-web` this is the Render API. On `ai-calendar-web-home` set it to the home API origin |
 
 ## Custom domain (optional, later)
 

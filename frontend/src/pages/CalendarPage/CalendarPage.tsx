@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useStore } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Columns3, List, Mic, MoreHorizontal, Plus } from 'lucide-react';
 import {
@@ -23,7 +22,6 @@ import { ScheduleApi } from 'api/schedule.api';
 import { useScheduleActions } from 'modules/schedule/hooks/useScheduleActions';
 import { ProblematicInboxBanner } from 'modules/schedule/components/ProblematicInboxBanner';
 import { ProblematicInboxSheet } from 'modules/schedule/components/ProblematicInboxSheet';
-import { UnscheduledInboxBanner } from 'modules/schedule/components/UnscheduledInboxBanner';
 import { ScheduleMenu } from 'modules/schedule/components/ScheduleMenu';
 import { ScheduleSuggestionsDialog } from 'modules/schedule/components/ScheduleSuggestionsDialog';
 import { SeriesDragHost } from 'modules/schedule/components/SeriesDragHost';
@@ -36,7 +34,6 @@ import { isActiveProblematicTask, todayYmdInZone } from 'modules/schedule/proble
 import { NowStrip } from 'modules/now/components/NowStrip';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
-import { filterUnscheduledTasks } from 'modules/events/utils/taskListFilters';
 import {
     isCompletedCalendarEvent,
     overlayCompletedTaskEvents,
@@ -121,7 +118,6 @@ function defaultCalendarView(): CalendarView {
 
 const CalendarPage: React.FC = () => {
     const { t } = useTranslation();
-    const navigate = useNavigate();
     const dispatch = useDispatch();
     const store = useStore();
     const phone = usePhoneLayout();
@@ -182,11 +178,6 @@ const CalendarPage: React.FC = () => {
     const problematicTasks = tasks.filter((task) =>
         isActiveProblematicTask(task, todayYmd, parkDayHints[task.id]),
     );
-    const unscheduledTasks = filterUnscheduledTasks(tasks, {
-        query: '',
-        status: 'active',
-        overdueOnly: false,
-    });
     const { data: habitsData } = useGetHabitsQuery();
     const voice = useVoiceTask({
         onComplete: createFromPayload,
@@ -671,12 +662,6 @@ const CalendarPage: React.FC = () => {
                     <ProblematicInboxBanner
                         count={problematicTasks.length}
                         onOpen={() => setProblematicOpen(true)}
-                    />
-                ) : null}
-                {unscheduledTasks.length > 0 ? (
-                    <UnscheduledInboxBanner
-                        count={unscheduledTasks.length}
-                        onOpen={() => navigate('/tasks')}
                     />
                 ) : null}
                 {phone ? null : (

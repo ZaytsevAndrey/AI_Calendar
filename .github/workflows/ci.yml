@@ -47,3 +47,34 @@ jobs:
 
       - name: Playwright P0 UI smoke
         run: npm run test:e2e:ui -- p0
+
+  # Two public frontends, one shared source. Render publishes each dist to its own
+  # onrender.com hostname; this job fails the push if either bundle does not compile.
+  frontend-sites:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: production
+            api: https://ai-calendar-api-fxsw.onrender.com
+          - name: home
+            api: ${{ vars.LOCAL_API_PUBLIC_URL || 'https://home.invalid' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build ${{ matrix.name }} frontend
+        run: npm run build:frontend
+        env:
+          REACT_APP_API_BASE_URL: ${{ matrix.api }}

@@ -91,4 +91,5 @@ export const uk: Record<MessageKey, string> = {
   'errors.UNAUTHORIZED': 'Не авторизовано.',
   'errors.INTERNAL': 'Внутрішня помилка сервера.',
   'errors.GENERIC': 'Щось пішло не так. Спробуйте ще раз.',
+  'errors.VOICE_RATE_LIMIT': 'Голос зараз зайнятий. Спробуйте за кілька секунд.',
 };

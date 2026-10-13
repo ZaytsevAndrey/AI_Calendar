@@ -1,6 +1,6 @@
 # Roadmap archive
 
-Shipped work, moved out of [roadmap](roadmap.md). The live queue is **§23** voice understanding → **§24** personal PC / Piper. Product behavior: [overview](overview.md).
+Shipped work, moved out of [roadmap](roadmap.md). The live queue is **§23.3+** voice understanding (harvest / fix loops) → **§24** personal PC / Piper. Product behavior: [overview](overview.md).
 
 On 11 Oct 2026 the checked live-queue items left [roadmap](roadmap.md): scheduling redesign §1–§8, habits §9–§10, problematic slot pick §11, incremental placement §12, Unscheduled §13, calendar/edit delete §14, Voice Agent §15–§19, and Later polish (UI language, voice habit check-in, problematic sheet). Former open §20–§21 were folded into the Oct rebuild (§22–§24). Behavior notes are the bullets below.
 
@@ -13,6 +13,10 @@ Sign-in is **Google only**. Password register, login, reset, and email verificat
 Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-coverage.md)). Each route screen is its own lazy chunk (`splitChunks`); production is no longer one `bundle.js`.
 
 ## Shipped (Oct 2026)
+
+- [x] **§23.2 Golden harness + create kind/when baseline.** Table fixtures without live LLM for all six `kind-when` branches (+ event-span fixed example): frozen specialist JSON → `normalizeVoiceParse` + harvest `kind`. Prompt stays aligned with `CREATE_KIND_WHEN_MODULE` examples. Files: `voice-create-kind-when.goldens.ts` / `.spec.ts`.
+
+- [x] **§23.1 Structured voice parse logging.** Each `parseTask` (including `/voice/turn` mutate) logs one unclipped `voice.parse.result` JSON line after normalize/resolve: `parseId`, transcript, router vs final intent, sniff override, language, understanding, inferred kind / command fields, key when ISOs, clarify question. Helper: `voice-parse-result-log.util.ts`. Harvest notes in [voice-prompt-next.md](voice-prompt-next.md). Raw `[llm:parse.*]` lines unchanged for prompt debug.
 
 - [x] **§22 Auto-scheduling trust (crowded scenarios).** Matrix **CD01–CD09** + T14/T15/T16/C01/C02 assert the live `PlacementStepService.place` path (not `engine.run` for writes). Unit: `placement-step.util.spec` + `placement-step.service.spec`. Nest: A-SCH-040–042 (create → job `conflicts` → `leave_problematic` / `move_new` / `place_on_top`; free hole; fixed vs fixed). Playwright JWT `openAs` (no Google OAuth): U-SCH-001–003 real conflict sheet + daily Done. Still **Target** / engine-only: T11 batch pass, T21/T23/T24 notify toasts, T40 overnight on placement path. Handoff was [task-scheduling-test-matrix.md](task-scheduling-test-matrix.md).
 
