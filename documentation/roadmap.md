@@ -6,6 +6,8 @@ Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Produ
 
 **Product pillars (Oct 2026 rebuild):** the two features that define the product are **auto-scheduling** and the **voice agent**. Auto-scheduling is the base; the agent is the differentiator. Do not polish TTS / deploy variants until both pillars are trustworthy. Specs: [spec-incremental-placement.md](spec-incremental-placement.md), [spec-conflict-rules.md](spec-conflict-rules.md), [spec-voice-agent.md](spec-voice-agent.md), [voice-prompt-next.md](voice-prompt-next.md).
 
+**Voice understanding (§23)** is already in progress: a little each day against Groq limits (create-eval → fix → goldens). It is **not** a Now item. Track it in [voice-prompt-next.md](voice-prompt-next.md), not in this ordered queue.
+
 ---
 
 ## Now (ordered)
@@ -18,35 +20,6 @@ The live API uses only `GROQ_API_KEY`. `GROQ_API_KEY` through `GROQ_API_KEY_6` r
 
 - [ ] On the API, rotate those six test keys when Groq answers with a per-minute limit. One turn stays on one key.
 - [ ] While voice is free, enforce a per-user ceiling and show a clear limit in the voice sheet.
-
-### 23. Voice agent — make it understand (split)
-
-Handoff: [voice-prompt-next.md](voice-prompt-next.md). Specialists are full in code; behavior is not frozen. Work **logging-first** then **live Groq create-eval** → fix loops → more scenarios. One mini-item per chat.
-
-#### 23.4 Create-eval fix loop (live Groq)
-
-Harness + ~50 scenarios are in ([`npm run voice:eval:create`](../backend/package.json)). Next:
-
-- [ ] Run the eval against real Groq; read `backend/.tmp/voice-create-eval-report.json`.
-- [ ] Fix prompt / normalize for failing create clusters; re-run until the suite is acceptably green.
-- [ ] Promote stubborn fails into offline goldens when useful.
-
-Done when: create-eval pass rate is high enough that create feels usable; known clusters fixed or documented.
-
-#### 23.5 Harvest + router goldens
-
-- [ ] Add goldens from real `voice.parse.result` / eval failures: create vs update vs command misroutes.
-
-Done when: known router misroutes from logs/eval are fixtures in CI.
-
-#### 23.6+ Fix loops by cluster
-
-Separate chats as failures appear: create edges (after-sleep, past clock, duration), update/reschedule, series scope, habits. Each chat = failing goldens → prompt or normalize fix → CI green. No new intents, no STT rewrite.
-
-#### 23.n Cleanup + archive
-
-- [ ] Resolve unused `voice.whenOrUnscheduled` i18n.
-- [ ] Archive [voice-prompt-next.md](voice-prompt-next.md) when the open queue there is empty.
 
 ### 26. Event preview
 
@@ -133,6 +106,6 @@ Third parties and publishing. Leave these until the Now list is done.
 ## Recommended next steps
 
 1. Next live item: roadmap **§25** — rotate the six Groq test keys on the API and cap voice per user while it is free.
-2. Then **§23.4** — run `npm run voice:eval:create` and fix create prompt/normalize ([voice-prompt-next.md](voice-prompt-next.md)).
-3. Then the rest of **Now**, in order: §23.5+, §26 preview, §27 type chip, §28 Google calendar label, §29 typed voice, §30 delete account, §31 backup, §32 mobile daily path, §24 Piper ([tts-local.md](tts-local.md)).
+2. Then the rest of **Now**, in order: §26 preview, §27 type chip, §28 Google calendar label, §29 typed voice, §30 delete account, §31 backup, §32 mobile daily path, §24 Piper ([tts-local.md](tts-local.md)).
+3. Voice understanding continues in parallel via [voice-prompt-next.md](voice-prompt-next.md); do not put it back in this queue.
 4. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.
