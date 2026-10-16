@@ -430,8 +430,8 @@ Generate body `{ startDate, endDate }` is **ignored**. Horizon = today → `recu
 | A-GGL-015 | X | P1 | `GET /google-calendar/check-all-users` no JWT | — | **Current: public list of users with tokens.** Assert actual; flag as security risk, do not expand. |
 | A-GGL-016 | A | P2 | `POST /google-calendar/save-token` with JWT | Unused UI path | Stub accepts code |
 | A-GGL-017 | A | P2 | Disconnect | — | **No route** — document skip; do not invent UI |
-| U-GGL-001 | U | P1 | Calendar click **app** event with linked task | Click | TaskForm |
-| U-GGL-002 | U | P1 | Click native Google event | Click | EventForm |
+| U-GGL-001 | U | P1 | Calendar click **app** event with linked task | Click → Edit | Preview then TaskForm (editOnly; no Delete/Skip) |
+| U-GGL-002 | U | P1 | Click native Google event | Click → Edit | Preview then EventForm |
 | U-GGL-003 | U | P1 | Edit/delete Google event in EventForm | Save/delete confirm | PUT/DELETE; toast |
 | U-GGL-004 | U | P1 | Cancelled Google events | Render | Filtered out |
 | U-GGL-005 | U | P0 | Ended **app-generated** event | Calendar | Gray `#9e9e9e` |

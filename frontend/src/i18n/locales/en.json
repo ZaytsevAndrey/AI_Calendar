@@ -112,6 +112,9 @@
     "seriesDragThisDay": "This day only",
     "seriesDragFollowing": "This day and following",
     "seriesDragAll": "All days",
+    "preview": {
+      "title": "Event"
+    },
     "seriesDeleteTitle": "Delete repeating task",
     "seriesDeleteBody": "How should “{{name}}” be deleted?",
     "seriesDeleteThisDay": "This day only",
@@ -146,7 +149,7 @@
     "previousMonth": "Previous month",
     "nextMonth": "Next month",
     "showDay": "Show {{label}}",
-    "dragHint": "Drag a block or its top/bottom edge. Step: 15 min. Click the center to edit.",
+    "dragHint": "Drag a block or its top/bottom edge. Step: 15 min. Click the center to open the preview.",
     "weekdayMon": "Mon",
     "weekdayTue": "Tue",
     "weekdayWed": "Wed",

@@ -11,6 +11,7 @@ import {
     visibleGoogleEvents,
 } from 'modules/calendar/hooks/useCalendar';
 import EventForm from 'modules/calendar/components/EventForm';
+import { EventPreview } from 'modules/calendar/components/EventPreview';
 import { GoogleCalendarEvent } from 'api/google-calendar.api';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import CalendarEvents from 'modules/calendar/components/CalendarEvents';
@@ -143,6 +144,13 @@ const CalendarPage: React.FC = () => {
     const [suggestionsOpen, setSuggestionsOpen] = useState(false);
     const [problematicOpen, setProblematicOpen] = useState(false);
     const [eventFormDialog, setEventFormDialog] = useState<{
+        open: boolean;
+        event: GoogleCalendarEvent | null;
+    }>({
+        open: false,
+        event: null,
+    });
+    const [eventPreview, setEventPreview] = useState<{
         open: boolean;
         event: GoogleCalendarEvent | null;
     }>({
@@ -369,6 +377,17 @@ const CalendarPage: React.FC = () => {
     const handleEditEvent = (eventId: string) => {
         const event = displayEvents.find((e: EventType) => e.id === eventId);
         if (!event) return;
+        setEventPreview({ open: true, event });
+    };
+
+    const closeEventPreview = () => {
+        setEventPreview({ open: false, event: null });
+    };
+
+    const openEditorFromPreview = (_scope?: SeriesDragScope) => {
+        const event = eventPreview.event;
+        if (!event) return;
+        closeEventPreview();
         const linkedTask = resolveTaskForCalendarEvent(tasks, event);
         if (linkedTask) {
             const start = eventStartDate(event);
@@ -382,10 +401,67 @@ const CalendarPage: React.FC = () => {
                           calendarId: event.calendarId,
                       }
                     : undefined,
+                { actionsMode: 'editOnly' },
             );
             return;
         }
         setEventFormDialog({ open: true, event });
+    };
+
+    const deleteFromPreview = (scope?: SeriesDragScope) => {
+        const event = eventPreview.event;
+        if (!event) return;
+        closeEventPreview();
+        if (scope) {
+            void (async () => {
+                const linked = resolveTaskForCalendarEvent(tasks, event);
+                if (!linked) {
+                    void handleDeleteCalendarEvent(event);
+                    return;
+                }
+                const occurrenceStart = occurrenceStartIso(event);
+                if (!occurrenceStart && scope !== 'all') {
+                    showErrorToast({ title: t('calendar.taskDeleteFailed') });
+                    return;
+                }
+                try {
+                    if (scope === 'occurrence') {
+                        await skipOccurrenceTrigger({
+                            id: linked.id,
+                            body: {
+                                occurrenceStart: occurrenceStart!,
+                                googleEventId: event.id.startsWith('local-completed:')
+                                    ? undefined
+                                    : event.id,
+                                googleEventCalendarId: event.calendarId,
+                            },
+                        }).unwrap();
+                        return;
+                    }
+                    if (scope === 'series') {
+                        await endSeriesFromTrigger({
+                            id: linked.id,
+                            body: {
+                                occurrenceStart: occurrenceStart!,
+                                googleEventId: event.id.startsWith('local-completed:')
+                                    ? undefined
+                                    : event.id,
+                                googleEventCalendarId: event.calendarId,
+                            },
+                        }).unwrap();
+                        return;
+                    }
+                    await deleteTaskTrigger(linked.id).unwrap();
+                } catch (err) {
+                    showErrorToast({
+                        title: t('calendar.taskDeleteFailed'),
+                        detail: extractApiErrorMessage(err),
+                    });
+                }
+            })();
+            return;
+        }
+        void handleDeleteCalendarEvent(event);
     };
 
     const handleEventFormSubmit = (data: any) => {
@@ -786,6 +862,19 @@ const CalendarPage: React.FC = () => {
                     </button>
                 </div>
             ) : null}
+
+            <EventPreview
+                open={eventPreview.open}
+                event={eventPreview.event}
+                task={
+                    eventPreview.event
+                        ? resolveTaskForCalendarEvent(tasks, eventPreview.event) ?? null
+                        : null
+                }
+                onClose={closeEventPreview}
+                onEdit={openEditorFromPreview}
+                onDelete={deleteFromPreview}
+            />
 
             <EventForm
                 open={eventFormDialog.open}

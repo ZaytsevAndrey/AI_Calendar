@@ -14,6 +14,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ## Shipped (Oct 2026)
 
+- [x] **§26 Event preview.** A calendar block click opens a read-only preview (title, time, description, location, recurrence) for app tasks and Google-only events. Edit and Delete live on the preview; repeating items use a this-day / following / entire-series menu on both. Chip X and list Delete stay as shortcuts. Opening Edit from the preview hides Delete/Skip on the form.
+
 - [x] **§25 Voice key rotation + daily token cap.** Live API discovers `GROQ_API_KEY` + `GROQ_API_KEY_N` (any count) and rotates on TPM/TPD when two or more are set; one voice session pins one key (STT + turn). Per-user chat-token ceiling per civil day (default 100000, `VOICE_DAILY_TOKEN_LIMIT`); exhausted → `VOICE_QUOTA_EXCEEDED` in the sheet only when hit.
 
 - [x] **First-run wake/sleep, then phases.** After Google sign-in, a user with no phases stays on `/setup/phases` with no app nav. Wake and sleep are saved first. Then they pick a day shape or skip to Sleep + Focus. `googleCalendarLinked` is set by that same sign-in, not by a second connect step.

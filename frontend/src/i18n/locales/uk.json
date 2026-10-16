@@ -112,6 +112,9 @@
     "seriesDragThisDay": "Лише цей день",
     "seriesDragFollowing": "Цей і наступні",
     "seriesDragAll": "Усі дні",
+    "preview": {
+      "title": "Подія"
+    },
     "seriesDeleteTitle": "Видалити повторювану задачу",
     "seriesDeleteBody": "Як видалити «{{name}}»?",
     "seriesDeleteThisDay": "Лише цей день",
@@ -146,7 +149,7 @@
     "previousMonth": "Попередній місяць",
     "nextMonth": "Наступний місяць",
     "showDay": "Показати {{label}}",
-    "dragHint": "Перетягніть блок або верхній/нижній край. Крок: 15 хв. Клацніть по центру, щоб редагувати.",
+    "dragHint": "Перетягніть блок або верхній/нижній край. Крок: 15 хв. Клацніть по центру, щоб відкрити прев’ю.",
     "weekdayMon": "Пн",
     "weekdayTue": "Вт",
     "weekdayWed": "Ср",

@@ -37,11 +37,14 @@ export type CreateTaskDefaults = {
   scheduleIntent?: boolean;
 };
 
+export type EditorActionsMode = 'full' | 'editOnly';
+
 export function useEventEditor() {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<TaskDTO | null>(null);
   const [occurrence, setOccurrence] = useState<TaskOccurrenceContext | null>(null);
+  const [actionsMode, setActionsMode] = useState<EditorActionsMode>('full');
   const [createDefaults, setCreateDefaults] = useState<CreateTaskDefaults | undefined>();
   const [formPrefill, setFormPrefill] = useState<ReturnType<typeof formValuesFromCreatePayload> | undefined>();
   const [afterCreate, setAfterCreate] = useState<(() => Promise<void>) | null>(null);
@@ -67,6 +70,7 @@ export function useEventEditor() {
     setOpen(false);
     setEditingEvent(null);
     setOccurrence(null);
+    setActionsMode('full');
     setCreateDefaults(undefined);
     setFormPrefill(undefined);
     setAfterCreate(null);
@@ -76,6 +80,7 @@ export function useEventEditor() {
   const openCreate = (defaults?: CreateTaskDefaults) => {
     setEditingEvent(null);
     setOccurrence(null);
+    setActionsMode('full');
     setCreateDefaults(defaults);
     setFormPrefill(undefined);
     setAfterCreate(null);
@@ -88,15 +93,21 @@ export function useEventEditor() {
   ) => {
     setEditingEvent(null);
     setOccurrence(null);
+    setActionsMode('full');
     setCreateDefaults(undefined);
     setFormPrefill(formValuesFromCreatePayload(payload, timeZone));
     setAfterCreate(() => options?.afterCreate ?? null);
     setOpen(true);
   };
 
-  const openEdit = (event: TaskDTO, nextOccurrence?: TaskOccurrenceContext) => {
+  const openEdit = (
+    event: TaskDTO,
+    nextOccurrence?: TaskOccurrenceContext,
+    options?: { actionsMode?: EditorActionsMode },
+  ) => {
     setEditingEvent(event);
     setOccurrence(nextOccurrence ?? null);
+    setActionsMode(options?.actionsMode ?? 'full');
     setCreateDefaults(undefined);
     setFormPrefill(undefined);
     setAfterCreate(null);
@@ -106,6 +117,7 @@ export function useEventEditor() {
   const openSchedule = (event: TaskDTO) => {
     setEditingEvent(event);
     setOccurrence(null);
+    setActionsMode('full');
     setCreateDefaults({ scheduleIntent: true });
     setFormPrefill(undefined);
     setAfterCreate(null);
@@ -142,6 +154,7 @@ export function useEventEditor() {
         setOpen(false);
         setEditingEvent(null);
         setOccurrence(null);
+        setActionsMode('full');
         setCreateDefaults(undefined);
         setFormPrefill(undefined);
         setAfterCreate(null);
@@ -203,6 +216,7 @@ export function useEventEditor() {
       setOpen(false);
       setEditingEvent(null);
       setOccurrence(null);
+      setActionsMode('full');
       setCreateDefaults(undefined);
       setFormPrefill(undefined);
       setAfterCreate(null);
@@ -256,6 +270,7 @@ export function useEventEditor() {
           setOpen(false);
           setEditingEvent(null);
           setOccurrence(null);
+          setActionsMode('full');
           setCreateDefaults(undefined);
           setFormPrefill(undefined);
           setAfterCreate(null);
@@ -317,8 +332,16 @@ export function useEventEditor() {
             onSubmit={submit}
             isSubmitting={isSubmitting}
             onCancel={close}
-            onSkipOccurrence={canSkipOccurrence ? handleSkipOccurrence : undefined}
-            onDelete={editingEvent ? handleDeleteFromEditor : undefined}
+            onSkipOccurrence={
+              actionsMode === 'full' && canSkipOccurrence
+                ? handleSkipOccurrence
+                : undefined
+            }
+            onDelete={
+              actionsMode === 'full' && editingEvent
+                ? handleDeleteFromEditor
+                : undefined
+            }
             isDeleting={isDeleting}
             mode={editingEvent ? 'edit' : 'create'}
           />
