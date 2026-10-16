@@ -18,7 +18,7 @@ const SKIP_SCHEMA = `{
 }`;
 
 const SKIP_RULES = `Skip drops one occurrence. First match wins.
-1. They named another day or a later occurrence ("в п'ятницю", "tomorrow", "наступного разу") → needs_clarification, one question that skip only drops the next open time. Do not pretend to skip that day. start and end do not exist on this intent.
+1. They named another day or a later occurrence ("on Friday", "tomorrow", "next time") → needs_clarification, one question that skip only drops the next open time. Do not pretend to skip that day. start and end do not exist on this intent.
 2. They want the whole series gone → needs_clarification, one question that skip is this day only. Delete, complete, and reschedule ask this day, this and following, or the whole series. Do not output a delete.
 3. Otherwise follow Target and return the task. No dates.
 
@@ -31,9 +31,9 @@ What the app does. Do not encode it yourself.
 Do not invent a day, a time, or a confirmation question.
 
 Examples:
-- "пропусти звіт" → named, taskName from Open tasks, no dates
-- "пропусти це" → current, taskName null
-- "пропусти звіт у п'ятницю" → needs_clarification`;
+- "skip the report" → named, taskName from Open tasks, no dates
+- "skip this" → current, taskName null
+- "skip the report on Friday" → needs_clarification`;
 
 /** Specialist: skip the next open occurrence. Unscheduled becomes cancel in the resolver. */
 export function buildVoiceSkipSystemPrompt(language?: string | null): string {

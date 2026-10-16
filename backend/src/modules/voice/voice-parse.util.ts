@@ -1,7 +1,10 @@
 import { isAppLanguage, type AppLanguage } from '../../i18n/types';
 import { t } from '../../i18n/t';
 import {
+  addDaysToYmd,
   endOfLocalDayIso,
+  localDateTimeIso,
+  localHm,
   localYmd,
   rezoneWallClockIso,
   startOfLocalDayIso,
@@ -111,17 +114,25 @@ function titleFromAnswer(answer: string): string | null {
   return titled.length > 80 ? `${titled.slice(0, 77)}…` : titled;
 }
 
-/** Drop past preferred/fixed slots so the placer starts from now, not history. */
-function rejectPastScheduleSlot(task: VoiceParsedTask, nowIso: string): void {
+/**
+ * Drop a past one-off preferred/fixed slot so the placer starts from now.
+ * A recurring start/end is the series wall clock, not an occurrence that already passed.
+ * Returns the cleared one-off start so the caller can keep the rest of that day.
+ */
+function rejectPastScheduleSlot(task: VoiceParsedTask, nowIso: string): string | null {
   const nowMs = Date.parse(nowIso);
-  if (Number.isNaN(nowMs)) return;
+  if (Number.isNaN(nowMs)) return null;
 
-  const startMs = task.scheduledStartTime
-    ? Date.parse(task.scheduledStartTime)
-    : NaN;
-  if (!Number.isNaN(startMs) && startMs < nowMs) {
-    task.scheduledStartTime = null;
-    task.scheduledEndTime = null;
+  let droppedStart: string | null = null;
+  if (!task.isRecurring) {
+    const startMs = task.scheduledStartTime
+      ? Date.parse(task.scheduledStartTime)
+      : NaN;
+    if (!Number.isNaN(startMs) && startMs < nowMs) {
+      droppedStart = task.scheduledStartTime ?? null;
+      task.scheduledStartTime = null;
+      task.scheduledEndTime = null;
+    }
   }
 
   const earliestMs = task.earliestStartTime
@@ -135,6 +146,116 @@ function rejectPastScheduleSlot(task: VoiceParsedTask, nowIso: string): void {
   if (!Number.isNaN(deadlineMs) && deadlineMs < nowMs) {
     task.deadline = null;
   }
+  return droppedStart;
+}
+
+/**
+ * A spoken one-off clock that is already past stays on that civil day:
+ * from now until 23:59. The day comes from the ISO the model emitted.
+ */
+function keepRestOfSpokenDay(
+  task: VoiceParsedTask,
+  droppedStart: string,
+  timeZone: string,
+  nowIso: string,
+): boolean {
+  const ymd = localYmd(droppedStart, timeZone);
+  const dayEnd = endOfLocalDayIso(ymd, timeZone);
+  const nowMs = Date.parse(nowIso);
+  if (Number.isNaN(nowMs) || Date.parse(dayEnd) < nowMs) return false;
+
+  const dayStart = startOfLocalDayIso(ymd, timeZone);
+  const earliest =
+    Date.parse(dayStart) < nowMs ? nowIso : dayStart;
+  const earliestMs = task.earliestStartTime
+    ? Date.parse(task.earliestStartTime)
+    : NaN;
+  if (Number.isNaN(earliestMs) || earliestMs < nowMs) {
+    task.earliestStartTime = earliest;
+  }
+  const deadlineMs = task.deadline ? Date.parse(task.deadline) : NaN;
+  if (Number.isNaN(deadlineMs) || deadlineMs < nowMs) {
+    task.deadline = dayEnd;
+  }
+  task.eventType = 'admin';
+  task.allowSplit = true;
+  task.isUnscheduled = undefined;
+  task.isRecurring = false;
+  task.recurrencePattern = null;
+  task.recurrenceWeekDays = [];
+  task.scheduledStartTime = null;
+  task.scheduledEndTime = null;
+  return true;
+}
+
+/**
+ * A past flexible preferred (no placement window) moves to the next civil day
+ * at the same wall clock the model already emitted.
+ */
+function rollSoftClockToTomorrow(
+  task: VoiceParsedTask,
+  droppedStart: string,
+  timeZone: string,
+  nowIso: string,
+): boolean {
+  const start = localDateTimeIso(
+    addDaysToYmd(localYmd(droppedStart, timeZone), 1),
+    localHm(droppedStart, timeZone),
+    timeZone,
+  );
+  if (Date.parse(start) <= Date.parse(nowIso)) return false;
+  const minutes = task.estimatedTimeInMinutes ?? 30;
+  task.scheduledStartTime = start;
+  task.scheduledEndTime = plusMinutesIso(start, minutes);
+  task.earliestStartTime = null;
+  task.deadline = null;
+  task.eventType = 'admin';
+  task.allowSplit = true;
+  task.isUnscheduled = undefined;
+  task.isRecurring = false;
+  task.recurrencePattern = null;
+  task.recurrenceWeekDays = [];
+  return true;
+}
+
+/** Deadline/earliest that is still ahead and is not a copy of the dropped clock. */
+function hasOpenPlacementWindow(
+  earliest: string | null | undefined,
+  deadline: string | null | undefined,
+  start: string,
+  durationMin: number,
+  nowMs: number,
+): boolean {
+  const startMs = Date.parse(start);
+  const deadlineMs = deadline ? Date.parse(deadline) : NaN;
+  const earliestMs = earliest ? Date.parse(earliest) : NaN;
+  const slotEnd = Number.isNaN(startMs) ? NaN : startMs + durationMin * 60_000;
+  const deadlineIsSlotEnd =
+    !Number.isNaN(deadlineMs) &&
+    !Number.isNaN(slotEnd) &&
+    Math.abs(deadlineMs - slotEnd) < 60_000;
+  const earliestIsStart =
+    !Number.isNaN(earliestMs) &&
+    !Number.isNaN(startMs) &&
+    Math.abs(earliestMs - startMs) < 60_000;
+  const deadlineOpen =
+    !Number.isNaN(deadlineMs) && deadlineMs > nowMs && !deadlineIsSlotEnd;
+  const earliestOpen =
+    !Number.isNaN(earliestMs) && earliestMs > nowMs && !earliestIsStart;
+  return deadlineOpen || earliestOpen;
+}
+
+function plusMinutesIso(iso: string, minutes: number): string {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return iso;
+  const offset = iso.match(/([+-]\d{2}:\d{2})$/)?.[1];
+  const shifted = new Date(ms + minutes * 60_000);
+  if (!offset) return shifted.toISOString();
+  const sign = offset.startsWith('-') ? -1 : 1;
+  const hours = Number(offset.slice(1, 3));
+  const mins = Number(offset.slice(4, 6));
+  const wall = new Date(shifted.getTime() + sign * (hours * 60 + mins) * 60_000);
+  return `${wall.toISOString().slice(0, 16)}:00${offset}`;
 }
 
 function readTaskKind(root: Record<string, unknown>, taskRaw: Record<string, unknown>): VoiceTaskKind | null {
@@ -172,9 +293,15 @@ function markUnscheduledInbox(task: VoiceParsedTask): void {
   task.allowSplit = true;
 }
 
+function isDayBoundary(iso: string, timeZone: string): boolean {
+  const hm = localHm(iso, timeZone);
+  return hm === '00:00' || hm === '23:59';
+}
+
 /**
  * Language-agnostic: if the model left only one side of a day envelope,
  * finish 00:00–23:59 on that civil day (using the IANA zone).
+ * A clock such as 18:00 is a bound, not a half day, so it stays as emitted.
  */
 function completePartialDayEnvelope(
   task: VoiceParsedTask,
@@ -187,6 +314,7 @@ function completePartialDayEnvelope(
   }
   const one = task.earliestStartTime || task.deadline;
   if (!one || (task.earliestStartTime && task.deadline)) return;
+  if (!isDayBoundary(one, zone)) return;
   const ymd = localYmd(one, zone);
   let earliest = startOfLocalDayIso(ymd, zone);
   if (nowIso && Date.parse(earliest) < Date.parse(nowIso)) {
@@ -333,8 +461,12 @@ export function normalizeVoiceParse(
     task.scheduledEndTime = null;
   }
 
+  const concreteFixed = task.eventType === 'fixed';
+  const spokenEarliest = task.earliestStartTime ?? null;
+  const spokenDeadline = task.deadline ?? null;
+  let droppedPastStart: string | null = null;
   if (ctx.nowIso && !isUnscheduled) {
-    rejectPastScheduleSlot(task, ctx.nowIso);
+    droppedPastStart = rejectPastScheduleSlot(task, ctx.nowIso);
   }
 
   if (
@@ -355,7 +487,64 @@ export function normalizeVoiceParse(
 
   completePartialDayEnvelope(task, ctx.timeZone, ctx.nowIso);
   if (ctx.nowIso && !isUnscheduled) {
-    rejectPastScheduleSlot(task, ctx.nowIso);
+    droppedPastStart =
+      rejectPastScheduleSlot(task, ctx.nowIso) || droppedPastStart;
+  }
+
+  let scheduleNotice: string | null = null;
+  if (
+    droppedPastStart &&
+    zone &&
+    ctx.nowIso &&
+    !task.isRecurring &&
+    !task.isUnscheduled
+  ) {
+    const nowMs = Date.parse(ctx.nowIso);
+    const windowOpen = hasOpenPlacementWindow(
+      spokenEarliest,
+      spokenDeadline,
+      droppedPastStart,
+      task.estimatedTimeInMinutes ?? 30,
+      nowMs,
+    );
+    if (
+      concreteFixed &&
+      keepRestOfSpokenDay(task, droppedPastStart, zone, ctx.nowIso)
+    ) {
+      scheduleNotice = t(lang, 'voice.pastClockKeptToday', {
+        time: localHm(droppedPastStart, zone),
+      });
+    } else if (!concreteFixed && !windowOpen) {
+      rollSoftClockToTomorrow(task, droppedPastStart, zone, ctx.nowIso);
+    }
+  }
+
+  if (
+    !droppedPastStart &&
+    spokenDeadline &&
+    zone &&
+    ctx.nowIso &&
+    !task.isRecurring &&
+    !task.isUnscheduled &&
+    !task.deadline &&
+    !task.scheduledStartTime
+  ) {
+    const nowMs = Date.parse(ctx.nowIso);
+    const deadlineMs = Date.parse(spokenDeadline);
+    const earliestMs = task.earliestStartTime
+      ? Date.parse(task.earliestStartTime)
+      : NaN;
+    const earliestStillOpen = !Number.isNaN(earliestMs) && earliestMs > nowMs;
+    if (
+      !earliestStillOpen &&
+      !Number.isNaN(deadlineMs) &&
+      deadlineMs < nowMs &&
+      keepRestOfSpokenDay(task, spokenDeadline, zone, ctx.nowIso)
+    ) {
+      scheduleNotice = t(lang, 'voice.pastClockKeptToday', {
+        time: localHm(spokenDeadline, zone),
+      });
+    }
   }
 
   let clarifyingQuestion = asNullableString(root.clarifyingQuestion);
@@ -408,6 +597,8 @@ export function normalizeVoiceParse(
     understanding,
     clarifyingQuestion:
       understanding === 'needs_clarification' ? clarifyingQuestion : null,
+    scheduleNotice:
+      understanding === 'needs_clarification' ? null : scheduleNotice,
     task: understanding === 'needs_clarification' && !task.name ? null : task,
   };
 }

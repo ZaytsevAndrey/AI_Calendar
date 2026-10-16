@@ -12,7 +12,7 @@ Speech meaning (clock, AM/PM, relative time, weekdays, recurring, titles, empty 
 
 - Clamp / validate structured fields the model already emitted (duration, phase id, weekdays arrays, ISO parseability)
 - Rezone wrong numeric offsets using the user’s IANA zone
-- Drop past `scheduledStart` / clamp past `earliest` to now
+- Drop a past one-off fixed `scheduledStart` and keep the rest of that civil day. A past flexible preferred with no open placement window moves to the next civil day at the same wall clock from the emitted ISO. A past preferred inside a still-open window is dropped; the window stays. A recurring series clock stays even if that hour today already passed.
 - Finish a half day-envelope (`00:00`–`23:59`) from an existing ISO civil day
 - Inbox when there is a name but no when
 - Require a non-empty `name` (fallback i18n clarify string is OK — not speech parsing)

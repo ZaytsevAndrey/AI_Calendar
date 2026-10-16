@@ -10,19 +10,36 @@ Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Produ
 
 ## Now (ordered)
 
-Do in order unless you explicitly skip ahead.
+Do in order unless you explicitly skip ahead. These items need no outside service and no open product decision.
+
+### 25. Voice — rotate test keys, cap each user
+
+The live API uses only `GROQ_API_KEY`. `GROQ_API_KEY` through `GROQ_API_KEY_6` rotate only in the create-eval script (`GROQ_ROTATE_KEYS`). Free-tier tokens per minute are 8000, so one voice turn can exhaust the minute budget. Friends are the only users for now. A subscription that replaces the cap is [end of queue](#end--external-do-not-start).
+
+- [ ] On the API, rotate those six test keys when Groq answers with a per-minute limit. One turn stays on one key.
+- [ ] While voice is free, enforce a per-user ceiling and show a clear limit in the voice sheet.
 
 ### 23. Voice agent — make it understand (split)
 
-Handoff: [voice-prompt-next.md](voice-prompt-next.md). Specialists are full in code; behavior is not frozen. Work **logging-first**: structured parse logs → harvest failures → golden fixtures → prompt/normalize fixes. One mini-item per chat.
+Handoff: [voice-prompt-next.md](voice-prompt-next.md). Specialists are full in code; behavior is not frozen. Work **logging-first** then **live Groq create-eval** → fix loops → more scenarios. One mini-item per chat.
 
-#### 23.3 Harvest + router goldens
+#### 23.4 Create-eval fix loop (live Groq)
 
-- [ ] Add goldens from real `voice.parse.result` failures: create vs update vs command misroutes.
+Harness + ~50 scenarios are in ([`npm run voice:eval:create`](../backend/package.json)). Next:
 
-Done when: known router misroutes from logs are fixtures in CI.
+- [ ] Run the eval against real Groq; read `backend/.tmp/voice-create-eval-report.json`.
+- [ ] Fix prompt / normalize for failing create clusters; re-run until the suite is acceptably green.
+- [ ] Promote stubborn fails into offline goldens when useful.
 
-#### 23.4+ Fix loops by cluster
+Done when: create-eval pass rate is high enough that create feels usable; known clusters fixed or documented.
+
+#### 23.5 Harvest + router goldens
+
+- [ ] Add goldens from real `voice.parse.result` / eval failures: create vs update vs command misroutes.
+
+Done when: known router misroutes from logs/eval are fixtures in CI.
+
+#### 23.6+ Fix loops by cluster
 
 Separate chats as failures appear: create edges (after-sleep, past clock, duration), update/reschedule, series scope, habits. Each chat = failing goldens → prompt or normalize fix → CI green. No new intents, no STT rewrite.
 
@@ -31,12 +48,76 @@ Separate chats as failures appear: create edges (after-sleep, past clock, durati
 - [ ] Resolve unused `voice.whenOrUnscheduled` i18n.
 - [ ] Archive [voice-prompt-next.md](voice-prompt-next.md) when the open queue there is empty.
 
+### 26. Event preview
+
+A click on a calendar event opens the editor. Open a preview first. Delete, edit, and the other actions start from that preview.
+
+- [ ] Preview for an app task and for a Google-only event.
+- [ ] Actions that today live on the editor (delete, edit, and the existing series-scope choices) move behind the preview.
+
+### 27. Task-type chip on the calendar card
+
+- [ ] The block shows its kind: fixed, flexible, recurring, habit, or external event.
+
+### 28. Which Google calendar, on the card
+
+- [ ] The card shows which already-connected Google calendar the event belongs to.
+- [ ] Non-Google calendars stay in [end of queue](#end--external-do-not-start).
+
+### 29. Type in the voice sheet
+
+- [ ] The voice sheet sends a typed message through the same turn path as speech.
+
+### 30. Delete account
+
+Sign-in is Google-only. Logout exists. There is no delete.
+
+- [ ] Delete the user and their tasks, habits, phases, settings, push subscriptions, and stored Google refresh token.
+- [ ] Remove Google events the app created, or ask before removing them.
+
+### 31. Database backup
+
+The copy script wipes production tables before it writes. There is no separate backup.
+
+- [ ] Scheduled copy of Postgres and a restore that has been run once.
+
+### 32. Mobile daily path
+
+Below 768px the shell is a bottom tab bar and the calendar opens on day. That pass is not finished.
+
+- [ ] On a phone, finish the daily path: see today, create or speak a task, mark it done, check in a habit.
+
 ### 24. Personal-computer build, then local TTS
 
-Handoff: [tts-local.md](tts-local.md). After §23, in this order:
+Handoff: [tts-local.md](tts-local.md). en/uk only. Other languages are [end of queue](#end--external-do-not-start).
 
 - [ ] Build/run variant for a personal computer (stays awake; not the Render free service).
 - [ ] On that build only: one Piper HTTP process, voice per request (`uk` Тетяна, `en` Lessac), behind `VoiceSpeech.speak()`.
+
+---
+
+## Later — decide before building
+
+Do not start these. The shape is still open.
+
+- **Habits.** Check-in, streak, and the calendar block stay until we decide what habits should become.
+- **Languages beyond en/uk.** UI and speech are en and uk. Pick the set before adding catalogs.
+- **Admin.** Owner-only. Contents are not chosen. Do not open an empty admin.
+
+---
+
+## End — external, do not start
+
+Third parties and publishing. Leave these until the Now list is done.
+
+- **Other calendars.** Providers besides Google.
+- **External event as flexible.** Imported events stay fixed anchors. A per-event flexible switch can wait.
+- **Payments.** Trial, subscription, and a payment provider. This is what replaces the free voice cap in §25.
+- **Privacy policy and Google consent.** A public policy URL, then move the consent screen out of testing so people other than listed test users can sign in.
+- **Custom domain.**
+- **Next.js landing and lead capture.**
+- **Speech for languages other than en/uk.**
+- **Invite a contact onto an event.** Not required for the first version.
 
 ---
 
@@ -51,6 +132,7 @@ Handoff: [tts-local.md](tts-local.md). After §23, in this order:
 
 ## Recommended next steps
 
-1. Next live item: roadmap **§23.3** — harvest + router goldens from real `voice.parse.result` lines ([voice-prompt-next.md](voice-prompt-next.md)).
-2. Then **§23.4+** fix loops; then **§24** Piper ([tts-local.md](tts-local.md)).
-3. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.
+1. Next live item: roadmap **§25** — rotate the six Groq test keys on the API and cap voice per user while it is free.
+2. Then **§23.4** — run `npm run voice:eval:create` and fix create prompt/normalize ([voice-prompt-next.md](voice-prompt-next.md)).
+3. Then the rest of **Now**, in order: §23.5+, §26 preview, §27 type chip, §28 Google calendar label, §29 typed voice, §30 delete account, §31 backup, §32 mobile daily path, §24 Piper ([tts-local.md](tts-local.md)).
+4. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

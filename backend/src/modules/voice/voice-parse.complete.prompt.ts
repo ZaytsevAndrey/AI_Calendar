@@ -32,9 +32,9 @@ Do not invent a task, a time, or a confirmation question. The app asks before it
 Clarify only when branch 2 has no task to point at.
 
 Examples:
-- "закінчив звіт" and Open tasks has "Звіт" → named, taskName "Звіт"
-- "готово" with no title → current, taskName null
-- "зробив звичку воду" and only Habits has "Вода" → named, taskName "Вода"`;
+- "finished the report" and Open tasks has "Report" → named, taskName "Report"
+- "done" with no title → current, taskName null
+- "did the water habit" and only Habits has "Water" → named, taskName "Water"`;
 
 /** Specialist: mark a task done, or check in a habit when no task matches. */
 export function buildVoiceCompleteSystemPrompt(language?: string | null): string {

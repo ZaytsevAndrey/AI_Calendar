@@ -15,6 +15,8 @@ const DEFAULT_LLM_MODEL = 'openai/gpt-oss-20b';
 const FALLBACK_LLM_MODEL = 'openai/gpt-oss-120b';
 /** Free-tier TPM is 8000. One voice prompt is ~3000, so a short wait usually fits. */
 const RATE_LIMIT_RETRIES = 2;
+/** Understanding waits on this call. A silent Groq must fail, not hang the turn. */
+const GROQ_CHAT_TIMEOUT_MS = 25_000;
 const RATE_LIMIT_WAIT_MIN_MS = 400;
 const RATE_LIMIT_WAIT_MAX_MS = 6000;
 
@@ -25,9 +27,20 @@ type GroqChatPayload = {
   failed_generation?: string;
 };
 
+const ROTATION_KEY_NAMES = [
+  'GROQ_API_KEY',
+  'GROQ_API_KEY_2',
+  'GROQ_API_KEY_3',
+  'GROQ_API_KEY_4',
+  'GROQ_API_KEY_5',
+  'GROQ_API_KEY_6',
+] as const;
+
 @Injectable()
 export class GroqClient {
   private readonly logger = new Logger(GroqClient.name);
+  /** Index of the key pinned for the current eval scenario. -1 until the first pin. */
+  private pinnedKeyIndex = -1;
 
   constructor(private readonly config: ConfigService) {}
 
@@ -39,6 +52,88 @@ export class GroqClient {
       );
     }
     return key;
+  }
+
+  /** Create-eval sets this so chat hops across Groq orgs. The API server leaves it unset. */
+  private rotating(): boolean {
+    const flag = this.config.get<string>('GROQ_ROTATE_KEYS')?.trim().toLowerCase();
+    return flag === '1' || flag === 'true';
+  }
+
+  /** Key env names retired after a tokens-per-day response. In-memory for this process. */
+  private readonly retiredKeyNames = new Set<string>();
+
+  private activeKeyNames(): string[] {
+    const skipFirst = this.config.get<string>('GROQ_SKIP_FIRST_KEY')?.trim() === '1';
+    const skipList = (this.config.get<string>('GROQ_SKIP_KEY_NAMES') || '')
+      .split(',')
+      .map((name) => name.trim())
+      .filter(Boolean);
+    const retired = new Set([...skipList, ...this.retiredKeyNames]);
+    const names = skipFirst ? ROTATION_KEY_NAMES.slice(1) : [...ROTATION_KEY_NAMES];
+    return names.filter(
+      (name) => !retired.has(name) && Boolean(this.config.get<string>(name)?.trim()),
+    );
+  }
+
+  private rotationKeys(): string[] {
+    if (!this.rotating()) return [];
+    return this.activeKeyNames()
+      .map((name) => this.config.get<string>(name)?.trim())
+      .filter((key): key is string => Boolean(key));
+  }
+
+  /**
+   * Drop the key pinned for the current scenario until this process ends.
+   * Used when that org is out of daily tokens.
+   */
+  retirePinnedKey(): { remaining: number; retiredName: string | null } {
+    const names = this.activeKeyNames();
+    if (names.length === 0) return { remaining: 0, retiredName: null };
+    const index = this.pinnedKeyIndex < 0 ? 0 : this.pinnedKeyIndex % names.length;
+    const retiredName = names[index] ?? null;
+    if (retiredName) this.retiredKeyNames.add(retiredName);
+    this.pinnedKeyIndex = -1;
+    return { remaining: this.activeKeyNames().length, retiredName };
+  }
+
+  pinnedKeyName(): string | null {
+    const names = this.activeKeyNames();
+    if (!this.rotating() || names.length === 0) return null;
+    const index = this.pinnedKeyIndex < 0 ? 0 : this.pinnedKeyIndex % names.length;
+    return names[index] ?? null;
+  }
+
+  retireNamedKey(name: string): { remaining: number } {
+    if (name) this.retiredKeyNames.add(name);
+    this.pinnedKeyIndex = -1;
+    return { remaining: this.activeKeyNames().length };
+  }
+
+  /**
+   * Pin the next org for every chat call until the next pin.
+   * One create scenario is router + specialist, so both stay on the same key.
+   */
+  pinNextKey(): { index: number; count: number } {
+    const keys = this.rotationKeys();
+    if (keys.length === 0) return { index: 0, count: 1 };
+    this.pinnedKeyIndex = (this.pinnedKeyIndex + 1) % keys.length;
+    return { index: this.pinnedKeyIndex, count: keys.length };
+  }
+
+  /** Same org as the last pin. Used when a short daily window should not rotate the key. */
+  currentPin(): { index: number; count: number } {
+    const keys = this.rotationKeys();
+    if (keys.length === 0) return { index: 0, count: 1 };
+    const index = this.pinnedKeyIndex < 0 ? 0 : this.pinnedKeyIndex % keys.length;
+    return { index, count: keys.length };
+  }
+
+  private chatKey(): string {
+    const keys = this.rotationKeys();
+    if (keys.length === 0) return this.apiKey();
+    const index = this.pinnedKeyIndex < 0 ? 0 : this.pinnedKeyIndex % keys.length;
+    return keys[index];
   }
 
   sttModel(): string {
@@ -73,11 +168,17 @@ export class GroqClient {
       form.append('prompt', hint.slice(0, 800));
     }
 
-    const response = await fetch(GROQ_AUDIO_URL, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${this.apiKey()}` },
-      body: form,
-    });
+    let response: Response;
+    try {
+      response = await fetch(GROQ_AUDIO_URL, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.apiKey()}` },
+        body: form,
+        signal: AbortSignal.timeout(GROQ_CHAT_TIMEOUT_MS),
+      });
+    } catch (err) {
+      throw this.llmUnavailable(fetchFailureMessage(err, 'STT'), fetchFailureStatus(err));
+    }
     const payload = (await response.json().catch(() => ({}))) as {
       text?: string;
       language?: string;
@@ -100,7 +201,7 @@ export class GroqClient {
     const localBase = this.localLlmBase();
     if (localBase) return this.completeLocalJson(localBase, systemPrompt, userPrompt);
 
-    const models = [this.llmModel(), FALLBACK_LLM_MODEL].filter(
+    const models = (this.rotating() ? [this.llmModel()] : [this.llmModel(), FALLBACK_LLM_MODEL]).filter(
       (model, index, list) => list.indexOf(model) === index,
     );
     let lastError = 'Groq LLM failed';
@@ -161,6 +262,9 @@ export class GroqClient {
     const model = this.config.get<string>('LLM_MODEL')?.trim() || 'calendar-voice';
     const strict = await this.ollamaChat(base, model, systemPrompt, userPrompt, true);
     if (strict.ok && looksLikeJson(strict.content)) return strict.content;
+    if (!strict.ok && isLlmTimeout(strict.error, strict.status)) {
+      throw this.llmUnavailable(strict.error, strict.status);
+    }
     const soft = await this.ollamaChat(base, model, systemPrompt, userPrompt, false);
     if (soft.ok) {
       this.logger.warn(`Local JSON mode failed on ${model}; recovered without format`);
@@ -198,7 +302,12 @@ export class GroqClient {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return { ok: false, error: `Local LLM failed: ${message}`, status: 503 };
+      const timedOut = isTimeoutError(err);
+      return {
+        ok: false,
+        error: timedOut ? 'Local LLM timed out' : `Local LLM failed: ${message}`,
+        status: timedOut ? 504 : 503,
+      };
     }
     const payload = (await response.json().catch(() => ({}))) as {
       error?: string;
@@ -222,7 +331,16 @@ export class GroqClient {
     if (isRateLimit(status, message)) {
       return new ServiceUnavailableException({
         code: 'VOICE_RATE_LIMIT',
+        daily: isDailyTokenLimit(message),
+        retryAfterMs: groqRetryAfterMs(message),
+        requestedTokens: groqRequestedTokens(message),
         message: 'Voice is busy. Try again in a few seconds.',
+      });
+    }
+    if (isLlmTimeout(message, status)) {
+      return new ServiceUnavailableException({
+        code: 'VOICE_LLM_TIMEOUT',
+        message: 'The voice model did not answer. Try again.',
       });
     }
     return new ServiceUnavailableException(message);
@@ -241,6 +359,16 @@ export class GroqClient {
       userPrompt,
       jsonObject,
     );
+    // A near-full daily window asks for minutes. A live turn must not sit that long;
+    // the eval loop waits the real interval and keeps the same key.
+    if (
+      !result.ok &&
+      result.status === 429 &&
+      isDailyTokenLimit(result.error) &&
+      (groqRetryAfterSeconds(result.error) ?? 0) * 1000 > RATE_LIMIT_WAIT_MAX_MS
+    ) {
+      return result;
+    }
     for (
       let attempt = 0;
       attempt < RATE_LIMIT_RETRIES && !result.ok && result.status === 429;
@@ -251,6 +379,16 @@ export class GroqClient {
         `Groq rate limit on ${model}; retrying in ${wait}ms`,
       );
       await this.sleep(wait);
+      result = await this.chatCompletion(
+        model,
+        systemPrompt,
+        userPrompt,
+        jsonObject,
+      );
+    }
+    if (!result.ok && /empty response/i.test(result.error)) {
+      this.logger.warn(`Empty LLM response on ${model}; retrying once`);
+      await this.sleep(400);
       result = await this.chatCompletion(
         model,
         systemPrompt,
@@ -292,14 +430,24 @@ export class GroqClient {
       body.response_format = { type: 'json_object' };
     }
 
-    const response = await fetch(GROQ_CHAT_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.apiKey()}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
+    let response: Response;
+    try {
+      response = await fetch(GROQ_CHAT_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.chatKey()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(GROQ_CHAT_TIMEOUT_MS),
+      });
+    } catch (err) {
+      return {
+        ok: false,
+        error: fetchFailureMessage(err, 'LLM'),
+        status: fetchFailureStatus(err),
+      };
+    }
     const payload = (await response.json().catch(() => ({}))) as GroqChatPayload;
     if (!response.ok) {
       const error = groqErrorMessage(payload, response.status, 'LLM');
@@ -384,6 +532,44 @@ function isFailedJsonGeneration(message: string): boolean {
   );
 }
 
+/** Groq writes "3.645s", "1m11.712s", or "19m9.984s". */
+export function groqRetryAfterSeconds(message: string): number | null {
+  const match = message.match(/try again in\s+(\S+)/i);
+  if (!match) return null;
+  const token = match[1].replace(/[,.]$/, '');
+  let total = 0;
+  let found = false;
+  const parts = /(\d+(?:\.\d+)?)(h|m|s)/gi;
+  let part: RegExpExecArray | null;
+  while ((part = parts.exec(token))) {
+    found = true;
+    const value = Number(part[1]);
+    if (!Number.isFinite(value)) return null;
+    const unit = part[2].toLowerCase();
+    if (unit === 'h') total += value * 3600;
+    else if (unit === 'm') total += value * 60;
+    else total += value;
+  }
+  return found ? total : null;
+}
+
+export function groqRequestedTokens(message: string): number | null {
+  const match = message.match(/Requested\s+(\d+)/i);
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isFinite(value) ? value : null;
+}
+
+export function groqRetryAfterMs(message: string): number | null {
+  const seconds = groqRetryAfterSeconds(message);
+  if (seconds == null) return null;
+  return Math.ceil(seconds * 1000);
+}
+
+function isDailyTokenLimit(message: string): boolean {
+  return /tokens per day|\bTPD\b/i.test(message);
+}
+
 /** Free-tier "try again in 3.645s" or a Retry-After header, capped so a turn stays short. */
 export function rateLimitWaitMs(
   message: string,
@@ -394,18 +580,30 @@ export function rateLimitWaitMs(
     const header = Number(retryAfterHeader);
     if (Number.isFinite(header) && header >= 0) seconds = header;
   }
-  if (seconds == null) {
-    const match = message.match(/try again in\s+([\d.]+)\s*s/i);
-    if (match) {
-      const parsed = Number(match[1]);
-      if (Number.isFinite(parsed) && parsed >= 0) seconds = parsed;
-    }
-  }
+  if (seconds == null) seconds = groqRetryAfterSeconds(message);
   if (seconds == null) return 4000;
   return Math.min(
     RATE_LIMIT_WAIT_MAX_MS,
     Math.max(RATE_LIMIT_WAIT_MIN_MS, Math.ceil(seconds * 1000) + 250),
   );
+}
+
+function isTimeoutError(err: unknown): boolean {
+  return err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
+}
+
+function fetchFailureStatus(err: unknown): number {
+  return isTimeoutError(err) ? 504 : 503;
+}
+
+function fetchFailureMessage(err: unknown, kind: string): string {
+  if (isTimeoutError(err)) return `Groq ${kind} timed out`;
+  const message = err instanceof Error ? err.message : String(err);
+  return `Groq ${kind} failed: ${message}`;
+}
+
+function isLlmTimeout(message: string, status: number): boolean {
+  return status === 504 || /timed out/i.test(message);
 }
 
 function isRateLimit(status: number, message: string): boolean {

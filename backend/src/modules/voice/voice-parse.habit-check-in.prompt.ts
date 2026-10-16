@@ -20,16 +20,16 @@ const HABIT_CHECK_IN_SCHEMA = `{
 const HABIT_CHECK_IN_RULES = `Check-in marks the habit done for the civil date in the user message (settings timezone today). There is no date field. Do not output one.
 
 First match wins.
-1. They named another day ("вчора", "tomorrow", "за понеділок") → needs_clarification, one question that check-in is today only. Do not pretend to check in that day.
+1. They named another day ("yesterday", "tomorrow", "for Monday") → needs_clarification, one question that check-in is today only. Do not pretend to check in that day.
 2. They named an Open task and not a habit → needs_clarification, one question which habit. Do not complete the task here.
 3. Otherwise follow Target. habit stays null.
 
 Do not invent a habit, a streak, or a confirmation question.
 
 Examples:
-- "відміть воду" → taskName "Вода" from Habits
-- "звичку зробив" and Habits has one line → taskName null
-- "відміть воду за вчора" → needs_clarification`;
+- "check in water" → taskName "Water" from Habits
+- "did the habit" and Habits has one line → taskName null
+- "check in water for yesterday" → needs_clarification`;
 
 /** Specialist: check a habit in for the civil today. The resolver ignores any spoken date. */
 export function buildVoiceHabitCheckInSystemPrompt(language?: string | null): string {

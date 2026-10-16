@@ -242,7 +242,7 @@ export class VoiceAgentOrchestrator {
         break;
       }
     } catch (err) {
-      if (isVoiceRateLimit(err)) throw err;
+      if (isVoiceRateLimit(err) || isVoiceLlmTimeout(err)) throw err;
       this.logger.warn(
         `Orchestrator LLM failed; falling back to parse-task: ${
           err instanceof Error ? err.message : String(err)
@@ -541,14 +541,20 @@ export class VoiceAgentOrchestrator {
   }
 }
 
-function isVoiceRateLimit(err: unknown): boolean {
-  if (!(err instanceof ServiceUnavailableException)) return false;
+function voiceErrorCode(err: unknown): string | undefined {
+  if (!(err instanceof ServiceUnavailableException)) return undefined;
   const response = err.getResponse();
-  return (
-    typeof response === 'object' &&
-    response !== null &&
-    (response as { code?: string }).code === 'VOICE_RATE_LIMIT'
-  );
+  if (typeof response !== 'object' || response === null) return undefined;
+  const code = (response as { code?: string }).code;
+  return typeof code === 'string' ? code : undefined;
+}
+
+function isVoiceRateLimit(err: unknown): boolean {
+  return voiceErrorCode(err) === 'VOICE_RATE_LIMIT';
+}
+
+function isVoiceLlmTimeout(err: unknown): boolean {
+  return voiceErrorCode(err) === 'VOICE_LLM_TIMEOUT';
 }
 
 function parseDecision(raw: string): LlmDecision {

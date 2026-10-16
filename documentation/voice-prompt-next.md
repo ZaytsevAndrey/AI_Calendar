@@ -1,6 +1,7 @@
 # Voice prompts — next work (handoff)
 
 **Status:** working queue for roadmap **§23** (split; logging-first).  
+**Fix log:** [voice-fix-flow.md](voice-fix-flow.md).  
 **Use:** open a **new chat per mini-item** below. Product contract: [spec-voice-agent.md](spec-voice-agent.md). Architecture plan (Cursor): `voice_prompt_architecture_3d81fe7a`.
 
 ## Already shipped (do not redo)
@@ -13,6 +14,7 @@
 - Debug raw LLM: `[llm:parse.router]`, `[llm:parse.create]`, … via `voice-llm-log.util.ts` (clipped).
 - Structured harvest log: `voice.parse.result` JSON after normalize/resolve ([voice-parse-result-log.util.ts](../backend/src/modules/voice/voice-parse-result-log.util.ts)).
 - Create kind/when baseline goldens (no live LLM): [voice-create-kind-when.goldens.ts](../backend/src/modules/voice/voice-create-kind-when.goldens.ts).
+- Live Groq create-eval (~50 scenarios): [voice-create-eval.scenarios.ts](../backend/src/modules/voice/voice-create-eval.scenarios.ts) + `npm run voice:eval:create`.
 
 ## Architecture (locked)
 
@@ -46,9 +48,26 @@ Router: [voice-parse.router.prompt.ts](../backend/src/modules/voice/voice-parse.
 
 ## Open queue (one chat each)
 
-1. **§23.3 Harvest + router goldens** — misroutes from real `voice.parse.result` lines (needs a few real utterances).
-2. **§23.4+ Fix loops** — failing goldens → prompt or normalize fix (create edges, update/reschedule, series, habits).
-3. **§23.n Cleanup** — unused `voice.whenOrUnscheduled` i18n; archive this file when empty.
+1. **§23.4 Create-eval fix loop** — run live Groq eval; fix create prompt/normalize; re-run.
+2. **§23.5 Harvest + router goldens** — misroutes from eval/logs.
+3. **§23.6+ Fix loops** — other clusters (edges, update/reschedule, series, habits).
+4. **§23.n Cleanup** — unused `voice.whenOrUnscheduled` i18n; archive this file when empty.
+
+### Live Groq create-eval
+
+Needs `GROQ_API_KEY` in `backend/.env`. From repo root or `backend/`:
+
+```bash
+npm run voice:eval:create
+```
+
+- Runs ~50 create transcripts through real `parseTask` (Groq router + create specialist).
+- Clears `LLM_BASE_URL` for the process so a local Ollama setting does not shadow Groq.
+- Sequential with a short pause; retries on `VOICE_RATE_LIMIT`.
+- Report: `backend/.tmp/voice-create-eval-report.json` (gitignored). Exit code 1 if any case fails.
+- Not part of default `npm test` / CI.
+
+After a fail: fix prompt or normalize, re-run. Optionally freeze a case into [voice-create-kind-when.goldens.ts](../backend/src/modules/voice/voice-create-kind-when.goldens.ts) (offline) or add another row to [voice-create-eval.scenarios.ts](../backend/src/modules/voice/voice-create-eval.scenarios.ts).
 
 ### Adding a create kind/when golden
 

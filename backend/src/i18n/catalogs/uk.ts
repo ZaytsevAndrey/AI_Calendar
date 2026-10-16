@@ -39,6 +39,8 @@ export const uk: Record<MessageKey, string> = {
   'voice.uncheckHabit': 'Зняти сьогоднішню відмітку «{{name}}»?',
   'voice.habitName': 'Як назвати цю звичку?',
   'voice.whatToChangeHabit': 'Що змінити в цій звичці?',
+  'voice.pastClockKeptToday':
+    '{{time}} вже минув. Лишаю на сьогодні.',
   'voice.createdTask': 'Створив задачу «{{name}}».',
   'voice.createdTaskFor': 'Створив задачу «{{name}}» на {{when}}.',
   'voice.whenToday': 'сьогодні',
@@ -94,4 +96,5 @@ export const uk: Record<MessageKey, string> = {
   'errors.INTERNAL': 'Внутрішня помилка сервера.',
   'errors.GENERIC': 'Щось пішло не так. Спробуйте ще раз.',
   'errors.VOICE_RATE_LIMIT': 'Голос зараз зайнятий. Спробуйте за кілька секунд.',
+  'errors.VOICE_LLM_TIMEOUT': 'Модель голосу не відповіла. Спробуйте ще раз.',
 };

@@ -25,10 +25,10 @@ Do not ask "are you sure". The app asks before it deletes.
 Do not invent a task or a replacement.
 
 Examples:
-- "видали звіт" and the line is not recurring → named, taskName from Open tasks, omit seriesScope
-- "видали це" → current, taskName null
-- "видали gym" and the line says recurring, with no day or series → omit seriesScope and ask
-- "видали всю серію gym" → seriesScope "all"`;
+- "delete the report" and the line is not recurring → named, taskName from Open tasks, omit seriesScope
+- "delete this" → current, taskName null
+- "delete gym" and the line says recurring, with no day or series → omit seriesScope and ask
+- "delete the whole gym series" → seriesScope "all"`;
 
 /** Specialist: identify a task to delete. Confirm stays on the orchestrator. */
 export function buildVoiceDeleteSystemPrompt(language?: string | null): string {

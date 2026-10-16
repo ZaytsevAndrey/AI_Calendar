@@ -54,7 +54,7 @@ describe('voice parse prompt split', () => {
         expect(pair.system).toMatch(/command\.start/);
         expect(pair.system).toMatch(/00:00/);
         expect(pair.system).toMatch(/23:59/);
-        expect(pair.system).toMatch(/зроби зараз/);
+        expect(pair.system).toMatch(/do now/);
         expect(pair.system).toMatch(/First match wins/);
         expect(pair.system).toMatch(/task null/i);
         expect(pair.user).toContain('schedule tomorrow:');

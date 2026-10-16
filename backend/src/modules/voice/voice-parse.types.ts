@@ -44,6 +44,8 @@ import type { VoiceCommand } from './voice-command.types';
 export type VoiceParseResult = {
   understanding: VoiceUnderstanding;
   clarifyingQuestion: string | null;
+  /** Spoken when a one-off clock was already past and the task stays on that day. */
+  scheduleNotice?: string | null;
   task: VoiceParsedTask | null;
   /** Set when the utterance is complete, skip, or reschedule. Null for create. */
   command?: VoiceCommand | null;

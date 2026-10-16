@@ -9,6 +9,7 @@ export type CreateEvalActual = {
   kind: string | null;
   taskName: string | null;
   clarifyingQuestion: string | null;
+  scheduleNotice: string | null;
   isUnscheduled: boolean | null;
   recurrencePattern: string | null;
   recurrenceWeekDays: number[] | null;
@@ -52,6 +53,7 @@ export function harvestCreateEvalActual(
     kind: log.kind,
     taskName: log.taskName,
     clarifyingQuestion: result.clarifyingQuestion,
+    scheduleNotice: result.scheduleNotice ?? null,
     isUnscheduled: log.isUnscheduled,
     recurrencePattern: log.recurrencePattern,
     recurrenceWeekDays: log.recurrenceWeekDays,
@@ -102,6 +104,14 @@ export function matchCreateEvalScenario(
   assertName(exp, actual, failures);
   assertRecurring(exp, actual, failures);
   assertWhen(exp, actual, failures);
+  if (exp.scheduleNoticeIncludes) {
+    const notice = actual.scheduleNotice || '';
+    if (!notice.includes(exp.scheduleNoticeIncludes)) {
+      failures.push(
+        `scheduleNotice: expected to include "${exp.scheduleNoticeIncludes}", got "${notice || 'null'}"`,
+      );
+    }
+  }
 
   return { ok: failures.length === 0, failures, actual };
 }

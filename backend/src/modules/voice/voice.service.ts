@@ -220,7 +220,8 @@ export class VoiceService {
     const sniffed = sniffCommandIntent(speech) ?? sniffCommandIntent(transcript);
     const routerIntent = readVoiceIntent(routerParsed);
     let intent = routerIntent;
-    if (sniffed && (intent === 'create' || intent === 'needs_clarification')) {
+    // A create the router already chose stays create. Sniff only fills a blank.
+    if (sniffed && intent === 'needs_clarification') {
       intent = sniffed;
     }
     const speechLanguage = readRouterLanguage(routerParsed) ||

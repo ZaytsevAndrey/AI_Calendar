@@ -1,0 +1,41 @@
+---
+description: Voice create-eval loop — run until a scenario fails, fix it, retest, skip a Groq key that is out of daily tokens until the next day
+globs: backend/src/scripts/eval-voice-create.ts,backend/src/modules/voice/**,backend/.tmp/voice-eval-loop.json
+alwaysApply: false
+---
+
+# Voice create-eval loop
+
+Follow this while testing voice create parse in this project. State lives in `backend/.tmp/voice-eval-loop.json`.
+
+## Cadence
+
+- Groq eval only. Gap between scenario starts is 35 seconds.
+- Rotate the live keys. One scenario pins router + specialist to the same key. Eval rotation stays on `gpt-oss-20b` even when only one key is left. Do not fall back to `gpt-oss-120b`.
+- A tokens-per-minute reply hops to the next live key and retries the same scenario. That hop is not a bug.
+- A tokens-per-day reply hops to the next key once in the same pass. Do not wait and probe that key again.
+- When one full pass gets a daily-limit reply from every live key, stop for the day. Do not sleep and retry. Report how many scenarios passed, how many bugs were found and fixed, and the regression risks below. Do not start another Groq run that day.
+
+## Cycle
+
+1. Run the corpus from `nextId` with `--stop-on-fail`.
+2. On the first real mismatch, stop. Fix the prompt (or the normalizer only when it clamps an ISO the model already emitted). Do not add transcript word lists.
+3. Re-run that scenario alone. If it passes, append it to `passed`, record the bug under `bugs`, increment `fixes`, set `nextId` to the following scenario, and continue.
+4. If the retest fails, fix again. Each successful retest counts as one fix.
+5. Do not run a guard while the corpus still has scenarios after `nextId`. First drive every scenario green. After the corpus has been fully passed once, a guard is every id in `bugs`, plus `u001,u002,u004,u033,u037,u043,u076,u094,u163`. A guard failure is a regression. Fix and retest it before continuing. It counts toward the next 20.
+
+## Regression risks to name when tokens run out
+
+- Bare hours 1–7 without a morning or night word are afternoon.
+- A past concrete clock stays on that civil day until 23:59 with a notice. A past soft clock with no window moves to tomorrow at the same time. A past preferred inside an open window is dropped.
+- "After 18" stays an earliest bound. A half day-envelope is completed only from 00:00 or 23:59.
+- Afternoon ordinals ("друга дня") are 14:00, not a whole day and not 02:00.
+- "Every morning" / "щоранку" is a daily series at that clock, not a one-off today.
+- A clock on a weekly series ("щосереди о 19") stays the preferred start. It is not dropped when that weekday is not today.
+- A named event that fills a clock span (a conference from 9 to 18) stays fixed for those hours. It is not a placement window.
+- An errand inside a from–to span ("edit a video from 16 to 20") stays a window. It is not a meeting that lasts the whole span.
+- A trailing Z on a model ISO is an absolute instant and is converted into local time. A numeric offset keeps the wall-clock digits.
+- "In N hours" is added to the local clock. Four hours after 13:00 is 17:00, not 14:00.
+- A named weekday with no "last" is the next one. On a Tuesday, "Monday" is the coming Monday, not yesterday.
+- A hedge ("десь", around) on a clock is a flexible preferred time, not a fixed meeting.
+- Sniff does not override a router `create`. Task-content verbs ("оновити резюме", "видалити фото") are creates unless an open task is named.

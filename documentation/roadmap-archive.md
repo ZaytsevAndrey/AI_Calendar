@@ -1,6 +1,6 @@
 # Roadmap archive
 
-Shipped work, moved out of [roadmap](roadmap.md). The live queue is **§23.3+** voice understanding (harvest / fix loops) → **§24** personal PC / Piper. Product behavior: [overview](overview.md).
+Shipped work, moved out of [roadmap](roadmap.md). The live queue is **§23.4+** voice understanding (live create-eval fix loop) → **§24** personal PC / Piper. Product behavior: [overview](overview.md).
 
 On 11 Oct 2026 the checked live-queue items left [roadmap](roadmap.md): scheduling redesign §1–§8, habits §9–§10, problematic slot pick §11, incremental placement §12, Unscheduled §13, calendar/edit delete §14, Voice Agent §15–§19, and Later polish (UI language, voice habit check-in, problematic sheet). Former open §20–§21 were folded into the Oct rebuild (§22–§24). Behavior notes are the bullets below.
 
@@ -17,6 +17,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 - [x] **First-run wake/sleep, then phases.** After Google sign-in, a user with no phases stays on `/setup/phases` with no app nav. Wake and sleep are saved first. Then they pick a day shape or skip to Sleep + Focus. `googleCalendarLinked` is set by that same sign-in, not by a second connect step.
 
 - [x] **Lifestyle presets tile the awake day.** Working adds Work between Meetings and Life admin. Student Study fills from the end of Classes until Free time. Open was already contiguous. Blocks under 30 minutes are still dropped.
+
+- [x] **§23.3 Live Groq create-eval harness (~50).** Opt-in `npm run voice:eval:create` boots Nest, calls real `parseTask` via Groq (clears `LLM_BASE_URL` for the run), matches kind/when tolerantly, writes `backend/.tmp/voice-create-eval-report.json`. Corpus: `voice-create-eval.scenarios.ts`. Not in default CI. Next: run + fix loop (§23.4).
 
 - [x] **§23.2 Golden harness + create kind/when baseline.** Table fixtures without live LLM for all six `kind-when` branches (+ event-span fixed example): frozen specialist JSON → `normalizeVoiceParse` + harvest `kind`. Prompt stays aligned with `CREATE_KIND_WHEN_MODULE` examples. Files: `voice-create-kind-when.goldens.ts` / `.spec.ts`.
 

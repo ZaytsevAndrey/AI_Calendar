@@ -63,14 +63,16 @@ export function intentsFromParseResult(
   }
 
   const lang = resolveLang(opts?.language);
-  return {
-    intents: [
-      {
-        type: 'create',
-        summary: summarizeCreate(parsed.task, lang, opts),
-        task: parsed.task as unknown as Record<string, unknown>,
-      },
-    ],
+    const summary = summarizeCreate(parsed.task, lang, opts);
+    const notice = parsed.scheduleNotice?.trim();
+    return {
+      intents: [
+        {
+          type: 'create',
+          summary: notice ? `${summary} ${notice}` : summary,
+          task: parsed.task as unknown as Record<string, unknown>,
+        },
+      ],
     needsConfirm: false,
     clarifyQuestion: null,
     refuseMessage: null,

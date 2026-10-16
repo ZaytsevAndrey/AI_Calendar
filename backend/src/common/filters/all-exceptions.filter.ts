@@ -19,6 +19,7 @@ const API_ERROR_KEYS: Record<string, MessageKey> = {
   PASSWORDS_DO_NOT_MATCH: 'errors.PASSWORDS_DO_NOT_MATCH',
   INVALID_RESET_TOKEN: 'errors.INVALID_RESET_TOKEN',
   VOICE_RATE_LIMIT: 'errors.VOICE_RATE_LIMIT',
+  VOICE_LLM_TIMEOUT: 'errors.VOICE_LLM_TIMEOUT',
 };
 
 function statusForApiError(code: string): number {

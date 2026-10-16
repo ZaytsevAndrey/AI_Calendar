@@ -357,6 +357,93 @@ describe('normalizeVoiceParse', () => {
     expect(result.task?.eventType).toBe('admin');
     expect(result.task?.earliestStartTime).toBe(nowIso);
     expect(result.task?.deadline).toBe('2026-09-07T23:59:00+03:00');
+    expect(result.scheduleNotice).toContain('14:00');
+  });
+
+  it('keeps the rest of today when the model emitted only a past one-off clock', () => {
+    const nowIso = '2026-10-13T10:00:00.000Z';
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'здати аналізи',
+          kind: 'fixed',
+          eventType: 'fixed',
+          scheduledStartTime: '2026-10-13T11:00:00+03:00',
+          scheduledEndTime: '2026-10-13T11:30:00+03:00',
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'сьогодні о 11 ранку здати аналізи',
+        timeZone: 'Europe/Kyiv',
+        nowIso,
+        language: 'uk',
+      },
+    );
+    expect(result.understanding).toBe('complete');
+    expect(result.task?.eventType).toBe('admin');
+    expect(result.task?.isUnscheduled).toBeFalsy();
+    expect(result.task?.scheduledStartTime).toBeNull();
+    expect(result.task?.earliestStartTime).toBe(nowIso);
+    expect(result.task?.deadline).toBe('2026-10-13T23:59:00+03:00');
+    expect(result.scheduleNotice).toBe('11:00 вже минув. Лишаю на сьогодні.');
+  });
+
+  it('keeps the rest of today when a deadline-only bound is already past', () => {
+    const nowIso = '2026-10-13T10:00:00.000Z';
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'відправити правки',
+          kind: 'flexible',
+          deadline: '2026-10-13T12:00:00+03:00',
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'сьогодні до 12 відправити правки',
+        timeZone: 'Europe/Kyiv',
+        nowIso,
+        language: 'uk',
+      },
+    );
+    expect(result.understanding).toBe('complete');
+    expect(result.task?.eventType).toBe('admin');
+    expect(result.task?.isUnscheduled).toBeFalsy();
+    expect(result.task?.earliestStartTime).toBe(nowIso);
+    expect(result.task?.deadline).toBe('2026-10-13T23:59:00+03:00');
+    expect(result.scheduleNotice).toBe('12:00 вже минув. Лишаю на сьогодні.');
+  });
+
+  it('keeps a recurring series clock even when that hour today is already past', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'зарядка',
+          kind: 'recurring',
+          isRecurring: true,
+          recurrencePattern: 'DAILY',
+          scheduledStartTime: '2026-10-13T07:00:00+03:00',
+          scheduledEndTime: '2026-10-13T07:30:00+03:00',
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'щоранку зарядка о 7',
+        timeZone: 'Europe/Kyiv',
+        nowIso: '2026-10-13T10:00:00.000Z',
+        language: 'uk',
+      },
+    );
+    expect(result.task?.isRecurring).toBe(true);
+    expect(result.task?.scheduledStartTime).toBe('2026-10-13T07:00:00+03:00');
+    expect(result.task?.scheduledEndTime).toBe('2026-10-13T07:30:00+03:00');
   });
 
   it('keeps WEEKLY weekdays from the model (no transcript rewrite)', () => {
@@ -455,7 +542,7 @@ describe('normalizeVoiceParse', () => {
     expect(result.clarifyingQuestion).toBeNull();
   });
 
-  it('clears a past soft preferred from the model (LLM must place tomorrow)', () => {
+  it('moves a past soft preferred to tomorrow at the same clock', () => {
     const nowIso = '2026-10-13T10:00:00.000Z'; // 13:00 Kyiv — noon already past
     const result = normalizeVoiceParse(
       {
@@ -479,10 +566,41 @@ describe('normalizeVoiceParse', () => {
       },
     );
     expect(result.understanding).toBe('complete');
+    expect(result.task?.scheduledStartTime).toBe('2026-10-14T12:00:00+03:00');
+    expect(result.task?.scheduledEndTime).toBe('2026-10-14T12:30:00+03:00');
+    expect(result.task?.earliestStartTime).toBeNull();
+    expect(result.task?.deadline).toBeNull();
+    expect(result.scheduleNotice).toBeNull();
+  });
+
+  it('drops a past preferred inside a window that is still open', () => {
+    const nowIso = '2026-10-13T10:00:00.000Z';
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'написати статтю',
+          kind: 'flexible',
+          estimatedTimeInMinutes: 30,
+          earliestStartTime: '2026-10-13T10:00:00+03:00',
+          deadline: '2026-10-13T14:00:00+03:00',
+          scheduledStartTime: '2026-10-13T12:00:00+03:00',
+          scheduledEndTime: '2026-10-13T12:30:00+03:00',
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'між 10 і 14 написати статтю десь о дванадцятій',
+        timeZone: 'Europe/Kyiv',
+        nowIso,
+        language: 'uk',
+      },
+    );
     expect(result.task?.scheduledStartTime).toBeNull();
-    // Past earliest is clamped to now; day envelope completed structurally.
     expect(result.task?.earliestStartTime).toBe(nowIso);
-    expect(result.task?.deadline).toBe('2026-10-13T23:59:00+03:00');
+    expect(result.task?.deadline).toBe('2026-10-13T14:00:00+03:00');
+    expect(result.scheduleNotice).toBeNull();
   });
 
   it('passes through a preferred clock the model set inside a window', () => {
@@ -592,6 +710,31 @@ describe('normalizeVoiceParse', () => {
     expect(result.understanding).toBe('complete');
     expect(result.task?.earliestStartTime).toBe('2026-10-17T00:00:00+03:00');
     expect(result.task?.deadline).toBe('2026-10-17T23:59:00+03:00');
+  });
+
+  it('keeps an after-hour earliest instead of expanding it to the whole day', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'заїхати в спортзал',
+          kind: 'flexible',
+          earliestStartTime: '2026-10-13T18:00:00+03:00',
+          deadline: null,
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'після 18 заїхати в спортзал',
+        timeZone: 'Europe/Kyiv',
+        nowIso: '2026-10-13T10:00:00.000Z',
+        language: 'uk',
+      },
+    );
+    expect(result.task?.earliestStartTime).toBe('2026-10-13T18:00:00+03:00');
+    expect(result.task?.deadline).toBeNull();
+    expect(result.task?.scheduledStartTime).toBeNull();
   });
 
   it('asks for a name when the model left it empty', () => {
@@ -732,6 +875,29 @@ describe('normalizeVoiceParse', () => {
     expect(relative.task?.eventType).toBe('fixed');
     expect(relative.task?.scheduledStartTime).toContain('T15:00:00+03:00');
 
+    const zulu = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'коротка перерва',
+          kind: 'fixed',
+          scheduledStartTime: '2026-10-13T12:00:00.000Z',
+          scheduledEndTime: '2026-10-13T12:30:00.000Z',
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: false,
+        transcript: 'через дві години коротка перерва',
+        timeZone: 'Europe/Kyiv',
+        nowIso: '2026-10-13T10:00:00.000Z',
+        language: 'uk',
+      },
+    );
+    expect(zulu.task?.eventType).toBe('fixed');
+    expect(zulu.task?.scheduledStartTime).toContain('T15:00:00+03:00');
+    expect(zulu.task?.scheduledEndTime).toContain('T15:30:00+03:00');
+
     const day = normalizeVoiceParse(
       {
         understanding: 'complete',
@@ -863,7 +1029,7 @@ describe('buildLocalCalendarContext', () => {
     expect(text).toContain('schedule today: 2026-09-07');
     expect(text).toContain('schedule tomorrow: 2026-09-08');
     expect(text).toContain('schedule +3 days: 2026-09-10');
-    expect(text).toContain('must be >= now ISO');
+    expect(text).toContain('even when that instant is already before now ISO');
     expect(text).toContain('in N hours');
     expect(text).toContain('After sleep');
   });

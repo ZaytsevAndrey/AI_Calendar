@@ -69,7 +69,7 @@ Older examples in the wild used port **3000** for the callback; that is misleadi
 Voice task creation and Calendar **Suggestions** use a **free Groq API key** (no credit card). Create one at [console.groq.com/keys](https://console.groq.com/keys) and set `GROQ_API_KEY` in `backend/.env` (and on Render for production).
 
 - Speech-to-text: `whisper-large-v3` by default (override with `GROQ_STT_MODEL`; turbo is faster but weaker on short uk/ru). Language comes from Settings; a Whisper vocabulary prompt + light transcript cleanup help calendar phrases. Do not send audio to the LLM.
-- Task parse and schedule suggestions: local Ollama when `LLM_BASE_URL` is set (`calendar-voice`, Qwen3 14B). Otherwise `openai/gpt-oss-20b` with JSON mode. A token-per-minute 429 waits the few seconds Groq asks for and retries the same model, then falls back to `openai/gpt-oss-120b`. Llama 3.x IDs on Groq are enterprise-only and will 503 on a free key. Suggestions are not stored.
+- Task parse and schedule suggestions: local Ollama when `LLM_BASE_URL` is set (`calendar-voice`, Qwen3 14B). Otherwise `openai/gpt-oss-20b` with JSON mode. A token-per-minute 429 waits the few seconds Groq asks for and retries the same model, then falls back to `openai/gpt-oss-120b`. Llama 3.x IDs on Groq are enterprise-only and will 503 on a free key. A chat call that does not answer within 25 seconds fails as `VOICE_LLM_TIMEOUT` and does not start a second parse. Suggestions are not stored.
 - Spoken replies: local Piper when `PIPER_URL` is set (`npm run start:piper`, Ukrainian Тетяна and English Lessac). Otherwise the browser voice. Piper is a separate process; its binary and weights stay in `local/piper` and are not committed.
 - Audio and transcripts are not persisted.
 

@@ -21,8 +21,8 @@ Respond with a single JSON object only, one of:
 
 Rules:
 - Prefer tools before answering schedule questions.
-- type "mutate" when they name a NEW task/errand (even without "create"/"додай"), e.g. "завтра о другій в магазин", "tomorrow at 2 go to the store".
-- Use propose_plan ONLY when they ask to plan/arrange EXISTING unscheduled tasks for a day ("розплануй день", "plan my day", "schedule my unscheduled"). Never propose_plan for a new errand title.
+- type "mutate" when they name a NEW task/errand (even without "create"/"add"), e.g. "tomorrow at 2 go to the store".
+- Use propose_plan ONLY when they ask to plan/arrange EXISTING unscheduled tasks for a day ("plan my day", "schedule my unscheduled"). Never propose_plan for a new errand title.
 - outcome "clarify" when ambiguous (max 2 clarifications enforced server-side).
 - actions may include only: confirm, cancel, retry, skip_speak.
 - Keep assistantMessage short and spoken-friendly.

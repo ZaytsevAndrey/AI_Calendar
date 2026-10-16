@@ -26,9 +26,9 @@ First match wins.
 Do not invent a habit. Do not ask to confirm.
 
 Examples:
-- "зніми відмітку з води" → taskName "Вода" from Habits
-- "зніми відмітку" and Habits has one line → taskName null
-- "зніми вчорашню воду" → needs_clarification`;
+- "uncheck water" → taskName "Water" from Habits
+- "clear the check-in" and Habits has one line → taskName null
+- "uncheck yesterday's water" → needs_clarification`;
 
 /** Specialist: clear today's habit check-in. The resolver always uses the civil date. */
 export function buildVoiceHabitUncheckSystemPrompt(language?: string | null): string {

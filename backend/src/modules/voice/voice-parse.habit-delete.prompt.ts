@@ -24,9 +24,9 @@ If they mean a task from Open tasks, ask which habit. Do not delete the task her
 Do not invent a habit.
 
 Examples:
-- "видали звичку воду" → taskName "Вода" from Habits
-- "видали звичку" and Habits has one line → taskName null
-- "видали звичку" and Habits has several → needs_clarification`;
+- "delete the water habit" → taskName "Water" from Habits
+- "delete the habit" and Habits has one line → taskName null
+- "delete the habit" and Habits has several → needs_clarification`;
 
 /** Specialist: identify a habit to delete. Confirm stays on the orchestrator. */
 export function buildVoiceHabitDeleteSystemPrompt(language?: string | null): string {

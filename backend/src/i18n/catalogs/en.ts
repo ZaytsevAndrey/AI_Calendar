@@ -36,6 +36,8 @@ export const en = {
   'voice.uncheckHabit': 'Clear today\'s check-in for "{{name}}"?',
   'voice.habitName': 'What should I call this habit?',
   'voice.whatToChangeHabit': 'What should I change on that habit?',
+  'voice.pastClockKeptToday':
+    '{{time}} already passed. Left it for the rest of today.',
   'voice.createdTask': 'Created task "{{name}}".',
   'voice.createdTaskFor': 'Created task "{{name}}" for {{when}}.',
   'voice.whenToday': 'today',
@@ -91,6 +93,7 @@ export const en = {
   'errors.INTERNAL': 'Internal server error.',
   'errors.GENERIC': 'Something went wrong. Please try again.',
   'errors.VOICE_RATE_LIMIT': 'Voice is busy. Try again in a few seconds.',
+  'errors.VOICE_LLM_TIMEOUT': 'The voice model did not answer. Try again.',
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -37,9 +37,9 @@ The target is known and nothing changed → needs_clarification, one question wh
 Do not create a habit. Do not check it in. Do not ask to confirm.
 
 Examples:
-- "перейменуй звичку біг на пробіжку" → taskName "Біг" from Habits, habit.name "Пробіжка"
-- "зміни колір води на зелений" → taskName "Вода", habit.color "#22c55e", no name key
-- "прибери час у розтяжки" → taskName "Розтяжка", blockStartTime null, blockMinutes null`;
+- "rename habit run to jog" → taskName "Run" from Habits, habit.name "Jog"
+- "change the water color to green" → taskName "Water", habit.color "#22c55e", no name key
+- "clear the time on stretch" → taskName "Stretch", blockStartTime null, blockMinutes null`;
 
 /** Specialist: partial edit of an existing habit. taskName is the current title. */
 export function buildVoiceHabitUpdateSystemPrompt(language?: string | null): string {

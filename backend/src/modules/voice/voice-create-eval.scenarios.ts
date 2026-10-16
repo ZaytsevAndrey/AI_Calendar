@@ -42,6 +42,7 @@ export type CreateEvalExpect = {
   hasEarliest?: boolean;
   hasDeadline?: boolean;
   noScheduleFields?: boolean;
+  scheduleNoticeIncludes?: string;
 };
 
 export type CreateEvalScenario = {
