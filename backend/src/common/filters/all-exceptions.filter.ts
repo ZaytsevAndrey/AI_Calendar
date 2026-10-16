@@ -20,6 +20,7 @@ const API_ERROR_KEYS: Record<string, MessageKey> = {
   INVALID_RESET_TOKEN: 'errors.INVALID_RESET_TOKEN',
   VOICE_RATE_LIMIT: 'errors.VOICE_RATE_LIMIT',
   VOICE_LLM_TIMEOUT: 'errors.VOICE_LLM_TIMEOUT',
+  VOICE_QUOTA_EXCEEDED: 'errors.VOICE_QUOTA_EXCEEDED',
 };
 
 function statusForApiError(code: string): number {

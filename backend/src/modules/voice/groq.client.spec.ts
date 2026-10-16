@@ -1,6 +1,41 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GroqClient, groqRetryAfterSeconds, rateLimitWaitMs } from './groq.client';
+import {
+  discoverGroqKeyNames,
+  GroqClient,
+  groqRetryAfterSeconds,
+  rateLimitWaitMs,
+} from './groq.client';
+
+describe('discoverGroqKeyNames', () => {
+  it('returns only the primary key when extras are missing', () => {
+    expect(
+      discoverGroqKeyNames((name) => (name === 'GROQ_API_KEY' ? 'k1' : undefined)),
+    ).toEqual(['GROQ_API_KEY']);
+  });
+
+  it('collects numbered keys until the first gap', () => {
+    const env: Record<string, string> = {
+      GROQ_API_KEY: 'k1',
+      GROQ_API_KEY_2: 'k2',
+      GROQ_API_KEY_3: 'k3',
+      GROQ_API_KEY_5: 'k5',
+    };
+    expect(discoverGroqKeyNames((name) => env[name])).toEqual([
+      'GROQ_API_KEY',
+      'GROQ_API_KEY_2',
+      'GROQ_API_KEY_3',
+    ]);
+  });
+
+  it('supports more than six keys', () => {
+    const env: Record<string, string> = { GROQ_API_KEY: 'k1' };
+    for (let n = 2; n <= 10; n += 1) {
+      env[`GROQ_API_KEY_${n}`] = `k${n}`;
+    }
+    expect(discoverGroqKeyNames((name) => env[name])).toHaveLength(10);
+  });
+});
 
 describe('GroqClient local LLM', () => {
   const originalFetch = global.fetch;
@@ -60,7 +95,10 @@ describe('GroqClient local LLM', () => {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ choices: [{ message: { content: '{"ok":true}' } }] }),
+      json: async () => ({
+        choices: [{ message: { content: '{"ok":true}' } }],
+        usage: { total_tokens: 10 },
+      }),
     });
     global.fetch = fetchMock as unknown as typeof fetch;
 
@@ -85,6 +123,88 @@ describe('GroqClient local LLM', () => {
       return init.headers.Authorization;
     });
     expect(bearers).toEqual(['Bearer key-1', 'Bearer key-1', 'Bearer key-2']);
+  });
+
+  it('rotates on the live API when two or more keys are set without GROQ_ROTATE_KEYS', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: '{"ok":true}' } }],
+        usage: { total_tokens: 5 },
+      }),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const groq = new GroqClient({
+      get: (key: string) => {
+        if (key === 'GROQ_API_KEY') return 'key-1';
+        if (key === 'GROQ_API_KEY_2') return 'key-2';
+        return undefined;
+      },
+    } as ConfigService);
+
+    expect(groq.pinNextKey()).toEqual({ index: 0, count: 2 });
+    const first = await groq.runWithPin(0, () => groq.completeJson('system', 'user'));
+    expect(first.tokensUsed).toBe(5);
+    expect(groq.pinNextKey()).toEqual({ index: 1, count: 2 });
+    await groq.runWithPin(1, () => groq.completeJson('system', 'user'));
+
+    const bearers = fetchMock.mock.calls.map((call) => {
+      const init = call[1] as { headers: { Authorization: string } };
+      return init.headers.Authorization;
+    });
+    expect(bearers).toEqual(['Bearer key-1', 'Bearer key-2']);
+  });
+
+  it('hops to the next key after TPM retries fail', async () => {
+    const tpm = {
+      ok: false,
+      status: 429,
+      headers: { get: () => '1' },
+      json: async () => ({
+        error: { message: 'Rate limit reached. Please try again in 0.5s.' },
+      }),
+    };
+    const ok = {
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({
+        choices: [{ message: { content: '{"ok":true}' } }],
+        usage: { total_tokens: 3 },
+      }),
+    };
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(tpm)
+      .mockResolvedValueOnce(tpm)
+      .mockResolvedValueOnce(tpm)
+      .mockResolvedValueOnce(ok);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const groq = new GroqClient({
+      get: (key: string) => {
+        if (key === 'GROQ_API_KEY') return 'key-1';
+        if (key === 'GROQ_API_KEY_2') return 'key-2';
+        return undefined;
+      },
+    } as ConfigService);
+
+    const sleep = jest
+      .spyOn(groq as unknown as { sleep: (ms: number) => Promise<void> }, 'sleep')
+      .mockResolvedValue(undefined);
+
+    const result = await groq.runWithPin(0, () => groq.completeJson('system', 'user'));
+    expect(result.value).toBe('{"ok":true}');
+    expect(result.keyIndex).toBe(1);
+    const bearers = fetchMock.mock.calls.map((call) => {
+      const init = call[1] as { headers: { Authorization: string } };
+      return init.headers.Authorization;
+    });
+    expect(bearers.filter((b) => b === 'Bearer key-1').length).toBeGreaterThanOrEqual(1);
+    expect(bearers[bearers.length - 1]).toBe('Bearer key-2');
+    sleep.mockRestore();
   });
 
   it('skips the first Groq key when that org is out of tokens', async () => {

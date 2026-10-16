@@ -93,7 +93,7 @@ async function main(): Promise<void> {
     // Force Groq for this eval. An empty value stays set so a later dotenv load
     // does not put the home Ollama URL back.
     process.env.LLM_BASE_URL = '';
-    // Eval process only. The API server keeps a single GROQ_API_KEY.
+    // Eval forces rotation even with one key; live API rotates when 2+ keys are set.
     process.env.GROQ_ROTATE_KEYS = '1';
     const skipped = retiredKeysForToday();
     if (skipped.length > 0) {

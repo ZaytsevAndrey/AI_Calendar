@@ -4,6 +4,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AsyncLocalStorage } from 'async_hooks';
 
 const GROQ_AUDIO_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
 const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
@@ -19,28 +20,46 @@ const RATE_LIMIT_RETRIES = 2;
 const GROQ_CHAT_TIMEOUT_MS = 25_000;
 const RATE_LIMIT_WAIT_MIN_MS = 400;
 const RATE_LIMIT_WAIT_MAX_MS = 6000;
+/** Safety cap when scanning GROQ_API_KEY_N. */
+const MAX_DISCOVERED_KEYS = 64;
 
 type GroqChatPayload = {
   choices?: Array<{ message?: { content?: string } }>;
+  usage?: { total_tokens?: number; prompt_tokens?: number; completion_tokens?: number };
   error?: { message?: string; failed_generation?: string } | string;
   message?: string;
   failed_generation?: string;
 };
 
-const ROTATION_KEY_NAMES = [
-  'GROQ_API_KEY',
-  'GROQ_API_KEY_2',
-  'GROQ_API_KEY_3',
-  'GROQ_API_KEY_4',
-  'GROQ_API_KEY_5',
-  'GROQ_API_KEY_6',
-] as const;
+type GroqRequestContext = {
+  keyIndex: number;
+  tokensUsed: number;
+};
+
+/**
+ * `GROQ_API_KEY`, then `GROQ_API_KEY_2`, `GROQ_API_KEY_3`, … while set.
+ * Stops at the first gap so operators can add keys without a fixed ceiling.
+ */
+export function discoverGroqKeyNames(
+  get: (name: string) => string | undefined,
+): string[] {
+  const names: string[] = [];
+  const first = get('GROQ_API_KEY')?.trim();
+  if (first) names.push('GROQ_API_KEY');
+  for (let n = 2; n <= MAX_DISCOVERED_KEYS; n += 1) {
+    const name = `GROQ_API_KEY_${n}`;
+    if (!get(name)?.trim()) break;
+    names.push(name);
+  }
+  return names;
+}
 
 @Injectable()
 export class GroqClient {
   private readonly logger = new Logger(GroqClient.name);
   /** Index of the key pinned for the current eval scenario. -1 until the first pin. */
   private pinnedKeyIndex = -1;
+  private readonly requestAls = new AsyncLocalStorage<GroqRequestContext>();
 
   constructor(private readonly config: ConfigService) {}
 
@@ -54,14 +73,21 @@ export class GroqClient {
     return key;
   }
 
-  /** Create-eval sets this so chat hops across Groq orgs. The API server leaves it unset. */
+  /**
+   * Rotate when 2+ keys are configured, or when create-eval sets GROQ_ROTATE_KEYS.
+   */
   private rotating(): boolean {
     const flag = this.config.get<string>('GROQ_ROTATE_KEYS')?.trim().toLowerCase();
-    return flag === '1' || flag === 'true';
+    if (flag === '1' || flag === 'true') return true;
+    return this.activeKeyNames().length >= 2;
   }
 
   /** Key env names retired after a tokens-per-day response. In-memory for this process. */
   private readonly retiredKeyNames = new Set<string>();
+
+  private discoveredKeyNames(): string[] {
+    return discoverGroqKeyNames((name) => this.config.get<string>(name));
+  }
 
   private activeKeyNames(): string[] {
     const skipFirst = this.config.get<string>('GROQ_SKIP_FIRST_KEY')?.trim() === '1';
@@ -70,8 +96,9 @@ export class GroqClient {
       .map((name) => name.trim())
       .filter(Boolean);
     const retired = new Set([...skipList, ...this.retiredKeyNames]);
-    const names = skipFirst ? ROTATION_KEY_NAMES.slice(1) : [...ROTATION_KEY_NAMES];
-    return names.filter(
+    const names = this.discoveredKeyNames();
+    const list = skipFirst ? names.filter((name) => name !== 'GROQ_API_KEY') : names;
+    return list.filter(
       (name) => !retired.has(name) && Boolean(this.config.get<string>(name)?.trim()),
     );
   }
@@ -90,23 +117,27 @@ export class GroqClient {
   retirePinnedKey(): { remaining: number; retiredName: string | null } {
     const names = this.activeKeyNames();
     if (names.length === 0) return { remaining: 0, retiredName: null };
-    const index = this.pinnedKeyIndex < 0 ? 0 : this.pinnedKeyIndex % names.length;
+    const index = this.currentKeyIndex() % Math.max(names.length, 1);
     const retiredName = names[index] ?? null;
     if (retiredName) this.retiredKeyNames.add(retiredName);
     this.pinnedKeyIndex = -1;
+    const ctx = this.requestAls.getStore();
+    if (ctx) ctx.keyIndex = 0;
     return { remaining: this.activeKeyNames().length, retiredName };
   }
 
   pinnedKeyName(): string | null {
     const names = this.activeKeyNames();
     if (!this.rotating() || names.length === 0) return null;
-    const index = this.pinnedKeyIndex < 0 ? 0 : this.pinnedKeyIndex % names.length;
+    const index = this.currentKeyIndex() % names.length;
     return names[index] ?? null;
   }
 
   retireNamedKey(name: string): { remaining: number } {
     if (name) this.retiredKeyNames.add(name);
     this.pinnedKeyIndex = -1;
+    const ctx = this.requestAls.getStore();
+    if (ctx) ctx.keyIndex = 0;
     return { remaining: this.activeKeyNames().length };
   }
 
@@ -118,6 +149,8 @@ export class GroqClient {
     const keys = this.rotationKeys();
     if (keys.length === 0) return { index: 0, count: 1 };
     this.pinnedKeyIndex = (this.pinnedKeyIndex + 1) % keys.length;
+    const ctx = this.requestAls.getStore();
+    if (ctx) ctx.keyIndex = this.pinnedKeyIndex;
     return { index: this.pinnedKeyIndex, count: keys.length };
   }
 
@@ -125,15 +158,63 @@ export class GroqClient {
   currentPin(): { index: number; count: number } {
     const keys = this.rotationKeys();
     if (keys.length === 0) return { index: 0, count: 1 };
-    const index = this.pinnedKeyIndex < 0 ? 0 : this.pinnedKeyIndex % keys.length;
+    const index = this.currentKeyIndex() % keys.length;
     return { index, count: keys.length };
+  }
+
+  /**
+   * Run Groq calls under a fixed key index (voice session pin).
+   * Key hops inside the callback update the returned `keyIndex`.
+   */
+  async runWithPin<T>(
+    keyIndex: number,
+    fn: () => Promise<T>,
+  ): Promise<{ value: T; keyIndex: number; tokensUsed: number }> {
+    const keys = this.rotationKeys();
+    const safeIndex =
+      keys.length === 0 ? 0 : ((keyIndex % keys.length) + keys.length) % keys.length;
+    const ctx: GroqRequestContext = { keyIndex: safeIndex, tokensUsed: 0 };
+    this.pinnedKeyIndex = safeIndex;
+    const value = await this.requestAls.run(ctx, fn);
+    return { value, keyIndex: ctx.keyIndex, tokensUsed: ctx.tokensUsed };
+  }
+
+  /** True while inside `runWithPin` (nested parse must not open a second context). */
+  isInPinContext(): boolean {
+    return Boolean(this.requestAls.getStore());
+  }
+
+  private currentKeyIndex(): number {
+    const ctx = this.requestAls.getStore();
+    if (ctx) return ctx.keyIndex;
+    return this.pinnedKeyIndex < 0 ? 0 : this.pinnedKeyIndex;
   }
 
   private chatKey(): string {
     const keys = this.rotationKeys();
     if (keys.length === 0) return this.apiKey();
-    const index = this.pinnedKeyIndex < 0 ? 0 : this.pinnedKeyIndex % keys.length;
+    const index = this.currentKeyIndex() % keys.length;
     return keys[index];
+  }
+
+  private canHopKey(): boolean {
+    return this.rotationKeys().length >= 2;
+  }
+
+  /** Advance pin after TPM; keep eval global index in sync. */
+  private advancePin(): void {
+    const keys = this.rotationKeys();
+    if (keys.length < 2) return;
+    const next = (this.currentKeyIndex() + 1) % keys.length;
+    this.pinnedKeyIndex = next;
+    const ctx = this.requestAls.getStore();
+    if (ctx) ctx.keyIndex = next;
+  }
+
+  private recordTokens(total: number | undefined): void {
+    if (total == null || !Number.isFinite(total) || total <= 0) return;
+    const ctx = this.requestAls.getStore();
+    if (ctx) ctx.tokensUsed += Math.floor(total);
   }
 
   sttModel(): string {
@@ -153,31 +234,81 @@ export class GroqClient {
     /** Same-language vocabulary / style hint (max ~224 tokens). */
     prompt?: string,
   ): Promise<{ text: string; language?: string }> {
-    const form = new FormData();
-    const bytes = new Uint8Array(buffer);
-    form.append('file', new Blob([bytes], { type: mimeType }), filename);
-    form.append('model', this.sttModel());
-    form.append('response_format', 'verbose_json');
-    form.append('temperature', '0');
-    const lang = language?.trim().toLowerCase().slice(0, 2);
-    if (lang && /^[a-z]{2}$/.test(lang)) {
-      form.append('language', lang);
-    }
-    const hint = prompt?.replace(/\s+/g, ' ').trim();
-    if (hint) {
-      form.append('prompt', hint.slice(0, 800));
+    const buildForm = () => {
+      const form = new FormData();
+      const bytes = new Uint8Array(buffer);
+      form.append('file', new Blob([bytes], { type: mimeType }), filename);
+      form.append('model', this.sttModel());
+      form.append('response_format', 'verbose_json');
+      form.append('temperature', '0');
+      const lang = language?.trim().toLowerCase().slice(0, 2);
+      if (lang && /^[a-z]{2}$/.test(lang)) {
+        form.append('language', lang);
+      }
+      const hint = prompt?.replace(/\s+/g, ' ').trim();
+      if (hint) {
+        form.append('prompt', hint.slice(0, 800));
+      }
+      return form;
+    };
+
+    let result = await this.transcribeOnce(buildForm);
+    if (!result.ok && result.status === 429) {
+      if (isDailyTokenLimit(result.error) && this.canHopKey()) {
+        this.retirePinnedKey();
+        if (this.rotationKeys().length >= 1) {
+          this.pinnedKeyIndex = 0;
+          const ctx = this.requestAls.getStore();
+          if (ctx) ctx.keyIndex = 0;
+          this.logger.warn('Groq STT TPD; hopping to next key');
+          result = await this.transcribeOnce(buildForm);
+        }
+      } else if (!isDailyTokenLimit(result.error)) {
+        for (
+          let attempt = 0;
+          attempt < RATE_LIMIT_RETRIES && !result.ok && result.status === 429;
+          attempt += 1
+        ) {
+          const wait = result.retryAfterMs ?? 4000;
+          this.logger.warn(`Groq STT rate limit; retrying in ${wait}ms`);
+          await this.sleep(wait);
+          result = await this.transcribeOnce(buildForm);
+        }
+        if (!result.ok && result.status === 429 && this.canHopKey()) {
+          this.advancePin();
+          this.logger.warn('Groq STT TPM; hopping to next key');
+          result = await this.transcribeOnce(buildForm);
+        }
+      }
     }
 
+    if (!result.ok) {
+      this.logger.warn(result.error);
+      throw this.llmUnavailable(result.error, result.status);
+    }
+    return { text: result.text, language: result.language };
+  }
+
+  private async transcribeOnce(
+    buildForm: () => FormData,
+  ): Promise<
+    | { ok: true; text: string; language?: string }
+    | { ok: false; error: string; status: number; retryAfterMs?: number }
+  > {
     let response: Response;
     try {
       response = await fetch(GROQ_AUDIO_URL, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${this.apiKey()}` },
-        body: form,
+        headers: { Authorization: `Bearer ${this.chatKey()}` },
+        body: buildForm(),
         signal: AbortSignal.timeout(GROQ_CHAT_TIMEOUT_MS),
       });
     } catch (err) {
-      throw this.llmUnavailable(fetchFailureMessage(err, 'STT'), fetchFailureStatus(err));
+      return {
+        ok: false,
+        error: fetchFailureMessage(err, 'STT'),
+        status: fetchFailureStatus(err),
+      };
     }
     const payload = (await response.json().catch(() => ({}))) as {
       text?: string;
@@ -186,15 +317,22 @@ export class GroqClient {
       message?: string;
     };
     if (!response.ok) {
-      const message = groqErrorMessage(payload, response.status, 'STT');
-      this.logger.warn(message);
-      throw new ServiceUnavailableException(message);
+      const error = groqErrorMessage(payload, response.status, 'STT');
+      return {
+        ok: false,
+        error,
+        status: response.status,
+        retryAfterMs:
+          response.status === 429
+            ? rateLimitWaitMs(error, response.headers.get('retry-after'))
+            : undefined,
+      };
     }
     const text = (payload.text || '').trim();
     if (!text) {
-      throw new ServiceUnavailableException('Could not transcribe audio');
+      return { ok: false, error: 'Could not transcribe audio', status: 502 };
     }
-    return { text, language: payload.language };
+    return { ok: true, text, language: payload.language };
   }
 
   async completeJson(systemPrompt: string, userPrompt: string): Promise<string> {
@@ -205,6 +343,7 @@ export class GroqClient {
       (model, index, list) => list.indexOf(model) === index,
     );
     let lastError = 'Groq LLM failed';
+    let lastStatus = 503;
 
     for (let i = 0; i < models.length; i += 1) {
       const model = models[i];
@@ -218,6 +357,7 @@ export class GroqClient {
       );
       if (strict.ok) return strict.content;
       lastError = strict.error;
+      lastStatus = strict.status;
       logFailedGeneration(this.logger, strict.failedGeneration);
 
       // json_object mode is flaky on longer voice prompts — retry same model without it.
@@ -235,6 +375,7 @@ export class GroqClient {
           return soft.content;
         }
         lastError = soft.error;
+        lastStatus = soft.status;
         logFailedGeneration(this.logger, soft.failedGeneration);
       }
 
@@ -243,10 +384,10 @@ export class GroqClient {
         continue;
       }
       this.logger.warn(lastError);
-      throw this.llmUnavailable(lastError, strict.status);
+      throw this.llmUnavailable(lastError, lastStatus);
     }
 
-    throw this.llmUnavailable(lastError, 503);
+    throw this.llmUnavailable(lastError, lastStatus);
   }
 
   private localLlmBase(): string {
@@ -346,7 +487,7 @@ export class GroqClient {
     return new ServiceUnavailableException(message);
   }
 
-  /** TPM 429: wait out the window Groq names, then repeat the same model. */
+  /** TPM 429: wait on the same key, then hop. TPD: retire and hop once. */
   private async chatWithRateLimitRetry(
     model: string,
     systemPrompt: string,
@@ -359,14 +500,29 @@ export class GroqClient {
       userPrompt,
       jsonObject,
     );
-    // A near-full daily window asks for minutes. A live turn must not sit that long;
-    // the eval loop waits the real interval and keeps the same key.
+    // A near-full daily window asks for minutes. Hop keys instead of waiting.
     if (
       !result.ok &&
       result.status === 429 &&
       isDailyTokenLimit(result.error) &&
       (groqRetryAfterSeconds(result.error) ?? 0) * 1000 > RATE_LIMIT_WAIT_MAX_MS
     ) {
+      if (this.canHopKey()) {
+        this.retirePinnedKey();
+        if (this.rotationKeys().length >= 1) {
+          // After retire, index 0 is the next live key; pinNext would skip it.
+          this.pinnedKeyIndex = 0;
+          const ctx = this.requestAls.getStore();
+          if (ctx) ctx.keyIndex = 0;
+          this.logger.warn(`Groq TPD on ${model}; hopping to next key`);
+          result = await this.chatCompletion(
+            model,
+            systemPrompt,
+            userPrompt,
+            jsonObject,
+          );
+        }
+      }
       return result;
     }
     for (
@@ -379,6 +535,23 @@ export class GroqClient {
         `Groq rate limit on ${model}; retrying in ${wait}ms`,
       );
       await this.sleep(wait);
+      result = await this.chatCompletion(
+        model,
+        systemPrompt,
+        userPrompt,
+        jsonObject,
+      );
+    }
+    if (!result.ok && result.status === 429 && this.canHopKey()) {
+      if (isDailyTokenLimit(result.error)) {
+        this.retirePinnedKey();
+        this.pinnedKeyIndex = 0;
+        const ctx = this.requestAls.getStore();
+        if (ctx) ctx.keyIndex = 0;
+      } else {
+        this.advancePin();
+      }
+      this.logger.warn(`Groq rate limit on ${model}; hopping to next key`);
       result = await this.chatCompletion(
         model,
         systemPrompt,
@@ -470,6 +643,7 @@ export class GroqClient {
         status: response.status,
       };
     }
+    this.recordTokens(payload.usage?.total_tokens);
     return { ok: true, content };
   }
 }

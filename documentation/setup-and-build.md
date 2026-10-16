@@ -42,6 +42,8 @@ Create `backend/.env` from `backend/.env.example`.
 | `TYPEORM_SYNC` | Set to `false` to disable `synchronize`. Default is on so an empty Neon database gets a schema on first boot |
 | `DATABASE_SSL` | Postgres SSL is on by default (`rejectUnauthorized: false` for Neon). Set `false` only for local Postgres without SSL |
 | `GROQ_API_KEY` | Free Groq API key for voice STT + task parse ([console.groq.com/keys](https://console.groq.com/keys)). Voice buttons fail with 503 if unset |
+| `GROQ_API_KEY_2` … | Optional extra Groq orgs (`_2`, `_3`, … any count). Live API rotates on TPM/TPD when two or more are set; one voice session stays on one key until a hop |
+| `VOICE_DAILY_TOKEN_LIMIT` | Optional soft per-user chat-token ceiling per civil day (default `100000`). `0` disables. Exhausted → `VOICE_QUOTA_EXCEEDED` |
 | `GROQ_STT_MODEL` | Optional. Default `whisper-large-v3-turbo` |
 | `GROQ_LLM_MODEL` | Optional. Default `openai/gpt-oss-20b` when chat stays on Groq |
 | `LLM_BASE_URL` | Optional. Local Ollama, `http://127.0.0.1:11434`. When set, chat uses `LLM_MODEL` and Groq is only speech-to-text |

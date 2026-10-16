@@ -31,6 +31,7 @@ export class VoiceSessionStore {
       pendingIntents: null,
       pendingProposal: null,
       pendingSummary: null,
+      groqKeyIndex: null,
     };
     this.sessions.set(key, created);
     return created;

@@ -97,6 +97,16 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
   const finishingRef = useRef(false);
   const turnLockRef = useRef(false);
   const lastCreateKeyRef = useRef<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+
+  const ensureSessionId = useCallback(() => {
+    const existing = sessionIdRef.current;
+    if (existing) return existing;
+    const id = newSessionId();
+    sessionIdRef.current = id;
+    setSessionId(id);
+    return id;
+  }, []);
 
   const pushMessages = useCallback((...next: VoiceThreadMessage[]) => {
     setMessages((prev) => [...prev, ...next.filter((row) => row.text.trim())]);
@@ -131,18 +141,20 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
   }, [cancel]);
 
   const close = useCallback(() => {
-    const id = sessionId;
+    const id = sessionIdRef.current || sessionId;
     resetLocal();
     setMessages([]);
+    sessionIdRef.current = null;
     setSessionId(null);
     setIsOpen(false);
     if (id) void VoiceApi.endSession(id).catch(() => undefined);
   }, [resetLocal, sessionId]);
 
   const dismissForConflictSheet = useCallback(() => {
-    const id = sessionId;
+    const id = sessionIdRef.current || sessionId;
     resetLocal();
     setMessages([]);
+    sessionIdRef.current = null;
     setSessionId(null);
     setIsOpen(false);
     if (id) void VoiceApi.endSession(id).catch(() => undefined);
@@ -207,7 +219,9 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     setProposal(null);
     setError(null);
     setMessages([]);
-    setSessionId(newSessionId());
+    const id = newSessionId();
+    sessionIdRef.current = id;
+    setSessionId(id);
     const pending = getPendingConflictChoice();
     if (pending) {
       setHeldConflict(pending);
@@ -364,8 +378,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
 
   const turnAndRoute = useCallback(
     async (text: string, actionId?: VoiceAgentActionId) => {
-      const activeSession = sessionId || newSessionId();
-      if (!sessionId) setSessionId(activeSession);
+      const activeSession = ensureSessionId();
       setBusyLabel(i18n.t('voice.understanding'));
       setStage('working');
       if (text) pushMessages(msg('user', text));
@@ -433,10 +446,10 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     },
     [
       beginRecording,
+      ensureSessionId,
       pushMessages,
       routeLegacyParse,
       runIntents,
-      sessionId,
       speakAndStage,
       stayReady,
       timeZone,
@@ -453,10 +466,12 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       setBusyLabel(i18n.t('voice.transcribing'));
       setStage('working');
       const { base64, mimeType } = await stop();
+      const activeSession = ensureSessionId();
       const { transcript: spoken } = await VoiceApi.transcribe(
         base64,
         mimeType,
         speechLang,
+        activeSession,
       );
       setTranscript(spoken);
 
@@ -506,9 +521,11 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     applySpokenConflict,
     beginRecording,
     clarifyingQuestion,
+    ensureSessionId,
     heldConflict,
     pushMessages,
     speakAndStage,
+    speechLang,
     stage,
     stayReady,
     stop,

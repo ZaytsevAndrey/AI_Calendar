@@ -25,4 +25,13 @@ export class TranscribeVoiceDto {
   @IsString()
   @IsOptional()
   language?: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Voice session id so STT and the following turn share one Groq key.',
+  })
+  @IsString()
+  @IsOptional()
+  sessionId?: string;
 }

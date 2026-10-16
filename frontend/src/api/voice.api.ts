@@ -199,11 +199,12 @@ export const VoiceApi = {
     audioBase64: string,
     mimeType: string,
     language?: string,
+    sessionId?: string,
   ): Promise<TranscribeVoiceResult> => {
     const response = await apiCall({
       method: 'POST',
       url: '/voice/transcribe',
-      data: { audioBase64, mimeType, language },
+      data: { audioBase64, mimeType, language, sessionId },
     });
     if (!response) throw new Error('No response from server');
     return response.data as TranscribeVoiceResult;

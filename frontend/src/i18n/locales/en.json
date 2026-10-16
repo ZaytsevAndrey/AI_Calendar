@@ -839,6 +839,7 @@
     "PASSWORDS_DO_NOT_MATCH": "Passwords do not match.",
     "INVALID_RESET_TOKEN": "Invalid reset token.",
     "UNAUTHORIZED": "Unauthorized.",
+    "VOICE_QUOTA_EXCEEDED": "Daily voice limit reached. Try again tomorrow.",
     "GENERIC": "Something went wrong. Please try again."
   },
   "auth": {

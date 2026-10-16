@@ -94,6 +94,8 @@ export const en = {
   'errors.GENERIC': 'Something went wrong. Please try again.',
   'errors.VOICE_RATE_LIMIT': 'Voice is busy. Try again in a few seconds.',
   'errors.VOICE_LLM_TIMEOUT': 'The voice model did not answer. Try again.',
+  'errors.VOICE_QUOTA_EXCEEDED':
+    'Daily voice limit reached. Try again tomorrow.',
 } as const;
 
 export type MessageKey = keyof typeof en;

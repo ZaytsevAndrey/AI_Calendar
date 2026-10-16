@@ -50,6 +50,8 @@ import {
   buildVoiceParseResultLog,
   formatVoiceParseResultLog,
 } from './voice-parse-result-log.util';
+import { VoiceQuotaService } from './voice-quota.service';
+import { VoiceSessionStore } from './voice-session.store';
 
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
 
@@ -72,6 +74,8 @@ export class VoiceService {
     private readonly groq: GroqClient,
     private readonly userSettingsService: UserSettingsService,
     private readonly agentOrchestrator: VoiceAgentOrchestrator,
+    private readonly sessions: VoiceSessionStore,
+    private readonly quota: VoiceQuotaService,
     @InjectRepository(Phase)
     private readonly phasesRepository: Repository<Phase>,
     @InjectRepository(Task)
@@ -82,20 +86,23 @@ export class VoiceService {
     private readonly habitsRepository: Repository<Habit>,
   ) {}
 
-  turn(userId: string, dto: VoiceTurnDto): Promise<VoiceTurnResponse> {
-    return this.agentOrchestrator.turn(userId, dto, (ctx) => {
-      const transcript = (ctx.transcript || '').trim();
-      if (!transcript) {
-        throw new BadRequestException('transcript is required');
-      }
-      return this.parseTask(userId, {
-        transcript,
-        timeZone: dto.timeZone,
-        clientNowIso: dto.clientNowIso,
-        previousTranscript: ctx.previousTranscript,
-        clarificationAnswer: ctx.clarificationAnswer,
-      });
-    });
+  async turn(userId: string, dto: VoiceTurnDto): Promise<VoiceTurnResponse> {
+    await this.quota.assertUnderLimit(userId);
+    return this.withSessionGroq(userId, dto.sessionId, () =>
+      this.agentOrchestrator.turn(userId, dto, (ctx) => {
+        const transcript = (ctx.transcript || '').trim();
+        if (!transcript) {
+          throw new BadRequestException('transcript is required');
+        }
+        return this.parseTask(userId, {
+          transcript,
+          timeZone: dto.timeZone,
+          clientNowIso: dto.clientNowIso,
+          previousTranscript: ctx.previousTranscript,
+          clarificationAnswer: ctx.clarificationAnswer,
+        });
+      }),
+    );
   }
 
   endVoiceSession(userId: string, sessionId: string): { ok: true } {
@@ -107,6 +114,7 @@ export class VoiceService {
     userId: string,
     dto: TranscribeVoiceDto,
   ): Promise<{ transcript: string; language?: string }> {
+    await this.quota.assertUnderLimit(userId);
     const base64 = stripDataUrl(dto.audioBase64 || '');
     if (!base64) {
       throw new BadRequestException('audioBase64 is required');
@@ -131,26 +139,79 @@ export class VoiceService {
     const sttLanguage = whisperLanguageFromSettings(
       dto.language || settings.speechLanguage || settings.language,
     );
-    const result = await this.groq.transcribe(
-      buffer,
-      `voice.${ext}`,
-      mimeType,
-      sttLanguage,
-      buildWhisperPrompt(sttLanguage),
-    );
-    const cleaned = cleanupVoiceTranscript(
-      result.text,
-      result.language || sttLanguage,
-    );
-    // Whisper often invents «дякую» / «thank you» on silence — drop it.
-    const transcript = isNoiseOrEmptyTranscript(cleaned) ? '' : cleaned;
-    this.logger.log(
-      `voice.stt raw=${JSON.stringify(result.text)} cleaned=${JSON.stringify(cleaned)} kept=${JSON.stringify(transcript)}`,
-    );
-    return { transcript, language: result.language || sttLanguage };
+    const run = async () => {
+      const result = await this.groq.transcribe(
+        buffer,
+        `voice.${ext}`,
+        mimeType,
+        sttLanguage,
+        buildWhisperPrompt(sttLanguage),
+      );
+      const cleaned = cleanupVoiceTranscript(
+        result.text,
+        result.language || sttLanguage,
+      );
+      // Whisper often invents «дякую» / «thank you» on silence — drop it.
+      const transcript = isNoiseOrEmptyTranscript(cleaned) ? '' : cleaned;
+      this.logger.log(
+        `voice.stt raw=${JSON.stringify(result.text)} cleaned=${JSON.stringify(cleaned)} kept=${JSON.stringify(transcript)}`,
+      );
+      return { transcript, language: result.language || sttLanguage };
+    };
+    const sessionId = dto.sessionId?.trim();
+    if (sessionId) {
+      return this.withSessionGroq(userId, sessionId, run);
+    }
+    return run();
   }
 
   async parseTask(
+    userId: string,
+    dto: ParseVoiceTaskDto,
+  ): Promise<VoiceParseResult> {
+    await this.quota.assertUnderLimit(userId);
+    if (this.groq.isInPinContext()) {
+      return this.parseTaskBody(userId, dto);
+    }
+    return this.withEphemeralGroq(userId, () => this.parseTaskBody(userId, dto));
+  }
+
+  /**
+   * Pin one Groq key for the voice session (STT + turn) and count chat tokens.
+   */
+  private async withSessionGroq<T>(
+    userId: string,
+    sessionId: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const session = this.sessions.getOrCreate(userId, sessionId);
+    if (session.groqKeyIndex == null) {
+      session.groqKeyIndex = this.groq.pinNextKey().index;
+    }
+    const { value, keyIndex, tokensUsed } = await this.groq.runWithPin(
+      session.groqKeyIndex,
+      fn,
+    );
+    session.groqKeyIndex = keyIndex;
+    if (tokensUsed > 0) {
+      await this.quota.addTokens(userId, tokensUsed);
+    }
+    return value;
+  }
+
+  private async withEphemeralGroq<T>(
+    userId: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const pin = this.groq.pinNextKey();
+    const { value, tokensUsed } = await this.groq.runWithPin(pin.index, fn);
+    if (tokensUsed > 0) {
+      await this.quota.addTokens(userId, tokensUsed);
+    }
+    return value;
+  }
+
+  private async parseTaskBody(
     userId: string,
     dto: ParseVoiceTaskDto,
   ): Promise<VoiceParseResult> {

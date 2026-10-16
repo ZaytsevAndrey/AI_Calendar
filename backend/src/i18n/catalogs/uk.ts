@@ -97,4 +97,6 @@ export const uk: Record<MessageKey, string> = {
   'errors.GENERIC': 'Щось пішло не так. Спробуйте ще раз.',
   'errors.VOICE_RATE_LIMIT': 'Голос зараз зайнятий. Спробуйте за кілька секунд.',
   'errors.VOICE_LLM_TIMEOUT': 'Модель голосу не відповіла. Спробуйте ще раз.',
+  'errors.VOICE_QUOTA_EXCEEDED':
+    'Денний ліміт голосу вичерпано. Спробуйте завтра.',
 };

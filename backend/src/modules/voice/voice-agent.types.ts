@@ -66,6 +66,8 @@ export type VoiceAgentSession = {
   pendingIntents: VoiceWriteIntent[] | null;
   pendingProposal: DayPlanProposal | null;
   pendingSummary: string | null;
+  /** Groq rotation index for this session; set on first STT/chat call. */
+  groqKeyIndex: number | null;
 };
 
 export const VOICE_AGENT_ACTION_IDS: VoiceAgentActionId[] = [

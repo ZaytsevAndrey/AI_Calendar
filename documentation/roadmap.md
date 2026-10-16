@@ -14,13 +14,6 @@ Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Produ
 
 Do in order unless you explicitly skip ahead. These items need no outside service and no open product decision.
 
-### 25. Voice — rotate test keys, cap each user
-
-The live API uses only `GROQ_API_KEY`. `GROQ_API_KEY` through `GROQ_API_KEY_6` rotate only in the create-eval script (`GROQ_ROTATE_KEYS`). Free-tier tokens per minute are 8000, so one voice turn can exhaust the minute budget. Friends are the only users for now. A subscription that replaces the cap is [end of queue](#end--external-do-not-start).
-
-- [ ] On the API, rotate those six test keys when Groq answers with a per-minute limit. One turn stays on one key.
-- [ ] While voice is free, enforce a per-user ceiling and show a clear limit in the voice sheet.
-
 ### 26. Event preview
 
 A click on a calendar event opens the editor. Open a preview first. Delete, edit, and the other actions start from that preview.
@@ -75,6 +68,7 @@ Do not start these. The shape is still open.
 
 - **Habits.** Check-in, streak, and the calendar block stay until we decide what habits should become.
 - **Languages beyond en/uk.** UI and speech are en and uk. Pick the set before adding catalogs.
+- **STT language: auto vs settings.** Today `speechLanguage` (`en` | `uk`) is a hint to Whisper on `/voice/transcribe`. Investigate whether Whisper already detects the spoken language well enough without that setting, whether a wrong hint hurts accuracy, and whether Settings still needs an explicit speech language (or auto / follow-UI is enough). Decide before changing Settings or the STT call.
 - **Admin.** Owner-only. Contents are not chosen. Do not open an empty admin.
 
 ---
@@ -85,7 +79,7 @@ Third parties and publishing. Leave these until the Now list is done.
 
 - **Other calendars.** Providers besides Google.
 - **External event as flexible.** Imported events stay fixed anchors. A per-event flexible switch can wait.
-- **Payments.** Trial, subscription, and a payment provider. This is what replaces the free voice cap in §25.
+- **Payments.** Trial, subscription, and a payment provider. This is what replaces the free voice daily token cap.
 - **Privacy policy and Google consent.** A public policy URL, then move the consent screen out of testing so people other than listed test users can sign in.
 - **Custom domain.**
 - **Next.js landing and lead capture.**
@@ -105,7 +99,7 @@ Third parties and publishing. Leave these until the Now list is done.
 
 ## Recommended next steps
 
-1. Next live item: roadmap **§25** — rotate the six Groq test keys on the API and cap voice per user while it is free.
-2. Then the rest of **Now**, in order: §26 preview, §27 type chip, §28 Google calendar label, §29 typed voice, §30 delete account, §31 backup, §32 mobile daily path, §24 Piper ([tts-local.md](tts-local.md)).
+1. Next live item: roadmap **§26** — event preview (open preview before the editor).
+2. Then the rest of **Now**, in order: §27 type chip, §28 Google calendar label, §29 typed voice, §30 delete account, §31 backup, §32 mobile daily path, §24 Piper ([tts-local.md](tts-local.md)).
 3. Voice understanding continues in parallel via [voice-prompt-next.md](voice-prompt-next.md); do not put it back in this queue.
 4. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.
