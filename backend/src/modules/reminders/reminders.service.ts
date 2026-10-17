@@ -9,13 +9,9 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, MoreThan, Repository } from 'typeorm';
 import { sendNotification, setVapidDetails } from 'web-push';
-import { resolveIanaTimeZone } from '../../common/iana-time-zone';
-import { HabitCheckIn } from '../habits/entities/habit-check-in.entity';
-import { Habit } from '../habits/entities/habit.entity';
 import { ExternalCalendarBusyService } from '../calendar-providers/external-calendar-busy.service';
 import { Task } from '../tasks/entities/task.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
-import { localYmd, normalizeClockHm } from '../voice/voice-local-date.util';
 import { PushSubscription } from './entities/push-subscription.entity';
 import { ReminderDelivery } from './entities/reminder-delivery.entity';
 import {
@@ -63,10 +59,6 @@ export class RemindersService {
     private readonly settings: Repository<UserSettings>,
     @InjectRepository(Task)
     private readonly tasks: Repository<Task>,
-    @InjectRepository(Habit)
-    private readonly habits: Repository<Habit>,
-    @InjectRepository(HabitCheckIn)
-    private readonly checkIns: Repository<HabitCheckIn>,
     private readonly externalBusy: ExternalCalendarBusyService,
   ) {}
 
@@ -171,37 +163,23 @@ export class RemindersService {
     const subs = await this.subscriptions.find({ where: { userId: settings.userId } });
     if (!subs.length) return null;
 
-    const timeZone = resolveIanaTimeZone(settings.timeZone);
-    const todayYmd = localYmd(now.toISOString(), timeZone);
     const nowMs = now.getTime();
 
-    const [habits, checks, tasks, recent] = await Promise.all([
-      this.habits.find({ where: { userId: settings.userId } }),
-      this.checkIns.find({ where: { userId: settings.userId, localDate: todayYmd } }),
+    const [tasks, recent] = await Promise.all([
       this.tasks.find({ where: { userId: settings.userId } }),
       this.deliveries.find({
         where: { userId: settings.userId, sentAt: MoreThan(new Date(nowMs - DELIVERY_TTL_MS)) },
       }),
     ]);
-    const checked = new Set(checks.map((row) => row.habitId));
     const events = await this.loadDisplayEvents(settings, nowMs);
 
     const due = selectDueReminders({
       nowMs,
-      todayYmd,
-      timeZone,
-      wakeHm: normalizeClockHm(settings.wakeTime),
       blocks: buildTimedReminderBlocks({
         nowMs,
         events,
         tasks,
       }),
-      habits: habits.map((habit) => ({
-        id: habit.id,
-        name: habit.name,
-        blockStartTime: habit.blockStartTime,
-        checkedToday: checked.has(habit.id),
-      })),
       alreadySent: new Set(recent.map((row) => row.dedupeKey)),
       language: settings.language,
     });

@@ -88,20 +88,5 @@ test.describe('P0 UI smoke', () => {
     await expect(stripBlock(page, name)).toHaveCount(0);
   });
 
-  test('U-HAB-004 calendar habit chip toggles today', async ({ page, auth, request }) => {
-    const name = uniqueName('E2E water');
-    const created = await apiJson(request, auth.onboarded.access_token, 'post', '/habits', {
-      name,
-      color: '#22c55e',
-    });
-    expect(created.status).toBeGreaterThanOrEqual(200);
-    expect(created.status).toBeLessThan(300);
-
-    await openAs(page, auth.onboarded);
-    const chip = page.getByRole('button', { name, exact: true });
-    await expect(chip).toHaveAttribute('aria-pressed', 'false');
-    await chip.click();
-    await expect(chip).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByRole('link', { name: 'All habits' })).toBeVisible();
-  });
+  test.skip('U-HAB-004 calendar habit chip toggles today (habits disabled for MVP)', async () => {});
 });

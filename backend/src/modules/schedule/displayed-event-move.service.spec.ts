@@ -18,7 +18,6 @@ describe('DisplayedEventMoveService', () => {
   };
 
   function service(opts: {
-    habit?: boolean;
     tasks?: Record<string, unknown>[];
     slots?: Record<string, unknown>[];
     phases?: Record<string, unknown>[];
@@ -76,9 +75,6 @@ describe('DisplayedEventMoveService', () => {
       } as never,
       taskRepo as never,
       {
-        findOne: jest.fn().mockResolvedValue(opts.habit ? { id: 'habit' } : null),
-      } as never,
-      {
         findAll: jest.fn().mockResolvedValue(opts.tasks ?? []),
         update: updateTask,
         skipOccurrence: opts.skipOccurrence ?? jest.fn().mockResolvedValue({}),
@@ -120,10 +116,11 @@ describe('DisplayedEventMoveService', () => {
     };
   }
 
-  it('does not change a habit block', async () => {
-    const { move, patch, place } = service({ habit: true });
-    await expect(move.move(userId, dto)).rejects.toBeInstanceOf(BadRequestException);
-    expect(patch).not.toHaveBeenCalled();
+  it('patches Google when the event is not an app task or slot', async () => {
+    const { move, patch, place } = service({ tasks: [], slots: [] });
+    const result = await move.move(userId, dto);
+    expect(result).toEqual({ kind: 'google', jobId: null });
+    expect(patch).toHaveBeenCalled();
     expect(place).not.toHaveBeenCalled();
   });
 

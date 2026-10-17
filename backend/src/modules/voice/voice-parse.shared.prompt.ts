@@ -13,7 +13,6 @@ export type VoiceParsePromptContext = {
   openTaskNames?: string[];
   /** Same tasks as openTaskNames, with the series flag and any known bounds. */
   openTasks?: VoiceParseOpenTask[];
-  habitNames?: string[];
   /** From router; used so specialist prompts answer in the same language. */
   language?: 'uk' | 'en' | 'ru';
   /** User setting: default length of a new task, in minutes. */
@@ -34,11 +33,6 @@ export const VOICE_PARSE_INTENTS = [
   'update',
   'delete',
   'complete',
-  'habit_check_in',
-  'habit_create',
-  'habit_update',
-  'habit_delete',
-  'habit_uncheck',
   'skip',
   'reschedule',
   'needs_clarification',
@@ -124,13 +118,6 @@ ${phaseLines}
 }
 Open tasks (incomplete):
 ${formatOpenTasks(input)}
-
-Habits:
-${
-  input.habitNames?.length
-    ? input.habitNames.map((name) => `- ${JSON.stringify(name)}`).join('\n')
-    : '(none)'
-}
 
 Transcript: ${JSON.stringify(input.transcript)}${clarification}`;
 }

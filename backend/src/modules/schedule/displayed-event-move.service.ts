@@ -9,7 +9,6 @@ import { GoogleCalendarService } from '../google-calendar/google-calendar.servic
 import { PendingGoogleWriteService } from '../google-calendar/pending-google-write.service';
 import { CalendarProvidersRegistry } from '../calendar-providers/calendar-providers.registry';
 import type { CalendarProviderId } from '../calendar-providers/calendar-provider.types';
-import { Habit } from '../habits/entities/habit.entity';
 import { PhasesService } from '../phases/phases.service';
 import { ScheduleState, Task, TaskStatus } from '../tasks/entities/task.entity';
 import { TasksService } from '../tasks/tasks.service';
@@ -45,8 +44,6 @@ export class DisplayedEventMoveService {
     private readonly scheduledRepo: Repository<ScheduledTask>,
     @InjectRepository(Task)
     private readonly taskRepo: Repository<Task>,
-    @InjectRepository(Habit)
-    private readonly habitRepo: Repository<Habit>,
     private readonly tasksService: TasksService,
     private readonly googleCalendarService: GoogleCalendarService,
     private readonly calendarProviders: CalendarProvidersRegistry,
@@ -67,12 +64,6 @@ export class DisplayedEventMoveService {
       throw new BadRequestException('Event end must be after start.');
     }
 
-    const ids = [dto.googleEventId, dto.recurringEventId].filter(
-      (id): id is string => Boolean(id),
-    );
-    const habit = await this.habitRepo.findOne({
-      where: ids.map((googleEventId) => ({ userId, googleEventId })),
-    });
     const tasks = await this.tasksService.findAll(userId);
     const slots = await this.scheduledRepo
       .createQueryBuilder('st')
@@ -84,7 +75,7 @@ export class DisplayedEventMoveService {
       googleEventId: dto.googleEventId,
       recurringEventId: dto.recurringEventId,
       originalStartIso: dto.originalStart,
-      isHabit: !!habit,
+      isHabit: false,
       tasks: tasks.map((task) => ({
         id: task.id,
         eventType: task.eventType,

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  GoneException,
   Injectable,
   Logger,
   NotFoundException,
@@ -85,24 +86,33 @@ export class HabitsService {
     private readonly streakTips: HabitStreakTipService,
   ) {}
 
+  /**
+   * MVP: habits are soft-disabled. Return an empty list with no Google backfill
+   * so leftover DB rows do not sync or surface. Rows are kept for a later re-enable.
+   */
   async findAll(userId: string): Promise<HabitsListResponse> {
     const { today, timeZone } = await this.civilToday(userId);
-    const habits = await this.habitsRepository.find({
-      where: { userId },
-      order: { createdAt: 'ASC' },
-    });
-    await this.backfillMissingGoogleBlocks(userId, habits);
-    const summaries = await this.summariesFor(habits, today);
     return {
       today,
       editableFrom: checkInEditableFrom(today),
       editableTo: today,
       timeZone,
-      habits: summaries,
+      habits: [],
     };
   }
 
+  /** Flip to true to restore habit writes without resurrecting call sites. */
+  private static readonly HABITS_WRITES_ENABLED = false;
+
+  /** MVP: habit writes are disabled. */
+  private assertHabitsEnabled(): void {
+    if (!HabitsService.HABITS_WRITES_ENABLED) {
+      throw new GoneException('Habits are disabled for this release');
+    }
+  }
+
   async create(userId: string, dto: CreateHabitDto): Promise<HabitSummary> {
+    this.assertHabitsEnabled();
     const block = this.normalizeBlock(dto.blockStartTime, dto.blockMinutes);
     const habit = this.habitsRepository.create({
       userId,
@@ -128,6 +138,7 @@ export class HabitsService {
     id: string,
     dto: UpdateHabitDto,
   ): Promise<HabitSummary> {
+    this.assertHabitsEnabled();
     const habit = await this.requireHabit(userId, id);
     const previous = this.googleSnapshot(habit);
     if (dto.name !== undefined) habit.name = this.requireName(dto.name);
@@ -149,6 +160,7 @@ export class HabitsService {
   }
 
   async remove(userId: string, id: string): Promise<void> {
+    this.assertHabitsEnabled();
     const habit = await this.requireHabit(userId, id);
     try {
       await this.deleteGoogleBlock(userId, habit);
@@ -170,6 +182,7 @@ export class HabitsService {
     date: string,
     done: boolean,
   ): Promise<HabitSummary> {
+    this.assertHabitsEnabled();
     const habit = await this.requireHabit(userId, habitId);
     const { today, language } = await this.civilToday(userId);
     const localDate = this.requireAllowedDate(date, today);

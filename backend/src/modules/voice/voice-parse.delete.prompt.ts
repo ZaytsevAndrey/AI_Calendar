@@ -20,7 +20,6 @@ const DELETE_SCHEMA = `{
 }`;
 
 const DELETE_RULES = `Delete removes a task. Follow Target. No dates, no patch, no new name.
-They named only a habit → needs_clarification, one question which task. Do not delete a habit here.
 Do not ask "are you sure". The app asks before it deletes.
 Do not invent a task or a replacement.
 

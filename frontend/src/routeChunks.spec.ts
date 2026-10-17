@@ -14,7 +14,6 @@ describe('routeChunks', () => {
             'page-calendar',
             'page-tasks',
             'page-phases',
-            'page-habits',
             'page-settings',
             'page-phase-setup',
             'page-login',

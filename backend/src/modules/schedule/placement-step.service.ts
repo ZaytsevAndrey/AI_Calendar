@@ -6,8 +6,6 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
-import { habitBlockIntervals } from '../habits/habit-blocks.util';
-import { Habit } from '../habits/entities/habit.entity';
 import { ExternalCalendarBusyService } from '../calendar-providers/external-calendar-busy.service';
 import { PendingGoogleWriteService } from '../google-calendar/pending-google-write.service';
 import { PhasesService } from '../phases/phases.service';
@@ -200,8 +198,6 @@ export class PlacementStepService {
     private readonly taskRepo: Repository<Task>,
     @InjectRepository(ScheduledTask)
     private readonly scheduledRepo: Repository<ScheduledTask>,
-    @InjectRepository(Habit)
-    private readonly habitRepo: Repository<Habit>,
     private readonly userSettingsService: UserSettingsService,
     private readonly phasesService: PhasesService,
     private readonly pendingGoogleWrites: PendingGoogleWriteService,
@@ -488,22 +484,6 @@ export class PlacementStepService {
         buffered: true,
       });
     }
-
-    const startYmd = localYmd(now.toISOString(), timeZone);
-    const endYmd = addDaysToYmd(startYmd, horizon.horizonDays);
-    const habits = await this.habitRepo.find({ where: { userId } });
-    habitBlockIntervals(habits, startYmd, endYmd, timeZone).forEach((interval, index) => {
-      seats.push({
-        id: `habit:${index}`,
-        taskId: `habit:${index}`,
-        taskName: 'Habit',
-        role: 'anchor',
-        start: interval.start,
-        end: interval.end,
-        windows: [],
-        notBefore: nowMs,
-      });
-    });
 
     const external =
       opts?.cachedExternalSeats ??

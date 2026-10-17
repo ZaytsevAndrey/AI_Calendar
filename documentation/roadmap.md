@@ -24,7 +24,7 @@ The copy script wipes production tables before it writes. There is no separate b
 
 Below 768px the shell is a bottom tab bar and the calendar opens on day. That pass is not finished.
 
-- [ ] On a phone, finish the daily path: see today, create or speak a task, mark it done, check in a habit.
+- [ ] On a phone, finish the daily path: see today, create or speak a task, mark it done.
 
 ### 33. Calendar card min height + crowded hour stretch
 
@@ -40,20 +40,14 @@ Short blocks can look too thin. When many events share an hour, the hour row sta
 - [ ] Redesign the preview layout (hierarchy, spacing, actions).
 - [ ] Fill it with the fields people need before Edit: type, phase, duration, deadline / window, calendar source, recurrence, status, description when present — for both app tasks and provider-only events.
 
-### 24. Personal-computer build, then local TTS
-
-Handoff: [tts-local.md](tts-local.md). en/uk only. Other languages are [end of queue](#end--external-do-not-start).
-
-- [ ] Build/run variant for a personal computer (stays awake; not the Render free service).
-- [ ] On that build only: one Piper HTTP process, voice per request (`uk` Тетяна, `en` Lessac), behind `VoiceSpeech.speak()`.
-
 ---
 
 ## Later — decide before building
 
 Do not start these. The shape is still open.
 
-- **Habits.** Check-in, streak, and the calendar block stay until we decide what habits should become.
+- **§24 Personal-computer build, then local TTS.** Deferred from Now — do after the rest of Now. Handoff: [tts-local.md](tts-local.md). en/uk only. Other languages are [end of queue](#end--external-do-not-start). Build/run variant for a personal computer (stays awake; not the Render free service); on that build only: one Piper HTTP process, voice per request (`uk` Тетяна, `en` Lessac), behind `VoiceSpeech.speak()`.
+- **Habits.** Soft-disabled for MVP (no UI/nav/voice/schedule/reminders impact; DB rows and Google habit events left as-is). Re-enable only after we decide what habits should become.
 - **Languages beyond en/uk.** UI and speech are en and uk. Pick the set before adding catalogs.
 - **STT language: auto vs settings.** Today `speechLanguage` (`en` | `uk`) is a hint to Whisper on `/voice/transcribe`. Investigate whether Whisper already detects the spoken language well enough without that setting, whether a wrong hint hurts accuracy, and whether Settings still needs an explicit speech language (or auto / follow-UI is enough). Decide before changing Settings or the STT call.
 - **Admin.** Owner-only. Contents are not chosen. Do not open an empty admin.
@@ -86,7 +80,7 @@ Third parties and publishing. Leave these until the Now list is done.
 
 ## Recommended next steps
 
-1. Next live item: roadmap **§31** — database backup.
-2. Then the rest of **Now**: §32 mobile daily path, §33 card min height / crowded hour, §35 preview look + content, §24 Piper ([tts-local.md](tts-local.md)).
+1. In progress: roadmap **§32** — mobile daily path.
+2. Then the rest of **Now**: §31 database backup, §33 card min height / crowded hour, §35 preview look + content. (§24 Piper is in Later.)
 3. Voice understanding continues in parallel via [voice-prompt-next.md](voice-prompt-next.md); do not put it back in this queue.
 4. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

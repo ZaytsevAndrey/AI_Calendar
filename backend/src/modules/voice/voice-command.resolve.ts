@@ -11,7 +11,6 @@ import {
 import type {
   VoiceCommand,
   VoiceCommandDraft,
-  VoiceCommandHabit,
   VoiceCommandIntent,
   VoiceCommandSlot,
   VoiceCommandTask,
@@ -114,48 +113,9 @@ export function sniffCommandIntent(transcript: string): VoiceCommandIntent | nul
   const text = transcript.replace(/\s+/g, ' ').trim();
   if (!text) return null;
   if (leading('add|create|new task|нагадай|створи|додай|создай|добавь').test(text)) {
-    // Habit create may still start with "create habit" / "створи звичку".
-    if (
-      leading(
-        'create\\s+habit|new\\s+habit|add\\s+habit|створи(?:ти)?\\s+звичк|додай(?:ти)?\\s+звичк|создай\\s+привычк|добавь\\s+привычк',
-      ).test(text)
-    ) {
-      return 'habit_create';
-    }
     return null;
   }
-  if (
-    leading(
-      'delete\\s+habit|remove\\s+habit|видалити\\s+звичк|удалить\\s+привычк',
-    ).test(text)
-  ) {
-    return 'habit_delete';
-  }
-  if (
-    leading(
-      'uncheck|clear\\s+check(?:[-\\s]?in)?|зняти\\s+відмітк|скасувати\\s+відмітк|снять\\s+отметк',
-    ).test(text)
-  ) {
-    return 'habit_uncheck';
-  }
-  if (
-    leading(
-      'update\\s+habit|edit\\s+habit|change\\s+habit|rename\\s+habit|зміни(?:ти)?\\s+звичк|перейменуй\\s+звичк|измени\\s+привычк',
-    ).test(text)
-  ) {
-    return 'habit_update';
-  }
-  if (leading('create\\s+habit|new\\s+habit|add\\s+habit|створи(?:ти)?\\s+звичк|додай(?:ти)?\\s+звичк').test(text)) {
-    return 'habit_create';
-  }
   if (sniffDoNow(text)) return 'reschedule';
-  if (
-    leading(
-      'check(?:ed)?\\s*in|mark\\s+(?:my\\s+)?habit|habit\\s+check|i\\s+(?:did|have\\s+done)(?:\\s+my)?\\s+habit|відміт(?:ив|ила|ити)(?:\\s+звичку)?|звичк[ауіи]',
-    ).test(text)
-  ) {
-    return 'habit_check_in';
-  }
   if (
     leading(
       'delete|remove|видалити|видали|удалить|удали',
@@ -205,17 +165,15 @@ export function readVoiceIntent(
           .trim()
           .toLowerCase()
       : '';
+  if (intent.startsWith('habit_')) {
+    return 'needs_clarification';
+  }
   if (
     intent === 'complete' ||
     intent === 'skip' ||
     intent === 'reschedule' ||
-    intent === 'habit_check_in' ||
     intent === 'update' ||
     intent === 'delete' ||
-    intent === 'habit_create' ||
-    intent === 'habit_update' ||
-    intent === 'habit_delete' ||
-    intent === 'habit_uncheck' ||
     intent === 'create' ||
     intent === 'needs_clarification'
   ) {
@@ -276,47 +234,11 @@ export function resolveVoiceCommand(input: {
   alreadyClarified: boolean;
   tasks: VoiceCommandTask[];
   slots: VoiceCommandSlot[];
-  habits?: VoiceCommandHabit[];
   language?: string;
   wakeTime?: string | null;
 }): VoiceCommandResolveResult {
   const lang = resolveLang(input.language);
   const draft = normalizeDraft(input.draft, input.transcript);
-  const habits = input.habits ?? [];
-
-  if (draft.intent === 'habit_create') {
-    return resolveHabitCreate({
-      draft,
-      alreadyClarified: input.alreadyClarified,
-      language: lang,
-    });
-  }
-
-  if (
-    draft.intent === 'habit_update' ||
-    draft.intent === 'habit_delete' ||
-    draft.intent === 'habit_uncheck'
-  ) {
-    return resolveHabitMutation({
-      draft,
-      habits,
-      timeZone: input.timeZone,
-      nowIso: input.nowIso,
-      alreadyClarified: input.alreadyClarified,
-      language: lang,
-    });
-  }
-
-  if (draft.intent === 'habit_check_in') {
-    return resolveHabitCheckIn({
-      draft,
-      habits,
-      timeZone: input.timeZone,
-      nowIso: input.nowIso,
-      alreadyClarified: input.alreadyClarified,
-      language: lang,
-    });
-  }
 
   if (draft.intent === 'update' || draft.intent === 'delete') {
     const picked = pickTask({ ...input, draft, language: lang });
@@ -398,27 +320,6 @@ export function resolveVoiceCommand(input: {
       : picked;
   }
   if (picked.type === 'refuse') {
-    if (draft.intent === 'complete' && habits.length > 0) {
-      const habitResult = resolveHabitCheckIn({
-        draft: { ...draft, intent: 'habit_check_in' },
-        habits,
-        timeZone: input.timeZone,
-        nowIso: input.nowIso,
-        alreadyClarified: input.alreadyClarified,
-        language: lang,
-      });
-      if (
-        habitResult.type === 'command' &&
-        habitResult.command.kind === 'habit_check_in'
-      ) {
-        return habitResult;
-      }
-      if (habitResult.type === 'clarify') {
-        return input.alreadyClarified
-          ? { type: 'command', command: { kind: 'refuse', message: habitResult.question } }
-          : habitResult;
-      }
-    }
     return { type: 'command', command: { kind: 'refuse', message: picked.message } };
   }
 
@@ -470,137 +371,6 @@ export function resolveVoiceCommand(input: {
   }
 
   return rescheduleCommand({ ...input, draft, language: lang }, task, slot, nowMs);
-}
-
-function resolveHabitCreate(input: {
-  draft: VoiceCommandDraft;
-  alreadyClarified: boolean;
-  language: AppLanguage;
-}): VoiceCommandResolveResult {
-  const lang = input.language;
-  const fields = { ...(input.draft.habitFields || {}) };
-  const name = (fields.name || input.draft.taskName || '').trim();
-  if (!name) {
-    const question = vt(lang, 'voice.habitName');
-    return input.alreadyClarified
-      ? { type: 'command', command: { kind: 'refuse', message: question } }
-      : { type: 'clarify', question };
-  }
-  fields.name = name;
-  return {
-    type: 'command',
-    command: {
-      kind: 'habit_create',
-      summary: vt(lang, 'voice.createHabit', { name }),
-      fields: fields as VoiceHabitFields & { name: string },
-    },
-  };
-}
-
-function resolveHabitMutation(input: {
-  draft: VoiceCommandDraft;
-  habits: VoiceCommandHabit[];
-  timeZone: string;
-  nowIso: string;
-  alreadyClarified: boolean;
-  language: AppLanguage;
-}): VoiceCommandResolveResult {
-  const lang = input.language;
-  if (input.habits.length === 0) {
-    return {
-      type: 'command',
-      command: { kind: 'refuse', message: vt(lang, 'voice.noHabits') },
-    };
-  }
-  const query = input.draft.taskName;
-  if (!query) {
-    if (input.habits.length === 1) {
-      return finishHabitMutation(input.habits[0], input);
-    }
-    return input.alreadyClarified
-      ? {
-          type: 'command',
-          command: { kind: 'refuse', message: vt(lang, 'voice.whichHabit') },
-        }
-      : {
-          type: 'clarify',
-          question: vt(lang, 'voice.whichHabitList', {
-            names: input.habits
-              .slice(0, 5)
-              .map((habit) => habit.name)
-              .join(', '),
-          }),
-        };
-  }
-  const matched = matchNamedHabit(input.habits, query, lang);
-  if (matched.type === 'clarify') {
-    return input.alreadyClarified
-      ? { type: 'command', command: { kind: 'refuse', message: matched.question } }
-      : matched;
-  }
-  if (matched.type === 'refuse') {
-    return { type: 'command', command: { kind: 'refuse', message: matched.message } };
-  }
-  return finishHabitMutation(matched.habit, input);
-}
-
-function finishHabitMutation(
-  habit: VoiceCommandHabit,
-  input: {
-    draft: VoiceCommandDraft;
-    timeZone: string;
-    nowIso: string;
-    alreadyClarified: boolean;
-    language: AppLanguage;
-  },
-): VoiceCommandResolveResult {
-  const lang = input.language;
-  const date = localYmd(input.nowIso, input.timeZone);
-  if (input.draft.intent === 'habit_delete') {
-    return {
-      type: 'command',
-      command: {
-        kind: 'habit_delete',
-        habitId: habit.id,
-        habitName: habit.name,
-        summary: vt(lang, 'voice.deleteHabit', { name: habit.name }),
-      },
-    };
-  }
-  if (input.draft.intent === 'habit_uncheck') {
-    return {
-      type: 'command',
-      command: {
-        kind: 'habit_uncheck',
-        habitId: habit.id,
-        habitName: habit.name,
-        date,
-        summary: vt(lang, 'voice.uncheckHabit', { name: habit.name }),
-      },
-    };
-  }
-  const patch = { ...(input.draft.habitFields || {}) };
-  delete (patch as { name?: string }).name;
-  // Rename: draft.taskName is the target; habitFields.name is the new name.
-  if (input.draft.habitFields?.name && input.draft.habitFields.name !== habit.name) {
-    patch.name = input.draft.habitFields.name;
-  }
-  if (!Object.keys(patch).length) {
-    const question = vt(lang, 'voice.whatToChangeHabit');
-    return input.alreadyClarified
-      ? { type: 'command', command: { kind: 'refuse', message: question } }
-      : { type: 'clarify', question };
-  }
-  return {
-    type: 'command',
-    command: {
-      kind: 'habit_update',
-      habitId: habit.id,
-      habitName: habit.name,
-      summary: vt(lang, 'voice.updateHabit', { name: habit.name }),
-      patch,
-    },
-  };
 }
 
 function applyReopenHints(patch: VoiceTaskPatch, transcript: string): VoiceTaskPatch {
@@ -746,71 +516,6 @@ function asWeekDays(value: unknown): number[] | null {
     ),
   ].sort((a, b) => a - b);
   return days.length ? days : null;
-}
-
-function resolveHabitCheckIn(input: {
-  draft: VoiceCommandDraft;
-  habits: VoiceCommandHabit[];
-  timeZone: string;
-  nowIso: string;
-  alreadyClarified: boolean;
-  language: AppLanguage;
-}): VoiceCommandResolveResult {
-  const lang = input.language;
-  if (input.habits.length === 0) {
-    return {
-      type: 'command',
-      command: { kind: 'refuse', message: vt(lang, 'voice.noHabits') },
-    };
-  }
-  const query = input.draft.taskName;
-  if (!query) {
-    if (input.habits.length === 1) {
-      return habitCheckInCommand(input.habits[0], input.timeZone, input.nowIso, lang);
-    }
-    return input.alreadyClarified
-      ? {
-          type: 'command',
-          command: { kind: 'refuse', message: vt(lang, 'voice.whichHabit') },
-        }
-      : {
-          type: 'clarify',
-          question: vt(lang, 'voice.whichHabitList', {
-            names: input.habits
-              .slice(0, 5)
-              .map((habit) => habit.name)
-              .join(', '),
-          }),
-        };
-  }
-  const matched = matchNamedHabit(input.habits, query, lang);
-  if (matched.type === 'clarify') {
-    return input.alreadyClarified
-      ? { type: 'command', command: { kind: 'refuse', message: matched.question } }
-      : matched;
-  }
-  if (matched.type === 'refuse') {
-    return { type: 'command', command: { kind: 'refuse', message: matched.message } };
-  }
-  return habitCheckInCommand(matched.habit, input.timeZone, input.nowIso, lang);
-}
-
-function habitCheckInCommand(
-  habit: VoiceCommandHabit,
-  timeZone: string,
-  nowIso: string,
-  lang: AppLanguage,
-): VoiceCommandResolveResult {
-  return {
-    type: 'command',
-    command: {
-      kind: 'habit_check_in',
-      habitId: habit.id,
-      habitName: habit.name,
-      date: localYmd(nowIso, timeZone),
-      summary: vt(lang, 'voice.habitCheckIn', { name: habit.name }),
-    },
-  };
 }
 
 function skipCommand(
@@ -1235,7 +940,7 @@ function stripCommandPrefix(text: string): string | null {
     .trim()
     .replace(
       new RegExp(
-        `^(?:please\\s+|будь ласка\\s+)?(?:do\\s+now|schedule\\s+(?:it\\s+)?now|place\\s+(?:it\\s+)?now|зроби\\s+зараз|заплануй(?:\\s+це)?\\s+зараз|сделай\\s+сейчас|check(?:ed)?\\s*in|mark\\s+(?:my\\s+)?habit|habit\\s+check|i\\s+(?:did|have\\s+done)(?:\\s+my)?\\s+habit|відміт(?:ив|ила|ити)(?:\\s+звичку)?|звичк[ауіи]|create\\s+habit|new\\s+habit|add\\s+habit|створи(?:ти)?\\s+звичк|додай(?:ти)?\\s+звичк|delete\\s+habit|remove\\s+habit|видалити\\s+звичк|update\\s+habit|edit\\s+habit|change\\s+habit|uncheck|clear\\s+check(?:[-\\s]?in)?|зняти\\s+відмітк|delete|remove|видалити|видали|удалить|удали|rename|reopen|update|edit|change|set|перейменуй|зміни(?:ти)?|онов(?:и|ити)|відкрий(?:\\s+знову)?|skip|пропусти(?:ти)?|пропустить|move|reschedule|перенес(?:и|ти|іть)?|перестав(?:ь|ити)?|зсунь|сдвин(?:ь|уть)|mark|закінч(?:ив|ила|ити)?|заверш(?:ив|ила)|зроби(?:в|ла)|готово|закончил(?:а)?|сделал(?:а)?|выполнил(?:а)?|done|complete|completed|finish(?:ed)?)${EDGE}\\s*`,
+        `^(?:please\\s+|будь ласка\\s+)?(?:do\\s+now|schedule\\s+(?:it\\s+)?now|place\\s+(?:it\\s+)?now|зроби\\s+зараз|заплануй(?:\\s+це)?\\s+зараз|сделай\\s+сейчас|delete|remove|видалити|видали|удалить|удали|rename|reopen|update|edit|change|set|перейменуй|зміни(?:ти)?|онов(?:и|ити)|відкрий(?:\\s+знову)?|skip|пропусти(?:ти)?|пропустить|move|reschedule|перенес(?:и|ти|іть)?|перестав(?:ь|ити)?|зсунь|сдвин(?:ь|уть)|mark|закінч(?:ив|ила|ити)?|заверш(?:ив|ила)|зроби(?:в|ла)|готово|закончил(?:а)?|сделал(?:а)?|выполнил(?:а)?|done|complete|completed|finish(?:ed)?)${EDGE}\\s*`,
         'iu',
       ),
       '',
@@ -1280,42 +985,6 @@ function matchNamed(
     };
   }
   return { type: 'refuse', message: vt(lang, 'voice.couldNotFindTask') };
-}
-
-function matchNamedHabit(
-  habits: VoiceCommandHabit[],
-  query: string,
-  lang: AppLanguage,
-):
-  | { type: 'habit'; habit: VoiceCommandHabit }
-  | { type: 'clarify'; question: string }
-  | { type: 'refuse'; message: string } {
-  const needle = normalizeName(query);
-  if (!needle || CURRENT_WORDS.test(needle)) {
-    return { type: 'clarify', question: vt(lang, 'voice.whichHabit') };
-  }
-  const exact = habits.filter((habit) => normalizeName(habit.name) === needle);
-  const hits = exact.length
-    ? exact
-    : habits.filter((habit) => {
-        const name = normalizeName(habit.name);
-        if (!name) return false;
-        if (name.includes(needle)) return true;
-        return needle.includes(name) && name.length >= 3;
-      });
-  if (hits.length === 1) return { type: 'habit', habit: hits[0] };
-  if (hits.length > 1) {
-    return {
-      type: 'clarify',
-      question: vt(lang, 'voice.whichHabitList', {
-        names: hits
-          .slice(0, 5)
-          .map((habit) => habit.name)
-          .join(', '),
-      }),
-    };
-  }
-  return { type: 'refuse', message: vt(lang, 'voice.couldNotFindHabit') };
 }
 
 function pickOpenSlot(

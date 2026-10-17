@@ -1,7 +1,5 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { HabitCheckIn } from '../habits/entities/habit-check-in.entity';
-import { Habit } from '../habits/entities/habit.entity';
 import { CalendarProvidersModule } from '../calendar-providers/calendar-providers.module';
 import { Task } from '../tasks/entities/task.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
@@ -18,8 +16,6 @@ import { RemindersService } from './reminders.service';
       ReminderDelivery,
       UserSettings,
       Task,
-      Habit,
-      HabitCheckIn,
     ]),
     CalendarProvidersModule,
   ],

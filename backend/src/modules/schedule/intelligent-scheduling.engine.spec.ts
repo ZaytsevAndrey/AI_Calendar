@@ -127,7 +127,6 @@ describe('IntelligentSchedulingEngine', () => {
   let engine: IntelligentSchedulingEngine;
   let taskRepo: MockRepo;
   let scheduledRepo: MockRepo;
-  let habitRepo: { find: jest.Mock };
   let getSettingsMock: jest.Mock;
 
   const userId = 'user-1';
@@ -179,9 +178,6 @@ describe('IntelligentSchedulingEngine', () => {
     };
 
     getSettingsMock = jest.fn().mockResolvedValue(baseSettings);
-    habitRepo = {
-      find: jest.fn().mockResolvedValue([]),
-    };
 
     engine = new IntelligentSchedulingEngine(
       taskRepo as never,
@@ -192,73 +188,11 @@ describe('IntelligentSchedulingEngine', () => {
       {
         listVisibleEvents: jest.fn().mockResolvedValue([]),
       } as never,
-      habitRepo as never,
     );
   });
 
   afterEach(() => {
     jest.useRealTimers();
-  });
-
-  it('places a task after a habit time block instead of on top of it', async () => {
-    habitRepo.find.mockResolvedValue([
-      { blockStartTime: '09:00', blockMinutes: 60 },
-    ]);
-    taskRepo.find.mockResolvedValue([
-      makeTask({
-        id: 'after-habit',
-        name: 'Write',
-        estimatedTimeInMinutes: 60,
-        phases: [phaseWorkday],
-      }),
-    ]);
-
-    const result = await engine.run(userId);
-
-    expect(result.errors).toHaveLength(0);
-    expect(extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls).get('after-habit')?.[0]).toEqual([
-      atLocalTimeIso(0, 10),
-      atLocalTimeIso(0, 11),
-    ]);
-  });
-
-  it('does not treat a habit Google series as extra busy beyond the habit block', async () => {
-    habitRepo.find.mockResolvedValue([
-      { blockStartTime: '09:00', blockMinutes: 60, googleEventId: 'habit-series-1' },
-    ]);
-    getSettingsMock.mockResolvedValue(
-      makeSettings({
-        ...baseSettings,
-        googleCalendarLinked: true,
-      }),
-    );
-    const externalBusy = (engine as any).externalBusy as {
-      listVisibleEvents: jest.Mock;
-    };
-    externalBusy.listVisibleEvents.mockResolvedValue([
-      {
-        id: 'habit-series-1_20260420',
-        recurringEventId: 'habit-series-1',
-        status: 'confirmed',
-        start: { dateTime: '2026-04-20T09:00:00.000Z' },
-        end: { dateTime: '2026-04-20T12:00:00.000Z' },
-      },
-    ]);
-    taskRepo.find.mockResolvedValue([
-      makeTask({
-        id: 'after-habit-series',
-        name: 'Write',
-        estimatedTimeInMinutes: 60,
-        phases: [phaseWorkday],
-      }),
-    ]);
-
-    const result = await engine.run(userId);
-
-    expect(result.errors).toHaveLength(0);
-    expect(
-      extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls).get('after-habit-series')?.[0],
-    ).toEqual([atLocalTimeIso(0, 10), atLocalTimeIso(0, 11)]);
   });
 
   it('places recurring tasks by createdAt FIFO and ignores priority', async () => {
@@ -656,7 +590,7 @@ describe('IntelligentSchedulingEngine', () => {
     ]);
   });
 
-  it('pads external Google events and leaves habit blocks unpadded', async () => {
+  it('pads external Google events with the fixed-event buffer', async () => {
     getSettingsMock.mockResolvedValue(
       makeSettings({
         ...baseSettings,
@@ -689,28 +623,6 @@ describe('IntelligentSchedulingEngine', () => {
     expect(extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls).get('after-google')?.[0]).toEqual([
       atLocalTimeWithMinutesIso(0, 10, 45),
       atLocalTimeWithMinutesIso(0, 11, 45),
-    ]);
-
-    scheduledRepo.save.mockClear();
-    externalBusy.listVisibleEvents.mockResolvedValue([]);
-    getSettingsMock.mockResolvedValue(
-      makeSettings({ ...baseSettings, fixedEventBufferMinutes: 15 }),
-    );
-    habitRepo.find.mockResolvedValue([{ blockStartTime: '10:00', blockMinutes: 30 }]);
-    taskRepo.find.mockResolvedValue([
-      makeTask({
-        id: 'against-habit',
-        name: 'Write',
-        estimatedTimeInMinutes: 60,
-        phases: [phaseWorkday],
-      }),
-    ]);
-
-    const habitResult = await engine.run(userId);
-    expect(habitResult.errors).toHaveLength(0);
-    expect(extractTaskSegmentsByTaskId(scheduledRepo.save.mock.calls).get('against-habit')?.[0]).toEqual([
-      atLocalTimeIso(0, 9),
-      atLocalTimeIso(0, 10),
     ]);
   });
 

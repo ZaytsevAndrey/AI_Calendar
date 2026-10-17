@@ -151,12 +151,11 @@ describe('Google, event-phases, and isolation API e2e', () => {
     const a = await seedOnboardedUser(ctx.app);
     const b = await seedOnboardedUser(ctx.app);
     const phase = await createTimePhase(ctx.app, b.token, { name: 'B phase' });
-    const habit = jsonBody(
-      await api(ctx.app, 'POST', '/habits', {
-        token: b.token,
-        payload: { name: 'B habit' },
-      }),
-    );
+    const habitCreate = await api(ctx.app, 'POST', '/habits', {
+      token: b.token,
+      payload: { name: 'B habit' },
+    });
+    expect(habitCreate.statusCode).toBe(410);
     const task = jsonBody(
       await api(ctx.app, 'POST', '/tasks', {
         token: b.token,
@@ -186,11 +185,11 @@ describe('Google, event-phases, and isolation API e2e', () => {
       (await api(ctx.app, 'GET', `/phases/${phase.id}`, { token: a.token })).statusCode,
     ).toBe(404);
     expect(
-      (await api(ctx.app, 'PATCH', `/habits/${habit.id}`, {
+      (await api(ctx.app, 'PATCH', '/habits/00000000-0000-4000-8000-000000000099', {
         token: a.token,
         payload: { name: 'hack' },
       })).statusCode,
-    ).toBe(404);
+    ).toBe(410);
     expect(
       (await api(ctx.app, 'GET', `/schedule/${slot.id}`, { token: a.token }))
         .statusCode,

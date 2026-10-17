@@ -1,7 +1,5 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { HabitCheckIn } from '../habits/entities/habit-check-in.entity';
-import { Habit } from '../habits/entities/habit.entity';
 import { Phase } from '../phases/entities/phase.entity';
 import { ScheduledTask } from '../schedule/schedule.entity';
 import { Task } from '../tasks/entities/task.entity';
@@ -23,8 +21,6 @@ import { VoiceSessionStore } from './voice-session.store';
       Phase,
       Task,
       ScheduledTask,
-      Habit,
-      HabitCheckIn,
       VoiceDailyUsage,
     ]),
     UserSettingsModule,

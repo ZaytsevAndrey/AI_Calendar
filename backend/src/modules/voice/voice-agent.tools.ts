@@ -1,9 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { HabitCheckIn } from '../habits/entities/habit-check-in.entity';
-import { Habit } from '../habits/entities/habit.entity';
-import { computeHabitStats } from '../habits/habit-stats.util';
 import { Phase } from '../phases/entities/phase.entity';
 import { ExternalCalendarBusyService } from '../calendar-providers/external-calendar-busy.service';
 import { providerEventsToBusyIntervals } from '../schedule/external-calendar-busy.util';
@@ -31,7 +26,6 @@ export type VoiceToolContext = {
   settings: UserSettings;
   tasks: Task[];
   slots: ScheduledTask[];
-  habits: Habit[];
   phases: Phase[];
 };
 
@@ -48,8 +42,6 @@ export const VOICE_READ_TOOL_NAMES = [
   'list_problematic',
   'find_free_gaps',
   'match_task',
-  'match_habit',
-  'get_habit_status',
   'get_task',
 ] as const;
 
@@ -57,11 +49,7 @@ export type VoiceReadToolName = (typeof VOICE_READ_TOOL_NAMES)[number];
 
 @Injectable()
 export class VoiceAgentTools {
-  constructor(
-    @InjectRepository(HabitCheckIn)
-    private readonly checkInsRepository: Repository<HabitCheckIn>,
-    private readonly externalBusy: ExternalCalendarBusyService,
-  ) {}
+  constructor(private readonly externalBusy: ExternalCalendarBusyService) {}
 
   async execute(
     call: VoiceToolCall,
@@ -82,14 +70,6 @@ export class VoiceAgentTools {
         return this.findFreeGaps(ctx, String(args.day ?? args.ymd ?? ''));
       case 'match_task':
         return this.matchTask(ctx, String(args.query ?? args.name ?? ''));
-      case 'match_habit':
-        return this.matchHabit(ctx, String(args.query ?? args.name ?? ''));
-      case 'get_habit_status':
-        return this.getHabitStatus(
-          ctx,
-          String(args.habitId ?? ''),
-          String(args.query ?? args.name ?? ''),
-        );
       case 'get_task':
         return this.getTask(ctx, String(args.taskId ?? args.id ?? ''));
       default:
@@ -112,9 +92,6 @@ export class VoiceAgentTools {
     }
     for (const slot of ctx.slots) {
       if (slot.googleEventId) ids.add(slot.googleEventId);
-    }
-    for (const habit of ctx.habits) {
-      if (habit.googleEventId) ids.add(habit.googleEventId);
     }
     return ids;
   }
@@ -371,46 +348,6 @@ export class VoiceAgentTools {
         scheduleState: task.scheduleState,
       }));
     return { query, matches };
-  }
-
-  private matchHabit(ctx: VoiceToolContext, query: string) {
-    const q = query.trim().toLowerCase();
-    if (!q) return { matches: [] };
-    const matches = ctx.habits
-      .filter((habit) => habit.name.toLowerCase().includes(q))
-      .slice(0, 8)
-      .map((habit) => ({ habitId: habit.id, name: habit.name }));
-    return { query, matches };
-  }
-
-  private async getHabitStatus(
-    ctx: VoiceToolContext,
-    habitId: string,
-    query: string,
-  ) {
-    let habit =
-      (habitId && ctx.habits.find((row) => row.id === habitId)) || undefined;
-    if (!habit && query.trim()) {
-      const q = query.trim().toLowerCase();
-      habit = ctx.habits.find((row) => row.name.toLowerCase().includes(q));
-    }
-    if (!habit) return { error: 'Habit not found' };
-    const today = localYmd(ctx.nowIso, ctx.timeZone);
-    const checkIns = await this.checkInsRepository.find({
-      where: { habitId: habit.id },
-    });
-    const ymds = checkIns.map((row) => row.localDate);
-    const stats = computeHabitStats(ymds, today);
-    return {
-      habitId: habit.id,
-      name: habit.name,
-      today,
-      checkedInToday: ymds.includes(today),
-      currentStreak: stats.currentStreak,
-      points: stats.points,
-      blockStartTime: habit.blockStartTime,
-      blockMinutes: habit.blockMinutes,
-    };
   }
 
   private getTask(ctx: VoiceToolContext, taskId: string) {

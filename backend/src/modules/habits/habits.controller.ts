@@ -29,39 +29,38 @@ export class HabitsController {
   constructor(private readonly habitsService: HabitsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List habits with streaks, points, and check-in dates' })
-  @ApiResponse({ status: 200, description: 'Habits for the current user.' })
+  @ApiOperation({
+    summary: 'List habits (MVP: always empty; soft-disabled)',
+  })
+  @ApiResponse({ status: 200, description: 'Empty habits list for the current user.' })
   findAll(@Request() req) {
     return this.habitsService.findAll(req.user.userId);
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a habit' })
-  @ApiResponse({ status: 201, description: 'Habit created.' })
+  @ApiOperation({ summary: 'Create a habit (MVP: disabled)' })
+  @ApiResponse({ status: 410, description: 'Habits are disabled.' })
   create(@Request() req, @Body() dto: CreateHabitDto) {
     return this.habitsService.create(req.user.userId, dto);
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update a habit' })
-  @ApiResponse({ status: 200, description: 'Habit updated.' })
-  @ApiResponse({ status: 404, description: 'Habit not found.' })
+  @ApiOperation({ summary: 'Update a habit (MVP: disabled)' })
+  @ApiResponse({ status: 410, description: 'Habits are disabled.' })
   update(@Request() req, @Param('id') id: string, @Body() dto: UpdateHabitDto) {
     return this.habitsService.update(req.user.userId, id, dto);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a habit and its check-ins' })
-  @ApiResponse({ status: 200, description: 'Habit deleted.' })
-  @ApiResponse({ status: 404, description: 'Habit not found.' })
+  @ApiOperation({ summary: 'Delete a habit (MVP: disabled)' })
+  @ApiResponse({ status: 410, description: 'Habits are disabled.' })
   remove(@Request() req, @Param('id') id: string) {
     return this.habitsService.remove(req.user.userId, id);
   }
 
   @Post(':id/check-ins')
-  @ApiOperation({ summary: 'Mark a civil day as done (any day through today)' })
-  @ApiResponse({ status: 201, description: 'Check-in saved.' })
-  @ApiResponse({ status: 400, description: 'Date is invalid or in the future.' })
+  @ApiOperation({ summary: 'Check in (MVP: disabled)' })
+  @ApiResponse({ status: 410, description: 'Habits are disabled.' })
   checkIn(
     @Request() req,
     @Param('id') id: string,
@@ -71,8 +70,8 @@ export class HabitsController {
   }
 
   @Delete(':id/check-ins/:date')
-  @ApiOperation({ summary: 'Clear a check-in (any day through today)' })
-  @ApiResponse({ status: 200, description: 'Check-in removed.' })
+  @ApiOperation({ summary: 'Clear check-in (MVP: disabled)' })
+  @ApiResponse({ status: 410, description: 'Habits are disabled.' })
   uncheck(
     @Request() req,
     @Param('id') id: string,

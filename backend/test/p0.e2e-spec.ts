@@ -140,42 +140,22 @@ describe('P0 API e2e', () => {
     });
   });
 
-  describe('A-HAB habits', () => {
-    it('A-HAB-002 / A-HAB-011 / A-HAB-013 create, today check-in, reject future date', async () => {
+  describe('A-HAB habits (MVP soft-disabled)', () => {
+    it('A-HAB-001 / A-HAB-002 GET empty list; POST returns 410', async () => {
       const { token } = await seedOnboardedUser(ctx.app);
+      const listed = await api(ctx.app, 'GET', '/habits', { token });
+      expect(listed.statusCode).toBe(200);
+      const body = jsonBody(listed);
+      expect(body.habits).toEqual([]);
+      expect(String(body.today)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(body.editableTo).toBe(body.today);
+      expect(body.editableFrom).toBe(addDaysToYmd(String(body.today), -13));
+
       const created = await api(ctx.app, 'POST', '/habits', {
         token,
         payload: { name: 'Exercise' },
       });
-      expect(created.statusCode).toBe(201);
-      const habitId = jsonBody(created).id;
-      expect(habitId).toBeTruthy();
-
-      const listed = await api(ctx.app, 'GET', '/habits', { token });
-      const today = String(jsonBody(listed).today);
-      expect(jsonBody(listed).editableTo).toBe(today);
-      expect(jsonBody(listed).editableFrom).toBe(addDaysToYmd(today, -13));
-
-      const checkIn = await api(ctx.app, 'POST', `/habits/${habitId}/check-ins`, {
-        token,
-        payload: { date: today },
-      });
-      expect(checkIn.statusCode).toBe(201);
-      expect(jsonBody(checkIn).checkedToday).toBe(true);
-
-      const older = await api(ctx.app, 'POST', `/habits/${habitId}/check-ins`, {
-        token,
-        payload: { date: addDaysToYmd(today, -14) },
-      });
-      expect(older.statusCode).toBe(201);
-
-      const rejected = await api(
-        ctx.app,
-        'POST',
-        `/habits/${habitId}/check-ins`,
-        { token, payload: { date: addDaysToYmd(today, 1) } },
-      );
-      expect(rejected.statusCode).toBe(400);
+      expect(created.statusCode).toBe(410);
     });
   });
 

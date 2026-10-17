@@ -39,11 +39,6 @@ export const routeChunks = {
         'page-phases',
         () => import(/* webpackChunkName: "page-phases" */ 'pages/PhasesPage/PhasesPage'),
     ),
-    habits: defineRouteChunk(
-        'habits',
-        'page-habits',
-        () => import(/* webpackChunkName: "page-habits" */ 'pages/HabitsPage'),
-    ),
     settings: defineRouteChunk(
         'settings',
         'page-settings',
@@ -78,7 +73,6 @@ const chunksByPath: Record<string, RouteChunk> = {
     '/': routeChunks.calendar,
     '/tasks': routeChunks.tasks,
     '/phases': routeChunks.phases,
-    '/habits': routeChunks.habits,
     '/settings': routeChunks.settings,
 };
 

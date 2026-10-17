@@ -1,7 +1,5 @@
 import { eventsApi } from 'api/eventsApi';
 import { eventTasksApi } from 'api/eventTasksApi';
-import { habitsApi } from 'api/habitsApi';
-import type { HabitAchievementId, HabitDTO } from 'api/habits.api';
 import { ScheduleApi } from 'api/schedule.api';
 import type { SkipOccurrenceDTO, UpdateTaskDTO } from 'api/tasks.api';
 import type { VoiceCommandAction } from 'api/voice.api';
@@ -28,95 +26,10 @@ function refreshCalendar(dispatch: (action: any) => void): void {
   dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));
 }
 
-function isStreakAchievement(id: HabitAchievementId): boolean {
-  return id.startsWith('streak_');
-}
-
 export async function executeVoiceCommand(
   command: VoiceCommandAction,
   deps: ExecuteDeps,
 ): Promise<void> {
-  if (command.kind === 'habit_check_in') {
-    const response = await apiCall({
-      url: `/habits/${command.habitId}/check-ins`,
-      method: 'POST',
-      data: { date: command.date },
-    });
-    const habit = response.data as HabitDTO;
-    deps.dispatch(habitsApi.util.invalidateTags([{ type: 'Habits', id: 'LIST' }]));
-    showSuccessToast({
-      title: i18n.t('voice.habitCheckedIn'),
-      detail: command.habitName,
-    });
-    let tipShown = false;
-    for (const id of habit.newlyUnlocked ?? []) {
-      const useTip =
-        !tipShown && Boolean(habit.streakTip) && isStreakAchievement(id);
-      showSuccessToast({
-        title: useTip
-          ? i18n.t('habits.streakTipTitle')
-          : i18n.t('habits.achievements.unlocked'),
-        detail: useTip ? habit.streakTip : i18n.t(`habits.achievements.${id}`),
-      });
-      if (useTip) tipShown = true;
-    }
-    return;
-  }
-
-  if (command.kind === 'habit_create') {
-    await apiCall({
-      url: '/habits',
-      method: 'POST',
-      data: command.fields,
-    });
-    deps.dispatch(habitsApi.util.invalidateTags([{ type: 'Habits', id: 'LIST' }]));
-    showSuccessToast({
-      title: i18n.t('voice.habitCreated'),
-      detail: command.fields.name,
-    });
-    return;
-  }
-
-  if (command.kind === 'habit_update') {
-    await apiCall({
-      url: `/habits/${command.habitId}`,
-      method: 'PATCH',
-      data: command.patch,
-    });
-    deps.dispatch(habitsApi.util.invalidateTags([{ type: 'Habits', id: 'LIST' }]));
-    showSuccessToast({
-      title: i18n.t('voice.habitUpdated'),
-      detail: command.habitName,
-    });
-    return;
-  }
-
-  if (command.kind === 'habit_delete') {
-    await apiCall({
-      url: `/habits/${command.habitId}`,
-      method: 'DELETE',
-    });
-    deps.dispatch(habitsApi.util.invalidateTags([{ type: 'Habits', id: 'LIST' }]));
-    showSuccessToast({
-      title: i18n.t('voice.habitDeleted'),
-      detail: command.habitName,
-    });
-    return;
-  }
-
-  if (command.kind === 'habit_uncheck') {
-    await apiCall({
-      url: `/habits/${command.habitId}/check-ins/${command.date}`,
-      method: 'DELETE',
-    });
-    deps.dispatch(habitsApi.util.invalidateTags([{ type: 'Habits', id: 'LIST' }]));
-    showSuccessToast({
-      title: i18n.t('voice.habitUnchecked'),
-      detail: command.habitName,
-    });
-    return;
-  }
-
   if (command.kind === 'complete') {
     // Progress toast from eventTasksApi.updateEvent.
     await deps.updateTask({ id: command.taskId, body: { status: 'completed' } }).unwrap();

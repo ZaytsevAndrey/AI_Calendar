@@ -50,8 +50,6 @@ import {
     useUpdateEventMutation as useUpdateTaskMutation,
 } from 'api/eventTasksApi';
 import { eventsApi } from 'api/eventsApi';
-import { useGetHabitsQuery } from 'api/habitsApi';
-import { isHabitGoogleEvent } from 'modules/habits/habitBlocks';
 import { VoiceTaskButton } from 'modules/voice/components/VoiceTaskButton';
 import { VoiceTaskSheet } from 'modules/voice/components/VoiceTaskSheet';
 import { useVoiceTask } from 'modules/voice/hooks/useVoiceTask';
@@ -81,7 +79,6 @@ import {
 } from 'modules/calendar/calendarView';
 import { todayNowContext } from 'modules/now/nowBlocks';
 import { CalendarChipMeta } from 'modules/calendar/components/CalendarChipMeta';
-import { KindIcon } from 'modules/calendar/kindIcons';
 import {
     listCalendarOverlays,
     listProviderCalendars,
@@ -220,7 +217,6 @@ const CalendarPage: React.FC = () => {
     const problematicTasks = tasks.filter((task) =>
         isActiveProblematicTask(task, todayYmd, parkDayHints[task.id]),
     );
-    const { data: habitsData } = useGetHabitsQuery();
     const [overlays, setOverlays] = useState<CalendarEventOverlayDTO[]>([]);
     const [calendarNameById, setCalendarNameById] = useState<CalendarNameById>({});
     const refreshOverlays = React.useCallback(() => {
@@ -283,11 +279,6 @@ const CalendarPage: React.FC = () => {
         }
     }, [currentView]);
     const gridView: CalendarView = phone && currentView === 'week' ? 'day' : currentView;
-    const habitEventIds = new Set(
-        (habitsData?.habits ?? [])
-            .map((habit) => habit.googleEventId)
-            .filter((id): id is string => !!id),
-    );
     const sleepWindow = {
         sleepTime: userSettings?.sleepTime,
         wakeTime: userSettings?.wakeTime,
@@ -305,7 +296,6 @@ const CalendarPage: React.FC = () => {
                 ) {
                     return false;
                 }
-                if (isHabitGoogleEvent(habitEventIds, event)) return false;
                 const linked = resolveTaskForCalendarEvent(tasks, event);
                 if (linked?.isUnscheduled && linked.status === 'completed') return false;
                 if (linked?.isUnscheduled && linked.status === 'canceled') return false;
@@ -995,16 +985,6 @@ const CalendarPage: React.FC = () => {
                                         );
                                     }}
                                 />
-                            )}
-                            renderHabitMeta={() => (
-                                <span className="calendar-chip__meta">
-                                    <span
-                                        className="calendar-chip__icon-btn calendar-chip__icon-btn--static"
-                                        title={t('calendar.kind.habit')}
-                                    >
-                                        <KindIcon kind="habit" />
-                                    </span>
-                                </span>
                             )}
                         />
                     </div>

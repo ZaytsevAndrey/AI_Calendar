@@ -12,26 +12,6 @@ import {
   buildVoiceDeleteUserPrompt,
 } from './voice-parse.delete.prompt';
 import {
-  buildVoiceHabitCheckInSystemPrompt,
-  buildVoiceHabitCheckInUserPrompt,
-} from './voice-parse.habit-check-in.prompt';
-import {
-  buildVoiceHabitCreateSystemPrompt,
-  buildVoiceHabitCreateUserPrompt,
-} from './voice-parse.habit-create.prompt';
-import {
-  buildVoiceHabitDeleteSystemPrompt,
-  buildVoiceHabitDeleteUserPrompt,
-} from './voice-parse.habit-delete.prompt';
-import {
-  buildVoiceHabitUncheckSystemPrompt,
-  buildVoiceHabitUncheckUserPrompt,
-} from './voice-parse.habit-uncheck.prompt';
-import {
-  buildVoiceHabitUpdateSystemPrompt,
-  buildVoiceHabitUpdateUserPrompt,
-} from './voice-parse.habit-update.prompt';
-import {
   buildVoiceRescheduleSystemPrompt,
   buildVoiceRescheduleUserPrompt,
 } from './voice-parse.reschedule.prompt';
@@ -92,31 +72,6 @@ export function buildVoiceIntentPrompt(
       return {
         system: buildVoiceRescheduleSystemPrompt(language),
         user: buildVoiceRescheduleUserPrompt(ctx),
-      };
-    case 'habit_check_in':
-      return {
-        system: buildVoiceHabitCheckInSystemPrompt(language),
-        user: buildVoiceHabitCheckInUserPrompt(ctx),
-      };
-    case 'habit_create':
-      return {
-        system: buildVoiceHabitCreateSystemPrompt(language),
-        user: buildVoiceHabitCreateUserPrompt(ctx),
-      };
-    case 'habit_update':
-      return {
-        system: buildVoiceHabitUpdateSystemPrompt(language),
-        user: buildVoiceHabitUpdateUserPrompt(ctx),
-      };
-    case 'habit_delete':
-      return {
-        system: buildVoiceHabitDeleteSystemPrompt(language),
-        user: buildVoiceHabitDeleteUserPrompt(ctx),
-      };
-    case 'habit_uncheck':
-      return {
-        system: buildVoiceHabitUncheckSystemPrompt(language),
-        user: buildVoiceHabitUncheckUserPrompt(ctx),
       };
     case 'needs_clarification':
       return {

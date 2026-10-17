@@ -15,8 +15,6 @@ import {
   getEventTypeRules,
 } from '../scheduling/event-type.enum';
 import { ExternalCalendarBusyService } from '../calendar-providers/external-calendar-busy.service';
-import { Habit } from '../habits/entities/habit.entity';
-import { habitBlockIntervals } from '../habits/habit-blocks.util';
 import { effectiveRecurrenceWeekDays } from './recurrence-from-phases.util';
 import { isOccurrenceYmdSkipped } from '../tasks/skipped-occurrence.util';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
@@ -378,8 +376,6 @@ export class IntelligentSchedulingEngine {
     private readonly scheduledRepo: Repository<ScheduledTask>,
     private readonly userSettingsService: UserSettingsService,
     private readonly externalBusy: ExternalCalendarBusyService,
-    @InjectRepository(Habit)
-    private readonly habitRepo: Repository<Habit>,
   ) {}
 
   async captureAutoSegmentsSnapshot(userId: string): Promise<SegmentSnapshot[]> {
@@ -548,13 +544,6 @@ export class IntelligentSchedulingEngine {
     for (const row of autoBefore) {
       if (row.googleEventId) ourGoogleEventIds.add(row.googleEventId);
     }
-    const habitBusy = await this.collectHabitBlockBusy(
-      userId,
-      startYmd,
-      localYmd(extendedEnd.toISOString(), timeZone),
-      timeZone,
-      ourGoogleEventIds,
-    );
     try {
       externalBusy = await this.collectExternalBusyIntervals(
         userId,
@@ -573,7 +562,7 @@ export class IntelligentSchedulingEngine {
 
     const anchorBusy = await this.buildAnchorBusyIntervals(
       allTasks,
-      [...externalBusy, ...habitBusy],
+      externalBusy,
       nowMs,
     );
     const bufferMinutes = normalizeFixedEventBufferMinutes(
@@ -1420,23 +1409,6 @@ export class IntelligentSchedulingEngine {
     }
 
     return mergeIntervals(busy);
-  }
-
-  private async collectHabitBlockBusy(
-    userId: string,
-    startYmd: string,
-    endYmdExclusive: string,
-    timeZone: string,
-    ourGoogleEventIds: Set<string>,
-  ): Promise<MsInterval[]> {
-    const habits = await this.habitRepo.find({
-      where: { userId },
-      select: ['blockStartTime', 'blockMinutes', 'googleEventId'],
-    });
-    for (const habit of habits) {
-      if (habit.googleEventId) ourGoogleEventIds.add(habit.googleEventId);
-    }
-    return habitBlockIntervals(habits, startYmd, endYmdExclusive, timeZone);
   }
 
   /**

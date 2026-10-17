@@ -50,28 +50,7 @@ test.describe('P2 chrome and empty states', () => {
     await expect(page.getByText('No scheduled tasks in this filter.')).toBeVisible();
   });
 
-  test('U-HAB-005 empty habits state', async ({ page, auth }) => {
-    await page.route(`${API_BASE}/habits`, async (route) => {
-      if (route.request().method() !== 'GET') {
-        await route.continue();
-        return;
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          today: '2026-09-21',
-          yesterday: '2026-09-20',
-          timeZone: 'Europe/Kyiv',
-          habits: [],
-        }),
-      });
-    });
-
-    await openAs(page, auth.onboarded, '/habits');
-    await expect(page.getByText('No habits yet. Add one — for example Exercise or No smoking.')).toBeVisible();
-    await expect(page.getByText(/Today \d+\//)).toHaveCount(0);
-  });
+  test.skip('U-HAB-005 empty habits state (habits disabled for MVP)', async () => {});
 
   test('U-PH-006 overnight phase appears on the day grid', async ({ page, auth, request }) => {
     await deleteUnusedTimePhases(request, auth.onboarded.access_token);

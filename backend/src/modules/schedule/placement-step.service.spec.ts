@@ -118,7 +118,6 @@ describe('PlacementStepService.place (dryRun crowded day)', () => {
       { transaction: jest.fn(async (fn) => fn({})) } as never,
       taskRepo as never,
       scheduledRepo as never,
-      { find: jest.fn().mockResolvedValue([]) } as never,
       {
         getSettings: jest.fn().mockResolvedValue({
           timeZone: TZ,

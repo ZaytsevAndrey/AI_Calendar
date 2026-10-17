@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { format } from 'date-fns';
 import { dateFnsOptions } from '../../../i18n/dateLocale';
 import { getDaysInView, sameLocalDay } from '../calendarView';
-import { HabitDayDialog, HabitDayDots } from '../../habits/components/CalendarHabits';
 
 type Props = {
     date: Date;
@@ -11,7 +10,6 @@ type Props = {
 
 export function PhoneWeekStrip({ date, onSelect }: Props) {
     const days = getDaysInView('week', date);
-    const [habitDate, setHabitDate] = useState<string | null>(null);
     const today = new Date();
     const loc = dateFnsOptions();
 
@@ -39,12 +37,10 @@ export function PhoneWeekStrip({ date, onSelect }: Props) {
                                 <span className="uppercase">{format(day, 'EEE', loc)}</span>
                                 <span className="text-sm font-medium">{format(day, 'd', loc)}</span>
                             </button>
-                            <HabitDayDots day={day} onOpen={setHabitDate} />
                         </div>
                     );
                 })}
             </div>
-            <HabitDayDialog date={habitDate} onClose={() => setHabitDate(null)} />
         </div>
     );
 }

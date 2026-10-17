@@ -32,14 +32,6 @@ export type VoiceTaskPatch = {
   } | null;
 };
 
-export type VoiceHabitFields = {
-  name?: string;
-  color?: string;
-  description?: string | null;
-  blockStartTime?: string | null;
-  blockMinutes?: number | null;
-};
-
 export type VoiceParseResult = {
   understanding: VoiceUnderstanding;
   clarifyingQuestion: string | null;
@@ -114,38 +106,6 @@ export type VoiceCommand =
       kind: 'delete';
       taskId: string;
       taskName: string;
-      summary: string;
-    }
-  | {
-      kind: 'habit_check_in';
-      habitId: string;
-      habitName: string;
-      date: string;
-      summary: string;
-    }
-  | {
-      kind: 'habit_create';
-      summary: string;
-      fields: VoiceHabitFields & { name: string };
-    }
-  | {
-      kind: 'habit_update';
-      habitId: string;
-      habitName: string;
-      summary: string;
-      patch: VoiceHabitFields;
-    }
-  | {
-      kind: 'habit_delete';
-      habitId: string;
-      habitName: string;
-      summary: string;
-    }
-  | {
-      kind: 'habit_uncheck';
-      habitId: string;
-      habitName: string;
-      date: string;
       summary: string;
     };
 

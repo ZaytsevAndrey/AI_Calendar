@@ -7,8 +7,6 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { sendNotification, setVapidDetails } from 'web-push';
-import { HabitCheckIn } from '../habits/entities/habit-check-in.entity';
-import { Habit } from '../habits/entities/habit.entity';
 import { ExternalCalendarBusyService } from '../calendar-providers/external-calendar-busy.service';
 import { Task } from '../tasks/entities/task.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
@@ -58,8 +56,6 @@ describe('RemindersService', () => {
   };
   const settingsRepo = { find: jest.fn() };
   const tasks = { find: jest.fn() };
-  const habits = { find: jest.fn() };
-  const checkIns = { find: jest.fn() };
   const externalBusy = { listVisibleEvents: jest.fn() };
 
   let service: RemindersService;
@@ -81,8 +77,6 @@ describe('RemindersService', () => {
         scheduledEndTime: new Date(START + 30 * 60_000),
       },
     ]);
-    habits.find.mockResolvedValue([]);
-    checkIns.find.mockResolvedValue([]);
     externalBusy.listVisibleEvents.mockResolvedValue([]);
 
     const moduleRef = await Test.createTestingModule({
@@ -93,8 +87,6 @@ describe('RemindersService', () => {
         { provide: getRepositoryToken(ReminderDelivery), useValue: deliveries },
         { provide: getRepositoryToken(UserSettings), useValue: settingsRepo },
         { provide: getRepositoryToken(Task), useValue: tasks },
-        { provide: getRepositoryToken(Habit), useValue: habits },
-        { provide: getRepositoryToken(HabitCheckIn), useValue: checkIns },
         { provide: ExternalCalendarBusyService, useValue: externalBusy },
       ],
     }).compile();
@@ -134,24 +126,16 @@ describe('RemindersService', () => {
     expect(sendNotification).not.toHaveBeenCalled();
   });
 
-  it('still sends a habit reminder when Google events cannot be loaded', async () => {
+  it('skips dispatch when Google events cannot be loaded and there are no seated tasks', async () => {
     settingsRepo.find.mockResolvedValue([
       settings({ googleCalendarLinked: true, wakeTime: '07:00:00' }),
     ]);
     tasks.find.mockResolvedValue([]);
-    habits.find.mockResolvedValue([
-      { id: 'habit-1', name: 'Exercise', blockStartTime: '10:00' },
-    ]);
-    checkIns.find.mockResolvedValue([]);
     externalBusy.listVisibleEvents.mockRejectedValue(new Error('token expired'));
 
     const result = await service.dispatchDue(new Date(START - 15 * 60_000));
-    expect(result.sent).toBe(1);
-    expect(sendNotification).toHaveBeenCalledWith(
-      expect.any(Object),
-      expect.stringContaining('Exercise'),
-      expect.any(Object),
-    );
+    expect(result.sent).toBe(0);
+    expect(sendNotification).not.toHaveBeenCalled();
   });
 
   it('rejects the cron tick until a secret is configured', async () => {

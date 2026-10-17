@@ -1,6 +1,5 @@
 import {
     CalendarDays,
-    Flame,
     Layers,
     ListTodo,
     Settings,
@@ -32,12 +31,6 @@ export const mainNavItems: readonly MainNavItem[] = [
         labelKey: 'nav.phases',
         icon: Layers,
         match: (path) => path === '/phases' || path.startsWith('/setup'),
-    },
-    {
-        to: '/habits',
-        labelKey: 'nav.habits',
-        icon: Flame,
-        match: (path) => path === '/habits',
     },
     {
         to: '/settings',

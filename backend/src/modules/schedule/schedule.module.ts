@@ -16,7 +16,6 @@ import { PlacementStepService } from './placement-step.service';
 import { TasksModule } from '../tasks/tasks.module';
 import { UserSettingsModule } from '../user-settings/user-settings.module';
 import { Task } from '../tasks/entities/task.entity';
-import { Habit } from '../habits/entities/habit.entity';
 import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
 import { CalendarProvidersModule } from '../calendar-providers/calendar-providers.module';
 import { PhasesModule } from '../phases/phases.module';
@@ -24,12 +23,7 @@ import { VoiceModule } from '../voice/voice.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      ScheduledTask,
-      ScheduleJob,
-      Task,
-      Habit,
-    ]),
+    TypeOrmModule.forFeature([ScheduledTask, ScheduleJob, Task]),
     forwardRef(() => TasksModule),
     UserSettingsModule,
     GoogleCalendarModule,

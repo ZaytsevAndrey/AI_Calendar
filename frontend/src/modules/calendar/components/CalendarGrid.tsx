@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 import { getEventColor } from '../hooks/useCalendar';
 import { useTimePhases, useTimePhasesForDate, getPhaseByTime } from '../../phases/hooks/usePhases';
 import { useGetUserSettingsQuery } from '../../../api/userSettingsApi';
-import { useGetHabitsQuery } from '../../../api/habitsApi';
 import CalendarTimeGrid from './CalendarTimeGrid';
 import {
     CalendarView,
@@ -15,7 +14,6 @@ import {
     eventDisplayRange,
     getDaysInView,
     gridEventsForDay,
-    habitDisplayOnColumn,
     visibleHourBands,
     isAllDayEvent,
     isEventInSleepHours,
@@ -24,10 +22,6 @@ import {
     tooltipText,
 } from '../calendarView';
 import { dateOnDayAtMinutes } from '../eventDrag';
-import { HabitBlockButton, HabitDayDialog, HabitDayDots, HabitDaySection } from '../../habits/components/CalendarHabits';
-import { habitBlockChips, isHabitGoogleEvent } from '../../habits/habitBlocks';
-import { useToggleHabit } from '../../habits/useToggleHabit';
-import { isHabitDateEditable } from '../../habits/habitDays';
 import { ymdFromLocalDate } from '../../../utils/ianaDateTime';
 import { formatClock } from '../../../utils/formatDate';
 
@@ -55,7 +49,6 @@ interface CalendarGridProps {
     phoneMonth?: boolean;
     onPickDay?: (day: Date) => void;
     renderEventMeta?: (event: GoogleCalendarEvent, completed: boolean) => React.ReactNode;
-    renderHabitMeta?: (habit: { id: string; name: string; done?: boolean }) => React.ReactNode;
 }
 
 const CalendarGrid: React.FC<CalendarGridProps> = ({
@@ -70,13 +63,11 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     phoneMonth = false,
     onPickDay,
     renderEventMeta,
-    renderHabitMeta,
 }) => {
     const { t, i18n } = useTranslation();
     const { data: timePhases = [] } = useTimePhasesForDate(date);
     const { data: allTimePhases = [] } = useTimePhases();
     const { data: userSettings } = useGetUserSettingsQuery();
-    const { data: habitsData } = useGetHabitsQuery();
 
     const sleepWindow = {
         sleepTime: userSettings?.sleepTime,
@@ -107,31 +98,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     };
 
     const days = getDaysInView(view, date);
-    const habitEventIds = new Set(
-        (habitsData?.habits ?? [])
-            .map((habit) => habit.googleEventId)
-            .filter((id): id is string => !!id),
-    );
-    const visibleEvents = events.filter((event) => !isHabitGoogleEvent(habitEventIds, event));
-    const habitBlocks = habitBlockChips(
-        habitsData?.habits ?? [],
-        days,
-        habitsData?.timeZone ?? 'UTC',
-    );
-    const [habitDate, setHabitDate] = useState<string | null>(null);
-    const { toggle: toggleHabit, busy: habitBusy } = useToggleHabit();
-    const habitDialog = (
-        <HabitDayDialog date={habitDate} onClose={() => setHabitDate(null)} />
-    );
-    const handleToggleHabit = (habit: {
-        habitId: string;
-        ymd: string;
-        done: boolean;
-    }) => {
-        if (habitBusy || !habitsData) return;
-        if (!isHabitDateEditable(habit.ymd, habitsData.today)) return;
-        void toggleHabit(habit.habitId, habit.ymd, habit.done);
-    };
+    const visibleEvents = events;
 
     const weekdayKeys = [
         'calendar.weekdayMon',
@@ -146,63 +113,58 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
 
     if (view === 'month' && phoneMonth) {
         return (
-            <>
-                <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-lg border border-ide-border bg-ide-panel">
-                    <div className="grid shrink-0 grid-cols-7 border-b border-ide-border">
-                        {weekdayKeys.map((key) => (
-                            <div
-                                key={key}
-                                className="py-2 text-center text-[11px] font-medium text-ide-muted"
-                            >
-                                {t(key).slice(0, 1)}
-                            </div>
-                        ))}
-                    </div>
-                    <div
-                        className="grid min-h-0 flex-1 auto-rows-fr grid-cols-7 overflow-y-auto"
-                        data-testid="calendar-month-grid"
-                    >
-                        {days.map((day) => {
-                            const dayEvents = gridEventsForDay(visibleEvents, day, sleepWindow);
-                            const ymd = ymdFromLocalDate(day);
-                            const marked =
-                                dayEvents.length > 0 ||
-                                habitBlocks.some((block) => block.ymd === ymd);
-                            const isCurrentDay = isToday(day);
-                            const isInCurrentMonth = isCurrentMonth(day);
-                            const label = day.toLocaleDateString(dateLocale, {
-                                weekday: 'long',
-                                day: 'numeric',
-                                month: 'long',
-                            });
-                            return (
-                                <button
-                                    key={ymd}
-                                    type="button"
-                                    aria-label={t('calendar.showDay', { label })}
-                                    className={`flex min-h-[44px] flex-col items-center justify-center border-b border-r border-ide-border text-sm ${
-                                        !isInCurrentMonth ? 'opacity-50' : ''
-                                    } ${
-                                        isCurrentDay
-                                            ? 'bg-ide-selection/30 font-bold text-ide-link'
-                                            : 'text-ide-text'
-                                    }`}
-                                    onClick={() => onPickDay?.(day)}
-                                >
-                                    <span>{day.getDate()}</span>
-                                    <span
-                                        className={`mt-1 h-1.5 w-1.5 rounded-full ${
-                                            marked ? 'bg-ide-link' : 'bg-transparent'
-                                        }`}
-                                        aria-hidden
-                                    />
-                                </button>
-                            );
-                        })}
-                    </div>
+            <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-lg border border-ide-border bg-ide-panel">
+                <div className="grid shrink-0 grid-cols-7 border-b border-ide-border">
+                    {weekdayKeys.map((key) => (
+                        <div
+                            key={key}
+                            className="py-2 text-center text-[11px] font-medium text-ide-muted"
+                        >
+                            {t(key).slice(0, 1)}
+                        </div>
+                    ))}
                 </div>
-                {habitDialog}
-            </>
+                <div
+                    className="grid min-h-0 flex-1 auto-rows-fr grid-cols-7 overflow-y-auto"
+                    data-testid="calendar-month-grid"
+                >
+                    {days.map((day) => {
+                        const dayEvents = gridEventsForDay(visibleEvents, day, sleepWindow);
+                        const ymd = ymdFromLocalDate(day);
+                        const marked = dayEvents.length > 0;
+                        const isCurrentDay = isToday(day);
+                        const isInCurrentMonth = isCurrentMonth(day);
+                        const label = day.toLocaleDateString(dateLocale, {
+                            weekday: 'long',
+                            day: 'numeric',
+                            month: 'long',
+                        });
+                        return (
+                            <button
+                                key={ymd}
+                                type="button"
+                                aria-label={t('calendar.showDay', { label })}
+                                className={`flex min-h-[44px] flex-col items-center justify-center border-b border-r border-ide-border text-sm ${
+                                    !isInCurrentMonth ? 'opacity-50' : ''
+                                } ${
+                                    isCurrentDay
+                                        ? 'bg-ide-selection/30 font-bold text-ide-link'
+                                        : 'text-ide-text'
+                                }`}
+                                onClick={() => onPickDay?.(day)}
+                            >
+                                <span>{day.getDate()}</span>
+                                <span
+                                    className={`mt-1 h-1.5 w-1.5 rounded-full ${
+                                        marked ? 'bg-ide-link' : 'bg-transparent'
+                                    }`}
+                                    aria-hidden
+                                />
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
         );
     }
 
@@ -278,48 +240,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
             (event) => !!event.start?.dateTime && !isEventInSleepHours(event, sleepWindow),
         );
         const allDay = visibleEvents.filter((event) => isAllDayEvent(event));
-        const habitSourceDays =
-            axis.endMin > 24 * 60 && days.length
-                ? [
-                      ...days,
-                      new Date(
-                          days[days.length - 1].getFullYear(),
-                          days[days.length - 1].getMonth(),
-                          days[days.length - 1].getDate() + 1,
-                      ),
-                  ]
-                : days;
-        const habitSource = habitBlockChips(
-            habitsData?.habits ?? [],
-            habitSourceDays,
-            habitsData?.timeZone ?? 'UTC',
-        );
-        const habits = habitSource.flatMap((block) => {
-            const habit = (habitsData?.habits ?? []).find((item) => item.id === block.habitId);
-            const durationMinutes = habit?.blockMinutes ?? 30;
-            for (const day of days) {
-                const placed = habitDisplayOnColumn(
-                    block.ymd,
-                    block.startMinutes,
-                    durationMinutes,
-                    day,
-                    axis,
-                );
-                if (!placed) continue;
-                return [
-                    {
-                        ...block,
-                        durationMinutes: placed.displayDuration,
-                        displayStartMin: placed.displayStart,
-                        gridYmd: ymdFromLocalDate(day),
-                    },
-                ];
-            }
-            return [];
-        });
 
         return (
-            <>
             <div className="flex flex-col rounded-lg border border-ide-border bg-ide-panel p-2 sm:p-4 max-md:!p-1.5 max-md:h-full max-md:min-h-0 max-md:flex-1 max-md:overflow-hidden lg:h-full lg:min-h-0">
                 {getDisplayPhases().length > 0 && (
                     <div className="mb-4 hidden max-h-24 shrink-0 flex-wrap gap-2 overflow-y-auto md:flex">
@@ -344,7 +266,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                     </div>
                 )}
 
-                {view === 'day' ? <HabitDaySection date={ymdFromLocalDate(days[0])} /> : null}
                 {onEventTimeChange ? (
                     <p className="mb-2 hidden shrink-0 text-xs text-ide-muted md:block">
                         {t('calendar.dragHint')}
@@ -354,7 +275,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                     days={days}
                     events={timed}
                     allDayEvents={allDay}
-                    habits={habits}
                     dayStartMin={dayStartMin}
                     dayEndMin={dayEndMin}
                     hourBands={hourBands}
@@ -366,19 +286,10 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                     }
                     onEventTimeChange={onEventTimeChange}
                     onDeleteEvent={onDeleteEvent}
-                    onToggleHabit={handleToggleHabit}
                     isEventCompleted={isEventCompleted}
                     renderEventMeta={renderEventMeta}
-                    renderHabitMeta={renderHabitMeta}
-                    renderDayExtra={
-                        view === 'week'
-                            ? (day) => <HabitDayDots day={day} onOpen={setHabitDate} />
-                            : undefined
-                    }
                 />
             </div>
-            {habitDialog}
-            </>
         );
     }
 
@@ -393,7 +304,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     const weeks = createWeeks(days);
 
     return (
-        <>
         <div className="flex w-full flex-col lg:h-full lg:min-h-0">
             {getDisplayPhases().length > 0 && !phoneMonth && (
                 <div className="mb-4 flex shrink-0 flex-wrap gap-2">
@@ -455,40 +365,18 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                     >
                                         {day.getDate()}
                                     </span>
-                                    <HabitDayDots day={day} onOpen={setHabitDate} />
 
                                     <div className="mt-1 min-h-0 flex-1 overflow-y-auto">
                                         {dayEvents
                                             .filter((event) => !event.start?.dateTime)
                                             .map((event) => renderGridEvent(event))}
-                                        {[
-                                            ...habitBlocks
-                                                .filter((block) => block.ymd === ymdFromLocalDate(day))
-                                                .map((block) => ({
-                                                    kind: 'habit' as const,
-                                                    block,
-                                                    sort: block.startMinutes,
-                                                })),
-                                            ...dayEvents
-                                                .filter((event) => event.start?.dateTime)
-                                                .map((event) => ({
-                                                    kind: 'event' as const,
-                                                    event,
-                                                    sort: eventStartMinutes(event),
-                                                })),
-                                        ]
-                                            .sort((a, b) => a.sort - b.sort)
-                                            .map((item) =>
-                                                item.kind === 'habit' ? (
-                                                    <HabitBlockButton
-                                                        key={item.block.id}
-                                                        block={item.block}
-                                                        showTime
-                                                    />
-                                                ) : (
-                                                    renderGridEvent(item.event)
-                                                ),
-                                            )}
+                                        {dayEvents
+                                            .filter((event) => event.start?.dateTime)
+                                            .sort(
+                                                (a, b) =>
+                                                    eventStartMinutes(a) - eventStartMinutes(b),
+                                            )
+                                            .map((event) => renderGridEvent(event))}
                                     </div>
                                 </div>
                             );
@@ -497,8 +385,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                 ))}
             </div>
         </div>
-        {habitDialog}
-        </>
     );
 };
 

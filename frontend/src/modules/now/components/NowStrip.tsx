@@ -4,7 +4,6 @@ import { CalendarPlus, Check, Pencil, SkipForward, Zap } from 'lucide-react';
 import { useGetEventsQuery } from 'api/eventsApi';
 import type { GoogleCalendarEvent } from 'api/google-calendar.api';
 import { useGetEventsQuery as useGetTasksQuery, useSkipOccurrenceMutation, useUpdateEventMutation } from 'api/eventTasksApi';
-import { useGetHabitsQuery } from 'api/habitsApi';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import type { TaskDTO } from 'api/tasks.api';
 import { previewEventFromTask } from 'modules/calendar/completedTaskEvents';
@@ -14,7 +13,6 @@ import {
   type SchedulingKind,
 } from 'modules/calendar/schedulingKind';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
-import { useToggleHabit } from 'modules/habits/useToggleHabit';
 import { buildDoNowPatch } from 'modules/events/unscheduledActions';
 import { localHm } from 'utils/ianaDateTime';
 import { showErrorToast } from 'utils/toast';
@@ -30,7 +28,6 @@ import {
   type NowBlock,
 } from '../nowBlocks';
 import { usePhoneLayout } from 'modules/common/hooks/useMediaQuery';
-import { HabitNowStrip } from './HabitNowStrip';
 
 /** Compact icon actions — same vocabulary as Tasks Unscheduled cards. */
 const stripIconBtn =
@@ -73,7 +70,6 @@ const cardBase =
   'group flex min-w-0 items-center gap-1.5 rounded-lg border px-2 py-1.5 shadow-ide transition duration-200 ease-out hover:-translate-y-px hover:shadow-ide-md';
 
 function kindForBlock(block: NowBlock): SchedulingKind {
-  if (block.habit) return 'habit';
   if (block.event) {
     return schedulingKindForEvent({
       event: block.event,
@@ -191,7 +187,7 @@ function BlockRow({
   const { t } = useTranslation();
   const showDone = !!(block && canCompleteNowBlock(block));
   const showSkip = !!(block && canSkipNowBlock(block) && block.task);
-  const rowBusyId = block?.habit?.habitId ?? block?.task?.id ?? null;
+  const rowBusyId = block?.task?.id ?? null;
   const toneStyle = TONE[tone];
   const kind = block ? kindForBlock(block) : null;
   const previewEvent = block ? previewEventForBlock(block) : null;
@@ -289,10 +285,8 @@ export function NowStrip({
     ? (sharedEvents ?? [])
     : (todayEvents?.events ?? sharedEvents ?? []);
   const { data: tasks = [] } = useGetTasksQuery();
-  const { data: habitsData } = useGetHabitsQuery();
   const [updateTask] = useUpdateEventMutation();
   const [skipOccurrence] = useSkipOccurrenceMutation();
-  const { toggle: toggleHabit } = useToggleHabit();
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const canActOnInbox = (task: TaskDTO) =>
@@ -302,15 +296,8 @@ export function NowStrip({
     task.status !== 'canceled';
 
   const blocks = useMemo(
-    () =>
-      buildNowBlocks(
-        events,
-        tasks,
-        ctx.todayYmd,
-        ctx.timeZone,
-        habitsData?.habits ?? [],
-      ),
-    [events, tasks, ctx.todayYmd, ctx.timeZone, habitsData?.habits],
+    () => buildNowBlocks(events, tasks, ctx.todayYmd, ctx.timeZone),
+    [events, tasks, ctx.todayYmd, ctx.timeZone],
   );
   const { now, next } = useMemo(
     () =>
@@ -336,15 +323,6 @@ export function NowStrip({
   const [expanded, setExpanded] = useState(false);
 
   const markDone = async (block: NowBlock) => {
-    if (block.habit) {
-      setBusyId(block.habit.habitId);
-      try {
-        await toggleHabit(block.habit.habitId, block.habit.ymd, block.habit.done);
-      } finally {
-        setBusyId(null);
-      }
-      return;
-    }
     const task = block.task;
     if (!task) return;
     setBusyId(task.id);
@@ -584,7 +562,6 @@ export function NowStrip({
       {emptyClock ? (
         <p className="text-xs text-ide-muted">{t('now.emptyClock')}</p>
       ) : null}
-      {phone ? null : <HabitNowStrip />}
         </>
       )}
     </section>

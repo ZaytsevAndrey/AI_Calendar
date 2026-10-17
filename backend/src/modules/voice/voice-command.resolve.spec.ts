@@ -64,10 +64,10 @@ describe('sniffCommandIntent', () => {
     expect(sniffCommandIntent('done')).toBe('complete');
   });
 
-  it('sniffs habit check-in phrases', () => {
-    expect(sniffCommandIntent('check in Stretch')).toBe('habit_check_in');
-    expect(sniffCommandIntent('відмітив звичку спорт')).toBe('habit_check_in');
-    expect(sniffCommandIntent('I did my habit Stretch')).toBe('habit_check_in');
+  it('does not sniff habit check-in as a command intent', () => {
+    expect(sniffCommandIntent('check in Stretch')).toBeNull();
+    expect(sniffCommandIntent('відмітив звичку спорт')).toBeNull();
+    expect(sniffCommandIntent('I did my habit Stretch')).toBeNull();
     expect(sniffCommandIntent('I did the report')).toBeNull();
   });
 });
@@ -75,7 +75,6 @@ describe('sniffCommandIntent', () => {
 describe('resolveVoiceCommand', () => {
   const dentist = task({ id: 't1', name: 'Dentist' });
   const gym = task({ id: 't2', name: 'Gym', isRecurring: true, googleEventId: 'series-1' });
-  const stretch = { id: 'h1', name: 'Stretch' };
   it('completes a named non-recurring task', () => {
     const result = resolveVoiceCommand({
       draft: draft({ intent: 'complete', taskName: 'Dentist' }),
@@ -278,29 +277,7 @@ describe('resolveVoiceCommand', () => {
     });
   });
 
-  it('checks in a named habit for today', () => {
-    const result = resolveVoiceCommand({
-      draft: draft({ intent: 'habit_check_in', taskName: 'Stretch' }),
-      transcript: 'I did Stretch',
-      timeZone: ZONE,
-      nowIso: NOW,
-      alreadyClarified: false,
-      tasks: [],
-      slots: [],
-      habits: [stretch],
-    });
-    expect(result).toMatchObject({
-      type: 'command',
-      command: {
-        kind: 'habit_check_in',
-        habitId: 'h1',
-        habitName: 'Stretch',
-        date: '2026-09-22',
-      },
-    });
-  });
-
-  it('falls back from task complete to habit when only a habit matches', () => {
+  it('refuses complete when the name matches no open task', () => {
     const result = resolveVoiceCommand({
       draft: draft({ intent: 'complete', taskName: 'Stretch' }),
       transcript: 'зробив Stretch',
@@ -309,24 +286,6 @@ describe('resolveVoiceCommand', () => {
       alreadyClarified: false,
       tasks: [dentist],
       slots: [],
-      habits: [stretch],
-    });
-    expect(result).toMatchObject({
-      type: 'command',
-      command: { kind: 'habit_check_in', habitId: 'h1' },
-    });
-  });
-
-  it('refuses habit check-in when there are no habits', () => {
-    const result = resolveVoiceCommand({
-      draft: draft({ intent: 'habit_check_in', taskName: 'Stretch' }),
-      transcript: 'check in Stretch',
-      timeZone: ZONE,
-      nowIso: NOW,
-      alreadyClarified: false,
-      tasks: [],
-      slots: [],
-      habits: [],
     });
     expect(result).toMatchObject({
       type: 'command',
@@ -418,54 +377,14 @@ describe('resolveVoiceCommand', () => {
     ).toMatchObject({ type: 'command', command: { kind: 'delete', taskId: 't2' } });
   });
 
-  it('creates a habit from a name', () => {
-    const result = resolveVoiceCommand({
-      draft: draft({
-        intent: 'habit_create',
-        taskName: 'Meditation',
-        habitFields: { name: 'Meditation', color: '#22c55e' },
-      }),
-      transcript: 'create habit Meditation',
-      timeZone: ZONE,
-      nowIso: NOW,
-      alreadyClarified: false,
-      tasks: [],
-      slots: [],
-      habits: [],
-    });
-    expect(result).toMatchObject({
-      type: 'command',
-      command: {
-        kind: 'habit_create',
-        fields: { name: 'Meditation', color: '#22c55e' },
-      },
-    });
-  });
-
-  it('unchecks a habit for today', () => {
-    const result = resolveVoiceCommand({
-      draft: draft({ intent: 'habit_uncheck', taskName: 'Stretch' }),
-      transcript: 'uncheck Stretch',
-      timeZone: ZONE,
-      nowIso: NOW,
-      alreadyClarified: false,
-      tasks: [],
-      slots: [],
-      habits: [stretch],
-    });
-    expect(result).toMatchObject({
-      type: 'command',
-      command: { kind: 'habit_uncheck', habitId: 'h1', date: '2026-09-22' },
-    });
-  });
 });
 
 describe('sniffCommandIntent extras', () => {
-  it('sniffs update delete and habit CRUD', () => {
+  it('sniffs update and delete', () => {
     expect(sniffCommandIntent('delete dentist')).toBe('delete');
     expect(sniffCommandIntent('rename dentist to checkup')).toBe('update');
-    expect(sniffCommandIntent('create habit Stretch')).toBe('habit_create');
-    expect(sniffCommandIntent('delete habit Stretch')).toBe('habit_delete');
-    expect(sniffCommandIntent('uncheck Stretch')).toBe('habit_uncheck');
+    expect(sniffCommandIntent('create habit Stretch')).toBeNull();
+    expect(sniffCommandIntent('delete habit Stretch')).toBe('delete');
+    expect(sniffCommandIntent('uncheck Stretch')).toBeNull();
   });
 });

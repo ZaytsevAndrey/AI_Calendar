@@ -14,6 +14,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ## Shipped (Oct 2026)
 
+- [x] **Habits soft-disabled for MVP.** No nav/route/UI, no schedule busy, no habit push reminders, no voice `habit_*` commands. `GET /habits` returns an empty list (no Google backfill); writes return 410. Module code and DB rows kept; existing Google habit events left as-is.
+
 - [x] **§30 Delete account.** Settings → two-step confirm (calendar cleanup warning, then type `DELETE` or email). `DELETE /auth/account` removes app-created Google events and the dedicated app calendar first (fail closed on Google errors), then wipes local user data and identities. `GET /auth/me` returns the email for the confirm UI.
 
 - [x] **§29 Type in the voice sheet.** Composer under the thread sends text through the same `POST /voice/turn` path as speech (no STT). Mic on/off toggle (default on): when on, auto-listen continues; when off, listening stops and typed turns still work. Send while listening cancels the recording and submits the typed message.

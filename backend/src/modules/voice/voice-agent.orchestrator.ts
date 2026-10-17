@@ -2,7 +2,6 @@ import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
-import { Habit } from '../habits/entities/habit.entity';
 import { Phase } from '../phases/entities/phase.entity';
 import { ScheduledTask } from '../schedule/schedule.entity';
 import { Task } from '../tasks/entities/task.entity';
@@ -69,8 +68,6 @@ export class VoiceAgentOrchestrator {
     private readonly tasksRepository: Repository<Task>,
     @InjectRepository(ScheduledTask)
     private readonly scheduledRepository: Repository<ScheduledTask>,
-    @InjectRepository(Habit)
-    private readonly habitsRepository: Repository<Habit>,
   ) {}
 
   async turn(
@@ -144,7 +141,7 @@ export class VoiceAgentOrchestrator {
           clarifying && previousUser && transcript ? transcript : undefined,
       });
 
-    const [settings, phases, tasks, slots, habits] = await Promise.all([
+    const [settings, phases, tasks, slots] = await Promise.all([
       this.userSettingsService.getSettings(userId),
       this.phasesRepository.find({
         where: { userId },
@@ -156,10 +153,6 @@ export class VoiceAgentOrchestrator {
         .innerJoin('slot.task', 'task')
         .where('task.userId = :userId', { userId })
         .getMany(),
-      this.habitsRepository.find({
-        where: { userId },
-        order: { createdAt: 'ASC' },
-      }),
     ]);
 
     const timeZone = resolveIanaTimeZone(settings.timeZone || dto.timeZone);
@@ -177,7 +170,6 @@ export class VoiceAgentOrchestrator {
       settings,
       tasks,
       slots,
-      habits,
       phases,
     };
     const speechLanguage = settings.speechLanguage || settings.language || 'en';

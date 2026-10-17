@@ -8,7 +8,7 @@ Related docs: [task-scheduling-test-matrix.md](task-scheduling-test-matrix.md) (
 
 ## 1. Goal
 
-Protect the daily loop: **sign in (JWT seed in CI) → settings/phases gate → capture a task → placement seats it → conflict sheet when needed → Now/Done → habits**. Every live HTTP route and every user-facing screen has named cases. Placement math stays in unit tests on `PlacementStepService.place` / `planPlacement`; E2E asserts the HTTP/UI contract around that math. Generate / Clear / Undo APIs are removed.
+Protect the daily loop: **sign in (JWT seed in CI) → settings/phases gate → capture a task → placement seats it → conflict sheet when needed → Now/Done**. Habits are soft-disabled for MVP (UI/e2e cases skipped; API returns empty list / 410 on writes). Every live HTTP route and every user-facing screen has named cases. Placement math stays in unit tests on `PlacementStepService.place` / `planPlacement`; E2E asserts the HTTP/UI contract around that math. Generate / Clear / Undo APIs are removed.
 
 Out of scope until a later cycle: snooze, text-add, in-app guide, real Google OAuth in CI, real Groq in CI. Day/week drag-and-drop math and the move plan are unit-tested (`eventDrag.spec.ts`, `move-displayed-event.util.spec.ts`, `displayed-event-move.service.spec.ts` — app moves use placement + `jobId`). A browser drag needs a live Google event, which CI does not have.
 
@@ -593,7 +593,7 @@ Every resource is scoped by `userId`. Repeat the pattern; one failing case is en
 | U-PWA-001 | U | P2 | Authenticated, `beforeinstallprompt` | Banner | Shown |
 | U-PWA-002 | U | P2 | Dismiss | Click dismiss | `pwa-install-dismissed` set; hidden on reload |
 | U-PWA-003 | U | P2 | iOS | No beforeinstallprompt | Share hint (smoke) |
-| U-NAV-001 | U | P1 | Header | Calendar / Tasks / Phases / Habits / Settings | Routes match `Header.tsx` |
+| U-NAV-001 | U | P1 | Header | Calendar / Tasks / Phases / Settings (Habits removed for MVP) | Routes match `mainNav.ts` |
 
 ---
 

@@ -75,11 +75,6 @@ describe('voice parse prompt split', () => {
     expectSystem('complete', /skips today's open occurrence/);
     expectSystem('skip', /next open time/);
     expectSystem('delete', /whole series/);
-    expectSystem('habit_check_in', /civil date/);
-    expectSystem('habit_create', /check-in only/);
-    expectSystem('habit_update', /command\.taskName stays the current title/);
-    expectSystem('habit_delete', /are you sure/);
-    expectSystem('habit_uncheck', /only today can be cleared/);
     expectSystem('needs_clarification', /task stays null/);
   });
 });

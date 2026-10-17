@@ -17,11 +17,6 @@ describe('INTENT_EVAL_SCENARIOS', () => {
       'complete',
       'skip',
       'reschedule',
-      'habit_create',
-      'habit_check_in',
-      'habit_update',
-      'habit_delete',
-      'habit_uncheck',
       'needs_clarification',
     ]) {
       expect(intents.has(intent as never)).toBe(true);

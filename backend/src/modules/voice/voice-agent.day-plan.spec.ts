@@ -10,7 +10,6 @@ function ctx(overrides: Partial<VoiceToolContext> = {}): VoiceToolContext {
     settings: { wakeTime: '08:00', sleepTime: '22:00' } as VoiceToolContext['settings'],
     tasks: [],
     slots: [],
-    habits: [],
     phases: [],
     ...overrides,
   };

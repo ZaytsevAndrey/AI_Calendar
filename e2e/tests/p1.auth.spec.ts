@@ -64,9 +64,7 @@ test.describe('P1 auth and phases UI', () => {
     await nav.getByRole('link', { name: 'Phases' }).click();
     await expect(page).toHaveURL(/\/phases/);
     await expect(page.getByRole('heading', { name: 'Phases' })).toBeVisible();
-    await nav.getByRole('link', { name: 'Habits' }).click();
-    await expect(page).toHaveURL(/\/habits/);
-    await expect(page.getByRole('heading', { name: 'Habits' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Habits' })).toHaveCount(0);
     await nav.getByRole('link', { name: 'Settings' }).click();
     await expect(page).toHaveURL(/\/settings/);
     await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();

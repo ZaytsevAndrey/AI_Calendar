@@ -3,7 +3,6 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Phase } from '../phases/entities/phase.entity';
-import { Habit } from '../habits/entities/habit.entity';
 import { ScheduledTask } from '../schedule/schedule.entity';
 import { Task, TaskStatus } from '../tasks/entities/task.entity';
 import { UserSettingsService } from '../user-settings/user-settings.service';
@@ -17,11 +16,7 @@ import {
   resolveVoiceCommand,
   sniffCommandIntent,
 } from './voice-command.resolve';
-import type {
-  VoiceCommandHabit,
-  VoiceCommandSlot,
-  VoiceCommandTask,
-} from './voice-command.types';
+import type { VoiceCommandSlot, VoiceCommandTask } from './voice-command.types';
 import { buildVoiceIntentPrompt } from './voice-parse.intent-prompts';
 import {
   buildVoiceRouterSystemPrompt,
@@ -82,8 +77,6 @@ export class VoiceService {
     private readonly tasksRepository: Repository<Task>,
     @InjectRepository(ScheduledTask)
     private readonly scheduledRepository: Repository<ScheduledTask>,
-    @InjectRepository(Habit)
-    private readonly habitsRepository: Repository<Habit>,
   ) {}
 
   async turn(userId: string, dto: VoiceTurnDto): Promise<VoiceTurnResponse> {
@@ -220,7 +213,7 @@ export class VoiceService {
       throw new BadRequestException('transcript is required');
     }
 
-    const [settings, phases, tasks, slots, habits] = await Promise.all([
+    const [settings, phases, tasks, slots] = await Promise.all([
       this.userSettingsService.getSettings(userId),
       this.phasesRepository.find({
         where: { userId },
@@ -232,10 +225,6 @@ export class VoiceService {
         .innerJoin('slot.task', 'task')
         .where('task.userId = :userId', { userId })
         .getMany(),
-      this.habitsRepository.find({
-        where: { userId },
-        order: { createdAt: 'ASC' },
-      }),
     ]);
 
     // Settings IANA first so "tomorrow" matches the calendar, not the browser.
@@ -257,7 +246,6 @@ export class VoiceService {
         deadline: boundIso(task.deadline),
       }));
     const openTaskNames = openTasks.map((task) => task.name);
-    const habitNames = habits.map((habit) => habit.name).slice(0, 40);
     const speech = alreadyClarified
       ? `${dto.previousTranscript || ''} ${transcript}`.trim()
       : transcript;
@@ -273,7 +261,6 @@ export class VoiceService {
         previousTranscript: dto.previousTranscript,
         clarificationAnswer: dto.clarificationAnswer,
         openTaskNames,
-        habitNames,
       }),
     );
     logVoiceLlm(this.logger, 'parse.router', routerRaw);
@@ -304,7 +291,6 @@ export class VoiceService {
       previousTranscript: dto.previousTranscript,
       clarificationAnswer: dto.clarificationAnswer,
       openTaskNames,
-      habitNames,
       language: speechLanguage,
       defaultTaskDurationMinutes: taskDurationMinutes(settings),
       openTasks,
@@ -356,7 +342,6 @@ export class VoiceService {
         alreadyClarified,
         tasks: tasks.map(toCommandTask),
         slots: slots.map(toCommandSlot),
-        habits: habits.map(toCommandHabit),
         language: speechLanguage || settings.speechLanguage || settings.language,
         wakeTime: settings.wakeTime,
       });
@@ -456,10 +441,6 @@ function toCommandTask(task: Task): VoiceCommandTask {
       ? new Date(task.scheduledEndTime).toISOString()
       : null,
   };
-}
-
-function toCommandHabit(habit: Habit): VoiceCommandHabit {
-  return { id: habit.id, name: habit.name };
 }
 
 function toCommandSlot(slot: ScheduledTask): VoiceCommandSlot {

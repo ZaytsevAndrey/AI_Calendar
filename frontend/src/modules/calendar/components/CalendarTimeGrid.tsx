@@ -3,9 +3,7 @@ import { format } from 'date-fns';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
-import { HabitBlockChip } from '../../habits/habitBlocks';
 import { dateFnsOptions } from '../../../i18n/dateLocale';
-import { ymdFromLocalDate } from '../../../utils/ianaDateTime';
 import {
   getTaskMutationStage,
   MUTATION_STAGE_COLORS,
@@ -37,19 +35,10 @@ type Placement = {
   endMin: number;
 };
 
-type TimedHabit = HabitBlockChip & {
-  durationMinutes: number;
-  /** Column this block is drawn on when it continues past midnight. */
-  gridYmd?: string;
-  /** Top of the block on the packed visible axis. */
-  displayStartMin?: number;
-};
-
 interface CalendarTimeGridProps {
   days: Date[];
   events: GoogleCalendarEvent[];
   allDayEvents: GoogleCalendarEvent[];
-  habits: TimedHabit[];
   dayStartMin: number;
   dayEndMin: number;
   hourBands: { minutes: number; label: string; color?: string; durationMin?: number }[];
@@ -66,11 +55,9 @@ interface CalendarTimeGridProps {
     end: Date,
   ) => Promise<void>;
   onDeleteEvent?: (event: GoogleCalendarEvent) => void;
-  onToggleHabit?: (habit: TimedHabit) => void;
   isEventCompleted?: (event: GoogleCalendarEvent) => boolean;
   renderDayExtra?: (day: Date) => React.ReactNode;
   renderEventMeta?: (event: GoogleCalendarEvent, completed: boolean) => React.ReactNode;
-  renderHabitMeta?: (habit: TimedHabit) => React.ReactNode;
 }
 
 function eventMinutes(
@@ -92,7 +79,6 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
   days,
   events,
   allDayEvents,
-  habits,
   dayStartMin,
   dayEndMin,
   hourBands,
@@ -102,11 +88,9 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
   onCreateForDate,
   onEventTimeChange,
   onDeleteEvent,
-  onToggleHabit,
   isEventCompleted,
   renderDayExtra,
   renderEventMeta,
-  renderHabitMeta,
 }) => {
   const { t } = useTranslation();
   const daySpanMin = Math.max(dayEndMin - dayStartMin, 60);
@@ -409,44 +393,6 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                 />
               );
             })}
-            {habits
-              .filter((habit) => (habit.gridYmd ?? habit.ymd) === ymdFromLocalDate(day))
-              .map((habit) => {
-                const origin = habit.displayStartMin ?? habit.startMinutes;
-                const startMin = Math.max(origin, dayStartMin);
-                const endMin = Math.min(origin + habit.durationMinutes, dayEndMin);
-                if (endMin <= startMin) return null;
-                const top = ((startMin - dayStartMin) / daySpanMin) * gridHeightPx;
-                const height = ((endMin - startMin) / daySpanMin) * gridHeightPx;
-                return (
-                  <button
-                    key={habit.id}
-                    type="button"
-                    className={`calendar-chip absolute left-0.5 right-0.5 z-[1] px-1.5 py-0.5 text-left text-[0.65rem] font-medium leading-tight ${
-                      habit.done ? 'calendar-chip--done' : ''
-                    }`}
-                    style={
-                      {
-                        top,
-                        height: Math.max(height, 18),
-                        '--chip-color': habit.color,
-                      } as React.CSSProperties
-                    }
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleHabit?.(habit);
-                    }}
-                  >
-                    <span className="flex min-w-0 items-center gap-1">
-                      <span className="min-w-0 flex-1 truncate">
-                        {habit.done ? '✓ ' : ''}
-                        {habit.name}
-                      </span>
-                      {renderHabitMeta?.(habit)}
-                    </span>
-                  </button>
-                );
-              })}
             {items.map(({ event, place }) => {
               const lane = lanes.get(event.id) ?? { lane: 0, laneCount: 1 };
               const top = ((place.startMin - dayStartMin) / daySpanMin) * gridHeightPx;
