@@ -294,6 +294,7 @@ export class DisplayedEventMoveService {
             start.toISOString(),
             end.toISOString(),
             dto.calendarId,
+            task.externalCalendarProvider,
           );
         } catch (err) {
           this.logger.error(

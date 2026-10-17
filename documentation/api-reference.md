@@ -66,7 +66,7 @@ Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWor
 
 **`syncGoogleDeletions`** (default false): when off, a missing linked external event during retry only clears local provider ids. When on, that missing event deletes the local task. Failed Google writes sit in `pending_google_writes` and retry in the background; a newer Google edit of time/title/description drops the pending row and pulls into the task. **`DELETE /tasks/:id`** discards pending upserts for that task, waits for any in-flight Google sync, deletes linked Google events, then removes the row — so a racing sync cannot recreate the event after delete.
 
-**`syncTargetCalendars`**: stored preference. `null` is unset; `[]` means sync nowhere; otherwise `{ provider, calendarId }[]`. App-task writes still go to Google. The writer does not read this field yet.
+**`appCalendarProvider`**: `google` | `microsoft` | `apple` — connected account that hosts the named app calendar for new writes. **`appGoogleCalendarName`**: title of that calendar. Legacy **`syncTargetCalendars`** is unused by the writer.
 
 **`dismissWarnFlexibleMove`**, **`dismissWarnUnscheduleExternal`**, **`dismissWarnExternalWriteBack`**: user opted out of the matching confirmation dialogs.
 

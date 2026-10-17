@@ -1,6 +1,6 @@
 # Roadmap archive
 
-Shipped work, moved out of [roadmap](roadmap.md). The live queue is **§23.4+** voice understanding (live create-eval fix loop) → **§24** personal PC / Piper. Product behavior: [overview](overview.md).
+Shipped work, moved out of [roadmap](roadmap.md). The live product queue starts at **§28** (Unscheduled exit) + **§34** (past tasks on the grid). Voice understanding stays on [voice-prompt-next.md](voice-prompt-next.md). Product behavior: [overview](overview.md); per-feature write-ups: [features/](features/README.md).
 
 On 11 Oct 2026 the checked live-queue items left [roadmap](roadmap.md): scheduling redesign §1–§8, habits §9–§10, problematic slot pick §11, incremental placement §12, Unscheduled §13, calendar/edit delete §14, Voice Agent §15–§19, and Later polish (UI language, voice habit check-in, problematic sheet). Former open §20–§21 were folded into the Oct rebuild (§22–§24). Behavior notes are the bullets below.
 
@@ -8,13 +8,17 @@ On 11 Oct 2026 the checked live-queue items left [roadmap](roadmap.md): scheduli
 
 Personal daily driver. Core MVP, intelligent scheduling, the daily loop, setup controls, and the extras below are in.
 
-Sign-in is **Google only**. Password register, login, reset, and email verification are gone; those routes only redirect.
+Sign-in is **Google**, plus **Microsoft** when `MICROSOFT_*` is set. Apple Calendar is Settings CalDAV only. Password register, login, reset, and email verification are gone; those routes only redirect.
 
 Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-coverage.md)). Each route screen is its own lazy chunk (`splitChunks`); production is no longer one `bundle.js`.
 
 ## Shipped (Oct 2026)
 
-- [x] **§27 Multi-calendar + type/calendar chips.** Google, Microsoft (OAuth when `MICROSOFT_*` is set), and Apple (Settings CalDAV) share `CalendarProvider`. Placement, the engine, the Problematic slot picker, reminders, suggestions, and voice treat timed events on every visible connected calendar as busy (hidden, cancelled, and free events are not; the app’s own synced copies are not counted twice). Thin `calendar_event_overlays` for fixed/flexible on external events; Unscheduled deletes the external event and creates an inbox task. Automatic placement does not move those external events. Icon type + provider logo on calendar chips; visibility filter uses provider sections. Settings: connect Microsoft/Apple. `user_identities` + link/disconnect API. App-task writes still go to Google; stored `syncTargetCalendars` is not read by the writer yet. Docs: [integrations](integrations.md).
+- [x] **Feature docs catch-up.** Eighteen shipped behaviors have full write-ups under `documentation/features/` (purpose, user-facing behavior, logic, edge cases, data/API, known gaps): event preview, multi-calendar, personal day, drag/resize, calendar visibility, Now/Next, suggestions, default task duration, task filters, series grouping, fixed-event buffer, voice series scope, voice quota, habits, first-run phases, language, phone layout, reminders. Index: [features/README.md](features/README.md). Seed notes: [feature-docs-backfill.md](feature-docs-backfill.md). Workflow: `.cursor/skills/new-feature-workflow/feature-docs.md`.
+
+- [x] **Outbound app-calendar sync.** Settings Calendars section: connect accounts, name the app calendar, and pick one write account (Google / Microsoft / Apple). New tasks and habit blocks create that named calendar on the chosen account. Microsoft sign-in defaults writes to Microsoft. Switching the write account leaves existing events where they were. Docs: [integrations](integrations.md).
+
+- [x] **§27 Multi-calendar + type/calendar chips.** Google, Microsoft (OAuth when `MICROSOFT_*` is set), and Apple (Settings CalDAV) share `CalendarProvider`. Placement, the engine, the Problematic slot picker, reminders, suggestions, and voice treat timed events on every visible connected calendar as busy (hidden, cancelled, and free events are not; the app’s own synced copies are not counted twice). Thin `calendar_event_overlays` for fixed/flexible on external events; Unscheduled deletes the external event and creates an inbox task. Automatic placement does not move those external events. Icon type + provider logo on calendar chips; visibility filter uses provider sections. Settings: connect Microsoft/Apple. `user_identities` + link/disconnect API. Docs: [integrations](integrations.md).
 
 - [x] **§26 Event preview.** A calendar block click opens a read-only preview (title, time, description, location, recurrence) for app tasks and Google-only events. Edit and Delete live on the preview; repeating items use a this-day / following / entire-series menu on both. Chip X and list Delete stay as shortcuts. Opening Edit from the preview hides Delete/Skip on the form.
 

@@ -2,7 +2,7 @@
 
 Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Product behavior: [overview](overview.md).
 
-**How we work:** one chat = **one feature** below (top open item, or name it). Say *«давай наступну фічу»* / *«next feature»*. Finish → **delete that item from this file** and add a short done note to the archive. This file stays open work only. Do not leave `[x]` lines here.
+**How we work:** one chat = **one feature** below (top open item, or name it). Say *«давай наступну фічу»* / *«next feature»*. Finish → **delete that item from this file**, add a short done note to the archive, and correct `documentation/features/<slug>.md` (create it if missing). This file stays open work only. Do not leave `[x]` lines here.
 
 **Product pillars (Oct 2026 rebuild):** the two features that define the product are **auto-scheduling** and the **voice agent**. Auto-scheduling is the base; the agent is the differentiator. Do not polish TTS / deploy variants until both pillars are trustworthy. Specs: [spec-incremental-placement.md](spec-incremental-placement.md), [spec-conflict-rules.md](spec-conflict-rules.md), [spec-voice-agent.md](spec-voice-agent.md), [voice-prompt-next.md](voice-prompt-next.md).
 
@@ -19,6 +19,15 @@ Do in order unless you explicitly skip ahead. These items need no outside servic
 When a block becomes Unscheduled from the type chip, how the user puts it back on the grid is still open.
 
 - [ ] Decide: Schedule button on the chip / strip, open preview then edit, or Do now — then implement that path.
+
+Do **§34** in the same chat.
+
+### 34. Past tasks on the calendar grid
+
+Past tasks were hidden from the calendar after a mix-up with the side lists.
+
+- [ ] Show past tasks on the day / week / month **grid** (including ended and completed seats).
+- [ ] Keep them **out** of the period side lists (Month events, Week events, Day events, and the phone events sheet). Those lists stay current-period only.
 
 ### 29. Type in the voice sheet
 
@@ -68,7 +77,6 @@ Do not start these. The shape is still open.
 - **STT language: auto vs settings.** Today `speechLanguage` (`en` | `uk`) is a hint to Whisper on `/voice/transcribe`. Investigate whether Whisper already detects the spoken language well enough without that setting, whether a wrong hint hurts accuracy, and whether Settings still needs an explicit speech language (or auto / follow-UI is enough). Decide before changing Settings or the STT call.
 - **Admin.** Owner-only. Contents are not chosen. Do not open an empty admin.
 - **Hide app calendar.** Visibility toggle for the app-owned calendar — product nuances still open.
-- **Outbound sync beyond Google.** Settings stores `syncTargetCalendars`, but app-task create/update/delete still writes Google only. Do not start until that write path is the task.
 ---
 
 ## End — external, do not start
@@ -96,7 +104,7 @@ Third parties and publishing. Leave these until the Now list is done.
 
 ## Recommended next steps
 
-1. Next live item: roadmap **§28** — Unscheduled exit from calendar.
+1. Next live items (same chat): roadmap **§28** — Unscheduled exit from calendar, and **§34** — past tasks on the grid (not in Month/Week/Day events lists).
 2. Then the rest of **Now**: §29 typed voice, §30 delete account, §31 backup, §32 mobile daily path, §33 card min height / crowded hour, §24 Piper ([tts-local.md](tts-local.md)).
 3. Voice understanding continues in parallel via [voice-prompt-next.md](voice-prompt-next.md); do not put it back in this queue.
-4. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.
+4. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update the feature file under [features/](features/README.md), and update [overview.md](overview.md) / API docs if behavior changed.

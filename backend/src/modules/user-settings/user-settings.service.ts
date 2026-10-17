@@ -1,10 +1,21 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  Optional,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserSettings } from './entities/user-settings.entity';
 import { UpdateUserSettingsDto } from './dto/update-user-settings.dto';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
-import { normalizeHiddenCalendarIds } from './hidden-google-calendars.util';
+import { AppCalendarWriteService } from '../calendar-providers/app-calendar-write.service';
+import {
+  appCalendarHideKey,
+  normalizeHiddenCalendarIds,
+} from './hidden-google-calendars.util';
 
 @Injectable()
 export class UserSettingsService {
@@ -14,6 +25,9 @@ export class UserSettingsService {
     @InjectRepository(UserSettings)
     private userSettingsRepository: Repository<UserSettings>,
     private readonly googleCalendarService: GoogleCalendarService,
+    @Optional()
+    @Inject(forwardRef(() => AppCalendarWriteService))
+    private readonly appWrites?: AppCalendarWriteService,
   ) {}
 
   async getSettings(userId: string): Promise<UserSettings> {
@@ -107,6 +121,7 @@ export class UserSettingsService {
   ): Promise<UserSettings> {
     const userSettings = await this.getSettings(userId);
     const previousAppCalendarName = userSettings.appGoogleCalendarName;
+    const previousAppCalendarProvider = userSettings.appCalendarProvider;
     const nextMin =
       updateUserSettingsDto.minSplitMinutes ?? userSettings.minSplitMinutes;
     const nextMax =
@@ -121,9 +136,30 @@ export class UserSettingsService {
           'hiddenGoogleCalendarIds must be an array of calendar ids',
         );
       }
+      const provider =
+        updateUserSettingsDto.appCalendarProvider ??
+        userSettings.appCalendarProvider;
+      const protectedId = appCalendarHideKey(provider, {
+        google: userSettings.appGoogleCalendarId,
+        microsoft: userSettings.appMicrosoftCalendarId,
+        apple: userSettings.appAppleCalendarId,
+      });
       updateUserSettingsDto.hiddenGoogleCalendarIds = normalizeHiddenCalendarIds(
         updateUserSettingsDto.hiddenGoogleCalendarIds,
-        userSettings.appGoogleCalendarId,
+        protectedId,
+      );
+    }
+
+    if (
+      updateUserSettingsDto.appCalendarProvider &&
+      this.appWrites &&
+      !(await this.appWrites.isConnected(
+        userId,
+        updateUserSettingsDto.appCalendarProvider,
+      ))
+    ) {
+      throw new BadRequestException(
+        'That calendar account is not connected.',
       );
     }
 
@@ -133,18 +169,25 @@ export class UserSettingsService {
     );
     const saved = await this.userSettingsRepository.save(updatedSettings);
 
-    if (
+    const providerChanged =
+      updateUserSettingsDto.appCalendarProvider !== undefined &&
+      saved.appCalendarProvider !== previousAppCalendarProvider;
+    const nameChanged =
       updateUserSettingsDto.appGoogleCalendarName !== undefined &&
-      saved.appGoogleCalendarName !== previousAppCalendarName
-    ) {
+      saved.appGoogleCalendarName !== previousAppCalendarName;
+    if (nameChanged || providerChanged) {
       try {
-        await this.googleCalendarService.updateAppCalendarSummaryIfLinked(
-          userId,
-        );
+        if (this.appWrites) {
+          await this.appWrites.syncHome(userId);
+        } else if (nameChanged) {
+          await this.googleCalendarService.updateAppCalendarSummaryIfLinked(
+            userId,
+          );
+        }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         this.logger.warn(
-          `Could not rename Google app calendar for user ${userId}: ${msg}`,
+          `Could not update the app calendar for user ${userId}: ${msg}`,
         );
       }
     }

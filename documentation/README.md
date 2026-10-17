@@ -12,6 +12,8 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Task creation rules](task-creation-rules.md) | Presets vs settings, validation, phase, recurrence weekdays, Google sync |
 | [Roadmap](roadmap.md) | Live queue |
 | [Roadmap archive](roadmap-archive.md) | Shipped work |
+| [Features](features/README.md) | Full per-feature behavior + logic (18 shipped). Written after planning, corrected before commit |
+| [Feature docs backfill](feature-docs-backfill.md) | Starting notes used for the catch-up pass. Not a spec |
 | [Spec: Incremental placement](spec-incremental-placement.md) | Who is read and written per calendar edit. No Generate button. A displaced day becomes a new task; a chain runs only when everyone still fits (target; engine still full-replans) |
 | [Spec: Conflict rules](spec-conflict-rules.md) | Unscheduled vs Problematic, conflict option ids; who moves defers to incremental placement |
 | [Spec: Voice Commander](spec-voice-commander.md) | Shipped one-shot commander: task/habit CRUD by voice, TTS, confirm delete/cancel |
@@ -25,4 +27,4 @@ Single source of truth for the project. Keep these files in sync with code chang
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** October 2026 (§23.3 live Groq create-eval harness; next §23.4 run + fix loop).
+**Last documentation update:** October 2026 (full feature docs under [features/](features/README.md): purpose, behavior, logic, edge cases, API, known gaps).

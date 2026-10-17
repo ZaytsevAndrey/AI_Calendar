@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UserIdentitiesService } from '../auth/user-identities.service';
+import { appEventBodyFromGoogle, toGraphEventBody } from './app-event-body';
 import type {
   CalendarProvider,
   ProviderCalendar,
@@ -158,6 +159,92 @@ export class MicrosoftCalendarProvider implements CalendarProvider {
       ? `https://graph.microsoft.com/v1.0/me/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`
       : `https://graph.microsoft.com/v1.0/me/events/${encodeURIComponent(eventId)}`;
     await this.graphJson(token, path, undefined, { method: 'DELETE' });
+  }
+
+  /** Create the named app calendar, or reuse `existingId` when Graph still has it. */
+  async ensureNamedCalendar(
+    userId: string,
+    name: string,
+    existingId: string | null,
+  ): Promise<string> {
+    this.ensureConfigured();
+    const token = await this.getAccessToken(userId);
+    if (!token) {
+      throw new ServiceUnavailableException(
+        'Microsoft Calendar is not connected.',
+      );
+    }
+    if (existingId) {
+      try {
+        const found = await this.graphJson<{ id?: string }>(
+          token,
+          `https://graph.microsoft.com/v1.0/me/calendars/${encodeURIComponent(existingId)}?$select=id`,
+        );
+        if (found.id) return String(found.id);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.logger.warn(
+          `Stored Microsoft app calendar missing (${msg}); creating a new one.`,
+        );
+      }
+    }
+    const created = await this.graphJson<{ id?: string }>(
+      token,
+      'https://graph.microsoft.com/v1.0/me/calendars',
+      undefined,
+      { method: 'POST', body: JSON.stringify({ name }) },
+    );
+    if (!created.id) {
+      throw new ServiceUnavailableException(
+        'Microsoft Calendar did not return a calendar id.',
+      );
+    }
+    return String(created.id);
+  }
+
+  async renameCalendar(
+    userId: string,
+    calendarId: string,
+    name: string,
+  ): Promise<void> {
+    this.ensureConfigured();
+    const token = await this.getAccessToken(userId);
+    if (!token) return;
+    await this.graphJson(
+      token,
+      `https://graph.microsoft.com/v1.0/me/calendars/${encodeURIComponent(calendarId)}`,
+      undefined,
+      { method: 'PATCH', body: JSON.stringify({ name }) },
+    );
+  }
+
+  async createAppEvent(
+    userId: string,
+    calendarId: string,
+    event: Record<string, unknown>,
+  ): Promise<string> {
+    this.ensureConfigured();
+    const token = await this.getAccessToken(userId);
+    if (!token) {
+      throw new ServiceUnavailableException(
+        'Microsoft Calendar is not connected.',
+      );
+    }
+    const created = await this.graphJson<{ id?: string }>(
+      token,
+      `https://graph.microsoft.com/v1.0/me/calendars/${encodeURIComponent(calendarId)}/events`,
+      undefined,
+      {
+        method: 'POST',
+        body: JSON.stringify(toGraphEventBody(appEventBodyFromGoogle(event))),
+      },
+    );
+    if (!created.id) {
+      throw new ServiceUnavailableException(
+        'Microsoft Calendar did not return an event id.',
+      );
+    }
+    return String(created.id);
   }
 
   private mapEvent(ev: GraphEvent, calendarId?: string): ProviderEvent {
