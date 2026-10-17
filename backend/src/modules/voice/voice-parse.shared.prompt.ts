@@ -12,19 +12,21 @@ export type VoiceParsePromptContext = {
   clarificationAnswer?: string;
   openTaskNames?: string[];
   /** Same tasks as openTaskNames, with the series flag and any known bounds. */
-  openTasks?: {
-    name: string;
-    recurring: boolean;
-    start?: string | null;
-    end?: string | null;
-    earliest?: string | null;
-    deadline?: string | null;
-  }[];
+  openTasks?: VoiceParseOpenTask[];
   habitNames?: string[];
   /** From router; used so specialist prompts answer in the same language. */
   language?: 'uk' | 'en' | 'ru';
   /** User setting: default length of a new task, in minutes. */
   defaultTaskDurationMinutes?: number;
+};
+
+export type VoiceParseOpenTask = {
+  name: string;
+  recurring: boolean;
+  start?: string | null;
+  end?: string | null;
+  earliest?: string | null;
+  deadline?: string | null;
 };
 
 export const VOICE_PARSE_INTENTS = [
@@ -59,7 +61,7 @@ export function languageInstruction(language?: string | null): string {
 }
 
 function formatOpenTasks(input: VoiceParsePromptContext): string {
-  const rows = input.openTasks?.length
+  const rows: VoiceParseOpenTask[] = input.openTasks?.length
     ? input.openTasks
     : (input.openTaskNames ?? []).map((name) => ({ name, recurring: false }));
   if (!rows.length) return '(none)';

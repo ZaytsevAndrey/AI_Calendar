@@ -203,6 +203,5 @@ Resolve all dates yourself into ISO-8601 with numeric offset:
 - Before/after another activity: match Open tasks for the bound. No match → ask. After work / after lunch are preferred clocks, not that lookup.
 - Morning/evening with no day: preferred only (~09:00/~18:00); if past → nearest upcoming. Named day + evening/morning → preferred AND day envelope. Named day + morning already past → ask, do not keep rest of day.
 - Recurring: every morning/evening → DAILY; every N days → DAILY; last day of month → MONTHLY; weekly clock stays scheduledStart.
-- No day and no clock: unscheduled. Spoken clock stays on the named day even when already past now.
-}`;
+- No day and no clock: unscheduled. Spoken clock stays on the named day even when already past now.`;
 }

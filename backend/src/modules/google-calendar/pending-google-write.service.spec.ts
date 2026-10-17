@@ -120,13 +120,17 @@ describe('PendingGoogleWriteService', () => {
   });
 
   it('anchors Google RRULE on majority clock, not a skewed open[0]', async () => {
-    // One shifted day at 09:30 must not rewrite the series DTSTART off 10:00.
-    const skewedStart = new Date('2026-10-12T06:30:00.000Z');
-    const skewedEnd = new Date('2026-10-12T07:00:00.000Z');
-    const aStart = new Date('2026-10-17T07:00:00.000Z');
-    const aEnd = new Date('2026-10-17T07:30:00.000Z');
-    const bStart = new Date('2026-10-19T07:00:00.000Z');
-    const bEnd = new Date('2026-10-19T07:30:00.000Z');
+    // One shifted day must not rewrite the series DTSTART off the majority HM.
+    // Keep every seat in the future so openSlots does not drop the majority days.
+    const day = (offset: number, hourUtc: number, minuteUtc = 0) => {
+      const start = new Date(Date.now() + offset * 86_400_000);
+      start.setUTCHours(hourUtc, minuteUtc, 0, 0);
+      const end = new Date(start.getTime() + 30 * 60_000);
+      return { start, end };
+    };
+    const skewed = day(1, 6, 30);
+    const a = day(2, 7, 0);
+    const b = day(4, 7, 0);
     taskRepo.findOne.mockResolvedValue({
       id: 't1',
       userId: 'u1',
@@ -137,8 +141,8 @@ describe('PendingGoogleWriteService', () => {
       recurrencePattern: 'DAILY',
       recurrenceWeekDays: null,
       skippedOccurrenceYmds: null,
-      scheduledStartTime: aStart,
-      scheduledEndTime: aEnd,
+      scheduledStartTime: a.start,
+      scheduledEndTime: a.end,
       googleEventId: null,
       status: 'todo',
       scheduleTimeZone: 'Asia/Nicosia',
@@ -146,18 +150,18 @@ describe('PendingGoogleWriteService', () => {
     scheduledRepo.find.mockResolvedValue([
       {
         taskId: 't1',
-        scheduledStartTime: skewedStart,
-        scheduledEndTime: skewedEnd,
+        scheduledStartTime: skewed.start,
+        scheduledEndTime: skewed.end,
       },
       {
         taskId: 't1',
-        scheduledStartTime: aStart,
-        scheduledEndTime: aEnd,
+        scheduledStartTime: a.start,
+        scheduledEndTime: a.end,
       },
       {
         taskId: 't1',
-        scheduledStartTime: bStart,
-        scheduledEndTime: bEnd,
+        scheduledStartTime: b.start,
+        scheduledEndTime: b.end,
       },
     ]);
     await service.syncTask('u1', 't1');
@@ -165,10 +169,10 @@ describe('PendingGoogleWriteService', () => {
       'u1',
       expect.objectContaining({
         start: expect.objectContaining({
-          dateTime: aStart.toISOString(),
+          dateTime: a.start.toISOString(),
         }),
         end: expect.objectContaining({
-          dateTime: aEnd.toISOString(),
+          dateTime: a.end.toISOString(),
         }),
       }),
       expect.any(Object),

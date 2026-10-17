@@ -1057,7 +1057,7 @@ describe('buildLocalCalendarContext', () => {
     expect(text).toContain('schedule today: 2026-09-07');
     expect(text).toContain('schedule tomorrow: 2026-09-08');
     expect(text).toContain('schedule +3 days: 2026-09-10');
-    expect(text).toContain('even when that instant is already before now ISO');
+    expect(text).toContain('even when already past now');
     expect(text).toContain('in N hours');
     expect(text).toContain('After sleep');
   });
