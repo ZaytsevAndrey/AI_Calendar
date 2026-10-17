@@ -96,6 +96,10 @@ export const en = {
   'errors.VOICE_LLM_TIMEOUT': 'The voice model did not answer. Try again.',
   'errors.VOICE_QUOTA_EXCEEDED':
     'Daily voice limit reached. Try again tomorrow.',
+  'errors.ACCOUNT_DELETE_CONFIRMATION_INVALID':
+    'Type DELETE or your account email exactly.',
+  'errors.ACCOUNT_DELETE_CALENDAR_FAILED':
+    'Could not remove Google Calendar data. Your account was not deleted. Fix calendar access and try again.',
 } as const;
 
 export type MessageKey = keyof typeof en;

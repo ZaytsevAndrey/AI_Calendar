@@ -21,6 +21,9 @@ const API_ERROR_KEYS: Record<string, MessageKey> = {
   VOICE_RATE_LIMIT: 'errors.VOICE_RATE_LIMIT',
   VOICE_LLM_TIMEOUT: 'errors.VOICE_LLM_TIMEOUT',
   VOICE_QUOTA_EXCEEDED: 'errors.VOICE_QUOTA_EXCEEDED',
+  ACCOUNT_DELETE_CONFIRMATION_INVALID:
+    'errors.ACCOUNT_DELETE_CONFIRMATION_INVALID',
+  ACCOUNT_DELETE_CALENDAR_FAILED: 'errors.ACCOUNT_DELETE_CALENDAR_FAILED',
 };
 
 function statusForApiError(code: string): number {
@@ -35,7 +38,10 @@ function statusForApiError(code: string): number {
       return HttpStatus.CONFLICT;
     case 'PASSWORDS_DO_NOT_MATCH':
     case 'INVALID_RESET_TOKEN':
+    case 'ACCOUNT_DELETE_CONFIRMATION_INVALID':
       return HttpStatus.BAD_REQUEST;
+    case 'ACCOUNT_DELETE_CALENDAR_FAILED':
+      return HttpStatus.BAD_GATEWAY;
     default:
       return HttpStatus.BAD_REQUEST;
   }

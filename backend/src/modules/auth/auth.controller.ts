@@ -1,17 +1,22 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Post,
   Logger,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { AccountDeletionService } from './account-deletion.service';
+import { DeleteAccountDto } from './dto/delete-account.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { JwtService } from '@nestjs/jwt';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -20,6 +25,7 @@ export class AuthController {
 
   constructor(
     private readonly authService: AuthService,
+    private readonly accountDeletion: AccountDeletionService,
     private readonly jwtService: JwtService,
     private readonly googleCalendarService: GoogleCalendarService,
   ) {}
@@ -73,5 +79,30 @@ export class AuthController {
     const userId = this.extractUserIdFromRequest(req);
     await this.authService.logout(userId);
     return { message: 'User logged out successfully' };
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Current user profile (email for account delete confirm)' })
+  @ApiResponse({ status: 200, description: 'Signed-in user email' })
+  me(@Req() req) {
+    return this.accountDeletion.getProfile(req.user.userId);
+  }
+
+  @Delete('account')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Permanently delete the account after typed confirmation; removes app Google events/calendar first',
+  })
+  @ApiBody({ type: DeleteAccountDto })
+  @ApiResponse({ status: 200, description: 'Account deleted' })
+  async deleteAccount(@Req() req, @Body() dto: DeleteAccountDto) {
+    await this.accountDeletion.deleteAccount(
+      req.user.userId,
+      dto.confirmation,
+    );
+    return { ok: true };
   }
 }

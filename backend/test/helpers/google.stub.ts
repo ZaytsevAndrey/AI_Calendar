@@ -34,6 +34,7 @@ export function createGoogleCalendarStub() {
       }),
     ),
     deleteEvent: jest.fn().mockResolvedValue({ success: true }),
+    deleteAppCalendar: jest.fn().mockResolvedValue(undefined),
     capRecurringSeriesUntil: jest.fn().mockResolvedValue(undefined),
     getLoginAuthUrl: jest
       .fn()

@@ -116,4 +116,46 @@ test.describe('P1 settings UI', () => {
     await expect(page.getByText('Linked with your Google account')).toBeVisible();
     await expect(page.getByRole('button', { name: /disconnect|unlink/i })).toHaveCount(0);
   });
+
+  test('U-SET-005 delete account two-step confirm calls DELETE /auth/account', async ({
+    page,
+    auth,
+  }) => {
+    let deleted = false;
+    await page.route('**/auth/me', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ email: 'delete-me@test.local' }),
+      });
+    });
+    await page.route('**/auth/account', async (route) => {
+      if (route.request().method() !== 'DELETE') {
+        await route.continue();
+        return;
+      }
+      const body = route.request().postDataJSON() as { confirmation?: string };
+      expect(body.confirmation).toBe('DELETE');
+      deleted = true;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true }),
+      });
+    });
+
+    await openAs(page, auth.onboarded, '/settings');
+    await page.getByRole('button', { name: 'Delete account' }).click();
+    await expect(page.getByRole('dialog', { name: 'Remove calendar data' })).toBeVisible();
+    await page.getByRole('button', { name: 'Continue' }).click();
+    const confirm = page.getByRole('dialog', { name: 'Confirm account deletion' });
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole('textbox').fill('DELETE');
+    await confirm.getByRole('button', { name: 'Delete forever' }).click();
+    await expect.poll(() => deleted).toBe(true);
+  });
 });

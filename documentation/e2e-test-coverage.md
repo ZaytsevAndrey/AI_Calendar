@@ -131,6 +131,10 @@ Email/password (`POST /auth/register`, `/login`, forgot/reset) **do not exist**.
 | A-AUTH-013 | A | P1 | Logout then refresh | `POST /auth/refresh` with old refresh | 401 |
 | A-AUTH-014 | A | P2 | Logout **without** Authorization | `POST /auth/logout` | **Current:** uncaught missing header → **500** (not 401). Assert actual status; do not “fix” in the test. |
 | A-AUTH-015 | A | P1 | Access expired, refresh valid | Call protected API (UI does this) | API itself does not auto-refresh; 401. Refresh endpoint still works. |
+| A-AUTH-016 | A | P1 | Authenticated | `GET /auth/me` | 200 + email |
+| A-AUTH-017 | A | P1 | Wrong confirmation | `DELETE /auth/account` | 400 `ACCOUNT_DELETE_CONFIRMATION_INVALID` |
+| A-AUTH-018 | A | P1 | Confirmation `DELETE` | `DELETE /auth/account` | 200; user row gone |
+| A-AUTH-019 | A | P1 | Google cleanup throws | `DELETE /auth/account` with tokens | 502 `ACCOUNT_DELETE_CALENDAR_FAILED`; user kept |
 | U-AUTH-001 | U | P0 | Logged-out | Open `/` | Redirect `/login` |
 | U-AUTH-002 | U | P0 | Logged-out | Click Continue with Google | Navigates to `/auth/google` URL (or stubbed redirect) |
 | U-AUTH-003 | U | P1 | `/login?error=access_denied` | Render login | Error visible |
@@ -178,6 +182,7 @@ Email/password (`POST /auth/register`, `/login`, forgot/reset) **do not exist**.
 | U-SET-002 | U | P1 | Empty TZ on first login | App loads | Client PATCHes browser IANA **once** |
 | U-SET-003 | U | P1 | TZ already set | Reload | No overwrite |
 | U-SET-004 | U | P1 | Google status | Settings | Shows connected from `check-connection` (no disconnect button — feature missing) |
+| U-SET-005 | U | P1 | Delete account | Two modals + type DELETE | Calls `DELETE /auth/account` (stubbed) |
 | U-SET-005 | U | P2 | Settings loading / error | Slow/fail API | Loading then retry |
 | U-ONB-001 | U | P0 | `/setup/phases` | Continue (saves wake/sleep), then Save with ≥1 weekday | `setup-defaults` or `apply-preset` → calendar |
 | U-ONB-002 | U | P0 | `/setup/phases` | Continue, then Skip | `setup-defaults` all days → calendar |

@@ -22,6 +22,8 @@ Primary sign-in is Google. Microsoft appears on login when `MICROSOFT_*` is set.
 | POST | `/auth/identities/:provider/disconnect` | Disconnect a linked identity (`confirm: true`) |
 | POST | `/auth/refresh` | Refresh tokens |
 | POST | `/auth/logout` | Logout |
+| GET | `/auth/me` | Signed-in email (for delete-account confirm) |
+| DELETE | `/auth/account` | Body `{ confirmation }` = `DELETE` or email; Google app events/calendar first, then wipe user |
 
 The Google redirect (`GET /google-calendar/callback`) sends the browser to the frontend `/auth/google/callback?ticket=…`. That sign-in writes wake `07:00`, sleep `22:00`, and `googleCalendarLinked: true`. It does not create phases.
 

@@ -99,4 +99,8 @@ export const uk: Record<MessageKey, string> = {
   'errors.VOICE_LLM_TIMEOUT': 'Модель голосу не відповіла. Спробуйте ще раз.',
   'errors.VOICE_QUOTA_EXCEEDED':
     'Денний ліміт голосу вичерпано. Спробуйте завтра.',
+  'errors.ACCOUNT_DELETE_CONFIRMATION_INVALID':
+    'Введіть точно DELETE або email акаунта.',
+  'errors.ACCOUNT_DELETE_CALENDAR_FAILED':
+    'Не вдалося прибрати дані Google Календаря. Акаунт не видалено. Відновіть доступ до календаря й спробуйте знову.',
 };

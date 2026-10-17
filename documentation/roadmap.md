@@ -14,13 +14,6 @@ Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Produ
 
 Do in order unless you explicitly skip ahead. These items need no outside service and no open product decision.
 
-### 30. Delete account
-
-Sign-in can be Google (live) plus Microsoft when configured. Apple Calendar is Settings CalDAV only. Logout exists. There is no delete.
-
-- [ ] Delete the user and their tasks, habits, phases, settings, push subscriptions, and stored provider refresh tokens.
-- [ ] Remove events the app created on connected calendars, or ask before removing them.
-
 ### 31. Database backup
 
 The copy script wipes production tables before it writes. There is no separate backup.
@@ -93,7 +86,7 @@ Third parties and publishing. Leave these until the Now list is done.
 
 ## Recommended next steps
 
-1. Next live item: roadmap **§30** — delete account.
-2. Then the rest of **Now**: §31 backup, §32 mobile daily path, §33 card min height / crowded hour, §35 preview look + content, §24 Piper ([tts-local.md](tts-local.md)).
+1. Next live item: roadmap **§31** — database backup.
+2. Then the rest of **Now**: §32 mobile daily path, §33 card min height / crowded hour, §35 preview look + content, §24 Piper ([tts-local.md](tts-local.md)).
 3. Voice understanding continues in parallel via [voice-prompt-next.md](voice-prompt-next.md); do not put it back in this queue.
 4. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

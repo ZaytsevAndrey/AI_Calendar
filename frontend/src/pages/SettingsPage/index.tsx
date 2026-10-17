@@ -5,6 +5,7 @@ import { LogOut } from 'lucide-react';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import UserSettingsForm from 'modules/user-settings/components/UserSettingsForm';
 import { logout } from 'modules/auth/actions/logoutActions';
+import { DeleteAccountSection } from 'modules/auth/components/DeleteAccountSection';
 import { buildLabel } from 'modules/common/buildInfo';
 
 const SettingsPage: React.FC = () => {
@@ -97,6 +98,7 @@ const SettingsPage: React.FC = () => {
                         <LogOut className="h-4 w-4" aria-hidden />
                         {t('settings.logout')}
                     </button>
+                    <DeleteAccountSection />
                     <p className="mt-4 text-center text-[11px] leading-4 text-ide-muted md:hidden">
                         Build {buildLabel()}
                     </p>

@@ -1310,7 +1310,72 @@ export class GoogleCalendarService {
     return /not\s*found|has been deleted|\bgone\b/i.test(message);
   }
 
+  /**
+   * Deletes the dedicated app secondary calendar (and its events) when present.
+   * No-op when disconnected or the calendar id is missing. Not-found is success.
+   */
+  async deleteAppCalendar(userId: string): Promise<void> {
+    if (stubExternalApis()) return;
+
+    const settings = await this.userSettingsRepo.findOne({ where: { userId } });
+    const calendarId = settings?.appGoogleCalendarId?.trim();
+    if (!calendarId) return;
+
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: {
+        googleAccessToken: true,
+        googleRefreshToken: true,
+        googleTokenExpiry: true,
+      },
+    });
+    if (!user?.googleAccessToken) {
+      throw new Error('Google Calendar not connected');
+    }
+
+    if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
+      if (!user.googleRefreshToken) {
+        throw new Error('Google Calendar token expired');
+      }
+      this.oauth2Client.setCredentials({
+        refresh_token: user.googleRefreshToken,
+      });
+      const { credentials } = await this.oauth2Client.refreshAccessToken();
+      await this.userRepo.update(userId, {
+        googleAccessToken: credentials.access_token,
+        googleTokenExpiry: new Date(credentials.expiry_date),
+      });
+      user.googleAccessToken = credentials.access_token;
+    }
+
+    this.oauth2Client.setCredentials({
+      access_token: user.googleAccessToken,
+    });
+    const calendar = google.calendar({
+      version: 'v3',
+      auth: this.oauth2Client,
+    });
+
+    try {
+      await calendar.calendars.delete({ calendarId });
+    } catch (e: unknown) {
+      if (!this.isGoogleNotFound(e)) throw e;
+      this.logger.warn(
+        `App calendar ${calendarId} already gone for user ${userId}`,
+      );
+    }
+
+    await this.userSettingsRepo.update(
+      { userId },
+      { appGoogleCalendarId: null },
+    );
+  }
+
   async deleteEvent(userId: string, eventId: string, calendarId?: string) {
+    if (stubExternalApis()) {
+      return { success: true };
+    }
+
     const user = await this.userRepo.findOne({
       where: { id: userId },
       select: {

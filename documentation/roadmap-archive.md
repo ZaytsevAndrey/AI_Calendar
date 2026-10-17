@@ -14,6 +14,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ## Shipped (Oct 2026)
 
+- [x] **§30 Delete account.** Settings → two-step confirm (calendar cleanup warning, then type `DELETE` or email). `DELETE /auth/account` removes app-created Google events and the dedicated app calendar first (fail closed on Google errors), then wipes local user data and identities. `GET /auth/me` returns the email for the confirm UI.
+
 - [x] **§29 Type in the voice sheet.** Composer under the thread sends text through the same `POST /voice/turn` path as speech (no STT). Mic on/off toggle (default on): when on, auto-listen continues; when off, listening stops and typed turns still work. Send while listening cancels the recording and submits the typed message.
 
 - [x] **§28 Unscheduled strip exit + recurring keep seats.** Calendar **Now / Next / Unscheduled** cards share soft-tint columns, kind icons, shadows, and hover; Unscheduled is a scrollable list with Done / Skip / Do now / Schedule / Edit (Tasks inbox uses **Edit**, not Open). Card click opens the same event preview (inbox via `local-task:`). Preview has **Done** for one-off app tasks. Recurring horizon rewrite no longer deletes open seats before a successful plan; if rewrite seats zero days but open seats remain, the series is kept. Duration-only recurring edits use `commit: keep` + extend.
