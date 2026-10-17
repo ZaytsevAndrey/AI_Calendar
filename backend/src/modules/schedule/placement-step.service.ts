@@ -1158,13 +1158,33 @@ export class PlacementStepService {
       await this.taskRepo.save(task);
     }
     const groupId = task.seriesGroupId;
-    await this.deleteOpenSlots(this.scheduledRepo, task.id, now);
 
     const seated = dayPlans.filter(
       (d): d is DayPlan & { hm: string } =>
         d.plan.outcome === 'seated' && !!d.hm,
     );
     if (!seated.length) {
+      // Spec wave 4 §28–§29: never wipe open seats before a successful rewrite.
+      // If this series already has future seats, keep them — do not clear the
+      // master clock / Google series. Dry-run often fails against own seats.
+      const existingOpen = await this.scheduledRepo
+        .createQueryBuilder('st')
+        .where('st.taskId = :taskId', { taskId: task.id })
+        .andWhere('st.scheduledEndTime > :now', { now })
+        .getCount();
+      if (existingOpen > 0 && task.scheduledStartTime && task.scheduledEndTime) {
+        this.logger.warn(
+          `[series-horizon] keep existing seats task=${task.id.slice(0, 8)} ` +
+            `open=${existingOpen} (horizon rewrite seated 0 days)`,
+        );
+        this.pendingGoogleWrites.syncTaskSoon(userId, task.id);
+        return {
+          outcome: 'seated',
+          start: new Date(task.scheduledStartTime).getTime(),
+          end: new Date(task.scheduledEndTime).getTime(),
+          moves: [],
+        };
+      }
       let reason = 'no_slot';
       for (const day of dayPlans) {
         if (day.plan.outcome === 'problematic') reason = day.plan.reason;
@@ -1190,6 +1210,9 @@ export class PlacementStepService {
       this.pendingGoogleWrites.syncTaskSoon(userId, task.id);
       return { outcome: 'problematic', reason };
     }
+
+    // Only clear open seats once we know the rewrite has days to write.
+    await this.deleteOpenSlots(this.scheduledRepo, task.id, now);
 
     const byHm = groupYmdsByClockHm(
       seated.map((d) => ({ ymd: d.ymd, hm: d.hm })),

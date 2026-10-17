@@ -3,6 +3,7 @@ import type { TaskDTO } from '../../api/tasks.api';
 import { findTaskForGoogleEvent } from './findTaskForGoogleEvent';
 
 const LOCAL_COMPLETED_PREFIX = 'local-completed:';
+const LOCAL_TASK_PREFIX = 'local-task:';
 
 export function resolveTaskForCalendarEvent(
   tasks: TaskDTO[],
@@ -12,7 +13,34 @@ export function resolveTaskForCalendarEvent(
     const taskId = event.id.slice(LOCAL_COMPLETED_PREFIX.length);
     return tasks.find((task) => task.id === taskId);
   }
+  if (typeof event.id === 'string' && event.id.startsWith(LOCAL_TASK_PREFIX)) {
+    const taskId = event.id.slice(LOCAL_TASK_PREFIX.length);
+    return tasks.find((task) => task.id === taskId);
+  }
   return findTaskForGoogleEvent(tasks, event);
+}
+
+/** Synthetic calendar event so EventPreview can open for inbox / strip tasks. */
+export function previewEventFromTask(
+  task: TaskDTO,
+  range?: { startMs: number; endMs: number },
+): GoogleCalendarEvent {
+  const startIso =
+    task.scheduledStartTime ||
+    (range ? new Date(range.startMs).toISOString() : undefined);
+  const endIso =
+    task.scheduledEndTime ||
+    (range ? new Date(range.endMs).toISOString() : undefined);
+  return {
+    id: `${LOCAL_TASK_PREFIX}${task.id}`,
+    summary: task.name,
+    description: task.description || undefined,
+    location: task.location || undefined,
+    start: startIso ? { dateTime: startIso } : {},
+    end: endIso ? { dateTime: endIso } : {},
+    status: 'confirmed',
+    isAppGenerated: true,
+  };
 }
 
 /** Local chips for completed tasks whose Google event was already dropped. */

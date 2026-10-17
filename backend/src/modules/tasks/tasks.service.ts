@@ -254,7 +254,12 @@ export class TasksService {
       before.estimatedTimeInMinutes !== after.estimatedTimeInMinutes;
     const endChanged = before.scheduledEndTime !== after.scheduledEndTime;
     if (durationChanged || endChanged) {
-      return { expandSeries: !!task.isRecurring };
+      // Spec §28–§29: already-seated series keep open days; only append.
+      // Full horizon rewrite is for create / preferred clock moves.
+      if (task.isRecurring) {
+        return { commit: 'keep', expandSeries: true };
+      }
+      return {};
     }
     if (task.isRecurring && patternChanged) {
       return { commit: 'keep', expandSeries: true };

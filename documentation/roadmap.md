@@ -14,12 +14,6 @@ Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Produ
 
 Do in order unless you explicitly skip ahead. These items need no outside service and no open product decision.
 
-### 28. Unscheduled exit from calendar
-
-When a block becomes Unscheduled from the type chip, how the user puts it back on the grid is still open.
-
-- [ ] Decide: Schedule button on the chip / strip, open preview then edit, or Do now — then implement that path.
-
 ### 29. Type in the voice sheet
 
 - [ ] The voice sheet sends a typed message through the same turn path as speech.
@@ -49,6 +43,13 @@ Short blocks can look too thin. When many events share an hour, the hour row sta
 
 - [ ] Minimum height for a task card on the day/week grid so the title and chips stay readable.
 - [ ] Stretch that hour’s row height when it holds many overlapping or stacked events, so cards do not crush each other.
+
+### 35. Event / task preview — look + content
+
+`EventPreview` ships, but the sheet looks weak and shows almost nothing useful beyond title and time.
+
+- [ ] Redesign the preview layout (hierarchy, spacing, actions).
+- [ ] Fill it with the fields people need before Edit: type, phase, duration, deadline / window, calendar source, recurrence, status, description when present — for both app tasks and provider-only events.
 
 ### 24. Personal-computer build, then local TTS
 
@@ -96,7 +97,7 @@ Third parties and publishing. Leave these until the Now list is done.
 
 ## Recommended next steps
 
-1. Next live item: roadmap **§28** — Unscheduled exit from calendar.
-2. Then the rest of **Now**: §29 typed voice, §30 delete account, §31 backup, §32 mobile daily path, §33 card min height / crowded hour, §24 Piper ([tts-local.md](tts-local.md)).
+1. Next live item: roadmap **§29** — typed message in the voice sheet.
+2. Then the rest of **Now**: §30 delete account, §31 backup, §32 mobile daily path, §33 card min height / crowded hour, §35 preview look + content, §24 Piper ([tts-local.md](tts-local.md)).
 3. Voice understanding continues in parallel via [voice-prompt-next.md](voice-prompt-next.md); do not put it back in this queue.
 4. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

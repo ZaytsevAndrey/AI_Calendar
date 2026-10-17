@@ -1,4 +1,5 @@
 import {
+  canCompleteFromPreview,
   isEventPreviewSeries,
   planEventPreviewDelete,
   planEventPreviewDeleteMutation,
@@ -84,6 +85,50 @@ describe('planEventPreviewActions', () => {
       expect(planEventPreviewDeleteMutation('all')).toEqual({
         kind: 'delete_task',
       });
+    });
+  });
+
+  describe('canCompleteFromPreview', () => {
+    it('allows one-off app todos', () => {
+      expect(
+        canCompleteFromPreview({
+          isRecurring: false,
+          isFixedExternal: false,
+          status: 'todo',
+        }),
+      ).toBe(true);
+    });
+
+    it('rejects recurring, external, completed, canceled, and null', () => {
+      expect(canCompleteFromPreview(null)).toBe(false);
+      expect(
+        canCompleteFromPreview({
+          isRecurring: true,
+          isFixedExternal: false,
+          status: 'todo',
+        }),
+      ).toBe(false);
+      expect(
+        canCompleteFromPreview({
+          isRecurring: false,
+          isFixedExternal: true,
+          status: 'todo',
+        }),
+      ).toBe(false);
+      expect(
+        canCompleteFromPreview({
+          isRecurring: false,
+          isFixedExternal: false,
+          status: 'completed',
+        }),
+      ).toBe(false);
+      expect(
+        canCompleteFromPreview({
+          isRecurring: false,
+          isFixedExternal: false,
+          status: 'canceled',
+        }),
+      ).toBe(false);
     });
   });
 });

@@ -36,7 +36,8 @@ export type NowBlock = {
   habit: NowHabitRef | null;
 };
 
-const MAX_UNSCHEDULED = 5;
+/** Soft cap so a huge inbox cannot freeze the strip; list scrolls inside the chip. */
+export const MAX_UNSCHEDULED = 40;
 
 export function weekdayIndexUtc(ymd: string): number {
   const [year, month, day] = ymd.split('-').map(Number);

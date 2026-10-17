@@ -265,7 +265,6 @@ const TasksPage: React.FC = () => {
               onSkip={markSkipped}
               onDoNow={doNow}
               onSchedule={openSchedule}
-              openLabel={t('tasks.item.open')}
               busyId={busyId}
               isLoading={false}
             />

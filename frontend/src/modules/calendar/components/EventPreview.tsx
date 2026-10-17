@@ -8,6 +8,7 @@ import { formatDateTimeRange, joinToastDetail } from 'utils/formatDate';
 import i18n from 'i18n';
 import { eventEndDate, eventStartDate } from '../calendarView';
 import {
+  canCompleteFromPreview,
   planEventPreviewDelete,
   planEventPreviewEdit,
 } from '../planEventPreviewActions';
@@ -22,6 +23,8 @@ type Props = {
   onClose: () => void;
   onEdit: (scope?: SeriesDragScope) => void;
   onDelete: (scope?: SeriesDragScope) => void;
+  /** Mark the linked app task completed (non-recurring / non-external). */
+  onDone?: () => void;
   busy?: boolean;
 };
 
@@ -61,9 +64,11 @@ export function EventPreview({
   onClose,
   onEdit,
   onDelete,
+  onDone,
   busy = false,
 }: Props) {
   const { t } = useTranslation();
+  const showDone = !!onDone && canCompleteFromPreview(task);
 
   const title = useMemo(() => {
     if (!event) return '';
@@ -137,6 +142,16 @@ export function EventPreview({
               {t('common.delete')}
             </button>
           )}
+          {showDone ? (
+            <button
+              type="button"
+              className="ui-btn-secondary w-full sm:w-auto"
+              disabled={busy}
+              onClick={() => onDone?.()}
+            >
+              {t('common.done')}
+            </button>
+          ) : null}
           {editPlan === 'series_menu' ? (
             <SeriesScopeMenu
               label={t('common.edit')}

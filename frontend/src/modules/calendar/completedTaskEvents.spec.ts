@@ -1,5 +1,6 @@
 import {
   overlayCompletedTaskEvents,
+  previewEventFromTask,
   resolveTaskForCalendarEvent,
 } from './completedTaskEvents';
 import type { TaskDTO } from '../../api/tasks.api';
@@ -63,5 +64,20 @@ describe('overlayCompletedTaskEvents', () => {
       isAppGenerated: true,
     };
     expect(overlayCompletedTaskEvents([google], [completed])).toEqual([google]);
+  });
+});
+
+describe('previewEventFromTask', () => {
+  it('builds a local-task event that resolveTaskForCalendarEvent finds', () => {
+    const inbox = task({
+      id: 'u2',
+      name: 'Buy milk',
+      isUnscheduled: true,
+      description: '2%',
+    });
+    const event = previewEventFromTask(inbox);
+    expect(event.id).toBe('local-task:u2');
+    expect(event.summary).toBe('Buy milk');
+    expect(resolveTaskForCalendarEvent([inbox], event)).toEqual(inbox);
   });
 });

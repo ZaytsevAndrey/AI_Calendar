@@ -1,6 +1,17 @@
+import type { TaskDTO } from 'api/tasks.api';
 import type { SeriesDragScope } from 'modules/schedule/seriesDragChoice';
 
 export type EventPreviewEditPlan = 'direct' | 'series_menu';
+
+/** Done on calendar preview: one-off app tasks only (same gate as Now strip). */
+export function canCompleteFromPreview(
+  task: Pick<TaskDTO, 'isRecurring' | 'isFixedExternal' | 'status'> | null,
+): boolean {
+  if (!task) return false;
+  if (task.isRecurring || task.isFixedExternal) return false;
+  if (task.status === 'completed' || task.status === 'canceled') return false;
+  return true;
+}
 
 export type EventPreviewDeletePlan =
   | 'confirm_google'

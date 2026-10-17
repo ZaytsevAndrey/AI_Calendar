@@ -47,6 +47,7 @@ import {
     useEndSeriesFromMutation,
     useGetEventsQuery as useGetTasksQuery,
     useSkipOccurrenceMutation,
+    useUpdateEventMutation as useUpdateTaskMutation,
 } from 'api/eventTasksApi';
 import { eventsApi } from 'api/eventsApi';
 import { useGetHabitsQuery } from 'api/habitsApi';
@@ -207,10 +208,13 @@ const CalendarPage: React.FC = () => {
     const [deleteTaskTrigger] = useDeleteTaskMutation();
     const [skipOccurrenceTrigger] = useSkipOccurrenceMutation();
     const [endSeriesFromTrigger] = useEndSeriesFromMutation();
+    const [updateTaskTrigger] = useUpdateTaskMutation();
+    const [previewBusy, setPreviewBusy] = useState(false);
     const { parkDayHints } = useScheduleActions();
     const { data: userSettings } = useGetUserSettingsQuery();
     const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
-    const { openCreate, openCreateFromPrefill, openEdit, createFromPayload, editorModal } = useEventEditor();
+    const { openCreate, openCreateFromPrefill, openEdit, openSchedule, createFromPayload, editorModal } =
+        useEventEditor();
     const { data: tasks = [] } = useGetTasksQuery();
     const todayYmd = todayYmdInZone(timeZone);
     const problematicTasks = tasks.filter((task) =>
@@ -499,6 +503,24 @@ const CalendarPage: React.FC = () => {
             return;
         }
         setEventFormDialog({ open: true, event });
+    };
+
+    const doneFromPreview = () => {
+        const event = eventPreview.event;
+        if (!event) return;
+        const linked = resolveTaskForCalendarEvent(tasks, event);
+        if (!linked) return;
+        setPreviewBusy(true);
+        void updateTaskTrigger({ id: linked.id, body: { status: 'completed' } })
+            .unwrap()
+            .then(() => closeEventPreview())
+            .catch((err) => {
+                showErrorToast({
+                    title: t('tasks.completeFailed'),
+                    detail: extractApiErrorMessage(err),
+                });
+            })
+            .finally(() => setPreviewBusy(false));
     };
 
     const deleteFromPreview = (scope?: SeriesDragScope) => {
@@ -856,6 +878,11 @@ const CalendarPage: React.FC = () => {
                 <NowStrip
                     skipEventsFetch={nowStripReuseCalendarEvents}
                     sharedEvents={eventsForRange}
+                    onEditTask={openEdit}
+                    onScheduleTask={openSchedule}
+                    onOpenPreview={(event) =>
+                        setEventPreview({ open: true, event })
+                    }
                 />
                 {problematicTasks.length > 0 ? (
                     <ProblematicInboxBanner
@@ -1035,6 +1062,8 @@ const CalendarPage: React.FC = () => {
                 onClose={closeEventPreview}
                 onEdit={openEditorFromPreview}
                 onDelete={deleteFromPreview}
+                onDone={doneFromPreview}
+                busy={previewBusy}
             />
 
             <EventForm
