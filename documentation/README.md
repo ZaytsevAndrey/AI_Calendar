@@ -25,4 +25,4 @@ Single source of truth for the project. Keep these files in sync with code chang
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** October 2026 (§23.3 live Groq create-eval harness; next §23.4 run + fix loop).
+**Last documentation update:** October 2026 (§29 typed message + mic toggle in the voice sheet).

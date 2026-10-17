@@ -7,7 +7,7 @@ import {
   uniqueName,
   expectMutationProgressToast,
 } from '../helpers/fixtures';
-import { mockVoiceCapture, stubVoiceApis, recordOnce } from '../helpers/voice';
+import { mockVoiceCapture, stubVoiceApis, recordOnce, turnMicOff, typeOnce } from '../helpers/voice';
 
 test.describe('P1 voice UI', () => {
   test('U-VOI-001 complete parse creates a task from the sheet', async ({ page, auth }) => {
@@ -50,9 +50,12 @@ test.describe('P1 voice UI', () => {
   });
 
   test('U-VOI-003 clarification is asked only once', async ({ page, auth }) => {
+    // `/voice/turn` sends the follow-up as transcript (not clarificationAnswer).
+    let userTurns = 0;
     await mockVoiceCapture(page);
-    await stubVoiceApis(page, (body) => {
-      if (body.clarificationAnswer) {
+    await stubVoiceApis(page, () => {
+      userTurns += 1;
+      if (userTurns >= 2) {
         return {
           understanding: 'complete',
           clarifyingQuestion: null,
@@ -218,16 +221,69 @@ test.describe('P1 voice UI', () => {
     await expectMutationProgressToast(page, 'Equalizer task');
   });
 
-  test('U-VOI-010 Speak replies toggle is in Settings', async ({ page, auth, request }) => {
-    const token = auth.onboarded.access_token;
-    const primed = await apiJson(request, token, 'patch', '/user-settings', {
-      speakVoiceReplies: true,
+  test('U-VOI-011 typed message creates a task without STT', async ({ page, auth }) => {
+    let transcribed = false;
+    await mockVoiceCapture(page);
+    await stubVoiceApis(page, () => ({
+      understanding: 'complete',
+      clarifyingQuestion: null,
+      task: {
+        name: 'Typed milk',
+        eventType: 'admin',
+        estimatedTimeInMinutes: 30,
+        priority: 'medium',
+      },
+    }));
+    // LIFO: this handler runs before the stub and flags any accidental STT call.
+    await page.route('**/voice/transcribe', async (route) => {
+      if (route.request().method() === 'POST') transcribed = true;
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({ transcript: 'should-not-run', language: 'en' }),
+      });
     });
-    expectOk(primed);
+    await openAs(page, auth.onboarded, '/tasks');
+    await page.getByRole('button', { name: 'Add task by voice' }).click();
+    await turnMicOff(page);
+    await typeOnce(page, 'buy milk typed');
+    await expectMutationProgressToast(page, 'Typed milk');
+    await expect(page.getByRole('heading', { name: 'Typed milk' }).first()).toBeVisible();
+    expect(transcribed).toBe(false);
+  });
 
+  test('U-VOI-012 mic off stops listening; typed still works', async ({ page, auth }) => {
+    await mockVoiceCapture(page);
+    await stubVoiceApis(page, () => ({
+      understanding: 'complete',
+      clarifyingQuestion: null,
+      task: {
+        name: 'Mic off typed',
+        eventType: 'admin',
+        estimatedTimeInMinutes: 20,
+        priority: 'low',
+      },
+    }));
+    await openAs(page, auth.onboarded, '/tasks');
+    await page.getByRole('button', { name: 'Add task by voice' }).click();
+    const sheet = page.getByRole('dialog');
+    await expect(sheet.getByText(/Listening/)).toBeVisible();
+    await turnMicOff(page);
+    await expect(sheet.getByRole('button', { name: 'Done' })).toHaveCount(0);
+    await typeOnce(page, 'create from keyboard');
+    await expectMutationProgressToast(page, 'Mic off typed');
+    await expect(page.getByRole('heading', { name: 'Mic off typed' }).first()).toBeVisible();
+  });
+
+  test('U-VOI-010 Speak replies toggle is in Settings', async ({ page, auth }) => {
     await openAs(page, auth.onboarded, '/settings');
     const speak = page.getByRole('checkbox', { name: 'Speak replies' });
     await expect(speak).toBeVisible();
+    // Shared e2e user may already be off from a prior run — normalize via UI.
+    if (!(await speak.isChecked())) {
+      await speak.click();
+      await expect(page.getByText('Speak replies on')).toBeVisible();
+    }
     await expect(speak).toBeChecked();
     await speak.click();
     await expect(page.getByText('Speak replies off')).toBeVisible();

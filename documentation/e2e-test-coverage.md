@@ -335,6 +335,8 @@ Do **not** hit real Groq. Stub transcribe + parse.
 | U-VOI-008 | U | P1 | Stub `command.delete`, confirm off | Voice delete | Confirm always shown; Confirm deletes |
 | U-VOI-009 | U | P1 | Mic stub recording | Voice sheet | Listening + microphone level equalizer visible |
 | U-VOI-010 | U | P1 | Settings Voice | Speak replies | Toggle visible; off shows toast |
+| U-VOI-011 | U | P1 | Voice sheet composer | Type + Send, mic off | Task created via `/voice/turn`; no STT |
+| U-VOI-012 | U | P1 | Mic on by default | Toggle Mic off, then type | Listening stops; typed create still works |
 
 ---
 

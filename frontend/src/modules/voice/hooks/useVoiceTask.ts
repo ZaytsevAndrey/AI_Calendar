@@ -94,10 +94,13 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
   const [proposal, setProposal] = useState<DayPlanProposal | null>(null);
   const [actions, setActions] = useState<VoiceAgentActionId[]>([]);
   const [heldConflict, setHeldConflict] = useState<SchedulingConflictDTO | null>(null);
+  /** When true, auto-listen after turns. Independent of typed messages. Default on. */
+  const [micEnabled, setMicEnabledState] = useState(true);
   const finishingRef = useRef(false);
   const turnLockRef = useRef(false);
   const lastCreateKeyRef = useRef<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  const micEnabledRef = useRef(true);
 
   const ensureSessionId = useCallback(() => {
     const existing = sessionIdRef.current;
@@ -193,6 +196,12 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     }
   }, [start]);
 
+  /** Auto-listen only when the mic toggle is on. */
+  const maybeListen = useCallback(async () => {
+    if (!micEnabledRef.current) return;
+    await beginRecording();
+  }, [beginRecording]);
+
   const stayReady = useCallback(
     async (opts?: { listen?: boolean }) => {
       setPendingIntents(null);
@@ -205,9 +214,9 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       // After a write, wait for an explicit mic tap — auto-listen often
       // catches TTS bleed / the same phrase again and creates a duplicate.
       if (opts?.listen === false) return;
-      await beginRecording();
+      await maybeListen();
     },
-    [beginRecording],
+    [maybeListen],
   );
 
   const open = useCallback(() => {
@@ -219,6 +228,8 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     setProposal(null);
     setError(null);
     setMessages([]);
+    micEnabledRef.current = true;
+    setMicEnabledState(true);
     const id = newSessionId();
     sessionIdRef.current = id;
     setSessionId(id);
@@ -231,16 +242,16 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       setIsOpen(true);
       void (async () => {
         await speakAndStage(question, 'needs_conflict_choice');
-        await beginRecording();
+        await maybeListen();
       })();
     } else {
       setHeldConflict(null);
       setClarifyingQuestion(null);
       setStage('idle');
       setIsOpen(true);
-      void beginRecording();
+      void maybeListen();
     }
-  }, [beginRecording, cancel, speakAndStage]);
+  }, [cancel, maybeListen, speakAndStage]);
 
   const runIntents = useCallback(
     async (intents: VoiceWriteIntent[], summary?: string) => {
@@ -357,7 +368,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
         pushMessages(msg('assistant', question));
         setStage('clarifying');
         await speakAndStage(question, 'clarifying');
-        await beginRecording();
+        await maybeListen();
         return;
       }
 
@@ -373,7 +384,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
         await runIntents([{ ...createIntent, summary }], summary);
       }
     },
-    [beginRecording, confirmCommands, pushMessages, runIntents, speakAndStage],
+    [confirmCommands, maybeListen, pushMessages, runIntents, speakAndStage],
   );
 
   const turnAndRoute = useCallback(
@@ -425,7 +436,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       if (result.outcome === 'clarify') {
         setClarifyingQuestion(assistantText || i18n.t('voice.clarifyMore'));
         await speakAndStage(assistantText, 'clarifying');
-        await beginRecording();
+        await maybeListen();
         return;
       }
 
@@ -442,11 +453,11 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
         return;
       }
       await speakAndStage(assistantText, 'ready');
-      await beginRecording();
+      await maybeListen();
     },
     [
-      beginRecording,
       ensureSessionId,
+      maybeListen,
       pushMessages,
       routeLegacyParse,
       runIntents,
@@ -454,6 +465,31 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       stayReady,
       timeZone,
     ],
+  );
+
+  /** Shared path after STT or a typed message (conflict choice or agent turn). */
+  const processUserText = useCallback(
+    async (spoken: string, opts: { wasConflictTurn: boolean }) => {
+      setTranscript(spoken);
+      const conflict = heldConflict ?? getPendingConflictChoice();
+      if (conflict) {
+        pushMessages(msg('user', spoken));
+        const outcome = await applySpokenConflict(spoken, conflict);
+        if (outcome === 'applied' || outcome === 'error') return;
+        if (opts.wasConflictTurn) {
+          const unclear = i18n.t('voice.conflictOptionUnclear');
+          setError(unclear);
+          setClarifyingQuestion(i18n.t('voice.pickConflictOption'));
+          setHeldConflict(conflict);
+          setStage('needs_conflict_choice');
+          await speakAndStage(unclear, 'needs_conflict_choice');
+          await maybeListen();
+          return;
+        }
+      }
+      await turnAndRoute(spoken);
+    },
+    [applySpokenConflict, heldConflict, maybeListen, pushMessages, speakAndStage, turnAndRoute],
   );
 
   const finishRecording = useCallback(async () => {
@@ -480,34 +516,17 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
         setError(null);
         if (wasConflictTurn) {
           setStage('needs_conflict_choice');
-          await beginRecording();
+          await maybeListen();
         } else if (wasClarifying) {
           setStage('clarifying');
-          await beginRecording();
+          await maybeListen();
         } else {
           await stayReady();
         }
         return;
       }
 
-      const conflict = heldConflict ?? getPendingConflictChoice();
-      if (conflict) {
-        pushMessages(msg('user', spoken));
-        const outcome = await applySpokenConflict(spoken, conflict);
-        if (outcome === 'applied' || outcome === 'error') return;
-        if (wasConflictTurn) {
-          const unclear = i18n.t('voice.conflictOptionUnclear');
-          setError(unclear);
-          setClarifyingQuestion(i18n.t('voice.pickConflictOption'));
-          setHeldConflict(conflict);
-          setStage('needs_conflict_choice');
-          await speakAndStage(unclear, 'needs_conflict_choice');
-          await beginRecording();
-          return;
-        }
-      }
-
-      await turnAndRoute(spoken);
+      await processUserText(spoken, { wasConflictTurn });
     } catch (err) {
       setError(extractApiErrorMessage(err));
       if (wasConflictTurn) setStage('needs_conflict_choice');
@@ -518,21 +537,70 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       // Stay locked until beginRecording arms the next listen (or user taps mic).
     }
   }, [
-    applySpokenConflict,
-    beginRecording,
     clarifyingQuestion,
     ensureSessionId,
     heldConflict,
-    pushMessages,
-    speakAndStage,
+    maybeListen,
+    processUserText,
     speechLang,
     stage,
     stayReady,
     stop,
-    turnAndRoute,
   ]);
 
   finishRecordingRef.current = finishRecording;
+
+  /** Typed message: same turn path as speech; cancels an active recording. */
+  const sendTypedMessage = useCallback(
+    async (raw: string): Promise<boolean> => {
+      const spoken = raw.trim();
+      if (!spoken || turnLockRef.current) return false;
+      VoiceSpeech.stop();
+      cancel();
+      finishingRef.current = true;
+      turnLockRef.current = true;
+      const wasConflictTurn = stage === 'needs_conflict_choice' || Boolean(heldConflict);
+      const wasClarifying = Boolean(clarifyingQuestion) && !wasConflictTurn;
+      try {
+        setError(null);
+        setBusyLabel(i18n.t('voice.understanding'));
+        setStage('working');
+        await processUserText(spoken, { wasConflictTurn });
+        return true;
+      } catch (err) {
+        setError(extractApiErrorMessage(err));
+        if (wasConflictTurn) setStage('needs_conflict_choice');
+        else if (wasClarifying) setStage('clarifying');
+        else setStage('error');
+        return true;
+      } finally {
+        turnLockRef.current = false;
+      }
+    },
+    [cancel, clarifyingQuestion, heldConflict, processUserText, stage],
+  );
+
+  const setMicEnabled = useCallback(
+    async (on: boolean) => {
+      micEnabledRef.current = on;
+      setMicEnabledState(on);
+      if (!on) {
+        cancel();
+        finishingRef.current = false;
+        setStage((current) => {
+          if (current !== 'recording' && current !== 'recording_clarification') return current;
+          if (heldConflict) return 'needs_conflict_choice';
+          if (clarifyingQuestion) return 'clarifying';
+          return 'ready';
+        });
+        return;
+      }
+      if (turnLockRef.current) return;
+      if (stage === 'working' || stage === 'speaking' || stage === 'confirm') return;
+      await beginRecording();
+    },
+    [beginRecording, cancel, clarifyingQuestion, heldConflict, stage],
+  );
 
   const runAction = useCallback(
     async (actionId: VoiceAgentActionId) => {
@@ -553,6 +621,8 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       }
       if (actionId === 'retry') {
         setError(null);
+        micEnabledRef.current = true;
+        setMicEnabledState(true);
         await beginRecording();
         return;
       }
@@ -596,8 +666,11 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     error: error || recorderError,
     busyLabel,
     micLevel,
+    micEnabled,
+    setMicEnabled,
     beginRecording,
     finishRecording,
+    sendTypedMessage,
     runAction,
     confirmCommand: () => {
       void runAction('confirm');

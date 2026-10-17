@@ -129,3 +129,18 @@ export async function recordOnce(page: Page): Promise<void> {
   await expect(dialog.getByText(/Listening/)).toBeVisible();
   await dialog.getByRole('button', { name: 'Done' }).click();
 }
+
+/** Turn the mic off (default is on) so typed turns are not raced by silence-end. */
+export async function turnMicOff(page: Page): Promise<void> {
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Mic on' }).click();
+  await expect(dialog.getByRole('button', { name: 'Mic off' })).toBeVisible();
+  await expect(dialog.getByText(/Listening/)).toHaveCount(0);
+}
+
+/** Send a typed message through the voice sheet composer. */
+export async function typeOnce(page: Page, text: string): Promise<void> {
+  const dialog = page.getByRole('dialog');
+  await dialog.getByPlaceholder('Type a message…').fill(text);
+  await dialog.getByRole('button', { name: 'Send' }).click();
+}

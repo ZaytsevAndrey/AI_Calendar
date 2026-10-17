@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { Mic } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Mic, MicOff, Send } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '../../../ui/Modal';
 import { Spinner } from '../../../ui/Spinner';
@@ -29,8 +29,11 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
     error,
     busyLabel,
     micLevel,
+    micEnabled,
+    setMicEnabled,
     beginRecording,
     finishRecording,
+    sendTypedMessage,
     runAction,
     confirmCommand,
     isRecording,
@@ -38,6 +41,11 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
     isSpeaking,
   } = voice;
   const threadRef = useRef<HTMLDivElement>(null);
+  const [draft, setDraft] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) setDraft('');
+  }, [isOpen]);
 
   useEffect(() => {
     const el = threadRef.current;
@@ -51,11 +59,22 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
   const showCancel = stage === 'confirm' || actions.includes('cancel');
   const showRetry = stage === 'error' || Boolean(error) || actions.includes('retry');
   const showStartSpeak =
+    micEnabled &&
     !isRecording &&
     !isWorking &&
     !isSpeaking &&
     !showConfirm &&
     (stage === 'ready' || stage === 'idle' || stage === 'clarifying');
+  const canType = !isWorking && !isSpeaking && !showConfirm;
+  const canSend = canType && draft.trim().length > 0;
+
+  const submitDraft = () => {
+    const text = draft.trim();
+    if (!text || !canSend) return;
+    void sendTypedMessage(text).then((accepted) => {
+      if (accepted) setDraft('');
+    });
+  };
 
   return (
     <Modal
@@ -69,6 +88,22 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
         <div className="flex w-full flex-wrap items-center justify-end gap-2">
           <button type="button" className="ui-btn-secondary" onClick={close} disabled={isWorking}>
             {t('common.close')}
+          </button>
+          <button
+            type="button"
+            className={micEnabled ? 'ui-btn-primary' : 'ui-btn-secondary'}
+            aria-pressed={micEnabled}
+            aria-label={micEnabled ? t('voice.micOn') : t('voice.micOff')}
+            title={micEnabled ? t('voice.micOn') : t('voice.micOff')}
+            disabled={isWorking || isSpeaking || showConfirm}
+            onClick={() => void setMicEnabled(!micEnabled)}
+          >
+            {micEnabled ? (
+              <Mic className="h-4 w-4" aria-hidden />
+            ) : (
+              <MicOff className="h-4 w-4" aria-hidden />
+            )}
+            {micEnabled ? t('voice.micOn') : t('voice.micOff')}
           </button>
           {showSkipSpeak ? (
             <button
@@ -221,6 +256,37 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
         ) : null}
 
         {error ? <p className="text-ide-error">{error}</p> : null}
+
+        <form
+          className="flex items-end gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submitDraft();
+          }}
+        >
+          <label className="sr-only" htmlFor="voice-typed-message">
+            {t('voice.typePlaceholder')}
+          </label>
+          <input
+            id="voice-typed-message"
+            type="text"
+            className="ui-input min-w-0 flex-1"
+            value={draft}
+            disabled={!canType}
+            placeholder={t('voice.typePlaceholder')}
+            autoComplete="off"
+            onChange={(event) => setDraft(event.target.value)}
+          />
+          <button
+            type="submit"
+            className="ui-btn-primary shrink-0 px-3"
+            disabled={!canSend}
+            aria-label={t('voice.send')}
+            title={t('voice.send')}
+          >
+            <Send className="h-4 w-4" aria-hidden />
+          </button>
+        </form>
       </div>
     </Modal>
   );
