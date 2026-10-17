@@ -1381,10 +1381,13 @@ export const CREATE_EVAL_UK_EXTRA: CreateEvalScenarioUk[] = [
     transcript: 'мітинг з 9:30 до 9:45',
     expect: {
       understanding: 'complete',
-      kind: 'fixed',
+      kind: 'flexible',
       nameIncludes: 'мітинг',
-      scheduledYmd: T,
-      scheduledHour: 9,
+      earliestYmd: T,
+      deadlineYmd: T,
+      hasEarliest: true,
+      hasDeadline: true,
+      scheduleNoticeIncludes: '09:30',
     },
   },
   {

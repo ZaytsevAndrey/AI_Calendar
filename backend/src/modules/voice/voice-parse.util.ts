@@ -549,12 +549,16 @@ export function normalizeVoiceParse(
 
   let clarifyingQuestion = asNullableString(root.clarifyingQuestion);
 
-  // Prefer model name; after a clarify turn, allow the answer text as title.
-  if (!name && ctx.clarificationAnswer?.trim()) {
+  // Prefer model name; after a clarify turn, allow the answer text as title —
+  // unless the model already left name empty and is still asking (when-only
+  // answers must not become the title).
+  const modelAskedAgain =
+    understanding === 'needs_clarification' && Boolean(clarifyingQuestion);
+  if (!name && ctx.clarificationAnswer?.trim() && !modelAskedAgain) {
     name = titleFromAnswer(ctx.clarificationAnswer) || '';
     task.name = name;
   }
-  if (!name && ctx.alreadyClarified) {
+  if (!name && ctx.alreadyClarified && !modelAskedAgain) {
     name =
       titleFromAnswer(ctx.clarificationAnswer || '') ||
       compactText(ctx.clarificationAnswer || ctx.transcript) ||

@@ -829,6 +829,34 @@ describe('normalizeVoiceParse', () => {
     expect(result.task?.isUnscheduled).toBe(true);
   });
 
+  it('keeps needs_clarification when the model rejects a when-only answer as a title', () => {
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'needs_clarification',
+        clarifyingQuestion: 'Як назвати задачу?',
+        task: {
+          name: '',
+          kind: 'fixed',
+          scheduledStartTime: '2026-10-14T15:00:00+03:00',
+          scheduledEndTime: '2026-10-14T15:30:00+03:00',
+          estimatedTimeInMinutes: 30,
+        },
+      },
+      {
+        validPhaseIds: new Set(),
+        alreadyClarified: true,
+        transcript: 'додай задачу завтра о 15',
+        clarificationAnswer: 'завтра о 15',
+        timeZone: 'Europe/Kyiv',
+        nowIso: '2026-10-13T10:00:00.000Z',
+        language: 'uk',
+      },
+    );
+    expect(result.understanding).toBe('needs_clarification');
+    expect(result.clarifyingQuestion).toMatch(/назв/i);
+    expect(result.task).toBeNull();
+  });
+
   it('after clarification, does not invent schedule from the transcript', () => {
     const result = normalizeVoiceParse(
       {

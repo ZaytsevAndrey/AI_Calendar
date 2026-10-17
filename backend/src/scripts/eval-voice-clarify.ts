@@ -35,7 +35,7 @@ import { matchClarifyEvalScenario } from '../modules/voice/voice-clarify-eval.ma
 import { INTENT_EVAL_FIXTURES } from '../modules/voice/voice-intent-eval.scenarios';
 
 const EVAL_EMAIL = 'voice-eval@local';
-const CASE_PAUSE_MS = process.argv.includes('--local') ? 300 : 2000;
+const CASE_PAUSE_MS = process.argv.includes('--local') ? 300 : 35_000;
 
 type CaseReport = {
   id: string;
@@ -80,6 +80,7 @@ async function main(): Promise<void> {
       `voice:eval:clarify — ${selection.label} via ${useLocal ? 'local LLM' : 'Groq'}`,
     );
 
+    const stopOnFail = process.argv.includes('--stop-on-fail');
     for (let i = 0; i < selection.scenarios.length; i++) {
       const scenario = selection.scenarios[i];
       process.stdout.write(
@@ -90,6 +91,7 @@ async function main(): Promise<void> {
       if (report.ok) console.log('PASS');
       else if (report.error) console.log(`ERROR ${report.error}`);
       else console.log(`FAIL ${report.failures.join('; ')}`);
+      if (stopOnFail && !report.ok) break;
       if (i < selection.scenarios.length - 1) await sleep(CASE_PAUSE_MS);
     }
 
@@ -254,6 +256,20 @@ function selectScenarios(useLocal: boolean): {
       scenarios: CLARIFY_EVAL_SCENARIOS.filter((s) => ids.has(s.id)),
       block: 'all',
       label: `filtered (--only)`,
+    };
+  }
+  const fromArg = process.argv.find((a) => a.startsWith('--from='));
+  if (fromArg) {
+    const fromId = fromArg.slice('--from='.length).trim();
+    const start = CLARIFY_EVAL_SCENARIOS.findIndex((s) => s.id === fromId);
+    if (start < 0) {
+      throw new Error(`Unknown --from=${fromId}`);
+    }
+    const scenarios = CLARIFY_EVAL_SCENARIOS.slice(start);
+    return {
+      scenarios,
+      block: 'all',
+      label: `${scenarios.length} scenarios (from ${fromId})`,
     };
   }
   const blockArg = process.argv.find((a) => a.startsWith('--block='));

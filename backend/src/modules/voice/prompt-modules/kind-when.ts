@@ -8,7 +8,7 @@ export const CREATE_KIND_WHEN_MODULE = `Decide kind in this order. First match w
    kind recurring, isRecurring true. A time of day is not part of the name and does not make this fixed: set scheduledStart/End to that time (+ duration) on schedule today. No time of day → scheduledStart/End null. Deadline only if they named a series end.
 
 2. Fixed — one concrete clock, no uncertainty and no repeat: stamped times, bare hours, ordinal hours, "in N hours".
-   Concrete means they commit to that instant. Approximate means they soften it: the hour is a preference, not a promise. Approximate is not this branch, even when a number sits next to the softener. Judge that meaning in the speaker's language. A digit does not make the time concrete. Do not look for the English word "around".
+   Concrete means they commit to that instant. Approximate means they soften it: the hour is a preference, not a promise. Approximate is not this branch, even when a number or an ordinal sits next to the softener. A softened "six" / "the sixth" is still approximate: kind flexible with scheduledStart 18:00, never fixed. Judge that meaning in the speaker's language. A digit does not make the time concrete. Do not look for the English word "around".
    Exception: they named a clock and then cancelled it ("at 15? no, better at 17"). The last clock is a commitment, so it is concrete fixed. Not flexible and not a day envelope.
    A from–to span plus a preferred clock stays branch 4, even when they also named a duration. Do not collapse that to a fixed block at the preferred clock.
    Relative "in N hours" = now ISO + N hours (fixed). Never unscheduled.
@@ -16,7 +16,7 @@ export const CREATE_KIND_WHEN_MODULE = `Decide kind in this order. First match w
    Otherwise scheduledStart at the clock, scheduledEnd = start + duration. earliestStartTime and deadline null.
 
 3. Flexible preferred — a soft clock: around 3, closer to evening, after lunch, about noon, "two in the afternoon" (any language).
-   Map soft phrases yourself to a wall clock (after lunch → ~14:00, about noon → 12:00, closer to evening → ~18:00, morning without a number → ~09:00, after work → ~18:00). An ordinal hour with afternoon/daytime ("the second of the day") is 14:00, not a whole calendar day and not 02:00.
+   Map soft phrases yourself to a wall clock (after lunch → ~14:00, about noon → 12:00, closer to evening → ~18:00, morning without a number → ~09:00, after work → ~18:00). An ordinal hour is a clock: "the second of the day" is 14:00, "around the sixth" is 18:00. Not a whole calendar day, not 02:00, and not a word in the task name. A softener plus that ordinal still sets scheduledStart. A spoken length next to it is only the duration. Never unscheduled and never put the ordinal into the name.
    kind flexible. scheduledStart/End = that clock + duration. This branch must set scheduledStart. Do not replace the clock with only a 00:00–23:59 day. If they also named a day ("today", "tomorrow", a weekday) and that part of day is still ahead, also set earliest 00:00 and deadline 23:59 that day. A bare part of day with no numbered clock still counts: evening ~18:00, morning ~09:00. The day envelope is only when they named a day. No named day → preferred clock only, earliest and deadline null. If that part of day is already past and they named no day, use the nearest upcoming one: morning already past → tomorrow ~09:00, not today and not a today envelope. If they named the day and that part of day is already past (today morning while the local clock is afternoon): do not emit a schedule. understanding needs_clarification. Ask whether they still want that past time. Do not keep the rest of the day. Never unscheduled when a soft clock is present, except that past-time question.
 
 4. Flexible window — a span of WHEN an errand may be done, not an event that occupies those hours: between 14 and 18, from 14 to 18, after 18, not before 15, by end of day, until evening.
@@ -57,32 +57,20 @@ Questions — at most one, in the transcript language:
 
 Examples (any language works the same way):
 - "tomorrow at 15:00 dentist" → fixed, 15:00
-- "tomorrow at 3 dentist" → fixed 15:00 (bare 1–7 is afternoon unless morning or night)
-- "in four hours dinner" when the local clock is 13:00 → fixed 17:00, default duration, understanding complete. Do not ask how long. Not 14:00.
-- "half an hour before six, dinner" → fixed 17:30, not 05:30
-- "a run around six, for forty minutes" → flexible preferred 18:00, duration 40, name is the run. Not unscheduled.
-- "about noon" when it is already afternoon → flexible preferred tomorrow 12:00, not fixed
-- "after 18 go to the gym" → earliest 18:00, scheduledStart null
-- "by end of day close the ticket" → flexible, deadline 23:59 schedule today, not unscheduled
-- "finish the slides before the meeting" when Open tasks has no meeting → needs_clarification. Do not invent a deadline.
-- "today in the morning send the invoice" when the local clock is 13:00 → needs_clarification. Ask if they still want that past morning. Not the rest of today.
-- "every Tuesday at 15:00 dentist" → recurring WEEKLY day 2, preferred 15:00, not fixed
-- "around 3 go to the shop" → flexible preferred 15:00
-- "pizza around 16" → flexible preferred 16:00, name is the errand. The 16 does not make it fixed. The same softening in any other language is the same parse.
-- "around after three" → flexible preferred 15:00, scheduledStart set. Not an earliest-only bound.
-- "after work stop by the pharmacy" → flexible preferred ~18:00
-- "today in the evening sort mail" → flexible preferred ~18:00, earliest 00:00 and deadline 23:59 today. Not only the 18:00 slot.
-- "call the client today… at 15? no, better at 17" → fixed 17:00 today. The first clock is cancelled. Not flexible and not a day envelope.
-- "tomorrow morning water the flowers" → flexible preferred ~09:00, earliest 00:00 and deadline 23:59 tomorrow.
-- "between 14 and 18 buy groceries" → flexible window 14:00–18:00, duration = default
-- "tomorrow from 16 to 20 edit a video" → flexible window 16:00–20:00, scheduledStart null. The span is when the errand may be done, not a four-hour meeting.
-- "tomorrow from 10 to 14 make calls, better at 11, for half an hour" → flexible window earliest 10:00 deadline 14:00, scheduledStart 11:00, duration 30. Not a fixed 11:00–11:30 block.
-- "on Saturday between 10 and 14 go to the dacha" when schedule today is Tuesday → flexible window on the listed Saturday, default duration. Do not ask how long.
-- "next Tuesday file an application" when schedule today is Tuesday → flexible day window seven days later, not today.
-- "after work until nine tidy the closet" → flexible window earliest ~18:00 and deadline 21:00. Both bounds.
-- "on the weekend clean the garage" once, no "every" → one window, not recurring
-- "meeting from 15 to 16" → fixed 15:00–16:00, duration 60
-- "tomorrow a conference from 9 to 18" → fixed 09:00–18:00, duration 540, not a window
-- "need to buy milk" → unscheduled
-- "every morning stretch at 7" → recurring DAILY, preferred 07:00 (morning context keeps 7 AM)
-- "every Wednesday English at 19" → recurring WEEKLY day 3, scheduledStart 19:00, not null`;
+- "tomorrow at 3 dentist" / "in four hours dinner" at 13:00 → fixed 15:00 / 17:00
+- "a run around six, for forty minutes" → flexible preferred 18:00, duration 40, name is the run. Kind flexible, not fixed.
+- "around 3 go to the shop" / "pizza around 16" → flexible preferred; digit does not make fixed
+- "about noon" already afternoon → flexible preferred tomorrow 12:00
+- "after 18 go to the gym" → earliest 18:00. "by end of day close the ticket" → deadline 23:59 today
+- "finish the slides before the meeting" with no meeting in Open tasks → needs_clarification
+- "today in the morning send the invoice" at 13:00 → needs_clarification (past morning)
+- "every Tuesday at 15:00 dentist" → recurring WEEKLY day 2, preferred 15:00
+- "every morning stretch at 7" → recurring DAILY 07:00. "every Wednesday English at 19" → WEEKLY day 3, scheduledStart 19:00
+- "after work" → preferred ~18:00. "after work until nine" → window 18:00–21:00
+- "today in the evening sort mail" → preferred ~18:00 plus today envelope. "tomorrow morning…" → preferred ~09:00 plus tomorrow envelope
+- "at 15? no, better at 17" → fixed 17:00. "better at" inside from–to stays preferred inside the window
+- "between 14 and 18 buy groceries" → window. "tomorrow from 16 to 20 edit a video" → window, not a meeting
+- "tomorrow from 10 to 14 make calls, better at 11, for half an hour" → window + preferred 11:00, duration 30
+- "meeting from 15 to 16" → fixed 60. "tomorrow a conference from 9 to 18" → fixed 540
+- "need to buy milk" → unscheduled. "next Tuesday file an application" on a Tuesday → day window +7`;
+
