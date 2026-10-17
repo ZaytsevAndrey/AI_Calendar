@@ -11,8 +11,15 @@ export type VoiceParsePromptContext = {
   previousTranscript?: string;
   clarificationAnswer?: string;
   openTaskNames?: string[];
-  /** Same tasks as openTaskNames, with the series flag the specialists must ask about. */
-  openTasks?: { name: string; recurring: boolean }[];
+  /** Same tasks as openTaskNames, with the series flag and any known bounds. */
+  openTasks?: {
+    name: string;
+    recurring: boolean;
+    start?: string | null;
+    end?: string | null;
+    earliest?: string | null;
+    deadline?: string | null;
+  }[];
   habitNames?: string[];
   /** From router; used so specialist prompts answer in the same language. */
   language?: 'uk' | 'en' | 'ru';
@@ -57,11 +64,17 @@ function formatOpenTasks(input: VoiceParsePromptContext): string {
     : (input.openTaskNames ?? []).map((name) => ({ name, recurring: false }));
   if (!rows.length) return '(none)';
   return rows
-    .map((task) =>
-      task.recurring
-        ? `- ${JSON.stringify(task.name)} recurring`
-        : `- ${JSON.stringify(task.name)}`,
-    )
+    .map((task) => {
+      const bits = [
+        task.recurring ? 'recurring' : '',
+        task.start ? `start=${task.start}` : '',
+        task.end ? `end=${task.end}` : '',
+        task.earliest ? `earliest=${task.earliest}` : '',
+        task.deadline ? `deadline=${task.deadline}` : '',
+      ].filter(Boolean);
+      const extra = bits.length ? ` ${bits.join(' ')}` : '';
+      return `- ${JSON.stringify(task.name)}${extra}`;
+    })
     .join('\n');
 }
 

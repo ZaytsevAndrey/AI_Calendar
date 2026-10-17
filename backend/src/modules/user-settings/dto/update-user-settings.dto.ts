@@ -231,12 +231,32 @@ export class UpdateUserSettingsDto {
   @ApiProperty({
     example: false,
     description:
-      'When true, deleting an app event in Google also removes it in the app. Off by default.',
+      'When true, deleting a linked external calendar event also removes it in the app. Off by default.',
     required: false,
   })
   @IsBoolean()
   @IsOptional()
   syncGoogleDeletions?: boolean;
+
+  @ApiProperty({
+    description:
+      'Outbound sync targets. null = default registration calendar; [] = sync nowhere.',
+    required: false,
+  })
+  @IsOptional()
+  syncTargetCalendars?: Array<{ provider: string; calendarId: string }> | null;
+
+  @IsBoolean()
+  @IsOptional()
+  dismissWarnExternalWriteBack?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  dismissWarnFlexibleMove?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  dismissWarnUnscheduleExternal?: boolean;
 
   @ApiProperty({
     example: false,

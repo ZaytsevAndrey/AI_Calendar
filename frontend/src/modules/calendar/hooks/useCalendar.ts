@@ -32,38 +32,60 @@ function useSleepWindow(): SleepWindow {
   };
 }
 
-export const useEventsForDay = (date: Date, calendarId?: string) => {
+export const useEventsForDay = (
+  date: Date,
+  calendarId?: string,
+  skip = false,
+) => {
   const sleep = useSleepWindow();
   const { timeMin, timeMax } = eventsQueryRange('day', date, sleep);
-  return useGetEventsQuery({
-    timeMin,
-    timeMax,
-    calendarId,
-  });
+  return useGetEventsQuery(
+    {
+      timeMin,
+      timeMax,
+      calendarId,
+    },
+    { skip },
+  );
 };
 
-export const useEventsForWeek = (dateInWeek: Date, calendarId?: string) => {
+export const useEventsForWeek = (
+  dateInWeek: Date,
+  calendarId?: string,
+  skip = false,
+) => {
   const sleep = useSleepWindow();
   const { timeMin, timeMax } = eventsQueryRange('week', dateInWeek, sleep);
-  return useGetEventsQuery({
-    timeMin,
-    timeMax,
-    calendarId,
-  });
+  return useGetEventsQuery(
+    {
+      timeMin,
+      timeMax,
+      calendarId,
+    },
+    { skip },
+  );
 };
 
-export const useEventsForMonth = (year: number, month: number, calendarId?: string) => {
+export const useEventsForMonth = (
+  year: number,
+  month: number,
+  calendarId?: string,
+  skip = false,
+) => {
   const sleep = useSleepWindow();
   const { timeMin, timeMax } = eventsQueryRange(
     'month',
     new Date(year, month - 1, 1),
     sleep,
   );
-  return useGetEventsQuery({
-    timeMin,
-    timeMax,
-    calendarId,
-  });
+  return useGetEventsQuery(
+    {
+      timeMin,
+      timeMax,
+      calendarId,
+    },
+    { skip },
+  );
 };
 
 export const isEventToday = (event: GoogleCalendarEvent): boolean => {

@@ -609,10 +609,7 @@ export const CREATE_EVAL_UK_EXTRA: CreateEvalScenarioUk[] = [
     construction: 'win.before.named.event.soft',
     transcript: 'перед мітингом доробити слайди',
     expect: {
-      understanding: 'complete',
-      kind: 'flexible',
-      nameIncludes: 'слайд',
-      hasDeadline: true,
+      understanding: 'needs_clarification',
     },
   },
   {
@@ -622,10 +619,7 @@ export const CREATE_EVAL_UK_EXTRA: CreateEvalScenarioUk[] = [
     construction: 'win.after.named.event.soft',
     transcript: 'після мітингу розібрати пошту',
     expect: {
-      understanding: 'complete',
-      kind: 'flexible',
-      nameIncludes: 'пошт',
-      hasEarliest: true,
+      understanding: 'needs_clarification',
     },
   },
   {
@@ -960,10 +954,13 @@ export const CREATE_EVAL_UK_EXTRA: CreateEvalScenarioUk[] = [
     transcript: 'о десятій ранку здати аналізи',
     expect: {
       understanding: 'complete',
-      kind: 'fixed',
+      kind: 'flexible',
       nameIncludes: 'аналіз',
-      scheduledYmd: T,
-      scheduledHour: 10,
+      earliestYmd: T,
+      deadlineYmd: T,
+      hasEarliest: true,
+      hasDeadline: true,
+      scheduleNoticeIncludes: '10:00',
     },
   },
   {
@@ -1193,11 +1190,7 @@ export const CREATE_EVAL_UK_EXTRA: CreateEvalScenarioUk[] = [
     construction: 'day.morning.word.without.clock.today',
     transcript: 'сьогодні вранці відправити інвойс',
     expect: {
-      understanding: 'complete',
-      kind: 'flexible',
-      nameIncludes: 'інвойс',
-      dayWindowYmd: T,
-      hasScheduledStart: true,
+      understanding: 'needs_clarification',
     },
   },
   {
@@ -1207,10 +1200,7 @@ export const CREATE_EVAL_UK_EXTRA: CreateEvalScenarioUk[] = [
     construction: 'pref.pislya.sportu.soft',
     transcript: 'після спортзалу заїхати в аптеку',
     expect: {
-      understanding: 'complete',
-      kind: 'flexible',
-      nameIncludes: 'аптек',
-      hasScheduledStart: true,
+      understanding: 'needs_clarification',
     },
   },
   {

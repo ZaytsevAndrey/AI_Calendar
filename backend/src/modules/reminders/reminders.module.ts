@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { HabitCheckIn } from '../habits/entities/habit-check-in.entity';
 import { Habit } from '../habits/entities/habit.entity';
-import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
+import { CalendarProvidersModule } from '../calendar-providers/calendar-providers.module';
 import { Task } from '../tasks/entities/task.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { PushSubscription } from './entities/push-subscription.entity';
@@ -21,7 +21,7 @@ import { RemindersService } from './reminders.service';
       Habit,
       HabitCheckIn,
     ]),
-    GoogleCalendarModule,
+    CalendarProvidersModule,
   ],
   controllers: [RemindersController, ReminderTickController],
   providers: [RemindersService, ReminderTickProcessor],

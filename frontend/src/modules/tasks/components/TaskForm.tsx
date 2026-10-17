@@ -17,6 +17,7 @@ import {
   WEEKDAY_OPTIONS,
   type TaskPresetId,
 } from '../task-wizard/constants';
+import { KindIcon } from 'modules/calendar/kindIcons';
 import {
   buildPreferredStartSlotOptions,
   getPhaseSchedulingTimeBounds,
@@ -232,15 +233,17 @@ const TaskForm: React.FC<TaskFormProps> = ({
               <button
                 key={preset.id}
                 type="button"
-                title={preset.hint}
+                title={`${preset.label}: ${preset.hint}`}
+                aria-label={preset.label}
                 onClick={() => applyPreset(preset.id)}
-                className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium ${
                   active
                     ? 'bg-ide-link text-white'
                     : 'text-ide-muted hover:text-ide-text'
                 }`}
               >
-                {preset.label}
+                <KindIcon kind={preset.id} className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{preset.label}</span>
               </button>
             );
           })}

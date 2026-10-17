@@ -34,6 +34,7 @@ describe('DisplayedEventMoveService', () => {
     failMutationJob?: jest.Mock;
   }) {
     const patch = opts.patch ?? jest.fn().mockResolvedValue(undefined);
+    const providerUpdate = jest.fn().mockResolvedValue(null);
     const syncTask = jest.fn().mockResolvedValue(undefined);
     const updateTask =
       opts.updateTask ??
@@ -86,6 +87,9 @@ describe('DisplayedEventMoveService', () => {
         jest.fn().mockResolvedValue({ id: 'copy-1', jobId: 'job-create' }),
       } as never,
       { patchEventTimes: patch } as never,
+      {
+        get: jest.fn().mockReturnValue({ updateEvent: providerUpdate }),
+      } as never,
       { syncTask } as never,
       { place, seatOpenHoles } as never,
       {
@@ -104,7 +108,16 @@ describe('DisplayedEventMoveService', () => {
           opts.failMutationJob ?? jest.fn().mockResolvedValue(undefined),
       } as never,
     );
-    return { move, patch, syncTask, updateTask, place, seatOpenHoles, taskRepo };
+    return {
+      move,
+      patch,
+      providerUpdate,
+      syncTask,
+      updateTask,
+      place,
+      seatOpenHoles,
+      taskRepo,
+    };
   }
 
   it('does not change a habit block', async () => {
@@ -274,7 +287,7 @@ describe('DisplayedEventMoveService', () => {
   });
 
   it('patches an external Google event without placement', async () => {
-    const { move, patch, updateTask, place } = service({
+    const { move, patch, providerUpdate, updateTask, place } = service({
       tasks: [],
     });
     await expect(move.move(userId, dto)).resolves.toEqual({
@@ -282,7 +295,26 @@ describe('DisplayedEventMoveService', () => {
       jobId: null,
     });
     expect(patch).toHaveBeenCalledTimes(1);
+    expect(providerUpdate).not.toHaveBeenCalled();
     expect(updateTask).not.toHaveBeenCalled();
+    expect(place).not.toHaveBeenCalled();
+  });
+
+  it('patches an external Microsoft event via Graph, not Google', async () => {
+    const { move, patch, providerUpdate, place } = service({ tasks: [] });
+    await expect(
+      move.move(userId, { ...dto, provider: 'microsoft', calendarId: 'ms-cal' }),
+    ).resolves.toEqual({ kind: 'google', jobId: null });
+    expect(patch).not.toHaveBeenCalled();
+    expect(providerUpdate).toHaveBeenCalledWith(
+      userId,
+      'evt-1',
+      {
+        start: { dateTime: '2026-09-22T11:00:00.000Z' },
+        end: { dateTime: '2026-09-22T12:00:00.000Z' },
+      },
+      'ms-cal',
+    );
     expect(place).not.toHaveBeenCalled();
   });
 

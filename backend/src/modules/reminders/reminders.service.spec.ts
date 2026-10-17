@@ -9,7 +9,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { sendNotification, setVapidDetails } from 'web-push';
 import { HabitCheckIn } from '../habits/entities/habit-check-in.entity';
 import { Habit } from '../habits/entities/habit.entity';
-import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { ExternalCalendarBusyService } from '../calendar-providers/external-calendar-busy.service';
 import { Task } from '../tasks/entities/task.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { PushSubscription } from './entities/push-subscription.entity';
@@ -60,7 +60,7 @@ describe('RemindersService', () => {
   const tasks = { find: jest.fn() };
   const habits = { find: jest.fn() };
   const checkIns = { find: jest.fn() };
-  const google = { getDisplayEvents: jest.fn() };
+  const externalBusy = { listVisibleEvents: jest.fn() };
 
   let service: RemindersService;
 
@@ -83,7 +83,7 @@ describe('RemindersService', () => {
     ]);
     habits.find.mockResolvedValue([]);
     checkIns.find.mockResolvedValue([]);
-    google.getDisplayEvents.mockResolvedValue({ events: [] });
+    externalBusy.listVisibleEvents.mockResolvedValue([]);
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -95,7 +95,7 @@ describe('RemindersService', () => {
         { provide: getRepositoryToken(Task), useValue: tasks },
         { provide: getRepositoryToken(Habit), useValue: habits },
         { provide: getRepositoryToken(HabitCheckIn), useValue: checkIns },
-        { provide: GoogleCalendarService, useValue: google },
+        { provide: ExternalCalendarBusyService, useValue: externalBusy },
       ],
     }).compile();
 
@@ -143,7 +143,7 @@ describe('RemindersService', () => {
       { id: 'habit-1', name: 'Exercise', blockStartTime: '10:00' },
     ]);
     checkIns.find.mockResolvedValue([]);
-    google.getDisplayEvents.mockRejectedValue(new Error('token expired'));
+    externalBusy.listVisibleEvents.mockRejectedValue(new Error('token expired'));
 
     const result = await service.dispatchDue(new Date(START - 15 * 60_000));
     expect(result.sent).toBe(1);

@@ -8,7 +8,7 @@ import { DataSource, In, Repository } from 'typeorm';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import { habitBlockIntervals } from '../habits/habit-blocks.util';
 import { Habit } from '../habits/entities/habit.entity';
-import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { ExternalCalendarBusyService } from '../calendar-providers/external-calendar-busy.service';
 import { PendingGoogleWriteService } from '../google-calendar/pending-google-write.service';
 import { PhasesService } from '../phases/phases.service';
 import { TaskEventType } from '../scheduling/event-type.enum';
@@ -78,11 +78,12 @@ export type PlaceOptions = {
   /** Compute a plan only — no slot / park / expand writes. */
   dryRun?: boolean;
   /**
-   * Preloaded Google anchor seats for a multi-day dry-run. Without this,
-   * each series day refetches the whole horizon from Google (30× API).
+   * Preloaded external-calendar anchor seats for a multi-day dry-run.
+   * Without this, each series day refetches the whole horizon.
    */
-  cachedGoogleSeats?: PlacementSeat[];
+  cachedExternalSeats?: PlacementSeat[];
 };
+import { providerEventsToBusyIntervals } from './external-calendar-busy.util';
 import { ScheduledTask } from './schedule.entity';
 
 const locks = new Map<string, Promise<unknown>>();
@@ -203,8 +204,8 @@ export class PlacementStepService {
     private readonly habitRepo: Repository<Habit>,
     private readonly userSettingsService: UserSettingsService,
     private readonly phasesService: PhasesService,
-    private readonly googleCalendarService: GoogleCalendarService,
     private readonly pendingGoogleWrites: PendingGoogleWriteService,
+    private readonly externalBusy: ExternalCalendarBusyService,
   ) {}
 
   place(
@@ -504,16 +505,10 @@ export class PlacementStepService {
       });
     });
 
-    const google =
-      opts?.cachedGoogleSeats ??
-      (await this.googleAnchors(
-        userId,
-        settings.googleCalendarLinked,
-        now,
-        horizon.end,
-        slots,
-      ));
-    seats.push(...google);
+    const external =
+      opts?.cachedExternalSeats ??
+      (await this.externalAnchors(userId, now, horizon.end, slots));
+    seats.push(...external);
 
     await this.attachSeriesHomeClocks(userId, seats, slots, timeZone);
 
@@ -1034,9 +1029,8 @@ export class PlacementStepService {
       .where('t.userId = :userId', { userId })
       .andWhere('st.scheduledEndTime > :now', { now })
       .getMany();
-    const cachedGoogleSeats = await this.googleAnchors(
+    const cachedExternalSeats = await this.externalAnchors(
       userId,
-      settings.googleCalendarLinked,
       now,
       horizon.end,
       slotsForGoogle,
@@ -1045,7 +1039,7 @@ export class PlacementStepService {
       `[series-horizon] start task=${task.id.slice(0, 8)} name="${task.name}" ` +
         `tz=${timeZone} duration=${durationMinutes}m preferredHint=${preferredHmHint ?? 'none'} ` +
         `anchor=${anchorYmd} horizonEnd=${horizonEndYmd} days=${ymds.length} ` +
-        `googleAnchors=${cachedGoogleSeats.length} ymds=[${ymds.join(',')}]`,
+        `externalAnchors=${cachedExternalSeats.length} ymds=[${ymds.join(',')}]`,
     );
 
     const dayPlans: DayPlan[] = [];
@@ -1057,7 +1051,7 @@ export class PlacementStepService {
         preferredHmHint,
         timeZone,
         'pass1',
-        cachedGoogleSeats,
+        cachedExternalSeats,
       );
       const hm = hmOf(plan);
       dayPlans.push({ ymd, plan, hm });
@@ -1120,7 +1114,7 @@ export class PlacementStepService {
           primaryHm,
           timeZone,
           'unify',
-          cachedGoogleSeats,
+          cachedExternalSeats,
         );
         const retryHm = hmOf(retry);
         if (retryHm === primaryHm) {
@@ -1338,10 +1332,10 @@ export class PlacementStepService {
     preferredHm: string | null,
     timeZone: string,
     phase: 'pass1' | 'unify' = 'pass1',
-    cachedGoogleSeats?: PlacementSeat[],
+    cachedExternalSeats?: PlacementSeat[],
   ): Promise<PlacementPlan> {
     const googleOpts =
-      cachedGoogleSeats != null ? { cachedGoogleSeats } : {};
+      cachedExternalSeats != null ? { cachedExternalSeats } : {};
     if (preferredHm) {
       const preferredStart = new Date(
         localDateTimeIso(ymd, preferredHm, timeZone),
@@ -1457,9 +1451,8 @@ export class PlacementStepService {
       .where('t.userId = :userId', { userId })
       .andWhere('st.scheduledEndTime > :now', { now: nowDate })
       .getMany();
-    const cachedGoogleSeats = await this.googleAnchors(
+    const cachedExternalSeats = await this.externalAnchors(
       userId,
-      settings.googleCalendarLinked,
       nowDate,
       horizon.end,
       slotsForGoogle,
@@ -1467,7 +1460,7 @@ export class PlacementStepService {
     this.logger.log(
       `[series-horizon] expand start task=${task.id.slice(0, 8)} name="${task.name}" ` +
         `preferred=${preferredHm} missing=${ymds.length} ` +
-        `googleAnchors=${cachedGoogleSeats.length} ymds=[${ymds.join(',')}]`,
+        `externalAnchors=${cachedExternalSeats.length} ymds=[${ymds.join(',')}]`,
     );
 
     for (const ymd of ymds) {
@@ -1478,7 +1471,7 @@ export class PlacementStepService {
         preferredHm,
         timeZone,
         'pass1',
-        cachedGoogleSeats,
+        cachedExternalSeats,
       );
       this.logger.log(
         `[series-horizon] expand day ymd=${ymd} ${JSON.stringify(summarizePlan(plan, timeZone))}`,
@@ -2107,59 +2100,40 @@ export class PlacementStepService {
       .execute();
   }
 
-  private async googleAnchors(
+  /** Timed events on every visible connected calendar. All-day events are not anchors. */
+  private async externalAnchors(
     userId: string,
-    linked: boolean,
     rangeStart: Date,
     rangeEnd: Date,
     slots: ScheduledTask[],
   ): Promise<PlacementSeat[]> {
-    if (!linked) return [];
     const exclude = new Set<string>();
     for (const slot of slots) {
       if (slot.googleEventId) exclude.add(slot.googleEventId);
       if (slot.task?.googleEventId) exclude.add(slot.task.googleEventId);
     }
     try {
-      const seats: PlacementSeat[] = [];
-      const calendarIds = ['primary'];
-      const appCalId =
-        await this.googleCalendarService.getStoredAppCalendarId(userId);
-      if (appCalId) calendarIds.push(appCalId);
-      let index = 0;
-      for (const calendarId of calendarIds) {
-        const page = await this.googleCalendarService.getEvents(
-          userId,
-          rangeStart.toISOString(),
-          rangeEnd.toISOString(),
-          2500,
-          undefined,
-          calendarId,
-        );
-        for (const ev of page.events) {
-          if (ev.status === 'cancelled' || ev.transparency === 'transparent') {
-            continue;
-          }
-          if (ev.id && exclude.has(ev.id)) continue;
-          if (ev.recurringEventId && exclude.has(ev.recurringEventId)) continue;
-          if (!ev.start?.dateTime || !ev.end?.dateTime) continue;
-          const start = new Date(ev.start.dateTime).getTime();
-          const end = new Date(ev.end.dateTime).getTime();
-          if (end <= start) continue;
-          seats.push({
-            id: `google:${index++}`,
-            taskId: `google:${ev.id ?? index}`,
-            taskName: ev.summary || 'Google',
-            role: 'anchor',
-            start,
-            end,
-            windows: [],
-            notBefore: rangeStart.getTime(),
-            buffered: true,
-          });
-        }
-      }
-      return seats;
+      const events = await this.externalBusy.listVisibleEvents(
+        userId,
+        rangeStart.toISOString(),
+        rangeEnd.toISOString(),
+      );
+      const busy = providerEventsToBusyIntervals(events, {
+        excludeIds: exclude,
+        timeZone: 'UTC',
+        includeAllDay: false,
+      });
+      return busy.map((interval, index) => ({
+        id: `external:${index}`,
+        taskId: `external:${index}`,
+        taskName: interval.label || 'Calendar',
+        role: 'anchor' as const,
+        start: interval.start,
+        end: interval.end,
+        windows: [],
+        notBefore: rangeStart.getTime(),
+        buffered: true,
+      }));
     } catch {
       return [];
     }

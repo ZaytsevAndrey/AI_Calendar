@@ -248,7 +248,14 @@ export class VoiceService {
           task.status !== TaskStatus.COMPLETED && task.status !== TaskStatus.CANCELED,
       )
       .slice(0, 40)
-      .map((task) => ({ name: task.name, recurring: task.isRecurring }));
+      .map((task) => ({
+        name: task.name,
+        recurring: task.isRecurring,
+        start: boundIso(task.scheduledStartTime),
+        end: boundIso(task.scheduledEndTime),
+        earliest: boundIso(task.earliestStartTime),
+        deadline: boundIso(task.deadline),
+      }));
     const openTaskNames = openTasks.map((task) => task.name);
     const habitNames = habits.map((habit) => habit.name).slice(0, 40);
     const speech = alreadyClarified
@@ -390,6 +397,12 @@ export class VoiceService {
     );
     return result;
   }
+}
+
+function boundIso(value: Date | string | null | undefined): string | null {
+  if (value == null || value === '') return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function taskDurationMinutes(settings: {

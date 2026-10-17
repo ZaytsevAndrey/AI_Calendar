@@ -8,6 +8,7 @@ import { Spinner } from '../../../ui/Spinner';
 import { timeZoneSelectOptions } from '../ianaTimeZones';
 import { ReminderSettingsSection } from '../../pwa/ReminderSettingsSection';
 import { VoiceSettingsSection } from '../../voice/components/VoiceSettingsSection';
+import { CalendarAccountsSection } from './CalendarAccountsSection';
 import { showErrorToast, showSuccessToast } from '../../../utils/toast';
 import {
     APP_LANGUAGES,
@@ -551,6 +552,8 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                     </p>
                 )}
             </section>
+
+            <CalendarAccountsSection />
 
             <ReminderSettingsSection remindersEnabled={!!initialData.remindersEnabled} />
             <VoiceSettingsSection

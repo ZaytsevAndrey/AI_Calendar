@@ -94,7 +94,7 @@ Summary: place by **type** (fixed / flexible / recurring) + **preferred time**; 
 ### 4.2 Slot graph
 
 - Build **busy** intervals: anchors (Google fixed) + `FIXED` user items + in-progress auto segments + **fully ended** auto-generated slots kept from earlier plans + optional **habit time blocks**. A habit’s own Google series is not counted again as external busy.
-- **`fixedEventBufferMinutes`** (Settings, default **0**): pad each fixed task and each external Google event on **both sides**. Habits, ended flexible slots, and in-progress flexible work are not padded. Generate avoids that gap, then uses it when the task would not fit in the horizon (and, for a recurring occurrence, not on that day). Dragging a block can still land in the gap. The gap is not a calendar event.  
+- **`fixedEventBufferMinutes`** (Settings, default **0**): pad each fixed task and each external event on a visible connected calendar (Google, Microsoft, Apple) on **both sides**. Habits, ended flexible slots, and in-progress flexible work are not padded. Generate avoids that gap, then uses it when the task would not fit in the horizon (and, for a recurring occurrence, not on that day). Dragging a block can still land in the gap. The gap is not a calendar event.  
 - Build **available** intervals = the task’s phase window (or wake/sleep if none) intersected with **weekend** rules from user settings.  
 - Respect **minimum split** when placing segments.
 
@@ -169,7 +169,7 @@ Target source of truth, failed-write queue, and `scheduleState` (`none` / `probl
 | `allowSplitScheduling` | Global gate for splitting (AND with per-task `allowSplit`) |
 | `minSplitMinutes` | e.g. 30; used when splitting |
 | `recurringScheduleHorizonDays` | Planning horizon (default 30) |
-| `fixedEventBufferMinutes` | Minutes kept free before and after each fixed task and external Google event (0–180, default 0). Generate may use the gap when the task would not otherwise fit. |
+| `fixedEventBufferMinutes` | Minutes kept free before and after each fixed task and each external event on a visible connected calendar (0–180, default 0). Generate may use the gap when the task would not otherwise fit. |
 
 ---
 

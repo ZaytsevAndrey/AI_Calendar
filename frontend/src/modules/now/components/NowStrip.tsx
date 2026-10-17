@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useGetEventsQuery } from 'api/eventsApi';
+import type { GoogleCalendarEvent } from 'api/google-calendar.api';
 import { useGetEventsQuery as useGetTasksQuery, useSkipOccurrenceMutation, useUpdateEventMutation } from 'api/eventTasksApi';
 import { useGetHabitsQuery } from 'api/habitsApi';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
@@ -22,6 +23,15 @@ import {
 } from '../nowBlocks';
 import { usePhoneLayout } from 'modules/common/hooks/useMediaQuery';
 import { HabitNowStrip } from './HabitNowStrip';
+
+export type NowStripProps = {
+  /**
+   * When the calendar page already loaded a range that covers today,
+   * reuse those events instead of a second /calendar-providers/events call.
+   */
+  sharedEvents?: GoogleCalendarEvent[];
+  skipEventsFetch?: boolean;
+};
 
 function useNowMs(intervalMs = 30_000): number {
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -101,7 +111,10 @@ function BlockRow({
   );
 }
 
-export function NowStrip() {
+export function NowStrip({
+  sharedEvents,
+  skipEventsFetch = false,
+}: NowStripProps = {}) {
   const { t } = useTranslation();
   const nowMs = useNowMs();
   const { data: settings } = useGetUserSettingsQuery();
@@ -110,10 +123,16 @@ export function NowStrip() {
     () => todayNowContext(new Date(nowMs).toISOString(), timeZone),
     [nowMs, timeZone],
   );
-  const { data: todayEvents } = useGetEventsQuery({
-    timeMin: ctx.fetchTimeMin,
-    timeMax: ctx.fetchTimeMax,
-  });
+  const { data: todayEvents } = useGetEventsQuery(
+    {
+      timeMin: ctx.fetchTimeMin,
+      timeMax: ctx.fetchTimeMax,
+    },
+    { skip: skipEventsFetch },
+  );
+  const events = skipEventsFetch
+    ? (sharedEvents ?? [])
+    : (todayEvents?.events ?? sharedEvents ?? []);
   const { data: tasks = [] } = useGetTasksQuery();
   const { data: habitsData } = useGetHabitsQuery();
   const [updateTask] = useUpdateEventMutation();
@@ -124,13 +143,13 @@ export function NowStrip() {
   const blocks = useMemo(
     () =>
       buildNowBlocks(
-        todayEvents?.events ?? [],
+        events,
         tasks,
         ctx.todayYmd,
         ctx.timeZone,
         habitsData?.habits ?? [],
       ),
-    [todayEvents?.events, tasks, ctx.todayYmd, ctx.timeZone, habitsData?.habits],
+    [events, tasks, ctx.todayYmd, ctx.timeZone, habitsData?.habits],
   );
   const { now, next } = useMemo(
     () =>

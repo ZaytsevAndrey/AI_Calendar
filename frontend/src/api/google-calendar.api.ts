@@ -45,6 +45,8 @@ export interface GoogleCalendarEvent {
     transparency?: 'opaque' | 'transparent';
     /** True when the event lives on this app's dedicated Google calendar. */
     isAppGenerated?: boolean;
+    /** google | microsoft | apple — set by /calendar-providers/events */
+    provider?: 'google' | 'microsoft' | 'apple';
 }
 
 export interface GoogleCalendarListItem {

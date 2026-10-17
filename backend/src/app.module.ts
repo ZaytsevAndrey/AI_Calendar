@@ -12,6 +12,8 @@ import { PhasesModule } from './modules/phases/phases.module';
 import { VoiceModule } from './modules/voice/voice.module';
 import { HabitsModule } from './modules/habits/habits.module';
 import { RemindersModule } from './modules/reminders/reminders.module';
+import { CalendarOverlaysModule } from './modules/calendar-overlays/calendar-overlays.module';
+import { CalendarProvidersModule } from './modules/calendar-providers/calendar-providers.module';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { migrateLegacyScheduleState } from './database/migrate-schedule-state';
 import { createTypeOrmOptions } from './database/typeorm.config';
@@ -41,6 +43,8 @@ import { createTypeOrmOptions } from './database/typeorm.config';
     ScheduleModule,
     TasksModule,
     GoogleCalendarModule,
+    CalendarProvidersModule,
+    CalendarOverlaysModule,
     EventPhasesModule,
     PhasesModule,
     VoiceModule,

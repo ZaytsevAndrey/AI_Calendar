@@ -190,8 +190,7 @@ describe('IntelligentSchedulingEngine', () => {
         getSettings: getSettingsMock,
       } as never,
       {
-        getEvents: jest.fn(),
-        getStoredAppCalendarId: jest.fn().mockResolvedValue(undefined),
+        listVisibleEvents: jest.fn().mockResolvedValue([]),
       } as never,
       habitRepo as never,
     );
@@ -233,18 +232,18 @@ describe('IntelligentSchedulingEngine', () => {
         googleCalendarLinked: true,
       }),
     );
-    const googleSvc = (engine as any).googleCalendarService as { getEvents: jest.Mock };
-    googleSvc.getEvents.mockResolvedValue({
-      events: [
-        {
-          id: 'habit-series-1_20260420',
-          recurringEventId: 'habit-series-1',
-          status: 'confirmed',
-          start: { dateTime: '2026-04-20T09:00:00.000Z' },
-          end: { dateTime: '2026-04-20T12:00:00.000Z' },
-        },
-      ],
-    });
+    const externalBusy = (engine as any).externalBusy as {
+      listVisibleEvents: jest.Mock;
+    };
+    externalBusy.listVisibleEvents.mockResolvedValue([
+      {
+        id: 'habit-series-1_20260420',
+        recurringEventId: 'habit-series-1',
+        status: 'confirmed',
+        start: { dateTime: '2026-04-20T09:00:00.000Z' },
+        end: { dateTime: '2026-04-20T12:00:00.000Z' },
+      },
+    ]);
     taskRepo.find.mockResolvedValue([
       makeTask({
         id: 'after-habit-series',
@@ -665,17 +664,17 @@ describe('IntelligentSchedulingEngine', () => {
         fixedEventBufferMinutes: 15,
       }),
     );
-    const googleSvc = (engine as any).googleCalendarService as { getEvents: jest.Mock };
-    googleSvc.getEvents.mockResolvedValue({
-      events: [
-        {
-          id: 'gcal-1',
-          status: 'confirmed',
-          start: { dateTime: '2026-04-20T10:00:00.000Z' },
-          end: { dateTime: '2026-04-20T10:30:00.000Z' },
-        },
-      ],
-    });
+    const externalBusy = (engine as any).externalBusy as {
+      listVisibleEvents: jest.Mock;
+    };
+    externalBusy.listVisibleEvents.mockResolvedValue([
+      {
+        id: 'gcal-1',
+        status: 'confirmed',
+        start: { dateTime: '2026-04-20T10:00:00.000Z' },
+        end: { dateTime: '2026-04-20T10:30:00.000Z' },
+      },
+    ]);
     taskRepo.find.mockResolvedValue([
       makeTask({
         id: 'after-google',
@@ -693,7 +692,7 @@ describe('IntelligentSchedulingEngine', () => {
     ]);
 
     scheduledRepo.save.mockClear();
-    googleSvc.getEvents.mockResolvedValue({ events: [] });
+    externalBusy.listVisibleEvents.mockResolvedValue([]);
     getSettingsMock.mockResolvedValue(
       makeSettings({ ...baseSettings, fixedEventBufferMinutes: 15 }),
     );
@@ -884,8 +883,8 @@ describe('IntelligentSchedulingEngine', () => {
 
   it('does not treat own synced Google events as external busy when replanning', async () => {
     const phase911 = makePhase('phase-911', '09:00', '11:00', [1, 2, 3, 4, 5]);
-    const googleSvc = (engine as any).googleCalendarService as {
-      getEvents: jest.Mock;
+    const externalBusy = (engine as any).externalBusy as {
+      listVisibleEvents: jest.Mock;
     };
 
     const t1 = makeTask({
@@ -934,32 +933,29 @@ describe('IntelligentSchedulingEngine', () => {
       }),
     );
 
-    googleSvc.getEvents.mockResolvedValue({
-      events: [
-        {
-          id: 'google-master-1_20260420',
-          recurringEventId: 'google-master-1',
-          status: 'confirmed',
-          start: { dateTime: '2026-04-20T09:00:00.000Z' },
-          end: { dateTime: '2026-04-20T09:30:00.000Z' },
-        },
-        {
-          id: 'google-master-2_20260420',
-          recurringEventId: 'google-master-2',
-          status: 'confirmed',
-          start: { dateTime: '2026-04-20T09:30:00.000Z' },
-          end: { dateTime: '2026-04-20T09:50:00.000Z' },
-        },
-        {
-          id: 'google-master-3_20260420',
-          recurringEventId: 'google-master-3',
-          status: 'confirmed',
-          start: { dateTime: '2026-04-20T10:00:00.000Z' },
-          end: { dateTime: '2026-04-20T10:30:00.000Z' },
-        },
-      ],
-      nextPageToken: undefined,
-    });
+    externalBusy.listVisibleEvents.mockResolvedValue([
+      {
+        id: 'google-master-1_20260420',
+        recurringEventId: 'google-master-1',
+        status: 'confirmed',
+        start: { dateTime: '2026-04-20T09:00:00.000Z' },
+        end: { dateTime: '2026-04-20T09:30:00.000Z' },
+      },
+      {
+        id: 'google-master-2_20260420',
+        recurringEventId: 'google-master-2',
+        status: 'confirmed',
+        start: { dateTime: '2026-04-20T09:30:00.000Z' },
+        end: { dateTime: '2026-04-20T09:50:00.000Z' },
+      },
+      {
+        id: 'google-master-3_20260420',
+        recurringEventId: 'google-master-3',
+        status: 'confirmed',
+        start: { dateTime: '2026-04-20T10:00:00.000Z' },
+        end: { dateTime: '2026-04-20T10:30:00.000Z' },
+      },
+    ]);
 
     taskRepo.find.mockResolvedValue([t1, t2, t3]);
 

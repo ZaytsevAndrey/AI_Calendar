@@ -19,6 +19,7 @@ describe('routeChunks', () => {
             'page-phase-setup',
             'page-login',
             'page-google-callback',
+            'page-microsoft-callback',
         ]);
         expect(new Set(names).size).toBe(names.length);
         expect(magicNames).toEqual(names);

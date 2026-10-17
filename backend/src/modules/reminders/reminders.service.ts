@@ -12,7 +12,7 @@ import { sendNotification, setVapidDetails } from 'web-push';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import { HabitCheckIn } from '../habits/entities/habit-check-in.entity';
 import { Habit } from '../habits/entities/habit.entity';
-import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { ExternalCalendarBusyService } from '../calendar-providers/external-calendar-busy.service';
 import { Task } from '../tasks/entities/task.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { localYmd, normalizeClockHm } from '../voice/voice-local-date.util';
@@ -67,7 +67,7 @@ export class RemindersService {
     private readonly habits: Repository<Habit>,
     @InjectRepository(HabitCheckIn)
     private readonly checkIns: Repository<HabitCheckIn>,
-    private readonly googleCalendar: GoogleCalendarService,
+    private readonly externalBusy: ExternalCalendarBusyService,
   ) {}
 
   getVapidPublicKey(): { publicKey: string } {
@@ -224,19 +224,23 @@ export class RemindersService {
     settings: UserSettings,
     nowMs: number,
   ): Promise<ReminderGoogleEvent[]> {
-    if (!settings.googleCalendarLinked) return [];
     try {
-      const page = await this.googleCalendar.getDisplayEvents(
+      const events = await this.externalBusy.listVisibleEvents(
         settings.userId,
         new Date(nowMs).toISOString(),
         new Date(nowMs + REMINDER_LOOKAHEAD_MS).toISOString(),
-        50,
       );
-      return (page.events ?? []) as ReminderGoogleEvent[];
+      return events.map((ev) => ({
+        id: ev.id,
+        summary: ev.summary,
+        status: ev.status,
+        recurringEventId: ev.recurringEventId,
+        start: ev.start,
+      }));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.warn(
-        `Google events skipped for reminders of user ${settings.userId}: ${message}`,
+        `External calendars skipped for reminders of user ${settings.userId}: ${message}`,
       );
       return [];
     }

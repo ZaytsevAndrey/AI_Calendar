@@ -49,7 +49,7 @@ Form create, drag, and Voice share this contract (same decision layer; implement
 | Flexible (or recurring) in the way of a placement that **wins** (e.g. after user picks `move_other`) | Move the flexible silently within phase |
 | **Recurring** occurrence moved to free a hole or dodge an anchor | Place + **notify** (in-app toast, not push) |
 | **Recurring** cannot fit in phase/horizon after moves | **Problematic** (not Unscheduled) |
-| New item preferred **exactly** on occupied **fixed** / Google busy | **Ask** (conflict options) |
+| New item preferred **exactly** on occupied **fixed** / external calendar busy | **Ask** (conflict options) |
 | New item has **no** preferred, or preferred elsewhere; fixed/Google occupies a clock | **Silently dodge** fixed/Google; take next free slot |
 | **Fixed vs fixed** overlap (create or drag) | **Always ask**; never silent overlap |
 | Phase full / no hole after silent flexible shifts | **Ask**; if no answer → Problematic |
@@ -86,7 +86,7 @@ flowchart TD
 1. If the item has a preferred start/end, try that **exact** clock interval inside the phase ∩ wake/sleep ∩ From/Until.
 2. If that interval is free → place there.
 3. If occupied by a **seated flexible** → the claimant takes that interval; only the overlapped task looks for the next free hole ([incremental placement](spec-incremental-placement.md)). No cascade.
-4. If occupied by **fixed** / Google and preferred is **exactly** that busy interval → conflict options (§6).
+4. If occupied by **fixed** / an external calendar event and preferred is **exactly** that busy interval → conflict options (§6).
 5. If no preferred → earliest valid slot; always dodge fixed/Google silently.
 
 Split (`allowSplit` ∧ settings) remains allowed when contiguous fit fails; split does not override fixed anchors.

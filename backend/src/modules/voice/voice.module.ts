@@ -5,6 +5,7 @@ import { Habit } from '../habits/entities/habit.entity';
 import { Phase } from '../phases/entities/phase.entity';
 import { ScheduledTask } from '../schedule/schedule.entity';
 import { Task } from '../tasks/entities/task.entity';
+import { CalendarProvidersModule } from '../calendar-providers/calendar-providers.module';
 import { UserSettingsModule } from '../user-settings/user-settings.module';
 import { VoiceDailyUsage } from './entities/voice-daily-usage.entity';
 import { GroqClient } from './groq.client';
@@ -27,6 +28,7 @@ import { VoiceSessionStore } from './voice-session.store';
       VoiceDailyUsage,
     ]),
     UserSettingsModule,
+    CalendarProvidersModule,
   ],
   controllers: [VoiceController],
   providers: [

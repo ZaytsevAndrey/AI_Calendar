@@ -1,8 +1,16 @@
-# Integrations: Google OAuth and Calendar
+# Integrations: OAuth and calendars
 
 ## Purpose
 
-Google sign-in is the only login. One OAuth consent covers the account (`openid`, `email`, `profile`) and Calendar scopes. Tokens are stored on the backend. The callback redirects the browser to the frontend `/auth/google/callback?ticket=…` (or `/login?error=…`). That sign-in marks `googleCalendarLinked`; there is no separate “connect calendar before you can enter” step.
+The app is the scheduling source of truth. Users **sign in** with **Google** (or **Microsoft** when configured). **Apple is not a sign-in provider** — iCloud Calendar is linked only from Settings via CalDAV. One account can link several calendar providers. Connected calendars appear in the Calendar visibility filter (provider sections → calendars). Settings stores `syncTargetCalendars` (default unset, or sync nowhere). App-task create/update/delete still writes Google only; that stored list is not read by the writer yet.
+
+Inbound events that the user has not touched stay on the provider. Placement, the scheduling engine, the Problematic slot picker, reminders, schedule suggestions, and voice now/agenda/gaps treat timed events on every **visible** connected calendar as busy (hidden calendars are skipped; cancelled and “show as free” events are not). A thin **calendar event overlay** stores scheduling mode (`fixed` | `flexible`) only after the user changes type. Moving a flexible event writes time back to the provider (with a dismissible warning). Automatic placement does not move those external events; it schedules around them. Unscheduled removes the external event and creates a local Unscheduled task.
+
+`syncExternalDeletions` (legacy name `syncGoogleDeletions`, default off): when a linked external event is gone during sync retry, clear local ids only; when on, also delete the local task / overlay.
+
+Google and Microsoft (when `MICROSOFT_*` is set) use OAuth. Apple iCloud uses per-user CalDAV credentials (no server Apple Developer app).
+
+---
 
 ## Google Cloud Console setup
 
@@ -23,7 +31,7 @@ Typical production values (see [deploy](deploy.md)):
 https://<ai-calendar-api>.onrender.com/google-calendar/callback
 ```
 
-## Backend environment variables
+### Backend environment variables (Google)
 
 ```env
 GOOGLE_CLIENT_ID=....apps.googleusercontent.com
@@ -34,7 +42,7 @@ FRONTEND_URL=http://localhost:3000
 
 `FRONTEND_URL` is the base URL for redirects after the callback is processed (success / error).
 
-## Common endpoints (short)
+### Common Google endpoints (short)
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -46,13 +54,13 @@ FRONTEND_URL=http://localhost:3000
 
 Full list: Swagger (`/api`).
 
-## Clear schedule and Google
+### Clear schedule and Google
 
 **`DELETE /schedule`** removes **still-open** app-generated local slots through the **Recurring schedule horizon** in Settings (fully ended blocks, including earlier today, stay). Then it deletes leftover **upcoming** events on the **app Google calendar** in that window. Recurring series that still have ended instances are capped with `UNTIL` instead of deleting the master. If Google is disconnected, local rows are still removed.
 
 App recurring tasks sync as one Google RRULE whose **DTSTART** uses the **majority local clock** among open seats (not the chronologically first skewed day). See [spec-intelligent-scheduling.md](spec-intelligent-scheduling.md) and [spec-incremental-placement.md](spec-incremental-placement.md) §7.
 
-## Error `redirect_uri_mismatch`
+### Error `redirect_uri_mismatch`
 
 The URI sent to Google does **not** match any **Authorized redirect URI** in the console.
 
@@ -63,6 +71,48 @@ Check:
 3. No stray slashes or `http` vs `https` mismatch.
 
 Older examples in the wild used port **3000** for the callback; that is misleading when Nest handles OAuth on **3001**. Use `backend/.env.example` and `google-calendar.controller.ts` as the source of truth.
+
+---
+
+## Microsoft Azure AD / Outlook
+
+Used for sign-in and Microsoft Graph calendars. After env vars are set and the backend is restarted, **Continue with Microsoft** on `/login` and **Connect Microsoft** in Settings work end-to-end (token exchange + calendar list/events on the grid).
+
+1. Open [Azure Portal](https://portal.azure.com) → **Microsoft Entra ID** → **App registrations** → **New registration**.
+2. Name the app; supported account types: **Accounts in any organizational directory and personal Microsoft accounts**.
+3. Redirect URI (Web): must match `MICROSOFT_REDIRECT_URI` exactly, e.g. `http://localhost:3001/auth/microsoft/callback`.
+4. **Certificates & secrets** → new client secret; copy value once.
+5. **API permissions** → Microsoft Graph delegated: `openid`, `profile`, `email`, `offline_access`, `Calendars.ReadWrite`, `User.Read`. Grant admin consent if the tenant requires it.
+6. Note **Application (client) ID** and **Directory (tenant) ID** (use `common` for multi-tenant + personal).
+
+### Backend environment variables (Microsoft)
+
+```env
+MICROSOFT_CLIENT_ID=
+MICROSOFT_CLIENT_SECRET=
+MICROSOFT_REDIRECT_URI=http://localhost:3001/auth/microsoft/callback
+# Optional; default common
+MICROSOFT_TENANT=common
+```
+
+---
+
+## Apple iCloud Calendar (CalDAV)
+
+Apple is **Settings-only** (not on the login screen). The user pastes an Apple ID email and an **app-specific password**. The backend verifies CalDAV against `https://caldav.icloud.com`, then stores credentials in `user_identities` (`provider: apple`; app password in `accessToken`, never returned to the client).
+
+### User steps (also shown in Settings)
+
+1. Open [appleid.apple.com](https://appleid.apple.com) and sign in.
+2. **Sign-In and Security** → **App-Specific Passwords**.
+3. Generate a password (e.g. “AI Calendar”). Two-factor authentication must be on.
+4. In the app: Settings → Calendar accounts → Connect Apple Calendar → paste Apple ID + that password (not the Apple account password).
+
+No `APPLE_*` server environment variables are required.
+
+API: `POST /auth/apple/caldav` with `{ appleId, appSpecificPassword }` (JWT). Disconnect: `POST /auth/identities/apple/disconnect` with `{ confirm: true }`.
+
+---
 
 ## Groq (voice and suggestions)
 
@@ -81,3 +131,5 @@ Microphone access needs HTTPS (or `localhost`). The frontend is an installable P
 - Backend logs when clicking “Connect Google Calendar”.  
 - Compare `GOOGLE_REDIRECT_URI` with the Google console.  
 - Swagger: confirm the server is running and `/google-calendar/*` routes match expectations.
+- For Microsoft: confirm redirect URIs and env vars before enabling the login button in production.
+- For Apple: confirm CalDAV connect from Settings with an app-specific password (no Apple Developer OAuth).

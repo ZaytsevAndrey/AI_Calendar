@@ -50,11 +50,31 @@ export class UserSettings {
   googleCalendarLinked: boolean;
 
   /**
-   * When true, deleting an app event in Google also removes it in the app.
-   * Off by default: a Google delete does not change the local task.
+   * When true, deleting an app event on a connected external calendar also
+   * removes it in the app. Off by default. Applies to all providers (legacy
+   * name kept for Google-era clients).
    */
   @Column({ default: false })
   syncGoogleDeletions: boolean;
+
+  /**
+   * Outbound sync targets: `{ provider, calendarId }[]`.
+   * `null` = default (registration provider calendar). Empty array = sync nowhere.
+   */
+  @Column({ type: 'simple-json', nullable: true })
+  syncTargetCalendars: Array<{ provider: string; calendarId: string }> | null;
+
+  /** Dismissible warning: edits write back to the original calendar. */
+  @Column({ default: false })
+  dismissWarnExternalWriteBack: boolean;
+
+  /** Dismissible warning: flexible allows moving the event in the original calendar. */
+  @Column({ default: false })
+  dismissWarnFlexibleMove: boolean;
+
+  /** Dismissible warning: unschedule removes the external event. */
+  @Column({ default: false })
+  dismissWarnUnscheduleExternal: boolean;
 
   /** Display name for the dedicated Google calendar where this app writes events. */
   @Column({ default: 'AI Calendar Assistant' })

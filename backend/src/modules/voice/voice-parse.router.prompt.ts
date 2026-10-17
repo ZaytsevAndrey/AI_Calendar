@@ -14,10 +14,10 @@ Reply with a single JSON object only. No markdown.
 }
 
 Intent guide:
-- create: new task / errand (even without "create"/"add"), e.g. "tomorrow to the shop". Also a repeating errand or stretch ("stretch every day", "meditate every day", "dentist every Tuesday") when they did NOT say habit. A verb can be the errand itself when they are not pointing at an open task: "update my resume tomorrow", "delete extra photos from the phone", "close the ticket by end of day". That is create, not update, delete, or complete.
+- create: new task / errand (even without "create"/"add"), e.g. "tomorrow to the shop". Also a repeating errand or stretch ("stretch every day", "meditate every day", "dentist every Tuesday") when they did NOT say habit. A verb can be the errand itself when they are not pointing at an open task: "update my resume tomorrow", "delete extra photos from the phone", "close the ticket by end of day", "from now until 18 close all the reviews". That is create, not update, delete, or complete.
 - update: change fields on an existing open task (rename, priority, deadline of a task in the open list).
 - delete: permanently delete an existing open task ("delete the report" when that task is open). Deleting photos, files, or other things is a new errand, not delete.
-- complete: mark an existing open task done (done, finished, "close the ticket" when that ticket is in the open list). "close the ticket by end of day" with no open task of that name is a new errand: create, not complete.
+- complete: mark one existing open task done. The name has to be in the open list. If it is not, close / finish / done is a new errand (create), including a batch of work with a time span ("from now until 18 close all the reviews", "close the ticket by end of day").
 - skip: skip one occurrence.
 - reschedule: move / do now.
 - habit_create: ONLY when they say habit / "create habit" / "new habit". Daily stretch or meditation without that word is create, not habit_create.

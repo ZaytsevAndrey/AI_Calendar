@@ -2,7 +2,8 @@ import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
-import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { ExternalCalendarBusyService } from '../calendar-providers/external-calendar-busy.service';
+import type { ProviderEvent } from '../calendar-providers/calendar-provider.types';
 import { PhasesService } from '../phases/phases.service';
 import { Task, TaskStatus } from '../tasks/entities/task.entity';
 import { UserSettingsService } from '../user-settings/user-settings.service';
@@ -27,15 +28,6 @@ const MAX_TASKS = 30;
 const MAX_SLOTS = 40;
 const MAX_EXTERNAL = 30;
 
-type GoogleEventLike = {
-  id?: string | null;
-  recurringEventId?: string | null;
-  status?: string | null;
-  summary?: string | null;
-  start?: { dateTime?: string | null; date?: string | null };
-  end?: { dateTime?: string | null; date?: string | null };
-};
-
 @Injectable()
 export class ScheduleRecommendationsService {
   private readonly logger = new Logger(ScheduleRecommendationsService.name);
@@ -47,7 +39,7 @@ export class ScheduleRecommendationsService {
     private readonly scheduledRepo: Repository<ScheduledTask>,
     private readonly userSettingsService: UserSettingsService,
     private readonly phasesService: PhasesService,
-    private readonly googleCalendarService: GoogleCalendarService,
+    private readonly externalBusy: ExternalCalendarBusyService,
     private readonly groq: GroqClient,
   ) {}
 
@@ -186,14 +178,10 @@ export class ScheduleRecommendationsService {
     events: { title: string; start: string; end: string }[];
   }> {
     try {
-      const connection = await this.googleCalendarService.checkConnection(userId);
-      if (!connection.connected) {
+      const connected = await this.externalBusy.anyConnected(userId);
+      if (!connected) {
         return { status: 'not_connected', events: [] };
       }
-      const calendarIds = ['primary'];
-      const appCalId =
-        await this.googleCalendarService.getStoredAppCalendarId(userId);
-      if (appCalId && appCalId !== 'primary') calendarIds.push(appCalId);
       const ours = new Set<string>();
       for (const slot of slots) {
         if (slot.googleEventId) ours.add(slot.googleEventId);
@@ -201,26 +189,23 @@ export class ScheduleRecommendationsService {
       for (const task of tasks) {
         if (task.googleEventId) ours.add(task.googleEventId);
       }
+      const listed = await this.externalBusy.listVisibleEvents(
+        userId,
+        rangeStart.toISOString(),
+        rangeEnd.toISOString(),
+      );
       const events: { title: string; start: string; end: string }[] = [];
-      for (const calendarId of calendarIds) {
-        const page = await this.googleCalendarService.getEvents(
-          userId,
-          rangeStart.toISOString(),
-          rangeEnd.toISOString(),
-          MAX_EXTERNAL,
-          undefined,
-          calendarId,
-        );
-        for (const ev of page.events as GoogleEventLike[]) {
-          if (events.length >= MAX_EXTERNAL) break;
-          const mapped = mapExternalEvent(ev, timeZone, ours);
-          if (mapped) events.push(mapped);
-        }
+      for (const ev of listed) {
+        if (events.length >= MAX_EXTERNAL) break;
+        const mapped = mapExternalEvent(ev, timeZone, ours);
+        if (mapped) events.push(mapped);
       }
       return { status: 'connected', events };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`Schedule suggestions skipped Google events: ${message}`);
+      this.logger.warn(
+        `Schedule suggestions skipped external calendars: ${message}`,
+      );
       return { status: 'unavailable', events: [] };
     }
   }
@@ -238,11 +223,13 @@ function phaseNames(task: Task): string[] {
 }
 
 function mapExternalEvent(
-  ev: GoogleEventLike,
+  ev: ProviderEvent,
   timeZone: string,
   ours: Set<string>,
 ): { title: string; start: string; end: string } | null {
-  if (!ev || ev.status === 'cancelled') return null;
+  if (!ev || ev.status === 'cancelled' || ev.transparency === 'transparent') {
+    return null;
+  }
   if (ev.id && ours.has(ev.id)) return null;
   if (ev.recurringEventId && ours.has(ev.recurringEventId)) return null;
   const start = eventBound(ev.start, timeZone);

@@ -1,14 +1,19 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { ProviderLogo } from 'modules/calendar/components/ProviderLogo';
 
 export interface LoginFormProps {
     requestStatus: string;
     errorMessage?: string | null;
     onGoogleSignIn: () => void;
+    onMicrosoftSignIn?: () => void;
+    microsoftAvailable?: boolean;
 }
 
 const LoginForm: React.FC<LoginFormProps> = ({
     onGoogleSignIn,
+    onMicrosoftSignIn,
+    microsoftAvailable,
     requestStatus,
     errorMessage,
 }) => {
@@ -23,14 +28,28 @@ const LoginForm: React.FC<LoginFormProps> = ({
                 {t('auth.signInLead')}
             </p>
             {errorMessage ? <p className="auth-form-error mb-4">{errorMessage}</p> : null}
-            <button
-                type="button"
-                className="auth-form-submit"
-                disabled={pending}
-                onClick={onGoogleSignIn}
-            >
-                {pending ? t('auth.redirecting') : t('auth.continueGoogle')}
-            </button>
+            <div className="flex flex-col gap-2">
+              <button
+                  type="button"
+                  className="auth-form-submit inline-flex items-center justify-center gap-2"
+                  disabled={pending}
+                  onClick={onGoogleSignIn}
+              >
+                  <ProviderLogo provider="google" className="h-4 w-4" />
+                  {pending ? t('auth.redirecting') : t('auth.continueGoogle')}
+              </button>
+              {microsoftAvailable && onMicrosoftSignIn ? (
+                <button
+                  type="button"
+                  className="auth-form-submit inline-flex items-center justify-center gap-2"
+                  disabled={pending}
+                  onClick={onMicrosoftSignIn}
+                >
+                  <ProviderLogo provider="microsoft" className="h-4 w-4" />
+                  {t('auth.continueMicrosoft')}
+                </button>
+              ) : null}
+            </div>
         </div>
         </div>
     );

@@ -6,16 +6,44 @@ Request/response shapes: **Swagger** after the server starts — `/api`.
 
 ## Auth — `/auth`
 
-Sign-in is Google only. There is no email/password register, login, or reset.
+Primary sign-in is Google. Microsoft appears on login when `MICROSOFT_*` is set. Apple is **not** a sign-in provider — iCloud Calendar is linked from Settings via CalDAV ([integrations](integrations.md)). There is no email/password register, login, or reset.
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/auth/google` | Start Google sign-in (login or register). The same consent includes Calendar scopes. |
 | POST | `/auth/google/session` | Exchange the one-time `ticket` for JWT `{ access_token, refresh_token }` |
+| GET | `/auth/microsoft` | Microsoft authorize URL (new session) |
+| GET | `/auth/microsoft/link` | Microsoft authorize URL to link while logged in (JWT) |
+| GET | `/auth/microsoft/callback` | Microsoft OAuth callback |
+| POST | `/auth/microsoft/session` | Exchange Microsoft one-time ticket for JWT |
+| POST | `/auth/apple/caldav` | Link iCloud Calendar (`appleId` + `appSpecificPassword`, JWT) |
+| GET | `/auth/providers/status` | Provider availability (`google` / `microsoft` OAuth; `apple` always true for CalDAV) |
+| GET | `/auth/identities` | Linked identities for the current user (JWT) |
+| POST | `/auth/identities/:provider/disconnect` | Disconnect a linked identity (`confirm: true`) |
 | POST | `/auth/refresh` | Refresh tokens |
 | POST | `/auth/logout` | Logout |
 
 The Google redirect (`GET /google-calendar/callback`) sends the browser to the frontend `/auth/google/callback?ticket=…`. That sign-in writes wake `07:00`, sleep `22:00`, and `googleCalendarLinked: true`. It does not create phases.
+
+## Calendar overlays — `/calendar-overlays`
+
+Thin scheduling-mode rows for external events (not full task copies). Created lazily when the user changes type.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/calendar-overlays` | List overlays for the user |
+| PUT | `/calendar-overlays/:provider/:eventId` | Set `schedulingMode` `fixed` \| `flexible` |
+| POST | `/calendar-overlays/:provider/:eventId/unschedule` | Delete external event + create Unscheduled task |
+| DELETE | `/calendar-overlays/:provider/:eventId` | Drop overlay only |
+
+## Calendar providers — `/calendar-providers`
+
+Unified list across connected providers (Google; Microsoft when OAuth linked; Apple when CalDAV linked).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/calendar-providers/calendars` | `{ providers, sections, calendars }` |
+| GET | `/calendar-providers/events` | Display events for `timeMin` / `timeMax` |
 
 ## User settings — `/user-settings`
 
@@ -36,11 +64,15 @@ Relevant fields for intelligent scheduling: `wakeTime`, `sleepTime`, `weekendWor
 
 **`remindersEnabled`** (default false) turns on Web Push. See [Reminders](#reminders--reminders).
 
-**`syncGoogleDeletions`** (default false): when off, a missing linked Google event during retry only clears local Google ids. When on, that missing event deletes the local task. Failed Google writes sit in `pending_google_writes` and retry in the background; a newer Google edit of time/title/description drops the pending row and pulls into the task. **`DELETE /tasks/:id`** discards pending upserts for that task, waits for any in-flight Google sync, deletes linked Google events, then removes the row — so a racing sync cannot recreate the event after delete.
+**`syncGoogleDeletions`** (default false): when off, a missing linked external event during retry only clears local provider ids. When on, that missing event deletes the local task. Failed Google writes sit in `pending_google_writes` and retry in the background; a newer Google edit of time/title/description drops the pending row and pulls into the task. **`DELETE /tasks/:id`** discards pending upserts for that task, waits for any in-flight Google sync, deletes linked Google events, then removes the row — so a racing sync cannot recreate the event after delete.
 
-**`hiddenGoogleCalendarIds`** (string array) hides those Google calendars on the Calendar page. Empty means primary, the app calendar, and calendars selected in Google. The stored app calendar id is dropped if sent. A non-array is 400. This does not change which calendars Generate treats as busy.
+**`syncTargetCalendars`**: stored preference. `null` is unset; `[]` means sync nowhere; otherwise `{ provider, calendarId }[]`. App-task writes still go to Google. The writer does not read this field yet.
 
-**`fixedEventBufferMinutes`** (integer, default 0, max 180) is the gap Generate keeps before and after each fixed task and external Google event. 0 turns it off. Generate may place work in that gap when the task would not fit otherwise. Habits are not padded. Dragging a block is not blocked by the gap.
+**`dismissWarnFlexibleMove`**, **`dismissWarnUnscheduleExternal`**, **`dismissWarnExternalWriteBack`**: user opted out of the matching confirmation dialogs.
+
+**`hiddenGoogleCalendarIds`** (string array) hides those calendars on the Calendar page. Google ids are stored plain; Microsoft and Apple use `provider:id`. Empty means the visible Google set (primary, the app calendar, and calendars selected in Google) plus every connected Microsoft and Apple calendar. The stored app calendar id is dropped if sent. A non-array is 400. A hidden calendar is also left out of placement, the Problematic slot picker, reminders, suggestions, and voice busy time.
+
+**`fixedEventBufferMinutes`** (integer, default 0, max 180) is the gap placement keeps before and after each fixed task and each external event on a visible connected calendar (Google, Microsoft, Apple). 0 turns it off. Generate may place work in that gap when the task would not fit otherwise. Habits are not padded. Dragging a block is not blocked by the gap.
 
 ## Phases (day phases) — `/phases`
 

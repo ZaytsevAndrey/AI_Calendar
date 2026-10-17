@@ -54,6 +54,8 @@ interface CalendarGridProps {
     /** Phone month: day number and a dot, tap opens that day. */
     phoneMonth?: boolean;
     onPickDay?: (day: Date) => void;
+    renderEventMeta?: (event: GoogleCalendarEvent, completed: boolean) => React.ReactNode;
+    renderHabitMeta?: (habit: { id: string; name: string; done?: boolean }) => React.ReactNode;
 }
 
 const CalendarGrid: React.FC<CalendarGridProps> = ({
@@ -67,6 +69,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     isEventCompleted,
     phoneMonth = false,
     onPickDay,
+    renderEventMeta,
+    renderHabitMeta,
 }) => {
     const { t, i18n } = useTranslation();
     const { data: timePhases = [] } = useTimePhasesForDate(date);
@@ -216,7 +220,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                 title={tooltipText(event)}
                 role="button"
                 tabIndex={0}
-                className={`calendar-chip relative mb-1 cursor-pointer whitespace-nowrap px-1.5 py-1 pl-2 text-xs font-medium ${
+                className={`calendar-chip relative mb-1 flex cursor-pointer items-center gap-0.5 px-1.5 py-1 pl-2 text-xs font-medium ${
                     completed ? 'calendar-chip--done' : ''
                 }`}
                 style={
@@ -241,7 +245,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                     }
                 }}
             >
-                <span className="block truncate">
+                <span className="min-w-0 flex-1 truncate">
                     {completed ? (
                         <span className="calendar-chip__check" aria-hidden>
                             ✓
@@ -249,6 +253,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                     ) : null}
                     {chipLabel(event)}
                 </span>
+                {renderEventMeta?.(event, completed)}
                 {eventPhase && (
                     <span
                         className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-white/80"
@@ -363,6 +368,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                     onDeleteEvent={onDeleteEvent}
                     onToggleHabit={handleToggleHabit}
                     isEventCompleted={isEventCompleted}
+                    renderEventMeta={renderEventMeta}
+                    renderHabitMeta={renderHabitMeta}
                     renderDayExtra={
                         view === 'week'
                             ? (day) => <HabitDayDots day={day} onOpen={setHabitDate} />

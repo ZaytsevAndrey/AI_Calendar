@@ -40,6 +40,7 @@ import {
     overlayCompletedTaskEvents,
     resolveTaskForCalendarEvent,
 } from 'modules/calendar/completedTaskEvents';
+import { isCalendarVisible } from 'modules/calendar/calendarVisibility';
 import {
     eventTasksApi,
     useDeleteEventMutation as useDeleteTaskMutation,
@@ -74,8 +75,19 @@ import {
     shiftPeriod,
     eventStartDate,
     eventEndDate,
+    eventsQueryRange,
     eventsVisibleInView,
 } from 'modules/calendar/calendarView';
+import { todayNowContext } from 'modules/now/nowBlocks';
+import { CalendarChipMeta } from 'modules/calendar/components/CalendarChipMeta';
+import { KindIcon } from 'modules/calendar/kindIcons';
+import {
+    listCalendarOverlays,
+    listProviderCalendars,
+    type CalendarEventOverlayDTO,
+} from 'api/calendarOverlays.api';
+import type { CalendarNameById } from 'modules/calendar/components/CalendarChipMeta';
+import { overlayForEvent } from 'modules/calendar/schedulingKind';
 
 const toggleBtn = (active: boolean) =>
     `min-h-[44px] rounded-md px-4 py-2 text-sm font-medium transition ${
@@ -133,6 +145,7 @@ const CalendarPage: React.FC = () => {
         eventId: string | null;
         taskId: string | null;
         calendarId?: string;
+        provider?: 'google' | 'microsoft' | 'apple';
         eventName: string;
     }>({
         open: false,
@@ -158,11 +171,22 @@ const CalendarPage: React.FC = () => {
         event: null,
     });
 
-    const dayEventsQuery = useEventsForDay(currentDate);
-    const weekEventsQuery = useEventsForWeek(currentDate);
+    // Only fetch the active view range — day+week+month together hammered CalDAV.
+    const dayEventsQuery = useEventsForDay(
+        currentDate,
+        undefined,
+        currentView !== 'day',
+    );
+    const weekEventsQuery = useEventsForWeek(
+        currentDate,
+        undefined,
+        currentView !== 'week',
+    );
     const monthEventsQuery = useEventsForMonth(
         currentDate.getFullYear(),
-        currentDate.getMonth() + 1
+        currentDate.getMonth() + 1,
+        undefined,
+        currentView !== 'month',
     );
 
     const queryMap = {
@@ -172,6 +196,12 @@ const CalendarPage: React.FC = () => {
     };
 
     const getEventsQuery = queryMap[currentView];
+    // RTK keeps `data` from the previous arg while the next week/day fetches —
+    // use currentData + isFetching so the spinner shows on range changes.
+    const eventsForRange = getEventsQuery.currentData?.events;
+    const eventsLoading =
+        getEventsQuery.isLoading ||
+        (getEventsQuery.isFetching && !getEventsQuery.currentData);
     const [updateEventTrigger] = useUpdateEvent();
     const [deleteEventTrigger] = useDeleteEvent();
     const [deleteTaskTrigger] = useDeleteTaskMutation();
@@ -187,6 +217,52 @@ const CalendarPage: React.FC = () => {
         isActiveProblematicTask(task, todayYmd, parkDayHints[task.id]),
     );
     const { data: habitsData } = useGetHabitsQuery();
+    const [overlays, setOverlays] = useState<CalendarEventOverlayDTO[]>([]);
+    const [calendarNameById, setCalendarNameById] = useState<CalendarNameById>({});
+    const refreshOverlays = React.useCallback(() => {
+        void listCalendarOverlays()
+            .then(setOverlays)
+            .catch(() => setOverlays([]));
+    }, []);
+    const refreshCalendarNames = React.useCallback(() => {
+        void listProviderCalendars()
+            .then((res) => {
+                const map: CalendarNameById = {};
+                for (const cal of res.calendars ?? []) {
+                    if (!cal.id) continue;
+                    const meta = { summary: cal.summary, provider: cal.provider };
+                    map[cal.id] = meta;
+                    map[`${cal.provider}:${cal.id}`] = meta;
+                }
+                setCalendarNameById(map);
+            })
+            .catch(() => setCalendarNameById({}));
+    }, []);
+    useEffect(() => {
+        refreshOverlays();
+        refreshCalendarNames();
+    }, [refreshOverlays, refreshCalendarNames]);
+    // Fill names only when events reference calendars we have not labeled yet.
+    const calendarNamesHydrated = React.useRef(false);
+    useEffect(() => {
+        if (calendarNamesHydrated.current) return;
+        const events = eventsForRange ?? [];
+        if (!events.length) return;
+        const missing = events.some((ev) => {
+            if (!ev.calendarId) return false;
+            const provider = ev.provider ?? 'google';
+            return (
+                !calendarNameById[ev.calendarId] &&
+                !calendarNameById[`${provider}:${ev.calendarId}`]
+            );
+        });
+        if (!missing) {
+            calendarNamesHydrated.current = true;
+            return;
+        }
+        calendarNamesHydrated.current = true;
+        refreshCalendarNames();
+    }, [eventsForRange, calendarNameById, refreshCalendarNames]);
     const voice = useVoiceTask({
         onComplete: createFromPayload,
         onSufficient: openCreateFromPrefill,
@@ -212,9 +288,19 @@ const CalendarPage: React.FC = () => {
         sleepTime: userSettings?.sleepTime,
         wakeTime: userSettings?.wakeTime,
     };
+    const hiddenCalendarIds = userSettings?.hiddenGoogleCalendarIds ?? [];
     const displayEvents = overlayCompletedTaskEvents(
-        visibleGoogleEvents(getEventsQuery.data?.events || []).filter(
+        visibleGoogleEvents(eventsForRange || []).filter(
             (event) => {
+                if (
+                    !isCalendarVisible(
+                        event.provider,
+                        event.calendarId,
+                        hiddenCalendarIds,
+                    )
+                ) {
+                    return false;
+                }
                 if (isHabitGoogleEvent(habitEventIds, event)) return false;
                 const linked = resolveTaskForCalendarEvent(tasks, event);
                 if (linked?.isUnscheduled && linked.status === 'completed') return false;
@@ -250,6 +336,7 @@ const CalendarPage: React.FC = () => {
                 eventId: event.id,
                 taskId: null,
                 calendarId: event.calendarId,
+                provider: event.provider ?? 'google',
                 eventName: name,
             });
             return;
@@ -307,6 +394,7 @@ const CalendarPage: React.FC = () => {
             eventId: event.id,
             taskId: linked.id,
             calendarId: event.calendarId,
+            provider: event.provider ?? 'google',
             eventName: name,
         });
     };
@@ -327,7 +415,8 @@ const CalendarPage: React.FC = () => {
     };
 
     const confirmDeleteEvent = () => {
-        const { mode, eventId, taskId, calendarId, eventName } = deleteConfirmDialog;
+        const { mode, eventId, taskId, calendarId, provider, eventName } =
+            deleteConfirmDialog;
         setDeleteConfirmDialog({
             open: false,
             mode: 'google',
@@ -348,7 +437,11 @@ const CalendarPage: React.FC = () => {
             return;
         }
         if (!eventId) return;
-        void deleteEventTrigger({ eventId, calendarId })
+        void deleteEventTrigger({
+            eventId,
+            calendarId,
+            provider: provider ?? 'google',
+        })
             .unwrap()
             .then(() => {
                 showSuccessToast({
@@ -472,6 +565,7 @@ const CalendarPage: React.FC = () => {
             eventId: event.id,
             eventData: data,
             calendarId: event.calendarId,
+            provider: event.provider ?? 'google',
         })
             .unwrap()
             .then(() => {
@@ -589,6 +683,7 @@ const CalendarPage: React.FC = () => {
                 {
                     googleEventId: event.id,
                     calendarId: event.calendarId,
+                    provider: event.provider ?? 'google',
                     recurringEventId: event.recurringEventId,
                     originalStart: originalStart.toISOString(),
                     originalEnd: originalEnd.toISOString(),
@@ -646,6 +741,31 @@ const CalendarPage: React.FC = () => {
             deadline: end,
         });
     };
+
+    const nowStripReuseCalendarEvents = React.useMemo(() => {
+        const sleep = {
+            sleepTime: userSettings?.sleepTime,
+            wakeTime: userSettings?.wakeTime,
+        };
+        const focus =
+            currentView === 'month'
+                ? new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+                : currentDate;
+        const active = eventsQueryRange(currentView, focus, sleep);
+        const nowCtx = todayNowContext(new Date().toISOString(), timeZone);
+        return (
+            new Date(active.timeMin).getTime() <=
+                new Date(nowCtx.fetchTimeMin).getTime() &&
+            new Date(active.timeMax).getTime() >=
+                new Date(nowCtx.fetchTimeMax).getTime()
+        );
+    }, [
+        currentView,
+        currentDate,
+        userSettings?.sleepTime,
+        userSettings?.wakeTime,
+        timeZone,
+    ]);
 
     return (
         <div className="page-shell-fill max-md:px-3 max-md:py-2">
@@ -733,7 +853,10 @@ const CalendarPage: React.FC = () => {
                 </div>
                     </>
                 )}
-                <NowStrip />
+                <NowStrip
+                    skipEventsFetch={nowStripReuseCalendarEvents}
+                    sharedEvents={eventsForRange}
+                />
                 {problematicTasks.length > 0 ? (
                     <ProblematicInboxBanner
                         count={problematicTasks.length}
@@ -787,7 +910,7 @@ const CalendarPage: React.FC = () => {
                 )}
             </header>
 
-            {getEventsQuery.isLoading ? (
+            {eventsLoading ? (
                 <div className="flex min-h-0 flex-1 items-center justify-center">
                     <Spinner className="h-10 w-10" />
                 </div>
@@ -818,12 +941,50 @@ const CalendarPage: React.FC = () => {
                                 setCurrentDate(day);
                                 setCurrentView('day');
                             }}
+                            renderEventMeta={(event, completed) => (
+                                <CalendarChipMeta
+                                    event={event}
+                                    task={resolveTaskForCalendarEvent(tasks, event)}
+                                    overlay={overlayForEvent(
+                                        overlays,
+                                        event,
+                                        event.provider ?? 'google',
+                                    )}
+                                    completed={completed}
+                                    calendarNameById={calendarNameById}
+                                    provider={event.provider ?? 'google'}
+                                    dismissWarnFlexibleMove={userSettings?.dismissWarnFlexibleMove}
+                                    dismissWarnUnscheduleExternal={
+                                        userSettings?.dismissWarnUnscheduleExternal
+                                    }
+                                    onOverlaysChanged={refreshOverlays}
+                                    onUnscheduled={() => {
+                                        refreshOverlays();
+                                        void getEventsQuery.refetch?.();
+                                        dispatch(
+                                            eventTasksApi.util.invalidateTags([
+                                                { type: 'EventTask', id: 'LIST' },
+                                            ]),
+                                        );
+                                    }}
+                                />
+                            )}
+                            renderHabitMeta={() => (
+                                <span className="calendar-chip__meta">
+                                    <span
+                                        className="calendar-chip__icon-btn calendar-chip__icon-btn--static"
+                                        title={t('calendar.kind.habit')}
+                                    >
+                                        <KindIcon kind="habit" />
+                                    </span>
+                                </span>
+                            )}
                         />
                     </div>
                     <div className="hidden h-80 w-full shrink-0 flex-col overflow-hidden md:flex lg:h-[min(18rem,38vh)] xl:h-auto xl:min-h-0 xl:w-[24rem]">
                         <CalendarEvents
                             events={listEvents}
-                            isLoading={getEventsQuery.isLoading}
+                            isLoading={eventsLoading}
                             error={getEventsQuery.error}
                             title={t('calendar.viewEvents', { view: t(`calendar.${currentView}`) })}
                             onEditEvent={handleEditEvent}
@@ -970,7 +1131,7 @@ const CalendarPage: React.FC = () => {
                 <div className="max-h-[60dvh]">
                     <CalendarEvents
                         events={listEvents}
-                        isLoading={getEventsQuery.isLoading}
+                        isLoading={eventsLoading}
                         error={getEventsQuery.error}
                         title={t('calendar.viewEvents', { view: t(`calendar.${currentView}`) })}
                         onEditEvent={(eventId) => {

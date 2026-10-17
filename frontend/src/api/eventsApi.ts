@@ -43,7 +43,11 @@ export const eventsApi = createApi({
         if (params?.timeMax) searchParams.append('timeMax', params.timeMax);
         if (params?.calendarId) searchParams.append('calendarId', params.calendarId);
         // add other params if needed
-        return { url: `/google-calendar/events?${searchParams.toString()}`, method: 'GET' };
+        // Unified list: Google + Microsoft (+ Apple when connected)
+        return {
+          url: `/calendar-providers/events?${searchParams.toString()}`,
+          method: 'GET',
+        };
       },
       providesTags: (result) =>
         result?.events
@@ -74,15 +78,34 @@ export const eventsApi = createApi({
       }),
       invalidatesTags: [{ type: 'Event', id: 'LIST' }],
     }),
-    updateEvent: builder.mutation<GoogleCalendarEvent, { eventId: string; eventData: UpdateEventParams; calendarId?: string }>({
-      query: ({ eventId, eventData, calendarId }) => ({
-        url:
+    updateEvent: builder.mutation<
+      GoogleCalendarEvent,
+      {
+        eventId: string;
+        eventData: UpdateEventParams;
+        calendarId?: string;
+        provider?: 'google' | 'microsoft' | 'apple';
+      }
+    >({
+      query: ({ eventId, eventData, calendarId, provider }) => {
+        const p = provider ?? 'google';
+        const calQ =
           calendarId != null && calendarId !== ''
-            ? `/google-calendar/events/${eventId}?calendarId=${encodeURIComponent(calendarId)}`
-            : `/google-calendar/events/${eventId}`,
-        method: 'PUT',
-        data: eventData,
-      }),
+            ? `?calendarId=${encodeURIComponent(calendarId)}`
+            : '';
+        if (p === 'google') {
+          return {
+            url: `/google-calendar/events/${encodeURIComponent(eventId)}${calQ}`,
+            method: 'PUT',
+            data: eventData,
+          };
+        }
+        return {
+          url: `/calendar-providers/${p}/events/${encodeURIComponent(eventId)}${calQ}`,
+          method: 'PUT',
+          data: eventData,
+        };
+      },
       invalidatesTags: (result, error, { eventId }) => [
         { type: 'Event', id: eventId },
         { type: 'Event', id: 'LIST' },
@@ -104,14 +127,31 @@ export const eventsApi = createApi({
       query: () => ({ url: '/google-calendar/calendars', method: 'GET' }),
       providesTags: ['CalendarList'],
     }),
-    deleteEvent: builder.mutation<void, { eventId: string; calendarId?: string }>({
-      query: ({ eventId, calendarId }) => ({
-        url:
+    deleteEvent: builder.mutation<
+      void,
+      {
+        eventId: string;
+        calendarId?: string;
+        provider?: 'google' | 'microsoft' | 'apple';
+      }
+    >({
+      query: ({ eventId, calendarId, provider }) => {
+        const p = provider ?? 'google';
+        const calQ =
           calendarId != null && calendarId !== ''
-            ? `/google-calendar/events/${eventId}?calendarId=${encodeURIComponent(calendarId)}`
-            : `/google-calendar/events/${eventId}`,
-        method: 'DELETE',
-      }),
+            ? `?calendarId=${encodeURIComponent(calendarId)}`
+            : '';
+        if (p === 'google') {
+          return {
+            url: `/google-calendar/events/${encodeURIComponent(eventId)}${calQ}`,
+            method: 'DELETE',
+          };
+        }
+        return {
+          url: `/calendar-providers/${p}/events/${encodeURIComponent(eventId)}${calQ}`,
+          method: 'DELETE',
+        };
+      },
       invalidatesTags: (result, error, { eventId }) => [
         { type: 'Event', id: eventId },
         { type: 'Event', id: 'LIST' },

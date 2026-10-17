@@ -64,6 +64,14 @@ export const routeChunks = {
         'page-google-callback',
         () => import(/* webpackChunkName: "page-google-callback" */ 'modules/auth/pages/GoogleCallbackPage'),
     ),
+    microsoftCallback: defineRouteChunk(
+        'microsoftCallback',
+        'page-microsoft-callback',
+        () =>
+            import(
+                /* webpackChunkName: "page-microsoft-callback" */ 'modules/auth/pages/MicrosoftCallbackPage'
+            ),
+    ),
 } as const;
 
 const chunksByPath: Record<string, RouteChunk> = {

@@ -199,18 +199,21 @@ Resolve all dates yourself into ISO-8601 with numeric offset:
 - Day without clock: flexible; earliest 00:00, deadline 23:59 that day; scheduledStart/End null.
 - An afternoon ordinal ("the second of the day", two in the afternoon) is a clock at 14:00, not a calendar day and not tomorrow. A hedge makes it a preferred time: set scheduledStart to 14:00. Do not leave only a 00:00–23:59 window.
 - Concrete time: they commit to the hour. Kind fixed.
-- Approximate time: they soften that same hour. Kind flexible, scheduledStart at the hour. A number next to the softener stays the preferred hour and does not become fixed. Read the softening in the speaker's language. English "around" is only an example of the meaning, not a word to search for. "three" is 15:00, 16 stays 16:00.
+- Approximate time: they soften that same hour. Kind flexible, scheduledStart at the hour. A number next to the softener stays the preferred hour and does not become fixed. An ordinal hour works the same way: around six is 18:00, scheduledStart set, and a following length is the duration. The hour is not part of the name. Not unscheduled. Read the softening in the speaker's language. English "around" is only an example of the meaning, not a word to search for. "three" is 15:00, 16 stays 16:00.
 - "around after three" is the same preferred time at 15:00 with scheduledStart set. Not an earliest-only bound.
 - Bare hours 1–7 with no morning or night word are afternoon: "at 4" is 16:00, not 04:00.
-- "half an hour before six", with no morning word, is 17:30, not 05:30.
+- A quarter or a half said with an hour is the clock, not how long the task takes. Counting toward the next hour, a quarter toward five is 16:45, not 05:00 and not a 15-minute duration. Half toward six is 17:30. No morning or night word, so the hour is afternoon.
 - "in three hours" when the local clock is 13:00 is 16:00, not 13:00.
 - "in four hours" when the local clock is 13:00 is 17:00, not 14:00. Add the hours to the local clock. Do not add them to the UTC hour and keep +03:00. No spoken length → default duration, understanding complete. Do not ask how long.
 - "around noon" when it is already afternoon is a flexible preferred tomorrow at 12:00. Not fixed, and not a rest-of-today window.
 - "after 18" is earliest 18:00 with scheduledStart null, not a fixed meeting at 18:00.
 - "by end of day" is a deadline at 23:59 on schedule today, kind flexible, scheduledStart null. Not an unscheduled inbox item. The errand is the task name ("close the ticket").
+- "from now until 18" is a window: earliest is now, deadline 18:00 on schedule today. The errand is the task name ("close all the reviews"). Not marking an existing task done.
+- Before or after another activity, with no clock of its own ("finish the slides before the meeting", "after the gym, stop by the pharmacy"): look at Open tasks. Before a match, deadline is its start. After a match, earliest is its end or its start. No match, or a match with no time: ask which task they mean. Do not invent 23:59, now, or 18:00. After work and after lunch are parts of the day, not this lookup.
 - Morning or evening with no named day is a preferred clock only: morning ~09:00, evening ~18:00. earliest and deadline null. If that part of day is already past, use the nearest upcoming one. Morning already past → tomorrow ~09:00. Do not add a 00:00–23:59 envelope.
-- "after work" is a flexible preferred around 18:00.
+- "after work" is a flexible preferred around 18:00. "after work until nine" is a window: earliest ~18:00 and deadline 21:00, both set. Not a preferred start with only a deadline.
 - "today in the evening", with no numbered clock, is a flexible preferred around 18:00 AND a day envelope: earliest 00:00, deadline 23:59 schedule today. Do not leave only the 18:00 slot.
+- "today in the morning" when the local clock is already afternoon: ask whether they still want that past morning. Do not keep the rest of today and do not move it.
 - "at 15? no, better at 17" cancels 15:00. The last clock is fixed 17:00 on the named day. Not flexible and not a 00:00–23:59 envelope. "better at" inside a from–to span is still a preferred start, not this case.
 - "tomorrow morning", with no numbered clock, is a flexible preferred around 09:00 AND earliest 00:00, deadline 23:59 schedule tomorrow.
 - A named event that fills the span ("a conference tomorrow from 9 to 18") is fixed: scheduledStart at 09:00, scheduledEnd at 18:00, duration is those hours. Not a placement window.
@@ -218,6 +221,8 @@ Resolve all dates yourself into ISO-8601 with numeric offset:
 - "tomorrow from 10 to 14 make calls, better at 11, for half an hour" is still that window: earliest 10:00, deadline 14:00, scheduledStart 11:00, duration 30. "better at" is a preferred start inside the span, not a fixed meeting. Do not drop the window.
 - A placement window with no spoken length uses the default duration. understanding complete. Do not ask how long, even for a trip. "on Saturday between 10 and 14 go to the dacha" is that window on the listed Saturday.
 - "every morning" and "every evening" are a daily repeat at that clock, kind recurring DAILY. Not one occurrence today. Morning keeps 7 at 07:00.
+- "every three days" is still a daily repeat: recurrencePattern DAILY. There is no every-N-days field. Do not leave the pattern null and do not make it unscheduled.
+- "the last day of the month" is a monthly repeat, kind recurring MONTHLY. Not a one-day window on the 31st. "this month" or one civil date stays a single day.
 - A repeat with a clock ("English every Wednesday at 19") keeps that hour as scheduledStart. Do not drop it because that weekday is not schedule today.
 - No day and no clock (and not a clear recurring pattern): unscheduled inbox; do not invent a day.
 - New tasks: put a spoken clock on the day they named, even when that instant is already before now ISO. Do not erase it and do not move a concrete clock to tomorrow.`;

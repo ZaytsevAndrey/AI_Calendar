@@ -7,6 +7,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { PendingGoogleWriteService } from '../google-calendar/pending-google-write.service';
+import { CalendarProvidersRegistry } from '../calendar-providers/calendar-providers.registry';
+import type { CalendarProviderId } from '../calendar-providers/calendar-provider.types';
 import { Habit } from '../habits/entities/habit.entity';
 import { PhasesService } from '../phases/phases.service';
 import { ScheduleState, Task, TaskStatus } from '../tasks/entities/task.entity';
@@ -47,6 +49,7 @@ export class DisplayedEventMoveService {
     private readonly habitRepo: Repository<Habit>,
     private readonly tasksService: TasksService,
     private readonly googleCalendarService: GoogleCalendarService,
+    private readonly calendarProviders: CalendarProvidersRegistry,
     private readonly pendingGoogleWrites: PendingGoogleWriteService,
     private readonly placementStep: PlacementStepService,
     private readonly userSettingsService: UserSettingsService,
@@ -101,8 +104,9 @@ export class DisplayedEventMoveService {
     }
 
     if (plan.kind === 'google') {
-      await this.googleCalendarService.patchEventTimes(
+      await this.patchExternalEventTimes(
         userId,
+        dto.provider ?? 'google',
         dto.googleEventId,
         start.toISOString(),
         end.toISOString(),
@@ -497,6 +501,42 @@ export class DisplayedEventMoveService {
     const windows = phaseWindowsForDay(phases, ymd, timeZone);
     const id = phaseIdAtFocus(windows, start.getTime());
     return id ? [id] : [];
+  }
+
+  /** Move an external (non-app-task) event on the correct provider API. */
+  private async patchExternalEventTimes(
+    userId: string,
+    providerId: CalendarProviderId,
+    eventId: string,
+    startIso: string,
+    endIso: string,
+    calendarId?: string,
+  ): Promise<void> {
+    if (providerId === 'google') {
+      await this.googleCalendarService.patchEventTimes(
+        userId,
+        eventId,
+        startIso,
+        endIso,
+        calendarId,
+      );
+      return;
+    }
+    const provider = this.calendarProviders.get(providerId);
+    if (!provider) {
+      throw new BadRequestException(
+        `Calendar provider "${providerId}" is not available`,
+      );
+    }
+    await provider.updateEvent(
+      userId,
+      eventId,
+      {
+        start: { dateTime: startIso },
+        end: { dateTime: endIso },
+      },
+      calendarId,
+    );
   }
 
   /** True when the drop day is the earliest still-open day of the series. */

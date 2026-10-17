@@ -18,6 +18,7 @@ import { UserSettingsModule } from '../user-settings/user-settings.module';
 import { Task } from '../tasks/entities/task.entity';
 import { Habit } from '../habits/entities/habit.entity';
 import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
+import { CalendarProvidersModule } from '../calendar-providers/calendar-providers.module';
 import { PhasesModule } from '../phases/phases.module';
 import { VoiceModule } from '../voice/voice.module';
 
@@ -32,6 +33,7 @@ import { VoiceModule } from '../voice/voice.module';
     forwardRef(() => TasksModule),
     UserSettingsModule,
     GoogleCalendarModule,
+    CalendarProvidersModule,
     PhasesModule,
     VoiceModule,
   ],

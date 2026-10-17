@@ -69,6 +69,8 @@ interface CalendarTimeGridProps {
   onToggleHabit?: (habit: TimedHabit) => void;
   isEventCompleted?: (event: GoogleCalendarEvent) => boolean;
   renderDayExtra?: (day: Date) => React.ReactNode;
+  renderEventMeta?: (event: GoogleCalendarEvent, completed: boolean) => React.ReactNode;
+  renderHabitMeta?: (habit: TimedHabit) => React.ReactNode;
 }
 
 function eventMinutes(
@@ -103,6 +105,8 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
   onToggleHabit,
   isEventCompleted,
   renderDayExtra,
+  renderEventMeta,
+  renderHabitMeta,
 }) => {
   const { t } = useTranslation();
   const daySpanMin = Math.max(dayEndMin - dayStartMin, 60);
@@ -304,18 +308,26 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                   const start = eventStartDate(event);
                   return start ? sameLocalDay(start, day) : false;
                 })
-                .map((event) => (
-                  <button
-                    key={event.id}
-                    type="button"
-                    title={tooltipText(event)}
-                    className="calendar-chip truncate px-1.5 py-1 text-left text-xs font-medium"
-                    style={{ ['--chip-color']: getEventColor(event) } as React.CSSProperties}
-                    onClick={() => onEditEvent?.(event.id)}
-                  >
-                    {chipLabel(event)}
-                  </button>
-                ))}
+                .map((event) => {
+                  const completed = isEventCompleted?.(event) ?? false;
+                  return (
+                    <button
+                      key={event.id}
+                      type="button"
+                      title={tooltipText(event)}
+                      className={`calendar-chip flex w-full items-center gap-0.5 px-1.5 py-1 text-left text-xs font-medium ${
+                        completed ? 'calendar-chip--done' : ''
+                      }`}
+                      style={
+                        { ['--chip-color']: getEventColor(event) } as React.CSSProperties
+                      }
+                      onClick={() => onEditEvent?.(event.id)}
+                    >
+                      <span className="min-w-0 flex-1 truncate">{chipLabel(event)}</span>
+                      {renderEventMeta?.(event, completed)}
+                    </button>
+                  );
+                })}
             </div>
           ))}
         </div>
@@ -425,8 +437,13 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                       onToggleHabit?.(habit);
                     }}
                   >
-                    {habit.done ? '✓ ' : ''}
-                    {habit.name}
+                    <span className="flex min-w-0 items-center gap-1">
+                      <span className="min-w-0 flex-1 truncate">
+                        {habit.done ? '✓ ' : ''}
+                        {habit.name}
+                      </span>
+                      {renderHabitMeta?.(habit)}
+                    </span>
                   </button>
                 );
               })}
@@ -472,7 +489,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                   <div
                     role="button"
                     tabIndex={0}
-                    className={`relative min-h-0 flex-1 px-1.5 py-0.5 pl-2 text-[0.65rem] font-medium leading-tight ${
+                    className={`relative flex min-h-0 flex-1 items-start gap-0.5 px-1.5 py-0.5 pl-2 text-[0.65rem] font-medium leading-tight ${
                       onEventTimeChange ? 'cursor-grab' : 'cursor-pointer'
                     }`}
                     onPointerDown={(e) => startDrag(e, event, 'move', place)}
@@ -488,7 +505,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                       }
                     }}
                   >
-                    <span className="block truncate pr-4">
+                    <span className="min-w-0 flex-1 truncate pr-3">
                       {completed ? (
                         <span className="calendar-chip__check" aria-hidden>
                           ✓
@@ -496,7 +513,9 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                       ) : null}
                       {chipLabel(event)}
                     </span>
-                    {completed ? (
+                    {renderEventMeta ? (
+                      renderEventMeta(event, completed)
+                    ) : completed ? (
                       <span className="calendar-chip__badge">{t('calendar.completedBadge')}</span>
                     ) : null}
                     {onDeleteEvent ? (

@@ -59,6 +59,8 @@ describe('PlacementStepService.place (dryRun crowded day)', () => {
     }>;
     googleEvents?: Array<{
       id: string;
+      summary?: string;
+      transparency?: string;
       start: { dateTime: string };
       end: { dateTime: string };
     }>;
@@ -108,11 +110,8 @@ describe('PlacementStepService.place (dryRun crowded day)', () => {
       remove: jest.fn(),
     };
 
-    const googleCalendarService = {
-      getStoredAppCalendarId: jest.fn().mockResolvedValue(null),
-      getEvents: jest.fn().mockResolvedValue({
-        events: opts.googleEvents ?? [],
-      }),
+    const externalBusy = {
+      listVisibleEvents: jest.fn().mockResolvedValue(opts.googleEvents ?? []),
     };
 
     const service = new PlacementStepService(
@@ -134,11 +133,11 @@ describe('PlacementStepService.place (dryRun crowded day)', () => {
       {
         findAllForScheduling: jest.fn().mockResolvedValue([phase]),
       } as never,
-      googleCalendarService as never,
       { syncTask: jest.fn() } as never,
+      externalBusy as never,
     );
 
-    return { service, googleCalendarService };
+    return { service, externalBusy };
   }
 
   it('CD01 seats a no-preferred claim in the free hole without moving peers', async () => {
@@ -282,7 +281,7 @@ describe('PlacementStepService.place (dryRun crowded day)', () => {
   });
 
   it('CD04 preferred on Google busy returns conflict', async () => {
-    const { service, googleCalendarService } = build({
+    const { service, externalBusy } = build({
       claim: {
         id: 'new',
         name: 'New',
@@ -304,7 +303,56 @@ describe('PlacementStepService.place (dryRun crowded day)', () => {
       windowYmd: ymd,
     });
     expect(plan.outcome).toBe('conflict');
-    expect(googleCalendarService.getEvents).toHaveBeenCalled();
+    expect(externalBusy.listVisibleEvents).toHaveBeenCalled();
+  });
+
+  it('CD04b preferred on a Microsoft event returns conflict; a free event does not', async () => {
+    const blocking = build({
+      claim: {
+        id: 'new',
+        name: 'New',
+        scheduledStartTime: wall('09:00'),
+        scheduledEndTime: wall('10:00'),
+      },
+      googleEvents: [
+        {
+          id: 'ms-1',
+          summary: 'Outlook standup',
+          start: { dateTime: wall('09:00').toISOString() },
+          end: { dateTime: wall('10:00').toISOString() },
+        },
+      ],
+    });
+    const blocked = await blocking.service.place('user-1', 'new', {
+      dryRun: true,
+      preferredStart: wall('09:00'),
+      windowYmd: ymd,
+    });
+    expect(blocked.outcome).toBe('conflict');
+
+    const free = build({
+      claim: {
+        id: 'new',
+        name: 'New',
+        scheduledStartTime: wall('09:00'),
+        scheduledEndTime: wall('10:00'),
+      },
+      googleEvents: [
+        {
+          id: 'apple-free',
+          summary: 'Available',
+          transparency: 'transparent',
+          start: { dateTime: wall('09:00').toISOString() },
+          end: { dateTime: wall('10:00').toISOString() },
+        },
+      ],
+    });
+    const seated = await free.service.place('user-1', 'new', {
+      dryRun: true,
+      preferredStart: wall('09:00'),
+      windowYmd: ymd,
+    });
+    expect(seated.outcome).toBe('seated');
   });
 
   it('CD05 solid fill with no preferred → problematic', async () => {

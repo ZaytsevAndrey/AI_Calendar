@@ -278,6 +278,105 @@
     color: rgba(255, 255, 255, 0.95);
 }
 
+.calendar-chip__meta {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.2rem;
+    margin-top: 0;
+    position: relative;
+    z-index: 3;
+    flex-shrink: 0;
+    max-width: 55%;
+}
+
+.calendar-chip__icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0.25rem;
+    background: color-mix(in srgb, #000 42%, transparent);
+    color: rgba(255, 255, 255, 0.98);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.calendar-chip__icon-btn--static {
+    cursor: default;
+    pointer-events: none;
+}
+
+.calendar-chip__cal {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    min-width: 0;
+    max-width: 100%;
+    height: 1.15rem;
+    padding: 0 0.3rem 0 0.2rem;
+    border-radius: 0.25rem;
+    background: color-mix(in srgb, #000 42%, transparent);
+    color: rgba(255, 255, 255, 0.98);
+    pointer-events: none;
+}
+
+.calendar-chip__cal-name {
+    min-width: 0;
+    max-width: 6.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.55rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    line-height: 1;
+    text-shadow: none;
+}
+
+.calendar-chip__kind-menu {
+    position: absolute;
+    left: 0;
+    top: 100%;
+    display: flex;
+    gap: 0.15rem;
+    padding: 0.25rem;
+    border-radius: 0.35rem;
+    background: #3c3f41;
+    border: 1px solid #515151;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    z-index: 20;
+}
+
+.calendar-chip__kind-menu--portal {
+    position: fixed;
+    left: auto;
+    top: auto;
+    z-index: 1400;
+}
+
+.calendar-chip__kind-option {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.35rem;
+    height: 1.35rem;
+    border: 0;
+    border-radius: 0.25rem;
+    background: transparent;
+    color: #a9b7c6;
+    cursor: pointer;
+}
+
+.calendar-chip__kind-option:hover,
+.calendar-chip__kind-option.is-active {
+    background: #585b5e;
+    color: #fff;
+}
+
 .calendar-event-stage-saving {
     box-shadow: inset 3px 0 0 0 #bbb529, inset 0 0 0 1px rgba(187, 181, 41, 0.55) !important;
     filter: saturate(1.15);

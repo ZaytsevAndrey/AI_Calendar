@@ -8,7 +8,7 @@ import { In, Repository } from 'typeorm';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import { habitBlockIntervals } from '../habits/habit-blocks.util';
 import { Habit } from '../habits/entities/habit.entity';
-import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { ExternalCalendarBusyService } from '../calendar-providers/external-calendar-busy.service';
 import { PhasesService } from '../phases/phases.service';
 import { TaskEventType } from '../scheduling/event-type.enum';
 import { Task, TaskStatus } from '../tasks/entities/task.entity';
@@ -19,11 +19,11 @@ import {
   startOfLocalDayIso,
 } from '../voice/voice-local-date.util';
 import { ScheduledTask } from './schedule.entity';
+import { providerEventsToBusyIntervals } from './external-calendar-busy.util';
 import {
   buildFreeSlotsPlan,
   FreeSlotsPhaseLike,
   LabeledBusyInterval,
-  MsInterval,
 } from './free-slots.util';
 
 export type FreeSlotIntervalDto = {
@@ -56,7 +56,7 @@ export class FreeSlotsService {
     private readonly habitRepo: Repository<Habit>,
     private readonly userSettingsService: UserSettingsService,
     private readonly phasesService: PhasesService,
-    private readonly googleCalendarService: GoogleCalendarService,
+    private readonly externalBusy: ExternalCalendarBusyService,
   ) {}
 
   async forTaskDay(
@@ -107,9 +107,11 @@ export class FreeSlotsService {
       weekendOk: settings.weekendWorkEnabled !== false,
     });
 
-    // If Google/external busy wiped the day, still offer local free gaps
-    // (slots + habits + fixed) so Move remains usable.
+    // If external busy wiped the day, still offer local free gaps
+    // (slots + habits + fixed) so Move remains usable. Keep the external
+    // chips on the timeline so those hours stay highlighted.
     if (plan.candidates.length === 0) {
+      const highlighted = plan.busySegments;
       const localBusy = await this.collectBusy(
         userId,
         task,
@@ -117,7 +119,7 @@ export class FreeSlotsService {
         dayEnd,
         ymd,
         timeZone,
-        { includeGoogle: false },
+        { includeExternal: false },
       );
       plan = buildFreeSlotsPlan({
         ymd,
@@ -129,6 +131,7 @@ export class FreeSlotsService {
         durationMinutes,
         weekendOk: settings.weekendWorkEnabled !== false,
       });
+      plan = { ...plan, busySegments: highlighted };
     }
 
     const primaryPhase = plan.usedWakeSleepFallback
@@ -211,7 +214,7 @@ export class FreeSlotsService {
     dayEnd: Date,
     ymd: string,
     timeZone: string,
-    opts?: { includeGoogle?: boolean },
+    opts?: { includeExternal?: boolean },
   ): Promise<LabeledBusyInterval[]> {
     const busy: LabeledBusyInterval[] = [];
     const ourGoogleIds = new Set<string>();
@@ -284,94 +287,43 @@ export class FreeSlotsService {
       });
     }
 
-    if (opts?.includeGoogle === false) {
+    if (opts?.includeExternal === false) {
       return busy;
     }
 
     try {
-      const settings = await this.userSettingsService.getSettings(userId);
-      if (settings.googleCalendarLinked) {
-        busy.push(
-          ...(await this.collectGoogleBusy(
-            userId,
-            dayStart,
-            dayEnd,
-            ourGoogleIds,
-            timeZone,
-          )),
-        );
-      }
+      busy.push(
+        ...(await this.collectExternalBusy(
+          userId,
+          dayStart,
+          dayEnd,
+          ourGoogleIds,
+          timeZone,
+        )),
+      );
     } catch {
-      /* timeline still useful without Google */
+      /* timeline still useful without external calendars */
     }
 
     return busy;
   }
 
-  private async collectGoogleBusy(
+  private async collectExternalBusy(
     userId: string,
     rangeStart: Date,
     rangeEnd: Date,
     excludeIds: Set<string>,
     timeZone: string,
   ): Promise<LabeledBusyInterval[]> {
-    const busy: LabeledBusyInterval[] = [];
-    const calendarIds = ['primary'];
-    const appCalId =
-      await this.googleCalendarService.getStoredAppCalendarId(userId);
-    if (appCalId) calendarIds.push(appCalId);
-
-    for (const calId of calendarIds) {
-      let pageToken: string | undefined;
-      do {
-        const page = await this.googleCalendarService.getEvents(
-          userId,
-          rangeStart.toISOString(),
-          rangeEnd.toISOString(),
-          2500,
-          pageToken,
-          calId,
-        );
-        for (const ev of page.events) {
-          if (ev.status === 'cancelled') continue;
-          if (ev.id && excludeIds.has(ev.id)) continue;
-          if (ev.recurringEventId && excludeIds.has(ev.recurringEventId)) {
-            continue;
-          }
-          const iv = this.googleEventToInterval(ev, timeZone);
-          if (iv) {
-            const summary =
-              typeof ev.summary === 'string' ? ev.summary.trim() : '';
-            busy.push({
-              ...iv,
-              ...(summary ? { label: summary } : {}),
-            });
-          }
-        }
-        pageToken = page.nextPageToken ?? undefined;
-      } while (pageToken);
-    }
-    return busy;
-  }
-
-  private googleEventToInterval(
-    ev: {
-      transparency?: string | null;
-      start?: { dateTime?: string | null; date?: string | null };
-      end?: { dateTime?: string | null; date?: string | null };
-    },
-    timeZone: string,
-  ): MsInterval | null {
-    // Free / "show as available" and all-day markers should not wipe timed Move slots.
-    if (ev.transparency === 'transparent') return null;
-    if (ev.start?.dateTime && ev.end?.dateTime) {
-      const start = new Date(ev.start.dateTime).getTime();
-      const end = new Date(ev.end.dateTime).getTime();
-      if (end > start) return { start, end };
-      return null;
-    }
-    // All-day Google events: ignore for this picker (timed placement only).
-    void timeZone;
-    return null;
+    const events = await this.externalBusy.listVisibleEvents(
+      userId,
+      rangeStart.toISOString(),
+      rangeEnd.toISOString(),
+    );
+    return providerEventsToBusyIntervals(events, {
+      excludeIds,
+      timeZone,
+      includeAllDay: false,
+    });
   }
 }

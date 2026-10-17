@@ -7,6 +7,10 @@ import i18n from 'i18n';
 import { getLoginStatus } from 'modules/auth/selectors/authSelectors';
 import { LOGIN } from 'modules/auth/actions/actionTypes';
 import apiCall from 'modules/common/utils/apiCall';
+import {
+  getAuthProvidersStatus,
+  getMicrosoftAuthUrl,
+} from 'api/calendarOverlays.api';
 import { showErrorToast } from '../../../../utils/toast';
 
 import LoginForm from './LoginForm';
@@ -17,6 +21,17 @@ const LoginFormContainer = () => {
     const [searchParams] = useSearchParams();
     const loginStatus = useSelector(getLoginStatus);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [providers, setProviders] = useState({
+      google: true,
+      microsoft: false,
+      apple: true,
+    });
+
+    useEffect(() => {
+        void getAuthProvidersStatus()
+          .then(setProviders)
+          .catch(() => undefined);
+    }, []);
 
     useEffect(() => {
         const err = searchParams.get('error');
@@ -47,9 +62,25 @@ const LoginFormContainer = () => {
         }
     };
 
+    const onMicrosoftSignIn = async () => {
+        dispatch({ type: LOGIN.pending });
+        try {
+            const { url } = await getMicrosoftAuthUrl(false);
+            window.location.assign(url);
+        } catch {
+            showErrorToast({
+                title: t('auth.signInFailed'),
+                detail: t('auth.couldNotStart'),
+            });
+            dispatch({ type: LOGIN.failure, payload: t('auth.couldNotStart') });
+        }
+    };
+
     return (
         <LoginForm
             onGoogleSignIn={onGoogleSignIn}
+            onMicrosoftSignIn={onMicrosoftSignIn}
+            microsoftAvailable={providers.microsoft}
             requestStatus={loginStatus}
             errorMessage={errorMessage}
         />

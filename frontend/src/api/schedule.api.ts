@@ -174,6 +174,8 @@ export const ScheduleApi = {
     body: {
       googleEventId: string;
       calendarId?: string;
+      /** google | microsoft | apple — required for external events */
+      provider?: 'google' | 'microsoft' | 'apple';
       recurringEventId?: string;
       originalStart: string;
       originalEnd: string;

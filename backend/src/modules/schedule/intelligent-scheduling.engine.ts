@@ -14,13 +14,14 @@ import {
   TaskEventType,
   getEventTypeRules,
 } from '../scheduling/event-type.enum';
-import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { ExternalCalendarBusyService } from '../calendar-providers/external-calendar-busy.service';
 import { Habit } from '../habits/entities/habit.entity';
 import { habitBlockIntervals } from '../habits/habit-blocks.util';
 import { effectiveRecurrenceWeekDays } from './recurrence-from-phases.util';
 import { isOccurrenceYmdSkipped } from '../tasks/skipped-occurrence.util';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import { placementNotBefore } from './placement-bounds.util';
+import { providerEventsToBusyIntervals } from './external-calendar-busy.util';
 import {
   addDaysToYmd,
   addMonthsToYmd,
@@ -376,7 +377,7 @@ export class IntelligentSchedulingEngine {
     @InjectRepository(ScheduledTask)
     private readonly scheduledRepo: Repository<ScheduledTask>,
     private readonly userSettingsService: UserSettingsService,
-    private readonly googleCalendarService: GoogleCalendarService,
+    private readonly externalBusy: ExternalCalendarBusyService,
     @InjectRepository(Habit)
     private readonly habitRepo: Repository<Habit>,
   ) {}
@@ -538,7 +539,7 @@ export class IntelligentSchedulingEngine {
 
     const warnings: SchedulingWarning[] = [];
     const conflicts: SchedulingConflict[] = [];
-    let googleBusy: MsInterval[] = [];
+    let externalBusy: MsInterval[] = [];
     const ourGoogleEventIds = new Set(
       allTasks
         .map((t) => t.googleEventId)
@@ -554,27 +555,25 @@ export class IntelligentSchedulingEngine {
       timeZone,
       ourGoogleEventIds,
     );
-    if (settings.googleCalendarLinked) {
-      try {
-        googleBusy = await this.collectGoogleBusyIntervals(
-          userId,
-          startDay,
-          extendedEnd,
-          ourGoogleEventIds,
-          timeZone,
-        );
-      } catch {
-        warnings.push({
-          code: SchedulingWarningCode.GOOGLE_BUSY_UNAVAILABLE,
-          message:
-            'Could not load Google Calendar; external events were not treated as busy.',
-        });
-      }
+    try {
+      externalBusy = await this.collectExternalBusyIntervals(
+        userId,
+        startDay,
+        extendedEnd,
+        ourGoogleEventIds,
+        timeZone,
+      );
+    } catch {
+      warnings.push({
+        code: SchedulingWarningCode.GOOGLE_BUSY_UNAVAILABLE,
+        message:
+          'Could not load connected calendars; external events were not treated as busy.',
+      });
     }
 
     const anchorBusy = await this.buildAnchorBusyIntervals(
       allTasks,
-      [...googleBusy, ...habitBusy],
+      [...externalBusy, ...habitBusy],
       nowMs,
     );
     const bufferMinutes = normalizeFixedEventBufferMinutes(
@@ -583,7 +582,7 @@ export class IntelligentSchedulingEngine {
     const bufferZones =
       bufferMinutes > 0
         ? expandIntervalsBothSides(
-            this.bufferSourceIntervals(allTasks, googleBusy),
+            this.bufferSourceIntervals(allTasks, externalBusy),
             bufferMinutes * 60_000,
           )
         : [];
@@ -1362,12 +1361,12 @@ export class IntelligentSchedulingEngine {
     return place(hardBusy);
   }
 
-  /** Fixed tasks and external Google events. Habits and ended flexible slots are not included. */
+  /** Fixed tasks and external calendar events. Habits and ended flexible slots are not included. */
   private bufferSourceIntervals(
     tasks: Task[],
-    googleBusy: MsInterval[],
+    externalBusy: MsInterval[],
   ): MsInterval[] {
-    const sources: MsInterval[] = googleBusy.map((iv) => ({ ...iv }));
+    const sources: MsInterval[] = externalBusy.map((iv) => ({ ...iv }));
     for (const task of tasks) {
       if (task.eventType !== TaskEventType.FIXED && !task.isFixedExternal) continue;
       if (!task.scheduledStartTime || !task.scheduledEndTime) continue;
@@ -1380,10 +1379,10 @@ export class IntelligentSchedulingEngine {
 
   private async buildAnchorBusyIntervals(
     tasks: Task[],
-    googleBusy: MsInterval[] = [],
+    externalBusy: MsInterval[] = [],
     nowMs: number = Date.now(),
   ): Promise<MsInterval[]> {
-    const busy: MsInterval[] = [...googleBusy];
+    const busy: MsInterval[] = [...externalBusy];
     const taskIds = tasks.map((t) => t.id);
     if (!taskIds.length) {
       return mergeIntervals(busy);
@@ -1441,83 +1440,28 @@ export class IntelligentSchedulingEngine {
   }
 
   /**
-   * Google list uses singleEvents=true — instances have their own id and may set recurringEventId.
-   * We must not treat our own synced events as external busy, or replan cannot re-place the same slots.
+   * Visible events from every connected calendar. Own synced instances are
+   * excluded so replan can reuse those slots.
    */
-  private isGoogleEventFromOurSyncedTasks(
-    ev: { id?: string | null; recurringEventId?: string | null },
-    ourGoogleEventIds: Set<string>,
-  ): boolean {
-    if (!ourGoogleEventIds.size) return false;
-    if (ev.id && ourGoogleEventIds.has(ev.id)) return true;
-    if (ev.recurringEventId && ourGoogleEventIds.has(ev.recurringEventId)) {
-      return true;
-    }
-    return false;
-  }
-
-  private googleEventToBusyInterval(
-    ev: {
-      status?: string | null;
-      start?: { dateTime?: string | null; date?: string | null };
-      end?: { dateTime?: string | null; date?: string | null };
-    },
-    timeZone: string,
-  ): MsInterval | null {
-    if (!ev || ev.status === 'cancelled') return null;
-    if (ev.start?.dateTime && ev.end?.dateTime) {
-      const s = new Date(ev.start.dateTime).getTime();
-      const e = new Date(ev.end.dateTime).getTime();
-      if (e > s) return { start: s, end: e };
-      return null;
-    }
-    if (ev.start?.date && ev.end?.date) {
-      const s = new Date(startOfLocalDayIso(ev.start.date, timeZone)).getTime();
-      const e = new Date(startOfLocalDayIso(ev.end.date, timeZone)).getTime();
-      if (e > s) return { start: s, end: e };
-    }
-    return null;
-  }
-
-  private async collectGoogleBusyIntervals(
+  private async collectExternalBusyIntervals(
     userId: string,
     rangeStart: Date,
     rangeEnd: Date,
     excludeGoogleEventIds?: Set<string>,
     timeZone: string = 'UTC',
   ): Promise<MsInterval[]> {
-    const busy: MsInterval[] = [];
-    const calendarIds = ['primary'];
-    const appCalId =
-      await this.googleCalendarService.getStoredAppCalendarId(userId);
-    if (appCalId) {
-      calendarIds.push(appCalId);
-    }
-    for (const calId of calendarIds) {
-      let pageToken: string | undefined;
-      do {
-        const page = await this.googleCalendarService.getEvents(
-          userId,
-          rangeStart.toISOString(),
-          rangeEnd.toISOString(),
-          2500,
-          pageToken,
-          calId,
-        );
-        for (const ev of page.events) {
-          if (
-            excludeGoogleEventIds?.size &&
-            this.isGoogleEventFromOurSyncedTasks(ev, excludeGoogleEventIds)
-          ) {
-            continue;
-          }
-          const iv = this.googleEventToBusyInterval(ev, timeZone);
-          if (iv) busy.push(iv);
-        }
-        pageToken = page.nextPageToken ?? undefined;
-      } while (pageToken);
-    }
-    return mergeIntervals(busy);
+    const events = await this.externalBusy.listVisibleEvents(
+      userId,
+      rangeStart.toISOString(),
+      rangeEnd.toISOString(),
+    );
+    return mergeIntervals(
+      providerEventsToBusyIntervals(events, {
+        excludeIds: excludeGoogleEventIds,
+        timeZone,
+        includeAllDay: true,
+      }),
+    );
   }
 
   private eligibleIntervalsForDay(

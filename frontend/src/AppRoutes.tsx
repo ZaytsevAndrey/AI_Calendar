@@ -71,6 +71,10 @@ const AppRoutes = () => {
                     path="/auth/google/callback"
                     element={<LazyRoute chunk={routeChunks.googleCallback} access="open" />}
                 />
+                <Route
+                    path="/auth/microsoft/callback"
+                    element={<LazyRoute chunk={routeChunks.microsoftCallback} access="open" />}
+                />
                 <Route path="/login" element={<LazyRoute chunk={routeChunks.login} access="public" />} />
                 <Route path="/register" element={<Navigate to="/login" replace />} />
                 <Route path="/forgot-password" element={<Navigate to="/login" replace />} />

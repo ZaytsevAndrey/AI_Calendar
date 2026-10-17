@@ -13,12 +13,9 @@ describe('ScheduleRecommendationsService', () => {
     groq?: jest.Mock;
   }) {
     const groq = opts?.groq ?? jest.fn();
-    const google = {
-      checkConnection: jest
-        .fn()
-        .mockResolvedValue({ connected: opts?.connected ?? false }),
-      getStoredAppCalendarId: jest.fn().mockResolvedValue(null),
-      getEvents: jest.fn().mockResolvedValue({ events: opts?.events ?? [] }),
+    const externalBusy = {
+      anyConnected: jest.fn().mockResolvedValue(opts?.connected ?? false),
+      listVisibleEvents: jest.fn().mockResolvedValue(opts?.events ?? []),
     };
     const chain = {
       innerJoinAndSelect: () => chain,
@@ -40,10 +37,10 @@ describe('ScheduleRecommendationsService', () => {
         }),
       } as never,
       { findAll: jest.fn().mockResolvedValue([]) } as never,
-      google as never,
+      externalBusy as never,
       { completeJson: groq } as never,
     );
-    return { instance, groq, google };
+    return { instance, groq, externalBusy };
   }
 
   it('does not call Groq when there is nothing to review', async () => {
@@ -116,8 +113,12 @@ describe('ScheduleRecommendationsService', () => {
     const groq = jest.fn().mockResolvedValue(
       JSON.stringify({ summary: 'Looks open.', suggestions: [] }),
     );
-    const { instance, google } = service({ tasks: [task], connected: true, groq });
-    google.getEvents.mockRejectedValue(new Error('token expired'));
+    const { instance, externalBusy } = service({
+      tasks: [task],
+      connected: true,
+      groq,
+    });
+    externalBusy.listVisibleEvents.mockRejectedValue(new Error('token expired'));
     const result = await instance.recommend('user-1', now);
     expect(result.summary).toBe('Looks open.');
     const prompt = String(groq.mock.calls[0][1]);

@@ -30,6 +30,11 @@ export interface UserSettingsDTO {
   remindersEnabled?: boolean;
   /** When true, a Google delete of an app event also removes it in the app. */
   syncGoogleDeletions?: boolean;
+  /** Outbound sync targets; null = default; [] = nowhere. */
+  syncTargetCalendars?: Array<{ provider: string; calendarId: string }> | null;
+  dismissWarnExternalWriteBack?: boolean;
+  dismissWarnFlexibleMove?: boolean;
+  dismissWarnUnscheduleExternal?: boolean;
   /** When true, voice complete / skip / move asks before writing. */
   confirmVoiceCommands?: boolean;
   /** When true, speak clarifying / confirm / result via client TTS. */
@@ -64,6 +69,10 @@ export interface UpdateUserSettingsDTO {
   speechLanguage?: string;
   remindersEnabled?: boolean;
   syncGoogleDeletions?: boolean;
+  syncTargetCalendars?: Array<{ provider: string; calendarId: string }> | null;
+  dismissWarnExternalWriteBack?: boolean;
+  dismissWarnFlexibleMove?: boolean;
+  dismissWarnUnscheduleExternal?: boolean;
   confirmVoiceCommands?: boolean;
   speakVoiceReplies?: boolean;
 }

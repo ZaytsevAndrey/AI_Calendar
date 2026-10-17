@@ -5,6 +5,8 @@ import { HabitCheckIn } from '../habits/entities/habit-check-in.entity';
 import { Habit } from '../habits/entities/habit.entity';
 import { computeHabitStats } from '../habits/habit-stats.util';
 import { Phase } from '../phases/entities/phase.entity';
+import { ExternalCalendarBusyService } from '../calendar-providers/external-calendar-busy.service';
+import { providerEventsToBusyIntervals } from '../schedule/external-calendar-busy.util';
 import { ScheduledTask } from '../schedule/schedule.entity';
 import {
   isProblematicSchedule,
@@ -58,6 +60,7 @@ export class VoiceAgentTools {
   constructor(
     @InjectRepository(HabitCheckIn)
     private readonly checkInsRepository: Repository<HabitCheckIn>,
+    private readonly externalBusy: ExternalCalendarBusyService,
   ) {}
 
   async execute(
@@ -102,7 +105,46 @@ export class VoiceAgentTools {
     );
   }
 
-  private getNowNext(ctx: VoiceToolContext) {
+  private syncedEventIds(ctx: VoiceToolContext): Set<string> {
+    const ids = new Set<string>();
+    for (const task of ctx.tasks) {
+      if (task.googleEventId) ids.add(task.googleEventId);
+    }
+    for (const slot of ctx.slots) {
+      if (slot.googleEventId) ids.add(slot.googleEventId);
+    }
+    for (const habit of ctx.habits) {
+      if (habit.googleEventId) ids.add(habit.googleEventId);
+    }
+    return ids;
+  }
+
+  /** Timed events from connected calendars that are not already local slots. */
+  private async externalBlocksForDay(
+    ctx: VoiceToolContext,
+    ymd: string,
+  ): Promise<Array<{ name: string; startMs: number; endMs: number }>> {
+    try {
+      const events = await this.externalBusy.listVisibleEvents(
+        ctx.userId,
+        startOfLocalDayIso(ymd, ctx.timeZone),
+        endOfLocalDayIso(ymd, ctx.timeZone),
+      );
+      return providerEventsToBusyIntervals(events, {
+        excludeIds: this.syncedEventIds(ctx),
+        timeZone: ctx.timeZone,
+        includeAllDay: false,
+      }).map((interval) => ({
+        name: interval.label || 'Calendar',
+        startMs: interval.start,
+        endMs: interval.end,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  private async getNowNext(ctx: VoiceToolContext) {
     const nowMs = new Date(ctx.nowIso).getTime();
     const today = localYmd(ctx.nowIso, ctx.timeZone);
     const dayStart = new Date(startOfLocalDayIso(today, ctx.timeZone)).getTime();
@@ -132,6 +174,17 @@ export class VoiceAgentTools {
       startMs: number;
       endMs: number;
     }>;
+    for (const external of await this.externalBlocksForDay(ctx, today)) {
+      if (!(external.endMs > dayStart && external.startMs < dayEnd)) continue;
+      blocks.push({
+        taskId: '',
+        name: external.name,
+        startIso: new Date(external.startMs).toISOString(),
+        endIso: new Date(external.endMs).toISOString(),
+        startMs: external.startMs,
+        endMs: external.endMs,
+      });
+    }
     blocks.sort((a, b) => a.startMs - b.startMs);
     const now =
       blocks.find((block) => block.startMs <= nowMs && nowMs < block.endMs) ??
@@ -142,11 +195,16 @@ export class VoiceAgentTools {
       nowLocal: localHm(ctx.nowIso, ctx.timeZone),
       today,
       now: now
-        ? { taskId: now.taskId, name: now.name, start: now.startIso, end: now.endIso }
+        ? {
+            taskId: now.taskId || null,
+            name: now.name,
+            start: now.startIso,
+            end: now.endIso,
+          }
         : null,
       next: next
         ? {
-            taskId: next.taskId,
+            taskId: next.taskId || null,
             name: next.name,
             start: next.startIso,
             end: next.endIso,
@@ -167,7 +225,7 @@ export class VoiceAgentTools {
     );
   }
 
-  private getDayAgenda(ctx: VoiceToolContext, dayRaw: string) {
+  private async getDayAgenda(ctx: VoiceToolContext, dayRaw: string) {
     const ymd = this.resolveDayYmd(ctx, dayRaw);
     const dayStart = new Date(startOfLocalDayIso(ymd, ctx.timeZone)).getTime();
     const dayEnd = new Date(endOfLocalDayIso(ymd, ctx.timeZone)).getTime();
@@ -187,8 +245,24 @@ export class VoiceAgentTools {
           eventType: task.eventType,
         };
       })
-      .filter(Boolean)
-      .sort((a, b) => String(a!.start).localeCompare(String(b!.start)));
+      .filter(Boolean) as Array<{
+      taskId: string | null;
+      name: string;
+      start: string;
+      end: string;
+      eventType: string | null;
+    }>;
+    for (const external of await this.externalBlocksForDay(ctx, ymd)) {
+      if (!(external.endMs > dayStart && external.startMs < dayEnd)) continue;
+      items.push({
+        taskId: null,
+        name: external.name,
+        start: new Date(external.startMs).toISOString(),
+        end: new Date(external.endMs).toISOString(),
+        eventType: null,
+      });
+    }
+    items.sort((a, b) => a.start.localeCompare(b.start));
     return { day: ymd, items, count: items.length };
   }
 
@@ -217,7 +291,7 @@ export class VoiceAgentTools {
     return { count: items.length, items };
   }
 
-  private findFreeGaps(ctx: VoiceToolContext, dayRaw: string) {
+  private async findFreeGaps(ctx: VoiceToolContext, dayRaw: string) {
     const ymd = this.resolveDayYmd(ctx, dayRaw);
     const wake = normalizeClockHm(ctx.settings.wakeTime || '08:00');
     const sleep = normalizeClockHm(ctx.settings.sleepTime || '23:00');
@@ -243,11 +317,14 @@ export class VoiceAgentTools {
       return { day: ymd, gaps: [], note: 'Invalid day window' };
     }
 
-    const busy = ctx.slots
-      .map((slot) => ({
+    const external = await this.externalBlocksForDay(ctx, ymd);
+    const busy = [
+      ...ctx.slots.map((slot) => ({
         start: new Date(slot.scheduledStartTime).getTime(),
         end: new Date(slot.scheduledEndTime).getTime(),
-      }))
+      })),
+      ...external.map((block) => ({ start: block.startMs, end: block.endMs })),
+    ]
       .filter((iv) => iv.end > windowStart && iv.start < windowEnd)
       .map((iv) => ({
         start: Math.max(iv.start, windowStart),

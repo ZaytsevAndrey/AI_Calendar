@@ -14,14 +14,11 @@ Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Produ
 
 Do in order unless you explicitly skip ahead. These items need no outside service and no open product decision.
 
-### 27. Task-type chip on the calendar card
+### 28. Unscheduled exit from calendar
 
-- [ ] The block shows its kind: fixed, flexible, recurring, habit, or external event.
+When a block becomes Unscheduled from the type chip, how the user puts it back on the grid is still open.
 
-### 28. Which Google calendar, on the card
-
-- [ ] The card shows which already-connected Google calendar the event belongs to.
-- [ ] Non-Google calendars stay in [end of queue](#end--external-do-not-start).
+- [ ] Decide: Schedule button on the chip / strip, open preview then edit, or Do now — then implement that path.
 
 ### 29. Type in the voice sheet
 
@@ -29,10 +26,10 @@ Do in order unless you explicitly skip ahead. These items need no outside servic
 
 ### 30. Delete account
 
-Sign-in is Google-only. Logout exists. There is no delete.
+Sign-in can be Google (live) plus Microsoft when configured. Apple Calendar is Settings CalDAV only. Logout exists. There is no delete.
 
-- [ ] Delete the user and their tasks, habits, phases, settings, push subscriptions, and stored Google refresh token.
-- [ ] Remove Google events the app created, or ask before removing them.
+- [ ] Delete the user and their tasks, habits, phases, settings, push subscriptions, and stored provider refresh tokens.
+- [ ] Remove events the app created on connected calendars, or ask before removing them.
 
 ### 31. Database backup
 
@@ -45,6 +42,13 @@ The copy script wipes production tables before it writes. There is no separate b
 Below 768px the shell is a bottom tab bar and the calendar opens on day. That pass is not finished.
 
 - [ ] On a phone, finish the daily path: see today, create or speak a task, mark it done, check in a habit.
+
+### 33. Calendar card min height + crowded hour stretch
+
+Short blocks can look too thin. When many events share an hour, the hour row stays the same height.
+
+- [ ] Minimum height for a task card on the day/week grid so the title and chips stay readable.
+- [ ] Stretch that hour’s row height when it holds many overlapping or stacked events, so cards do not crush each other.
 
 ### 24. Personal-computer build, then local TTS
 
@@ -63,21 +67,21 @@ Do not start these. The shape is still open.
 - **Languages beyond en/uk.** UI and speech are en and uk. Pick the set before adding catalogs.
 - **STT language: auto vs settings.** Today `speechLanguage` (`en` | `uk`) is a hint to Whisper on `/voice/transcribe`. Investigate whether Whisper already detects the spoken language well enough without that setting, whether a wrong hint hurts accuracy, and whether Settings still needs an explicit speech language (or auto / follow-UI is enough). Decide before changing Settings or the STT call.
 - **Admin.** Owner-only. Contents are not chosen. Do not open an empty admin.
-
+- **Hide app calendar.** Visibility toggle for the app-owned calendar — product nuances still open.
+- **Outbound sync beyond Google.** Settings stores `syncTargetCalendars`, but app-task create/update/delete still writes Google only. Do not start until that write path is the task.
 ---
 
 ## End — external, do not start
 
 Third parties and publishing. Leave these until the Now list is done.
 
-- **Other calendars.** Providers besides Google.
-- **External event as flexible.** Imported events stay fixed anchors. A per-event flexible switch can wait.
 - **Payments.** Trial, subscription, and a payment provider. This is what replaces the free voice daily token cap.
 - **Privacy policy and Google consent.** A public policy URL, then move the consent screen out of testing so people other than listed test users can sign in.
 - **Custom domain.**
 - **Next.js landing and lead capture.**
 - **Speech for languages other than en/uk.**
 - **Invite a contact onto an event.** Not required for the first version.
+- **More calendar providers** beyond Google / Microsoft / Apple.
 
 ---
 
@@ -92,7 +96,7 @@ Third parties and publishing. Leave these until the Now list is done.
 
 ## Recommended next steps
 
-1. Next live item: roadmap **§27** — task-type chip on the calendar card.
-2. Then the rest of **Now**, in order: §28 Google calendar label, §29 typed voice, §30 delete account, §31 backup, §32 mobile daily path, §24 Piper ([tts-local.md](tts-local.md)).
+1. Next live item: roadmap **§28** — Unscheduled exit from calendar.
+2. Then the rest of **Now**: §29 typed voice, §30 delete account, §31 backup, §32 mobile daily path, §33 card min height / crowded hour, §24 Piper ([tts-local.md](tts-local.md)).
 3. Voice understanding continues in parallel via [voice-prompt-next.md](voice-prompt-next.md); do not put it back in this queue.
 4. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

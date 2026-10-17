@@ -12,6 +12,12 @@ export class MoveDisplayedEventDto {
   @IsString()
   calendarId?: string;
 
+  /** Which calendar provider owns this displayed event. Default google. */
+  @ApiProperty({ required: false, enum: ['google', 'microsoft', 'apple'] })
+  @IsOptional()
+  @IsIn(['google', 'microsoft', 'apple'])
+  provider?: 'google' | 'microsoft' | 'apple';
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
