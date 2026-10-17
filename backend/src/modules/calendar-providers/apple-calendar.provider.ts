@@ -191,13 +191,17 @@ export class AppleCalendarProvider implements CalendarProvider {
       tokenExpiry: null,
       isRegistrationIdentity: false,
     });
+    this.invalidateUserCaches(userId);
+    return { email, calendarCount };
+  }
+
+  private invalidateUserCaches(userId: string): void {
     for (const key of this.listEventsCache.keys()) {
       if (key.startsWith(`${userId}|`)) this.listEventsCache.delete(key);
     }
     for (const key of this.calendarsCache.keys()) {
       if (key.startsWith(`${userId}|`)) this.calendarsCache.delete(key);
     }
-    return { email, calendarCount };
   }
 
   async listCalendars(userId: string): Promise<ProviderCalendar[]> {
@@ -476,6 +480,7 @@ export class AppleCalendarProvider implements CalendarProvider {
         etag: found.object.etag,
       },
     });
+    this.invalidateUserCaches(userId);
     const parsed = parseVEvent(nextData);
     if (!parsed?.start) return null;
     return {
@@ -508,6 +513,7 @@ export class AppleCalendarProvider implements CalendarProvider {
         etag: found.object.etag,
       },
     });
+    this.invalidateUserCaches(userId);
   }
 
   private async createClient(

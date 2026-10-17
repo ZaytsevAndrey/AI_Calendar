@@ -59,7 +59,7 @@ export async function createTestApp(): Promise<E2eApp> {
     .compile();
 
   const app = moduleFixture.createNestApplication<NestFastifyApplication>(
-    new FastifyAdapter({ bodyLimit: 15 * 1024 * 1024 }),
+    new FastifyAdapter({ bodyLimit: 15 * 1024 * 1024, maxParamLength: 2048 }),
     { logger: false },
   );
   app.useGlobalFilters(new AllExceptionsFilter(), new JwtExceptionFilter());

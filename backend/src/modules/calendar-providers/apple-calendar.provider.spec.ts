@@ -147,6 +147,38 @@ END:VEVENT`;
     });
   });
 
+  it('deletes by opaque id and clears list cache', async () => {
+    identities.listForUser.mockResolvedValue([
+      {
+        provider: 'apple',
+        email: 'me@icloud.com',
+        accessToken: 'abcdefghijklmnop',
+      },
+    ]);
+    const objectUrl =
+      'https://caldav.icloud.com/18070852993/calendars/A7FDB1B2-C3D4-E5F6-A7B8-C9D0E1F2A3B4/event-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.ics';
+    const calendarUrl =
+      'https://caldav.icloud.com/18070852993/calendars/A7FDB1B2-C3D4-E5F6-A7B8-C9D0E1F2A3B4/';
+    const eventId = Buffer.from(objectUrl, 'utf8').toString('base64url');
+    expect(eventId.length).toBeGreaterThan(100);
+
+    const deleteCalendarObject = jest.fn().mockResolvedValue(undefined);
+    createDAVClient.mockResolvedValue({
+      fetchCalendars: jest
+        .fn()
+        .mockResolvedValue([{ url: calendarUrl, displayName: 'Home' }]),
+      fetchCalendarObjects: jest.fn().mockResolvedValue([
+        { url: objectUrl, data: 'BEGIN:VEVENT\nEND:VEVENT', etag: '"9"' },
+      ]),
+      deleteCalendarObject,
+    });
+    const p = provider();
+    await p.deleteEvent(userId, eventId, calendarUrl);
+    expect(deleteCalendarObject).toHaveBeenCalledWith({
+      calendarObject: { url: objectUrl, etag: '"9"' },
+    });
+  });
+
   it('retries without multiget on incomplete response', async () => {
     identities.listForUser.mockResolvedValue([
       {

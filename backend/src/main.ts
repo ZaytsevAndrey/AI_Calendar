@@ -19,9 +19,12 @@ function isAllowedOrigin(origin: string | undefined): boolean {
 }
 
 async function bootstrap() {
+  // Apple CalDAV opaque event ids are base64url of full object URLs (~160–200+ chars).
+  // Fastify's default maxParamLength is 100, which 404s DELETE/PUT before the controller.
   const adapter = new FastifyAdapter({
     trustProxy: true,
     bodyLimit: 15 * 1024 * 1024,
+    maxParamLength: 2048,
   });
   await adapter.getInstance().register(fastifyCors, {
     origin: (origin, cb) => {
