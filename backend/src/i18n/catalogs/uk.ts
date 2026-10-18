@@ -54,6 +54,21 @@ export const uk: Record<MessageKey, string> = {
   'voice.endSeries': 'Закінчити «{{name}}» з цього дня?',
   'voice.seriesFieldWholeOnly':
     'Ця зміна стосується всієї серії. Скажіть «усю серію», щоб застосувати.',
+  'voice.cancelled': 'Скасовано.',
+  'voice.confirmed': 'Підтверджено.',
+  'voice.clarifyGeneric': 'Уточніть, будь ласка, що ви маєте на увазі?',
+  'voice.stillUnclear': 'Досі не розумію. Спробуйте сказати чіткіше.',
+  'voice.couldNotHelp': 'Не можу з цим допомогти.',
+  'voice.segmentDropped': 'Пропустив «{{text}}».',
+  'voice.planProposed':
+    'План на {{day}}: задач — {{count}}. Скажіть, що змінити, або застосуйте.',
+  'voice.planUnplaced': 'Не вмістилося: {{names}}.',
+  'voice.planEmpty': 'На {{day}} поки нічого планувати. Що треба зробити?',
+  'voice.planNoChanges': 'План залишає все як є.',
+  'voice.planApplying': 'Застосовую план на {{day}}.',
+  'voice.planItemCreate': 'Додати «{{name}}» о {{time}}',
+  'voice.planItemMove': 'Перенести «{{name}}» на {{time}}',
+  'voice.planItemSchedule': 'Запланувати «{{name}}» о {{time}}',
 
   'schedule.emptySummary':
     'Поки нічого переглядати. Додайте задачі або згенеруйте розклад.',

@@ -114,12 +114,13 @@ API: `POST /auth/apple/caldav` with `{ appleId, appSpecificPassword }` (JWT). Di
 
 ---
 
-## Groq (voice and suggestions)
+## Groq (voice)
 
-Voice task creation and Calendar **Suggestions** use a **free Groq API key** (no credit card). Create one at [console.groq.com/keys](https://console.groq.com/keys) and set `GROQ_API_KEY` in `backend/.env` (and on Render for production). Optional extras: `GROQ_API_KEY_2`, `GROQ_API_KEY_3`, … (any count). When two or more are set, the live API rotates on a tokens-per-minute or tokens-per-day 429; one voice session pins one key until that hop.
+Voice task creation uses a **free Groq API key** (no credit card). Create one at [console.groq.com/keys](https://console.groq.com/keys) and set `GROQ_API_KEY` in `backend/.env` (and on Render for production). Optional extras: `GROQ_API_KEY_2`, `GROQ_API_KEY_3`, … (any count). When two or more are set, the live API rotates on a tokens-per-minute or tokens-per-day 429; one voice session pins one key until that hop.
 
 - Speech-to-text: `whisper-large-v3` by default (override with `GROQ_STT_MODEL`; turbo is faster but weaker on short uk/ru). Language comes from Settings; a Whisper vocabulary prompt + light transcript cleanup help calendar phrases. Do not send audio to the LLM. STT uses the same pinned key as chat for that session.
-- Task parse and schedule suggestions: local Ollama when `LLM_BASE_URL` is set (`calendar-voice`, Qwen3 14B). Otherwise `openai/gpt-oss-20b` with JSON mode. A token-per-minute 429 waits the few seconds Groq asks for and retries the same key, then hops to the next configured key when extras exist. With a single key only, chat may fall back to `openai/gpt-oss-120b`. Llama 3.x IDs on Groq are enterprise-only and will 503 on a free key. A chat call that does not answer within 25 seconds fails as `VOICE_LLM_TIMEOUT` and does not start a second parse. Suggestions are not stored.
+- Task parse: local Ollama when `LLM_BASE_URL` is set (`calendar-voice`, Qwen3 14B). Otherwise `openai/gpt-oss-20b` with JSON mode. A token-per-minute 429 waits the few seconds Groq asks for and retries the same key, then hops to the next configured key when extras exist. With a single key only, chat may fall back to `openai/gpt-oss-120b`. Llama 3.x IDs on Groq are enterprise-only and will 503 on a free key. A chat call that does not answer within 25 seconds fails as `VOICE_LLM_TIMEOUT` and does not start a second parse.
+- Companion planner (`/voice/turn`: splitting multi-intent utterances, day-plan dialogue): `openai/gpt-oss-120b` by default (override with `GROQ_PLANNER_MODEL`). A 429 on the planner model falls back to the parse model (`GROQ_LLM_MODEL`, default `openai/gpt-oss-20b`). Each segment is still parsed by the 20b specialist. Planner tokens count toward the same daily ceiling.
 - Per-user free ceiling: chat `usage.total_tokens` per civil day (settings IANA zone), default 100000 via `VOICE_DAILY_TOKEN_LIMIT`. When exhausted, voice returns `VOICE_QUOTA_EXCEEDED` and the sheet blocks further turns until the next day.
 - Spoken replies: local Piper when `PIPER_URL` is set (`npm run start:piper`, Ukrainian Тетяна and English Lessac). Otherwise the browser voice. Piper is a separate process; its binary and weights stay in `local/piper` and are not committed.
 - Audio and transcripts are not persisted.

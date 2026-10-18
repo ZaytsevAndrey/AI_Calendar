@@ -41,7 +41,7 @@ Default: **API E2E first**. UI E2E only for glue that unit/API cannot see. Do no
 
 ### Harness (UI)
 
-- Playwright: start frontend + backend (`e2e/playwright.config.ts`, ports **3100** / **3101**, isolated SQLite). **One worker**; each test starts after the previous one finishes. Default viewport is Desktop Chrome **1280×720**. `U-CAL-017` is the phone case (**390×844**, plus a **320×568** overflow check). `U-CAL-024` checks that create, voice, and Generate are one tap on that phone, and that a task card shows status pills with search and Filters on one row. `U-CAL-023` checks **1024×700**, **1100×800**, and **1279×768**, the widths where the calendar used to collapse. Week columns are also checked at **768×1024**. The iOS install hint changes the user agent only.
+- Playwright: start frontend + backend (`e2e/playwright.config.ts`, ports **3100** / **3101**, isolated SQLite). **One worker**; each test starts after the previous one finishes. Default viewport is Desktop Chrome **1280×720**. `U-CAL-017` is the phone case (**390×844**, plus a **320×568** overflow check). `U-CAL-024` checks that create and voice are one tap on that phone, and that a task card shows status pills with search and Filters on one row. `U-CAL-023` checks **1024×700**, **1100×800**, and **1279×768**, the widths where the calendar used to collapse. Week columns are also checked at **768×1024**. The iOS install hint changes the user agent only.
 - Seed JWT into Redux persist / `localStorage` (`auth` slice + `access_token`). Skip the real Google redirect. Backend `E2E_BOOTSTRAP=1` writes `e2e/.tmp/auth.json` (onboarded / needs-settings / needs-phases users).
 - Stub Google on the API with `E2E_STUB_EXTERNAL=1` (`checkConnection` false, empty event lists). No real Groq in P0 smoke.
 - One headed debug run is optional; CI is headless (`npm run test:e2e:ui`).
@@ -335,13 +335,22 @@ Do **not** hit real Groq. Stub transcribe + parse.
 | A-VOI-015 | A | P1 | Named task, intent update with duration | `POST /voice/parse-task` | `command.kind=update`, patch includes `estimatedTimeInMinutes` |
 | A-VOI-016 | A | P1 | Named task, intent delete | `POST /voice/parse-task` | `command.kind=delete`, that task id |
 | A-VOI-017 | A | P1 | Habit create + uncheck | `POST /voice/parse-task` | `habit_create` fields; `habit_uncheck` with today |
-| U-VOI-006 | U | P1 | Stub `command.complete` | Setting off, then on | Off completes immediately. On shows Confirm, then completes. Setting is restored off |
+| U-VOI-006 | U | P1 | Stub `command.complete` | Setting off, then on | Off completes immediately. On shows a Complete preview card + Apply, then completes. Setting is restored off |
 | U-VOI-007 | U | P1 | Stub create + job `conflicts[]` | Voice create, reopen, spoken option | Shared conflict sheet opens; reopen voice picks `move_new` via speech |
-| U-VOI-008 | U | P1 | Stub `command.delete`, confirm off | Voice delete | Confirm always shown; Confirm deletes |
+| U-VOI-008 | U | P1 | Stub `command.delete`, confirm off | Voice delete | Delete preview card always shown; Apply deletes |
 | U-VOI-009 | U | P1 | Mic stub recording | Voice sheet | Listening + microphone level equalizer visible |
 | U-VOI-010 | U | P1 | Settings Voice | Speak replies | Toggle visible; off shows toast |
 | U-VOI-011 | U | P1 | Voice sheet composer | Type + Send, mic off | Task created via `/voice/turn`; no STT |
 | U-VOI-012 | U | P1 | Mic on by default | Toggle Mic off, then type | Listening stops; typed create still works |
+| A-VOI-020 | A | P0 | Planner `steps` with two segments (create + complete) | `POST /voice/turn` | `act` with both intents in spoken order; `segments` ready |
+| A-VOI-021 | A | P0 | Batch with a delete | turn → `confirm` action → `report` | One combined confirm; `act` with both; report returns empty `answer` |
+| A-VOI-022 | A | P0 | Two Unscheduled tasks, planner `plan_start` (day +2) | turn → `plan_edits` → `confirm` → `report` | Real dry-run seats both without overlap; edit drops one (revision 2); DB untouched before Apply; Apply → `window` + `clearUnscheduled`; plan gone after report |
+| A-VOI-023 | A | P1 | Planner `plan_start` interview | turn → `build_plan` → `cancel` | `clarify` + `build_plan` action + interview plan; build → `confirm` plan; cancel drops the draft |
+| A-VOI-024 | A | P1 | Planner returns non-JSON | turn | One parse fallback; `act` + `legacyParse` |
+| A-VOI-025 | A | P1 | Command specialist `needs_clarification` + question, no task name | `POST /voice/parse-task` | That question returned; no "current task" fallback / refuse |
+| U-VOI-013 | U | P1 | Stub `confirm` with two create intents | Type, Apply | Both cards; both tasks created; report sent with `applied` ×2; **Done just now** cards with statuses |
+| U-VOI-014 | U | P1 | Stub interview → plan → edited plan | Type, Make plan, type edit, Apply | **Planning** header + Make plan; plan cards; edit marks only the new card **Changed** and lists **Did not fit**; Apply creates the task; turns `text → build_plan → text → confirm → report` |
+| U-VOI-015 | U | P1 | Stub plan review | Close panel, reopen | Session DELETE for that id; no plan cards after reopen |
 
 ---
 
@@ -382,7 +391,7 @@ Generate body `{ startDate, endDate }` is **ignored**. Horizon = today → `recu
 | A-SCH-029 | A | P1 | Recurring Google series (stub) | replan | Old series `UNTIL` + new series recorded on stub |
 | A-SCH-030 | A | P2 | Job poll timeout on UI (120s) | Hang stub | UI error toast — UI case U-CAL-007 |
 | A-SCH-031 | A | P1 | Movable TODO, replan not drained | `POST /schedule/preview` | `diff` places the task; `/schedule` stays empty; undo stays unavailable |
-| A-SCH-032 | A | P1 | Groq stub | `POST /schedule/recommendations` | 401 without JWT. Empty user skips Groq and returns no suggestions. A task returns only suggestions whose `taskId` exists. `/schedule` stays empty |
+| A-SCH-032 | A | — | ~~`POST /schedule/recommendations`~~ | removed | Suggestions API and UI gone |
 | A-SCH-033a | A | P1 | No JWT | `GET /schedule/free-slots` | 401 |
 | A-SCH-033b | A | P1 | JWT, missing `taskId` | GET | 400 |
 | A-SCH-033c | A | P1 | Invalid `ymd` | GET | 400 |
@@ -515,18 +524,18 @@ Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day,
 
 | ID | Layer | P | Given | When | Then |
 |----|-------|---|-------|------|------|
-| U-CAL-001 | U | P0 | Authenticated onboarded | Open `/` | Calendar + NowStrip + schedule menu (Suggestions; no Generate) |
+| U-CAL-001 | U | P0 | Authenticated onboarded | Open `/` | Calendar + NowStrip + Create task; no Schedule / Suggestions menu |
 | U-CAL-002 | U | P1 | Day / week / month | Switch views + date picker + prev/next | Range changes; events reload |
 | U-CAL-003 | U | P0 | Click empty civil day | Create | From/Until = that day in **Settings** TZ (not browser TZ) |
-| U-CAL-004 | U | — | ~~Generate preview/apply~~ | removed | Generate / Clear / Undo UI and APIs gone |
+| U-CAL-004 | U | — | ~~Generate / Suggestions~~ | removed | Generate / Clear / Undo / Suggestions UI and APIs gone |
 | U-CAL-005 | U | — | ~~Undo~~ | removed | |
 | U-CAL-006 | U | — | ~~Clear~~ | removed | |
 | U-CAL-007 | U | — | ~~Generate hang~~ | removed | |
 | U-CAL-008 | U | — | ~~Generate warnings banner~~ | removed | |
 | U-CAL-009 | U | — | ~~Alerts older than 24h~~ | removed | |
-| U-CAL-016 | U | P1 | No open tasks | Schedule → Suggestions | Dialog shows the empty review message and Close dismisses it |
+| U-CAL-016 | U | — | ~~Schedule → Suggestions~~ | removed | Suggestions dialog gone |
 | U-CAL-017 | U | P1 | Phone viewport 390×844 and 320×568 | Calendar day, week strip, month, events sheet, Tasks, Settings | Day is the default. Hour grid is on screen without scrolling the page. Week is one column. Month tap opens that day. Sign out sits above the tab bar |
-| U-CAL-024 | U | P1 | Phone 390×844 | Calendar action bar, then Tasks | Create task and voice each open in one tap. More schedule actions still has Suggestions. Scheduled task card shows To Do and Medium pills. Search and Filters share a row |
+| U-CAL-024 | U | P1 | Phone 390×844 | Calendar action bar, then Tasks | Create task and voice each open in one tap. No More schedule actions. Scheduled task card shows To Do and Medium pills. Search and Filters share a row |
 | U-CAL-010 | U | P0 | Now overlapping block | Strip | Now title; Done if `canCompleteNowBlock` |
 | U-CAL-011 | U | P0 | Next start later today | Strip | Next shown |
 | U-CAL-012 | U | P0 | Flexible window already expired | Strip Unscheduled | Placement parks as `isUnscheduled` (not Problematic `no_slot`) |
@@ -653,7 +662,7 @@ UI (wave 3):
 1. U-AUTH-001 / U-AUTH-006–007 gates  
 2. U-CAL-001 calendar loads  
 3. U-TSK-002 create flexible  
-4. U-CAL-004 generate  
+4. U-CAL-004 generate / Suggestions (removed)
 5. U-CAL-013 Now Done  
 6. U-CAL-019 Now Skip  
 7. U-HAB-004 habit chip  

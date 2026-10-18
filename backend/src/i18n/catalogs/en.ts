@@ -51,6 +51,21 @@ export const en = {
   'voice.endSeries': 'End "{{name}}" from this day?',
   'voice.seriesFieldWholeOnly':
     'That change applies to the whole series. Say the whole series to apply it.',
+  'voice.cancelled': 'Cancelled.',
+  'voice.confirmed': 'Confirmed.',
+  'voice.clarifyGeneric': 'Could you clarify what you mean?',
+  'voice.stillUnclear': 'I still do not understand. Please try a clearer request.',
+  'voice.couldNotHelp': 'I could not help with that.',
+  'voice.segmentDropped': 'Skipped "{{text}}".',
+  'voice.planProposed':
+    'Plan for {{day}}: {{count}} task(s). Tell me what to change, or apply.',
+  'voice.planUnplaced': 'Did not fit: {{names}}.',
+  'voice.planEmpty': 'Nothing to plan for {{day}} yet. What do you need to get done?',
+  'voice.planNoChanges': 'The plan keeps everything as it is.',
+  'voice.planApplying': 'Applying the plan for {{day}}.',
+  'voice.planItemCreate': 'Add "{{name}}" at {{time}}',
+  'voice.planItemMove': 'Move "{{name}}" to {{time}}',
+  'voice.planItemSchedule': 'Schedule "{{name}}" at {{time}}',
 
   'schedule.emptySummary':
     'Nothing to review yet. Add tasks or generate a schedule first.',

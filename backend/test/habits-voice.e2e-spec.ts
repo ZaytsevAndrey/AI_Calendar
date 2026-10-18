@@ -319,6 +319,31 @@ describe('Habits and voice API e2e', () => {
     expect(jsonBody(parsed).command).toMatchObject({ kind: 'delete', taskId: id });
   });
 
+  it('A-VOI-025 specialist asks which task: question kept, no "current" fallback', async () => {
+    const { token } = await seedOnboardedUser(ctx.app);
+    mockVoiceParseTurn(
+      ctx.groq,
+      {
+        intent: 'reschedule',
+        understanding: 'needs_clarification',
+        clarifyingQuestion: 'Which task do you mean?',
+        command: { target: 'current', taskName: null, start: null, end: null },
+        task: null,
+      },
+      { intent: 'reschedule', language: 'en' },
+    );
+    const parsed = await api(ctx.app, 'POST', '/voice/parse-task', {
+      token,
+      payload: { transcript: 'move that thing', timeZone: 'Europe/Kyiv' },
+    });
+    expect(parsed.statusCode).toBe(201);
+    expect(jsonBody(parsed)).toMatchObject({
+      understanding: 'needs_clarification',
+      clarifyingQuestion: 'Which task do you mean?',
+      command: null,
+    });
+  });
+
   it('A-VOI-017 habit create and uncheck resolve', async () => {
     const { token } = await seedOnboardedUser(ctx.app);
     mockVoiceParseTurn(

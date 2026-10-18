@@ -23,7 +23,8 @@
     "purge:orphan-google": "ts-node src/scripts/purge-orphan-app-calendar-events.ts",
     "voice:eval:create": "ts-node src/scripts/eval-voice-create.ts",
     "voice:eval:intent": "ts-node src/scripts/eval-voice-intent.ts",
-    "voice:eval:clarify": "ts-node src/scripts/eval-voice-clarify.ts"
+    "voice:eval:clarify": "ts-node src/scripts/eval-voice-clarify.ts",
+    "voice:eval:multi": "ts-node src/scripts/eval-voice-multi-intent.ts"
   },
   "dependencies": {
     "@fastify/cors": "^8.5.0",

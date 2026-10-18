@@ -6,8 +6,11 @@ import {
   type DayPlanProposal,
   type VoiceAgentActionId,
   type VoiceCommandAction,
+  type VoiceExecutionReport,
+  type VoiceIntentExecutionStatus,
   type VoiceParseResult,
   type VoiceParsedTask,
+  type VoiceTurnResult,
   type VoiceWriteIntent,
 } from 'api/voice.api';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
@@ -91,7 +94,14 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
   const [busyLabel, setBusyLabel] = useState(() => i18n.t('voice.working'));
   const [pendingIntents, setPendingIntents] = useState<VoiceWriteIntent[] | null>(null);
   const [pendingSummary, setPendingSummary] = useState<string | null>(null);
-  const [proposal, setProposal] = useState<DayPlanProposal | null>(null);
+  /** When true, Apply must go through server `actionId: confirm` (pending held in session). */
+  const [serverHoldsPending, setServerHoldsPending] = useState(false);
+  const [plan, setPlanState] = useState<DayPlanProposal | null>(null);
+  /** Cards of the last executed batch with per-intent status; cleared on the next turn. */
+  const [lastRun, setLastRun] = useState<{
+    intents: VoiceWriteIntent[];
+    statuses: VoiceIntentExecutionStatus[];
+  } | null>(null);
   const [actions, setActions] = useState<VoiceAgentActionId[]>([]);
   const [heldConflict, setHeldConflict] = useState<SchedulingConflictDTO | null>(null);
   /** When true, auto-listen after turns. Independent of typed messages. Default on. */
@@ -101,6 +111,13 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
   const lastCreateKeyRef = useRef<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const micEnabledRef = useRef(true);
+  const planRef = useRef<DayPlanProposal | null>(null);
+  const routeResultRef = useRef<(result: VoiceTurnResult) => Promise<void>>(async () => undefined);
+
+  const setPlan = useCallback((next: DayPlanProposal | null) => {
+    planRef.current = next;
+    setPlanState(next);
+  }, []);
 
   const ensureSessionId = useCallback(() => {
     const existing = sessionIdRef.current;
@@ -137,11 +154,13 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     setClarifyingQuestion(null);
     setPendingIntents(null);
     setPendingSummary(null);
-    setProposal(null);
+    setServerHoldsPending(false);
+    setPlan(null);
+    setLastRun(null);
     setActions([]);
     setHeldConflict(null);
     setError(null);
-  }, [cancel]);
+  }, [cancel, setPlan]);
 
   const close = useCallback(() => {
     const id = sessionIdRef.current || sessionId;
@@ -206,7 +225,8 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     async (opts?: { listen?: boolean }) => {
       setPendingIntents(null);
       setPendingSummary(null);
-      setProposal(null);
+      setServerHoldsPending(false);
+      setPlan(null);
       setClarifyingQuestion(null);
       setActions(['skip_speak']);
       setError(null);
@@ -216,7 +236,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       if (opts?.listen === false) return;
       await maybeListen();
     },
-    [maybeListen],
+    [maybeListen, setPlan],
   );
 
   const open = useCallback(() => {
@@ -225,7 +245,9 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     setTranscript('');
     setPendingIntents(null);
     setPendingSummary(null);
-    setProposal(null);
+    setServerHoldsPending(false);
+    setPlan(null);
+    setLastRun(null);
     setError(null);
     setMessages([]);
     micEnabledRef.current = true;
@@ -251,50 +273,77 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       setIsOpen(true);
       void maybeListen();
     }
-  }, [cancel, maybeListen, speakAndStage]);
+  }, [cancel, maybeListen, setPlan, speakAndStage]);
+
+  /** Tell the session what actually ran; it may answer with a re-seated open plan. */
+  const sendReport = useCallback(
+    async (report: VoiceExecutionReport): Promise<VoiceTurnResult | null> => {
+      const id = sessionIdRef.current;
+      if (!id || !report.results.length) return null;
+      try {
+        return await VoiceApi.turn({
+          sessionId: id,
+          timeZone,
+          clientNowIso: new Date().toISOString(),
+          actionId: 'report',
+          executionReport: report,
+        });
+      } catch {
+        return null;
+      }
+    },
+    [timeZone],
+  );
 
   const runIntents = useCallback(
     async (intents: VoiceWriteIntent[], summary?: string) => {
       setBusyLabel(i18n.t('voice.saving'));
       setStage('working');
       const hasCreate = intents.some((intent) => intent.type === 'create');
-      try {
-        const { conflict } = await executeVoiceIntents(intents, {
-          updateTask,
-          skipOccurrence,
-          deleteTask,
-          dispatch,
-          onCreate: async (task) => {
-            const key = [
-              task.name.trim().toLowerCase(),
-              task.earliestStartTime || '',
-              task.deadline || '',
-            ].join('|');
-            if (lastCreateKeyRef.current === key) {
-              return;
-            }
-            lastCreateKeyRef.current = key;
-            window.setTimeout(() => {
-              if (lastCreateKeyRef.current === key) lastCreateKeyRef.current = null;
-            }, 15_000);
-            await onComplete(task);
-          },
-        });
+      const { conflict, error: runError, report } = await executeVoiceIntents(intents, {
+        updateTask,
+        skipOccurrence,
+        deleteTask,
+        dispatch,
+        onCreate: async (task) => {
+          const key = [
+            task.name.trim().toLowerCase(),
+            task.earliestStartTime || '',
+            task.deadline || '',
+          ].join('|');
+          if (lastCreateKeyRef.current === key) {
+            return;
+          }
+          lastCreateKeyRef.current = key;
+          window.setTimeout(() => {
+            if (lastCreateKeyRef.current === key) lastCreateKeyRef.current = null;
+          }, 15_000);
+          await onComplete(task);
+        },
+      });
+      if (conflict) {
         if (summary) pushMessages(msg('assistant', summary));
-        if (conflict) {
-          dismissForConflictSheet();
-          return;
-        }
-        await speakAndStage(summary, 'ready');
-        await stayReady({ listen: !hasCreate });
-      } catch (err) {
-        if (err instanceof SeriesMoveCancelled) {
-          await stayReady({ listen: !hasCreate });
-          return;
-        }
-        setError(extractApiErrorMessage(err));
-        setStage('error');
+        dismissForConflictSheet();
+        return;
       }
+      setLastRun(
+        intents.length > 1
+          ? { intents, statuses: report.results.map((row) => row.status) }
+          : null,
+      );
+      const followUp = await sendReport(report);
+      if (runError && !(runError instanceof SeriesMoveCancelled)) {
+        setError(extractApiErrorMessage(runError));
+        setStage('error');
+        return;
+      }
+      if (summary && !runError) pushMessages(msg('assistant', summary));
+      if (followUp?.outcome === 'confirm' && followUp.plan) {
+        await routeResultRef.current(followUp);
+        return;
+      }
+      if (!runError) await speakAndStage(summary, 'ready');
+      await stayReady({ listen: !hasCreate });
     },
     [
       deleteTask,
@@ -302,6 +351,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       dispatch,
       onComplete,
       pushMessages,
+      sendReport,
       skipOccurrence,
       speakAndStage,
       stayReady,
@@ -353,6 +403,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
         if (confirmCommands || requiresAlwaysConfirm(result.command.kind)) {
           setPendingIntents([intent]);
           setPendingSummary(result.command.summary);
+          setServerHoldsPending(false);
           setActions(['confirm', 'cancel', 'skip_speak']);
           setStage('confirm');
           await speakAndStage(result.command.summary, 'confirm');
@@ -387,23 +438,10 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     [confirmCommands, maybeListen, pushMessages, runIntents, speakAndStage],
   );
 
-  const turnAndRoute = useCallback(
-    async (text: string, actionId?: VoiceAgentActionId) => {
-      const activeSession = ensureSessionId();
-      setBusyLabel(i18n.t('voice.understanding'));
-      setStage('working');
-      if (text) pushMessages(msg('user', text));
-
-      const result = await VoiceApi.turn({
-        transcript: text || undefined,
-        sessionId: activeSession,
-        timeZone,
-        clientNowIso: new Date().toISOString(),
-        actionId,
-      });
-
+  const routeResult = useCallback(
+    async (result: VoiceTurnResult) => {
       setActions(result.actions?.length ? result.actions : []);
-      setProposal(result.proposal);
+      setPlan(result.plan ?? null);
 
       if (result.intents?.length && result.outcome === 'act') {
         await runIntents(result.intents, result.assistantMessage);
@@ -411,19 +449,24 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       }
 
       if (result.outcome === 'confirm') {
-        setPendingIntents(result.intents?.length ? result.intents : null);
-        // Server holds pending; client may only have proposal. Confirm via actionId.
-        if (!result.intents?.length && result.proposal) {
-          setPendingIntents([]); // marker that confirm goes to server
-        }
+        // Intents (when present) are for preview cards; Apply goes through the server session.
+        setPendingIntents(result.intents?.length ? result.intents : []);
+        setServerHoldsPending(true);
         setPendingSummary(result.assistantMessage);
+        setClarifyingQuestion(null);
         setActions(
           result.actions?.length ? result.actions : ['confirm', 'cancel', 'skip_speak'],
         );
         if (result.assistantMessage) pushMessages(msg('assistant', result.assistantMessage));
         await speakAndStage(result.assistantMessage, 'confirm');
+        // A plan under review is edited by voice; plain write confirms wait for a tap.
+        if (result.plan) await maybeListen();
         return;
       }
+
+      setPendingIntents(null);
+      setPendingSummary(null);
+      setServerHoldsPending(false);
 
       if (result.outcome === 'legacy_parse' && result.legacyParse) {
         await routeLegacyParse(result.legacyParse);
@@ -455,16 +498,33 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       await speakAndStage(assistantText, 'ready');
       await maybeListen();
     },
-    [
-      ensureSessionId,
-      maybeListen,
-      pushMessages,
-      routeLegacyParse,
-      runIntents,
-      speakAndStage,
-      stayReady,
-      timeZone,
-    ],
+    [maybeListen, pushMessages, routeLegacyParse, runIntents, setPlan, speakAndStage, stayReady],
+  );
+
+  routeResultRef.current = routeResult;
+
+  const turnAndRoute = useCallback(
+    async (text: string, actionId?: VoiceAgentActionId) => {
+      const activeSession = ensureSessionId();
+      setBusyLabel(
+        actionId === 'build_plan' || planRef.current
+          ? i18n.t('voice.planning')
+          : i18n.t('voice.understanding'),
+      );
+      setStage('working');
+      setLastRun(null);
+      if (text) pushMessages(msg('user', text));
+
+      const result = await VoiceApi.turn({
+        transcript: text || undefined,
+        sessionId: activeSession,
+        timeZone,
+        clientNowIso: new Date().toISOString(),
+        actionId,
+      });
+      await routeResult(result);
+    },
+    [ensureSessionId, pushMessages, routeResult, timeZone],
   );
 
   /** Shared path after STT or a typed message (conflict choice or agent turn). */
@@ -519,6 +579,9 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
           await maybeListen();
         } else if (wasClarifying) {
           setStage('clarifying');
+          await maybeListen();
+        } else if (planRef.current?.stage === 'review') {
+          setStage('confirm');
           await maybeListen();
         } else {
           await stayReady();
@@ -591,12 +654,14 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
           if (current !== 'recording' && current !== 'recording_clarification') return current;
           if (heldConflict) return 'needs_conflict_choice';
           if (clarifyingQuestion) return 'clarifying';
+          if (planRef.current?.stage === 'review') return 'confirm';
           return 'ready';
         });
         return;
       }
       if (turnLockRef.current) return;
-      if (stage === 'working' || stage === 'speaking' || stage === 'confirm') return;
+      if (stage === 'working' || stage === 'speaking') return;
+      if (stage === 'confirm' && !planRef.current) return;
       await beginRecording();
     },
     [beginRecording, cancel, clarifyingQuestion, heldConflict, stage],
@@ -611,12 +676,28 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
         }
         return;
       }
+      if (actionId === 'build_plan') {
+        VoiceSpeech.stop();
+        cancel();
+        await turnAndRoute('', 'build_plan');
+        return;
+      }
       if (actionId === 'cancel') {
         VoiceSpeech.stop();
+        cancel();
+        const serverSide = serverHoldsPending || planRef.current != null;
         setPendingIntents(null);
         setPendingSummary(null);
-        setProposal(null);
-        await turnAndRoute('', 'cancel');
+        setServerHoldsPending(false);
+        setPlan(null);
+        setClarifyingQuestion(null);
+        if (serverSide) {
+          await turnAndRoute('', 'cancel');
+        } else {
+          setActions([]);
+          setStage('ready');
+          await maybeListen();
+        }
         return;
       }
       if (actionId === 'retry') {
@@ -628,25 +709,35 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       }
       if (actionId === 'confirm') {
         VoiceSpeech.stop();
+        cancel();
+        if (serverHoldsPending) {
+          setPendingIntents(null);
+          setPendingSummary(null);
+          setServerHoldsPending(false);
+          setPlan(null);
+          await turnAndRoute('', 'confirm');
+          return;
+        }
         if (pendingIntents && pendingIntents.length > 0) {
           const intents = pendingIntents;
           const summary = pendingSummary || undefined;
           setPendingIntents(null);
           setPendingSummary(null);
-          setProposal(null);
+          setPlan(null);
           await runIntents(intents, summary);
-          return;
         }
-        // Server-held pending (day-plan / confirm)
-        await turnAndRoute('', 'confirm');
       }
     },
     [
       beginRecording,
+      cancel,
       clarifyingQuestion,
+      maybeListen,
       pendingIntents,
       pendingSummary,
       runIntents,
+      serverHoldsPending,
+      setPlan,
       stage,
       turnAndRoute,
     ],
@@ -661,7 +752,9 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     messages,
     clarifyingQuestion,
     pendingSummary,
-    proposal,
+    pendingIntents,
+    plan,
+    lastRun,
     actions,
     error: error || recorderError,
     busyLabel,

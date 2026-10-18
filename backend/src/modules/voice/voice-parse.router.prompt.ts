@@ -23,7 +23,7 @@ Intent guide:
 - needs_clarification: unintelligible or no guessable intent.
 
 Prefer a concrete intent over needs_clarification when possible.
-If Previous+Answer continue a create (recurring pattern, when, unscheduled), keep intent create — not update.
+If Previous+Answer are given, the Answer only fills in what Previous was missing: classify the request in Previous. "delete that one" + "milk" is delete; "move that thing" + "the report, tomorrow" is reschedule. If Previous+Answer continue a create (recurring pattern, when, unscheduled), keep intent create — not update.
 language = primary language of the transcript (uk/en/ru).`;
 }
 

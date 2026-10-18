@@ -238,6 +238,80 @@ describe('GroqClient local LLM', () => {
     expect(bearers).toEqual(['Bearer key-2', 'Bearer key-3']);
   });
 
+  it('sends planner calls to gpt-oss-120b and falls back to the chat model on a rate limit', async () => {
+    const tpd = {
+      ok: false,
+      status: 429,
+      headers: { get: () => null },
+      json: async () => ({
+        error: {
+          message:
+            'Rate limit reached: tokens per day (TPD). Please try again in 19m9.984s.',
+        },
+      }),
+    };
+    const ok = {
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({
+        choices: [{ message: { content: '{"ok":true}' } }],
+        usage: { total_tokens: 7 },
+      }),
+    };
+    const fetchMock = jest.fn().mockResolvedValueOnce(tpd).mockResolvedValueOnce(ok);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const groq = new GroqClient({
+      get: (key: string) => (key === 'GROQ_API_KEY' ? 'test-key' : undefined),
+    } as ConfigService);
+
+    const result = await groq.runWithPin(0, () =>
+      groq.completeJson('system', 'user', { role: 'planner' }),
+    );
+    expect(result.value).toBe('{"ok":true}');
+    expect(result.tokensUsed).toBe(7);
+    const models = fetchMock.mock.calls.map(
+      (call) => (JSON.parse((call[1] as { body: string }).body) as { model: string }).model,
+    );
+    expect(models).toEqual(['openai/gpt-oss-120b', 'openai/gpt-oss-20b']);
+  });
+
+  it('retries the same model without JSON mode when it emits a stray tool call', async () => {
+    const strayTool = {
+      ok: false,
+      status: 400,
+      headers: { get: () => null },
+      json: async () => ({
+        error: { message: 'Tool choice is none, but model called a tool', code: 'tool_use_failed' },
+      }),
+    };
+    const ok = {
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({
+        choices: [{ message: { content: '{"ok":true}' } }],
+        usage: { total_tokens: 5 },
+      }),
+    };
+    const fetchMock = jest.fn().mockResolvedValueOnce(strayTool).mockResolvedValueOnce(ok);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const groq = new GroqClient({
+      get: (key: string) => (key === 'GROQ_API_KEY' ? 'test-key' : undefined),
+    } as ConfigService);
+
+    const result = await groq.runWithPin(0, () => groq.completeJson('system', 'user'));
+    expect(result.value).toBe('{"ok":true}');
+    const bodies = fetchMock.mock.calls.map(
+      (call) => JSON.parse((call[1] as { body: string }).body) as { model: string; response_format?: unknown },
+    );
+    expect(bodies.map((body) => body.model)).toEqual(['openai/gpt-oss-20b', 'openai/gpt-oss-20b']);
+    expect(bodies[0].response_format).toBeDefined();
+    expect(bodies[1].response_format).toBeUndefined();
+  });
+
   it('fails a hung Groq chat once instead of trying the fallback model', async () => {
     const timeout = new Error('The operation was aborted due to timeout');
     timeout.name = 'TimeoutError';

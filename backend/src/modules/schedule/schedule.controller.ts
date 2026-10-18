@@ -20,13 +20,11 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ScheduleService } from './schedule.service';
 import { DisplayedEventMoveService } from './displayed-event-move.service';
-import { ScheduleRecommendationsService } from './schedule-recommendations.service';
 import { ConflictOptionPhrasesService } from './conflict-option-phrases.service';
 import {
   FreeSlotsResponse,
   FreeSlotsService,
 } from './free-slots.service';
-import { ScheduleRecommendations } from './schedule-recommendations.util';
 import { ConflictOptionPhrase } from './conflict-option-phrases.util';
 import {
   CreateScheduleDto,
@@ -46,7 +44,6 @@ export class ScheduleController {
   constructor(
     private readonly scheduleService: ScheduleService,
     private readonly displayedEventMoveService: DisplayedEventMoveService,
-    private readonly scheduleRecommendationsService: ScheduleRecommendationsService,
     private readonly conflictOptionPhrasesService: ConflictOptionPhrasesService,
     private readonly freeSlotsService: FreeSlotsService,
   ) {}
@@ -157,17 +154,6 @@ export class ScheduleController {
     taskName?: string;
   }> {
     return this.displayedEventMoveService.move(req.user.userId, dto);
-  }
-
-  @Post('recommendations')
-  @HttpCode(200)
-  @ApiOperation({
-    summary:
-      'Suggest schedule improvements for the next 7 days. Does not change tasks, slots, or Google.',
-  })
-  @ApiResponse({ status: 200, description: 'Suggestions only' })
-  async recommendations(@Request() req): Promise<ScheduleRecommendations> {
-    return this.scheduleRecommendationsService.recommend(req.user.userId);
   }
 
   @Post('conflict-option-phrases')

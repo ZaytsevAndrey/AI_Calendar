@@ -124,23 +124,54 @@ export type VoiceTurnOutcome =
   | 'refuse'
   | 'legacy_parse';
 
-export type VoiceAgentActionId = 'confirm' | 'cancel' | 'retry' | 'skip_speak';
+export type VoiceAgentActionId =
+  | 'confirm'
+  | 'cancel'
+  | 'retry'
+  | 'skip_speak'
+  | 'build_plan'
+  | 'report';
 
 export type VoiceWriteIntent =
   | { type: 'create'; summary: string; task: VoiceParsedTask }
   | { type: 'command'; summary: string; command: VoiceCommandAction };
 
+export type VoiceIntentExecutionStatus = 'applied' | 'skipped' | 'conflict' | 'error';
+
+export type VoiceExecutionReport = {
+  results: Array<{ summary: string; status: VoiceIntentExecutionStatus }>;
+};
+
+export type VoiceSegmentSummary = {
+  summary: string;
+  status: 'ready' | 'clarify' | 'refused' | 'dropped';
+};
+
+export type PlanItemSource = 'unscheduled' | 'new' | 'flexible';
+
 export type DayPlanProposalItem = {
-  taskId: string;
+  itemId: string;
+  taskId: string | null;
+  source: PlanItemSource;
   name: string;
   start: string;
   end: string;
   durationMinutes: number;
 };
 
+export type DayPlanUnplaced = {
+  itemId: string;
+  name: string;
+  reason: 'no_room' | 'deadline_passed' | 'conflict';
+};
+
 export type DayPlanProposal = {
   day: string;
+  stage: 'interview' | 'review';
+  revision: number;
   items: DayPlanProposalItem[];
+  unplaced: DayPlanUnplaced[];
+  changedItemIds: string[];
 };
 
 export type VoiceTurnResult = {
@@ -149,7 +180,8 @@ export type VoiceTurnResult = {
   assistantMessage: string;
   intents: VoiceWriteIntent[];
   actions: VoiceAgentActionId[];
-  proposal: DayPlanProposal | null;
+  plan: DayPlanProposal | null;
+  segments: VoiceSegmentSummary[];
   clarifyCount: number;
   legacyParse: VoiceParseResult | null;
 };
@@ -191,7 +223,8 @@ export const VoiceApi = {
     sessionId: string;
     timeZone: string;
     clientNowIso?: string;
-    actionId?: string;
+    actionId?: VoiceAgentActionId;
+    executionReport?: VoiceExecutionReport;
   }): Promise<VoiceTurnResult> => {
     const response = await apiCall({
       method: 'POST',

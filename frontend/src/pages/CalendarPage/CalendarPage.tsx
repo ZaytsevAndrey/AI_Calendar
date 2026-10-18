@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useStore } from 'react-redux';
 import { useTranslation } from 'react-i18next';
-import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Columns3, List, Mic, MoreHorizontal, Plus } from 'lucide-react';
+import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Columns3, List, Mic, Plus } from 'lucide-react';
 import {
     useEventsForDay,
     useEventsForWeek,
@@ -23,8 +23,6 @@ import { ScheduleApi } from 'api/schedule.api';
 import { useScheduleActions } from 'modules/schedule/hooks/useScheduleActions';
 import { ProblematicInboxBanner } from 'modules/schedule/components/ProblematicInboxBanner';
 import { ProblematicInboxSheet } from 'modules/schedule/components/ProblematicInboxSheet';
-import { ScheduleMenu } from 'modules/schedule/components/ScheduleMenu';
-import { ScheduleSuggestionsDialog } from 'modules/schedule/components/ScheduleSuggestionsDialog';
 import { SeriesDragHost } from 'modules/schedule/components/SeriesDragHost';
 import {
     askSeriesDeleteScope,
@@ -135,7 +133,6 @@ const CalendarPage: React.FC = () => {
     const coarse = useCoarsePointer();
     const [currentView, setCurrentView] = useState<CalendarView>(defaultCalendarView);
     const [currentDate, setCurrentDate] = useState(new Date());
-    const [actionsOpen, setActionsOpen] = useState(false);
     const [eventsOpen, setEventsOpen] = useState(false);
     const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
         open: boolean;
@@ -152,7 +149,6 @@ const CalendarPage: React.FC = () => {
         taskId: null,
         eventName: '',
     });
-    const [suggestionsOpen, setSuggestionsOpen] = useState(false);
     const [problematicOpen, setProblematicOpen] = useState(false);
     const [eventFormDialog, setEventFormDialog] = useState<{
         open: boolean;
@@ -857,10 +853,6 @@ const CalendarPage: React.FC = () => {
                             {t('calendar.createTask')}
                         </button>
                         <VoiceTaskButton onClick={voice.open} />
-                        <ScheduleMenu
-                            busy={false}
-                            onSuggest={() => setSuggestionsOpen(true)}
-                        />
                     </div>
                 </div>
                     </>
@@ -1020,14 +1012,6 @@ const CalendarPage: React.FC = () => {
                     >
                         <Mic className="h-4 w-4" aria-hidden />
                     </button>
-                    <button
-                        type="button"
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ide-muted hover:bg-white/5"
-                        aria-label={t('calendar.moreSchedule')}
-                        onClick={() => setActionsOpen(true)}
-                    >
-                        <MoreHorizontal className="h-4 w-4" aria-hidden />
-                    </button>
                 </div>
             ) : null}
 
@@ -1095,11 +1079,6 @@ const CalendarPage: React.FC = () => {
                 </p>
             </Modal>
 
-            <ScheduleSuggestionsDialog
-                open={suggestionsOpen}
-                onClose={() => setSuggestionsOpen(false)}
-            />
-
             {editorModal}
             <ProblematicInboxSheet
                 open={problematicOpen}
@@ -1111,25 +1090,6 @@ const CalendarPage: React.FC = () => {
             />
             <VoiceTaskSheet voice={voice} />
             <SeriesDragHost />
-
-            <Modal
-                open={phone && actionsOpen}
-                onClose={() => setActionsOpen(false)}
-                title={t('schedule.menu')}
-            >
-                <div className="flex flex-col">
-                    <button
-                        type="button"
-                        className="ui-menu-row"
-                        onClick={() => {
-                            setActionsOpen(false);
-                            setSuggestionsOpen(true);
-                        }}
-                    >
-                        {t('schedule.suggestions')}
-                    </button>
-                </div>
-            </Modal>
 
             <Modal
                 open={phone && eventsOpen}

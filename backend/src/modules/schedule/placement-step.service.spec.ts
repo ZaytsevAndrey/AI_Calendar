@@ -136,8 +136,103 @@ describe('PlacementStepService.place (dryRun crowded day)', () => {
       externalBusy as never,
     );
 
-    return { service, externalBusy };
+    return { service, externalBusy, taskRepo, phase };
   }
+
+  it('PV01 previews an unsaved draft task without loading it', async () => {
+    const { service, taskRepo, phase } = build({
+      claim: { id: 'unused' },
+      peerSlots: [
+        {
+          id: 'slot-a',
+          start: '09:00',
+          end: '10:00',
+          task: { id: 'peer-a', name: 'Peer A', eventType: TaskEventType.ADMIN },
+        },
+      ],
+      linked: false,
+    });
+    const draft = baseTask({ id: 'draft:1', name: 'Draft', phase, phases: [phase] });
+
+    const plan = await service.previewPlacement('user-1', {
+      task: draft as never,
+      windowYmd: ymd,
+    });
+    expect(taskRepo.findOne).not.toHaveBeenCalled();
+    expect(plan.outcome).toBe('seated');
+    if (plan.outcome !== 'seated') return;
+    expect(plan.start).toBe(wall('10:00').getTime());
+  });
+
+  it('PV02 extra seats block proposed items and ignored tasks free their slot', async () => {
+    const { service, phase } = build({
+      claim: { id: 'unused' },
+      peerSlots: [
+        {
+          id: 'slot-a',
+          start: '09:00',
+          end: '10:00',
+          task: { id: 'peer-a', name: 'Peer A', eventType: TaskEventType.ADMIN },
+        },
+      ],
+      linked: false,
+    });
+    const draft = baseTask({ id: 'draft:2', name: 'Draft', phase, phases: [phase] });
+    const proposed = {
+      id: 'plan:x',
+      taskId: 'plan:x',
+      taskName: 'Proposed',
+      role: 'anchor' as const,
+      start: wall('10:00').getTime(),
+      end: wall('11:00').getTime(),
+      windows: [],
+      notBefore: Date.now(),
+    };
+
+    const blocked = await service.previewPlacement('user-1', {
+      task: draft as never,
+      windowYmd: ymd,
+      extraSeats: [proposed],
+    });
+    expect(blocked.outcome).toBe('seated');
+    if (blocked.outcome !== 'seated') return;
+    expect(blocked.start).toBe(wall('11:00').getTime());
+
+    const freed = await service.previewPlacement('user-1', {
+      task: draft as never,
+      windowYmd: ymd,
+      ignoreTaskIds: ['peer-a'],
+    });
+    expect(freed.outcome).toBe('seated');
+    if (freed.outcome !== 'seated') return;
+    expect(freed.start).toBe(wall('09:00').getTime());
+  });
+
+  it('PV03 a preferred start that would shift a peer falls back to a free hole', async () => {
+    const { service, phase } = build({
+      claim: { id: 'unused' },
+      peerSlots: [
+        {
+          id: 'slot-a',
+          start: '09:00',
+          end: '10:00',
+          task: { id: 'peer-a', name: 'Peer A', eventType: TaskEventType.ADMIN },
+        },
+      ],
+      linked: false,
+    });
+    const draft = baseTask({ id: 'draft:3', name: 'Draft', phase, phases: [phase] });
+
+    const plan = await service.previewPlacement('user-1', {
+      task: draft as never,
+      windowYmd: ymd,
+      preferredStart: wall('09:00'),
+    });
+    expect(plan.outcome).toBe('seated');
+    if (plan.outcome !== 'seated') return;
+    expect(plan.moves).toEqual([]);
+    expect(plan.start).toBe(wall('10:00').getTime());
+  });
 
   it('CD01 seats a no-preferred claim in the free hole without moving peers', async () => {
     const { service } = build({

@@ -55,6 +55,13 @@ export function createGroqStub() {
     failTranscribe: () => {
       throw new ServiceUnavailableException('Groq STT failed');
     },
+    isInPinContext: jest.fn().mockReturnValue(false),
+    pinNextKey: jest.fn().mockReturnValue({ index: 0, count: 1 }),
+    runWithPin: jest.fn(async (_keyIndex: number, fn: () => Promise<unknown>) => ({
+      value: await fn(),
+      keyIndex: 0,
+      tokensUsed: 0,
+    })),
   };
 }
 

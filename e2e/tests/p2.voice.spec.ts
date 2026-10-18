@@ -5,7 +5,7 @@ test.describe('P2 voice UI', () => {
   test('U-VOI-004 mic permission denied stays in the sheet', async ({ page, auth }) => {
     await denyMicrophone(page);
     await openAs(page, auth.onboarded, '/tasks');
-    await page.getByRole('button', { name: 'Add task by voice' }).click();
+    await page.getByRole('button', { name: 'Open Companion' }).click();
     const sheet = page.getByRole('dialog');
     // Recording starts on open; denied mic surfaces immediately.
     await expect(
@@ -29,7 +29,7 @@ test.describe('P2 voice UI', () => {
       });
     });
     await openAs(page, auth.onboarded, '/tasks');
-    await page.getByRole('button', { name: 'Add task by voice' }).click();
+    await page.getByRole('button', { name: 'Open Companion' }).click();
     await recordOnce(page);
     const sheet = page.getByRole('dialog');
     await expect(sheet.getByText('Could not transcribe audio')).toBeVisible();

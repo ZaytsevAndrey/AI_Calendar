@@ -4,15 +4,17 @@
 **Language:** English  
 **Last updated:** October 2026  
 
-Voice becomes a **hybrid agent**: multi-turn dialogue, grounded Q&A, and write intents — without a second scheduler. Placement and conflict stay on [spec-conflict-rules.md](spec-conflict-rules.md) and [spec-incremental-placement.md](spec-incremental-placement.md). The shipped one-shot commander contract remains [spec-voice-commander.md](spec-voice-commander.md); this document supersedes it for the **new UI entry path** (`POST /voice/turn`). HTTP details land in [api-reference.md](api-reference.md) when implemented; Groq keys in [integrations.md](integrations.md).
+The product surface is **Companion** (UK: **Помічник**) — a hybrid chat + voice helper: multi-turn dialogue, grounded Q&A, and write intents — without a second scheduler. Placement and conflict stay on [spec-conflict-rules.md](spec-conflict-rules.md) and [spec-incremental-placement.md](spec-incremental-placement.md). The shipped one-shot commander contract remains [spec-voice-commander.md](spec-voice-commander.md); this document supersedes it for the **Companion entry path** (`POST /voice/turn`). HTTP details in [api-reference.md](api-reference.md); Groq keys in [integrations.md](integrations.md).
+
+One utterance may hold several writes plus a question (§6.6). A day plan is a multi-step dialogue: an optional short interview, then a proposal seated by the placement engine that the user edits by voice before Apply (§6.4). UI chrome: [features/companion-panel.md](features/companion-panel.md).
 
 ---
 
 ## 1. Goals
 
-- Let the user **talk to a smart agent** that reads the calendar/tasks/habits and performs the same mutations the UI can, correctly.
+- Let the user **talk with Companion** that reads the calendar/tasks/habits and performs the same mutations the UI can, correctly.
 - Keep **one write contract**: orchestrator never mutates the DB; the client executes intents through existing task / habit / placement APIs.
-- Support **Q&A**, **multi-turn clarify**, **day-plan propose → confirm → apply**, and a **hero voice UI** (mobile near full-screen, thread, polished audio visuals, silence-based end of speech).
+- Support **Q&A**, **multi-turn clarify**, **several writes in one utterance**, a **day-plan dialogue (interview → proposal → voice edits → Apply)**, and a Companion chrome that leaves the calendar usable on desktop.
 - Stay safe: destructive actions and day-plan apply require confirm; conflict / Problematic stay on existing client paths in v1.
 
 ## 2. Non-goals (v1)
@@ -51,15 +53,24 @@ Voice becomes a **hybrid agent**: multi-turn dialogue, grounded Q&A, and write i
 | S3 | History | Only the **current open-widget chat**. |
 | S4 | Tabs | Separate `sessionId` per browser tab. |
 | S5 | Open | **Every widget open → new session.** |
-| U1 | Chrome | Phone **near full-screen**; desktop large sheet/modal; same component. |
-| U2 | Thread | Scrollable user + assistant bubbles. |
-| U3a | End of speech | **No Stop button**; silence / VAD ends the utterance; auto-listen when input expected. |
+| U1 | Chrome | Product name **Companion** (UK: Помічник). Phone = bottom sheet; desktop = **floating movable/resizable** panel (calendar stays usable; geometry in `localStorage`). |
+| U2 | Thread | Scrollable user + Companion bubbles. |
+| U3a | End of speech | Silence / VAD ends the utterance; auto-listen when mic is on. Footer **Done** can finish early while listening. |
 | U3b | Two skips | `skip_speak` = stop TTS only; `cancel` = dismiss pending turn (+ stop speak). |
-| U3c | Actions | Agent may return `actions[]`: `confirm` \| `cancel` \| `retry` \| `skip_speak`. |
-| U4 | Audio visual | **Replace** current equalizer with a polished listening + speaking visual. |
+| U3c | Actions | Sparse footer by state: idle = Close + mic; listening = Done; speaking = Skip; confirm = **Apply** + Cancel; error = Retry + Close. No redundant “Start speaking”. |
+| U4 | Audio visual | Listening + speaking visual. |
 | U5 | TTS content | Speak clarify, confirm, success/refuse, **and Q&A answers**; not busy/errors. |
-| U6 | Day-plan UI | Visual list of proposed slots + short spoken one-liner. |
-| U7 | Look | Hero inside **current design system** (ide tokens); not a separate brand theme. |
+| U6 | Preview UI | Confirm / day-plan show **calendar-style change cards** (name, time, duration, type). Confirm response may include `intents[]` for preview; apply still waits for Apply / spoken yes. |
+| U7 | Look | Current design system (`ide` tokens); not a separate brand theme. |
+| M1 | Multi-intent scope | Any writes **plus** Q&A in one utterance. The planner splits it into at most **6** segments; each segment goes through the normal router + specialist parse. |
+| M2 | Partial clarify | Resolved segments are held while one unclear segment is asked about; at most **2** questions per segment, then it is dropped with a spoken note. If the reply comes back as new write segments, the held resolved writes join them. A command specialist that cannot tell which task is meant asks (no "current task" fallback). |
+| M3 | Batch confirm | **One** combined confirm for the batch when any write needs it; otherwise `act` with all intents. |
+| M4 | Execution report | After running intents (no conflict sheet), the client sends `actionId: 'report'` with per-intent statuses; no LLM call. |
+| D1 | Plan dialogue | Two parts: an interview (at most **3** questions; `build_plan` skips it) and voice edits of the proposal before Apply. |
+| D2 | Plan scope | Unscheduled tasks, new tasks named in the dialogue, and re-seating flexible one-offs already on that day. Fixed tasks, series, external events are never moved. |
+| D3 | Plan seating | The placement engine (dry-run) seats the draft in priority order; each seated item blocks the next. Nothing is written until Apply. |
+| D4 | Apply mapping | Unscheduled → `window` (+ `clearUnscheduled`); flexible → `shift` of its slot (skipped when unchanged); new → flexible create at the proposed slot with an end-of-day deadline. |
+| D5 | Planner model | Planner role runs on **gpt-oss-120b** (`GROQ_PLANNER_MODEL`) and falls back to the parse model; specialist parse stays on gpt-oss-20b. |
 
 ---
 
@@ -129,19 +140,32 @@ The model uses session chat, now-overlapping app task, current habit block, and 
 
 Spoken yes/no and action button `confirm` / `cancel` are equivalent.
 
-### 6.4 Day-plan
+### 6.4 Day-plan dialogue
 
-1. User asks to schedule / arrange tasks for a day (or similar).
-2. Server builds a **proposal** from read tools + placement preview helpers (no DB writes).
-3. Outcome `confirm` with visual **list of proposed slots** + short spoken one-liner.
-4. On `confirm`, response (or follow-up turn) yields **batch** write intents; client applies **one by one** through placement.
-5. Stop the batch on conflict sheet, hard error, or user `cancel`. Unscheduled / Problematic follow existing rules; say so in the result line when relevant.
+The planner LLM decides `plan_start` only when the user explicitly asks to plan, arrange or organize a whole day; listing to-dos for a day stays multi-intent creates (§6.6).
+
+1. **Draft.** The server opens a `planDraft` in the session for that day: up to 10 open Unscheduled tasks (earliest deadline first) plus flexible one-offs that have a single future slot that day (their current start becomes the preferred start, so they stay put unless something conflicts). Constraints and new tasks from the same utterance are applied as plan edits.
+2. **Interview (optional).** When the user wants to plan together, the reply is `clarify` with `actions: ['build_plan', 'cancel']` and `plan.stage = 'interview'`. Each answer becomes plan edits; the planner asks at most 3 questions. `build_plan` (button or "that's enough") skips straight to the proposal.
+3. **Proposal.** `VoiceDayPlanner` seats the draft with `PlacementStepService.previewSequence` (dry-run, under the user lock, external calendars fetched once). Items are seated in draft order; a seated item becomes an anchor for the next ones. Plan constraints (preferred start, earliest, deadline, duration) override the stored row. Items that do not fit are listed as `unplaced` with a reason (`no_room` / `deadline_passed` / `conflict`). An empty proposal returns to the interview.
+4. **Review.** The reply is `confirm` with `plan.stage = 'review'`, `actions: ['confirm', 'cancel']` and empty `intents`; the Apply intents are held server-side. The mic stays live: every utterance is a plan edit (`add_task`, `include_task`, `remove_item`, `set_preferred_start`, `set_window`, `set_duration`, `set_order`), and the server re-seats and returns the next `revision` with `changedItemIds` (moved, new, or newly unplaced). Questions are answered while the plan stays on screen. Writes about other days run as normal intents beside the plan; the following `report` re-seats the plan against the new calendar.
+5. **Apply.** `confirm` (button or spoken yes) returns `act` with the mapped intents (D4) and drops the draft; the client applies them one by one. `cancel` drops the draft (a pending write confirm opened during review cancels back to the plan first). Closing the widget discards it.
 
 ### 6.5 Close / open / stay open
 
 - Open widget → **new** `sessionId`.
 - Close → discard server session + pending UI state (no auto-create).
 - Successful write → sheet **stays open**; same session continues.
+
+### 6.6 Several intents in one utterance
+
+1. The planner returns `steps` with `answer` (spoken reply to any question, grounded in read tools) and `segments` (one self-contained command per write, in the transcript language, at most 6, in spoken order). A shared day or time is copied into each segment; pronouns become task names; a later part that changes an earlier one is merged into one segment.
+2. Each segment is parsed by the existing router + specialist (`parse-task` logic) and mapped to intents. A segment that needs a question is held (M2); refusals and parse failures become spoken notes.
+3. When every segment is resolved, the reply is `act` (or one `confirm` when any write requires it, M3) with all intents and `segments[]` statuses. The spoken line is the answer first, then each write summary, then notes.
+4. If the planner fails, one `parse-task` run on the whole transcript is the fallback (`legacyParse` set).
+
+### 6.7 Execution report
+
+After the client runs a batch without opening the conflict sheet, it sends `{ actionId: 'report', executionReport: { results: [{ summary, status }] } }` where status is `applied` / `skipped` / `conflict` / `error`. The server appends a system line to the chat history (so the next planner turn knows what really happened). If a plan is open in review with nothing pending, the reply re-seats and re-shows it; otherwise it is an empty `answer`. The client shows the batch cards with their statuses ("Done just now").
 
 ---
 
@@ -154,19 +178,19 @@ Spoken yes/no and action button `confirm` / `cancel` are equivalent.
 - `transcript` (string, required after STT)
 - `sessionId` (string, required for an open widget; client generates on open)
 - `locale` / timezone: from user settings on server (same as parse-task)
-- Optional: client signal for action tap (`actionId`) instead of a new transcript
+- Optional: client signal for action tap (`actionId`: `confirm` \| `cancel` \| `build_plan` \| `report`) instead of a new transcript
+- Optional `executionReport` with `actionId: 'report'` (§6.7)
 
-**Response (conceptual)**
+**Response**
 
 - `sessionId`
-- `outcome`: `answer` \| `clarify` \| `confirm` \| `act` \| `refuse`
+- `outcome`: `answer` \| `clarify` \| `confirm` \| `act` \| `refuse` \| `legacy_parse`
 - `assistantMessage` (string; shown + optionally spoken)
-- `intents[]`: zero or more write intents (create / command shapes compatible with today’s client executor), including day-plan apply items
-- `actions[]`: subset of `confirm` \| `cancel` \| `retry` \| `skip_speak`
-- `proposal` (optional): day-plan visual payload (task id/name, suggested start/end, day)
-- `clarifyCount` (optional)
-
-Exact DTO field names are fixed at implementation; behavior above is normative.
+- `intents[]`: zero or more write intents (create / command shapes compatible with today’s client executor). A plan under review sends `[]`; its intents come with the Apply `act`.
+- `actions[]`: subset of `confirm` \| `cancel` \| `retry` \| `skip_speak` \| `build_plan`
+- `plan`: `{ day, stage: 'interview' | 'review', revision, items[{ itemId, taskId, source, name, start, end, durationMinutes }], unplaced[{ itemId, name, reason }], changedItemIds[] }` or `null`
+- `segments[]`: `{ summary, status: 'ready' | 'clarify' | 'refused' | 'dropped' }` for a multi-intent turn
+- `clarifyCount`, `legacyParse`
 
 ### 7.2 Existing endpoints
 
@@ -177,7 +201,7 @@ Exact DTO field names are fixed at implementation; behavior above is normative.
 
 ### 7.3 Write intent shapes
 
-Reuse today’s resolved command kinds and create task payload consumed by `executeVoiceCommand` / create flow. Add day-plan propose (server-side only / embedded in `proposal`) and apply items that expand to the same create/window/move-style calls the UI would make.
+Reuse today’s resolved command kinds and create task payload consumed by `executeVoiceCommand` / create flow. Day-plan apply items use the same shapes (D4): `window` with `clearUnscheduled`, `shift` with `slotId`, and create.
 
 ---
 
@@ -242,7 +266,8 @@ Do **not** create a separate Cursor skill for tools; use [new-feature-workflow](
 | `thinking` | Latest user transcript in thread; working | Close discards |
 | `speaking` | Assistant text; polished **speaking** visual; mic gated | `skip_speak` and/or `cancel` as offered |
 | `clarify` | Question in thread → return to listening | actions; close discards |
-| `confirm` | Summary + optional proposal list | `confirm` / `cancel`; close discards |
+| `confirm` | Summary + preview cards (writes) or the plan cards with changed badges and a "Did not fit" list | `confirm` / `cancel`; plan review keeps mic + composer live for edits; close discards |
+| plan interview | Question + "Planning {day}" header | **Make plan** (`build_plan`) / `cancel`; mic live |
 | `ready` | Thread; auto-listen when next input expected | close |
 | `error` | Error copy | `retry` / close |
 
@@ -258,7 +283,7 @@ Shared **conflict sheet** remains the existing overlay (not redesigned inside vo
 
 | Action id | Effect |
 |-----------|--------|
-| `skip_speak` | Stop TTS + speaking animation only; keep message, proposal, pending confirm, intents |
+| `skip_speak` | Stop TTS + speaking animation only; keep message, plan, pending confirm, intents |
 | `cancel` | Dismiss pending confirm / abandon that assistant act; stop speak if playing |
 
 ### 10.5 Action buttons
@@ -295,9 +320,10 @@ Concrete CSS/SVG/canvas (or small dependency) is chosen at implementation; must 
 
 | Layer | Cover when implementing |
 |-------|-------------------------|
-| Unit | Orchestrator outcome mapping; clarify budget; tool registry; intent batch ordering; action vocabulary |
-| API e2e | `/voice/turn` answer / clarify / confirm / act / refuse; fallback to parse-task once |
-| Playwright | Full-screen mobile sheet; thread; silence-end or stubbed end-of-speech; `skip_speak` vs `cancel`; day-plan list + confirm; stay-open after write; close discards |
+| Unit | Planner decision parser; batch assembler + partial clarify; plan-draft reducer + apply mapping; `VoiceDayPlanner` with a mocked preview; orchestrator flows with mocked Groq; `previewSequence` |
+| Live eval | `npm run voice:eval:multi` — multi-intent + day-plan corpus (uk/en, 50 turns) on real Groq; planner pinned to 20b in eval |
+| API e2e | `/voice/turn` multi-intent act / confirm + report; day plan propose (real dry-run) → edit → apply; interview → `build_plan` → cancel; planner failure fallback |
+| Playwright | Multi-intent cards + Apply + statuses; interview → Make plan → voice edit → changed badge → Apply; close discards the plan |
 
 Extend [e2e-test-coverage.md](e2e-test-coverage.md) with A-VOI / U-VOI rows when each phase ships. Keep existing commander cases green where `parse-task` remains.
 
@@ -322,6 +348,7 @@ Implement in order (one chat ≈ one phase):
 ### P4 — Day-plan propose / confirm / apply
 
 - Visual proposal list; sequential placement applies.
+- Follow-up (shipped): multi-intent utterances, execution report, and the day-plan dialogue with engine dry-run seating (§6.4, §6.6, §6.7).
 
 ### P5 — Hero UX
 

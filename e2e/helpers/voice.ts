@@ -104,7 +104,8 @@ export async function stubVoiceApis(
         assistantMessage: '',
         intents: [],
         actions: [],
-        proposal: null,
+        plan: null,
+        segments: [],
         clarifyCount: 0,
         legacyParse,
       }),
@@ -121,6 +122,62 @@ export async function stubVoiceApis(
       body: JSON.stringify({ ok: true }),
     });
   });
+}
+
+export type AgentTurnBody = {
+  sessionId?: string;
+  transcript?: string;
+  actionId?: string;
+  executionReport?: { results: Array<{ summary: string; status: string }> };
+};
+
+/**
+ * Script `/voice/turn` replies (agent outcomes, not legacy parse). `reply` gets every request
+ * body; returned fields override an empty `answer`. Session DELETEs are recorded too.
+ */
+export async function stubAgentTurns(
+  page: Page,
+  reply: (body: AgentTurnBody) => Record<string, unknown>,
+): Promise<{ turns: AgentTurnBody[]; endedSessions: string[] }> {
+  const turns: AgentTurnBody[] = [];
+  const endedSessions: string[] = [];
+  await page.route('**/voice/turn', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    const body = route.request().postDataJSON() as AgentTurnBody;
+    turns.push(body);
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        sessionId: body.sessionId || 'e2e-session',
+        outcome: 'answer',
+        assistantMessage: '',
+        intents: [],
+        actions: [],
+        plan: null,
+        segments: [],
+        clarifyCount: 0,
+        legacyParse: null,
+        ...reply(body),
+      }),
+    });
+  });
+  await page.route('**/voice/session/**', async (route) => {
+    if (route.request().method() !== 'DELETE') {
+      await route.continue();
+      return;
+    }
+    endedSessions.push(route.request().url().split('/').pop() || '');
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    });
+  });
+  return { turns, endedSessions };
 }
 
 /** Finish one auto-started recording (sheet begins Listening on open). */

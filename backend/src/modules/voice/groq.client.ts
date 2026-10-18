@@ -14,6 +14,10 @@ const DEFAULT_STT_MODEL = 'whisper-large-v3';
 /** Free-tier production chat model. Llama 3.3/3.1 on Groq are enterprise-only. */
 const DEFAULT_LLM_MODEL = 'openai/gpt-oss-20b';
 const FALLBACK_LLM_MODEL = 'openai/gpt-oss-120b';
+/** Companion planner (multi-intent split, day-plan dialogue). Falls back to the chat model. */
+const DEFAULT_PLANNER_MODEL = 'openai/gpt-oss-120b';
+
+export type GroqCompletionRole = 'parse' | 'planner';
 /** Free-tier TPM is 8000. One voice prompt is ~3000, so a short wait usually fits. */
 const RATE_LIMIT_RETRIES = 2;
 /** Understanding waits on this call. A silent Groq must fail, not hang the turn. */
@@ -225,6 +229,22 @@ export class GroqClient {
     return this.config.get<string>('GROQ_LLM_MODEL')?.trim() || DEFAULT_LLM_MODEL;
   }
 
+  plannerModel(): string {
+    return (
+      this.config.get<string>('GROQ_PLANNER_MODEL')?.trim() || DEFAULT_PLANNER_MODEL
+    );
+  }
+
+  private modelsFor(role: GroqCompletionRole): string[] {
+    const list =
+      role === 'planner'
+        ? [this.plannerModel(), this.llmModel()]
+        : this.rotating()
+          ? [this.llmModel()]
+          : [this.llmModel(), FALLBACK_LLM_MODEL];
+    return list.filter((model, index) => list.indexOf(model) === index);
+  }
+
   async transcribe(
     buffer: Buffer,
     filename: string,
@@ -335,13 +355,15 @@ export class GroqClient {
     return { ok: true, text, language: payload.language };
   }
 
-  async completeJson(systemPrompt: string, userPrompt: string): Promise<string> {
+  async completeJson(
+    systemPrompt: string,
+    userPrompt: string,
+    opts?: { role?: GroqCompletionRole },
+  ): Promise<string> {
     const localBase = this.localLlmBase();
     if (localBase) return this.completeLocalJson(localBase, systemPrompt, userPrompt);
 
-    const models = (this.rotating() ? [this.llmModel()] : [this.llmModel(), FALLBACK_LLM_MODEL]).filter(
-      (model, index, list) => list.indexOf(model) === index,
-    );
+    const models = this.modelsFor(opts?.role ?? 'parse');
     let lastError = 'Groq LLM failed';
     let lastStatus = 503;
 
@@ -702,7 +724,8 @@ function isFailedJsonGeneration(message: string): boolean {
   const lower = message.toLowerCase();
   return (
     lower.includes('failed to generate json') ||
-    lower.includes('failed_generation')
+    lower.includes('failed_generation') ||
+    lower.includes('tool choice is none')
   );
 }
 

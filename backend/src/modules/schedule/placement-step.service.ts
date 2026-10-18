@@ -80,6 +80,22 @@ export type PlaceOptions = {
    * Without this, each series day refetches the whole horizon.
    */
   cachedExternalSeats?: PlacementSeat[];
+  /** Dry-run only: plan this unsaved task instead of loading `taskId`. */
+  draftTask?: Task;
+  /** Dry-run only: extra busy anchors (items a caller already proposed). */
+  extraSeats?: PlacementSeat[];
+  /** Dry-run only: free the current slots of these tasks (they are being re-seated). */
+  ignoreTaskIds?: string[];
+};
+
+export type PlacementPreviewInput = {
+  /** Unsaved task to seat; its `id` may be a draft id. */
+  task: Task;
+  /** Civil day (YYYY-MM-DD) the seat must stay on. */
+  windowYmd: string;
+  preferredStart?: Date | null;
+  extraSeats?: PlacementSeat[];
+  ignoreTaskIds?: string[];
 };
 import { providerEventsToBusyIntervals } from './external-calendar-busy.util';
 import { ScheduledTask } from './schedule.entity';
@@ -213,6 +229,103 @@ export class PlacementStepService {
   }
 
   /**
+   * Plan one unsaved task on a civil day without writing anything.
+   * A preferred start that would shift other tasks falls back to the nearest
+   * free hole, so a preview never relies on displacing a peer.
+   */
+  previewPlacement(
+    userId: string,
+    input: PlacementPreviewInput,
+  ): Promise<PlacementPlan> {
+    return withUserLock(userId, () => this.previewUnlocked(userId, input));
+  }
+
+  /**
+   * Preview several unsaved tasks on one civil day in order. Each seated entry
+   * blocks the next ones; external calendars are fetched once.
+   */
+  previewSequence(
+    userId: string,
+    input: {
+      windowYmd: string;
+      entries: Array<{ task: Task; preferredStart: Date | null }>;
+      ignoreTaskIds?: string[];
+    },
+  ): Promise<PlacementPlan[]> {
+    return withUserLock(userId, async () => {
+      const settings = await this.userSettingsService.getSettings(userId);
+      const now = new Date();
+      const horizon = planningHorizonRange(settings, now);
+      const slots = await this.scheduledRepo
+        .createQueryBuilder('st')
+        .innerJoinAndSelect('st.task', 't')
+        .where('t.userId = :userId', { userId })
+        .andWhere('st.scheduledEndTime > :now', { now })
+        .getMany();
+      const cachedExternalSeats = await this.externalAnchors(
+        userId,
+        now,
+        horizon.end,
+        slots,
+      );
+      const extraSeats: PlacementSeat[] = [];
+      const plans: PlacementPlan[] = [];
+      for (const entry of input.entries) {
+        const plan = await this.previewUnlocked(userId, {
+          task: entry.task,
+          windowYmd: input.windowYmd,
+          preferredStart: entry.preferredStart,
+          extraSeats,
+          ignoreTaskIds: input.ignoreTaskIds,
+          cachedExternalSeats,
+        });
+        plans.push(plan);
+        if (plan.outcome === 'seated') {
+          extraSeats.push({
+            id: `preview:${entry.task.id}`,
+            taskId: `preview:${entry.task.id}`,
+            taskName: entry.task.name,
+            role: 'anchor',
+            start: plan.start,
+            end: plan.end,
+            windows: [],
+            notBefore: now.getTime(),
+          });
+        }
+      }
+      return plans;
+    });
+  }
+
+  private async previewUnlocked(
+    userId: string,
+    input: PlacementPreviewInput & { cachedExternalSeats?: PlacementSeat[] },
+  ): Promise<PlacementPlan> {
+    const base: PlaceOptions = {
+      dryRun: true,
+      draftTask: input.task,
+      windowYmd: input.windowYmd,
+      extraSeats: input.extraSeats ? [...input.extraSeats] : undefined,
+      ignoreTaskIds: input.ignoreTaskIds,
+      cachedExternalSeats: input.cachedExternalSeats,
+    };
+    if (input.preferredStart) {
+      const preferred = await this.placeUnlocked(userId, input.task.id, {
+        ...base,
+        preferredStart: input.preferredStart,
+      });
+      if (preferred.outcome === 'seated' && preferred.moves.length === 0) {
+        return preferred;
+      }
+    }
+    return this.placeUnlocked(userId, input.task.id, {
+      ...base,
+      searchHole: true,
+      preferredStart: input.preferredStart ?? null,
+    });
+  }
+
+  /**
    * Serialize SQLite writes with placement for one user (single connection).
    * Task create/update saves must not interleave with `place` transactions.
    */
@@ -331,11 +444,15 @@ export class PlacementStepService {
     taskId: string,
     opts?: PlaceOptions,
   ): Promise<PlacementPlan> {
-    const task = await this.taskRepo.findOne({
-      where: { id: taskId, userId },
-      relations: ['phase', 'phases'],
-    });
+    const task =
+      opts?.dryRun && opts.draftTask
+        ? opts.draftTask
+        : await this.taskRepo.findOne({
+            where: { id: taskId, userId },
+            relations: ['phase', 'phases'],
+          });
     if (!task) throw new NotFoundException('Task not found');
+    const ignoredTaskIds = new Set(opts?.dryRun ? (opts.ignoreTaskIds ?? []) : []);
     if (
       task.scheduleState === ScheduleState.RESOLVED &&
       task.scheduledStartTime &&
@@ -393,7 +510,7 @@ export class PlacementStepService {
     const seats: PlacementSeat[] = [];
     const seenFixed = new Set<string>();
     for (const slot of slots) {
-      if (slot.taskId === task.id) continue;
+      if (slot.taskId === task.id || ignoredTaskIds.has(slot.taskId)) continue;
       const owner = slot.task;
       if (!owner || owner.isUnscheduled) continue;
       if (owner.scheduleState === ScheduleState.PROBLEMATIC) continue;
@@ -489,6 +606,9 @@ export class PlacementStepService {
       opts?.cachedExternalSeats ??
       (await this.externalAnchors(userId, now, horizon.end, slots));
     seats.push(...external);
+    if (opts?.dryRun && opts.extraSeats?.length) {
+      seats.push(...opts.extraSeats.map((seat) => ({ ...seat })));
+    }
 
     await this.attachSeriesHomeClocks(userId, seats, slots, timeZone);
 

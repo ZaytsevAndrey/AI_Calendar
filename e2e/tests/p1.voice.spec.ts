@@ -23,8 +23,8 @@ test.describe('P1 voice UI', () => {
       },
     }));
     await openAs(page, auth.onboarded, '/tasks');
-    await page.getByRole('button', { name: 'Add task by voice' }).click();
-    await expect(page.getByRole('dialog').getByText('Voice agent')).toBeVisible();
+    await page.getByRole('button', { name: 'Open Companion' }).click();
+    await expect(page.getByRole('dialog', { name: 'Companion' })).toBeVisible();
     await recordOnce(page);
     await expectMutationProgressToast(page, 'Voice dentist');
     await expect(page.getByRole('heading', { name: 'Voice dentist' }).first()).toBeVisible();
@@ -43,7 +43,7 @@ test.describe('P1 voice UI', () => {
       },
     }));
     await openAs(page, auth.onboarded, '/tasks');
-    await page.getByRole('button', { name: 'Add task by voice' }).click();
+    await page.getByRole('button', { name: 'Open Companion' }).click();
     await recordOnce(page);
     await expectMutationProgressToast(page, 'Voice draft');
     await expect(page.getByRole('heading', { name: 'Voice draft' }).first()).toBeVisible();
@@ -74,7 +74,7 @@ test.describe('P1 voice UI', () => {
       };
     });
     await openAs(page, auth.onboarded, '/tasks');
-    await page.getByRole('button', { name: 'Add task by voice' }).click();
+    await page.getByRole('button', { name: 'Open Companion' }).click();
     await recordOnce(page);
     const sheet = page.getByRole('dialog');
     await expect(sheet.getByText('What should I call this task?')).toBeVisible();
@@ -133,7 +133,7 @@ test.describe('P1 voice UI', () => {
     // Reload so the sheet picks up confirmVoiceCommands=false from the API patch.
     await page.reload();
     await expect(page.getByRole('heading', { name: immediateName })).toBeVisible();
-    await page.getByRole('button', { name: 'Add task by voice' }).click();
+    await page.getByRole('button', { name: 'Open Companion' }).click();
     await recordOnce(page);
     await expectMutationProgressToast(page, immediateName);
     await expect(page.getByRole('heading', { name: immediateName })).toHaveCount(0);
@@ -145,11 +145,13 @@ test.describe('P1 voice UI', () => {
     command = { taskId: confirmed.body.id as string, taskName: confirmedName };
     await page.reload();
     await expect(page.getByRole('heading', { name: confirmedName })).toBeVisible();
-    await page.getByRole('button', { name: 'Add task by voice' }).click();
+    await page.getByRole('button', { name: 'Open Companion' }).click();
     await recordOnce(page);
     const sheet = page.getByRole('dialog');
-    await expect(sheet.getByText(`Mark "${confirmedName}" done?`)).toBeVisible();
-    await sheet.getByRole('button', { name: 'Confirm' }).click();
+    const confirmCard = sheet.getByTestId('change-preview');
+    await expect(confirmCard.getByText(confirmedName)).toBeVisible();
+    await expect(confirmCard.getByText('Complete', { exact: true })).toBeVisible();
+    await sheet.getByRole('button', { name: 'Apply' }).click();
     await expectMutationProgressToast(page, confirmedName);
     await expect(page.getByRole('heading', { name: confirmedName })).toHaveCount(0);
 
@@ -192,11 +194,13 @@ test.describe('P1 voice UI', () => {
       'delete task',
     );
     await openAs(page, auth.onboarded, '/tasks');
-    await page.getByRole('button', { name: 'Add task by voice' }).click();
+    await page.getByRole('button', { name: 'Open Companion' }).click();
     await recordOnce(page);
     const sheet = page.getByRole('dialog');
-    await expect(sheet.getByText(`Delete "${name}"?`)).toBeVisible();
-    await sheet.getByRole('button', { name: 'Confirm' }).click();
+    const deleteCard = sheet.getByTestId('change-preview');
+    await expect(deleteCard.getByText(name)).toBeVisible();
+    await expect(deleteCard.getByText('Delete', { exact: true })).toBeVisible();
+    await sheet.getByRole('button', { name: 'Apply' }).click();
     await expectMutationProgressToast(page, name);
   });
 
@@ -213,7 +217,7 @@ test.describe('P1 voice UI', () => {
       },
     }));
     await openAs(page, auth.onboarded, '/tasks');
-    await page.getByRole('button', { name: 'Add task by voice' }).click();
+    await page.getByRole('button', { name: 'Open Companion' }).click();
     const sheet = page.getByRole('dialog');
     await expect(sheet.getByText(/Listening/)).toBeVisible();
     await expect(sheet.getByRole('img', { name: 'Microphone level' })).toBeVisible();
@@ -244,7 +248,7 @@ test.describe('P1 voice UI', () => {
       });
     });
     await openAs(page, auth.onboarded, '/tasks');
-    await page.getByRole('button', { name: 'Add task by voice' }).click();
+    await page.getByRole('button', { name: 'Open Companion' }).click();
     await turnMicOff(page);
     await typeOnce(page, 'buy milk typed');
     await expectMutationProgressToast(page, 'Typed milk');
@@ -265,7 +269,7 @@ test.describe('P1 voice UI', () => {
       },
     }));
     await openAs(page, auth.onboarded, '/tasks');
-    await page.getByRole('button', { name: 'Add task by voice' }).click();
+    await page.getByRole('button', { name: 'Open Companion' }).click();
     const sheet = page.getByRole('dialog');
     await expect(sheet.getByText(/Listening/)).toBeVisible();
     await turnMicOff(page);
@@ -343,7 +347,8 @@ test.describe('P1 voice UI', () => {
           assistantMessage: '',
           intents: [],
           actions: [],
-          proposal: null,
+          plan: null,
+          segments: [],
           clarifyCount: 0,
           legacyParse,
         }),
@@ -418,14 +423,14 @@ test.describe('P1 voice UI', () => {
     });
 
     await openAs(page, auth.onboarded, '/tasks');
-    await page.getByRole('button', { name: 'Add task by voice' }).click();
-    const voice = page.getByRole('dialog', { name: 'Voice agent' });
+    await page.getByRole('button', { name: 'Open Companion' }).click();
+    const voice = page.getByRole('dialog', { name: 'Companion' });
     await recordOnce(page);
 
     await expect(page.getByRole('dialog', { name: 'Schedule conflict' })).toBeVisible({
       timeout: 15_000,
     });
-    await expect(page.getByRole('dialog', { name: 'Voice agent' })).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: 'Companion' })).toHaveCount(0);
 
     spoken = 'place this task elsewhere';
     const conflict = page.getByRole('dialog', { name: 'Schedule conflict' });

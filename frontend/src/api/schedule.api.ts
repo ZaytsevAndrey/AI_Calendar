@@ -46,24 +46,6 @@ export interface ScheduleJobStatusResponse {
   updatedAt?: string;
 }
 
-export type ScheduleRecommendationKind =
-  | 'overload'
-  | 'gap'
-  | 'phase_mismatch'
-  | 'deadline_risk';
-
-export interface ScheduleRecommendation {
-  kind: ScheduleRecommendationKind;
-  title: string;
-  detail: string;
-  taskId: string | null;
-}
-
-export interface ScheduleRecommendations {
-  summary: string;
-  suggestions: ScheduleRecommendation[];
-}
-
 async function pollJobUntilDone(
   jobId: string,
   timeoutMs = 120_000,
@@ -222,17 +204,6 @@ export const ScheduleApi = {
       scheduledEndTime: endTime,
     });
     return response.data as ScheduledTaskDTO;
-  },
-
-  recommendSchedule: async (): Promise<ScheduleRecommendations> => {
-    const { data } = await axios.post<ScheduleRecommendations>(
-      '/schedule/recommendations',
-      {},
-    );
-    return {
-      summary: data.summary ?? '',
-      suggestions: data.suggestions ?? [],
-    };
   },
 
   getLatestDoneJob: async (): Promise<{

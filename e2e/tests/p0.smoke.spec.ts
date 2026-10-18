@@ -35,8 +35,8 @@ test.describe('P0 UI smoke', () => {
     await openAs(page, auth.onboarded);
     await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible();
     await expect(page.getByText('Now', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Schedule' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Create task' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Schedule' })).toHaveCount(0);
     await expect(
       page.getByText('Failed to load calendar events. Please check your Google Calendar connection.'),
     ).toHaveCount(0);
@@ -50,16 +50,6 @@ test.describe('P0 UI smoke', () => {
     await dialog.getByRole('textbox', { name: /Name/ }).fill('E2E flexible task');
     await dialog.getByRole('button', { name: 'Create task' }).click();
     await expectMutationProgressToast(page, 'E2E flexible task');
-  });
-
-  test('U-CAL-004 Schedule Suggestions', async ({ page, auth }) => {
-    await openAs(page, auth.onboarded);
-    await page.getByRole('button', { name: 'Schedule' }).click();
-    await page.getByRole('menuitem', { name: 'Suggestions' }).click();
-    const dialog = page.getByRole('dialog').filter({ hasText: 'Ideas for the next 7 days' });
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole('button', { name: 'Close' }).click();
-    await expect(dialog).toBeHidden();
   });
 
   test('U-CAL-013 Now Done completes a timed app task', async ({ page, auth, request }) => {

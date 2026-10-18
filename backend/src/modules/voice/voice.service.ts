@@ -333,6 +333,13 @@ export class VoiceService {
         }),
         command: null,
       };
+    } else if (!alreadyClarified && specialistAsksWhichTask(parsed)) {
+      result = {
+        understanding: 'needs_clarification',
+        clarifyingQuestion: String((parsed as { clarifyingQuestion: string }).clarifyingQuestion),
+        task: null,
+        command: null,
+      };
     } else {
       const resolved = resolveVoiceCommand({
         draft: commandDraftFromRaw(parsed, intent),
@@ -382,6 +389,21 @@ export class VoiceService {
     );
     return result;
   }
+}
+
+/** The command specialist could not tell which task is meant and asked; do not fall back to "current". */
+function specialistAsksWhichTask(parsed: unknown): boolean {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+  const root = parsed as {
+    understanding?: unknown;
+    clarifyingQuestion?: unknown;
+    command?: { taskName?: unknown } | null;
+    task?: { name?: unknown } | null;
+  };
+  if (root.understanding !== 'needs_clarification') return false;
+  if (typeof root.clarifyingQuestion !== 'string' || !root.clarifyingQuestion.trim()) return false;
+  const named = root.command?.taskName ?? root.task?.name;
+  return !(typeof named === 'string' && named.trim());
 }
 
 function boundIso(value: Date | string | null | undefined): string | null {

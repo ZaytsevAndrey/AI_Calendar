@@ -83,7 +83,7 @@ test.describe('phone layout', () => {
     await expect(build).toBeVisible();
   });
 
-  test('U-CAL-024 create, voice, and Suggestions are one tap', async ({ page, auth, request }) => {
+  test('U-CAL-024 create and voice are one tap', async ({ page, auth, request }) => {
     const name = uniqueName('Phone pill');
     expectOk(
       await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
@@ -95,8 +95,8 @@ test.describe('phone layout', () => {
     await openAs(page, auth.onboarded);
 
     await expect(page.getByRole('button', { name: 'Create task', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Add task by voice', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'More schedule actions' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Open Companion', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'More schedule actions' })).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Create task', exact: true }).click();
     const createDialog = page.getByRole('dialog');
@@ -104,18 +104,9 @@ test.describe('phone layout', () => {
     await expect(createDialog.getByRole('button', { name: 'Unscheduled', exact: true })).toBeVisible();
     await createDialog.getByRole('button', { name: 'Cancel' }).click();
 
-    await page.getByRole('button', { name: 'More schedule actions' }).click();
-    const more = page.getByRole('dialog').filter({ hasText: 'Suggestions' });
-    await expect(more.getByRole('button', { name: 'Suggestions' })).toBeVisible();
-    await more.getByRole('button', { name: 'Suggestions' }).click();
-    const suggestions = page.getByRole('dialog').filter({ hasText: 'Ideas for the next 7 days' });
-    await expect(suggestions).toBeVisible();
-    await suggestions.getByRole('button', { name: 'Close' }).click();
-    await expect(suggestions).toBeHidden();
-
     await page.getByRole('link', { name: 'Tasks' }).click();
     await expect(page.getByRole('button', { name: 'Create task', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Add task by voice', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Open Companion', exact: true })).toBeVisible();
     const card = page.locator('.task-item').filter({ hasText: name });
     await expect(card.getByText('To Do', { exact: true })).toBeVisible();
     await expect(card.getByText('Medium', { exact: true })).toBeVisible();

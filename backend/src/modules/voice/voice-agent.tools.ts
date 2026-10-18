@@ -71,6 +71,9 @@ export class VoiceAgentTools {
       case 'match_task':
         return this.matchTask(ctx, String(args.query ?? args.name ?? ''));
       case 'get_task':
+        if (!args.taskId && !args.id && args.name) {
+          return this.matchTask(ctx, String(args.name));
+        }
         return this.getTask(ctx, String(args.taskId ?? args.id ?? ''));
       default:
         return { error: `Unknown tool: ${name}` };

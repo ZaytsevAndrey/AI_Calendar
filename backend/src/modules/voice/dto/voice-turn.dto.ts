@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, MinLength, ValidateIf } from 'class-validator';
+import {
+  IsObject,
+  IsOptional,
+  IsString,
+  MinLength,
+  ValidateIf,
+} from 'class-validator';
+import type { VoiceExecutionReport } from '../voice-agent.types';
 
 export class VoiceTurnDto {
   @ApiProperty({
@@ -35,9 +42,19 @@ export class VoiceTurnDto {
 
   @ApiProperty({
     required: false,
-    description: 'Tapped action id from the previous turn (confirm, cancel, …)',
+    description:
+      'Tapped action id (confirm, cancel, build_plan) or `report` after the client ran intents',
   })
   @IsString()
   @IsOptional()
   actionId?: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Sent with actionId `report`: { results: [{ summary, status: applied | skipped | conflict | error }] }',
+  })
+  @IsOptional()
+  @IsObject()
+  executionReport?: VoiceExecutionReport;
 }

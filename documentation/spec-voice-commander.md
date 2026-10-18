@@ -17,7 +17,7 @@ Voice becomes the **primary controller** for tasks and habits: full create / edi
 
 ## 2. Non-goals
 
-- Schedule jobs by voice (Generate / Suggestions / Clear / Review cleanup).
+- Schedule jobs by voice (Generate / Clear / Review cleanup).
 - Phases CRUD or Settings changes by voice.
 - Calendar Q&A (“what’s next?”, “list today’s tasks”) as free-form query — only a short confirmation after a write.
 - True streaming STT / live word-by-word captions (deferred).

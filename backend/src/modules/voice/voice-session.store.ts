@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type {
-  DayPlanProposal,
+  PendingBatch,
+  PlanDraft,
   VoiceAgentSession,
   VoiceSessionTurn,
   VoiceWriteIntent,
@@ -29,8 +30,10 @@ export class VoiceSessionStore {
       clarifyCount: 0,
       turns: [],
       pendingIntents: null,
-      pendingProposal: null,
       pendingSummary: null,
+      pendingKind: null,
+      pendingBatch: null,
+      planDraft: null,
       groqKeyIndex: null,
     };
     this.sessions.set(key, created);
@@ -63,22 +66,34 @@ export class VoiceSessionStore {
     sessionId: string,
     pending: {
       intents: VoiceWriteIntent[] | null;
-      proposal: DayPlanProposal | null;
       summary: string | null;
+      kind: 'plan' | 'writes' | null;
     },
   ): void {
     const session = this.getOrCreate(userId, sessionId);
     session.pendingIntents = pending.intents;
-    session.pendingProposal = pending.proposal;
     session.pendingSummary = pending.summary;
+    session.pendingKind = pending.kind;
   }
 
   clearPending(userId: string, sessionId: string): void {
-    this.setPending(userId, sessionId, {
-      intents: null,
-      proposal: null,
-      summary: null,
-    });
+    this.setPending(userId, sessionId, { intents: null, summary: null, kind: null });
+  }
+
+  setPendingBatch(
+    userId: string,
+    sessionId: string,
+    batch: PendingBatch | null,
+  ): void {
+    this.getOrCreate(userId, sessionId).pendingBatch = batch;
+  }
+
+  setPlanDraft(
+    userId: string,
+    sessionId: string,
+    draft: PlanDraft | null,
+  ): void {
+    this.getOrCreate(userId, sessionId).planDraft = draft;
   }
 
   clear(userId: string, sessionId: string): void {

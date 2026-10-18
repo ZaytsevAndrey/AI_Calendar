@@ -14,6 +14,10 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ## Shipped (Oct 2026)
 
+- [x] **Companion multi-intent + day-plan dialogue.** A planner LLM (`GROQ_PLANNER_MODEL`, gpt-oss-120b, falls back to 20b) splits one utterance into up to 6 segments (writes + Q&A); each is parsed by the 20b specialist and the batch gets one confirm. After Apply the client reports per-intent statuses (`actionId: 'report'`) and the panel shows **Done just now** cards. "Plan my day" runs up to 3 interview questions, seats Unscheduled, new and flexible tasks via an engine dry-run (`previewSequence`), and accepts voice edits that mark changed cards before Apply. Old greedy packer and regex heuristics removed. Live corpus: `npm run voice:eval:multi`. Docs: [spec-voice-agent.md](spec-voice-agent.md) §6.4, §6.6, §6.7.
+
+- [x] **Companion panel UI.** Renamed Voice → Companion / Помічник. Desktop floating movable/resizable panel over the calendar; phone keeps the bottom sheet. Confirm / day-plan use calendar-style preview cards; footer actions decluttered (Apply + Cancel on confirm). Docs: [features/companion-panel.md](features/companion-panel.md).
+
 - [x] **Habits soft-disabled for MVP.** No nav/route/UI, no schedule busy, no habit push reminders, no voice `habit_*` commands. `GET /habits` returns an empty list (no Google backfill); writes return 410. Module code and DB rows kept; existing Google habit events left as-is.
 
 - [x] **§30 Delete account.** Settings → two-step confirm (calendar cleanup warning, then type `DELETE` or email). `DELETE /auth/account` removes app-created Google events and the dedicated app calendar first (fail closed on Google errors), then wipes local user data and identities. `GET /auth/me` returns the email for the confirm UI.
@@ -145,7 +149,7 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ### Extras
 
-- [x] **AI schedule recommendations.** Calendar → Schedule → **Suggestions** asks Groq for up to five notes on the next 7 days. Nothing is saved or applied. An empty calendar skips the model. A Google outage still returns suggestions from local tasks.
+- [x] **AI schedule recommendations.** ~~Calendar → Schedule → **Suggestions**~~ — later removed with the Schedule menu and `POST /schedule/recommendations`.
 - [x] **PWA reminders.** Settings opt-in (off by default). Web Push once in the half hour before each timed Now/Next block, the same window for a habit with a clock time, and one wake-time note for habits without a block. Already checked habits stay quiet. `POST /reminders/tick` about every 30 minutes wakes the free API. A start that already passed is not sent. iPhone needs Add to Home Screen.
 - [x] **Voice beyond create.** The same mic completes, skips, or reschedules the current or named task (uk/en/ru). Done on a series skips today's occurrence. An open slot moves like a drag; no slot updates the window and replans. One question, then a refusal. Settings **Ask before voice commands** (off by default) confirms first. Create stays immediate.
 - [x] **Search / filters on tasks.** Tasks page only, client-side, and the two sections do not share controls. **Unscheduled:** name search, status, overdue. **Scheduled:** name search, status, phase, schedule type, overdue, and sort. Filters combine. Overdue means a past deadline on a task that is not completed or canceled.
