@@ -996,7 +996,7 @@ describe('clarificationOnlyResult', () => {
 });
 
 describe('scheduleTodayYmd', () => {
-  it('rolls back before wake after midnight', () => {
+  it('rolls back until three hours before wake when sleep is unset', () => {
     expect(
       scheduleTodayYmd(
         '2026-09-07T22:30:00.000Z', // 01:30 Asia/Nicosia Sep 8
@@ -1016,32 +1016,43 @@ describe('scheduleTodayYmd', () => {
     ).toBe('2026-09-07');
   });
 
-  it('keeps civil today after sleep and before wake', () => {
+  it('keeps the ending day through three hours after sleep', () => {
     expect(
       scheduleTodayYmd(
-        '2026-09-08T00:00:00.000Z', // 03:00 +03 Sep 8
+        '2026-09-07T23:00:00.000Z', // 02:00 +03 Sep 8, sleep 01:00
         'Asia/Nicosia',
         '08:00',
-        '02:00',
+        '01:00',
       ),
-    ).toBe('2026-09-08');
+    ).toBe('2026-09-07');
     expect(
       scheduleTodayYmd(
-        '2026-09-08T00:00:00.000Z',
+        '2026-09-08T01:00:00.000Z', // 04:00 +03 Sep 8, exactly sleep + 3h
         'Asia/Nicosia',
         '08:00',
-        '22:00',
+        '01:00',
+      ),
+    ).toBe('2026-09-07');
+  });
+
+  it('starts the next day three hours before wake', () => {
+    expect(
+      scheduleTodayYmd(
+        '2026-09-08T02:00:00.000Z', // 05:00 +03 Sep 8, wake 08:00
+        'Asia/Nicosia',
+        '08:00',
+        '01:00',
       ),
     ).toBe('2026-09-08');
   });
 
-  it('rolls back only before an overnight sleep', () => {
+  it('waits out the later of the two boundaries', () => {
     expect(
       scheduleTodayYmd(
-        '2026-09-07T22:30:00.000Z', // 01:30 +03 Sep 8
+        '2026-09-08T00:00:00.000Z', // 03:00 +03 Sep 8, sleep 22:00, wake-3 is 05:00
         'Asia/Nicosia',
         '08:00',
-        '02:00',
+        '22:00',
       ),
     ).toBe('2026-09-07');
   });
@@ -1059,19 +1070,19 @@ describe('buildLocalCalendarContext', () => {
     expect(text).toContain('schedule +3 days: 2026-09-10');
     expect(text).toContain('even when already past now');
     expect(text).toContain('in N hours');
-    expect(text).toContain('After sleep');
+    expect(text).toContain('three hours after sleep');
   });
 
-  it('maps tomorrow to the next civil day after sleep and before wake', () => {
+  it('keeps the ending schedule day until three hours before wake', () => {
     const text = buildLocalCalendarContext(
       '2026-09-08T00:00:00.000Z', // 03:00 +03 Sep 8
       'Asia/Nicosia',
       '08:00',
       '22:00',
     );
-    expect(text).toContain('schedule today: 2026-09-08');
-    expect(text).toContain('schedule tomorrow: 2026-09-09');
-    expect(text).not.toContain('before wake = still previous');
+    expect(text).toContain('schedule today: 2026-09-07');
+    expect(text).toContain('schedule tomorrow: 2026-09-08');
+    expect(text).toContain('still the schedule day that is ending');
   });
 });
 

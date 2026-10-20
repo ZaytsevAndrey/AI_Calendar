@@ -5,6 +5,24 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AsyncLocalStorage } from 'async_hooks';
+import {
+  DEFAULT_DEEPSEEK_PLANNER_MODEL,
+  deepseekPlannerCall,
+  deepseekPlannerResult,
+  type DeepSeekPlannerPayload,
+} from './deepseek-planner';
+import {
+  DEFAULT_GEMINI_PLANNER_MODEL,
+  geminiPlannerCall,
+  geminiPlannerResult,
+  type GeminiPlannerPayload,
+} from './gemini-planner';
+import {
+  DEFAULT_QWEN_PLANNER_MODEL,
+  qwenPlannerCall,
+  qwenPlannerResult,
+  type QwenPlannerPayload,
+} from './qwen-planner';
 
 const GROQ_AUDIO_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
 const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
@@ -18,6 +36,44 @@ const FALLBACK_LLM_MODEL = 'openai/gpt-oss-120b';
 const DEFAULT_PLANNER_MODEL = 'openai/gpt-oss-120b';
 
 export type GroqCompletionRole = 'parse' | 'planner';
+
+/** One Groq chat call recorded while VOICE_EVAL_PACE=1. */
+export type GroqEvalSpend = {
+  at: number;
+  model: string;
+  keyIndex: number;
+  tokens: number;
+  role: GroqCompletionRole;
+  label: string;
+};
+
+const EVAL_PACE_WINDOW_MS = 60_000;
+
+/**
+ * How long to wait so `need` tokens fit this key+model's minute window.
+ * A request larger than the ceiling returns 0: waiting cannot make it fit.
+ */
+export function tokenPaceWaitMs(input: {
+  now: number;
+  limit: number;
+  need: number;
+  spends: Array<{ at: number; tokens: number }>;
+}): number {
+  if (input.need <= 0 || input.limit <= 0 || input.need > input.limit) return 0;
+  const window = input.spends
+    .filter((row) => input.now - row.at < EVAL_PACE_WINDOW_MS && row.tokens > 0)
+    .sort((a, b) => a.at - b.at);
+  const used = window.reduce((sum, row) => sum + row.tokens, 0);
+  if (used + input.need <= input.limit) return 0;
+  let dropped = 0;
+  let waitUntil = input.now;
+  for (const row of window) {
+    dropped += row.tokens;
+    waitUntil = row.at + EVAL_PACE_WINDOW_MS + 250;
+    if (used - dropped + input.need <= input.limit) break;
+  }
+  return Math.max(0, waitUntil - input.now);
+}
 /** Free-tier TPM is 8000. One voice prompt is ~3000, so a short wait usually fits. */
 const RATE_LIMIT_RETRIES = 2;
 /** Understanding waits on this call. A silent Groq must fail, not hang the turn. */
@@ -63,6 +119,9 @@ export class GroqClient {
   private readonly logger = new Logger(GroqClient.name);
   /** Index of the key pinned for the current eval scenario. -1 until the first pin. */
   private pinnedKeyIndex = -1;
+  private readonly evalSpendsLog: GroqEvalSpend[] = [];
+  private readonly evalTpmLimit = new Map<string, number>();
+  private evalMeta: { role: GroqCompletionRole; label: string } | null = null;
   private readonly requestAls = new AsyncLocalStorage<GroqRequestContext>();
 
   constructor(private readonly config: ConfigService) {}
@@ -221,6 +280,76 @@ export class GroqClient {
     if (ctx) ctx.tokensUsed += Math.floor(total);
   }
 
+  /** Keys still usable after a tokens-per-day retirement. */
+  liveKeyCount(): number {
+    return this.activeKeyNames().length;
+  }
+
+  evalSpends(): readonly GroqEvalSpend[] {
+    return this.evalSpendsLog;
+  }
+
+  private evalPacing(): boolean {
+    const flag = process.env.VOICE_EVAL_PACE?.trim().toLowerCase();
+    return flag === '1' || flag === 'true';
+  }
+
+  private async paceForEval(model: string, systemPrompt: string, userPrompt: string): Promise<void> {
+    if (!this.evalPacing()) return;
+    const keyIndex = this.currentKeyIndex();
+    const bucket = `${keyIndex}:${model}`;
+    const limit = this.evalTpmLimit.get(bucket) ?? 8_000;
+    const recent = this.evalSpendsLog.filter(
+      (row) => row.keyIndex === keyIndex && row.model === model,
+    );
+    const peak = recent.slice(-4).reduce((max, row) => Math.max(max, row.tokens), 0);
+    const estimate = Math.max(
+      Math.ceil((systemPrompt.length + userPrompt.length) / 3.5) + 800,
+      peak,
+    );
+    const now = Date.now();
+    const wait = tokenPaceWaitMs({
+      now,
+      limit,
+      need: estimate,
+      spends: this.evalSpendsLog.filter(
+        (row) => row.keyIndex === keyIndex && row.model === model,
+      ),
+    });
+    if (estimate > limit) {
+      this.logger.warn(
+        `Eval pace: ${model} prompt estimate ${estimate} exceeds TPM ${limit}`,
+      );
+      return;
+    }
+    if (wait > 0) {
+      this.logger.warn(`Eval pace ${model} key ${keyIndex}: sleep ${wait}ms`);
+      await this.sleep(wait);
+    }
+  }
+
+  private noteEvalSpend(
+    model: string,
+    tokens: number | undefined,
+    limitHeader: string | null,
+  ): void {
+    if (!this.evalPacing()) return;
+    const keyIndex = this.currentKeyIndex();
+    const bucket = `${keyIndex}:${model}`;
+    const limit = Number(limitHeader);
+    if (Number.isFinite(limit) && limit > 0) this.evalTpmLimit.set(bucket, limit);
+    const used = Math.floor(tokens ?? 0);
+    if (used <= 0) return;
+    this.evalSpendsLog.push({
+      at: Date.now(),
+      model,
+      keyIndex,
+      tokens: used,
+      role: this.evalMeta?.role ?? 'parse',
+      label: this.evalMeta?.label ?? 'parse',
+    });
+  }
+
   sttModel(): string {
     return this.config.get<string>('GROQ_STT_MODEL')?.trim() || DEFAULT_STT_MODEL;
   }
@@ -358,12 +487,35 @@ export class GroqClient {
   async completeJson(
     systemPrompt: string,
     userPrompt: string,
-    opts?: { role?: GroqCompletionRole },
+    opts?: { role?: GroqCompletionRole; label?: string },
   ): Promise<string> {
+    const role = opts?.role ?? 'parse';
+    const previousMeta = this.evalMeta;
+    this.evalMeta = {
+      role,
+      label: opts?.label ?? (role === 'planner' ? 'planner' : 'parse'),
+    };
+    try {
+    if (this.deepseekForEveryCall()) {
+      const forced = await this.tryDeepSeekPlanner(systemPrompt, userPrompt, true);
+      if (forced == null) {
+        throw this.llmUnavailable('DeepSeek returned no text', 503);
+      }
+      return forced;
+    }
+    if (role === 'planner') {
+      const viaDeepSeek = await this.tryDeepSeekPlanner(systemPrompt, userPrompt);
+      if (viaDeepSeek != null) return viaDeepSeek;
+      const viaQwen = await this.tryQwenPlanner(systemPrompt, userPrompt);
+      if (viaQwen != null) return viaQwen;
+      const viaGemini = await this.tryGeminiPlanner(systemPrompt, userPrompt);
+      if (viaGemini != null) return viaGemini;
+    }
+
     const localBase = this.localLlmBase();
     if (localBase) return this.completeLocalJson(localBase, systemPrompt, userPrompt);
 
-    const models = this.modelsFor(opts?.role ?? 'parse');
+    const models = this.modelsFor(role);
     let lastError = 'Groq LLM failed';
     let lastStatus = 503;
 
@@ -410,6 +562,162 @@ export class GroqClient {
     }
 
     throw this.llmUnavailable(lastError, lastStatus);
+    } finally {
+      this.evalMeta = previousMeta;
+    }
+  }
+
+  /** Eval switch. Groq chat stays in place when this is unset. */
+  private deepseekForEveryCall(): boolean {
+    return process.env.VOICE_LLM_PROVIDER?.trim().toLowerCase() === 'deepseek';
+  }
+
+  /**
+   * Planner calls use DeepSeek when `DEEPSEEK_API_KEY` is set.
+   * A failure returns null so Qwen, Gemini, then Groq still answer,
+   * unless `required` is set (every call is DeepSeek, no Groq hop).
+   */
+  private async tryDeepSeekPlanner(
+    systemPrompt: string,
+    userPrompt: string,
+    required = false,
+  ): Promise<string | null> {
+    const key = this.config.get<string>('DEEPSEEK_API_KEY')?.trim() || '';
+    if (!key) {
+      if (required) throw this.llmUnavailable('DEEPSEEK_API_KEY missing', 503);
+      return null;
+    }
+    const model =
+      this.config.get<string>('DEEPSEEK_PLANNER_MODEL')?.trim() ||
+      DEFAULT_DEEPSEEK_PLANNER_MODEL;
+    const base =
+      this.config.get<string>('DEEPSEEK_BASE_URL')?.trim() || 'https://api.deepseek.com';
+    const call = deepseekPlannerCall(model, systemPrompt, userPrompt);
+    let response: Response;
+    try {
+      response = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify(call.body),
+        signal: AbortSignal.timeout(45_000),
+      });
+    } catch (err) {
+      const message = isTimeoutError(err)
+        ? 'DeepSeek planner timed out'
+        : `DeepSeek planner failed: ${err instanceof Error ? err.message : String(err)}`;
+      if (required) throw this.llmUnavailable(message, isTimeoutError(err) ? 504 : 503);
+      this.logger.warn(`${message}; using the fallback planner`);
+      return null;
+    }
+    const payload = (await response.json().catch(() => ({}))) as DeepSeekPlannerPayload;
+    const parsed = deepseekPlannerResult(payload);
+    if (!response.ok || !parsed.ok) {
+      const error = parsed.ok
+        ? `DeepSeek planner failed (${response.status})`
+        : parsed.error;
+      if (required) throw this.llmUnavailable(error, response.status);
+      this.logger.warn(`${error}; using the fallback planner`);
+      return null;
+    }
+    this.recordTokens(parsed.tokens);
+    this.noteEvalSpend(model, parsed.tokens, null);
+    return parsed.content;
+  }
+
+  /**
+   * Planner calls use Qwen when `QWEN_API_KEY` is set.
+   * A failure returns null so Gemini, then Groq, still answers.
+   */
+  private async tryQwenPlanner(
+    systemPrompt: string,
+    userPrompt: string,
+  ): Promise<string | null> {
+    const key = this.config.get<string>('QWEN_API_KEY')?.trim() || '';
+    if (!key) return null;
+    const model =
+      this.config.get<string>('QWEN_PLANNER_MODEL')?.trim() ||
+      DEFAULT_QWEN_PLANNER_MODEL;
+    const base =
+      this.config.get<string>('QWEN_BASE_URL')?.trim() ||
+      'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
+    const call = qwenPlannerCall(model, systemPrompt, userPrompt);
+    let response: Response;
+    try {
+      response = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify(call.body),
+        signal: AbortSignal.timeout(45_000),
+      });
+    } catch (err) {
+      const message = isTimeoutError(err)
+        ? 'Qwen planner timed out'
+        : `Qwen planner failed: ${err instanceof Error ? err.message : String(err)}`;
+      this.logger.warn(`${message}; using the fallback planner`);
+      return null;
+    }
+    const payload = (await response.json().catch(() => ({}))) as QwenPlannerPayload;
+    const parsed = qwenPlannerResult(payload);
+    if (!response.ok || !parsed.ok) {
+      const error = parsed.ok ? `Qwen planner failed (${response.status})` : parsed.error;
+      this.logger.warn(`${error}; using the fallback planner`);
+      return null;
+    }
+    this.recordTokens(parsed.tokens);
+    this.noteEvalSpend(model, parsed.tokens, null);
+    return parsed.content;
+  }
+
+  /**
+   * Planner calls use Gemini when `GEMINI_API_KEY` is set.
+   * A failure returns null so the Groq planner (or local chat) still answers.
+   */
+  private async tryGeminiPlanner(
+    systemPrompt: string,
+    userPrompt: string,
+  ): Promise<string | null> {
+    const key = this.config.get<string>('GEMINI_API_KEY')?.trim() || '';
+    if (!key) return null;
+    const model =
+      this.config.get<string>('GEMINI_PLANNER_MODEL')?.trim() ||
+      DEFAULT_GEMINI_PLANNER_MODEL;
+    const call = geminiPlannerCall(model, systemPrompt, userPrompt);
+    let response: Response;
+    try {
+      response = await fetch(call.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': key,
+        },
+        body: JSON.stringify(call.body),
+        signal: AbortSignal.timeout(GROQ_CHAT_TIMEOUT_MS),
+      });
+    } catch (err) {
+      const message = isTimeoutError(err)
+        ? 'Gemini planner timed out'
+        : `Gemini planner failed: ${err instanceof Error ? err.message : String(err)}`;
+      this.logger.warn(`${message}; using the fallback planner`);
+      return null;
+    }
+    const payload = (await response.json().catch(() => ({}))) as GeminiPlannerPayload;
+    const parsed = geminiPlannerResult(payload);
+    if (!response.ok || !parsed.ok) {
+      const error = parsed.ok
+        ? `Gemini planner failed (${response.status})`
+        : parsed.error;
+      this.logger.warn(`${error}; using the fallback planner`);
+      return null;
+    }
+    this.recordTokens(parsed.tokens);
+    this.noteEvalSpend(model, parsed.tokens, null);
+    return parsed.content;
   }
 
   private localLlmBase(): string {
@@ -625,6 +933,8 @@ export class GroqClient {
       body.response_format = { type: 'json_object' };
     }
 
+    await this.paceForEval(model, systemPrompt, userPrompt);
+
     let response: Response;
     try {
       response = await fetch(GROQ_CHAT_URL, {
@@ -666,6 +976,11 @@ export class GroqClient {
       };
     }
     this.recordTokens(payload.usage?.total_tokens);
+    this.noteEvalSpend(
+      model,
+      payload.usage?.total_tokens,
+      response.headers?.get('x-ratelimit-limit-tokens') ?? null,
+    );
     return { ok: true, content };
   }
 }

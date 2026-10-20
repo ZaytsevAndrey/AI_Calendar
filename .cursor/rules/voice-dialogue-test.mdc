@@ -1,0 +1,28 @@
+---
+description: Voice agent dialogue tests — prompt rules, day-plan contract, stop-on-fail, token pacing
+globs: backend/src/modules/voice/**,backend/src/scripts/eval-voice-multi-intent.ts,documentation/voice-agent-dialogue-test-plan.md
+alwaysApply: false
+---
+
+# Voice agent dialogue tests
+
+Oracle: `documentation/voice-agent-dialogue-test-plan.md`. Read it before a live Groq run or a prompt edit in this cycle. Where it differs from `documentation/spec-voice-agent.md` §6.4, the test plan wins. Do not edit an expectation so it matches the old three-question interview.
+
+## Prompts and TypeScript
+
+- Prompts are English. Describe situations, not words. No sample utterances in any language.
+- The normalizer only clamps fields the model already emitted. Do not grow `sniffCommandIntent`.
+- The agent states only what the user said or a tool returned. It invents no task, gap, clock, duration, or travel time. A task `location` is not minutes of travel.
+
+## Day plan
+
+The agent does not end the dialogue. The draft grows as tasks are understood. Apply is the user ending it and sending the draft to the engine. Fixed tasks and series are not moved. The interview has no question cap.
+
+## Running tests
+
+- Corpus is Ukrainian. Planner calls try DeepSeek, then Qwen, then Gemini, then Groq. Parse stays on Groq unless `VOICE_LLM_PROVIDER=deepseek`.
+- A run without `--minutes` stops on the first mismatch. `--bulk` and `--minutes` walk the 350 once and continue past behavior mismatches. A provider hard limit exits 2. Do not loop the pool.
+- Pace per key and per model from the token ledger in the test plan. Do not reuse the create-eval 35 second gap.
+- A daily token ceiling retires that key. When every key is retired, stop for the day.
+- Measure planner, tool, router, and specialist calls before cutting any of them.
+- Companion panel and the mini-calendar widget are out of this cycle. Assert the turn payload.

@@ -104,6 +104,22 @@ describe('resolveVoiceCommand', () => {
     expect(result).toMatchObject({ type: 'clarify' });
   });
 
+  it('does not cancel a finished series day when that day is not open', () => {
+    const result = resolveVoiceCommand({
+      draft: draft({ intent: 'complete', taskName: 'Gym', seriesScope: 'occurrence' }),
+      transcript: 'finished gym today',
+      timeZone: ZONE,
+      nowIso: NOW,
+      alreadyClarified: false,
+      tasks: [task({ id: 't2', name: 'Gym', isRecurring: true, isUnscheduled: true })],
+      slots: [],
+    });
+    expect(result).toMatchObject({
+      type: 'command',
+      command: { kind: 'refuse' },
+    });
+  });
+
   it('skips today when a recurring task is marked done for this day', () => {
     const result = resolveVoiceCommand({
       draft: draft({ intent: 'complete', taskName: 'Gym' }),

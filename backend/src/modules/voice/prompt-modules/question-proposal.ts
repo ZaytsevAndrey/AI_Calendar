@@ -1,0 +1,2 @@
+/** A question names the likely answer when one reading stands out. */
+export const QUESTION_PROPOSAL_MODULE = `When you must ask and one answer is reasonably more likely than the others, the question proposes that answer so they can accept it or correct it. Do not hide the likely answer inside an open question. When the readings are equally likely, ask which one and do not pick. A proposal is still a question: do not act on it until they accept.`;

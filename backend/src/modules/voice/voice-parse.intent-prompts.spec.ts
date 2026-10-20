@@ -34,12 +34,12 @@ describe('voice parse prompt split', () => {
       if (intent === 'create') {
         expect(pair.system).toMatch(/"kind"/);
         expect(pair.system).toMatch(/Ukrainian/);
-        expect(pair.system).toMatch(/after sleep/i);
+        expect(pair.system).not.toMatch(/already the new wake-day/);
         expect(pair.system).toMatch(/First match wins/);
         expect(pair.system).toMatch(/phaseId only from the phases list/);
         expect(pair.system).toMatch(/Do not guess/);
         expect(pair.user).toContain('schedule today:');
-        expect(pair.user).toContain('After sleep');
+        expect(pair.user).toContain('three hours after sleep');
         expect(pair.user).toContain('Default task duration: 30 minutes');
       }
       if (intent === 'update') {
@@ -52,8 +52,8 @@ describe('voice parse prompt split', () => {
       }
       if (intent === 'reschedule') {
         expect(pair.system).toMatch(/command\.start/);
-        expect(pair.system).toMatch(/00:00/);
-        expect(pair.system).toMatch(/23:59/);
+        expect(pair.system).toMatch(/Wake/);
+        expect(pair.system).toMatch(/Sleep/);
         expect(pair.system).toMatch(/do now/);
         expect(pair.system).toMatch(/First match wins/);
         expect(pair.system).toMatch(/task null/i);

@@ -132,7 +132,7 @@ describe('VoiceAgentOrchestrator — multi-intent', () => {
 
     const res = await h.turn({ transcript: 'buy milk and the report is done' });
 
-    expect(h.completeJson.mock.calls[0][2]).toEqual({ role: 'planner' });
+    expect(h.completeJson.mock.calls[0][2]).toEqual({ role: 'planner', label: 'planner.r0' });
     expect(h.parse.mock.calls.map((call) => call[0].transcript)).toEqual(['buy milk', 'report is done']);
     expect(res.outcome).toBe('act');
     expect(res.intents.map((intent) => intent.type)).toEqual(['create', 'command']);
@@ -278,8 +278,14 @@ describe('VoiceAgentOrchestrator — day plan', () => {
       ],
     });
     const edited = await h.turn({ transcript: 'drop email and add an hour of gym' });
-    expect(edited.outcome).toBe('confirm');
+    expect(edited.outcome).toBe('clarify');
+    expect(edited.actions).toEqual(['build_plan', 'cancel']);
     expect(edited.plan?.items.map((item) => item.name)).toEqual(['Taxes', 'Gym']);
+    expect(h.propose).toHaveBeenCalledTimes(1);
+
+    const builtAfter = await h.turn({ actionId: 'build_plan' });
+    expect(builtAfter.outcome).toBe('confirm');
+    expect(builtAfter.plan?.items.map((item) => item.name)).toEqual(['Taxes', 'Gym']);
     expect(h.propose).toHaveBeenCalledTimes(2);
 
     const applied = await h.turn({ actionId: 'confirm' });
@@ -295,9 +301,10 @@ describe('VoiceAgentOrchestrator — day plan', () => {
 
     h.planner({ type: 'final', outcome: 'answer', assistantMessage: 'Taxes take about 30 minutes.' });
     const res = await h.turn({ transcript: 'how long are taxes' });
-    expect(res.outcome).toBe('confirm');
+    expect(res.outcome).toBe('clarify');
+    expect(res.actions).toContain('build_plan');
     expect(res.plan?.items).toHaveLength(2);
-    expect(h.session().pendingKind).toBe('plan');
+    expect(h.session().planDraft?.stage).toBe('interview');
   });
 
   it('switches to the interview when nothing can be planned', async () => {
@@ -333,9 +340,10 @@ describe('VoiceAgentOrchestrator — day plan', () => {
     expect(h.session().pendingKind).toBe('writes');
 
     const back = await h.turn({ actionId: 'cancel' });
-    expect(back.outcome).toBe('confirm');
+    expect(back.outcome).toBe('clarify');
+    expect(back.actions).toContain('build_plan');
     expect(back.plan?.items).toHaveLength(2);
-    expect(h.session().pendingKind).toBe('plan');
+    expect(h.session().planDraft?.stage).toBe('interview');
   });
 
   it('report logs what ran and re-seats an open plan', async () => {
@@ -352,7 +360,8 @@ describe('VoiceAgentOrchestrator — day plan', () => {
       actionId: 'report',
       executionReport: { results: [{ summary: 'Created Milk', status: 'applied' }] },
     });
-    expect(res.outcome).toBe('confirm');
+    expect(res.outcome).toBe('clarify');
+    expect(res.actions).toContain('build_plan');
     expect(res.plan?.items).toHaveLength(2);
     expect(h.session().turns.some((turn) => turn.role === 'system' && turn.text.includes('Created Milk'))).toBe(true);
   });

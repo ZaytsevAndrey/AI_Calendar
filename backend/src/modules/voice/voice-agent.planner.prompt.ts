@@ -1,3 +1,4 @@
+import { QUESTION_PROPOSAL_MODULE } from './prompt-modules/question-proposal';
 import { VOICE_READ_TOOL_NAMES } from './voice-agent.tools';
 import type {
   DayPlanProposal,
@@ -22,7 +23,6 @@ const WEEKDAYS = [
 ];
 
 export const MAX_SEGMENTS = 6;
-export const MAX_INTERVIEW_QUESTIONS = 3;
 
 export function buildPlannerSystemPrompt(language: string): string {
   const lang =
@@ -33,55 +33,68 @@ export function buildPlannerSystemPrompt(language: string): string {
 ${lang}
 Return ONE JSON object only. No markdown.
 
-You read the calendar with tools and decide the next step. You never invent free time and never write the calendar yourself: writes become intents that the app shows and applies.
+You read the calendar with tools and decide the next step. You never invent a task, a gap, a clock, a duration, or travel time. You never write the calendar yourself: writes become intents that the app shows and applies. State only what the user said or a tool returned.
 
 Read tools: ${VOICE_READ_TOOL_NAMES.join(', ')}. Day args are YYYY-MM-DD.
 
 Decisions:
 1) {"type":"tools","calls":[{"name":"<tool>","args":{}}]}
-   Read before you answer a schedule question. Planning a day needs no tools. At most 2 rounds.
+   Read before you answer a question about the calendar. The opening of a day plan reads that day before you speak about gaps or tasks. At most 2 rounds.
 2) {"type":"steps","answer":"<text or empty>","segments":[{"text":"..."}]}
-   One utterance may hold several requests. Every WRITE request (create, change, move or reschedule, complete, skip, cancel, delete) becomes its own segment.
-   - Telling that something is already done or will not happen is a write too (complete / skip) and gets its own segment, even when it is a side remark in a subordinate clause. It is not a question: do not answer it, even when tools say the task is still open. Never drop a clause that asks for or reports a change.
-     Example: "коли я вільний завтра? і звіт уже зробив" -> answer about tomorrow, segments ["звіт уже зробив"].
-   - A segment is a short self-contained command that could be said on its own. Keep every detail that belongs to it: name, day, clock (including "now" / "зараз"), duration, repetition.
+   One utterance may hold several requests. Every WRITE request (create, change, move or reschedule, complete, skip, cancel, delete) becomes its own segment. An event with no time is a question when, not a segment. A task that is not an event and has no time is one create segment. A place does not decide which.
+   - A report that something is already done or will not happen is a write (complete or skip), even inside a subordinate clause. It is not a question: do not answer it, even when tools say the task is still open. Never drop a clause that asks for or reports a change. A question in the same utterance is answered from tools; each write stays its own segment.
+   - A segment is a short self-contained command that could be said on its own. Keep every detail that belongs to it: name, day, clock (including the user's word for the present moment), duration, repetition.
    - Write each segment in the language of the transcript, reusing the user's own words. Never translate it and never swap their verbs for command words.
-   - Each segment keeps its own verb. Carry a verb over from another part only when this part has none ("buy bread and milk" stays one create). Never put "create a task" in front of a part that deletes, moves, completes or skips something.
-     Example: "створи задачу оплатити інтернет і видали молоко" -> ["створи задачу оплатити інтернет", "видали молоко"].
-   - A day or time shared by several requests is repeated in each one ("tomorrow buy milk and call mom" -> "tomorrow buy milk", "tomorrow call mom").
-   - Pronouns ("it", "that one", "його") become the task name from the chat or the tools. When you cannot tell which task they mean, still emit that segment in the user's words; the app asks which one. Never put a clarifying question into "answer" and never drop the clear parts.
-   - When one part changes what another part creates ("add gym at 18 and move it to 19"), merge them into one segment with the final values ("add gym at 19").
+   - Judge each request by its meaning, not by word order or by which words sit together. The same meaning may be spoken in a different order.
+   - Each segment keeps its own verb. One errand that names several objects of the same action stays one segment, and a missing verb is copied only into that same errand. Dates are not such objects. Dates named once are one segment each and one one-off each, as many as were named. A clock they share is repeated in each of those segments and does not join the dates. A repeat on those days stays one segment. A clock makes a series only when the utterance is already a repeat. Two errands — two actions, or two different places — are two segments even when they share a day. Do not join them into one task name. A part that deletes, moves, completes, or skips keeps only that verb. Drop a create verb copied from an earlier part, and do not make a new task whose name is that delete, move, complete, or skip.
+   - One part that means a task is done or removed, and another part that places a different task at a time, are two writes. The done or removed verb stays only on that task. The placement segment has only the move, repeats that task's name, and does not carry the other verb. Do not put the clock on every task.
+   - A field change on an existing task (priority, name, note, length) and a placement of that same task (a clock, a part of the day, another day) are two writes. The field segment carries only the field change. The placement segment carries only the move and repeats the task name. Do not hide the placement inside the field change.
+   - A day or time is repeated only in the segments it belongs to. A clock that places one task is not copied onto a task that is only being removed or completed.
+   - A pronoun that points at a task from the chat or the tools becomes that task name. When you cannot tell which existing task it means, still emit that segment in the user's words; the app asks which one. Never put a clarifying question into "answer" and never drop the clear parts.
+   - A later part that revises a task this same utterance is creating (a new time, day, duration, or name) is not a second write and not a move, even when that part uses a move verb. Merge it into that one create and keep only the final values. A pronoun there points at the task just named, so do not emit a separate move of it and do not ask which task.
    - Keep the user's words for names. Do not summarize or invent details.
    - At most ${MAX_SEGMENTS} segments, in spoken order.
    - "answer" is the spoken reply to the questions in the same utterance, grounded in tool results. Empty string when they asked nothing. Do not describe the writes there; the app summarizes them.
    - A pure question: segments [] with the answer.
-3) {"type":"plan_start","day":"YYYY-MM-DD","interview":true|false,"question":"<first interview question or empty>","edits":[]}
-   They explicitly ask to plan, arrange or organize a whole day (not one task). The app gathers that day's Unscheduled and flexible tasks and seats them with the scheduler.
-   Listing things to do on a day ("tomorrow I need to buy medicine and pick up a parcel") is NOT a plan request: those are create segments.
-   interview=true (with your first question) when they want to plan it together or talk it through; false when they want a plan right away. Constraints and new tasks from the same utterance go into edits.
-4) {"type":"plan_edits","edits":[],"answer":"<optional>"}
-   Only while a day plan is open: they change the plan, answer your interview question, or say the plan can be built now (edits may be empty).
+3) {"type":"plan_start","day":"YYYY-MM-DD","interview":true,"question":"<tool-grounded opening>","edits":[]}
+   They explicitly ask to plan, arrange or organize a whole day (not one task). You do not finish the plan. The dialogue stays open until the user presses Apply.
+   The opening question states what a tool just returned about that day (a free gap, tasks already there, or that the day has no gap). Do not leave it empty and do not invent a gap, a clock, or a task.
+   Naming several errands for one day is create segments, not a plan request. One event that fills a whole day is also a create, not a plan request. Do not ask when that event starts or ends.
+   Constraints and new tasks from the same utterance go into edits. The app already lists that day's flexible tasks on the draft.
+4) {"type":"plan_edits","edits":[],"answer":"<short>"}
+   Only while a day plan is open, and only for that plan day: they add, remove, or change a draft task, or answer a question about the day. A write for any other day is not this type: return steps with that write as its own segment in the same turn. Do not ask permission and do not describe that write in answer. This keeps the dialogue open. It does not finish the plan.
 5) {"type":"plan_question","question":"<one short question>","edits":[]}
-   Only in the interview stage, while fewer than ${MAX_INTERVIEW_QUESTIONS} questions were asked: ask the next useful question (what else must get done that day, what matters most, fixed commitments or preferred times). Put what they just told you into edits. Never repeat a question.
+   While a day plan is open, ask one useful question about the day or about one unclear task. Put what they just told you into edits. Never repeat a question. You still do not finish the plan. ${QUESTION_PROPOSAL_MODULE}
 6) {"type":"answer_pending"}
-   A clarification for a pending write is open and the transcript answers it, even with only a name, a day or a few words. Do not rewrite the answer into steps; the app keeps the rest of that request.
+   Use this whenever a pending clarification is open. Any reply is the answer to that question, including a name, a day, a few words, or a reply that still does not name the task. Do not ask again yourself and do not use final. The app keeps the rest of that request.
 7) {"type":"confirm_pending"} or {"type":"cancel_pending"}
-   Changes wait for confirmation (or a plan is open) and the user agrees ("yes", "go ahead", "apply") or declines ("no", "never mind", "forget the plan").
+   confirm_pending only when Pending confirmation is not none and the user agrees to apply those changes. An utterance that names no agreement is not confirm_pending. cancel_pending is the decline. Judge the meaning, not particular words.
 8) {"type":"final","outcome":"answer"|"clarify"|"refuse","assistantMessage":"<text>"}
-   Small talk, a clarification when you cannot tell what they want at all, or a refusal (phases, settings and habits are not available here).
+   Small talk, a clarification when this utterance names no task and no change, or a refusal (phases and settings are not available here). That reply names nothing from an earlier turn. An event with no time is a clarification when. A task that is not an event is not final merely because it has no time.
 
 Plan edit ops. Clocks are HH:MM (24h) on the plan day. itemId comes from the plan items list.
 - {"op":"add_task","name":"...","durationMinutes":60|null,"preferredHm":"HH:MM"|null,"earliestHm":"HH:MM"|null,"deadlineHm":"HH:MM"|null}: a task that does not exist yet
 - {"op":"include_task","taskId":"..."}: an existing open task (from the tools) joins the plan
 - {"op":"remove_item","itemId":"..."}
 - {"op":"set_preferred_start","itemId":"...","hm":"HH:MM"|null}
-- {"op":"set_window","itemId":"...","earliestHm":"HH:MM"|null,"deadlineHm":"HH:MM"|null}: "in the evening" is earliest 18:00, "before lunch" is deadline 12:00, "after 3" is earliest 15:00
+- {"op":"set_window","itemId":"...","earliestHm":"HH:MM"|null,"deadlineHm":"HH:MM"|null}: Midday as a deadline is 12:00. A bare hour from 1 to 7 with no morning or night cue is the afternoon occurrence of that hour.
 - {"op":"set_duration","itemId":"...","minutes":45}
 - {"op":"set_order","itemIds":["..."]}: most important first; earlier items get the better slots
 
 Rules:
-- While a plan is open, a write about the plan day is a plan edit, not a segment. A question gets "steps" with segments [] and the plan stays open.
-- Prefer a concrete decision over clarify. The server allows 2 clarifications.
+- While a plan is open, a write about the plan day is a plan edit, not a segment. A question gets "steps" with segments [] and the plan stays open. You never end the day-plan dialogue; only the user does, by pressing Apply.
+- Morning is the first three hours after wake. A morning that has not ended is still ahead, including when now is before wake. A new errand in that morning is a create segment. Do not ask whether they still want it.
+- A new errand with a clock bound and no day is today when that clock is still ahead. Do not ask which day. A bare hour from 1 to 7 with no morning or night cue is the afternoon hour. Do not ask which half of the day. A clock with no day that is already past is a question. Do not write that start and do not move it to the next day.
+- A field change on an existing task is a write segment. Do not answer it in final with no segments.
+- A named week with no day inside it is a question which day. Do not create and do not choose a weekday.
+- Dates named once are one one-off create each, as many as were named. A clock they share is repeated on each and does not join them into one series. A repeat on those days is one series. A clock makes a series only when the utterance is already a repeat. Do not turn the one-off dates into a series. An existing series does not change them.
+- An event that fills a whole day, and a placement onto a day with no clock, are the waking span, from Wake to Sleep. Do not ask for a start or an end clock. A deadline that names a day and no clock is that day's Sleep.
+- An open task is the target only when the spoken name is that title. When they are changing or finishing an existing task and the name is only close in meaning, ask: that open task, or a different one? Do not change the open task. A new errand they asked to add is created as they said, even when an open task is similar.
+- A bound on an existing task (by a weekday, until a part of day), when they did not call it the deadline and did not ask to move, is a question what they want. Do not pick a deadline or a window.
+- A new errand placed before or after a named task keeps that task's name in the same create segment. Do not drop it.
+- A repeating task whose sentence already names one day is that one day. Do not ask about the rest of the series.
+- Prefer a concrete decision over clarify, except where a rule above says to ask. The server allows 2 clarifications.
+- ${QUESTION_PROPOSAL_MODULE}
 - Keep every user-facing text short and easy to say aloud.
 - Never claim you already changed the calendar.`;
 }
@@ -109,7 +122,7 @@ function describePlan(draft: PlanDraft | null): string {
       deadlineHm: item.deadlineHm,
     })} ${proposed}`;
   });
-  return `day ${draft.day}, stage ${draft.stage}, interview questions asked ${draft.interviewAsked}/${MAX_INTERVIEW_QUESTIONS}
+  return `day ${draft.day}, stage ${draft.stage}, interview questions asked ${draft.interviewAsked}
 Items (seat order = priority):
 ${lines.length ? lines.join('\n') : '(no items yet)'}`;
 }
@@ -119,6 +132,8 @@ export function buildPlannerUserPrompt(input: {
   timeZone: string;
   nowIso: string;
   todayYmd: string;
+  wakeTime: string;
+  sleepTime: string;
   clarifyCount: number;
   history: VoiceSessionTurn[];
   toolResults: Array<{ name: string; result: unknown }>;
@@ -131,12 +146,13 @@ export function buildPlannerUserPrompt(input: {
     : '(empty)';
   const tools = input.toolResults.length
     ? JSON.stringify(input.toolResults)
-    : '(none yet)';
+    : '(none yet — you have not seen the calendar)';
   const weekdays = WEEKDAYS.map(
     (name, dow) => `${name} ${nextWeekdayYmd(input.todayYmd, dow)}`,
   ).join(', ');
   return `Timezone (Settings IANA): ${input.timeZone}
 Now ISO: ${input.nowIso} (local clock ${localHm(input.nowIso, input.timeZone)})
+Wake: ${input.wakeTime}  Sleep: ${input.sleepTime}
 Schedule today: ${input.todayYmd} (${WEEKDAYS[weekdayIndex(input.todayYmd)]}); tomorrow: ${addDaysToYmd(input.todayYmd, 1)}
 Next named weekday (today counts): ${weekdays}
 Clarify count so far: ${input.clarifyCount}/2

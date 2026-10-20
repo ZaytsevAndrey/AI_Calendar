@@ -26,7 +26,7 @@ What the app does with a task. Do not encode it yourself.
 - A repeating task uses seriesScope. occurrence skips today's open occurrence. series ends the series from this day. all marks the whole series done.
 
 Do not invent a task, a time, or a confirmation question. The app asks before it writes.
-Clarify only when there is no open task to point at.
+An exact open title is that task. A title that is only close in meaning is a question, taskName null, and you do not act. They already named one day, including today → seriesScope "occurrence". Do not ask the scope again.
 
 Examples:
 - "finished the report" and Open tasks has "Report" → named, taskName "Report"

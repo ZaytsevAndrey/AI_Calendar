@@ -19,12 +19,20 @@ export function localYmd(nowIso: string, timeZone: string): string {
   }).format(instant);
 }
 
+type YmdHm = { ymd: string; hm: string };
+
+function hmToMinutes(hm: string): number {
+  const [hour, minute] = hm.split(':').map(Number);
+  return hour * 60 + minute;
+}
+
 /**
  * Wake-day "today" for speech.
- * After sleep, the civil date is the schedule day even when the clock is
- * still before wake. The previous wake-day continues only before an
- * overnight sleep (sleep after midnight, clock still before that sleep).
- * With no sleep time, a clock before wake still belongs to the previous civil date.
+ * The day that is ending lasts through three hours after sleep.
+ * The day that is starting begins three hours before wake.
+ * When three hours after sleep is later, the ending day lasts through that
+ * later instant and the next day begins after it.
+ * With no sleep time, the next day begins three hours before wake.
  */
 export function scheduleTodayYmd(
   nowIso: string,
@@ -36,13 +44,43 @@ export function scheduleTodayYmd(
   const wake = normalizeClockHm(wakeTime || '08:00');
   const hm = localHm(nowIso, timeZone);
   const sleep = sleepTime?.trim() ? normalizeClockHm(sleepTime) : null;
-  if (sleep && sleep < wake) {
-    if (hm < sleep) return addDaysToYmd(cal, -1);
-    return cal;
+  const now: YmdHm = { ymd: cal, hm };
+  const wakeMinus = shiftClock(cal, wake, -180);
+  if (!sleep) {
+    return compareYmdHm(now, wakeMinus) >= 0 ? cal : addDaysToYmd(cal, -1);
   }
-  if (sleep) return cal;
-  if (hm < wake) return addDaysToYmd(cal, -1);
-  return cal;
+  const sleepYmd =
+    hmToMinutes(sleep) < hmToMinutes(wake) ? cal : addDaysToYmd(cal, -1);
+  const sleepPlus = shiftClock(sleepYmd, sleep, 180);
+  if (compareYmdHm(sleepPlus, wakeMinus) > 0) {
+    return compareYmdHm(now, sleepPlus) > 0 ? cal : addDaysToYmd(cal, -1);
+  }
+  return compareYmdHm(now, wakeMinus) >= 0 ? cal : addDaysToYmd(cal, -1);
+}
+
+function shiftClock(ymd: string, hm: string, deltaMinutes: number): YmdHm {
+  let total = hmToMinutes(hm) + deltaMinutes;
+  let days = 0;
+  while (total < 0) {
+    total += 1440;
+    days -= 1;
+  }
+  while (total >= 1440) {
+    total -= 1440;
+    days += 1;
+  }
+  const hour = Math.floor(total / 60);
+  const minute = total % 60;
+  return {
+    ymd: addDaysToYmd(ymd, days),
+    hm: `${pad2(hour)}:${pad2(minute)}`,
+  };
+}
+
+function compareYmdHm(a: YmdHm, b: YmdHm): number {
+  if (a.ymd !== b.ymd) return a.ymd < b.ymd ? -1 : 1;
+  if (a.hm !== b.hm) return a.hm < b.hm ? -1 : 1;
+  return 0;
 }
 
 export function addDaysToYmd(ymd: string, days: number): string {
@@ -184,24 +222,24 @@ export function buildLocalCalendarContext(
 - "next" + today's weekday (next Tuesday when schedule today is Tuesday): ${sameWeekdayNextWeek}. Not schedule today.
 - civil date: ${calendarToday}${
     calendarToday !== scheduleToday
-      ? ' (before overnight sleep = still previous wake-day)'
+      ? ' (still the schedule day that is ending)'
       : ''
   }
 
 Resolve all dates yourself into ISO-8601 with numeric offset:
 - Words for today/tomorrow (any language) map to schedule today/tomorrow above.
-- After sleep, those anchors are the civil date even when the clock is still before wake.
-- Before an overnight sleep (clock still before sleep, sleep after midnight), schedule today is the previous civil date.
+- The day that is ending lasts through three hours after sleep. The day that is starting begins three hours before wake. When three hours after sleep is later, the ending day lasts through that later instant and the next day begins after it. With no sleep time, the next day begins three hours before wake.
+- That choice only picks the date. It does not make a later part of that day past.
 - Relative "in N hours" (any language) = now ISO + N hours.
 - Relative "in N days" (any language) = schedule today + N days.
 - Day + clock: put the clock on that schedule day (never on schedule today when they said tomorrow).
 - A named weekday with no "last" is the next one, including today when today is that weekday. Copy that date from the "next named weekday" line. When schedule today is Tuesday, Monday is the listed Monday, not schedule +3 days and not the Monday that already passed. On Saturday is the listed Saturday, not Thursday and not schedule +2 days. "next" plus today's weekday is the date on the "next + today's weekday" line, seven days later, not schedule today.
-- Day without clock: flexible; earliest 00:00, deadline 23:59 that day; scheduledStart/End null.
+- Day without clock: flexible; earliest at Wake, deadline at Sleep that day; scheduledStart/End null. A deadline that names a day and no clock is Sleep.
 - Concrete time commits to the hour (kind fixed). Approximate softens it (kind flexible, scheduledStart at the hour, never fixed). Softened ordinal: around the sixth is flexible preferred 18:00; length is only duration; ordinal is not in the name.
 - Bare 1–7 afternoon unless morning/night. Quarter/half toward an hour is the clock (quarter to five → 16:45), not the length.
 - "in N hours" adds to the local clock. "after 18" earliest only. "by end of day" / "from now until 18" are windows. Named-event fill of a span is fixed; errand inside a span is a window.
 - Before/after another activity: match Open tasks for the bound. No match → ask. After work / after lunch are preferred clocks, not that lookup.
-- Morning/evening with no day: preferred only (~09:00/~18:00); if past → nearest upcoming. Named day + evening/morning → preferred AND day envelope. Named day + morning already past → ask, do not keep rest of day.
+- Morning is the first three hours after wake, not a fixed clock. It is past only when its end is before now. Now before it starts, including before wake, means it is still ahead on the named day. Do not ask and do not move it to the next day. It has ended and they named that day → ask whether they still want it. It has ended and they named no day → the same morning on the next day.
 - Recurring: every morning/evening → DAILY; every N days → DAILY; last day of month → MONTHLY; weekly clock stays scheduledStart.
 - No day and no clock: unscheduled. Spoken clock stays on the named day even when already past now.`;
 }

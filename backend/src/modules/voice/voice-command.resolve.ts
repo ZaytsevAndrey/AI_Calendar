@@ -78,7 +78,8 @@ function seriesScopeFor(
 ): VoiceSeriesScope | null {
   const sniffed = sniffSeriesScope(transcript);
   if (sniffed) return sniffed;
-  if (alreadyClarified) return draft.seriesScope;
+  if (draft.seriesScope) return draft.seriesScope;
+  if (alreadyClarified) return null;
   return null;
 }
 
@@ -329,7 +330,7 @@ export function resolveVoiceCommand(input: {
   if (draft.intent === 'complete' && task.isRecurring) {
     const scope = seriesScopeFor(draft, input.transcript, input.alreadyClarified);
     if (!scope) return missingSeriesScope(task.name, lang, input.alreadyClarified);
-    if (scope === 'occurrence') return skipCommand(task, slot, lang);
+    if (scope === 'occurrence') return doneToday(task, slot, lang);
     if (scope === 'series') return endSeriesCommand(task, slot, lang);
     if (task.isFixedExternal) {
       return {
@@ -516,6 +517,28 @@ function asWeekDays(value: unknown): number[] | null {
     ),
   ].sort((a, b) => a - b);
   return days.length ? days : null;
+}
+
+function doneToday(
+  task: VoiceCommandTask,
+  slot: VoiceCommandSlot | null,
+  lang: AppLanguage,
+): VoiceCommandResolveResult {
+  if (task.isUnscheduled || !slot) {
+    return {
+      type: 'command',
+      command: {
+        kind: 'refuse',
+        message: vt(lang, 'voice.noOccurrenceDone', { name: task.name }),
+      },
+    };
+  }
+  const closed = skipCommand(task, slot, lang);
+  if (closed.type !== 'command' || closed.command.kind !== 'skip') return closed;
+  return {
+    type: 'command',
+    command: { ...closed.command, summary: vt(lang, 'voice.doneToday', { name: task.name }) },
+  };
 }
 
 function skipCommand(

@@ -29,7 +29,6 @@ import { parsePlannerDecision, type PlannerDecision } from './voice-agent.planne
 import {
   buildPlannerSystemPrompt,
   buildPlannerUserPrompt,
-  MAX_INTERVIEW_QUESTIONS,
 } from './voice-agent.planner.prompt';
 import { VoiceAgentTools, type VoiceToolContext } from './voice-agent.tools';
 import type {
@@ -238,6 +237,8 @@ export class VoiceAgentOrchestrator {
           timeZone: ctx.timeZone,
           nowIso: ctx.nowIso,
           todayYmd: ctx.todayYmd,
+          wakeTime: ctx.settings.wakeTime,
+          sleepTime: ctx.settings.sleepTime,
           clarifyCount: session.clarifyCount,
           history: session.turns,
           toolResults,
@@ -245,7 +246,7 @@ export class VoiceAgentOrchestrator {
           pendingClarification: pendingQuestion,
           planDraft: session.planDraft,
         }),
-        { role: 'planner' },
+        { role: 'planner', label: `planner.r${round}` },
       );
       logVoiceLlm(this.logger, `planner.round${round}`, raw);
       const decision = parsePlannerDecision(raw);
@@ -342,11 +343,10 @@ export class VoiceAgentOrchestrator {
       });
     }
     this.sessions.setPendingBatch(userId, sessionId, null);
-    const message = joinSpoken([
-      batch.answer,
-      ...batch.intents.map((intent) => intent.summary),
-      ...batch.notes,
-    ]);
+    const spoken = batch.intents.map((intent) =>
+      batch.needsConfirm ? intent.summary : statedSummary(intent, ctx.language),
+    );
+    const message = joinSpoken([batch.answer, ...spoken, ...batch.notes]);
     if (!batch.intents.length) {
       return this.finish(userId, sessionId, {
         outcome: 'refuse',
@@ -428,12 +428,16 @@ export class VoiceAgentOrchestrator {
     this.sessions.clearPending(ctx.userId, ctx.sessionId);
     const day = /^\d{4}-\d{2}-\d{2}$/.test(decision.day) ? decision.day : ctx.todayYmd;
     const draftCtx = this.draftContext(ctx);
-    let draft = applyPlanEdits(initialPlanDraft(day, draftCtx), decision.edits, draftCtx);
-    if (decision.interview && decision.question) {
-      draft = { ...draft, stage: 'interview', interviewAsked: 1 };
-      return this.holdInterview(ctx, draft, decision.question);
-    }
-    return this.proposeAndHold(ctx, draft);
+    const draft = applyPlanEdits(initialPlanDraft(day, draftCtx), decision.edits, draftCtx);
+    return this.holdInterview(
+      ctx,
+      {
+        ...draft,
+        stage: 'interview',
+        interviewAsked: decision.question ? 1 : 0,
+      },
+      decision.question,
+    );
   }
 
   private async planEdits(
@@ -443,7 +447,7 @@ export class VoiceAgentOrchestrator {
     answer: string,
   ): Promise<VoiceTurnResponse> {
     const next = applyPlanEdits(draft, edits, this.draftContext(ctx));
-    return this.proposeAndHold(ctx, { ...next, stage: 'review' }, answer);
+    return this.holdInterview(ctx, { ...next, stage: 'interview' }, answer);
   }
 
   private async planQuestion(
@@ -452,12 +456,9 @@ export class VoiceAgentOrchestrator {
     decision: { question: string; edits: PlanEdit[] },
   ): Promise<VoiceTurnResponse> {
     const next = applyPlanEdits(draft, decision.edits, this.draftContext(ctx));
-    if (next.stage !== 'interview' || next.interviewAsked >= MAX_INTERVIEW_QUESTIONS) {
-      return this.proposeAndHold(ctx, { ...next, stage: 'review' });
-    }
     return this.holdInterview(
       ctx,
-      { ...next, interviewAsked: next.interviewAsked + 1 },
+      { ...next, stage: 'interview', interviewAsked: next.interviewAsked + 1 },
       decision.question,
     );
   }
@@ -622,6 +623,9 @@ export class VoiceAgentOrchestrator {
     this.sessions.setPendingBatch(userId, sessionId, null);
     if (keepPlan && session.planDraft) {
       const ctx = await this.loadContext(userId, dto);
+      if (session.planDraft.stage === 'interview') {
+        return this.holdInterview(ctx, session.planDraft, '');
+      }
       return this.proposeAndHold(ctx, session.planDraft);
     }
     this.sessions.setPlanDraft(userId, sessionId, null);
@@ -642,9 +646,12 @@ export class VoiceAgentOrchestrator {
     const sessionId = dto.sessionId;
     const line = describeReport(dto.executionReport);
     if (line) this.sessions.appendTurn(userId, sessionId, { role: 'system', text: line });
-    if (session.planDraft?.stage === 'review' && !session.pendingIntents) {
+    if (session.planDraft && !session.pendingIntents) {
       const ctx = await this.loadContext(userId, dto);
-      return this.proposeAndHold(ctx, session.planDraft);
+      if (session.planDraft.stage === 'review') {
+        return this.proposeAndHold(ctx, session.planDraft);
+      }
+      return this.holdInterview(ctx, session.planDraft, '');
     }
     return this.finish(userId, sessionId, { outcome: 'answer', assistantMessage: '' });
   }
@@ -694,12 +701,30 @@ export class VoiceAgentOrchestrator {
   }
 }
 
+function statedSummary(intent: VoiceWriteIntent, lang: AppLanguage): string {
+  const summary = intent.summary.trim();
+  if (!summary.endsWith('?')) return intent.summary;
+  const name =
+    intent.type === 'create'
+      ? String(intent.task.name ?? '')
+      : String(intent.command.taskName ?? intent.command.name ?? '');
+  return name ? t(lang, 'voice.appliedChange', { name }) : summary.replace(/\?+$/, '.');
+}
+
 function interviewPayload(draft: PlanDraft): DayPlanProposal {
   return {
     day: draft.day,
     stage: 'interview',
     revision: draft.revision,
-    items: [],
+    items: draft.items.map((item) => ({
+      itemId: item.id,
+      taskId: item.taskId,
+      source: item.source,
+      name: item.name,
+      start: '',
+      end: '',
+      durationMinutes: item.durationMinutes,
+    })),
     unplaced: [],
     changedItemIds: [],
   };

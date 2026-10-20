@@ -106,7 +106,7 @@ Task `phaseIds` must reference phases owned by the same user.
 
 ## Voice — `/voice`
 
-JWT. STT needs `GROQ_API_KEY`. Chat uses local Ollama when `LLM_BASE_URL` is set, otherwise Groq. Optional `GROQ_API_KEY_2`… rotate on provider rate limits. Soft daily chat-token cap (`VOICE_DAILY_TOKEN_LIMIT`, default 100000) returns `VOICE_QUOTA_EXCEEDED` when exhausted. Spoken replies use Piper when `PIPER_URL` is up (`POST /voice/speak`), otherwise the browser voice. Audio is **not** stored. Each parse logs one structured `voice.parse.result` line (see [voice-prompt-next.md](voice-prompt-next.md)).
+JWT. STT needs `GROQ_API_KEY`. The voice planner tries DeepSeek, then Qwen, then Gemini, then Groq. `VOICE_LLM_PROVIDER=deepseek` also sends parse to DeepSeek. Otherwise task parse uses local Ollama when `LLM_BASE_URL` is set, otherwise Groq. Optional `GROQ_API_KEY_2`… rotate on provider rate limits. Soft daily chat-token cap (`VOICE_DAILY_TOKEN_LIMIT`, default 100000) returns `VOICE_QUOTA_EXCEEDED` when exhausted. Spoken replies use Piper when `PIPER_URL` is up (`POST /voice/speak`), otherwise the browser voice. Audio is **not** stored. Each parse logs one structured `voice.parse.result` line (see [voice-prompt-next.md](voice-prompt-next.md)).
 
 | Method | Path | Description |
 |--------|------|-------------|

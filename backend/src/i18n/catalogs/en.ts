@@ -16,6 +16,8 @@ export const en = {
   'voice.couldNotFindTask': 'I could not find that task.',
   'voice.whenMove': 'When should I move it?',
   'voice.markDone': 'Mark "{{name}}" done?',
+  'voice.doneToday': 'Mark today\'s "{{name}}" done?',
+  'voice.noOccurrenceDone': 'There is no open "{{name}}" today to mark done.',
   'voice.skipToday': 'Skip today\'s "{{name}}"?',
   'voice.skip': 'Skip "{{name}}"?',
   'voice.moveTo': 'Move "{{name}}" to {{when}}?',
@@ -40,6 +42,7 @@ export const en = {
     '{{time}} already passed. Left it for the rest of today.',
   'voice.createdTask': 'Created task "{{name}}".',
   'voice.createdTaskFor': 'Created task "{{name}}" for {{when}}.',
+  'voice.appliedChange': 'Recorded the change to "{{name}}".',
   'voice.whenToday': 'today',
   'voice.whenTomorrow': 'tomorrow',
   'voice.whenOrUnscheduled':

@@ -312,7 +312,12 @@ export function applyPlanEdits(
       }
     }
   }
-  return { ...draft, items, nextNewId };
+  return {
+    ...draft,
+    items,
+    nextNewId,
+    revision: edits.length ? draft.revision + 1 : draft.revision,
+  };
 }
 
 function lang(value?: string | null): AppLanguage {

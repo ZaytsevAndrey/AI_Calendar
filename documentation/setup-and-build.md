@@ -46,6 +46,11 @@ Create `backend/.env` from `backend/.env.example`.
 | `VOICE_DAILY_TOKEN_LIMIT` | Optional soft per-user chat-token ceiling per civil day (default `100000`). `0` disables. Exhausted → `VOICE_QUOTA_EXCEEDED` |
 | `GROQ_STT_MODEL` | Optional. Default `whisper-large-v3-turbo` |
 | `GROQ_LLM_MODEL` | Optional. Default `openai/gpt-oss-20b` when chat stays on Groq |
+| `DEEPSEEK_API_KEY` | Optional. First planner in the chain (`DEEPSEEK_PLANNER_MODEL`, default `deepseek-flash`). Parse stays on Groq unless `VOICE_LLM_PROVIDER=deepseek` |
+| `QWEN_API_KEY` | Optional. Planner step after DeepSeek (`QWEN_PLANNER_MODEL`, default `qwen3.7-flash`) |
+| `GEMINI_API_KEY` | Optional free Gemini key ([aistudio.google.com/apikey](https://aistudio.google.com/apikey)). Planner step after Qwen. Parse and speech-to-text stay on Groq |
+| `GEMINI_PLANNER_MODEL` | Optional. Default `gemini-3.8-flash` |
+| `VOICE_LLM_PROVIDER` | Optional. `deepseek` forces planner and parse onto DeepSeek and does not fall back |
 | `LLM_BASE_URL` | Optional. Local Ollama, `http://127.0.0.1:11434`. When set, chat uses `LLM_MODEL` and Groq is only speech-to-text |
 | `LLM_MODEL` | Optional. Default `calendar-voice` (Qwen3 14B, 8192 context; see `tools/calendar-voice.Modelfile`) |
 | `PIPER_URL` | Optional. Local Piper, `http://127.0.0.1:5510`. Voice replies use it; if it is down the browser voice is used |

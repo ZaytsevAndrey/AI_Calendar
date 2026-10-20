@@ -2,14 +2,14 @@
 
 **Status:** working queue for roadmap **§23** (split; logging-first).  
 **Fix log:** [voice-fix-flow.md](voice-fix-flow.md).  
-**Use:** open a **new chat per mini-item** below. Product contract: [spec-voice-agent.md](spec-voice-agent.md). Architecture plan (Cursor): `voice_prompt_architecture_3d81fe7a`.
+**Use:** open a **new chat per mini-item** below. Product contract: [spec-voice-agent.md](spec-voice-agent.md). Dialogue test cycle (target day-plan behavior, prompt rules, pacing): [voice-agent-dialogue-test-plan.md](voice-agent-dialogue-test-plan.md). Architecture plan (Cursor): `voice_prompt_architecture_3d81fe7a`.
 
 ## Already shipped (do not redo)
 
 - Orchestrator `/voice/turn` + session + read tools + day-plan + hero UI.
 - Parse: **router** (`intent` + `language`) → **per-intent specialist** → normalize / `resolveVoiceCommand`.
-- Every intent has a **full** specialist: one system string (schema, first-match rules, fields the resolver reads). Create is assembled from [prompt-modules/](../backend/src/modules/voice/prompt-modules/). The other intents are one file each and share the task-target, habit-target, and clock fragments inside that same call. Spoken today/tomorrow follow sleep (after sleep = civil date, even before wake). `needs_clarification` returns a question only and does not create a task.
-- Create when: day window OK; recurring with pattern OK without clock; **no usable when → Unscheduled** (no day/time clarify loop). Clarify only if **name** missing.
+- Every intent has a **full** specialist: one system string (schema, first-match rules, fields the resolver reads). Create is assembled from [prompt-modules/](../backend/src/modules/voice/prompt-modules/). The other intents are one file each and share the task-target, habit-target, and clock fragments inside that same call. The ending schedule day lasts through three hours after sleep; the starting day begins three hours before wake. That choice only picks the date. `needs_clarification` returns a question only and does not create a task.
+- Create when: a day with no clock is Wake to Sleep. Dates named once are one-offs; a shared clock does not join them. A clock makes a series only when the utterance is already a repeat. An event with no time is a question when. A task that is not an event, with no time, is Unscheduled. A place does not decide. A clock with no day that is already past is a question.
 - Placement honors `earliestStartTime` via [placement-bounds.util.ts](../backend/src/modules/schedule/placement-bounds.util.ts).
 - Debug raw LLM: `[llm:parse.router]`, `[llm:parse.create]`, … via `voice-llm-log.util.ts` (clipped).
 - Structured harvest log: `voice.parse.result` JSON after normalize/resolve ([voice-parse-result-log.util.ts](../backend/src/modules/voice/voice-parse-result-log.util.ts)).
@@ -94,7 +94,7 @@ voice.parse.result {"parseId":"…","transcript":"…","timeZone":"Europe/Kyiv",
 Logs: [llm:parse.router] then [llm:parse.<intent>] then voice.parse.result {…}
 Create no-when → task.isUnscheduled, understanding complete
 Recurring + WEEKLY Mon–Fri, no clock → complete recurring
-Tomorrow+clock after sleep (even before wake) → next civil day; before an overnight sleep → coming morning is “tomorrow”
+Schedule day: through three hours after sleep, and from three hours before wake. A clock with no day that is already past is a question, not the next day. A morning that has not ended is still ahead, including before wake.
 ```
 
 Delete or archive this file into [roadmap-archive.md](roadmap-archive.md) when the queue above is done.

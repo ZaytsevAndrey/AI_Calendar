@@ -16,6 +16,7 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Spec: Conflict rules](spec-conflict-rules.md) | Unscheduled vs Problematic, conflict option ids; who moves defers to incremental placement |
 | [Spec: Voice Commander](spec-voice-commander.md) | Shipped one-shot commander: task/habit CRUD by voice, TTS, confirm delete/cancel |
 | [Spec: Voice Agent](spec-voice-agent.md) | Hybrid Companion orchestrator, `/voice/turn`, Q&A + write intents (shipped) |
+| [Voice agent dialogue test plan](voice-agent-dialogue-test-plan.md) | Dialogue test cycle: target day-plan contract, prompt rules, Groq pacing, simple and complex flows |
 | [Companion panel](features/companion-panel.md) | Floating desktop panel, preview cards, multi-intent Apply with statuses, day-plan dialogue |
 | [Voice prompts — next](voice-prompt-next.md) | Handoff for roadmap **§23** (split): logging-first, then goldens, then fixes |
 | [Voice fix flow](voice-fix-flow.md) | One-rule create-prompt cycles and the sentinel log |
@@ -26,4 +27,4 @@ Single source of truth for the project. Keep these files in sync with code chang
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** October 2026 (Companion panel UI).
+**Last documentation update:** October 2026 (voice agent dialogue test plan).

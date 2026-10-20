@@ -18,6 +18,8 @@ export const uk: Record<MessageKey, string> = {
   'voice.couldNotFindTask': 'Не вдалося знайти цю задачу.',
   'voice.whenMove': 'На коли перенести?',
   'voice.markDone': 'Позначити «{{name}}» виконаною?',
+  'voice.doneToday': 'Позначити сьогоднішню «{{name}}» виконаною?',
+  'voice.noOccurrenceDone': 'Сьогодні немає відкритого «{{name}}», щоб позначити зробленим.',
   'voice.skipToday': 'Пропустити сьогоднішню «{{name}}»?',
   'voice.skip': 'Пропустити «{{name}}»?',
   'voice.moveTo': 'Перенести «{{name}}» на {{when}}?',
@@ -43,6 +45,7 @@ export const uk: Record<MessageKey, string> = {
     '{{time}} вже минув. Лишаю на сьогодні.',
   'voice.createdTask': 'Створив задачу «{{name}}».',
   'voice.createdTaskFor': 'Створив задачу «{{name}}» на {{when}}.',
+  'voice.appliedChange': 'Записав зміну «{{name}}».',
   'voice.whenToday': 'сьогодні',
   'voice.whenTomorrow': 'завтра',
   'voice.whenOrUnscheduled':

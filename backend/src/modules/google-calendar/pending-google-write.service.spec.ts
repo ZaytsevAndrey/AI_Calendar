@@ -27,6 +27,7 @@ describe('PendingGoogleWriteService', () => {
     updateEvent: jest.fn().mockResolvedValue({}),
     deleteEvent: jest.fn().mockResolvedValue(undefined),
     getEvent: jest.fn(),
+    capRecurringSeriesUntil: jest.fn().mockResolvedValue(undefined),
   };
 
   const service = new PendingGoogleWriteService(
@@ -43,6 +44,10 @@ describe('PendingGoogleWriteService', () => {
     scheduledRepo.find.mockResolvedValue([]);
     settingsRepo.findOne.mockResolvedValue({ syncGoogleDeletions: false });
     google.checkConnection.mockResolvedValue({ connected: true });
+    google.getEvent.mockReset();
+    google.createEvent.mockResolvedValue({ id: 'g-new' });
+    google.updateEvent.mockResolvedValue({});
+    google.capRecurringSeriesUntil.mockResolvedValue(undefined);
   });
 
   it('does not create a Google event when the task has no seat', async () => {
@@ -117,6 +122,175 @@ describe('PendingGoogleWriteService', () => {
       expect.objectContaining({ skipSleepWindowCheck: true }),
     );
     expect(scheduledRepo.save).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps a recurring series start on the first seated day, including the past', async () => {
+    const day = (offset: number) => {
+      const start = new Date(Date.now() + offset * 86_400_000);
+      start.setUTCHours(9, 0, 0, 0);
+      const end = new Date(start.getTime() + 30 * 60_000);
+      return { start, end };
+    };
+    const past = day(-2);
+    const next = day(1);
+    const later = day(2);
+    taskRepo.findOne.mockResolvedValue({
+      id: 't1',
+      userId: 'u1',
+      name: 'Standup',
+      isUnscheduled: false,
+      scheduleState: 'none',
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      recurrenceWeekDays: null,
+      skippedOccurrenceYmds: null,
+      scheduledStartTime: next.start,
+      scheduledEndTime: next.end,
+      googleEventId: 'g-series',
+      googleEventCalendarId: 'primary',
+      status: 'todo',
+      scheduleTimeZone: 'UTC',
+    });
+    scheduledRepo.find.mockResolvedValue([
+      {
+        taskId: 't1',
+        scheduledStartTime: past.start,
+        scheduledEndTime: past.end,
+      },
+      {
+        taskId: 't1',
+        scheduledStartTime: next.start,
+        scheduledEndTime: next.end,
+      },
+      {
+        taskId: 't1',
+        scheduledStartTime: later.start,
+        scheduledEndTime: later.end,
+      },
+    ]);
+    google.getEvent.mockResolvedValue({
+      start: { dateTime: past.start.toISOString() },
+      end: { dateTime: past.end.toISOString() },
+    });
+
+    await service.syncTask('u1', 't1');
+
+    expect(google.createEvent).not.toHaveBeenCalled();
+    expect(google.capRecurringSeriesUntil).not.toHaveBeenCalled();
+    expect(google.updateEvent).toHaveBeenCalledWith(
+      'u1',
+      'g-series',
+      expect.objectContaining({
+        start: expect.objectContaining({
+          dateTime: past.start.toISOString(),
+        }),
+        recurrence: [expect.stringMatching(/^RRULE:FREQ=DAILY;UNTIL=/)],
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it('extends the existing series when the next day uses another clock', async () => {
+    const day = (offset: number, hourUtc: number) => {
+      const start = new Date(Date.now() + offset * 86_400_000);
+      start.setUTCHours(hourUtc, 0, 0, 0);
+      const end = new Date(start.getTime() + 30 * 60_000);
+      return { start, end };
+    };
+    const past = day(-1, 9);
+    const next = day(1, 11);
+    taskRepo.findOne.mockResolvedValue({
+      id: 't1',
+      userId: 'u1',
+      name: 'Standup',
+      isUnscheduled: false,
+      scheduleState: 'none',
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      recurrenceWeekDays: null,
+      skippedOccurrenceYmds: null,
+      scheduledStartTime: next.start,
+      scheduledEndTime: next.end,
+      googleEventId: 'g-old',
+      googleEventCalendarId: 'primary',
+      status: 'todo',
+      scheduleTimeZone: 'UTC',
+    });
+    scheduledRepo.find.mockResolvedValue([
+      {
+        taskId: 't1',
+        scheduledStartTime: past.start,
+        scheduledEndTime: past.end,
+        googleEventId: 'g-old',
+      },
+      {
+        taskId: 't1',
+        scheduledStartTime: next.start,
+        scheduledEndTime: next.end,
+        googleEventId: 'g-old',
+      },
+    ]);
+    google.getEvent.mockResolvedValue({
+      start: { dateTime: past.start.toISOString() },
+      end: { dateTime: past.end.toISOString() },
+    });
+    google.createEvent.mockResolvedValue({ id: 'g-new' });
+
+    await service.syncTask('u1', 't1');
+
+    expect(google.capRecurringSeriesUntil).not.toHaveBeenCalled();
+    expect(google.createEvent).not.toHaveBeenCalled();
+    expect(google.updateEvent).toHaveBeenCalledWith(
+      'u1',
+      'g-old',
+      expect.objectContaining({
+        start: expect.objectContaining({
+          dateTime: past.start.toISOString(),
+        }),
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it('caps a finished segment instead of deleting its past instances', async () => {
+    const start = new Date(Date.now() - 2 * 86_400_000);
+    start.setUTCHours(9, 0, 0, 0);
+    const end = new Date(start.getTime() + 30 * 60_000);
+    taskRepo.findOne.mockResolvedValue({
+      id: 't1',
+      userId: 'u1',
+      name: 'Standup',
+      isUnscheduled: false,
+      scheduleState: 'none',
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      scheduledStartTime: start,
+      scheduledEndTime: end,
+      deadline: new Date(Date.now() - 86_400_000),
+      googleEventId: 'g-old',
+      googleEventCalendarId: 'primary',
+      status: 'todo',
+      scheduleTimeZone: 'UTC',
+    });
+    scheduledRepo.find.mockResolvedValue([
+      {
+        taskId: 't1',
+        scheduledStartTime: start,
+        scheduledEndTime: end,
+        googleEventId: 'g-old',
+      },
+    ]);
+
+    await service.syncTask('u1', 't1');
+
+    expect(google.deleteEvent).not.toHaveBeenCalled();
+    expect(google.createEvent).not.toHaveBeenCalled();
+    expect(google.capRecurringSeriesUntil).toHaveBeenCalledWith(
+      'u1',
+      'g-old',
+      start,
+      'primary',
+    );
   });
 
   it('anchors Google RRULE on majority clock, not a skewed open[0]', async () => {

@@ -27,8 +27,8 @@ Follow this while testing voice create parse in this project. State lives in `ba
 ## Regression risks to name when tokens run out
 
 - Bare hours 1–7 without a morning or night word are afternoon.
-- A past concrete clock stays on that civil day until 23:59 with a notice. A past soft clock with no window moves to tomorrow at the same time. A past preferred inside an open window is dropped.
-- "After 18" stays an earliest bound. A half day-envelope is completed only from 00:00 or 23:59.
+- A clock with no day that is already past is a question. Do not write it and do not move it to the next day. A clock on a named day stays on that day. If a past one-off start is still emitted, the normalizer keeps the rest of that civil day until 23:59.
+- "After 18" stays an earliest bound. A whole day in the prompts is Wake to Sleep. TypeScript completes a half envelope only from an emitted `00:00` or `23:59`.
 - Afternoon ordinals ("друга дня") are 14:00, not a whole day and not 02:00.
 - "Every morning" / "щоранку" is a daily series at that clock, not a one-off today.
 - A clock on a weekly series ("щосереди о 19") stays the preferred start. It is not dropped when that weekday is not today.

@@ -254,6 +254,7 @@ export class VoiceService {
     this.logger.log(
       `voice.parse transcript=${JSON.stringify(transcript)} parseId=${parseId}`,
     );
+
     const routerRaw = await this.groq.completeJson(
       buildVoiceRouterSystemPrompt(),
       buildVoiceRouterUserPrompt({
@@ -262,6 +263,7 @@ export class VoiceService {
         clarificationAnswer: dto.clarificationAnswer,
         openTaskNames,
       }),
+      { label: 'router' },
     );
     logVoiceLlm(this.logger, 'parse.router', routerRaw);
 
@@ -301,6 +303,7 @@ export class VoiceService {
     const content = await this.groq.completeJson(
       specialist.system,
       specialist.user,
+      { label: `specialist.${specialistIntent}` },
     );
     logVoiceLlm(this.logger, `parse.${specialistIntent}`, content);
 
@@ -333,7 +336,7 @@ export class VoiceService {
         }),
         command: null,
       };
-    } else if (!alreadyClarified && specialistAsksWhichTask(parsed)) {
+    } else if (specialistAsksWhichTask(parsed)) {
       result = {
         understanding: 'needs_clarification',
         clarifyingQuestion: String((parsed as { clarifyingQuestion: string }).clarifyingQuestion),
@@ -391,19 +394,15 @@ export class VoiceService {
   }
 }
 
-/** The command specialist could not tell which task is meant and asked; do not fall back to "current". */
+/** The specialist asked. A guessed title must not turn that question into an action. */
 function specialistAsksWhichTask(parsed: unknown): boolean {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
   const root = parsed as {
     understanding?: unknown;
     clarifyingQuestion?: unknown;
-    command?: { taskName?: unknown } | null;
-    task?: { name?: unknown } | null;
   };
   if (root.understanding !== 'needs_clarification') return false;
-  if (typeof root.clarifyingQuestion !== 'string' || !root.clarifyingQuestion.trim()) return false;
-  const named = root.command?.taskName ?? root.task?.name;
-  return !(typeof named === 'string' && named.trim());
+  return typeof root.clarifyingQuestion === 'string' && root.clarifyingQuestion.trim().length > 0;
 }
 
 function boundIso(value: Date | string | null | undefined): string | null {

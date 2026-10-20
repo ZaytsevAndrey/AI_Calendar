@@ -72,7 +72,11 @@ async function main(): Promise<void> {
     const cases: CaseReport[] = [];
 
     console.log(
-      `voice:eval:multi — ${scenarios.length} scenarios, planner=${process.env.GROQ_PLANNER_MODEL}`,
+      `voice:eval:multi — ${scenarios.length} scenarios, planner=${
+        process.env.GEMINI_API_KEY?.trim()
+          ? process.env.GEMINI_PLANNER_MODEL?.trim() || 'gemini-3.8-flash'
+          : process.env.GROQ_PLANNER_MODEL
+      }`,
     );
     for (let i = 0; i < scenarios.length; i++) {
       const scenario = scenarios[i];

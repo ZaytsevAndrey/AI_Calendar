@@ -36,6 +36,7 @@ import {
   type MsInterval,
 } from './free-slots.util';
 import { normalizeFixedEventBufferMinutes, planningHorizonRange } from './intelligent-scheduling.engine';
+import { lastContinuingSeriesIds } from './recurring-extend.util';
 import { placementNotBefore } from './placement-bounds.util';
 import {
   planPlacement,
@@ -872,9 +873,36 @@ export class PlacementStepService {
         status: TaskStatus.TODO,
       },
     });
-    for (const task of series) {
-      if (isProblematicSchedule(task) || !task.scheduledStartTime) continue;
-      if (task.scheduleState === ScheduleState.RESOLVED) continue;
+    const eligible = series.filter(
+      (task) =>
+        !isProblematicSchedule(task) &&
+        !!task.scheduledStartTime &&
+        task.scheduleState !== ScheduleState.RESOLVED,
+    );
+    if (!eligible.length) return;
+    const slotEnds = await this.scheduledRepo
+      .createQueryBuilder('st')
+      .select('st.taskId', 'taskId')
+      .addSelect('MAX(st.scheduledEndTime)', 'lastEnd')
+      .where('st.taskId IN (:...ids)', { ids: eligible.map((task) => task.id) })
+      .groupBy('st.taskId')
+      .getRawMany<{ taskId: string; lastEnd: string | Date }>();
+    const lastEndByTaskId = new Map<string, number>();
+    for (const row of slotEnds) {
+      const ms = new Date(row.lastEnd).getTime();
+      if (Number.isFinite(ms)) lastEndByTaskId.set(row.taskId, ms);
+    }
+    const continuing = lastContinuingSeriesIds(
+      eligible.map((task) => ({
+        id: task.id,
+        seriesGroupId: task.seriesGroupId,
+        scheduledStartTime: task.scheduledStartTime,
+        scheduledEndTime: task.scheduledEndTime,
+      })),
+      lastEndByTaskId,
+    );
+    for (const task of eligible) {
+      if (!continuing.has(task.id)) continue;
       await this.expandSeriesDays(userId, task.id);
       this.pendingGoogleWrites.syncTaskSoon(userId, task.id);
     }

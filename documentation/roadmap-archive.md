@@ -14,7 +14,7 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ## Shipped (Oct 2026)
 
-- [x] **Companion multi-intent + day-plan dialogue.** A planner LLM (`GROQ_PLANNER_MODEL`, gpt-oss-120b, falls back to 20b) splits one utterance into up to 6 segments (writes + Q&A); each is parsed by the 20b specialist and the batch gets one confirm. After Apply the client reports per-intent statuses (`actionId: 'report'`) and the panel shows **Done just now** cards. "Plan my day" runs up to 3 interview questions, seats Unscheduled, new and flexible tasks via an engine dry-run (`previewSequence`), and accepts voice edits that mark changed cards before Apply. Old greedy packer and regex heuristics removed. Live corpus: `npm run voice:eval:multi`. Docs: [spec-voice-agent.md](spec-voice-agent.md) §6.4, §6.6, §6.7.
+- [x] **Companion multi-intent + day-plan dialogue.** The planner splits one utterance into up to 6 text segments (writes + Q&A); each goes through the router and the specialist, and the batch gets one confirm. After Apply the client reports per-intent statuses (`actionId: 'report'`) and the panel shows **Done just now** cards. "Plan my day" keeps the interview open until Apply, with no question cap, seats Unscheduled, new and flexible tasks via an engine dry-run (`previewSequence`), and accepts voice edits that mark changed cards before Apply. Old greedy packer and regex heuristics removed. Current planner chain and when-rules: [spec-voice-agent.md](spec-voice-agent.md) §6.1, §6.4.
 
 - [x] **Companion panel UI.** Renamed Voice → Companion / Помічник. Desktop floating movable/resizable panel over the calendar; phone keeps the bottom sheet. Confirm / day-plan use calendar-style preview cards; footer actions decluttered (Apply + Cancel on confirm). Docs: [features/companion-panel.md](features/companion-panel.md).
 
@@ -52,7 +52,7 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 - [x] **Create kind decision tree.** The create prompt picks kind in a fixed order (recurring, then a concrete clock, a soft clock, a placement window, a day, otherwise Unscheduled). A span that is the event itself sets duration; a span that is when to do the work is a window. One question when the length is missing on a clearly long task, or when those two spans are easy to mix up. Default length is the duration number in the prompt.
 
-- [x] **Voice update + reschedule prompts.** Update specialist sends only changed task fields (`command.newName` for a rename, `phaseId` from the phase list). Reschedule specialist sends `command.start` / `command.end`: a clock is a move, a day with no clock is 00:00–23:59, “do now” uses now. Confirm and placement stay on the existing resolver.
+- [x] **Voice update + reschedule prompts.** Update specialist sends only changed task fields (`command.newName` for a rename, `phaseId` from the phase list) and does not write a placement. Reschedule only seats the task: a clock is a move, a day with no clock runs from Wake to Sleep, “do now” uses now. Confirm and placement stay on the existing resolver.
 
 - [x] **Create prompt modules + wake-day after sleep.** The create specialist is one LLM call assembled from `prompt-modules/` (schema, kind-when, recurring, phase, name-language). Spoken today/tomorrow follow sleep: after sleep the civil date is today even before wake, so “завтра” at 03:00 is the next civil day. The previous wake-day continues only before an overnight sleep.
 

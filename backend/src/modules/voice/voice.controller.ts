@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Delete,
-  Header,
   HttpCode,
   Param,
   Post,
@@ -63,12 +62,11 @@ export class VoiceController {
 
   @Post('speak')
   @HttpCode(200)
-  @Header('Content-Type', 'audio/wav')
   @ApiOperation({ summary: 'Synthesize a voice reply with local Piper' })
   @ApiResponse({ status: 200, description: 'WAV audio' })
   async speak(@Body() dto: SpeakVoiceDto): Promise<StreamableFile> {
     const wav = await this.piper.synthesize(dto.text, dto.language);
-    return new StreamableFile(wav);
+    return new StreamableFile(wav, { type: 'audio/wav' });
   }
 
   @Delete('session/:sessionId')

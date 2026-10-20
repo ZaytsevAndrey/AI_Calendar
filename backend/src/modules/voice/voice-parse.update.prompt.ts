@@ -1,4 +1,5 @@
 import { CLOCK_ISO_MODULE } from './prompt-modules/clock-speech';
+import { QUESTION_PROPOSAL_MODULE } from './prompt-modules/question-proposal';
 import { SERIES_SCOPE_MODULE } from './prompt-modules/series-scope';
 import { TASK_TARGET_MODULE } from './prompt-modules/task-target';
 import {
@@ -34,12 +35,14 @@ Fields, only when they named that change:
 - Rename: command.newName is the new title and command.rename true. The old title stays in command.taskName. Do not put the new title in task.name.
 - description, location: the words they added, or null when they said to clear it.
 - phaseId: an id from the phases list, or null to clear. Never invent an id. Do not change the phase just because a time falls inside one.
-- estimatedTimeInMinutes: a positive number they spoke ("for an hour" → 60). A window is not a length.
+- estimatedTimeInMinutes: a positive number only after they said the length is how long the task takes. A window is not a length. ${QUESTION_PROPOSAL_MODULE}
 - priority: low | medium | high | urgent, only when they said it (urgent → urgent, "no rush" / low priority → low). Do not default medium.
 - status: set command.status only. todo reopens, in_progress, completed, canceled. Omit task.status.
-- Repeat, only when they changed the repeat: isRecurring, recurrencePattern DAILY | WEEKLY | BIWEEKLY | MONTHLY or null, recurrenceWeekDays (Sunday=0 … Saturday=6) or null. every day → DAILY and days null. weekdays → WEEKLY and 1,2,3,4,5. weekends → WEEKLY and 6,0. one weekday → WEEKLY and that day. Turning a repeat off → isRecurring false, recurrencePattern null, recurrenceWeekDays null.
+- Repeat, only when they changed the repeat: isRecurring, recurrencePattern DAILY | WEEKLY | BIWEEKLY | MONTHLY or null, recurrenceWeekDays (Sunday=0 … Saturday=6) or null. every day → DAILY and days null. A repeat on named weekdays → WEEKLY on those days. Turning a repeat off → isRecurring false, recurrencePattern null, recurrenceWeekDays null.
 - eligibleWeekDays only when they limit which days a flexible task may land, not when they set a repeat. allowSplit only when they said it can or cannot be split.
-- deadline, earliestStartTime, scheduledStartTime, scheduledEndTime: ISO on task, never on command.start. Day only ("deadline tomorrow") → that field at 23:59, or earliest at 00:00 when they said the earliest moment. Do not fill the other schedule keys.
+- A bound on an existing task (by a weekday, until a part of day) is not a deadline and not a move until they say which. understanding needs_clarification. One question what they want. Do not pick. Do not set deadline, earliest, or a window. They called it the deadline → set deadline as below.
+- A placement (a clock, a part of the day, another day) is not a field. Do not set scheduledStartTime, scheduledEndTime, or earliestStartTime to move the task. They said the task has no time, or the time should be gone → set scheduledStartTime, scheduledEndTime, earliestStartTime, and deadline to null. That is the change. Do not ask what they meant.
+- deadline: ISO on task, never on command.start. Only when they called it the deadline. A day and no clock → that field at Sleep. Do not fill the other schedule keys.
 - eventType "fixed" only together with both scheduledStartTime and scheduledEndTime. eventType "admin" when they said it is movable. Otherwise omit eventType.
 - googleColorId, googleVisibility, googleTransparency, googleReminders only when they named that Google field. Do not invent Google metadata.
 
@@ -48,7 +51,7 @@ Do not output habit fields.
 
 Examples:
 - "rename milk to bread" → taskName from Open tasks, newName "Bread", rename true, task {}
-- "report deadline tomorrow" → task.deadline 23:59 on schedule tomorrow, no other task keys
+- "report deadline tomorrow" → task.deadline at Sleep on schedule tomorrow, no other task keys
 - "make it urgent" → target current, task.priority "urgent"`;
 
 /** Specialist: partial edit of an existing task. The resolver writes only keys that are present. */

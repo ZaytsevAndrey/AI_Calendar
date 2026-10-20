@@ -47,6 +47,29 @@ function statusForApiError(code: string): number {
   }
 }
 
+function sendJson(
+  response: {
+    status: (code: number) => { send: (payload: unknown) => void };
+    type?: (value: string) => unknown;
+    header?: (name: string, value: string) => unknown;
+    setHeader?: (name: string, value: string) => unknown;
+  },
+  status: number,
+  body: Record<string, unknown>,
+) {
+  // Binary routes (for example /voice/speak) set Content-Type before the
+  // handler runs. Fastify then refuses a JSON object and the error becomes a 500.
+  const json = 'application/json; charset=utf-8';
+  if (typeof response.type === 'function') {
+    response.type(json);
+  } else if (typeof response.header === 'function') {
+    response.header('Content-Type', json);
+  } else if (typeof response.setHeader === 'function') {
+    response.setHeader('Content-Type', json);
+  }
+  response.status(status).send(body);
+}
+
 function languageFromRequest(request: Request) {
   const user = (request as Request & { user?: { language?: string } }).user;
   const header =
@@ -142,6 +165,6 @@ Headers: ${JSON.stringify(request.headers)}
 -----------------
 `);
 
-    response.status(status).send(body);
+    sendJson(response, status, body);
   }
 }

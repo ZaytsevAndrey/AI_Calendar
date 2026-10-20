@@ -2,11 +2,11 @@
 
 **Status:** shipped (see [roadmap archive](roadmap-archive.md)).  
 **Language:** English  
-**Last updated:** October 2026  
+**Last updated:** 20 October 2026  
 
 The product surface is **Companion** (UK: **Помічник**) — a hybrid chat + voice helper: multi-turn dialogue, grounded Q&A, and write intents — without a second scheduler. Placement and conflict stay on [spec-conflict-rules.md](spec-conflict-rules.md) and [spec-incremental-placement.md](spec-incremental-placement.md). The shipped one-shot commander contract remains [spec-voice-commander.md](spec-voice-commander.md); this document supersedes it for the **Companion entry path** (`POST /voice/turn`). HTTP details in [api-reference.md](api-reference.md); Groq keys in [integrations.md](integrations.md).
 
-One utterance may hold several writes plus a question (§6.6). A day plan is a multi-step dialogue: an optional short interview, then a proposal seated by the placement engine that the user edits by voice before Apply (§6.4). UI chrome: [features/companion-panel.md](features/companion-panel.md).
+One utterance may hold several writes plus a question (§6.6). A day plan is a multi-step dialogue: an interview with no question cap, then a proposal seated by the placement engine that the user edits by voice before Apply (§6.4). UI chrome: [features/companion-panel.md](features/companion-panel.md).
 
 ---
 
@@ -66,11 +66,11 @@ One utterance may hold several writes plus a question (§6.6). A day plan is a m
 | M2 | Partial clarify | Resolved segments are held while one unclear segment is asked about; at most **2** questions per segment, then it is dropped with a spoken note. If the reply comes back as new write segments, the held resolved writes join them. A command specialist that cannot tell which task is meant asks (no "current task" fallback). |
 | M3 | Batch confirm | **One** combined confirm for the batch when any write needs it; otherwise `act` with all intents. |
 | M4 | Execution report | After running intents (no conflict sheet), the client sends `actionId: 'report'` with per-intent statuses; no LLM call. |
-| D1 | Plan dialogue | Two parts: an interview (at most **3** questions; `build_plan` skips it) and voice edits of the proposal before Apply. |
+| D1 | Plan dialogue | The interview has no question cap. The user ends it by pressing Apply. `build_plan` seats the current draft. Voice edits of the proposal come before Apply. |
 | D2 | Plan scope | Unscheduled tasks, new tasks named in the dialogue, and re-seating flexible one-offs already on that day. Fixed tasks, series, external events are never moved. |
 | D3 | Plan seating | The placement engine (dry-run) seats the draft in priority order; each seated item blocks the next. Nothing is written until Apply. |
 | D4 | Apply mapping | Unscheduled → `window` (+ `clearUnscheduled`); flexible → `shift` of its slot (skipped when unchanged); new → flexible create at the proposed slot with an end-of-day deadline. |
-| D5 | Planner model | Planner role runs on **gpt-oss-120b** (`GROQ_PLANNER_MODEL`) and falls back to the parse model; specialist parse stays on gpt-oss-20b. |
+| D5 | Planner model | Planner calls try DeepSeek (`DEEPSEEK_API_KEY`, default `deepseek-flash`), then Qwen (`QWEN_API_KEY`), then Gemini 3.8 Flash (`GEMINI_API_KEY`, thinking `low`), then Groq `openai/gpt-oss-120b`. A missing key skips that step. Parse stays on gpt-oss-20b. `VOICE_LLM_PROVIDER=deepseek` forces every planner and parse call onto DeepSeek and does not fall back. Speech-to-text stays on Groq. |
 
 ---
 
@@ -123,7 +123,7 @@ Clarify count is per open session. After **2** clarifications without resolution
 
 Parse is **two LLM steps**: (1) router → `intent` + `language`; (2) one specialist prompt per intent. Each specialist states the JSON the resolver reads, a first-match decision list, and what not to invent. Clarifying questions use the transcript language. Router intent `needs_clarification` returns a question only (`task` and `command` null) and does not create a task.
 
-Create specialist focuses on **kind** (`fixed` / `flexible` / `unscheduled` / `recurring`), **name**, and **when**. Day without clock → flexible with `deadline` (end of day). Recurring with a clear pattern may omit clock. No usable day/clock/window (and no clear recurring pattern) → **Unscheduled** inbox (`complete`), not a day/time clarify loop. Relative speech (“in 3 hours”) resolves from Local calendar anchors. The server does **not** re-parse the transcript for days/clocks beyond contract guards (name required; a past concrete one-off clock stays on that civil day from now until 23:59 with a short notice; a past soft clock with no window moves to tomorrow at the same time; a past preferred inside an open window is dropped; recurring clocks stay; no-when → Unscheduled).
+Create specialist focuses on **kind** (`fixed` / `flexible` / `unscheduled` / `recurring`), **name**, and **when**. The planner only splits text; the router chooses the action. Dates named once are one-offs, and a shared clock does not join them; a clock makes a series only when the utterance is already a repeat. A day with no clock, a whole-day event, and a deadline that names a day and no clock run from Wake to Sleep. An event with no time is a question when. A task that is not an event, with no time, is Unscheduled. A place does not decide. A clock with no day that is already past is a question; the model must not write that start or move it to the next day. A clock that is still ahead, with no day, is today. Relative speech (“in 3 hours”) resolves from Local calendar anchors. The schedule day lasts through three hours after sleep and begins three hours before wake. Update changes fields; reschedule only seats the task. The server does **not** re-parse the transcript for days/clocks beyond contract guards (name required; if a past one-off start is still emitted, the normalizer keeps the rest of that civil day until 23:59; a past preferred inside an open window is dropped; recurring clocks stay).
 
 ### 6.2 Resolve “this” / “current”
 
@@ -142,10 +142,12 @@ Spoken yes/no and action button `confirm` / `cancel` are equivalent.
 
 ### 6.4 Day-plan dialogue
 
+Shipped behavior is the list below. The dialogue test cycle follows a newer contract: the agent does not end the day-plan dialogue, and the draft grows until the user presses Apply. Oracle: [voice-agent-dialogue-test-plan.md](voice-agent-dialogue-test-plan.md). Where that file and this section differ, the test plan wins for tests and for fixes in that cycle.
+
 The planner LLM decides `plan_start` only when the user explicitly asks to plan, arrange or organize a whole day; listing to-dos for a day stays multi-intent creates (§6.6).
 
 1. **Draft.** The server opens a `planDraft` in the session for that day: up to 10 open Unscheduled tasks (earliest deadline first) plus flexible one-offs that have a single future slot that day (their current start becomes the preferred start, so they stay put unless something conflicts). Constraints and new tasks from the same utterance are applied as plan edits.
-2. **Interview (optional).** When the user wants to plan together, the reply is `clarify` with `actions: ['build_plan', 'cancel']` and `plan.stage = 'interview'`. Each answer becomes plan edits; the planner asks at most 3 questions. `build_plan` (button or "that's enough") skips straight to the proposal.
+2. **Interview (optional).** When the user wants to plan together, the reply is `clarify` with `actions: ['build_plan', 'cancel']` and `plan.stage = 'interview'`. Each answer becomes plan edits. There is no question cap and the server does not propose on its own after a count. `build_plan` seats the current draft.
 3. **Proposal.** `VoiceDayPlanner` seats the draft with `PlacementStepService.previewSequence` (dry-run, under the user lock, external calendars fetched once). Items are seated in draft order; a seated item becomes an anchor for the next ones. Plan constraints (preferred start, earliest, deadline, duration) override the stored row. Items that do not fit are listed as `unplaced` with a reason (`no_room` / `deadline_passed` / `conflict`). An empty proposal returns to the interview.
 4. **Review.** The reply is `confirm` with `plan.stage = 'review'`, `actions: ['confirm', 'cancel']` and empty `intents`; the Apply intents are held server-side. The mic stays live: every utterance is a plan edit (`add_task`, `include_task`, `remove_item`, `set_preferred_start`, `set_window`, `set_duration`, `set_order`), and the server re-seats and returns the next `revision` with `changedItemIds` (moved, new, or newly unplaced). Questions are answered while the plan stays on screen. Writes about other days run as normal intents beside the plan; the following `report` re-seats the plan against the new calendar.
 5. **Apply.** `confirm` (button or spoken yes) returns `act` with the mapped intents (D4) and drops the draft; the client applies them one by one. `cancel` drops the draft (a pending write confirm opened during review cancels back to the plan first). Closing the widget discards it.
@@ -321,7 +323,7 @@ Concrete CSS/SVG/canvas (or small dependency) is chosen at implementation; must 
 | Layer | Cover when implementing |
 |-------|-------------------------|
 | Unit | Planner decision parser; batch assembler + partial clarify; plan-draft reducer + apply mapping; `VoiceDayPlanner` with a mocked preview; orchestrator flows with mocked Groq; `previewSequence` |
-| Live eval | `npm run voice:eval:multi` — multi-intent + day-plan corpus (uk/en, 50 turns) on real Groq; planner pinned to 20b in eval |
+| Live eval | `npm run voice:eval:multi` — multi-intent + day-plan corpus (uk/en, 50 turns). Planner uses Gemini when `GEMINI_API_KEY` is set; the script's Groq planner pin is the fallback |
 | API e2e | `/voice/turn` multi-intent act / confirm + report; day plan propose (real dry-run) → edit → apply; interview → `build_plan` → cancel; planner failure fallback |
 | Playwright | Multi-intent cards + Apply + statuses; interview → Make plan → voice edit → changed badge → Apply; close discards the plan |
 

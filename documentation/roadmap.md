@@ -53,6 +53,9 @@ Do not start these. The shape is still open.
 - **Admin.** Owner-only. Contents are not chosen. Do not open an empty admin.
 - **Hide app calendar.** Visibility toggle for the app-owned calendar — product nuances still open.
 - **Outbound sync beyond Google.** Settings stores `syncTargetCalendars`, but app-task create/update/delete still writes Google only. Do not start until that write path is the task.
+- **Invite to an event (large).** Add someone to an event. Likely **per calendar provider** (Google / Microsoft / Apple differ on attendees, contact pickers, and OAuth scopes). Before any build: investigate whether we can read contacts at all; design the flow when contacts permission is denied (manual email? paste? skip?); decide where invite lives (preview, editor, voice); agree RSVP / attendees UI. Needs a dedicated product discussion — do not start from a thin ticket.
+- **User preference profile (large).** From voice / chat and from the schedule, gather durable facts about the user and inject them into day-plan and Suggestions prompts. Examples: avoid heavy work on days packed with meetings; commute home is ~40 minutes unless they stop somewhere. Before build: what is stored (structured prefs vs free-text notes), who can see/edit/delete it, how often it updates, privacy vs quality. Do not start until that shape is agreed.
+
 ---
 
 ## End — external, do not start
@@ -64,7 +67,6 @@ Third parties and publishing. Leave these until the Now list is done.
 - **Custom domain.**
 - **Next.js landing and lead capture.**
 - **Speech for languages other than en/uk.**
-- **Invite a contact onto an event.** Not required for the first version.
 - **More calendar providers** beyond Google / Microsoft / Apple.
 
 ---

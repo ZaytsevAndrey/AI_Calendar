@@ -5,7 +5,33 @@ import {
   GroqClient,
   groqRetryAfterSeconds,
   rateLimitWaitMs,
+  tokenPaceWaitMs,
 } from './groq.client';
+
+describe('tokenPaceWaitMs', () => {
+  const now = 1_000_000;
+
+  it('waits until the older spend leaves the minute window', () => {
+    const wait = tokenPaceWaitMs({
+      now,
+      limit: 8_000,
+      need: 3_000,
+      spends: [{ at: now - 20_000, tokens: 6_000 }],
+    });
+    expect(wait).toBe(40_250);
+  });
+
+  it('does not wait when the request itself is larger than the ceiling', () => {
+    expect(
+      tokenPaceWaitMs({
+        now,
+        limit: 8_000,
+        need: 9_000,
+        spends: [],
+      }),
+    ).toBe(0);
+  });
+});
 
 describe('discoverGroqKeyNames', () => {
   it('returns only the primary key when extras are missing', () => {
@@ -275,6 +301,181 @@ describe('GroqClient local LLM', () => {
       (call) => (JSON.parse((call[1] as { body: string }).body) as { model: string }).model,
     );
     expect(models).toEqual(['openai/gpt-oss-120b', 'openai/gpt-oss-20b']);
+  });
+
+  it('sends planner calls to Gemini and keeps parse on Groq', async () => {
+    const ok = {
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({
+        candidates: [
+          {
+            content: {
+              parts: [
+                { thought: true, text: 'skip' },
+                { text: '{"type":"steps"}' },
+              ],
+            },
+          },
+        ],
+        usageMetadata: { totalTokenCount: 11 },
+      }),
+    };
+    const groqOk = {
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({
+        choices: [{ message: { content: '{"parsed":true}' } }],
+        usage: { total_tokens: 3 },
+      }),
+    };
+    const fetchMock = jest.fn().mockResolvedValueOnce(ok).mockResolvedValueOnce(groqOk);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const groq = new GroqClient({
+      get: (key: string) => {
+        if (key === 'GROQ_API_KEY') return 'test-key';
+        if (key === 'GEMINI_API_KEY') return 'gem-key';
+        return undefined;
+      },
+    } as ConfigService);
+
+    const planner = await groq.runWithPin(0, () =>
+      groq.completeJson('system', 'user', { role: 'planner' }),
+    );
+    expect(planner.value).toBe('{"type":"steps"}');
+    expect(planner.tokensUsed).toBe(11);
+
+    await groq.completeJson('system', 'user');
+
+    const calls = fetchMock.mock.calls.map((call) => {
+      const url = String(call[0]);
+      const init = call[1] as { headers: Record<string, string>; body: string };
+      return { url, headers: init.headers, body: JSON.parse(init.body) as { model?: string } };
+    });
+    expect(calls[0].url).toContain('models/gemini-3.8-flash:generateContent');
+    expect(calls[0].headers['x-goog-api-key']).toBe('gem-key');
+    expect(calls[0].body).toMatchObject({
+      generationConfig: {
+        responseMimeType: 'application/json',
+        thinkingConfig: { thinkingLevel: 'low' },
+      },
+    });
+    expect(calls[1].url).toContain('api.groq.com');
+    expect(calls[1].body.model).toBe('openai/gpt-oss-20b');
+  });
+
+  it('sends planner calls to DeepSeek ahead of Qwen and Gemini', async () => {
+    const ok = {
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({
+        choices: [{ message: { content: '{"type":"steps"}', reasoning_content: 'skip' } }],
+        usage: { total_tokens: 11 },
+      }),
+    };
+    const fetchMock = jest.fn().mockResolvedValue(ok);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const groq = new GroqClient({
+      get: (key: string) => {
+        if (key === 'GROQ_API_KEY') return 'test-key';
+        if (key === 'GEMINI_API_KEY') return 'gem-key';
+        if (key === 'QWEN_API_KEY') return 'qwen-key';
+        if (key === 'DEEPSEEK_API_KEY') return 'ds-key';
+        return undefined;
+      },
+    } as ConfigService);
+
+    const planner = await groq.runWithPin(0, () =>
+      groq.completeJson('system', 'user', { role: 'planner' }),
+    );
+    expect(planner.value).toBe('{"type":"steps"}');
+    expect(planner.tokensUsed).toBe(11);
+    const init = fetchMock.mock.calls[0][1] as { headers: Record<string, string>; body: string };
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://api.deepseek.com/chat/completions');
+    expect(init.headers.Authorization).toBe('Bearer ds-key');
+    expect(JSON.parse(init.body)).toMatchObject({
+      model: 'deepseek-flash',
+      thinking: { type: 'disabled' },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends planner calls to Qwen ahead of Gemini', async () => {
+    const ok = {
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({
+        choices: [{ message: { content: '{"type":"steps"}', reasoning_content: 'skip' } }],
+        usage: { total_tokens: 9 },
+      }),
+    };
+    const fetchMock = jest.fn().mockResolvedValue(ok);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const groq = new GroqClient({
+      get: (key: string) => {
+        if (key === 'GROQ_API_KEY') return 'test-key';
+        if (key === 'GEMINI_API_KEY') return 'gem-key';
+        if (key === 'QWEN_API_KEY') return 'qwen-key';
+        return undefined;
+      },
+    } as ConfigService);
+
+    const planner = await groq.runWithPin(0, () =>
+      groq.completeJson('system', 'user', { role: 'planner' }),
+    );
+    expect(planner.value).toBe('{"type":"steps"}');
+    expect(planner.tokensUsed).toBe(9);
+    const init = fetchMock.mock.calls[0][1] as { headers: Record<string, string>; body: string };
+    expect(String(fetchMock.mock.calls[0][0])).toContain('dashscope-intl.aliyuncs.com');
+    expect(init.headers.Authorization).toBe('Bearer qwen-key');
+    expect(JSON.parse(init.body)).toMatchObject({
+      model: 'qwen3.7-flash',
+      enable_thinking: false,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the Groq planner when Gemini fails', async () => {
+    const down = {
+      ok: false,
+      status: 503,
+      headers: { get: () => null },
+      json: async () => ({ error: { message: 'unavailable' } }),
+    };
+    const ok = {
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({
+        choices: [{ message: { content: '{"ok":true}' } }],
+        usage: { total_tokens: 4 },
+      }),
+    };
+    const fetchMock = jest.fn().mockResolvedValueOnce(down).mockResolvedValueOnce(ok);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const groq = new GroqClient({
+      get: (key: string) => {
+        if (key === 'GROQ_API_KEY') return 'test-key';
+        if (key === 'GEMINI_API_KEY') return 'gem-key';
+        return undefined;
+      },
+    } as ConfigService);
+
+    const result = await groq.runWithPin(0, () =>
+      groq.completeJson('system', 'user', { role: 'planner' }),
+    );
+    expect(result.value).toBe('{"ok":true}');
+    const urls = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(urls[0]).toContain('generativelanguage.googleapis.com');
+    expect(urls[1]).toContain('api.groq.com');
   });
 
   it('retries the same model without JSON mode when it emits a stray tool call', async () => {

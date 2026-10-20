@@ -106,6 +106,27 @@ export type FreeSlotsResponse = {
   candidates: string[];
 };
 
+export const SCHEDULE_RECOMMENDATION_KINDS = [
+  'overload',
+  'gap',
+  'phase_mismatch',
+  'deadline_risk',
+] as const;
+
+export type ScheduleRecommendationKind = (typeof SCHEDULE_RECOMMENDATION_KINDS)[number];
+
+export type ScheduleRecommendation = {
+  kind: ScheduleRecommendationKind;
+  title: string;
+  detail: string;
+  taskId: string | null;
+};
+
+export type ScheduleRecommendations = {
+  summary: string;
+  suggestions: ScheduleRecommendation[];
+};
+
 export const ScheduleApi = {
   getFreeSlots: async (
     taskId: string,
@@ -213,5 +234,13 @@ export const ScheduleApi = {
       '/schedule-jobs/latest/done',
     );
     return data;
+  },
+
+  recommendSchedule: async (): Promise<ScheduleRecommendations> => {
+    const { data } = await axios.get<ScheduleRecommendations>('/schedule/recommendations');
+    return {
+      summary: data.summary ?? '',
+      suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
+    };
   },
 };
