@@ -16,7 +16,7 @@ Read this before the first live Groq call. The chat that wrote it will not be in
 |-------|----------|
 | Live planner model | Planner calls try DeepSeek, then Qwen, then Gemini, then Groq `openai/gpt-oss-120b`, skipping a step whose key is unset. Parse stays on Groq `openai/gpt-oss-20b`. `VOICE_LLM_PROVIDER=deepseek` sends every planner and parse call to DeepSeek and throws instead of falling back. Speech-to-text stays on Groq. |
 | Corpus language | Ukrainian only. No English twin of each case. |
-| Fail policy | A run without `--minutes` stops on the first behavior mismatch. `--bulk` and `--minutes` walk the 350 once and continue past behavior mismatches; those do not set exit 1. A provider hard limit exits 2 and stops the run. Do not loop the pool. |
+| Fail policy | A run without `--minutes` stops on the first behavior mismatch. `--minutes` walks the dialogue corpus once and continues past behavior mismatches; those do not set exit 1. A provider hard limit exits 2 and stops the run. Do not loop the pool. |
 | Habits | Hidden. Do not test them, do not add prompt rules about them, and do not route them. |
 | LLM chain | Measure call counts first (planner rounds, tool calls, router, specialist). Do not drop the router or the tool round until those numbers are recorded. |
 | Surface | Server `POST /voice/turn` only. No microphone, no Companion panel, no mini-calendar widget, no database write. Assert intents and the plan payload. |
@@ -133,7 +133,7 @@ S1–S5, S8, and S9 can run before the day-plan code matches §6. Habits are not
 
 ## 8. Complex flows
 
-Run only after the simple full pass is green. Offline first, with frozen planner JSON and frozen specialist JSON. Then a few live sessions on the configured planner (Gemini when `GEMINI_API_KEY` is set). Do not run the whole `voice:eval:multi` corpus and do not run the create corpus of hundreds of lines.
+Run only after the simple full pass is green. Offline first, with frozen planner JSON and frozen specialist JSON. Then a few live sessions on the configured planner (Gemini when `GEMINI_API_KEY` is set).
 
 | Id | Situation | Expect |
 |----|-----------|--------|

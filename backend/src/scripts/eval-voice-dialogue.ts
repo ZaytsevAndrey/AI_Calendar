@@ -1,8 +1,8 @@
 /**
- * Simple dialogue flows through POST /voice/turn.
+ * Dialogue corpus through POST /voice/turn.
  *
  *   npx ts-node --transpile-only src/scripts/eval-voice-dialogue.ts
- *   npx ts-node --transpile-only src/scripts/eval-voice-dialogue.ts --ids=S1,S4
+ *   npx ts-node --transpile-only src/scripts/eval-voice-dialogue.ts --ids=create.day-only,dialogue.plan-today
  *
  * Planner is gpt-oss-120b. Pacing is per key and per model (VOICE_EVAL_PACE).
  * Stops on the first behavior mismatch. A daily token ceiling on every key exits 2.
@@ -28,9 +28,8 @@ import {
   type VoiceWriteIntent,
 } from '../modules/voice/voice-agent.types';
 import { GroqClient, type GroqEvalSpend } from '../modules/voice/groq.client';
-import { INTENT_EVAL_FIXTURES } from '../modules/voice/voice-intent-eval.scenarios';
-import { MULTI_INTENT_EVAL_ANCHORS } from '../modules/voice/voice-multi-intent-eval.scenarios';
-import { BULK } from './eval-voice-dialogue.bulk';
+import { DIALOGUE_CORPUS } from '../modules/voice/dialogue-corpus';
+import { VOICE_EVAL_ANCHORS, VOICE_EVAL_FIXTURES } from '../modules/voice/dialogue-corpus/fixtures';
 
 const EVAL_EMAIL = 'voice-eval@local';
 
@@ -72,12 +71,9 @@ type ScenarioTurn = {
 
 type Scenario = {
   id: string;
+  mode?: 'assistant' | 'fast_create';
   turns: ScenarioTurn[];
 };
-
-function one(transcript: string, expect: Expect): ScenarioTurn[] {
-  return [{ transcript, expect }];
-}
 
 function expectsAct(expect: Expect): boolean {
   const outcomes = Array.isArray(expect.outcome) ? expect.outcome : [expect.outcome];
@@ -85,459 +81,6 @@ function expectsAct(expect: Expect): boolean {
 }
 
 /** Wall-clock samples. Same expects as the passed one-write and two-write cases. */
-const TIMED: Scenario[] = [
-  {
-    id: 'T1',
-    turns: one('треба купити хліб', {
-      outcome: 'confirm',
-      kinds: ['create'],
-      maxIntents: 1,
-      unscheduled: true,
-      nameIncludes: 'хліб',
-    }),
-  },
-  {
-    id: 'T2',
-    turns: one('купи хліб і запиши подзвонити мамі', {
-      outcome: 'confirm',
-      kinds: ['create', 'create'],
-      maxIntents: 2,
-    }),
-  },
-];
-
-const SCENARIOS: Scenario[] = [
-  { id: 'S9', turns: one('дякую', { outcome: 'answer', maxIntents: 0, noLlm: true }) },
-  {
-    id: 'S1',
-    turns: one('треба купити хліб', {
-      outcome: 'confirm',
-      kinds: ['create'],
-      maxIntents: 1,
-      unscheduled: true,
-      nameIncludes: 'хліб',
-    }),
-  },
-  {
-    id: 'S2',
-    turns: one('закінчив звіт', {
-      outcome: 'confirm',
-      kinds: ['complete'],
-      maxIntents: 1,
-      nameIncludes: 'звіт',
-    }),
-  },
-  {
-    id: 'S4',
-    turns: one('купи хліб і запиши подзвонити мамі', {
-      outcome: 'confirm',
-      kinds: ['create', 'create'],
-      maxIntents: 2,
-    }),
-  },
-  {
-    id: 'S5',
-    turns: one('створи задачу оплатити інтернет і видали молоко', {
-      outcome: 'confirm',
-      kinds: ['create', 'delete'],
-    }),
-  },
-  {
-    id: 'S8',
-    turns: one('завтра треба купити ліки, забрати посилку і записатися до лікаря', {
-      outcome: 'confirm',
-      kinds: ['create', 'create', 'create'],
-      noPlan: true,
-    }),
-  },
-  {
-    id: 'S3',
-    turns: one('що в мене сьогодні?', {
-      outcome: 'answer',
-      maxIntents: 0,
-      answer: true,
-      minPlannerCalls: 2,
-    }),
-  },
-  {
-    id: 'S6',
-    turns: one('сплануй сьогодні', {
-      outcome: 'clarify',
-      maxIntents: 0,
-      answer: true,
-      minPlannerCalls: 2,
-      planStage: 'interview',
-      actionsInclude: 'build_plan',
-      planNames: ['Звіт', 'Молоко'],
-    }),
-  },
-];
-
-/** Day-plan rows stay out until the server keeps the dialogue open until Apply. */
-const COMPLEX: Scenario[] = [
-  {
-    id: 'C1',
-    turns: one('що в мене сьогодні і додай задачу купити хліб', {
-      outcome: 'confirm',
-      kinds: ['create'],
-      maxIntents: 1,
-      answer: true,
-      minPlannerCalls: 2,
-    }),
-  },
-  {
-    id: 'C4',
-    turns: one('додай задачу спортзал на 18 і перенеси її на 19', {
-      outcome: 'confirm',
-      kinds: ['create'],
-      maxIntents: 1,
-      nameIncludes: '19',
-    }),
-  },
-  {
-    id: 'C8',
-    turns: [
-      { transcript: 'видали молоко', expect: { outcome: 'confirm', kinds: ['delete'], maxIntents: 1 } },
-      { transcript: 'так, давай', expect: { outcome: 'act', kinds: ['delete'], maxIntents: 1 } },
-    ],
-  },
-  {
-    id: 'C2',
-    turns: [
-      {
-        transcript: 'купи хліб і перенеси ту штуку',
-        expect: { outcome: 'clarify', maxIntents: 0 },
-      },
-      {
-        transcript: 'звіт, на завтра',
-        expect: { outcome: 'confirm', kinds: ['create', 'window|shift|update'] },
-      },
-    ],
-  },
-  {
-    id: 'C5',
-    turns: [
-      {
-        transcript: 'сплануй сьогодні',
-        expect: {
-          outcome: 'clarify',
-          maxIntents: 0,
-          answer: true,
-          minPlannerCalls: 2,
-          planStage: 'interview',
-          actionsInclude: 'build_plan',
-          planNames: ['Звіт', 'Молоко'],
-        },
-      },
-      {
-        transcript: 'додай годину спортзалу',
-        expect: {
-          outcome: 'clarify',
-          maxIntents: 0,
-          planStage: 'interview',
-          actionsInclude: 'build_plan',
-          planNames: ['Звіт', 'Молоко', 'спортзал'],
-        },
-      },
-      {
-        actionId: 'build_plan',
-        expect: { outcome: 'confirm', noLlm: true, planStage: 'review' },
-      },
-    ],
-  },
-  {
-    id: 'C6',
-    turns: [
-      {
-        transcript: 'сплануй сьогодні',
-        expect: {
-          outcome: 'clarify',
-          maxIntents: 0,
-          planStage: 'interview',
-          actionsInclude: 'build_plan',
-          planNames: ['Звіт', 'Молоко'],
-        },
-      },
-      {
-        transcript: 'прибери молоко і додай спортзал',
-        expect: {
-          outcome: 'clarify',
-          maxIntents: 0,
-          planStage: 'interview',
-          actionsInclude: 'build_plan',
-          planNames: ['Звіт', 'спортзал'],
-          planAbsent: ['Молоко'],
-          planRevisionMin: 1,
-        },
-      },
-    ],
-  },
-  {
-    id: 'C7',
-    turns: [
-      {
-        transcript: 'сплануй сьогодні',
-        expect: {
-          outcome: 'clarify',
-          maxIntents: 0,
-          planStage: 'interview',
-          actionsInclude: 'build_plan',
-        },
-      },
-      {
-        transcript: 'коли я вільний?',
-        expect: {
-          outcome: ['clarify', 'answer'],
-          maxIntents: 0,
-          answer: true,
-          minPlannerCalls: 2,
-          planStage: 'interview',
-          actionsInclude: 'build_plan',
-          planNames: ['Звіт', 'Молоко'],
-        },
-      },
-    ],
-  },
-  {
-    id: 'C9',
-    turns: [
-      {
-        transcript: 'купи хліб і перенеси ту штуку',
-        expect: { outcome: 'clarify', maxIntents: 0 },
-      },
-      {
-        transcript: 'не знаю',
-        expect: { outcome: 'clarify', maxIntents: 0 },
-      },
-      {
-        transcript: 'та байдуже',
-        expect: { outcome: 'confirm', kinds: ['create'], maxIntents: 1, nameIncludes: 'хліб' },
-      },
-    ],
-  },
-  {
-    id: 'C10',
-    turns: [
-      {
-        transcript: 'сплануй сьогодні',
-        expect: {
-          outcome: 'clarify',
-          maxIntents: 0,
-          planStage: 'interview',
-          actionsInclude: 'build_plan',
-          planNames: ['Звіт', 'Молоко'],
-        },
-      },
-      {
-        transcript: 'завтра треба купити хліб',
-        expect: { outcome: 'confirm', kinds: ['create'], maxIntents: 1, nameIncludes: 'хліб' },
-      },
-      {
-        actionId: 'report',
-        executionReport: { results: [{ summary: 'купити хліб', status: 'applied' }] },
-        expect: {
-          outcome: 'clarify',
-          noLlm: true,
-          planStage: 'interview',
-          actionsInclude: 'build_plan',
-          planNames: ['Звіт', 'Молоко'],
-        },
-      },
-    ],
-  },
-  {
-    id: 'C11',
-    turns: [
-      {
-        transcript: 'ну таке, зроби щось',
-        expect: { outcome: 'clarify', maxIntents: 0, noPlan: true },
-      },
-      {
-        transcript: 'ну не знаю',
-        expect: { outcome: 'clarify', maxIntents: 0, noPlan: true },
-      },
-      {
-        transcript: 'та байдуже',
-        expect: { outcome: 'refuse', maxIntents: 0, noPlan: true },
-      },
-    ],
-  },
-  {
-    id: 'C12',
-    turns: [
-      {
-        transcript: 'сплануй сьогодні',
-        expect: {
-          outcome: 'clarify',
-          maxIntents: 0,
-          planStage: 'interview',
-          actionsInclude: 'build_plan',
-          planNames: ['Звіт', 'Молоко'],
-          maxPlanItems: 2,
-        },
-      },
-      {
-        transcript: 'додай ще одну справу',
-        expect: {
-          outcome: 'clarify',
-          maxIntents: 0,
-          planStage: 'interview',
-          actionsInclude: 'build_plan',
-          planNames: ['Звіт', 'Молоко'],
-          maxPlanItems: 2,
-        },
-      },
-      {
-        transcript: 'не знаю',
-        expect: {
-          outcome: 'clarify',
-          maxIntents: 0,
-          planStage: 'interview',
-          actionsInclude: 'build_plan',
-          planNames: ['Звіт', 'Молоко'],
-          maxPlanItems: 2,
-        },
-      },
-      {
-        transcript: 'та байдуже',
-        expect: {
-          outcome: 'clarify',
-          maxIntents: 0,
-          answer: true,
-          planStage: 'interview',
-          actionsInclude: 'build_plan',
-          planNames: ['Звіт', 'Молоко'],
-          maxPlanItems: 2,
-        },
-      },
-    ],
-  },
-  {
-    id: 'C13',
-    turns: [
-      {
-        transcript: 'ну таке, зроби щось',
-        expect: { outcome: 'clarify', maxIntents: 0, noPlan: true },
-      },
-      {
-        transcript: 'ну не знаю',
-        expect: { outcome: 'clarify', maxIntents: 0, noPlan: true },
-      },
-      {
-        transcript: 'додай задачу купити хліб',
-        expect: { outcome: 'confirm', kinds: ['create'], maxIntents: 1, nameIncludes: 'хліб' },
-      },
-      {
-        transcript: 'ну таке, зроби щось',
-        expect: { outcome: 'clarify', maxIntents: 0, noPlan: true, messageExcludes: ['хліб'] },
-      },
-    ],
-  },
-  {
-    id: 'C14',
-    turns: [
-      {
-        transcript: 'купи хліб і перенеси ту штуку',
-        expect: { outcome: 'clarify', maxIntents: 0, noPlan: true },
-      },
-      {
-        transcript: 'звіт, на завтра',
-        expect: { outcome: 'confirm', kinds: ['create', 'window|shift|update'], nameIncludes: 'хліб' },
-      },
-      {
-        transcript: 'ну таке, зроби щось',
-        expect: { outcome: 'clarify', maxIntents: 0, noPlan: true, messageExcludes: ['Звіт', 'хліб'] },
-      },
-      {
-        transcript: 'ну не знаю',
-        expect: { outcome: 'clarify', maxIntents: 0, noPlan: true, messageExcludes: ['Звіт', 'хліб'] },
-      },
-    ],
-  },
-];
-
-/** Not yet run. Habits are hidden and are not in this list. Day-plan stays out until Apply owns the end of the dialogue. */
-const NEXT: Scenario[] = [
-  {
-    id: 'N1',
-    turns: one('додай задачу купити хліб і масло', {
-      outcome: 'confirm',
-      kinds: ['create'],
-      maxIntents: 1,
-      nameIncludes: 'хліб',
-    }),
-  },
-  {
-    id: 'M6',
-    turns: one('перенеси звіт на завтра і додай задачу прибрати кухню', {
-      outcome: 'confirm',
-      kinds: ['window|shift|update', 'create'],
-    }),
-  },
-  {
-    id: 'M7',
-    turns: one('молоко перенеси на 15:00, а звіт познач виконаним', {
-      outcome: 'confirm',
-      kinds: ['shift|update|window', 'complete'],
-    }),
-  },
-  {
-    id: 'M8',
-    turns: one('ну значить так… купити корм коту і ще оплатити комуналку', {
-      outcome: 'confirm',
-      kinds: ['create', 'create'],
-      maxIntents: 2,
-    }),
-  },
-  {
-    id: 'M9',
-    turns: one('спочатку зроби звіт зараз, потім нагадай купити воду о шостій', {
-      outcome: 'confirm',
-      kinds: ['shift|window|update', 'create'],
-    }),
-  },
-  {
-    id: 'M10',
-    turns: one('додай задачу купити хліб… ні, батон, і ще видали молоко', {
-      outcome: 'confirm',
-      kinds: ['create', 'delete'],
-      maxIntents: 2,
-      nameIncludes: 'батон',
-    }),
-  },
-  {
-    id: 'Q2',
-    turns: one('коли я вільний завтра? і звіт уже зробив', {
-      outcome: 'confirm',
-      kinds: ['complete'],
-      answer: true,
-      minPlannerCalls: 2,
-    }),
-  },
-  {
-    id: 'Q4',
-    turns: one('що в мене в списку без часу?', {
-      outcome: 'answer',
-      maxIntents: 0,
-      answer: true,
-      minPlannerCalls: 2,
-    }),
-  },
-  {
-    id: 'C3',
-    turns: [
-      {
-        transcript: 'додай задачу купити хліб',
-        expect: { outcome: 'confirm', kinds: ['create'], maxIntents: 1 },
-      },
-      {
-        transcript: 'перенеси його на завтра',
-        expect: { outcome: 'confirm', kinds: ['window|shift|update'], nameIncludes: 'хліб' },
-      },
-    ],
-  },
-];
-
 function intentKind(intent: VoiceWriteIntent): string {
   if (intent.type === 'create') return 'create';
   const kind = intent.command.kind;
@@ -643,16 +186,7 @@ function matchTurn(
 }
 
 function selectScenarios(): Scenario[] {
-  const minutes = process.argv.some((arg) => arg.startsWith('--minutes='));
-  const pool = process.argv.includes('--timed')
-    ? TIMED
-    : process.argv.includes('--bulk') || minutes
-      ? BULK
-      : process.argv.includes('--next')
-        ? NEXT
-        : process.argv.includes('--complex')
-          ? COMPLEX
-          : SCENARIOS;
+  const pool: Scenario[] = [...DIALOGUE_CORPUS];
   const idsArg = process.argv.find((arg) => arg.startsWith('--ids='));
   if (!idsArg) return pool;
   const ids = new Set(idsArg.slice('--ids='.length).split(',').map((id) => id.trim()));
@@ -692,10 +226,7 @@ async function main(): Promise<void> {
   const minutes = Number(
     process.argv.find((arg) => arg.startsWith('--minutes='))?.slice('--minutes='.length) || 0,
   );
-  const deepseekAll =
-    process.argv.includes('--deepseek') ||
-    process.argv.includes('--timed') ||
-    minutes > 0;
+  const deepseekAll = process.argv.includes('--deepseek') || minutes > 0;
   if (deepseekAll) process.env.VOICE_LLM_PROVIDER = 'deepseek';
   const deadline = minutes > 0 ? Date.now() + minutes * 60_000 : 0;
   const plannerLabel = process.env.DEEPSEEK_API_KEY?.trim()
@@ -719,15 +250,7 @@ async function main(): Promise<void> {
     await settings.updateSettings(userId, { speechLanguage: 'uk', language: 'uk' });
     const retriedTpm = new Set<string>();
     const scenarios = selectScenarios();
-    const poolLabel = process.argv.includes('--timed')
-      ? 'timed'
-      : minutes > 0
-        ? 'marathon'
-        : process.argv.includes('--next')
-          ? 'next'
-          : process.argv.includes('--complex')
-            ? 'complex'
-            : 'simple';
+    const poolLabel = minutes > 0 ? 'marathon' : 'corpus';
     console.log(
       `voice:eval:dialogue — ${scenarios.length} ${poolLabel} scenarios, llm=${deepseekAll ? plannerLabel : plannerLabel + ' parse=groq'}, liveKeys=${groq.liveKeyCount()}`,
     );
@@ -754,8 +277,9 @@ async function main(): Promise<void> {
             transcript: turn.transcript,
             actionId: turn.actionId,
             executionReport: turn.executionReport,
-            timeZone: MULTI_INTENT_EVAL_ANCHORS.timeZone,
-            clientNowIso: MULTI_INTENT_EVAL_ANCHORS.nowIso,
+            timeZone: VOICE_EVAL_ANCHORS.timeZone,
+            clientNowIso: VOICE_EVAL_ANCHORS.nowIso,
+            mode: scenario.mode,
           });
           const calls = groq.evalSpends().slice(before);
           const failures = matchTurn(turn.expect, response, calls);
@@ -789,8 +313,8 @@ async function main(): Promise<void> {
               const applied = await voice.turn(userId, {
                 sessionId,
                 actionId: 'confirm',
-                timeZone: MULTI_INTENT_EVAL_ANCHORS.timeZone,
-                clientNowIso: MULTI_INTENT_EVAL_ANCHORS.nowIso,
+                timeZone: VOICE_EVAL_ANCHORS.timeZone,
+                clientNowIso: VOICE_EVAL_ANCHORS.nowIso,
               });
               createdIds.push(...(await applyActCreates(app, userId, applied)));
             } else if (response.outcome === 'act') {
@@ -873,9 +397,9 @@ async function ensureEvalUser(app: INestApplicationContext): Promise<string> {
   const settingsService = app.get(UserSettingsService);
   await settingsService.getSettings(user.id);
   await settingsService.updateSettings(user.id, {
-    timeZone: MULTI_INTENT_EVAL_ANCHORS.timeZone,
-    wakeTime: MULTI_INTENT_EVAL_ANCHORS.wakeTime,
-    sleepTime: MULTI_INTENT_EVAL_ANCHORS.sleepTime,
+    timeZone: VOICE_EVAL_ANCHORS.timeZone,
+    wakeTime: VOICE_EVAL_ANCHORS.wakeTime,
+    sleepTime: VOICE_EVAL_ANCHORS.sleepTime,
     confirmVoiceCommands: false,
   });
   return user.id;
@@ -912,7 +436,9 @@ async function applyActCreates(
 
 async function seedFixtures(app: INestApplicationContext, userId: string): Promise<void> {
   const tasks = app.get<Repository<Task>>(getRepositoryToken(Task));
-  for (const fixture of INTENT_EVAL_FIXTURES.tasks) {
+  const legacy = await tasks.findOne({ where: { userId, name: 'Молоко' } });
+  if (legacy) await tasks.remove(legacy);
+  for (const fixture of VOICE_EVAL_FIXTURES.tasks) {
     const existing = await tasks.findOne({ where: { userId, name: fixture.name } });
     if (existing) {
       let changed = false;

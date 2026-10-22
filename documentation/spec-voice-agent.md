@@ -331,7 +331,7 @@ Concrete CSS/SVG/canvas (or small dependency) is chosen at implementation; must 
 | Layer | Cover when implementing |
 |-------|-------------------------|
 | Unit | Planner decision parser; batch assembler + partial clarify; plan-draft reducer + apply mapping; `VoiceDayPlanner` with a mocked preview; orchestrator flows with mocked Groq; `previewSequence` |
-| Live eval | `npm run voice:eval:multi` — multi-intent + day-plan corpus (uk/en, 50 turns). Planner uses Gemini when `GEMINI_API_KEY` is set; the script's Groq planner pin is the fallback |
+| Live eval | `npm run voice:eval:dialogue` — the dialogue corpus (one Ukrainian scenario per branch). |
 | API e2e | `/voice/turn` multi-intent act / confirm + report; day plan propose (real dry-run) → edit → apply; interview → `build_plan` → cancel; planner failure fallback |
 | Playwright | Multi-intent cards + Apply + statuses; interview → Make plan → voice edit → changed badge → Apply; close discards the plan |
 

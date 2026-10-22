@@ -1,6 +1,6 @@
 ---
 description: Voice agent dialogue tests — prompt rules, day-plan contract, stop-on-fail, token pacing
-globs: backend/src/modules/voice/**,backend/src/scripts/eval-voice-multi-intent.ts,documentation/voice-agent-dialogue-test-plan.md
+globs: backend/src/modules/voice/**,backend/src/scripts/eval-voice-dialogue.ts,documentation/voice-agent-dialogue-test-plan.md
 alwaysApply: false
 ---
 
@@ -20,8 +20,8 @@ The agent does not end the dialogue. The draft grows as tasks are understood. Ap
 
 ## Running tests
 
-- Corpus is Ukrainian. Planner calls try DeepSeek, then Qwen, then Gemini, then Groq. Parse stays on Groq unless `VOICE_LLM_PROVIDER=deepseek`.
-- A run without `--minutes` stops on the first mismatch. `--bulk` and `--minutes` walk the 350 once and continue past behavior mismatches. A provider hard limit exits 2. Do not loop the pool.
+- Corpus is Ukrainian, one scenario per branch, in `backend/src/modules/voice/dialogue-corpus`. Planner calls try DeepSeek, then Qwen, then Gemini, then Groq. Parse stays on Groq unless `VOICE_LLM_PROVIDER=deepseek`.
+- A run without `--minutes` stops on the first mismatch. `--minutes` walks the corpus once and continues past behavior mismatches. A provider hard limit exits 2. Do not loop the pool.
 - Pace per key and per model from the token ledger in the test plan. The create-eval 35 second gap is from the outdated parseTask harness. Do not reuse it.
 - A daily token ceiling retires that key. When every key is retired, stop for the day.
 - Measure planner, tool, router, and specialist calls before cutting any of them.
