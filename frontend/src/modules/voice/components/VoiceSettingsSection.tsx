@@ -6,24 +6,17 @@ import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
 import { isAppLanguage, type AppLanguage } from 'i18n';
 
 export function VoiceSettingsSection({
-  confirmVoiceCommands,
   speakVoiceReplies,
   speechLanguage,
 }: {
-  confirmVoiceCommands: boolean;
   speakVoiceReplies: boolean;
   speechLanguage: AppLanguage;
 }) {
   const { t } = useTranslation();
   const [updateUserSettings] = useUpdateUserSettingsMutation();
-  const [confirmEnabled, setConfirmEnabled] = useState(confirmVoiceCommands);
   const [speakEnabled, setSpeakEnabled] = useState(speakVoiceReplies);
   const [voiceLang, setVoiceLang] = useState<AppLanguage>(speechLanguage);
-  const [busy, setBusy] = useState<'confirm' | 'speak' | 'language' | null>(null);
-
-  useEffect(() => {
-    setConfirmEnabled(confirmVoiceCommands);
-  }, [confirmVoiceCommands]);
+  const [busy, setBusy] = useState<'speak' | 'language' | null>(null);
 
   useEffect(() => {
     setSpeakEnabled(speakVoiceReplies);
@@ -32,26 +25,6 @@ export function VoiceSettingsSection({
   useEffect(() => {
     if (isAppLanguage(speechLanguage)) setVoiceLang(speechLanguage);
   }, [speechLanguage]);
-
-  const toggleConfirm = async (next: boolean) => {
-    setBusy('confirm');
-    setConfirmEnabled(next);
-    try {
-      await updateUserSettings({ confirmVoiceCommands: next }).unwrap();
-      showSuccessToast({
-        title: next ? t('voice.confirmOn') : t('voice.confirmOff'),
-        detail: next ? t('voice.confirmOnDetail') : t('voice.confirmOffDetail'),
-      });
-    } catch (error) {
-      setConfirmEnabled(!next);
-      showErrorToast({
-        title: t('voice.updateFailed'),
-        detail: extractApiErrorMessage(error),
-      });
-    } finally {
-      setBusy(null);
-    }
-  };
 
   const toggleSpeak = async (next: boolean) => {
     setBusy('speak');
@@ -119,16 +92,6 @@ export function VoiceSettingsSection({
           </select>
           <p className="mt-1 max-w-md text-xs text-ide-muted">{t('voice.communicationLanguageHint')}</p>
         </div>
-        <label className="flex items-center gap-2 text-sm text-ide-text">
-          <input
-            type="checkbox"
-            className="h-4 w-4"
-            checked={confirmEnabled}
-            disabled={busy !== null}
-            onChange={(event) => void toggleConfirm(event.target.checked)}
-          />
-          {t('voice.askBefore')}
-        </label>
         <label className="flex items-center gap-2 text-sm text-ide-text">
           <input
             type="checkbox"

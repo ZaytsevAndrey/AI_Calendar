@@ -166,9 +166,8 @@ export function normalizeClockHm(value: string | null | undefined): string {
 }
 
 /**
- * Put a model ISO on the settings timezone.
- * A trailing Z is an absolute instant (relative "in N hours"): convert it.
- * A numeric offset is a spoken wall clock with a possibly wrong offset: keep the digits.
+ * Stamp the user's zone onto the date and clock the model wrote.
+ * A trailing Z or a numeric offset is not a conversion: those digits stay.
  */
 export function rezoneWallClockIso(
   iso: string | null | undefined,
@@ -176,12 +175,6 @@ export function rezoneWallClockIso(
 ): string | null {
   if (!iso) return null;
   const raw = String(iso).trim();
-  if (/z$/i.test(raw)) {
-    const ymd = localYmd(raw, timeZone);
-    const hm = localHm(raw, timeZone);
-    if (!ymd || !hm) return raw;
-    return localDateTimeIso(ymd, hm, timeZone);
-  }
   const match = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})/);
   if (!match) return iso;
   return localDateTimeIso(match[1], `${match[2]}:${match[3]}`, timeZone);
@@ -212,9 +205,8 @@ export function buildLocalCalendarContext(
   const nextWeekdays = WEEKDAY_NAMES.map(
     (name, dow) => `${name} ${nextWeekdayYmd(scheduleToday, dow)}`,
   ).join(', ');
-  return `Local calendar (${timeZone}):
-- now ISO: ${nowIso}
-- now local clock: ${clock}
+  return `Local calendar:
+- now: ${calendarToday} ${clock}
 - schedule today: ${scheduleToday} (${weekday}) = "today" in the speaker's language
 - schedule tomorrow: ${scheduleTomorrow} = "tomorrow" in the speaker's language
 - schedule +3 days: ${inThreeDays} = "in 3 days" in the speaker's language. Not a weekday name.
@@ -226,17 +218,17 @@ export function buildLocalCalendarContext(
       : ''
   }
 
-Resolve all dates yourself into ISO-8601 with numeric offset:
+Write every time as YYYY-MM-DDTHH:mm:00. No Z and no numeric offset. The digits are already the user's local time.
 - Words for today/tomorrow (any language) map to schedule today/tomorrow above.
 - The day that is ending lasts through three hours after sleep. The day that is starting begins three hours before wake. When three hours after sleep is later, the ending day lasts through that later instant and the next day begins after it. With no sleep time, the next day begins three hours before wake.
 - That choice only picks the date. It does not make a later part of that day past.
-- Relative "in N hours" (any language) = now ISO + N hours.
+- Relative "in N hours" (any language) = add N hours to the now clock above. Four hours after 13:00 is 17:00. Do not convert zones.
 - Relative "in N days" (any language) = schedule today + N days.
 - Day + clock: put the clock on that schedule day (never on schedule today when they said tomorrow).
 - A named weekday with no "last" is the next one, including today when today is that weekday. Copy that date from the "next named weekday" line. When schedule today is Tuesday, Monday is the listed Monday, not schedule +3 days and not the Monday that already passed. On Saturday is the listed Saturday, not Thursday and not schedule +2 days. "next" plus today's weekday is the date on the "next + today's weekday" line, seven days later, not schedule today.
 - Day without clock: flexible; earliest at Wake, deadline at Sleep that day; scheduledStart/End null. A deadline that names a day and no clock is Sleep.
-- Concrete time commits to the hour (kind fixed). Approximate softens it (kind flexible, scheduledStart at the hour, never fixed). Softened ordinal: around the sixth is flexible preferred 18:00; length is only duration; ordinal is not in the name.
-- Bare 1–7 afternoon unless morning/night. Quarter/half toward an hour is the clock (quarter to five → 16:45), not the length.
+- Concrete time commits to the hour (kind fixed). Approximate softens it (kind flexible, scheduledStart at the hour, never fixed). A softened ordinal is flexible preferred at the chosen place of that hour; length is only duration; the ordinal is not in the name.
+- A spoken hour has two places twelve hours apart. A named morning or night locks that half. Otherwise the place still ahead of now. Both past → ask, do not move it to the next day. Twelve after noon is not midnight. A fraction toward an hour is the clock on that place, not the length.
 - "in N hours" adds to the local clock. "after 18" earliest only. "by end of day" / "from now until 18" are windows. Named-event fill of a span is fixed; errand inside a span is a window.
 - Before/after another activity: match Open tasks for the bound. No match → ask. After work / after lunch are preferred clocks, not that lookup.
 - Morning is the first three hours after wake, not a fixed clock. It is past only when its end is before now. Now before it starts, including before wake, means it is still ahead on the named day. Do not ask and do not move it to the next day. It has ended and they named that day → ask whether they still want it. It has ended and they named no day → the same morning on the next day.

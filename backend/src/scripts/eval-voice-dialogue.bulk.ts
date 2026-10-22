@@ -46,7 +46,7 @@ function samples(construction: string, expect: Expect, lines: Array<string | [st
 }
 
 const create = (name: string, unscheduled = false): Expect => ({
-  outcome: 'act',
+  outcome: 'confirm',
   kinds: ['create'],
   maxIntents: 1,
   ...(unscheduled ? { unscheduled: true } : {}),
@@ -176,7 +176,7 @@ add('create.weekends', [{ transcript: 'по вихідних пробіжка о
 add('create.weekends', [
   {
     transcript: 'у суботу і неділю прання',
-    expect: { outcome: 'act', kinds: ['create', 'create'], maxIntents: 2, nameIncludes: 'пранн' },
+    expect: { outcome: 'confirm', kinds: ['create', 'create'], maxIntents: 2, nameIncludes: 'пранн' },
   },
 ]);
 samples('create.one.weekday.clock', create('планер'), [
@@ -187,7 +187,7 @@ samples('create.one.weekday.clock', create('планер'), [
 add('create.two.weekdays', [
   {
     transcript: 'у вівторок і четвер спорт о 18',
-    expect: { outcome: 'act', kinds: ['create', 'create'], maxIntents: 2, nameIncludes: 'спорт' },
+    expect: { outcome: 'confirm', kinds: ['create', 'create'], maxIntents: 2, nameIncludes: 'спорт' },
   },
 ]);
 add('create.two.weekdays', [
@@ -199,7 +199,7 @@ add('create.two.weekdays', [
 add('create.two.weekdays', [
   {
     transcript: 'у середу і пʼятницю басейн',
-    expect: { outcome: 'act', kinds: ['create', 'create'], maxIntents: 2, nameIncludes: 'басейн' },
+    expect: { outcome: 'confirm', kinds: ['create', 'create'], maxIntents: 2, nameIncludes: 'басейн' },
   },
 ]);
 samples('create.biweekly', create('стриж'), [
@@ -291,17 +291,17 @@ samples('create.compound.and', create('хліб', true), [
   ['купити чай і цукор', 'цукор'],
   ['треба сіль і перець', 'перець'],
 ]);
-samples('create.two.errands', { outcome: 'act', kinds: ['create', 'create'], maxIntents: 2, nameIncludes: 'хліб' }, [
+samples('create.two.errands', { outcome: 'confirm', kinds: ['create', 'create'], maxIntents: 2, nameIncludes: 'хліб' }, [
   'купи хліб і запиши подзвонити мамі',
   ['треба батон і треба кава', 'батон'],
   ['додай воду і додай сир', 'сир'],
 ]);
-samples('create.three.errands', { outcome: 'act', kinds: ['create', 'create', 'create'], maxIntents: 3, nameIncludes: 'ліки' }, [
+samples('create.three.errands', { outcome: 'confirm', kinds: ['create', 'create', 'create'], maxIntents: 3, nameIncludes: 'ліки' }, [
   'завтра треба купити ліки, забрати посилку і записатися до лікаря',
   ['купи хліб, запиши каву і додай сир', 'сир'],
   ['треба яйця, треба риба і треба рис', 'рис'],
 ]);
-samples('create.two.share.day', { outcome: 'act', kinds: ['create', 'create'], maxIntents: 2, nameIncludes: 'хліб' }, [
+samples('create.two.share.day', { outcome: 'confirm', kinds: ['create', 'create'], maxIntents: 2, nameIncludes: 'хліб' }, [
   'завтра купити хліб і забрати посилку',
   ['у пʼятницю лікар і аптека', 'аптек'],
   ['сьогодні банк і пошта', 'пошт'],
@@ -322,7 +322,7 @@ samples('create.someday', create('книжк', true), [
   ['колись купити пальто', 'пальто'],
 ]);
 
-samples('complete.named', { outcome: 'act', kinds: ['complete'], maxIntents: 1, nameIncludes: 'звіт' }, [
+samples('complete.named', { outcome: 'confirm', kinds: ['complete'], maxIntents: 1, nameIncludes: 'звіт' }, [
   'закінчив звіт',
   'зробив звіт',
   ['закінчив молоко', 'молоко'],
@@ -377,22 +377,22 @@ samples('wont.today.unknown', clarify, [
   'орбіта сьогодні відпадає',
   'квантової фізики сьогодні не буде',
 ]);
-samples('move.day', { outcome: 'act', kinds: ['window|shift|update'], maxIntents: 1, nameIncludes: 'звіт' }, [
+samples('move.day', { outcome: 'confirm', kinds: ['window|shift|update'], maxIntents: 1, nameIncludes: 'звіт' }, [
   'перенеси звіт на завтра',
   'звіт на пʼятницю',
   ['перенеси молоко на завтра', 'молоко'],
 ]);
-samples('move.clock', { outcome: 'act', kinds: ['window|shift|update'], maxIntents: 1, nameIncludes: 'молоко' }, [
+samples('move.clock', { outcome: 'confirm', kinds: ['window|shift|update'], maxIntents: 1, nameIncludes: 'молоко' }, [
   'перенеси молоко на 15:00',
   ['звіт на 18:00', 'звіт'],
   'постав молоко на 11',
 ]);
-samples('move.window', { outcome: 'act', kinds: ['window|shift|update'], maxIntents: 1, nameIncludes: 'звіт' }, [
+samples('move.window', { outcome: 'confirm', kinds: ['window|shift|update'], maxIntents: 1, nameIncludes: 'звіт' }, [
   'перенеси звіт між 14 і 18',
   ['молоко між 10 і 12', 'молоко'],
   'звіт з 16 до 19',
 ]);
-samples('move.now', { outcome: 'act', kinds: ['window|shift|update'], maxIntents: 1, nameIncludes: 'звіт' }, [
+samples('move.now', { outcome: 'confirm', kinds: ['window|shift|update'], maxIntents: 1, nameIncludes: 'звіт' }, [
   'зроби звіт зараз',
   ['молоко зараз', 'молоко'],
   'звіт прямо зараз',
@@ -407,17 +407,17 @@ samples('move.pronoun.day', clarify, [
   'її на 15:00',
   'ту штуку на вечір',
 ]);
-samples('move.correct.day', { outcome: 'act', kinds: ['window|shift|update'], maxIntents: 1, nameIncludes: 'звіт' }, [
+samples('move.correct.day', { outcome: 'confirm', kinds: ['window|shift|update'], maxIntents: 1, nameIncludes: 'звіт' }, [
   'перенеси звіт на сьогодні… ні, на завтра',
   ['молоко на пʼятницю, ні, на завтра', 'молоко'],
   'звіт на вечір… ні, на завтра',
 ]);
-samples('update.rename', { outcome: 'act', kinds: ['update'], maxIntents: 1, nameIncludes: 'молоко' }, [
+samples('update.rename', { outcome: 'confirm', kinds: ['update'], maxIntents: 1, nameIncludes: 'молоко' }, [
   'перейменуй молоко на хліб',
   'молоко тепер кефір',
   'назви молоко батоном',
 ]);
-samples('update.priority', { outcome: 'act', kinds: ['update'], maxIntents: 1, nameIncludes: 'звіт' }, [
+samples('update.priority', { outcome: 'confirm', kinds: ['update'], maxIntents: 1, nameIncludes: 'звіт' }, [
   'зроби звіт терміновим',
   'звіт не горить, низький пріоритет',
   ['молоко термінове', 'молоко'],
@@ -425,7 +425,7 @@ samples('update.priority', { outcome: 'act', kinds: ['update'], maxIntents: 1, n
 add('update.deadline', [
   {
     transcript: 'дедлайн звіту на завтра',
-    expect: { outcome: 'act', kinds: ['update'], maxIntents: 1, nameIncludes: 'звіт' },
+    expect: { outcome: 'confirm', kinds: ['update'], maxIntents: 1, nameIncludes: 'звіт' },
   },
 ]);
 add('update.deadline', [
@@ -440,13 +440,13 @@ samples('update.duration', clarify, [
 add('update.description', [
   {
     transcript: 'додай до звіту опис фінальна версія',
-    expect: { outcome: 'act', kinds: ['update'], maxIntents: 1, nameIncludes: 'звіт' },
+    expect: { outcome: 'confirm', kinds: ['update'], maxIntents: 1, nameIncludes: 'звіт' },
   },
 ]);
 add('update.description', [
   {
     transcript: 'у молоко допиши знежирене',
-    expect: { outcome: 'act', kinds: ['update'], maxIntents: 1, nameIncludes: 'молоко' },
+    expect: { outcome: 'confirm', kinds: ['update'], maxIntents: 1, nameIncludes: 'молоко' },
   },
 ]);
 add('update.description', [
@@ -517,22 +517,22 @@ samples('mix.create.delete', { outcome: 'confirm', kinds: ['create', 'delete'], 
   ['додай батон і прибери звіт', 'батон'],
   ['запиши воду і скасуй молоко', 'вод'],
 ]);
-samples('mix.move.create', { outcome: 'act', kinds: ['window|shift|update', 'create'], nameIncludes: 'звіт' }, [
+samples('mix.move.create', { outcome: 'confirm', kinds: ['window|shift|update', 'create'], nameIncludes: 'звіт' }, [
   'перенеси звіт на завтра і додай прибрати кухню',
   ['молоко на 15:00 і купи хліб', 'хліб'],
   'звіт на вечір і запиши каву',
 ]);
-samples('mix.complete.create', { outcome: 'act', kinds: ['complete', 'create'], nameIncludes: 'звіт' }, [
+samples('mix.complete.create', { outcome: 'confirm', kinds: ['complete', 'create'], nameIncludes: 'звіт' }, [
   'закінчив звіт і купи хліб',
   ['молоко готове, додай батон', 'батон'],
   'зробив звіт і запиши воду',
 ]);
-samples('mix.complete.move', { outcome: 'act', kinds: ['complete', 'window|shift|update'], nameIncludes: 'звіт' }, [
+samples('mix.complete.move', { outcome: 'confirm', kinds: ['complete', 'window|shift|update'], nameIncludes: 'звіт' }, [
   'закінчив звіт і перенеси молоко на завтра',
   'молоко готове, звіт на 15:00',
   'зробив молоко і звіт на вечір',
 ]);
-samples('mix.question.create', { outcome: 'act', kinds: ['create'], maxIntents: 1, nameIncludes: 'хліб' }, [
+samples('mix.question.create', { outcome: 'confirm', kinds: ['create'], maxIntents: 1, nameIncludes: 'хліб' }, [
   'що сьогодні і купи хліб',
   ['коли я вільний, і додай батон', 'батон'],
   ['що незаплановане, запиши воду', 'вод'],
@@ -613,22 +613,22 @@ samples('create.two.days.last', create('аптек'), [
   ['банк у четвер чи в пʼятницю, у пʼятницю', 'банк'],
   ['лікар завтра або післязавтра, післязавтра', 'лікар'],
 ]);
-samples('update.clear.time', { outcome: 'act', kinds: ['update'], maxIntents: 1, nameIncludes: 'звіт' }, [
+samples('update.clear.time', { outcome: 'confirm', kinds: ['update'], maxIntents: 1, nameIncludes: 'звіт' }, [
   'зніми час зі звіту',
   ['молоко без години', 'молоко'],
   'звіт зроби без часу',
 ]);
-samples('mix.question.complete', { outcome: 'act', kinds: ['complete'], maxIntents: 1, nameIncludes: 'звіт' }, [
+samples('mix.question.complete', { outcome: 'confirm', kinds: ['complete'], maxIntents: 1, nameIncludes: 'звіт' }, [
   'що сьогодні, і звіт готовий',
   ['коли вільно, молоко зробив', 'молоко'],
   'що далі, закінчив звіт',
 ]);
-samples('mix.rename.and.create', { outcome: 'act', kinds: ['update', 'create'], nameIncludes: 'молоко' }, [
+samples('mix.rename.and.create', { outcome: 'confirm', kinds: ['update', 'create'], nameIncludes: 'молоко' }, [
   'перейменуй молоко на кефір і купи хліб',
   ['звіт тепер звітність, додай батон', 'батон'],
   'назви молоко сиром і запиши воду',
 ]);
-samples('mix.priority.and.move', { outcome: 'act', kinds: ['update', 'window|shift|update'], nameIncludes: 'звіт' }, [
+samples('mix.priority.and.move', { outcome: 'confirm', kinds: ['update', 'window|shift|update'], nameIncludes: 'звіт' }, [
   'звіт терміновий і перенеси його на завтра',
   ['молоко низький пріоритет і на 15:00', 'молоко'],
   'зроби звіт терміновим і постав на вечір',
@@ -638,13 +638,13 @@ add('dialogue.hold.then.answer', [
   { transcript: 'купи хліб і перенеси ту штуку', expect: clarify },
   {
     transcript: 'звіт, на завтра',
-    expect: { outcome: 'act', kinds: ['create', 'window|shift|update'], nameIncludes: 'хліб' },
+    expect: { outcome: 'confirm', kinds: ['create', 'window|shift|update'], nameIncludes: 'хліб' },
   },
 ]);
 add('dialogue.revise.final.time', [
   {
     transcript: 'додай спортзал на 18 і перенеси її на 19',
-    expect: { outcome: 'act', kinds: ['create'], maxIntents: 1, nameIncludes: 'спорт' },
+    expect: { outcome: 'confirm', kinds: ['create'], maxIntents: 1, nameIncludes: 'спорт' },
   },
 ]);
 add('dialogue.drop.after.two.blanks', [
@@ -652,7 +652,7 @@ add('dialogue.drop.after.two.blanks', [
   { transcript: 'не знаю яку', expect: clarify },
   {
     transcript: 'та й байдуже',
-    expect: { outcome: 'act', kinds: ['create'], maxIntents: 1, nameIncludes: 'батон' },
+    expect: { outcome: 'confirm', kinds: ['create'], maxIntents: 1, nameIncludes: 'батон' },
   },
 ]);
 add('dialogue.other.day.while.plan', [
@@ -668,7 +668,7 @@ add('dialogue.other.day.while.plan', [
   },
   {
     transcript: 'завтра треба купити хліб',
-    expect: { outcome: 'act', kinds: ['create'], maxIntents: 1, nameIncludes: 'хліб' },
+    expect: { outcome: 'confirm', kinds: ['create'], maxIntents: 1, nameIncludes: 'хліб' },
   },
 ]);
 add('dialogue.no.intent.then.refuse', [
@@ -723,7 +723,7 @@ samples('create.place.only', create('офіс', true), [
   ['кава на Подолі', 'подол'],
   ['обід у кафе', 'кафе'],
 ]);
-samples('move.part.of.day', { outcome: 'act', kinds: ['window|shift|update'], maxIntents: 1, nameIncludes: 'звіт' }, [
+samples('move.part.of.day', { outcome: 'confirm', kinds: ['window|shift|update'], maxIntents: 1, nameIncludes: 'звіт' }, [
   'перенеси звіт на вечір',
   ['молоко на ранок', 'молоко'],
   ['звіт після обіду', 'звіт'],

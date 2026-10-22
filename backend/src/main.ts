@@ -7,6 +7,7 @@ import fastifyCors from '@fastify/cors';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { getFrontendBaseUrl } from './common/public-url';
+import { VoiceFileLogger } from './common/voice-file-logger';
 
 function isAllowedOrigin(origin: string | undefined): boolean {
   if (!origin) {
@@ -38,7 +39,9 @@ async function bootstrap() {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
-  const app = await NestFactory.create(AppModule, adapter as any);
+  const app = await NestFactory.create(AppModule, adapter as any, {
+    logger: new VoiceFileLogger(),
+  });
 
   app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalFilters(new JwtExceptionFilter());

@@ -58,7 +58,7 @@ The planner splits an utterance into text segments. It does not choose the actio
 - Dates named once, any count, are one one-off each, one segment each. A clock they share is repeated in each segment and does not join the dates. A clock makes a series only when the utterance is already a repeat. A repeat on those days is one series. An existing series does not change the one-offs.
 - A weekday named once, with no repeat, is one one-off. A repeating part of the week that names no day is not a special case: the repeat rule decides. Do not force a pair of days and do not force a question.
 - The ending schedule day lasts through three hours after sleep. The starting day begins three hours before wake. When three hours after sleep is later, the ending day lasts through that later instant. That choice only picks the date. It does not make a later part of that day past. Morning is the first three hours after wake. A part that has not ended is still ahead, including before wake.
-- A clock with no day that is still ahead is today. A bare hour from 1 to 7 with no morning or night cue is the afternoon occurrence. A clock with no day that is already past is a question: do not write that start and do not move it to the next day. A clock on a named day stays on that day.
+- A clock with no day that is still ahead is today. A spoken hour has two places twelve hours apart. A named morning or night locks that half. Otherwise use the place still ahead of now. If both have passed, that is a question: do not write that start and do not move it to the next day. Twelve after noon is not midnight. A clock on a named day stays on that day.
 - A whole day — an event that fills the day, a placement onto a day with no clock, and a deadline that names a day and no clock — runs from Wake to Sleep. Not midnight to 23:59.
 - An event with no time is a question when. A task that is not an event, with no time, is created without a time. A place does not decide which.
 - Update changes fields of an existing task. Reschedule only seats it. One utterance that does both is two segments. Update does not write the placement.
@@ -157,11 +157,11 @@ Run only after the simple full pass is green. Offline first, with frozen planner
 3. Layers, complex flows. Zero tokens.
 4. Full dialogue, complex flows. 120b.
 
-Each step starts only when the previous one is green. Create-eval (`npm run voice:eval:create`) is a different loop and is not part of this cycle.
+Each step starts only when the previous one is green. A write turn is `confirm` (preview cards). Spoken yes is `act`. The old `parseTask` create-eval is removed.
 
 ## 10. Groq pacing
 
-Do not sleep a fixed 35 seconds. That gap belongs to the create-eval loop only.
+Do not sleep a fixed 35 seconds. That gap belonged to the outdated create-eval loop.
 
 Limits are per key and per model. On a free key, Groq's published table for `openai/gpt-oss-120b` and `openai/gpt-oss-20b` is 8 000 tokens per minute, 200 000 tokens per day, 30 requests per minute, 1 000 requests per day. The two models have separate buckets. The exact ceiling is the response header `x-ratelimit-limit-tokens`. Use the header when it is present.
 

@@ -909,8 +909,8 @@ describe('normalizeVoiceParse', () => {
         task: {
           name: 'коротка перерва',
           kind: 'fixed',
-          scheduledStartTime: '2026-10-13T12:00:00.000Z',
-          scheduledEndTime: '2026-10-13T12:30:00.000Z',
+          scheduledStartTime: '2026-10-13T15:00:00.000Z',
+          scheduledEndTime: '2026-10-13T15:30:00.000Z',
         },
       },
       {
@@ -946,6 +946,97 @@ describe('normalizeVoiceParse', () => {
       },
     );
     expect(day.task?.deadline).toBe('2026-10-13T23:59:00+03:00');
+  });
+
+  it('replaces a phase that does not contain the committed window', () => {
+    const night = '501cbbf2-dcd6-4795-8e19-af0ade6f2957';
+    const rest = 'bfcfe0b5-4e8c-4388-b7ab-9ba64d632a99';
+    const focus = '36b7b224-d8d1-4ed1-830a-f8e1c550721a';
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'dinner',
+          kind: 'flexible',
+          estimatedTimeInMinutes: 60,
+          earliestStartTime: '2026-10-20T19:00:00',
+          deadline: '2026-10-20T22:00:00',
+          phaseId: night,
+        },
+      },
+      {
+        validPhaseIds: new Set([night, rest, focus]),
+        phases: [
+          {
+            id: night,
+            startTime: '22:00',
+            endTime: '02:00',
+            weekDays: [0, 1, 2, 3, 4, 5, 6],
+            type: 'time_phase',
+          },
+          {
+            id: rest,
+            startTime: '19:00',
+            endTime: '22:00',
+            weekDays: [1, 2, 3, 4, 5],
+            type: 'time_phase',
+          },
+          {
+            id: focus,
+            startTime: '10:00',
+            endTime: '02:00',
+            weekDays: [1, 2, 3, 4, 5],
+            type: 'main_phase',
+          },
+        ],
+        alreadyClarified: false,
+        transcript: 'dinner tonight',
+        timeZone: 'Asia/Nicosia',
+      },
+    );
+    expect(result.task?.phaseId).toBe(rest);
+    expect(result.task?.earliestStartTime).toContain('T19:00:00+03:00');
+    expect(result.task?.deadline).toContain('T22:00:00+03:00');
+  });
+
+  it('keeps a phase whose window already contains the clock', () => {
+    const night = '501cbbf2-dcd6-4795-8e19-af0ade6f2957';
+    const rest = 'bfcfe0b5-4e8c-4388-b7ab-9ba64d632a99';
+    const result = normalizeVoiceParse(
+      {
+        understanding: 'complete',
+        task: {
+          name: 'call',
+          kind: 'fixed',
+          scheduledStartTime: '2026-10-20T22:00:00',
+          scheduledEndTime: '2026-10-20T23:00:00',
+          phaseId: night,
+        },
+      },
+      {
+        validPhaseIds: new Set([night, rest]),
+        phases: [
+          {
+            id: night,
+            startTime: '22:00',
+            endTime: '02:00',
+            weekDays: [0, 1, 2, 3, 4, 5, 6],
+            type: 'time_phase',
+          },
+          {
+            id: rest,
+            startTime: '19:00',
+            endTime: '22:00',
+            weekDays: [1, 2, 3, 4, 5],
+            type: 'time_phase',
+          },
+        ],
+        alreadyClarified: false,
+        transcript: 'call at 22',
+        timeZone: 'Asia/Nicosia',
+      },
+    );
+    expect(result.task?.phaseId).toBe(night);
   });
 
   it('keeps model needs_clarification when a title and question are both present', () => {

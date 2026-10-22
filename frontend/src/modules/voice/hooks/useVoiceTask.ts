@@ -1,11 +1,15 @@
 import { useCallback, useRef, useState } from 'react';
+import {
+  loadCompanionVoiceMode,
+  saveCompanionVoiceMode,
+  type CompanionVoiceMode,
+} from '../companionMode';
 import { useDispatch } from 'react-redux';
 import { useSkipOccurrenceMutation, useUpdateEventMutation, useDeleteEventMutation } from 'api/eventTasksApi';
 import {
   VoiceApi,
   type DayPlanProposal,
   type VoiceAgentActionId,
-  type VoiceCommandAction,
   type VoiceExecutionReport,
   type VoiceIntentExecutionStatus,
   type VoiceParseResult,
@@ -53,10 +57,6 @@ type UseVoiceTaskOptions = {
   onSufficient?: (task: VoiceParsedTask) => void;
 };
 
-function requiresAlwaysConfirm(kind: VoiceCommandAction['kind']): boolean {
-  return kind === 'cancel' || kind === 'delete' || kind === 'end_series';
-}
-
 function newSessionId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -75,7 +75,6 @@ function msg(role: 'user' | 'assistant', text: string): VoiceThreadMessage {
 export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
   const { start, stop, cancel, error: recorderError, level: micLevel } = useAudioRecorder();
   const { data: userSettings } = useGetUserSettingsQuery();
-  const confirmCommands = !!userSettings?.confirmVoiceCommands;
   const speakReplies = userSettings?.speakVoiceReplies !== false;
   const speechLang =
     userSettings?.speechLanguage || userSettings?.language || i18n.language || 'en';
@@ -86,6 +85,9 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
   const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
   const [isOpen, setIsOpen] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [companionMode, setCompanionModeState] = useState<CompanionVoiceMode>(loadCompanionVoiceMode);
+  const companionModeRef = useRef(companionMode);
+  companionModeRef.current = companionMode;
   const [stage, setStage] = useState<VoiceStage>('idle');
   const [transcript, setTranscript] = useState('');
   const [messages, setMessages] = useState<VoiceThreadMessage[]>([]);
@@ -327,7 +329,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
         return;
       }
       setLastRun(
-        intents.length > 1
+        intents.length > 0
           ? { intents, statuses: report.results.map((row) => row.status) }
           : null,
       );
@@ -400,16 +402,12 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
           summary: result.command.summary,
           command: result.command,
         };
-        if (confirmCommands || requiresAlwaysConfirm(result.command.kind)) {
-          setPendingIntents([intent]);
-          setPendingSummary(result.command.summary);
-          setServerHoldsPending(false);
-          setActions(['confirm', 'cancel', 'skip_speak']);
-          setStage('confirm');
-          await speakAndStage(result.command.summary, 'confirm');
-          return;
-        }
-        await runIntents([intent], result.command.summary);
+        setPendingIntents([intent]);
+        setPendingSummary(result.command.summary);
+        setServerHoldsPending(false);
+        setActions(['confirm', 'cancel', 'skip_speak']);
+        setStage('confirm');
+        await speakAndStage(result.command.summary, 'confirm');
         return;
       }
 
@@ -432,10 +430,15 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
         // Prefer server-shaped summary when present on a prior turn; legacy
         // parse only returns the task — build a short created line locally.
         const summary = i18n.t('voice.createdTask', { name: result.task.name });
-        await runIntents([{ ...createIntent, summary }], summary);
+        setPendingIntents([{ ...createIntent, summary }]);
+        setPendingSummary(summary);
+        setServerHoldsPending(false);
+        setActions(['confirm', 'cancel', 'skip_speak']);
+        setStage('confirm');
+        await speakAndStage(summary, 'confirm');
       }
     },
-    [confirmCommands, maybeListen, pushMessages, runIntents, speakAndStage],
+    [maybeListen, pushMessages, speakAndStage],
   );
 
   const routeResult = useCallback(
@@ -521,6 +524,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
         timeZone,
         clientNowIso: new Date().toISOString(),
         actionId,
+        mode: companionModeRef.current,
       });
       await routeResult(result);
     },
@@ -743,10 +747,18 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     ],
   );
 
+  const setCompanionMode = useCallback((mode: CompanionVoiceMode) => {
+    companionModeRef.current = mode;
+    setCompanionModeState(mode);
+    saveCompanionVoiceMode(mode);
+  }, []);
+
   return {
     isOpen,
     open,
     close,
+    companionMode,
+    setCompanionMode,
     stage,
     transcript,
     messages,

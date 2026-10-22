@@ -2,7 +2,7 @@
 
 **Status:** shipped (see [roadmap archive](roadmap-archive.md)).  
 **Language:** English  
-**Last updated:** 20 October 2026  
+**Last updated:** 22 October 2026  
 
 The product surface is **Companion** (UK: **Помічник**) — a hybrid chat + voice helper: multi-turn dialogue, grounded Q&A, and write intents — without a second scheduler. Placement and conflict stay on [spec-conflict-rules.md](spec-conflict-rules.md) and [spec-incremental-placement.md](spec-incremental-placement.md). The shipped one-shot commander contract remains [spec-voice-commander.md](spec-voice-commander.md); this document supersedes it for the **Companion entry path** (`POST /voice/turn`). HTTP details in [api-reference.md](api-reference.md); Groq keys in [integrations.md](integrations.md).
 
@@ -39,7 +39,7 @@ One utterance may hold several writes plus a question (§6.6). A day plan is a m
 | L2 | Clarify budget | Max **2** clarifying questions, then refuse. |
 | L3 | Tool surface | Full **read + write-intent** tools mirroring product APIs; limit = product contract, not a short Q&A allowlist. |
 | L4 | Write authority | Orchestrator **never** writes DB; client executes intents only. |
-| L5 | Confirm | Same as today: always confirm delete / cancel / habit_delete / **day-plan apply**; others follow `confirmVoiceCommands`. |
+| L5 | Confirm | Every write (one task or a batch, Companion or Fast create) shows preview cards and waits for Apply or spoken yes. Day-plan apply does the same. |
 | L6 | Day-plan / placement | Same requests as normal engine/UI → same Unscheduled / Problematic / conflict rules. Propose without write until Confirm. |
 | L7 | “this” / “current” | LLM resolves from context; if unclear → clarify (counts toward budget). |
 | L8 | Close widget | **Discard** pending clarify/confirm (no auto-create on close). |
@@ -64,13 +64,14 @@ One utterance may hold several writes plus a question (§6.6). A day plan is a m
 | U7 | Look | Current design system (`ide` tokens); not a separate brand theme. |
 | M1 | Multi-intent scope | Any writes **plus** Q&A in one utterance. The planner splits it into at most **6** segments; each segment goes through the normal router + specialist parse. |
 | M2 | Partial clarify | Resolved segments are held while one unclear segment is asked about; at most **2** questions per segment, then it is dropped with a spoken note. If the reply comes back as new write segments, the held resolved writes join them. A command specialist that cannot tell which task is meant asks (no "current task" fallback). |
-| M3 | Batch confirm | **One** combined confirm for the batch when any write needs it; otherwise `act` with all intents. |
+| M3 | Batch confirm | **One** combined confirm for every write batch. Apply or spoken yes returns `act`. |
 | M4 | Execution report | After running intents (no conflict sheet), the client sends `actionId: 'report'` with per-intent statuses; no LLM call. |
 | D1 | Plan dialogue | The interview has no question cap. The user ends it by pressing Apply. `build_plan` seats the current draft. Voice edits of the proposal come before Apply. |
 | D2 | Plan scope | Unscheduled tasks, new tasks named in the dialogue, and re-seating flexible one-offs already on that day. Fixed tasks, series, external events are never moved. |
 | D3 | Plan seating | The placement engine (dry-run) seats the draft in priority order; each seated item blocks the next. Nothing is written until Apply. |
 | D4 | Apply mapping | Unscheduled → `window` (+ `clearUnscheduled`); flexible → `shift` of its slot (skipped when unchanged); new → flexible create at the proposed slot with an end-of-day deadline. |
 | D5 | Planner model | Planner calls try DeepSeek (`DEEPSEEK_API_KEY`, default `deepseek-flash`), then Qwen (`QWEN_API_KEY`), then Gemini 3.8 Flash (`GEMINI_API_KEY`, thinking `low`), then Groq `openai/gpt-oss-120b`. A missing key skips that step. Parse stays on gpt-oss-20b. `VOICE_LLM_PROVIDER=deepseek` forces every planner and parse call onto DeepSeek and does not fall back. Speech-to-text stays on Groq. |
+| F1 | Fast create | The Companion panel has a switch, remembered in `localStorage`. **Companion** is the dialogue above. **Fast create** changes only new tasks: one phrase becomes a create, with at most one question, and only when there is no name or the same span cannot be stored both as the event length and as the placement window. Other missing details use the existing defaults (no day → unscheduled, no length → default duration, a past clock with no day → that clock on schedule tomorrow). Moves, questions, and day plans stay on the Companion rules. The preview card and Apply stay. |
 
 ---
 
@@ -133,9 +134,8 @@ The model uses session chat, now-overlapping app task, current habit block, and 
 
 | Kind | Confirm |
 |------|---------|
-| delete, cancel, habit_delete | Always |
+| Any write (create, complete, move, delete, …) | Always. One card per write, then Apply |
 | day-plan apply | Always |
-| Other writes | `confirmVoiceCommands` as today |
 | Pure `answer` | No |
 
 Spoken yes/no and action button `confirm` / `cancel` are equivalent.
@@ -169,6 +169,12 @@ The planner LLM decides `plan_start` only when the user explicitly asks to plan,
 
 After the client runs a batch without opening the conflict sheet, it sends `{ actionId: 'report', executionReport: { results: [{ summary, status }] } }` where status is `applied` / `skipped` / `conflict` / `error`. The server appends a system line to the chat history (so the next planner turn knows what really happened). If a plan is open in review with nothing pending, the reply re-seats and re-shows it; otherwise it is an empty `answer`. The client shows the batch cards with their statuses ("Done just now").
 
+### 6.8 Fast create
+
+Optional `mode` on `POST /voice/turn` (and on the parse fallback): `assistant` (default) or `fast_create`. The panel switch sends it on every turn and stores it in `localStorage` (`companion-voice-mode`).
+
+In `fast_create` the planner and the create specialist get an extra block that overrides earlier "ask" lines for a **new task** only. A move, a completion, a skip, a delete, a calendar question, and a day plan keep §6.4–§6.6. A new task is still a preview card and Apply. The one allowed question is a missing name, or a span that cannot be stored as both the event length and the placement window.
+
 ---
 
 ## 7. API surface
@@ -182,6 +188,7 @@ After the client runs a batch without opening the conflict sheet, it sends `{ ac
 - `locale` / timezone: from user settings on server (same as parse-task)
 - Optional: client signal for action tap (`actionId`: `confirm` \| `cancel` \| `build_plan` \| `report`) instead of a new transcript
 - Optional `executionReport` with `actionId: 'report'` (§6.7)
+- Optional `mode`: `assistant` (default) or `fast_create` (§6.8)
 
 **Response**
 
@@ -258,6 +265,7 @@ Do **not** create a separate Cursor skill for tools; use [new-feature-workflow](
 - **Mobile:** near full-screen dismissible surface.
 - **Desktop:** large modal/sheet, same structure.
 - **Thread:** scrollable user + assistant messages for the session.
+- **Mode:** Companion / Fast create, above the thread. Companion is the default. The choice is kept in `localStorage`.
 - **Design:** current ide design system; elevated composition (mic, thread, audio visual) — not a new brand theme.
 
 ### 10.2 States

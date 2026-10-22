@@ -39,6 +39,9 @@ describe('voice parse prompt split', () => {
         expect(pair.system).toMatch(/phaseId only from the phases list/);
         expect(pair.system).toMatch(/Do not guess/);
         expect(pair.user).toContain('schedule today:');
+        expect(pair.user).toContain('now: 2026-09-07 19:00');
+        expect(pair.user).not.toContain('now ISO');
+        expect(pair.user).not.toContain('.000Z');
         expect(pair.user).toContain('three hours after sleep');
         expect(pair.user).toContain('Default task duration: 30 minutes');
       }

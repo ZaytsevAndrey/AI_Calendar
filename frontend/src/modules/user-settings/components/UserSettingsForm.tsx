@@ -557,7 +557,6 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
 
             <ReminderSettingsSection remindersEnabled={!!initialData.remindersEnabled} />
             <VoiceSettingsSection
-              confirmVoiceCommands={!!initialData.confirmVoiceCommands}
               speakVoiceReplies={initialData.speakVoiceReplies !== false}
               speechLanguage={
                 isAppLanguage(initialData.speechLanguage)

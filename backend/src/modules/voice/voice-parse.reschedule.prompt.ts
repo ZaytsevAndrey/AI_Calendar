@@ -24,7 +24,7 @@ const RESCHEDULE_SCHEMA = `{
 }`;
 
 const RESCHEDULE_RULES = `When. First match wins. Times go on command.start and command.end only.
-1. "do now" / "schedule it now" → command.start = now ISO, command.end null.
+1. "do now" / "schedule it now" → command.start = the now date and clock from the user message, as YYYY-MM-DDTHH:mm:00, command.end null.
 2. A start and an end ("between 14 and 18", "between 2 and 6", "until 4", "until 16:00") → start at the start, end at the end, on the schedule day they named (or schedule today when they named no day and the start is still ahead).
 3. A day and no clock ("tomorrow", "on Friday") → command.start at Wake and command.end at Sleep on that schedule day. That pair is the waking span, not midnight.
 4. A clock with no day that is already past → needs_clarification, one question when. start and end null. Do not write that start. Do not invent the next day.
@@ -40,7 +40,7 @@ ${QUESTION_PROPOSAL_MODULE}
 Examples:
 - "move the report to tomorrow" → start at Wake, end at Sleep, schedule tomorrow
 - "move it to 15:00" → start 15:00 on schedule today if that clock is still ahead, end null
-- "do it now" → start = now ISO, end null
+- "do it now" → start = the now clock, end null
 - "move it to between 14 and 18" → start 14:00, end 18:00`;
 
 /** Specialist: move / do-now / day window. The resolver reads command.start and command.end only. */

@@ -8,7 +8,7 @@ import {
 import type { PendingBatch } from './voice-agent.types';
 import type { VoiceParseResult } from './voice-parse.types';
 
-const ctx = { language: 'en', confirmVoiceCommands: false };
+const ctx = { language: 'en' };
 
 function create(name: string): VoiceParseResult {
   return {
@@ -42,7 +42,7 @@ describe('collectSegments', () => {
     expect(out.intents.map((intent) => intent.type)).toEqual(['create', 'command']);
     expect(out.segments.map((row) => row.status)).toEqual(['ready', 'ready']);
     expect(out.unresolved).toEqual([]);
-    expect(out.needsConfirm).toBe(false);
+    expect(out.needsConfirm).toBe(true);
   });
 
   it('holds unclear segments and notes failures and refusals', () => {
@@ -86,7 +86,7 @@ describe('continuePendingBatch', () => {
     clarifyCount: 1,
     answer: '',
     notes: [],
-    needsConfirm: false,
+    needsConfirm: true,
   });
 
   it('appends the answered segment and moves to the next question', () => {

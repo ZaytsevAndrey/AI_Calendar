@@ -45,7 +45,7 @@ export function buildVoiceIntentPrompt(
   switch (intent) {
     case 'create':
       return {
-        system: buildVoiceCreateSystemPrompt(language),
+        system: buildVoiceCreateSystemPrompt(language, ctx.mode),
         user: buildVoiceCreateUserPrompt(ctx),
       };
     case 'update':

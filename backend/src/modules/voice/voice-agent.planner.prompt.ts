@@ -1,4 +1,6 @@
+import { FAST_CREATE_PLANNER_MODULE } from './prompt-modules/fast-create';
 import { QUESTION_PROPOSAL_MODULE } from './prompt-modules/question-proposal';
+import type { VoiceCompanionMode } from './voice-companion-mode';
 import { VOICE_READ_TOOL_NAMES } from './voice-agent.tools';
 import type {
   DayPlanProposal,
@@ -8,6 +10,7 @@ import type {
 import {
   addDaysToYmd,
   localHm,
+  localYmd,
   nextWeekdayYmd,
   weekdayIndex,
 } from './voice-local-date.util';
@@ -24,12 +27,15 @@ const WEEKDAYS = [
 
 export const MAX_SEGMENTS = 6;
 
-export function buildPlannerSystemPrompt(language: string): string {
+export function buildPlannerSystemPrompt(
+  language: string,
+  mode: VoiceCompanionMode = 'assistant',
+): string {
   const lang =
     language === 'uk'
       ? 'Reply to the user in Ukrainian.'
       : 'Reply to the user in English.';
-  return `You are the planner of Companion, the voice and chat helper of an AI calendar app.
+  const prompt = `You are the planner of Companion, the voice and chat helper of an AI calendar app.
 ${lang}
 Return ONE JSON object only. No markdown.
 
@@ -77,14 +83,14 @@ Plan edit ops. Clocks are HH:MM (24h) on the plan day. itemId comes from the pla
 - {"op":"include_task","taskId":"..."}: an existing open task (from the tools) joins the plan
 - {"op":"remove_item","itemId":"..."}
 - {"op":"set_preferred_start","itemId":"...","hm":"HH:MM"|null}
-- {"op":"set_window","itemId":"...","earliestHm":"HH:MM"|null,"deadlineHm":"HH:MM"|null}: Midday as a deadline is 12:00. A bare hour from 1 to 7 with no morning or night cue is the afternoon occurrence of that hour.
+- {"op":"set_window","itemId":"...","earliestHm":"HH:MM"|null,"deadlineHm":"HH:MM"|null}: Midday as a deadline is 12:00. A bare hour uses the place still ahead of now; a named morning or night locks that half.
 - {"op":"set_duration","itemId":"...","minutes":45}
 - {"op":"set_order","itemIds":["..."]}: most important first; earlier items get the better slots
 
 Rules:
 - While a plan is open, a write about the plan day is a plan edit, not a segment. A question gets "steps" with segments [] and the plan stays open. You never end the day-plan dialogue; only the user does, by pressing Apply.
 - Morning is the first three hours after wake. A morning that has not ended is still ahead, including when now is before wake. A new errand in that morning is a create segment. Do not ask whether they still want it.
-- A new errand with a clock bound and no day is today when that clock is still ahead. Do not ask which day. A bare hour from 1 to 7 with no morning or night cue is the afternoon hour. Do not ask which half of the day. A clock with no day that is already past is a question. Do not write that start and do not move it to the next day.
+- A new errand with a clock bound and no day is today when that clock is still ahead. Do not ask which day. A spoken hour has two places twelve hours apart. A named morning or night locks that half. Otherwise use the place still ahead of now. Do not ask which half of the day. If both places have passed, that is a question. Do not write that start and do not move it to the next day.
 - A field change on an existing task is a write segment. Do not answer it in final with no segments.
 - A named week with no day inside it is a question which day. Do not create and do not choose a weekday.
 - Dates named once are one one-off create each, as many as were named. A clock they share is repeated on each and does not join them into one series. A repeat on those days is one series. A clock makes a series only when the utterance is already a repeat. Do not turn the one-off dates into a series. An existing series does not change them.
@@ -97,6 +103,7 @@ Rules:
 - ${QUESTION_PROPOSAL_MODULE}
 - Keep every user-facing text short and easy to say aloud.
 - Never claim you already changed the calendar.`;
+  return mode === 'fast_create' ? `${prompt}\n\n${FAST_CREATE_PLANNER_MODULE}` : prompt;
 }
 
 function describePlan(draft: PlanDraft | null): string {
@@ -150,8 +157,7 @@ export function buildPlannerUserPrompt(input: {
   const weekdays = WEEKDAYS.map(
     (name, dow) => `${name} ${nextWeekdayYmd(input.todayYmd, dow)}`,
   ).join(', ');
-  return `Timezone (Settings IANA): ${input.timeZone}
-Now ISO: ${input.nowIso} (local clock ${localHm(input.nowIso, input.timeZone)})
+  return `Now: ${localYmd(input.nowIso, input.timeZone)} ${localHm(input.nowIso, input.timeZone)}
 Wake: ${input.wakeTime}  Sleep: ${input.sleepTime}
 Schedule today: ${input.todayYmd} (${WEEKDAYS[weekdayIndex(input.todayYmd)]}); tomorrow: ${addDaysToYmd(input.todayYmd, 1)}
 Next named weekday (today counts): ${weekdays}

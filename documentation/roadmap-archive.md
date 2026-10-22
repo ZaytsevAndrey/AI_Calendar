@@ -14,6 +14,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ## Shipped (Oct 2026)
 
+- [x] **Fast create.** Companion panel switch: Companion (dialogue) or Fast create. Fast create builds a new task from one phrase and asks at most once, only when there is no name or the span cannot be stored both as the event length and as the window. Other writes, questions, and day plans stay on the Companion rules. Preview and Apply stay. Choice is kept in the browser and sent as `mode` on `POST /voice/turn`. See [spec-voice-agent.md](spec-voice-agent.md) §6.8.
+
 - [x] **Companion multi-intent + day-plan dialogue.** The planner splits one utterance into up to 6 text segments (writes + Q&A); each goes through the router and the specialist, and the batch gets one confirm. After Apply the client reports per-intent statuses (`actionId: 'report'`) and the panel shows **Done just now** cards. "Plan my day" keeps the interview open until Apply, with no question cap, seats Unscheduled, new and flexible tasks via an engine dry-run (`previewSequence`), and accepts voice edits that mark changed cards before Apply. Old greedy packer and regex heuristics removed. Current planner chain and when-rules: [spec-voice-agent.md](spec-voice-agent.md) §6.1, §6.4.
 
 - [x] **Companion panel UI.** Renamed Voice → Companion / Помічник. Desktop floating movable/resizable panel over the calendar; phone keeps the bottom sheet. Confirm / day-plan use calendar-style preview cards; footer actions decluttered (Apply + Cancel on confirm). Docs: [features/companion-panel.md](features/companion-panel.md).
@@ -36,7 +38,7 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 - [x] **Lifestyle presets tile the awake day.** Working adds Work between Meetings and Life admin. Student Study fills from the end of Classes until Free time. Open was already contiguous. Blocks under 30 minutes are still dropped.
 
-- [x] **§23.3 Live Groq create-eval harness (~50).** Opt-in `npm run voice:eval:create` boots Nest, calls real `parseTask` via Groq (clears `LLM_BASE_URL` for the run), matches kind/when tolerantly, writes `backend/.tmp/voice-create-eval-report.json`. Corpus: `voice-create-eval.scenarios.ts`. Not in default CI. Next: run + fix loop (§23.4).
+- [x] **§23.3 Live Groq create-eval harness (~50).** Was an opt-in `parseTask` run. **Removed:** it skipped the planner. Live voice tests are the planner dialogue corpus.
 
 - [x] **§23.2 Golden harness + create kind/when baseline.** Table fixtures without live LLM for all six `kind-when` branches (+ event-span fixed example): frozen specialist JSON → `normalizeVoiceParse` + harvest `kind`. Prompt stays aligned with `CREATE_KIND_WHEN_MODULE` examples. Files: `voice-create-kind-when.goldens.ts` / `.spec.ts`.
 

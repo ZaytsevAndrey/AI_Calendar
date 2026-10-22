@@ -13,6 +13,41 @@ import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 
 type VoiceController = ReturnType<typeof useVoiceTask>;
 
+function CompanionModeSwitch({ voice }: { voice: VoiceController }) {
+  const { t } = useTranslation();
+  const { companionMode, setCompanionMode, isWorking } = voice;
+  const options = [
+    { id: 'assistant' as const, label: t('voice.modeCompanion'), hint: t('voice.modeCompanionHint') },
+    { id: 'fast_create' as const, label: t('voice.modeFastCreate'), hint: t('voice.modeFastCreateHint') },
+  ];
+  return (
+    <div
+      role="group"
+      aria-label={t('voice.modeLabel')}
+      className="inline-flex w-full rounded-md border border-ide-border bg-ide-surface p-0.5"
+    >
+      {options.map((option) => {
+        const selected = companionMode === option.id;
+        return (
+          <button
+            key={option.id}
+            type="button"
+            className={`min-w-0 flex-1 rounded px-2 py-1 text-xs font-medium ${
+              selected ? 'bg-ide-selection text-ide-text' : 'text-ide-muted hover:bg-white/5'
+            }`}
+            aria-pressed={selected}
+            title={option.hint}
+            disabled={isWorking}
+            onClick={() => setCompanionMode(option.id)}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function MicToggle({ voice, primary }: { voice: VoiceController; primary?: boolean }) {
   const { t } = useTranslation();
   const { micEnabled, setMicEnabled, isWorking } = voice;
@@ -255,6 +290,8 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
     <div
       className={`flex h-full min-h-0 flex-col gap-3 text-sm ${phone ? 'min-h-[78dvh]' : ''}`}
     >
+      <CompanionModeSwitch voice={voice} />
+
       <VoiceAudioVisual
         mode={visualMode}
         level={micLevel}

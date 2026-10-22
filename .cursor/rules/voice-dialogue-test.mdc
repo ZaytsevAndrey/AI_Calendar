@@ -22,7 +22,7 @@ The agent does not end the dialogue. The draft grows as tasks are understood. Ap
 
 - Corpus is Ukrainian. Planner calls try DeepSeek, then Qwen, then Gemini, then Groq. Parse stays on Groq unless `VOICE_LLM_PROVIDER=deepseek`.
 - A run without `--minutes` stops on the first mismatch. `--bulk` and `--minutes` walk the 350 once and continue past behavior mismatches. A provider hard limit exits 2. Do not loop the pool.
-- Pace per key and per model from the token ledger in the test plan. Do not reuse the create-eval 35 second gap.
+- Pace per key and per model from the token ledger in the test plan. The create-eval 35 second gap is from the outdated parseTask harness. Do not reuse it.
 - A daily token ceiling retires that key. When every key is retired, stop for the day.
 - Measure planner, tool, router, and specialist calls before cutting any of them.
 - Companion panel and the mini-calendar widget are out of this cycle. Assert the turn payload.

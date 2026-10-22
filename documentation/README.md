@@ -14,7 +14,7 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Roadmap archive](roadmap-archive.md) | Shipped work |
 | [Spec: Incremental placement](spec-incremental-placement.md) | Who is read and written per calendar edit. No Generate button. A displaced day becomes a new task; a chain runs only when everyone still fits (target; engine still full-replans) |
 | [Spec: Conflict rules](spec-conflict-rules.md) | Unscheduled vs Problematic, conflict option ids; who moves defers to incremental placement |
-| [Spec: Voice Commander](spec-voice-commander.md) | Shipped one-shot commander: task/habit CRUD by voice, TTS, confirm delete/cancel |
+| [Spec: Voice Commander](spec-voice-commander.md) | Superseded one-shot commander. Live contract is the Voice Agent spec |
 | [Spec: Voice Agent](spec-voice-agent.md) | Hybrid Companion orchestrator, `/voice/turn`, Q&A + write intents (shipped) |
 | [Voice agent dialogue test plan](voice-agent-dialogue-test-plan.md) | Dialogue test cycle: target day-plan contract, prompt rules, Groq pacing, simple and complex flows |
 | [Companion panel](features/companion-panel.md) | Floating desktop panel, preview cards, multi-intent Apply with statuses, day-plan dialogue |
@@ -27,4 +27,4 @@ Single source of truth for the project. Keep these files in sync with code chang
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** October 2026 (voice agent dialogue test plan).
+**Last documentation update:** October 2026 (Companion fast create).

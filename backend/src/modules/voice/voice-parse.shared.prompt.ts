@@ -1,5 +1,6 @@
 import type { Phase } from '../phases/entities/phase.entity';
 import type { UserSettings } from '../user-settings/entities/user-settings.entity';
+import type { VoiceCompanionMode } from './voice-companion-mode';
 import { buildLocalCalendarContext } from './voice-local-date.util';
 
 export type VoiceParsePromptContext = {
@@ -17,6 +18,8 @@ export type VoiceParsePromptContext = {
   language?: 'uk' | 'en' | 'ru';
   /** User setting: default length of a new task, in minutes. */
   defaultTaskDurationMinutes?: number;
+  /** Fast create tightens the create specialist. Other intents ignore it. */
+  mode?: VoiceCompanionMode;
 };
 
 export type VoiceParseOpenTask = {

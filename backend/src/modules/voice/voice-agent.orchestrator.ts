@@ -9,6 +9,7 @@ import { ScheduledTask } from '../schedule/schedule.entity';
 import { Task } from '../tasks/entities/task.entity';
 import { UserSettingsService } from '../user-settings/user-settings.service';
 import { VoiceTurnDto } from './dto/voice-turn.dto';
+import { voiceCompanionMode, type VoiceCompanionMode } from './voice-companion-mode';
 import { GroqClient } from './groq.client';
 import {
   collectSegments,
@@ -64,8 +65,8 @@ type TurnContext = VoiceToolContext & {
   sessionId: string;
   todayYmd: string;
   language: AppLanguage;
-  confirmVoiceCommands: boolean;
   defaultDurationMinutes: number;
+  mode: VoiceCompanionMode;
   summary: SummaryContext;
 };
 
@@ -210,8 +211,8 @@ export class VoiceAgentOrchestrator {
       phases,
       todayYmd: scheduleTodayYmd(nowIso, timeZone, settings.wakeTime, settings.sleepTime),
       language,
-      confirmVoiceCommands: Boolean(settings.confirmVoiceCommands),
       defaultDurationMinutes: typeof minutes === 'number' && minutes >= 5 ? minutes : 30,
+      mode: voiceCompanionMode(dto.mode),
       summary: {
         language,
         timeZone,
@@ -231,7 +232,7 @@ export class VoiceAgentOrchestrator {
     const pendingQuestion = session.pendingBatch?.unresolved[0] ?? null;
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round += 1) {
       const raw = await this.groq.completeJson(
-        buildPlannerSystemPrompt(ctx.language),
+        buildPlannerSystemPrompt(ctx.language, ctx.mode),
         buildPlannerUserPrompt({
           transcript,
           timeZone: ctx.timeZone,
@@ -287,7 +288,6 @@ export class VoiceAgentOrchestrator {
     }
     const collected = collectSegments(parses, {
       ...ctx.summary,
-      confirmVoiceCommands: ctx.confirmVoiceCommands,
     });
     return this.settleBatch(ctx, {
       intents: [...(held?.intents ?? []), ...collected.intents],
@@ -326,7 +326,6 @@ export class VoiceAgentOrchestrator {
     }
     const next = continuePendingBatch(batch, parse, {
       ...ctx.summary,
-      confirmVoiceCommands: ctx.confirmVoiceCommands,
     });
     return this.settleBatch(ctx, next);
   }
@@ -406,7 +405,6 @@ export class VoiceAgentOrchestrator {
     const parse = await this.parseSegment(transcript, parseFallback);
     const collected = collectSegments([parse], {
       ...ctx.summary,
-      confirmVoiceCommands: ctx.confirmVoiceCommands,
     });
     const response = this.settleBatch(ctx, {
       intents: collected.intents,

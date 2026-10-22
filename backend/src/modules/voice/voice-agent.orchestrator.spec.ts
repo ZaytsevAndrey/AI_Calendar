@@ -125,7 +125,7 @@ function build(tasks: Task[] = []) {
 }
 
 describe('VoiceAgentOrchestrator — multi-intent', () => {
-  it('runs every write segment and speaks one combined line', async () => {
+  it('previews every write and applies them together', async () => {
     const h = build();
     h.planner({ type: 'steps', answer: '', segments: ['buy milk', 'report is done'] });
     h.parse.mockResolvedValueOnce(create('Milk')).mockResolvedValueOnce(command('complete', 'Report'));
@@ -134,10 +134,17 @@ describe('VoiceAgentOrchestrator — multi-intent', () => {
 
     expect(h.completeJson.mock.calls[0][2]).toEqual({ role: 'planner', label: 'planner.r0' });
     expect(h.parse.mock.calls.map((call) => call[0].transcript)).toEqual(['buy milk', 'report is done']);
-    expect(res.outcome).toBe('act');
+    expect(res.outcome).toBe('confirm');
+    expect(res.actions).toEqual(['confirm', 'cancel']);
     expect(res.intents.map((intent) => intent.type)).toEqual(['create', 'command']);
     expect(res.segments.map((row) => row.status)).toEqual(['ready', 'ready']);
     expect(res.assistantMessage).toContain('complete Report');
+    expect(h.session().pendingKind).toBe('writes');
+
+    const applied = await h.turn({ actionId: 'confirm' });
+    expect(applied.outcome).toBe('act');
+    expect(applied.intents).toHaveLength(2);
+    expect(h.session().pendingIntents).toBeNull();
   });
 
   it('answers a question and writes in the same turn', async () => {
@@ -147,7 +154,7 @@ describe('VoiceAgentOrchestrator — multi-intent', () => {
 
     const res = await h.turn({ transcript: 'when am I free and buy milk' });
 
-    expect(res.outcome).toBe('act');
+    expect(res.outcome).toBe('confirm');
     expect(res.assistantMessage.startsWith('You are free at 15:00.')).toBe(true);
   });
 
@@ -191,9 +198,10 @@ describe('VoiceAgentOrchestrator — multi-intent', () => {
       previousTranscript: 'move it',
       clarificationAnswer: 'the report',
     });
-    expect(done.outcome).toBe('act');
+    expect(done.outcome).toBe('confirm');
     expect(done.intents).toHaveLength(2);
     expect(h.session().pendingBatch).toBeNull();
+    expect(h.session().pendingKind).toBe('writes');
   });
 
   it('keeps resolved writes when the clarify answer comes back as new steps', async () => {
@@ -211,7 +219,7 @@ describe('VoiceAgentOrchestrator — multi-intent', () => {
     h.parse.mockResolvedValueOnce(command('shift', 'Report'));
     const done = await h.turn({ transcript: 'the report, tomorrow' });
 
-    expect(done.outcome).toBe('act');
+    expect(done.outcome).toBe('confirm');
     expect(done.intents.map((intent) => intent.type)).toEqual(['create', 'command']);
     expect(done.segments?.map((row) => row.status)).toEqual(['ready', 'ready']);
     expect(h.session().pendingBatch).toBeNull();
@@ -223,7 +231,8 @@ describe('VoiceAgentOrchestrator — multi-intent', () => {
     h.parse.mockResolvedValueOnce(create('Milk'));
 
     const res = await h.turn({ transcript: 'buy milk' });
-    expect(res.outcome).toBe('act');
+    expect(res.outcome).toBe('confirm');
+    expect(res.intents).toHaveLength(1);
     expect(res.legacyParse?.task?.name).toBe('Milk');
   });
 
@@ -352,7 +361,9 @@ describe('VoiceAgentOrchestrator — day plan', () => {
     await h.turn({ transcript: 'plan my day' });
     h.planner({ type: 'steps', answer: '', segments: ['buy milk'] });
     h.parse.mockResolvedValueOnce(create('Milk'));
-    const act = await h.turn({ transcript: 'buy milk' });
+    const preview = await h.turn({ transcript: 'buy milk' });
+    expect(preview.outcome).toBe('confirm');
+    const act = await h.turn({ actionId: 'confirm' });
     expect(act.outcome).toBe('act');
     expect(h.session().pendingIntents).toBeNull();
 

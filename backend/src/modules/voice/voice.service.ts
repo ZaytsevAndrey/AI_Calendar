@@ -10,6 +10,7 @@ import { GroqClient } from './groq.client';
 import { ParseVoiceTaskDto } from './dto/parse-voice-task.dto';
 import { TranscribeVoiceDto } from './dto/transcribe-voice.dto';
 import { VoiceTurnDto } from './dto/voice-turn.dto';
+import { voiceCompanionMode } from './voice-companion-mode';
 import {
   commandDraftFromRaw,
   readVoiceIntent,
@@ -37,6 +38,7 @@ import {
   isNoiseOrEmptyTranscript,
 } from './voice-stt.util';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
+import { localHm, localYmd } from './voice-local-date.util';
 import type { VoiceParseResult } from './voice-parse.types';
 import { VoiceAgentOrchestrator } from './voice-agent.orchestrator';
 import type { VoiceTurnResponse } from './voice-agent.types';
@@ -93,6 +95,7 @@ export class VoiceService {
           clientNowIso: dto.clientNowIso,
           previousTranscript: ctx.previousTranscript,
           clarificationAnswer: ctx.clarificationAnswer,
+          mode: dto.mode,
         });
       }),
     );
@@ -240,10 +243,10 @@ export class VoiceService {
       .map((task) => ({
         name: task.name,
         recurring: task.isRecurring,
-        start: boundIso(task.scheduledStartTime),
-        end: boundIso(task.scheduledEndTime),
-        earliest: boundIso(task.earliestStartTime),
-        deadline: boundIso(task.deadline),
+        start: localWall(task.scheduledStartTime, timeZone),
+        end: localWall(task.scheduledEndTime, timeZone),
+        earliest: localWall(task.earliestStartTime, timeZone),
+        deadline: localWall(task.deadline, timeZone),
       }));
     const openTaskNames = openTasks.map((task) => task.name);
     const speech = alreadyClarified
@@ -251,8 +254,9 @@ export class VoiceService {
       : transcript;
 
     const parseId = randomUUID();
+    const mode = voiceCompanionMode(dto.mode);
     this.logger.log(
-      `voice.parse transcript=${JSON.stringify(transcript)} parseId=${parseId}`,
+      `voice.parse transcript=${JSON.stringify(transcript)} parseId=${parseId} mode=${mode}`,
     );
 
     const routerRaw = await this.groq.completeJson(
@@ -296,6 +300,7 @@ export class VoiceService {
       language: speechLanguage,
       defaultTaskDurationMinutes: taskDurationMinutes(settings),
       openTasks,
+      mode,
     };
 
     const specialistIntent = normalizeParseIntent(intent);
@@ -325,6 +330,13 @@ export class VoiceService {
       result = {
         ...normalizeVoiceParse(parsed, {
           validPhaseIds: new Set(phases.map((phase) => phase.id)),
+          phases: phases.map((phase) => ({
+            id: phase.id,
+            startTime: phase.startTime,
+            endTime: phase.endTime,
+            weekDays: phase.weekDays,
+            type: phase.type,
+          })),
           alreadyClarified,
           timeZone,
           nowIso,
@@ -405,10 +417,16 @@ function specialistAsksWhichTask(parsed: unknown): boolean {
   return typeof root.clarifyingQuestion === 'string' && root.clarifyingQuestion.trim().length > 0;
 }
 
-function boundIso(value: Date | string | null | undefined): string | null {
+/** Local wall clock for the specialist. No Z and no offset. */
+function localWall(
+  value: Date | string | null | undefined,
+  timeZone: string,
+): string | null {
   if (value == null || value === '') return null;
   const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  if (Number.isNaN(date.getTime())) return null;
+  const iso = date.toISOString();
+  return `${localYmd(iso, timeZone)}T${localHm(iso, timeZone)}:00`;
 }
 
 function taskDurationMinutes(settings: {

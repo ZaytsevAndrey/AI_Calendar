@@ -6,7 +6,7 @@ Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Produ
 
 **Product pillars (Oct 2026 rebuild):** the two features that define the product are **auto-scheduling** and the **voice agent**. Auto-scheduling is the base; the agent is the differentiator. Do not polish TTS / deploy variants until both pillars are trustworthy. Specs: [spec-incremental-placement.md](spec-incremental-placement.md), [spec-conflict-rules.md](spec-conflict-rules.md), [spec-voice-agent.md](spec-voice-agent.md), [voice-prompt-next.md](voice-prompt-next.md).
 
-**Voice understanding (§23)** is already in progress: a little each day against Groq limits (create-eval → fix → goldens). It is **not** a Now item. Track it in [voice-prompt-next.md](voice-prompt-next.md), not in this ordered queue.
+**Voice understanding (§23)** is the planner dialogue corpus ([voice-agent-dialogue-test-plan.md](voice-agent-dialogue-test-plan.md)). The old `parseTask` create-eval is removed.
 
 ---
 
@@ -39,6 +39,13 @@ Short blocks can look too thin. When many events share an hour, the hour row sta
 
 - [ ] Redesign the preview layout (hierarchy, spacing, actions).
 - [ ] Fill it with the fields people need before Edit: type, phase, duration, deadline / window, calendar source, recurrence, status, description when present — for both app tasks and provider-only events.
+
+### 36. Now line on the calendar
+
+Day and week time grids have no current-time marker.
+
+- [ ] Draw a horizontal line at the current clock (Settings IANA `timeZone`) across today’s column.
+- [ ] Label it **Now** (i18n). Hide when the visible day/week does not include the current civil day, or when now falls outside the personal wake–sleep window.
 
 ---
 
@@ -83,6 +90,6 @@ Third parties and publishing. Leave these until the Now list is done.
 ## Recommended next steps
 
 1. In progress: roadmap **§32** — mobile daily path.
-2. Then the rest of **Now**: §31 database backup, §33 card min height / crowded hour, §35 preview look + content. (§24 Piper is in Later.)
+2. Then the rest of **Now**: §31 database backup, §33 card min height / crowded hour, §35 preview look + content, §36 now line on the calendar. (§24 Piper is in Later.)
 3. Voice understanding continues in parallel via [voice-prompt-next.md](voice-prompt-next.md); do not put it back in this queue.
 4. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

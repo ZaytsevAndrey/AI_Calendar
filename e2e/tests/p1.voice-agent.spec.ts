@@ -187,4 +187,59 @@ test.describe('P1 Companion agent: multi-intent and day plan', () => {
     await expect(reopened.getByTestId('change-preview')).toHaveCount(0);
     await expect(reopened.getByText('Draft only')).toHaveCount(0);
   });
+
+  test('U-VOI-016 the mode switch is sent on the next turn', async ({ page, auth }) => {
+    await mockVoiceCapture(page);
+    const { turns } = await stubAgentTurns(page, () => ({
+      outcome: 'answer',
+      assistantMessage: '',
+    }));
+
+    await openAs(page, auth.onboarded, '/tasks');
+    const sheet = await openCompanion(page);
+    await expect(sheet.getByRole('button', { name: 'Companion', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    await typeOnce(page, 'buy milk');
+    await expect.poll(() => turns[0]?.mode).toBe('assistant');
+
+    await sheet.getByRole('button', { name: 'Fast create', exact: true }).click();
+    await typeOnce(page, 'call mom');
+    await expect.poll(() => turns.at(-1)?.mode).toBe('fast_create');
+  });
+
+  test('U-VOI-017 fast create previews the task and waits for Apply', async ({ page, auth }) => {
+    const name = uniqueName('Fast bread');
+    const intent = createIntent(name);
+    await mockVoiceCapture(page);
+    const { turns } = await stubAgentTurns(page, (body) => {
+      if (body.actionId === 'confirm') {
+        return { outcome: 'act', assistantMessage: `Created ${name}.`, intents: [intent] };
+      }
+      if (body.actionId === 'report') return {};
+      return {
+        outcome: 'confirm',
+        assistantMessage: `Create ${name}.`,
+        actions: ['confirm', 'cancel'],
+        intents: [intent],
+      };
+    });
+
+    await openAs(page, auth.onboarded, '/tasks');
+    const sheet = await openCompanion(page);
+    await sheet.getByRole('button', { name: 'Fast create', exact: true }).click();
+    await typeOnce(page, 'buy bread');
+
+    await expect.poll(() => turns[0]?.mode).toBe('fast_create');
+    const preview = sheet.getByTestId('change-preview');
+    await expect(preview.getByText(name)).toBeVisible();
+    await expect(preview.getByText('Create', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name })).toHaveCount(0);
+    await sheet.getByRole('button', { name: 'Apply' }).click();
+    await expect(page.getByRole('heading', { name }).first()).toBeVisible();
+    await expect(sheet.getByText('Done just now')).toBeVisible();
+    await expect(preview.getByText('Applied', { exact: true })).toBeVisible();
+  });
 });

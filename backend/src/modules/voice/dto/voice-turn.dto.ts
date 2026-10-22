@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  IsIn,
   IsObject,
   IsOptional,
   IsString,
@@ -7,6 +8,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import type { VoiceExecutionReport } from '../voice-agent.types';
+import { VOICE_COMPANION_MODES, type VoiceCompanionMode } from '../voice-companion-mode';
 
 export class VoiceTurnDto {
   @ApiProperty({
@@ -57,4 +59,14 @@ export class VoiceTurnDto {
   @IsOptional()
   @IsObject()
   executionReport?: VoiceExecutionReport;
+
+  @ApiProperty({
+    required: false,
+    enum: VOICE_COMPANION_MODES,
+    description:
+      'assistant keeps the dialogue. fast_create builds a new task from one phrase and asks only when that task cannot be saved.',
+  })
+  @IsOptional()
+  @IsIn(VOICE_COMPANION_MODES)
+  mode?: VoiceCompanionMode;
 }

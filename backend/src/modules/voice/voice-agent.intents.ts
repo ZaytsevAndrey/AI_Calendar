@@ -8,8 +8,6 @@ import {
   scheduleTodayYmd,
 } from './voice-local-date.util';
 
-const ALWAYS_CONFIRM = new Set(['cancel', 'delete', 'end_series']);
-
 export function intentsFromParseResult(
   parsed: VoiceParseResult,
   opts?: {
@@ -46,7 +44,7 @@ export function intentsFromParseResult(
           command: command as unknown as Record<string, unknown>,
         },
       ],
-      needsConfirm: ALWAYS_CONFIRM.has(command.kind),
+      needsConfirm: true,
       clarifyQuestion: null,
       refuseMessage: null,
     };
@@ -63,30 +61,26 @@ export function intentsFromParseResult(
   }
 
   const lang = resolveLang(opts?.language);
-    const summary = summarizeCreate(parsed.task, lang, opts);
-    const notice = parsed.scheduleNotice?.trim();
-    return {
-      intents: [
-        {
-          type: 'create',
-          summary: notice ? `${summary} ${notice}` : summary,
-          task: parsed.task as unknown as Record<string, unknown>,
-        },
-      ],
-    needsConfirm: false,
+  const summary = summarizeCreate(parsed.task, lang, opts);
+  const notice = parsed.scheduleNotice?.trim();
+  return {
+    intents: [
+      {
+        type: 'create',
+        summary: notice ? `${summary} ${notice}` : summary,
+        task: parsed.task as unknown as Record<string, unknown>,
+      },
+    ],
+    needsConfirm: true,
     clarifyQuestion: null,
     refuseMessage: null,
   };
 }
 
-export function commandNeedsConfirm(
-  intent: VoiceWriteIntent,
-  confirmVoiceCommands: boolean,
-): boolean {
-  if (intent.type === 'create') return false;
-  const kind = String(intent.command.kind || '');
-  if (ALWAYS_CONFIRM.has(kind)) return true;
-  return confirmVoiceCommands && kind !== 'refuse';
+/** Every write waits for the preview card. A refusal is not a write. */
+export function commandNeedsConfirm(intent: VoiceWriteIntent): boolean {
+  if (intent.type === 'create') return true;
+  return String(intent.command.kind || '') !== 'refuse';
 }
 
 function resolveLang(value?: string | null): AppLanguage {

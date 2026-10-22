@@ -22,6 +22,11 @@ import { UserSettingsService } from '../modules/user-settings/user-settings.serv
 import { Task, TaskStatus } from '../modules/tasks/entities/task.entity';
 import { TaskEventType } from '../modules/scheduling/event-type.enum';
 import { VoiceService } from '../modules/voice/voice.service';
+import {
+  type VoiceExecutionReport,
+  type VoiceTurnResponse,
+  type VoiceWriteIntent,
+} from '../modules/voice/voice-agent.types';
 import { GroqClient, type GroqEvalSpend } from '../modules/voice/groq.client';
 import { INTENT_EVAL_FIXTURES } from '../modules/voice/voice-intent-eval.scenarios';
 import { MULTI_INTENT_EVAL_ANCHORS } from '../modules/voice/voice-multi-intent-eval.scenarios';
@@ -74,12 +79,17 @@ function one(transcript: string, expect: Expect): ScenarioTurn[] {
   return [{ transcript, expect }];
 }
 
+function expectsAct(expect: Expect): boolean {
+  const outcomes = Array.isArray(expect.outcome) ? expect.outcome : [expect.outcome];
+  return outcomes.includes('act');
+}
+
 /** Wall-clock samples. Same expects as the passed one-write and two-write cases. */
 const TIMED: Scenario[] = [
   {
     id: 'T1',
     turns: one('треба купити хліб', {
-      outcome: 'act',
+      outcome: 'confirm',
       kinds: ['create'],
       maxIntents: 1,
       unscheduled: true,
@@ -89,7 +99,7 @@ const TIMED: Scenario[] = [
   {
     id: 'T2',
     turns: one('купи хліб і запиши подзвонити мамі', {
-      outcome: 'act',
+      outcome: 'confirm',
       kinds: ['create', 'create'],
       maxIntents: 2,
     }),
@@ -101,7 +111,7 @@ const SCENARIOS: Scenario[] = [
   {
     id: 'S1',
     turns: one('треба купити хліб', {
-      outcome: 'act',
+      outcome: 'confirm',
       kinds: ['create'],
       maxIntents: 1,
       unscheduled: true,
@@ -111,7 +121,7 @@ const SCENARIOS: Scenario[] = [
   {
     id: 'S2',
     turns: one('закінчив звіт', {
-      outcome: 'act',
+      outcome: 'confirm',
       kinds: ['complete'],
       maxIntents: 1,
       nameIncludes: 'звіт',
@@ -120,7 +130,7 @@ const SCENARIOS: Scenario[] = [
   {
     id: 'S4',
     turns: one('купи хліб і запиши подзвонити мамі', {
-      outcome: 'act',
+      outcome: 'confirm',
       kinds: ['create', 'create'],
       maxIntents: 2,
     }),
@@ -135,7 +145,7 @@ const SCENARIOS: Scenario[] = [
   {
     id: 'S8',
     turns: one('завтра треба купити ліки, забрати посилку і записатися до лікаря', {
-      outcome: 'act',
+      outcome: 'confirm',
       kinds: ['create', 'create', 'create'],
       noPlan: true,
     }),
@@ -168,7 +178,7 @@ const COMPLEX: Scenario[] = [
   {
     id: 'C1',
     turns: one('що в мене сьогодні і додай задачу купити хліб', {
-      outcome: 'act',
+      outcome: 'confirm',
       kinds: ['create'],
       maxIntents: 1,
       answer: true,
@@ -178,7 +188,7 @@ const COMPLEX: Scenario[] = [
   {
     id: 'C4',
     turns: one('додай задачу спортзал на 18 і перенеси її на 19', {
-      outcome: 'act',
+      outcome: 'confirm',
       kinds: ['create'],
       maxIntents: 1,
       nameIncludes: '19',
@@ -200,7 +210,7 @@ const COMPLEX: Scenario[] = [
       },
       {
         transcript: 'звіт, на завтра',
-        expect: { outcome: 'act', kinds: ['create', 'window|shift|update'] },
+        expect: { outcome: 'confirm', kinds: ['create', 'window|shift|update'] },
       },
     ],
   },
@@ -301,7 +311,7 @@ const COMPLEX: Scenario[] = [
       },
       {
         transcript: 'та байдуже',
-        expect: { outcome: 'act', kinds: ['create'], maxIntents: 1, nameIncludes: 'хліб' },
+        expect: { outcome: 'confirm', kinds: ['create'], maxIntents: 1, nameIncludes: 'хліб' },
       },
     ],
   },
@@ -320,7 +330,7 @@ const COMPLEX: Scenario[] = [
       },
       {
         transcript: 'завтра треба купити хліб',
-        expect: { outcome: 'act', kinds: ['create'], maxIntents: 1, nameIncludes: 'хліб' },
+        expect: { outcome: 'confirm', kinds: ['create'], maxIntents: 1, nameIncludes: 'хліб' },
       },
       {
         actionId: 'report',
@@ -415,7 +425,7 @@ const COMPLEX: Scenario[] = [
       },
       {
         transcript: 'додай задачу купити хліб',
-        expect: { outcome: 'act', kinds: ['create'], maxIntents: 1, nameIncludes: 'хліб' },
+        expect: { outcome: 'confirm', kinds: ['create'], maxIntents: 1, nameIncludes: 'хліб' },
       },
       {
         transcript: 'ну таке, зроби щось',
@@ -432,7 +442,7 @@ const COMPLEX: Scenario[] = [
       },
       {
         transcript: 'звіт, на завтра',
-        expect: { outcome: 'act', kinds: ['create', 'window|shift|update'], nameIncludes: 'хліб' },
+        expect: { outcome: 'confirm', kinds: ['create', 'window|shift|update'], nameIncludes: 'хліб' },
       },
       {
         transcript: 'ну таке, зроби щось',
@@ -451,7 +461,7 @@ const NEXT: Scenario[] = [
   {
     id: 'N1',
     turns: one('додай задачу купити хліб і масло', {
-      outcome: 'act',
+      outcome: 'confirm',
       kinds: ['create'],
       maxIntents: 1,
       nameIncludes: 'хліб',
@@ -460,21 +470,21 @@ const NEXT: Scenario[] = [
   {
     id: 'M6',
     turns: one('перенеси звіт на завтра і додай задачу прибрати кухню', {
-      outcome: 'act',
+      outcome: 'confirm',
       kinds: ['window|shift|update', 'create'],
     }),
   },
   {
     id: 'M7',
     turns: one('молоко перенеси на 15:00, а звіт познач виконаним', {
-      outcome: 'act',
+      outcome: 'confirm',
       kinds: ['shift|update|window', 'complete'],
     }),
   },
   {
     id: 'M8',
     turns: one('ну значить так… купити корм коту і ще оплатити комуналку', {
-      outcome: 'act',
+      outcome: 'confirm',
       kinds: ['create', 'create'],
       maxIntents: 2,
     }),
@@ -482,7 +492,7 @@ const NEXT: Scenario[] = [
   {
     id: 'M9',
     turns: one('спочатку зроби звіт зараз, потім нагадай купити воду о шостій', {
-      outcome: 'act',
+      outcome: 'confirm',
       kinds: ['shift|window|update', 'create'],
     }),
   },
@@ -498,7 +508,7 @@ const NEXT: Scenario[] = [
   {
     id: 'Q2',
     turns: one('коли я вільний завтра? і звіт уже зробив', {
-      outcome: 'act',
+      outcome: 'confirm',
       kinds: ['complete'],
       answer: true,
       minPlannerCalls: 2,
@@ -518,11 +528,11 @@ const NEXT: Scenario[] = [
     turns: [
       {
         transcript: 'додай задачу купити хліб',
-        expect: { outcome: 'act', kinds: ['create'], maxIntents: 1 },
+        expect: { outcome: 'confirm', kinds: ['create'], maxIntents: 1 },
       },
       {
         transcript: 'перенеси його на завтра',
-        expect: { outcome: 'act', kinds: ['window|shift|update'], nameIncludes: 'хліб' },
+        expect: { outcome: 'confirm', kinds: ['window|shift|update'], nameIncludes: 'хліб' },
       },
     ],
   },
@@ -772,8 +782,20 @@ async function main(): Promise<void> {
             failed = true;
             break;
           }
-          if (turnIndex < scenario.turns.length - 1 && response.outcome === 'act') {
-            createdIds.push(...(await applyActCreates(app, userId, response)));
+          if (turnIndex < scenario.turns.length - 1) {
+            const next = scenario.turns[turnIndex + 1];
+            const nextRunsPending = expectsAct(next.expect);
+            if (response.outcome === 'confirm' && response.intents.length && !nextRunsPending) {
+              const applied = await voice.turn(userId, {
+                sessionId,
+                actionId: 'confirm',
+                timeZone: MULTI_INTENT_EVAL_ANCHORS.timeZone,
+                clientNowIso: MULTI_INTENT_EVAL_ANCHORS.nowIso,
+              });
+              createdIds.push(...(await applyActCreates(app, userId, applied)));
+            } else if (response.outcome === 'act') {
+              createdIds.push(...(await applyActCreates(app, userId, response)));
+            }
           }
         }
         const seconds = ((Date.now() - scenarioStarted) / 1000).toFixed(1);

@@ -10,15 +10,15 @@ export const CREATE_KIND_WHEN_MODULE = `Decide kind in this order. First match w
    kind recurring, isRecurring true. A time of day is not part of the name and does not make this fixed: set scheduledStart/End to that time (+ duration) on schedule today. No time of day → scheduledStart/End null. Deadline only if they named a series end.
 
 2. Fixed — one concrete clock, no uncertainty and no repeat: stamped times, bare hours, ordinal hours, "in N hours".
-   Concrete means they commit to that instant. Approximate means they soften it: the hour is a preference, not a promise. Approximate is not this branch, even when a number or an ordinal sits next to the softener. A softened "six" / "the sixth" is still approximate: kind flexible with scheduledStart 18:00, never fixed. Judge that meaning in the speaker's language. A digit does not make the time concrete. Do not look for the English word "around".
+   Concrete means they commit to that instant. Approximate means they soften it: the hour is a preference, not a promise. Approximate is not this branch, even when a number or an ordinal sits next to the softener. A softened "six" / "the sixth" is still approximate: kind flexible with scheduledStart at the chosen place of that hour, never fixed. Judge that meaning in the speaker's language. A digit does not make the time concrete. Do not look for the English word "around".
    Exception: they named a clock and then cancelled it ("at 15? no, better at 17"). The last clock is a commitment, so it is concrete fixed. Not flexible and not a day envelope.
    A from–to span plus a preferred clock stays branch 4, even when they also named a duration. Do not collapse that to a fixed block at the preferred clock.
-   Relative "in N hours" = now ISO + N hours (fixed). Never unscheduled.
+   Relative "in N hours" = add N hours to the now clock in the user message (fixed). Never unscheduled.
    If the span is the event itself (meeting from 15 to 16, a conference from 9 to 18), that length IS the duration even when it is many hours: scheduledStart at the start, scheduledEnd at the end, estimatedTimeInMinutes = that many minutes, kind fixed. Not a placement window and not the default 30 minutes.
    Otherwise scheduledStart at the clock, scheduledEnd = start + duration. earliestStartTime and deadline null.
 
 3. Flexible preferred — a soft clock: around 3, closer to evening, after lunch, about noon, "two in the afternoon" (any language).
-   Map soft phrases yourself to a wall clock (after lunch → ~14:00, about noon → 12:00, closer to evening → ~18:00, after work → ~18:00). Morning, the first three hours after wake, is not this branch. An ordinal hour is a clock: "the second of the day" is 14:00, "around the sixth" is 18:00. Not a whole calendar day, not 02:00, and not a word in the task name. A softener plus that ordinal still sets scheduledStart. A spoken length next to it is only the duration. Never unscheduled and never put the ordinal into the name.
+   Map soft phrases yourself to a wall clock (after lunch → ~14:00, about noon → 12:00, closer to evening → ~18:00, after work → ~18:00). Morning, the first three hours after wake, is not this branch. An ordinal hour is that hour. Its place follows the bare-hour rule, not a fixed afternoon. Not a whole calendar day and not a word in the task name. A softener plus that ordinal still sets scheduledStart. A spoken length next to it is only the duration. Never unscheduled and never put the ordinal into the name.
    kind flexible. scheduledStart/End = that clock + duration. This branch must set scheduledStart. Do not replace the clock with only a Wake–Sleep day. If they also named a day ("today", "tomorrow", a weekday) and that part of day is still ahead, also set earliest at Wake and deadline at Sleep that day. The day envelope is only when they named a day. No named day → preferred clock only, earliest and deadline null. Never unscheduled when a soft clock is present, except the past-time question below.
 
 4. Flexible window — a span of WHEN an errand may be done, not an event that occupies those hours: between 14 and 18, from 14 to 18, after 18, not before 15, by end of day, until evening.
@@ -36,15 +36,15 @@ export const CREATE_KIND_WHEN_MODULE = `Decide kind in this order. First match w
 
 6. No day, clock, span, or repeat — kind unscheduled, isUnscheduled true, all schedule fields null, understanding complete. Do not ask which day. A place with no clock is this branch. A new errand placed before or after a named task is not this branch: use the lookup above.
 
-Hours (copy schedule today/tomorrow from the user message; do not invent offsets):
-- Copy the numeric offset from schedule today/tomorrow lines in the user message (e.g. +03:00). Do not emit +02:00 when the anchors say +03:00.
+Hours (copy schedule today/tomorrow from the user message):
+- Write YYYY-MM-DDTHH:mm:00 with no Z and no numeric offset. Do not convert zones.
 - ${BARE_HOUR_RULE}
 - A number that is not a clock is not a time.
-- A concrete clock with no day that is still ahead is schedule today. A concrete clock with no day that is already past is a question. Do not write that start. Do not move it to the next day. Do not use branch 6.
+- A concrete clock with no day that is still ahead is schedule today. A bare hour is past only when both of its places have passed. While the later place is still ahead, that later place is the clock on schedule today, and it is not a question. A concrete clock with no day that is already past is a question. Do not write that start. Do not move it to the next day. Do not use branch 6.
 - A clock on a named day stays on that day, even when the instant is already before now.
 - A soft clock still ahead of now stays on schedule today. Do not move it to tomorrow.
 - A waking-day part is past only when its end is before now. Now before that part starts, including before wake, is not past. Soft clock already past today, with no placement window → the nearest upcoming same part of day. A waking-day part already past, with no named day → the same part next day. Never a past start and never a today envelope. A preferred clock inside a window that is already past: keep the window, leave scheduledStart null.
-- "half an hour before six" / a quarter to five, with no morning or night word, is the afternoon hour: half to six is 17:30, a quarter to five is 16:45. Not 05:30 and not 04:45.
+- A fraction toward an hour is the clock on the chosen place of that hour, not the task length.
 - "tomorrow" (any language) = schedule tomorrow.
 - A named weekday with no "last" is the next one. "on Monday at 9" when schedule today is Tuesday → next Monday 09:00, not the previous Monday. "on Saturday" is the listed Saturday, not Thursday. "next Tuesday" when schedule today is Tuesday is seven days later, not today.
 

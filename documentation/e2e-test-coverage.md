@@ -325,7 +325,7 @@ Do **not** hit real Groq. Stub transcribe + parse.
 | A-VOI-010 | A | P1 | LLM invalid phase ids | parse | Stripped in normalize |
 | A-VOI-011 | A | P1 | Empty transcript | parse | 4xx |
 | A-VOI-012 | A | P2 | LLM non-JSON | parse | Error, not 500 HTML |
-| U-VOI-001 | U | P1 | Mic on Tasks/Calendar | Open sheet, stub complete | Task created immediately; mutation progress toast |
+| U-VOI-001 | U | P1 | Mic on Tasks/Calendar | Open sheet, stub complete | Preview card, then Apply creates the task; card stays as Done just now |
 | U-VOI-002 | U | P1 | Stub `sufficient` | After parse | Wizard opens prefilled |
 | U-VOI-003 | U | P1 | Stub `needs_clarification` | Answer once | Completes; no second question UI |
 | U-VOI-004 | U | P2 | Mic permission denied | Start | Error in sheet, no crash |
@@ -335,7 +335,7 @@ Do **not** hit real Groq. Stub transcribe + parse.
 | A-VOI-015 | A | P1 | Named task, intent update with duration | `POST /voice/parse-task` | `command.kind=update`, patch includes `estimatedTimeInMinutes` |
 | A-VOI-016 | A | P1 | Named task, intent delete | `POST /voice/parse-task` | `command.kind=delete`, that task id |
 | A-VOI-017 | A | P1 | Habit create + uncheck | `POST /voice/parse-task` | `habit_create` fields; `habit_uncheck` with today |
-| U-VOI-006 | U | P1 | Stub `command.complete` | Setting off, then on | Off completes immediately. On shows a Complete preview card + Apply, then completes. Setting is restored off |
+| U-VOI-006 | U | P1 | Stub `command.complete` | Voice complete | Complete preview card, then Apply. Card stays as Done just now |
 | U-VOI-007 | U | P1 | Stub create + job `conflicts[]` | Voice create, reopen, spoken option | Shared conflict sheet opens; reopen voice picks `move_new` via speech |
 | U-VOI-008 | U | P1 | Stub `command.delete`, confirm off | Voice delete | Delete preview card always shown; Apply deletes |
 | U-VOI-009 | U | P1 | Mic stub recording | Voice sheet | Listening + microphone level equalizer visible |
@@ -351,6 +351,7 @@ Do **not** hit real Groq. Stub transcribe + parse.
 | U-VOI-013 | U | P1 | Stub `confirm` with two create intents | Type, Apply | Both cards; both tasks created; report sent with `applied` ×2; **Done just now** cards with statuses |
 | U-VOI-014 | U | P1 | Stub interview → plan → edited plan | Type, Make plan, type edit, Apply | **Planning** header + Make plan; plan cards; edit marks only the new card **Changed** and lists **Did not fit**; Apply creates the task; turns `text → build_plan → text → confirm → report` |
 | U-VOI-015 | U | P1 | Stub plan review | Close panel, reopen | Session DELETE for that id; no plan cards after reopen |
+| U-VOI-016 | U | P1 | Mode switch | Open Companion, type, switch to Fast create, type | Default turn sends `mode: assistant`; the next turn sends `mode: fast_create`. Prompt rules are unit-tested, not live Groq |
 
 ---
 

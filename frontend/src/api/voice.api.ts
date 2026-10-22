@@ -116,6 +116,9 @@ export type TranscribeVoiceResult = {
   language?: string;
 };
 
+/** Companion dialogue, or one-phrase create with at most one blocking question. */
+export type CompanionVoiceMode = 'assistant' | 'fast_create';
+
 export type VoiceTurnOutcome =
   | 'answer'
   | 'clarify'
@@ -225,6 +228,7 @@ export const VoiceApi = {
     clientNowIso?: string;
     actionId?: VoiceAgentActionId;
     executionReport?: VoiceExecutionReport;
+    mode?: CompanionVoiceMode;
   }): Promise<VoiceTurnResult> => {
     const response = await apiCall({
       method: 'POST',

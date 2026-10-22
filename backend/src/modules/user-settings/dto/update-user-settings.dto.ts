@@ -261,7 +261,7 @@ export class UpdateUserSettingsDto {
   @ApiProperty({
     example: false,
     description:
-      'Ask before a voice command completes, skips, or moves a task. Off runs the command immediately. Does not affect voice create. Delete and cancel always confirm.',
+      'Unused. Every voice write shows a preview card until Apply. Kept so older clients can still send the field.',
     required: false,
   })
   @IsBoolean()

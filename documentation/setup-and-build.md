@@ -103,11 +103,11 @@ cd frontend && npm run build
 npm run lint         # all workspaces that define the script
 npm run test         # backend Jest, then frontend Jest
 npm run test:e2e:ui  # Playwright against webpack :3100 + API :3101 (install Chromium once: npx playwright install chromium)
-npm run voice:eval:create  # live Groq create-eval (~50); needs GROQ_API_KEY in backend/.env; not CI
+npm run voice:eval:dialogue  # live planner dialogue corpus (see voice-agent-dialogue-test-plan.md)
 npm run clean        # remove node_modules / build / dist (see scripts/clean.js)
 ```
 
-`voice:eval:create` calls real Groq (not mocked). It writes `backend/.tmp/voice-create-eval-report.json` and exits non-zero on failures. Details: [voice-prompt-next.md](voice-prompt-next.md).
+`voice:eval:dialogue` runs the planner dialogue corpus ([voice-agent-dialogue-test-plan.md](voice-agent-dialogue-test-plan.md)). A write turn is `confirm` (preview cards). Spoken yes is `act`.
 
 Tests run **one after another**. Jest uses `--runInBand` (one process; the next file starts only after the previous file’s tests finish). From the repo root, `npm test` runs the backend suite and then the frontend suite. Backend API e2e (`npm run test:e2e` in `backend`) is also `--runInBand`. Playwright uses a single worker.
 

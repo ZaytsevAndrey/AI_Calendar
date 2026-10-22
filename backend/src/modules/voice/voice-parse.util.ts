@@ -8,6 +8,7 @@ import {
   localYmd,
   rezoneWallClockIso,
   startOfLocalDayIso,
+  weekdayIndex,
 } from './voice-local-date.util';
 import type {
   VoiceParsedTask,
@@ -15,6 +16,17 @@ import type {
   VoiceTaskKind,
   VoiceUnderstanding,
 } from './voice-parse.types';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Phase row the normalizer may use to check that a window contains the committed time. */
+export type VoicePhaseWindow = {
+  id: string;
+  startTime: string;
+  endTime: string;
+  weekDays?: number[] | null;
+  type?: string | null;
+};
 
 const PRIORITIES = new Set(['low', 'medium', 'high', 'urgent']);
 const PATTERNS = new Set(['DAILY', 'WEEKLY', 'BIWEEKLY', 'MONTHLY']);
@@ -333,6 +345,93 @@ function resolveLang(value?: string | null): AppLanguage {
   return 'en';
 }
 
+function committedSpan(isos: Array<string | null>): { startMs: number; endMs: number } | null {
+  const times = isos
+    .filter((iso): iso is string => Boolean(iso))
+    .map((iso) => Date.parse(iso))
+    .filter((ms) => Number.isFinite(ms))
+    .sort((a, b) => a - b);
+  if (!times.length) return null;
+  return { startMs: times[0], endMs: times[times.length - 1] };
+}
+
+function phaseBoundsMs(
+  ymd: string,
+  phase: VoicePhaseWindow,
+  timeZone: string,
+): { start: number; end: number } | null {
+  if (phase.type === 'sleep_time') return null;
+  const days = phase.weekDays;
+  if (days && days.length > 0 && !days.includes(weekdayIndex(ymd))) return null;
+  const start = Date.parse(localDateTimeIso(ymd, phase.startTime, timeZone));
+  let end = Date.parse(localDateTimeIso(ymd, phase.endTime, timeZone));
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  if (end <= start) end += DAY_MS;
+  return { start, end };
+}
+
+function boundsContain(
+  bounds: { start: number; end: number },
+  spanStart: number,
+  spanEnd: number,
+): boolean {
+  if (spanEnd <= spanStart) return bounds.start <= spanStart && spanStart < bounds.end;
+  return bounds.start <= spanStart && spanEnd <= bounds.end;
+}
+
+function phaseContainsSpan(
+  phase: VoicePhaseWindow,
+  spanStart: number,
+  spanEnd: number,
+  timeZone: string,
+): boolean {
+  const ymd = localYmd(new Date(spanStart).toISOString(), timeZone);
+  const today = phaseBoundsMs(ymd, phase, timeZone);
+  if (!today) return false;
+  if (boundsContain(today, spanStart, spanEnd)) return true;
+  // A clock after midnight still sits in the phase that started the evening before.
+  return boundsContain(
+    { start: today.start - DAY_MS, end: today.end - DAY_MS },
+    spanStart,
+    spanEnd,
+  );
+}
+
+function phaseLengthMinutes(phase: VoicePhaseWindow): number {
+  const start = phase.startTime.split(':').map(Number);
+  const end = phase.endTime.split(':').map(Number);
+  let minutes = end[0] * 60 + (end[1] || 0) - (start[0] * 60 + (start[1] || 0));
+  if (minutes <= 0) minutes += 24 * 60;
+  return minutes;
+}
+
+/**
+ * Keep the emitted phase when its window contains the committed time.
+ * Otherwise use the narrowest phase that does. None → null.
+ */
+export function phaseIdForCommittedTime(
+  phases: VoicePhaseWindow[],
+  chosenId: string | null,
+  spanStart: number,
+  spanEnd: number,
+  timeZone: string,
+): string | null {
+  const contains = (id: string | null) => {
+    if (!id) return false;
+    const phase = phases.find((row) => row.id === id);
+    return Boolean(phase && phaseContainsSpan(phase, spanStart, spanEnd, timeZone));
+  };
+  if (contains(chosenId)) return chosenId;
+  const fitting = phases.filter((phase) => contains(phase.id));
+  if (!fitting.length) return null;
+  fitting.sort((a, b) => {
+    const delta = phaseLengthMinutes(a) - phaseLengthMinutes(b);
+    if (delta !== 0) return delta;
+    return a.startTime.localeCompare(b.startTime);
+  });
+  return fitting[0].id;
+}
+
 /**
  * Normalize LLM create JSON.
  * Meaning of speech (when, title, empty create) is the model's job.
@@ -343,6 +442,8 @@ export function normalizeVoiceParse(
   raw: unknown,
   ctx: {
     validPhaseIds: Set<string>;
+    /** When set, a phase that does not contain the committed time is replaced. */
+    phases?: VoicePhaseWindow[];
     alreadyClarified: boolean;
     transcript: string;
     timeZone?: string;
@@ -381,7 +482,7 @@ export function normalizeVoiceParse(
   const recurrencePattern =
     isRecurring && PATTERNS.has(patternRaw) ? patternRaw : null;
   const phaseCandidate = asNullableString(taskRaw.phaseId);
-  const phaseId =
+  let phaseId =
     phaseCandidate && ctx.validPhaseIds.has(phaseCandidate)
       ? phaseCandidate
       : null;
@@ -415,6 +516,24 @@ export function normalizeVoiceParse(
     scheduledEndTime = null;
     deadline = null;
     earliestStartTime = null;
+  }
+
+  if (!isUnscheduled && zone && ctx.phases?.length) {
+    const span = committedSpan([
+      scheduledStartTime,
+      scheduledEndTime,
+      earliestStartTime,
+      deadline,
+    ]);
+    if (span) {
+      phaseId = phaseIdForCommittedTime(
+        ctx.phases,
+        phaseId,
+        span.startMs,
+        span.endMs,
+        zone,
+      );
+    }
   }
 
   let name = asString(taskRaw.name);

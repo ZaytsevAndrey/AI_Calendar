@@ -11,7 +11,7 @@ Speech meaning (clock, AM/PM, relative time, weekdays, recurring, titles, empty 
 ## Allowed in TypeScript (`normalizeVoiceParse`, calendar helpers)
 
 - Clamp / validate structured fields the model already emitted (duration, phase id, weekdays arrays, ISO parseability)
-- Rezone wrong numeric offsets using the user’s IANA zone
+- Stamp the settings zone onto the date and clock digits the model emitted. A trailing Z or a wrong numeric offset does not move those digits.
 - Drop a past one-off fixed `scheduledStart` and keep the rest of that civil day. A past flexible preferred with no open placement window moves to the next civil day at the same wall clock from the emitted ISO. A past preferred inside a still-open window is dropped; the window stays. A recurring series clock stays even if that hour today already passed.
 - Finish a half day-envelope only when the model already emitted `00:00` or `23:59`. Prompts describe a whole day as Wake to Sleep, not midnight to 23:59.
 - Inbox when there is a name but no when

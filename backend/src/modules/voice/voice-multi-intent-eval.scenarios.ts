@@ -2,7 +2,7 @@
  * Companion agent eval: several intents in one utterance, and the day-plan dialogue.
  * Runs `/voice/turn` logic end to end (planner + specialist parse) with a fresh session per scenario.
  * Fixtures: open Unscheduled tasks Звіт / Молоко and the Gym series (see INTENT_EVAL_FIXTURES).
- * Nothing is written: `act` / `confirm` intents are only asserted, never executed.
+ * Nothing is written: a write turn is `confirm` (preview). Spoken yes returns `act`. Intents are only asserted.
  */
 import type { VoiceTurnOutcome, VoiceTurnResponse } from './voice-agent.types';
 
@@ -62,32 +62,32 @@ const one = (transcript: string, expect: MultiIntentTurnExpect): MultiIntentTurn
 
 export const MULTI_INTENT_EVAL_SCENARIOS: MultiIntentEvalScenario[] = [
   // ── Two or more writes ───────────────────────────────────────────────
-  { id: 'mi01', language: 'uk', construction: 'two.creates', turns: one('купи хліб і запиши подзвонити мамі', { outcome: 'act', kinds: ['create', 'create'], maxIntents: 2 }) },
-  { id: 'mi02', language: 'uk', construction: 'create.plus.complete', turns: one('додай задачу помити авто, а звіт я вже закінчив', { outcome: 'act', kinds: ['create', 'complete'] }) },
-  { id: 'mi03', language: 'uk', construction: 'complete.plus.skip', turns: one('звіт готовий, а gym сьогодні пропусти', { outcome: ['act', 'confirm'], kinds: ['complete', 'skip|cancel'] }) },
+  { id: 'mi01', language: 'uk', construction: 'two.creates', turns: one('купи хліб і запиши подзвонити мамі', { outcome: 'confirm', kinds: ['create', 'create'], maxIntents: 2 }) },
+  { id: 'mi02', language: 'uk', construction: 'create.plus.complete', turns: one('додай задачу помити авто, а звіт я вже закінчив', { outcome: 'confirm', kinds: ['create', 'complete'] }) },
+  { id: 'mi03', language: 'uk', construction: 'complete.plus.skip', turns: one('звіт готовий, а gym сьогодні пропусти', { outcome: 'confirm', kinds: ['complete', 'skip|cancel'] }) },
   { id: 'mi04', language: 'uk', construction: 'create.plus.delete.confirms', turns: one('створи задачу оплатити інтернет і видали молоко', { outcome: 'confirm', kinds: ['create', 'delete'] }) },
-  { id: 'mi05', language: 'uk', construction: 'three.creates.list', turns: one('завтра треба купити ліки, забрати посилку і записатися до лікаря', { outcome: 'act', kinds: ['create', 'create', 'create'] }) },
-  { id: 'mi06', language: 'uk', construction: 'reschedule.plus.create', turns: one('перенеси звіт на завтра і додай задачу прибрати кухню', { outcome: 'act', kinds: ['window', 'create'] }) },
-  { id: 'mi07', language: 'uk', construction: 'shift.plus.complete', turns: one('молоко перенеси на 15:00, а звіт познач виконаним', { outcome: 'act', kinds: ['shift|update|window', 'complete'] }) },
-  { id: 'mi08', language: 'uk', construction: 'noise.two.creates', turns: one('ну значить так… купити корм коту і ще оплатити комуналку', { outcome: 'act', kinds: ['create', 'create'] }) },
-  { id: 'mi09', language: 'uk', construction: 'then.connector', turns: one('спочатку зроби звіт зараз, потім нагадай купити воду о шостій', { outcome: 'act', kinds: ['shift', 'create'] }) },
+  { id: 'mi05', language: 'uk', construction: 'three.creates.list', turns: one('завтра треба купити ліки, забрати посилку і записатися до лікаря', { outcome: 'confirm', kinds: ['create', 'create', 'create'] }) },
+  { id: 'mi06', language: 'uk', construction: 'reschedule.plus.create', turns: one('перенеси звіт на завтра і додай задачу прибрати кухню', { outcome: 'confirm', kinds: ['window', 'create'] }) },
+  { id: 'mi07', language: 'uk', construction: 'shift.plus.complete', turns: one('молоко перенеси на 15:00, а звіт познач виконаним', { outcome: 'confirm', kinds: ['shift|update|window', 'complete'] }) },
+  { id: 'mi08', language: 'uk', construction: 'noise.two.creates', turns: one('ну значить так… купити корм коту і ще оплатити комуналку', { outcome: 'confirm', kinds: ['create', 'create'] }) },
+  { id: 'mi09', language: 'uk', construction: 'then.connector', turns: one('спочатку зроби звіт зараз, потім нагадай купити воду о шостій', { outcome: 'confirm', kinds: ['shift', 'create'] }) },
   { id: 'mi10', language: 'uk', construction: 'mind.change.inside.one', turns: one('додай задачу купити хліб… ні, батон, і ще видали молоко', { outcome: 'confirm', kinds: ['create', 'delete'], maxIntents: 2 }) },
-  { id: 'mi11', language: 'en', construction: 'two.creates', turns: one('add buy batteries and call the dentist tomorrow', { outcome: 'act', kinds: ['create', 'create'] }) },
-  { id: 'mi12', language: 'en', construction: 'create.plus.complete', turns: one('I finished the report, and add a task to water the plants', { outcome: 'act', kinds: ['complete', 'create'] }) },
+  { id: 'mi11', language: 'en', construction: 'two.creates', turns: one('add buy batteries and call the dentist tomorrow', { outcome: 'confirm', kinds: ['create', 'create'] }) },
+  { id: 'mi12', language: 'en', construction: 'create.plus.complete', turns: one('I finished the report, and add a task to water the plants', { outcome: 'confirm', kinds: ['complete', 'create'] }) },
   { id: 'mi13', language: 'en', construction: 'delete.plus.skip', turns: one('delete milk and skip gym today', { outcome: 'confirm', kinds: ['delete', 'skip|cancel'] }) },
-  { id: 'mi14', language: 'en', construction: 'three.mixed', turns: one('move the report to tomorrow, mark milk done, and add pick up laundry at 6pm', { outcome: 'act', kinds: ['window', 'complete', 'create'] }) },
+  { id: 'mi14', language: 'en', construction: 'three.mixed', turns: one('move the report to tomorrow, mark milk done, and add pick up laundry at 6pm', { outcome: 'confirm', kinds: ['window', 'complete', 'create'] }) },
 
   // ── Q&A + writes ─────────────────────────────────────────────────────
-  { id: 'qa01', language: 'uk', construction: 'question.plus.create', turns: one('що в мене сьогодні і додай задачу купити хліб', { outcome: 'act', kinds: ['create'], maxIntents: 1, answer: true }) },
-  { id: 'qa02', language: 'uk', construction: 'free.time.plus.complete', turns: one('коли я вільний завтра? і звіт уже зробив', { outcome: 'act', kinds: ['complete'], answer: true }) },
-  { id: 'qa03', language: 'en', construction: 'question.plus.create', turns: one('what is next, and add a task to book flights', { outcome: 'act', kinds: ['create'], answer: true }) },
+  { id: 'qa01', language: 'uk', construction: 'question.plus.create', turns: one('що в мене сьогодні і додай задачу купити хліб', { outcome: 'confirm', kinds: ['create'], maxIntents: 1, answer: true }) },
+  { id: 'qa02', language: 'uk', construction: 'free.time.plus.complete', turns: one('коли я вільний завтра? і звіт уже зробив', { outcome: 'confirm', kinds: ['complete'], answer: true }) },
+  { id: 'qa03', language: 'en', construction: 'question.plus.create', turns: one('what is next, and add a task to book flights', { outcome: 'confirm', kinds: ['create'], answer: true }) },
   { id: 'qa04', language: 'uk', construction: 'question.only', turns: one('що в мене в списку без часу?', { outcome: 'answer', maxIntents: 0, answer: true }) },
   { id: 'qa05', language: 'en', construction: 'question.only', turns: one('am I free tomorrow afternoon?', { outcome: 'answer', maxIntents: 0, answer: true }) },
 
   // ── Single intent stays single ───────────────────────────────────────
-  { id: 'si01', language: 'uk', construction: 'one.create.with.and.in.name', turns: one('додай задачу купити хліб і масло', { outcome: 'act', kinds: ['create'], maxIntents: 1 }) },
-  { id: 'si02', language: 'uk', construction: 'one.complete', turns: one('закінчив звіт', { outcome: 'act', kinds: ['complete'], maxIntents: 1 }) },
-  { id: 'si03', language: 'en', construction: 'one.create.compound.name', turns: one('add rock and roll practice on friday', { outcome: 'act', kinds: ['create'], maxIntents: 1 }) },
+  { id: 'si01', language: 'uk', construction: 'one.create.with.and.in.name', turns: one('додай задачу купити хліб і масло', { outcome: 'confirm', kinds: ['create'], maxIntents: 1 }) },
+  { id: 'si02', language: 'uk', construction: 'one.complete', turns: one('закінчив звіт', { outcome: 'confirm', kinds: ['complete'], maxIntents: 1 }) },
+  { id: 'si03', language: 'en', construction: 'one.create.compound.name', turns: one('add rock and roll practice on friday', { outcome: 'confirm', kinds: ['create'], maxIntents: 1 }) },
 
   // ── Partial clarify ──────────────────────────────────────────────────
   {
@@ -96,7 +96,7 @@ export const MULTI_INTENT_EVAL_SCENARIOS: MultiIntentEvalScenario[] = [
     construction: 'clear.plus.vague.then.answer',
     turns: [
       { transcript: 'купи хліб і перенеси ту штуку', expect: { outcome: 'clarify', maxIntents: 0 } },
-      { transcript: 'звіт, на завтра', expect: { outcome: 'act', kinds: ['create', 'window|update|shift'] } },
+      { transcript: 'звіт, на завтра', expect: { outcome: 'confirm', kinds: ['create', 'window|update|shift'] } },
     ],
   },
   {

@@ -41,7 +41,7 @@ function language(ctx: SummaryContext) {
 /** Map each parsed segment to intents, an open question, or a refusal note. */
 export function collectSegments(
   parses: SegmentParse[],
-  ctx: SummaryContext & { confirmVoiceCommands: boolean },
+  ctx: SummaryContext,
 ): CollectedSegments {
   const out: CollectedSegments = {
     intents: [],
@@ -71,12 +71,7 @@ export function collectSegments(
       out.intents.push(intent);
       out.segments.push({ summary: intent.summary, status: 'ready' });
     }
-    if (
-      mapped.needsConfirm ||
-      mapped.intents.some((intent) =>
-        commandNeedsConfirm(intent, ctx.confirmVoiceCommands),
-      )
-    ) {
+    if (mapped.needsConfirm || mapped.intents.some((intent) => commandNeedsConfirm(intent))) {
       out.needsConfirm = true;
     }
   }
@@ -87,7 +82,7 @@ export function collectSegments(
 export function continuePendingBatch(
   batch: PendingBatch,
   answer: SegmentParse,
-  ctx: SummaryContext & { confirmVoiceCommands: boolean },
+  ctx: SummaryContext,
 ): PendingBatch {
   const [current, ...rest] = batch.unresolved;
   const collected = collectSegments([answer], ctx);

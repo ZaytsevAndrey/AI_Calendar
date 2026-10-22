@@ -26,7 +26,8 @@ describe('voice-agent.intents', () => {
     expect(mapped.intents[0].summary).toBe(
       'Створив задачу «Milk» на завтра.',
     );
-    expect(mapped.needsConfirm).toBe(false);
+    expect(mapped.needsConfirm).toBe(true);
+    expect(commandNeedsConfirm(mapped.intents[0])).toBe(true);
   });
 
   it('always confirms delete', () => {
@@ -42,9 +43,7 @@ describe('voice-agent.intents', () => {
       } as any,
     });
     expect(mapped.needsConfirm).toBe(true);
-    expect(
-      commandNeedsConfirm(mapped.intents[0], false),
-    ).toBe(true);
+    expect(commandNeedsConfirm(mapped.intents[0])).toBe(true);
   });
 
   it('maps refuse', () => {

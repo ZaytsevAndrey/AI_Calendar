@@ -88,8 +88,10 @@ describe('Voice agent /voice/turn e2e', () => {
       language: 'en',
     });
 
-    const body = await turn(token, randomUUID(), { transcript: 'buy milk and the report is done' });
-    expect(body.outcome).toBe('act');
+    const sessionId = randomUUID();
+    const body = await turn(token, sessionId, { transcript: 'buy milk and the report is done' });
+    expect(body.outcome).toBe('confirm');
+    expect(body.actions).toEqual(['confirm', 'cancel']);
     expect(body.intents).toHaveLength(2);
     expect(body.intents[0]).toMatchObject({ type: 'create', task: { name: 'Buy milk' } });
     expect(body.intents[1]).toMatchObject({
@@ -98,6 +100,10 @@ describe('Voice agent /voice/turn e2e', () => {
     });
     expect(body.segments.map((row) => row.status)).toEqual(['ready', 'ready']);
     expect(body.plan).toBeNull();
+
+    const applied = await turn(token, sessionId, { actionId: 'confirm' });
+    expect(applied.outcome).toBe('act');
+    expect(applied.intents).toHaveLength(2);
   });
 
   it('A-VOI-021 a batch with a delete is confirmed once, then reported', async () => {
@@ -137,20 +143,29 @@ describe('Voice agent /voice/turn e2e', () => {
     const sessionId = randomUUID();
 
     queuePlanner({ type: 'plan_start', day, interview: false, question: '', edits: [] });
-    const proposed = await turn(token, sessionId, { transcript: 'plan my day' });
+    const opened = await turn(token, sessionId, { transcript: 'plan my day' });
+    expect(opened.outcome).toBe('clarify');
+    expect(opened.actions).toEqual(['build_plan', 'cancel']);
+    expect(opened.plan).toMatchObject({ day, stage: 'interview' });
+    expect(opened.plan!.items.map((item) => item.name).sort()).toEqual(['Email', 'Taxes']);
+
+    const proposed = await turn(token, sessionId, { actionId: 'build_plan' });
     expect(proposed.outcome).toBe('confirm');
     expect(proposed.actions).toEqual(['confirm', 'cancel']);
     expect(proposed.intents).toEqual([]);
-    expect(proposed.plan).toMatchObject({ day, stage: 'review', revision: 1 });
+    expect(proposed.plan).toMatchObject({ day, stage: 'review' });
     const items = proposed.plan!.items;
     expect(items.map((item) => item.name).sort()).toEqual(['Email', 'Taxes']);
     expect(Date.parse(items[0].end)).toBeLessThanOrEqual(Date.parse(items[1].start));
 
     queuePlanner({ type: 'plan_edits', answer: '', edits: [{ op: 'remove_item', itemId: emailId }] });
     const edited = await turn(token, sessionId, { transcript: 'drop email' });
-    expect(edited.outcome).toBe('confirm');
+    expect(edited.outcome).toBe('clarify');
     expect(edited.plan!.items.map((item) => item.taskId)).toEqual([taxesId]);
-    expect(edited.plan!.revision).toBe(2);
+
+    const reseated = await turn(token, sessionId, { actionId: 'build_plan' });
+    expect(reseated.outcome).toBe('confirm');
+    expect(reseated.plan!.items.map((item) => item.taskId)).toEqual([taxesId]);
 
     const tasks = ctx.app.get<Repository<Task>>(getRepositoryToken(Task));
     expect((await tasks.findOneByOrFail({ id: taxesId })).isUnscheduled).toBe(true);
@@ -186,7 +201,8 @@ describe('Voice agent /voice/turn e2e', () => {
     const asked = await turn(token, sessionId, { transcript: 'help me plan' });
     expect(asked.outcome).toBe('clarify');
     expect(asked.actions).toEqual(['build_plan', 'cancel']);
-    expect(asked.plan).toMatchObject({ day, stage: 'interview', items: [] });
+    expect(asked.plan).toMatchObject({ day, stage: 'interview' });
+    expect(asked.plan!.items.map((item) => item.name)).toEqual(['Taxes']);
 
     const built = await turn(token, sessionId, { actionId: 'build_plan' });
     expect(built.outcome).toBe('confirm');
@@ -207,7 +223,7 @@ describe('Voice agent /voice/turn e2e', () => {
     mockVoiceParseTurn(ctx.groq, createMilk);
 
     const body = await turn(token, randomUUID(), { transcript: 'buy milk' });
-    expect(body.outcome).toBe('act');
+    expect(body.outcome).toBe('confirm');
     expect(body.intents).toHaveLength(1);
     expect(body.legacyParse?.task?.name).toBe('Buy milk');
   });

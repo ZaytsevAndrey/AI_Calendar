@@ -1,6 +1,6 @@
 # Specification: Voice Commander
 
-**Status:** product contract for Voice Commander (roadmap §13 shipped).  
+**Status:** superseded by [spec-voice-agent.md](spec-voice-agent.md). Kept as the history of the one-shot commander. Live behavior is the Companion planner: every write previews on a card until Apply.  
 **Language:** English  
 **Last updated:** October 2026  
 
@@ -141,7 +141,7 @@ Keep `POST /voice/transcribe` and `POST /voice/parse-task`. Extend the parse res
 
 The client continues to perform writes through existing task / habit / schedule APIs (`executeVoiceCommand` and create path). Parse does not mutate the database except via those client calls.
 
-**Dates/times:** the parse prompt supplies Local calendar anchors (now ISO, wake-day today/tomorrow, wake/sleep). The model returns final ISO fields; the server does not rewrite days/clocks from the transcript. Create still requires a usable task name.
+**Dates/times:** the parse prompt supplies Local calendar anchors (local now as date and clock, no zone suffix, wake-day today/tomorrow, wake/sleep). The model returns those wall-clock digits; the server stamps the settings zone and does not rewrite days/clocks from the transcript. Create still requires a usable task name.
 
 ---
 

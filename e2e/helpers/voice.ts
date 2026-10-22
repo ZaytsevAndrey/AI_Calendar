@@ -128,6 +128,7 @@ export type AgentTurnBody = {
   sessionId?: string;
   transcript?: string;
   actionId?: string;
+  mode?: string;
   executionReport?: { results: Array<{ summary: string; status: string }> };
 };
 

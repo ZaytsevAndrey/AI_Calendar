@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, MinLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { VOICE_COMPANION_MODES, type VoiceCompanionMode } from '../voice-companion-mode';
 
 export class ParseVoiceTaskDto {
   @ApiProperty({ description: 'Speech-to-text transcript' })
@@ -37,4 +38,13 @@ export class ParseVoiceTaskDto {
   @IsString()
   @IsOptional()
   clarificationAnswer?: string;
+
+  @ApiProperty({
+    required: false,
+    enum: VOICE_COMPANION_MODES,
+    description: 'fast_create tightens the create specialist. Other intents ignore it.',
+  })
+  @IsOptional()
+  @IsIn(VOICE_COMPANION_MODES)
+  mode?: VoiceCompanionMode;
 }
