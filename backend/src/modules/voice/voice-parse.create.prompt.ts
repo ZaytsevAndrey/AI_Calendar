@@ -1,9 +1,10 @@
 import { FAST_CREATE_SPECIALIST_MODULE } from './prompt-modules/fast-create';
-import { createNameLanguageModule } from './prompt-modules/name-language';
 import { CREATE_KIND_WHEN_MODULE } from './prompt-modules/kind-when';
+import { createNameLanguageModule } from './prompt-modules/name-language';
 import { CREATE_PHASE_MODULE } from './prompt-modules/phase';
 import { CREATE_RECURRING_MODULE } from './prompt-modules/recurring';
 import { CREATE_SCHEMA_MODULE } from './prompt-modules/schema';
+import { TASK_FIELDS_MODULE } from './prompt-modules/task-fields';
 import type { VoiceCompanionMode } from './voice-companion-mode';
 import {
   buildVoiceParseSharedUserPrompt,
@@ -20,10 +21,11 @@ export function buildVoiceCreateSystemPrompt(
     createNameLanguageModule(language),
     'Reply with a single JSON object only. No markdown.',
     CREATE_SCHEMA_MODULE,
+    TASK_FIELDS_MODULE,
     CREATE_KIND_WHEN_MODULE,
     CREATE_RECURRING_MODULE,
     CREATE_PHASE_MODULE,
-    'Do not invent Google metadata. Do not output command/habit objects.',
+    'Do not invent Google metadata. Do not output a command object.',
   ];
   if (mode === 'fast_create') parts.push(FAST_CREATE_SPECIALIST_MODULE);
   return parts.join('\n\n');

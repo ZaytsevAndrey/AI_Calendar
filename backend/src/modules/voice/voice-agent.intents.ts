@@ -1,12 +1,7 @@
-import { t, type MessageKey } from '../../i18n/t';
 import { isAppLanguage, type AppLanguage } from '../../i18n/types';
 import type { VoiceParseResult, VoiceParsedTask } from './voice-parse.types';
 import type { VoiceWriteIntent } from './voice-agent.types';
-import {
-  addDaysToYmd,
-  localYmd,
-  scheduleTodayYmd,
-} from './voice-local-date.util';
+import { summarizeCreatedTask } from './voice-stored-summary';
 
 export function intentsFromParseResult(
   parsed: VoiceParseResult,
@@ -87,14 +82,6 @@ function resolveLang(value?: string | null): AppLanguage {
   return isAppLanguage(value) ? value : 'en';
 }
 
-function vt(
-  lang: AppLanguage,
-  key: MessageKey,
-  params?: Record<string, string | number>,
-): string {
-  return t(lang, key, params);
-}
-
 function summarizeCreate(
   task: VoiceParsedTask,
   lang: AppLanguage,
@@ -105,31 +92,10 @@ function summarizeCreate(
     sleepTime?: string | null;
   },
 ): string {
-  const name = task.name;
-  const timeZone = opts?.timeZone || task.timeZone;
-  const nowIso = opts?.nowIso;
-  if (!timeZone || !nowIso || !task.earliestStartTime) {
-    return vt(lang, 'voice.createdTask', { name });
-  }
-  const day = localYmd(task.earliestStartTime, timeZone);
-  const today = scheduleTodayYmd(
-    nowIso,
-    timeZone,
-    opts?.wakeTime,
-    opts?.sleepTime,
-  );
-  const tomorrow = addDaysToYmd(today, 1);
-  if (day === tomorrow) {
-    return vt(lang, 'voice.createdTaskFor', {
-      name,
-      when: vt(lang, 'voice.whenTomorrow'),
-    });
-  }
-  if (day === today) {
-    return vt(lang, 'voice.createdTaskFor', {
-      name,
-      when: vt(lang, 'voice.whenToday'),
-    });
-  }
-  return vt(lang, 'voice.createdTaskFor', { name, when: day });
+  return summarizeCreatedTask(task, lang, {
+    timeZone: opts?.timeZone || task.timeZone,
+    nowIso: opts?.nowIso,
+    wakeTime: opts?.wakeTime,
+    sleepTime: opts?.sleepTime,
+  });
 }

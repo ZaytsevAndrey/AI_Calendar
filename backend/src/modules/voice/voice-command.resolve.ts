@@ -1,4 +1,5 @@
 import { isFixedEventType } from '../scheduling/event-type.enum';
+import { summarizeUpdatedTask } from './voice-stored-summary';
 import { googleRecurringInstanceId } from '../tasks/skipped-occurrence.util';
 import { isAppLanguage, t, type AppLanguage, type MessageKey } from '../../i18n';
 import {
@@ -289,6 +290,37 @@ export function resolveVoiceCommand(input: {
         ? { type: 'command', command: { kind: 'refuse', message: question } }
         : { type: 'clarify', question };
     }
+    const keys = Object.keys(patch);
+    if (keys.length === 1 && patch.status === 'completed') {
+      return resolveVoiceCommand({
+        ...input,
+        draft: { ...draft, intent: 'complete' },
+      });
+    }
+    const scheduleKeys = new Set([
+      'deadline',
+      'earliestStartTime',
+      'scheduledStartTime',
+      'scheduledEndTime',
+    ]);
+    const seats =
+      keys.every((key) => scheduleKeys.has(key)) &&
+      (keys.includes('scheduledStartTime') || keys.includes('earliestStartTime'));
+    if (seats) {
+      const nowMs = Date.parse(input.nowIso);
+      const slot = pickOpenSlot(
+        picked.task,
+        input.slots,
+        nowMs,
+        draft.target === 'current',
+      );
+      return rescheduleCommand(
+        { ...input, draft, language: lang },
+        picked.task,
+        slot,
+        nowMs,
+      );
+    }
     if (picked.task.isRecurring) {
       const scope = seriesScopeFor(draft, input.transcript, input.alreadyClarified);
       if (!scope) {
@@ -307,7 +339,11 @@ export function resolveVoiceCommand(input: {
         kind: 'update',
         taskId: picked.task.id,
         taskName: picked.task.name,
-        summary: vt(lang, 'voice.updateTask', { name: picked.task.name }),
+        summary: summarizeUpdatedTask(picked.task.name, patch, lang, {
+          timeZone: input.timeZone,
+          nowIso: input.nowIso,
+          wakeTime: input.wakeTime,
+        }),
         patch,
       },
     };

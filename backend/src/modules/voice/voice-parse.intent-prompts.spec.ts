@@ -46,22 +46,13 @@ describe('voice parse prompt split', () => {
         expect(pair.user).toContain('Default task duration: 30 minutes');
       }
       if (intent === 'update') {
-        expect(pair.system).toMatch(/ONLY fields the speaker changed/);
         expect(pair.system).toMatch(/command\.newName/);
         expect(pair.system).toMatch(/phaseId/);
+        expect(pair.system).toMatch(/deadline/);
+        expect(pair.system).toMatch(/completed/);
         expect(pair.system).toMatch(/Do not invent/);
         expect(pair.system).not.toMatch(/Habit create/);
         expect(pair.user).toContain('Phases:');
-      }
-      if (intent === 'reschedule') {
-        expect(pair.system).toMatch(/command\.start/);
-        expect(pair.system).toMatch(/Wake/);
-        expect(pair.system).toMatch(/Sleep/);
-        expect(pair.system).toMatch(/do now/);
-        expect(pair.system).toMatch(/First match wins/);
-        expect(pair.system).toMatch(/task null/i);
-        expect(pair.user).toContain('schedule tomorrow:');
-        expect(pair.user).not.toContain('Phases:');
       }
       if (intent !== 'create' && intent !== 'update') {
         expect(pair.system).toMatch(/Do not invent/);
@@ -75,7 +66,7 @@ describe('voice parse prompt split', () => {
     const expectSystem = (intent: (typeof VOICE_PARSE_INTENTS)[number], pattern: RegExp) => {
       expect(buildVoiceIntentPrompt(intent, ctx).system).toMatch(pattern);
     };
-    expectSystem('complete', /skips today's open occurrence/);
+    expectSystem('update', /one EXISTING app task/);
     expectSystem('skip', /next open time/);
     expectSystem('delete', /whole series/);
     expectSystem('needs_clarification', /task stays null/);

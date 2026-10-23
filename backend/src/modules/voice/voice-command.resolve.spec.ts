@@ -329,8 +329,36 @@ describe('resolveVoiceCommand', () => {
         kind: 'update',
         taskId: 't1',
         patch: { estimatedTimeInMinutes: 45 },
+        summary: 'Update "Dentist": 45 min?',
       },
     });
+  });
+
+  it('stores a deadline without a start as an update field', () => {
+    const result = resolveVoiceCommand({
+      draft: draft({
+        intent: 'update',
+        taskName: 'Dentist',
+        patch: { deadline: '2026-09-23T20:00:00' },
+      }),
+      transcript: 'dentist by tomorrow',
+      timeZone: ZONE,
+      nowIso: NOW,
+      alreadyClarified: false,
+      tasks: [dentist],
+      slots: [],
+    });
+    expect(result).toMatchObject({
+      type: 'command',
+      command: {
+        kind: 'update',
+        patch: { deadline: '2026-09-23T20:00:00' },
+      },
+    });
+    if (result.type === 'command' && result.command.kind === 'update') {
+      expect(result.command.summary).toContain('Dentist');
+      expect(result.command.summary).toContain('until');
+    }
   });
 
   it('deletes a named task', () => {

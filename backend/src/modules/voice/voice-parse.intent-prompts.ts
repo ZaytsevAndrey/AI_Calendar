@@ -1,9 +1,5 @@
 import { buildVoiceClarifySystemPrompt, buildVoiceClarifyUserPrompt } from './voice-parse.clarify.prompt';
 import {
-  buildVoiceCompleteSystemPrompt,
-  buildVoiceCompleteUserPrompt,
-} from './voice-parse.complete.prompt';
-import {
   buildVoiceCreateSystemPrompt,
   buildVoiceCreateUserPrompt,
 } from './voice-parse.create.prompt';
@@ -11,10 +7,6 @@ import {
   buildVoiceDeleteSystemPrompt,
   buildVoiceDeleteUserPrompt,
 } from './voice-parse.delete.prompt';
-import {
-  buildVoiceRescheduleSystemPrompt,
-  buildVoiceRescheduleUserPrompt,
-} from './voice-parse.reschedule.prompt';
 import {
   buildVoiceSkipSystemPrompt,
   buildVoiceSkipUserPrompt,
@@ -58,20 +50,10 @@ export function buildVoiceIntentPrompt(
         system: buildVoiceDeleteSystemPrompt(language),
         user: buildVoiceDeleteUserPrompt(ctx),
       };
-    case 'complete':
-      return {
-        system: buildVoiceCompleteSystemPrompt(language),
-        user: buildVoiceCompleteUserPrompt(ctx),
-      };
     case 'skip':
       return {
         system: buildVoiceSkipSystemPrompt(language),
         user: buildVoiceSkipUserPrompt(ctx),
-      };
-    case 'reschedule':
-      return {
-        system: buildVoiceRescheduleSystemPrompt(language),
-        user: buildVoiceRescheduleUserPrompt(ctx),
       };
     case 'needs_clarification':
       return {

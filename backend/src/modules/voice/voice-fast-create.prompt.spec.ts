@@ -37,12 +37,12 @@ describe('fast create prompts', () => {
     expect(create.system).toMatch(/Ask at most one question/);
     expect(create.system).toMatch(/empty name/);
     expect(create.system).toMatch(/event's own length or as the window/);
-    expect(create.system).toMatch(/Do not ask which day, how long/);
+    expect(create.system).toMatch(/default duration/);
     expect(create.system).toMatch(/schedule tomorrow/);
   });
 
   it('does not change other specialists when the turn is fast create', () => {
-    const move = buildVoiceIntentPrompt('reschedule', { ...ctx, mode: 'fast_create' });
+    const move = buildVoiceIntentPrompt('update', { ...ctx, mode: 'fast_create' });
     expect(move.system).not.toContain('Fast create.');
   });
 
@@ -50,7 +50,7 @@ describe('fast create prompts', () => {
     const planner = buildPlannerSystemPrompt('en', 'fast_create');
     expect(planner).toContain('Fast create is on');
     expect(planner).toMatch(/day plan stay as written above/);
-    expect(planner).toMatch(/Do not ask when, which day, or how long/);
+    expect(planner).toMatch(/create specialist fills them/);
     expect(planner).toMatch(/names no errand/);
   });
 });

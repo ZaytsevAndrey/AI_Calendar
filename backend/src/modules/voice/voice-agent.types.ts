@@ -96,7 +96,7 @@ export type DayPlanProposal = {
 export type PlanDraft = {
   day: string;
   stage: PlanStage;
-  /** Interview questions asked so far (max 3). */
+  /** Interview questions asked so far. The interview has no cap. */
   interviewAsked: number;
   /** Seat order = priority order. */
   items: PlanItem[];
@@ -105,7 +105,12 @@ export type PlanDraft = {
   lastProposal: DayPlanProposal | null;
 };
 
-export type UnresolvedSegment = { segment: string; question: string };
+export type UnresolvedSegment = {
+  segment: string;
+  question: string;
+  /** Set when the user left this question unanswered while another question was still open. */
+  deferred?: boolean;
+};
 
 /** Resolved intents held while one unclear segment is being clarified. */
 export type PendingBatch = {

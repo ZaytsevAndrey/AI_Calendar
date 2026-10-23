@@ -9,6 +9,7 @@ import {
   type MutationStage,
 } from 'modules/schedule/taskMutationProgress';
 import i18n from 'i18next';
+import { describeStoredTask } from 'modules/voice/summarizeStoredTask';
 
 type TaskWriteResult = TaskDTO & {
   jobId?: string | null;
@@ -114,7 +115,13 @@ export const eventTasksApi = createApi({
               await refreshAfterSilentReplan(dispatch, data, (stage) => {
                 progress.setStage(stage);
               });
+              return data;
             },
+            doneDetail: (data) =>
+              describeStoredTask(data, {
+                timeZone: data.scheduleTimeZone || arg.timeZone,
+                nowIso: new Date().toISOString(),
+              }) || undefined,
           });
         } catch {
           patch.undo();
@@ -142,7 +149,19 @@ export const eventTasksApi = createApi({
               await refreshAfterSilentReplan(dispatch, data, (stage) => {
                 progress.setStage(stage);
               });
+              return { saved: data, body: arg.body };
             },
+            doneDetail: ({ saved, body }) =>
+              describeStoredTask(
+                { ...body, scheduleState: saved.scheduleState },
+                {
+                  timeZone: body.timeZone || saved.scheduleTimeZone,
+                  nowIso: new Date().toISOString(),
+                  rename: true,
+                  mentionDefaults: true,
+                  mentionClears: true,
+                },
+              ) || undefined,
           });
         } catch {
           return;

@@ -1,5 +1,6 @@
-import { buildChangePreviewCards } from './changePreviewCards';
+import { buildChangePreviewCards, formatPreviewWhen } from './changePreviewCards';
 import type { VoiceWriteIntent } from 'api/voice.api';
+import i18n from 'i18n';
 
 describe('buildChangePreviewCards', () => {
   it('maps create intent to a create card with duration', () => {
@@ -23,6 +24,7 @@ describe('buildChangePreviewCards', () => {
     const cards = buildChangePreviewCards({ intents });
     expect(cards).toHaveLength(1);
     expect(cards[0].kind).toBe('create');
+    expect(cards[0].taskType).toBe('flexible');
     expect(cards[0].name).toBe('Milk');
     expect(cards[0].durationMinutes).toBe(45);
     expect(cards[0].startIso).toBe('2026-10-18T10:00:00.000Z');
@@ -44,6 +46,7 @@ describe('buildChangePreviewCards', () => {
     const cards = buildChangePreviewCards({ intents });
     expect(cards).toHaveLength(1);
     expect(cards[0].kind).toBe('delete');
+    expect(cards[0].taskType).toBeNull();
     expect(cards[0].name).toBe('Report');
   });
 
@@ -102,6 +105,7 @@ describe('buildChangePreviewCards', () => {
     });
     expect(cards.map((card) => card.name)).toEqual(['Deep work', 'Gym', 'Email']);
     expect(cards.map((card) => card.kind)).toEqual(['window', 'create', 'shift']);
+    expect(cards.map((card) => card.taskType)).toEqual(['unscheduled', 'flexible', 'flexible']);
     expect(cards.map((card) => Boolean(card.changed))).toEqual([false, true, false]);
     expect(cards[0].durationMinutes).toBe(60);
   });
@@ -128,5 +132,56 @@ describe('buildChangePreviewCards', () => {
   it('returns empty when nothing to preview', () => {
     expect(buildChangePreviewCards({})).toEqual([]);
     expect(buildChangePreviewCards({ intents: [] })).toEqual([]);
+  });
+
+  it('puts the date and task type on a create draft', async () => {
+    await i18n.changeLanguage('uk');
+    const intents: VoiceWriteIntent[] = [
+      {
+        type: 'create',
+        summary: 'Звіт',
+        task: {
+          name: 'Звіт',
+          eventType: 'fixed',
+          estimatedTimeInMinutes: 60,
+          isRecurring: false,
+          allowSplit: false,
+          priority: 'urgent',
+          scheduledStartTime: '2026-10-18T12:00:00.000Z',
+          scheduledEndTime: '2026-10-18T13:00:00.000Z',
+        },
+      },
+    ];
+    const cards = buildChangePreviewCards({ intents });
+    expect(cards[0].taskType).toBe('fixed');
+    expect(formatPreviewWhen(cards[0], 'Europe/Kyiv', 'Без часу')).toBe(
+      '18 жовт. 2026, 15:00–16:00',
+    );
+  });
+
+  it('shows a day without a midnight clock, and a deadline on that day', async () => {
+    await i18n.changeLanguage('uk');
+    const intents: VoiceWriteIntent[] = [
+      {
+        type: 'create',
+        summary: 'Молоко',
+        task: {
+          name: 'Молоко',
+          eventType: 'admin',
+          isUnscheduled: false,
+          estimatedTimeInMinutes: 30,
+          isRecurring: false,
+          allowSplit: false,
+          priority: 'medium',
+          earliestStartTime: '2026-10-18T00:00:00+03:00',
+          deadline: '2026-10-18T20:00:00+03:00',
+        },
+      },
+    ];
+    const cards = buildChangePreviewCards({ intents });
+    expect(cards[0].taskType).toBe('flexible');
+    expect(formatPreviewWhen(cards[0], 'Europe/Kyiv', 'Без часу')).toBe(
+      '18 жовт. 2026, до 20:00',
+    );
   });
 });

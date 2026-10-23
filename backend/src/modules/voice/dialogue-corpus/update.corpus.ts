@@ -25,7 +25,7 @@ scenario('update', 'location', line('додай до звіту місце: пе
 
 scenario('update', 'deadline', line('дедлайн звіту — завтра', updated('звіт')));
 
-scenario('update', 'bound-is-a-question', line('звіт до пʼятниці', ask));
+scenario('update', 'bound-is-deadline', line('звіт до пʼятниці', updated('звіт')));
 
 scenario('update', 'duration', line('на звіт заклади годину', updated('звіт')));
 

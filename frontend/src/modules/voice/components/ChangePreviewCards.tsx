@@ -1,9 +1,9 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { localHm } from 'utils/ianaDateTime';
 import {
   buildChangePreviewCards,
   changePreviewKindLabelKey,
+  formatPreviewWhen,
   type ChangePreviewCard,
 } from '../changePreviewCards';
 import type {
@@ -28,10 +28,7 @@ const STATUS_CLASS: Record<VoiceIntentExecutionStatus, string> = {
 };
 
 function formatTimeRange(card: ChangePreviewCard, timeZone: string, unscheduledLabel: string): string {
-  if (!card.startIso) return unscheduledLabel;
-  const start = localHm(card.startIso, timeZone);
-  if (!card.endIso) return start;
-  return `${start}–${localHm(card.endIso, timeZone)}`;
+  return formatPreviewWhen(card, timeZone, unscheduledLabel);
 }
 
 export function ChangePreviewCards({
@@ -82,6 +79,7 @@ export function ChangePreviewCards({
                 </span>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ide-muted">
+                {card.taskType ? <span>{t(`tasks.preset.${card.taskType}`)}</span> : null}
                 <span>{formatTimeRange(card, timeZone, t('voice.previewUnscheduled'))}</span>
                 {card.durationMinutes != null ? (
                   <span>{t('voice.previewDuration', { count: card.durationMinutes })}</span>

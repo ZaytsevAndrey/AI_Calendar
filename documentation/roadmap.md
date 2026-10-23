@@ -47,6 +47,13 @@ Day and week time grids have no current-time marker.
 - [ ] Draw a horizontal line at the current clock (Settings IANA `timeZone`) across today’s column.
 - [ ] Label it **Now** (i18n). Hide when the visible day/week does not include the current civil day, or when now falls outside the personal wake–sleep window.
 
+### 37. Diagnose duplicate / excess fetches
+
+Network looks busy: the same resources seem to refetch too often (calendar events, tasks, settings, habits, and similar).
+
+- [ ] Trace Network / RTK Query / axios on Calendar, Tasks, and Settings: which endpoints fire, how often, and what triggers them (mount, focus, invalidation, polling, overlapping hooks).
+- [ ] Write down the duplicate clusters and the smallest fix list (shared cache key, skip duplicate subscribers, tighter invalidation, debounce). Do not rewrite fetching until that note exists.
+
 ---
 
 ## Later — decide before building
@@ -90,6 +97,6 @@ Third parties and publishing. Leave these until the Now list is done.
 ## Recommended next steps
 
 1. In progress: roadmap **§32** — mobile daily path.
-2. Then the rest of **Now**: §31 database backup, §33 card min height / crowded hour, §35 preview look + content, §36 now line on the calendar. (§24 Piper is in Later.)
+2. Then the rest of **Now**: §31 database backup, §33 card min height / crowded hour, §35 preview look + content, §36 now line on the calendar, §37 diagnose duplicate fetches. (§24 Piper is in Later.)
 3. Voice understanding continues in parallel via [voice-prompt-next.md](voice-prompt-next.md); do not put it back in this queue.
 4. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

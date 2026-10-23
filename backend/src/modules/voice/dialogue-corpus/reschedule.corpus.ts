@@ -1,4 +1,4 @@
-/** Reschedule specialist. Moves of «Звіт». Gym moves need a scope; a single day has no occurrence to move. */
+/** Time-only updates of «Звіт». The client kind is a seat (window, shift, or update). Gym needs a scope. */
 import { ask, line, moved, scenario } from './define';
 
 scenario('reschedule', 'day', line('перенеси звіт на завтра', moved));

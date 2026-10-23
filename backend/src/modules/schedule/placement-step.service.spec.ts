@@ -65,6 +65,11 @@ describe('PlacementStepService.place (dryRun crowded day)', () => {
       end: { dateTime: string };
     }>;
     linked?: boolean;
+    /** Schedulable phase on the user. Claim stays unphased when `attachPhase` is false. */
+    phaseWindow?: { startTime: string; endTime: string };
+    attachPhase?: boolean;
+    wakeTime?: string;
+    sleepTime?: string;
   }) {
     const claim = baseTask(opts.claim);
     const peerSlots = opts.peerSlots ?? [];
@@ -88,16 +93,18 @@ describe('PlacementStepService.place (dryRun crowded day)', () => {
     const phase = {
       id: 'phase-1',
       type: 'time_phase',
-      startTime: '09:00',
-      endTime: '12:00',
+      startTime: opts.phaseWindow?.startTime ?? '09:00',
+      endTime: opts.phaseWindow?.endTime ?? '12:00',
       weekDays: null as number[] | null,
     };
+    const attachPhase = opts.attachPhase !== false;
 
     const taskRepo = {
       findOne: jest.fn().mockResolvedValue({
         ...claim,
-        phase,
-        phases: [phase],
+        phaseId: attachPhase ? 'phase-1' : null,
+        phase: attachPhase ? phase : null,
+        phases: attachPhase ? [phase] : [],
       }),
       find: jest.fn().mockResolvedValue([]),
       save: jest.fn(async (row) => row),
@@ -121,8 +128,8 @@ describe('PlacementStepService.place (dryRun crowded day)', () => {
       {
         getSettings: jest.fn().mockResolvedValue({
           timeZone: TZ,
-          wakeTime: '08:00',
-          sleepTime: '23:00',
+          wakeTime: opts.wakeTime ?? '08:00',
+          sleepTime: opts.sleepTime ?? '23:00',
           weekendWorkEnabled: true,
           googleCalendarLinked: opts.linked !== false,
           recurringScheduleHorizonDays: 14,
@@ -508,5 +515,120 @@ describe('PlacementStepService.place (dryRun crowded day)', () => {
       searchHole: true,
     });
     expect(plan.outcome).toBe('unscheduled');
+  });
+
+  it('seats an unphased flexible at preferred 09:00 even when phases start later', async () => {
+    const { service } = build({
+      attachPhase: false,
+      phaseWindow: { startTime: '14:00', endTime: '18:00' },
+      wakeTime: '07:00',
+      sleepTime: '23:00',
+      claim: {
+        id: 'new',
+        name: 'Morning',
+        phaseId: null,
+        estimatedTimeInMinutes: 30,
+        scheduledStartTime: wall('09:00'),
+        scheduledEndTime: wall('09:30'),
+      },
+      linked: false,
+    });
+
+    const plan = await service.place('user-1', 'new', {
+      dryRun: true,
+      preferredStart: wall('09:00'),
+      durationMinutes: 30,
+    });
+    expect(plan.outcome).toBe('seated');
+    if (plan.outcome !== 'seated') return;
+    expect(plan.start).toBe(wall('09:00').getTime());
+    expect(plan.end).toBe(wall('09:30').getTime());
+  });
+
+  it('preferred outside the phase takes a free hole instead of Problematic', async () => {
+    const { service } = build({
+      phaseWindow: { startTime: '14:00', endTime: '18:00' },
+      wakeTime: '07:00',
+      sleepTime: '23:00',
+      claim: {
+        id: 'new',
+        name: 'Afternoon',
+        estimatedTimeInMinutes: 60,
+        scheduledStartTime: wall('09:00'),
+        scheduledEndTime: wall('10:00'),
+      },
+      linked: false,
+    });
+
+    const plan = await service.place('user-1', 'new', {
+      dryRun: true,
+      preferredStart: wall('09:00'),
+      durationMinutes: 60,
+    });
+    expect(plan.outcome).toBe('seated');
+    if (plan.outcome !== 'seated') return;
+    expect(plan.start).toBe(wall('14:00').getTime());
+    expect(plan.end).toBe(wall('15:00').getTime());
+  });
+
+  it('does not use phase time before the task start', async () => {
+    const { service } = build({
+      phaseWindow: { startTime: '08:00', endTime: '12:00' },
+      wakeTime: '07:00',
+      sleepTime: '23:00',
+      claim: {
+        id: 'new',
+        name: 'Afternoon',
+        estimatedTimeInMinutes: 30,
+        scheduledStartTime: wall('15:00'),
+        scheduledEndTime: wall('15:30'),
+      },
+      linked: false,
+    });
+
+    const plan = await service.place('user-1', 'new', {
+      dryRun: true,
+      preferredStart: wall('15:00'),
+      durationMinutes: 30,
+    });
+    expect(plan.outcome).toBe('problematic');
+  });
+
+  it('keeps an unphased hole search inside the task start, not earlier wake time', async () => {
+    const { service } = build({
+      attachPhase: false,
+      wakeTime: '07:00',
+      sleepTime: '23:00',
+      claim: {
+        id: 'new',
+        name: 'Afternoon',
+        phaseId: null,
+        estimatedTimeInMinutes: 60,
+        scheduledStartTime: wall('15:00'),
+        scheduledEndTime: wall('16:00'),
+      },
+      peerSlots: [
+        {
+          id: 'resolved',
+          start: '15:00',
+          end: '16:00',
+          task: {
+            id: 'resolved',
+            name: 'Kept',
+            scheduleState: ScheduleState.RESOLVED,
+          },
+        },
+      ],
+      linked: false,
+    });
+
+    const plan = await service.place('user-1', 'new', {
+      dryRun: true,
+      preferredStart: wall('15:00'),
+      durationMinutes: 60,
+    });
+    expect(plan.outcome).toBe('seated');
+    if (plan.outcome !== 'seated') return;
+    expect(plan.start).toBe(wall('16:00').getTime());
   });
 });

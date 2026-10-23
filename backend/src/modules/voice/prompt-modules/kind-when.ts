@@ -23,7 +23,7 @@ export const CREATE_KIND_WHEN_MODULE = `Decide kind in this order. First match w
 
 4. Flexible window — a span of WHEN an errand may be done, not an event that occupies those hours: between 14 and 18, from 14 to 18, after 18, not before 15, by end of day, until evening.
    kind flexible. earliestStartTime = span start, deadline = span end. "after 18" sets earliest only. End of the day, with no clock, sets deadline at Sleep on schedule today and earliest null. "from now until 18" sets earliest to now and deadline 18:00 on schedule today. scheduledStart/End null. Not unscheduled.
-   A window with no named day is schedule today. Do not ask which day.
+   A window with no named day is schedule today.
    Morning is the first three hours after wake, not a guessed clock. A morning whose end is still after now is ahead, even when now is before wake. They named that day and the morning has already ended → needs_clarification. Ask whether they still want that past morning. Do not keep the rest of the day. No named day and the morning has ended → the same morning on the next day.
    Before or after another activity, with no clock of its own, is a lookup in Open tasks, not a guessed window, and never an unscheduled task. Match by meaning. Before a matched task that has a start: deadline is that start. After a matched task that has an end: earliest is that end. The new name is the errand. No match: say that task is not open and ask. A match with no start and no deadline: say that task has no time and ask. Do not create in either case. Do not invent 23:59, now, or a clock. After work and after lunch are soft clocks, not this lookup.
    If they also named a preferred clock inside the span ("better at"), set scheduledStart/End too. A spoken duration is estimatedTimeInMinutes of the errand. It does not drop the window and it does not make the task fixed.
@@ -31,10 +31,10 @@ export const CREATE_KIND_WHEN_MODULE = `Decide kind in this order. First match w
 
 5. Day only — tomorrow / Friday (any language), no clock and no repeat. An afternoon ordinal hour is a clock, so it is not this branch. A named week with no day inside it is not this branch: needs_clarification, one question which day. Do not choose a weekday and do not set a day envelope.
    kind flexible. earliest at Wake, deadline at Sleep that schedule day. scheduledStart/End null.
-   The event fills a whole day and they gave no clocks → kind fixed. scheduledStart at Wake and scheduledEnd at Sleep on the named day, or on schedule today when they named no day. estimatedTimeInMinutes is that span. Do not ask for a start or an end clock. Not a placement window.
+   The event fills a whole day and they gave no clocks → kind fixed. scheduledStart at Wake and scheduledEnd at Sleep on the named day, or on schedule today when they named no day. estimatedTimeInMinutes is that span. Start and end are those clocks. Not a placement window.
    Dates named once are one-off tasks, not a series. A repeat on those days is one series.
 
-6. No day, clock, span, or repeat — kind unscheduled, isUnscheduled true, all schedule fields null, understanding complete. Do not ask which day. A place with no clock is this branch. A new errand placed before or after a named task is not this branch: use the lookup above.
+6. No day, clock, span, or repeat — kind unscheduled, isUnscheduled true, all schedule fields null, understanding complete. A missing day with no clock is this branch. A place with no clock is this branch. A new errand placed before or after a named task is not this branch: use the lookup above.
 
 Hours (copy schedule today/tomorrow from the user message):
 - Write YYYY-MM-DDTHH:mm:00 with no Z and no numeric offset. Do not convert zones.
@@ -58,8 +58,8 @@ Duration:
 - Not sure whether a span is the event's length or the window when to do it → one question. Do not guess.
 
 Questions — at most one, in the transcript language. ${QUESTION_PROPOSAL_MODULE}
-- Allowed: no action/name; length missing on a clearly long task; span might be either the event length or the placement window; the other activity is not in Open tasks; a named part of day on that day is already past; a named week with no day inside it; a clock with no day that is already past.
-- Not allowed: which day when they simply gave no day, which phase, which priority, a start or end clock when the event fills the whole day.
+Ask only when the utterance does not determine one storable value and no default fills it: no action or name; length missing on a clearly long task; a span that might be either the event length or the placement window; the other activity is not in Open tasks; a named part of day on that day is already past; a named week with no day inside it; a clock with no day that is already past.
+A missing day with no clock is Unscheduled. A missing phase stays empty. A missing priority is medium. An event that fills the day uses Wake and Sleep.
 
 Examples (any language works the same way):
 - "tomorrow at 15:00 dentist" → fixed, 15:00

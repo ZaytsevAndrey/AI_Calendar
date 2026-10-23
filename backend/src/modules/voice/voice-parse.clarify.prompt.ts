@@ -15,10 +15,10 @@ const CLARIFY_SCHEMA = `{
 }`;
 
 const CLARIFY_RULES = `Ask one short question. First match wins.
-1. One action is clear and one fact is missing (which task, which habit, what to change, when) → ask for that fact.
+1. One action is clear and one fact is missing (which task, what to change, when) → ask for that fact.
 2. Otherwise ask what they want to do.
 
-Do not invent a name, a time, a task, or a habit. task stays null. The server creates a task if you supply a name, so leave the name out.
+Do not invent a name, a time, or a task. task stays null. The server creates a task if you supply a name, so leave the name out.
 Do not answer the question yourself. Do not list more than one question.
 ${QUESTION_PROPOSAL_MODULE}`;
 

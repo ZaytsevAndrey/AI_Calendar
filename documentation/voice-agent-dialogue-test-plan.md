@@ -1,10 +1,10 @@
 # Voice agent dialogue — test plan and working rules
 
-**Status:** contract for the dialogue test cycle. Not all of it is what the code does today.  
+**Status:** how to run the dialogue eval. Not a product contract. Product behavior is [spec-voice-agent.md](spec-voice-agent.md). Sentences below that disagree with that file are withdrawn.  
 **Language:** English  
-**Last updated:** 20 October 2026  
+**Last updated:** 23 October 2026  
 
-This file is the oracle for testing Companion dialogues (`POST /voice/turn`) and for every fix made during that cycle. Shipped behavior stays in [spec-voice-agent.md](spec-voice-agent.md). Where this file and §6.4 differ, **this file wins** for the test cycle. Do not weaken a test so it matches the old three-question interview.
+Do not add a product rule here. Do not weaken a test so it matches the old three-question interview.
 
 Read this before the first live Groq call. The chat that wrote it will not be in context later.
 
@@ -61,24 +61,24 @@ The planner splits an utterance into text segments. It does not choose the actio
 - A clock with no day that is still ahead is today. A spoken hour has two places twelve hours apart. A named morning or night locks that half. Otherwise use the place still ahead of now. If both have passed, that is a question: do not write that start and do not move it to the next day. Twelve after noon is not midnight. A clock on a named day stays on that day.
 - A whole day — an event that fills the day, a placement onto a day with no clock, and a deadline that names a day and no clock — runs from Wake to Sleep. Not midnight to 23:59.
 - An event with no time is a question when. A task that is not an event, with no time, is created without a time. A place does not decide which.
-- Update changes fields of an existing task. Reschedule only seats it. One utterance that does both is two segments. Update does not write the placement.
-- Changing or finishing an existing task: the exact title is that task. A name that is only close in meaning is a question, and the open title is not copied. A new errand is created even when an open task is similar.
-- A bound on an existing task, when they did not call it the deadline and did not ask to move, is a question. A deadline they named, with a day and no clock, is that day's Sleep.
+- One existing task is one update: its fields, where it sits in time, and whether it is done. A time change with no other field seats the task. A time change together with another field is that same update.
+- Changing an existing task: the exact title is that task. A merely similar name is a question which task, and the open title is not copied. A new errand is created even when an open task is similar.
+- "By" or "until" a day is the deadline. The word "deadline" is not required. A day and no clock is that day's Sleep. "Not before" or "after" a clock is the earliest start.
 - A day-plan interview has no question cap. The user ends it by pressing Apply. The server does not propose on its own after a count of questions.
 
 If the model still emits a past one-off start, the normalizer keeps the rest of that civil day until 23:59. The prompt's job is to ask instead of emitting that start.
 
 ---
 
-## 5. Clarify budgets
+## 5. Ignored questions
 
-Three counters. They do not share a number.
+There is no clarification counter and no refusal after a fixed number of questions. Ignoring a question means the next utterance does not answer it.
 
-**Unclear piece of a clear utterance.** «Купи хліб і перенеси ту штуку.» Bread is held. The question is only about the second piece. «Звіт, на завтра» joins both into one reply. Two answers that still do not name the task drop only that piece. Bread is still created. The next unclear piece gets its own two questions.
+**One unclear piece beside a clear write.** «Додай стендап і перенеси оце.» The standup is held. The question is only about the move. The next utterance that does not name the task skips the move. The standup is still created. It is not asked again.
 
-**The whole utterance has no intent.** «Ну таке, зроби щось.» The planner may ask twice in the session, then `refuse`. A successful write resets this counter. A question about one piece does not spend it.
+**The whole utterance has no intent.** «Ну таке, зроби щось.» One question. The next utterance that still names nothing skips that question. It is not a `refuse`.
 
-A day-plan interview does not spend these counters and has no question cap of its own.
+A day-plan interview is not this queue and has no question cap. The user ends it with Apply.
 
 ---
 
@@ -112,14 +112,14 @@ The on-screen mini calendar is not part of this cycle. The turn payload is the p
 
 ## 7. Simple flows
 
-Offline layers first (no Groq): normalizer, resolve, batch, plan draft, engine dry-run, session (noise, confirm, cancel, report, both clarify counters).
+Offline layers first (no Groq): normalizer, resolve, batch, plan draft, engine dry-run, session (noise, confirm, cancel, report, an ignored question).
 
 Then the same flows through `POST /voice/turn` on 120b. Record call counts. Do not change the chain.
 
 | Id | Situation | Expect |
 |----|-----------|--------|
 | S1 | One new errand, no time | `act`, one create, Unscheduled |
-| S2 | A named open task is done | `act`, one complete |
+| S2 | A named open task is done | `confirm`, one complete. The router intent is update; a done-only change is applied as complete |
 | S3 | What is on today, no write | `answer`, zero intents, a read tool was called |
 | S4 | Two new errands in one utterance | `act`, two creates. A shared day is copied into each segment |
 | S5 | A new errand and a delete of an existing task | one `confirm` covering both |

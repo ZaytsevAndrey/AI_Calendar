@@ -2,7 +2,7 @@ import {
   collectSegments,
   continuePendingBatch,
   joinSpoken,
-  MAX_SEGMENT_CLARIFY,
+  skipOpenQuestions,
   type SegmentParse,
 } from './voice-agent.batch';
 import type { PendingBatch } from './voice-agent.types';
@@ -101,17 +101,41 @@ describe('continuePendingBatch', () => {
     expect(next.clarifyCount).toBe(1);
   });
 
-  it('re-asks while the budget lasts, then drops the segment', () => {
-    let batch = held();
-    for (let i = 1; i < MAX_SEGMENT_CLARIFY; i += 1) {
-      batch = continuePendingBatch(batch, { segment: 'move the thing', result: unclear('Which one exactly?') }, ctx);
-      expect(batch.unresolved[0]).toEqual({ segment: 'move the thing', question: 'Which one exactly?' });
-    }
-    batch = continuePendingBatch(batch, { segment: 'move the thing', result: unclear('Still?') }, ctx);
-    expect(batch.unresolved).toEqual([{ segment: 'call mom', question: 'When?' }]);
-    expect(batch.segments).toContainEqual({ summary: 'move the thing', status: 'dropped' });
-    expect(batch.notes).toHaveLength(1);
-    expect(batch.intents).toHaveLength(1);
+  it('queues one ignored question while another is still open', () => {
+    const next = continuePendingBatch(
+      held(),
+      { segment: 'move the thing', result: unclear('Which one exactly?') },
+      ctx,
+    );
+    expect(next.unresolved[0]).toEqual({ segment: 'call mom', question: 'When?' });
+    expect(next.unresolved[1]).toEqual({
+      segment: 'move the thing',
+      question: 'Which task?',
+      deferred: true,
+    });
+    expect(next.intents).toHaveLength(1);
+  });
+
+  it('skips the only ignored question', () => {
+    const single = held();
+    single.unresolved = [{ segment: 'move the thing', question: 'Which task?' }];
+    const next = continuePendingBatch(
+      single,
+      { segment: 'move the thing', result: unclear('Which one exactly?') },
+      ctx,
+    );
+    expect(next.unresolved).toEqual([]);
+    expect(next.segments).toContainEqual({ summary: 'move the thing', status: 'dropped' });
+    expect(next.notes).toHaveLength(1);
+    expect(next.intents).toHaveLength(1);
+  });
+
+  it('skips every open question when none was answered', () => {
+    const next = skipOpenQuestions(held(), ctx);
+    expect(next.unresolved).toEqual([]);
+    expect(next.segments).toContainEqual({ summary: 'move the thing', status: 'dropped' });
+    expect(next.notes).toHaveLength(2);
+    expect(next.intents).toHaveLength(1);
   });
 });
 

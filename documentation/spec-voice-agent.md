@@ -1,378 +1,208 @@
-# Specification: Voice Agent (hybrid)
+# Specification: Voice Agent
 
-**Status:** shipped (see [roadmap archive](roadmap-archive.md)).  
+**Status:** the only product contract for Companion.  
 **Language:** English  
-**Last updated:** 22 October 2026  
+**Last updated:** 23 October 2026
 
-The product surface is **Companion** (UK: **Помічник**) — a hybrid chat + voice helper: multi-turn dialogue, grounded Q&A, and write intents — without a second scheduler. Placement and conflict stay on [spec-conflict-rules.md](spec-conflict-rules.md) and [spec-incremental-placement.md](spec-incremental-placement.md). The shipped one-shot commander contract remains [spec-voice-commander.md](spec-voice-commander.md); this document supersedes it for the **Companion entry path** (`POST /voice/turn`). HTTP details in [api-reference.md](api-reference.md); Groq keys in [integrations.md](integrations.md).
+Companion (Ukrainian: Помічник) talks with the user and returns write intents. The server does not change the calendar. The client applies intents through the existing task, habit, and placement APIs. Placement and conflict stay in [spec-conflict-rules.md](spec-conflict-rules.md) and [spec-incremental-placement.md](spec-incremental-placement.md). The screen is [features/companion-panel.md](features/companion-panel.md). HTTP fields are in [api-reference.md](api-reference.md).
 
-One utterance may hold several writes plus a question (§6.6). A day plan is a multi-step dialogue: an interview with no question cap, then a proposal seated by the placement engine that the user edits by voice before Apply (§6.4). UI chrome: [features/companion-panel.md](features/companion-panel.md).
-
----
-
-## 1. Goals
-
-- Let the user **talk with Companion** that reads the calendar/tasks/habits and performs the same mutations the UI can, correctly.
-- Keep **one write contract**: orchestrator never mutates the DB; the client executes intents through existing task / habit / placement APIs.
-- Support **Q&A**, **multi-turn clarify**, **several writes in one utterance**, a **day-plan dialogue (interview → proposal → voice edits → Apply)**, and a Companion chrome that leaves the calendar usable on desktop.
-- Stay safe: destructive actions and day-plan apply require confirm; conflict / Problematic stay on existing client paths in v1.
-
-## 2. Non-goals (v1)
-
-- Wake word / always-on microphone.
-- Second scheduler brain or inventing free slots outside placement helpers.
-- Phases CRUD or Settings changes by voice.
-- Piping conflict-sheet or Problematic outcomes back into the agent session (deferred).
-- Server-side TTS on Render. Local Piper is queued in [tts-local.md](tts-local.md); keep the `VoiceSpeech` abstraction for that swap.
-- Streaming STT / word-by-word captions.
-- Rewriting Whisper / mic capture stack beyond silence detection + UI.
-- `undo` action (no product undo API after Generate removal).
-- Persisting voice sessions in the database.
+Other voice files do not add product rules. [spec-voice-commander.md](spec-voice-commander.md) is the old one-shot commander. [voice-agent-dialogue-test-plan.md](voice-agent-dialogue-test-plan.md) is how the dialogue eval runs. [voice-fix-flow.md](voice-fix-flow.md) is how a rule change is edited. [voice-prompt-next.md](voice-prompt-next.md) is a work queue.
 
 ---
 
-## 3. Decision log (locked)
+## 1. A turn
 
-| ID | Topic | Decision |
-|----|--------|----------|
-| L1 / T1 | Client entry | New voice UI **always** calls `POST /voice/turn`. |
-| L2 | Clarify budget | Max **2** clarifying questions, then refuse. |
-| L3 | Tool surface | Full **read + write-intent** tools mirroring product APIs; limit = product contract, not a short Q&A allowlist. |
-| L4 | Write authority | Orchestrator **never** writes DB; client executes intents only. |
-| L5 | Confirm | Every write (one task or a batch, Companion or Fast create) shows preview cards and waits for Apply or spoken yes. Day-plan apply does the same. |
-| L6 | Day-plan / placement | Same requests as normal engine/UI → same Unscheduled / Problematic / conflict rules. Propose without write until Confirm. |
-| L7 | “this” / “current” | LLM resolves from context; if unclear → clarify (counts toward budget). |
-| L8 | Close widget | **Discard** pending clarify/confirm (no auto-create on close). |
-| L9 | After write | Voice surface **stays open** for follow-up. |
-| T2 | Intent shapes | Reuse `executeVoiceCommand` + create payloads; extend for day-plan. |
-| T3 | Batch | Multiple write intents per turn allowed; client runs **sequentially**; stop on confirm gate / conflict / error. |
-| T5 | Failure | One automatic fallback to `parse-task`; then error + Retry. |
-| T6 | Conflict feedback | v1: conflict / Problematic **not** fed back into agent session. |
-| T7 | Legacy API | Keep public `POST /voice/parse-task` for compatibility, tests, fallback. |
-| S1–S2 | Session store | **In-memory** only; **no idle TTL**; clear on widget close (and server restart). |
-| S3 | History | Only the **current open-widget chat**. |
-| S4 | Tabs | Separate `sessionId` per browser tab. |
-| S5 | Open | **Every widget open → new session.** |
-| U1 | Chrome | Product name **Companion** (UK: Помічник). Phone = bottom sheet; desktop = **floating movable/resizable** panel (calendar stays usable; geometry in `localStorage`). |
-| U2 | Thread | Scrollable user + Companion bubbles. |
-| U3a | End of speech | Silence / VAD ends the utterance; auto-listen when mic is on. Footer **Done** can finish early while listening. |
-| U3b | Two skips | `skip_speak` = stop TTS only; `cancel` = dismiss pending turn (+ stop speak). |
-| U3c | Actions | Sparse footer by state: idle = Close + mic; listening = Done; speaking = Skip; confirm = **Apply** + Cancel; error = Retry + Close. No redundant “Start speaking”. |
-| U4 | Audio visual | Listening + speaking visual. |
-| U5 | TTS content | Speak clarify, confirm, success/refuse, **and Q&A answers**; not busy/errors. |
-| U6 | Preview UI | Confirm / day-plan show **calendar-style change cards** (name, time, duration, type). Confirm response may include `intents[]` for preview; apply still waits for Apply / spoken yes. |
-| U7 | Look | Current design system (`ide` tokens); not a separate brand theme. |
-| M1 | Multi-intent scope | Any writes **plus** Q&A in one utterance. The planner splits it into at most **6** segments; each segment goes through the normal router + specialist parse. |
-| M2 | Partial clarify | Resolved segments are held while one unclear segment is asked about; at most **2** questions per segment, then it is dropped with a spoken note. If the reply comes back as new write segments, the held resolved writes join them. A command specialist that cannot tell which task is meant asks (no "current task" fallback). |
-| M3 | Batch confirm | **One** combined confirm for every write batch. Apply or spoken yes returns `act`. |
-| M4 | Execution report | After running intents (no conflict sheet), the client sends `actionId: 'report'` with per-intent statuses; no LLM call. |
-| D1 | Plan dialogue | The interview has no question cap. The user ends it by pressing Apply. `build_plan` seats the current draft. Voice edits of the proposal come before Apply. |
-| D2 | Plan scope | Unscheduled tasks, new tasks named in the dialogue, and re-seating flexible one-offs already on that day. Fixed tasks, series, external events are never moved. |
-| D3 | Plan seating | The placement engine (dry-run) seats the draft in priority order; each seated item blocks the next. Nothing is written until Apply. |
-| D4 | Apply mapping | Unscheduled → `window` (+ `clearUnscheduled`); flexible → `shift` of its slot (skipped when unchanged); new → flexible create at the proposed slot with an end-of-day deadline. |
-| D5 | Planner model | Planner calls try DeepSeek (`DEEPSEEK_API_KEY`, default `deepseek-flash`), then Qwen (`QWEN_API_KEY`), then Gemini 3.8 Flash (`GEMINI_API_KEY`, thinking `low`), then Groq `openai/gpt-oss-120b`. A missing key skips that step. Parse stays on gpt-oss-20b. `VOICE_LLM_PROVIDER=deepseek` forces every planner and parse call onto DeepSeek and does not fall back. Speech-to-text stays on Groq. |
-| F1 | Fast create | The Companion panel has a switch, remembered in `localStorage`. **Companion** is the dialogue above. **Fast create** changes only new tasks: one phrase becomes a create, with at most one question, and only when there is no name or the same span cannot be stored both as the event length and as the placement window. Other missing details use the existing defaults (no day → unscheduled, no length → default duration, a past clock with no day → that clock on schedule tomorrow). Moves, questions, and day plans stay on the Companion rules. The preview card and Apply stay. |
+`POST /voice/turn` takes the transcript, or a button (`confirm`, `cancel`, `build_plan`, `report`).
+
+| Outcome | What it means |
+|---------|----------------|
+| `answer` | A reply from a read tool or from the chat. No write. |
+| `clarify` | One question. Nothing in that question is written. |
+| `confirm` | Preview cards. The client waits for Apply or a spoken yes. |
+| `act` | The client runs `intents[]`. |
+| `refuse` | The agent cannot do this. |
+
+Every write waits for Apply or a spoken yes. Spoken yes and `confirm` are the same. Spoken no and `cancel` are the same. After a successful write the panel stays open.
+
+The agent states only what the user said or a tool returned. It does not invent a task, a gap, a clock, a duration, or a travel time.
 
 ---
 
-## 4. Architecture
+## 2. Questions
 
-```mermaid
-flowchart LR
-  mic[Mic_auto_listen] --> vad[Silence_end]
-  vad --> stt["POST /voice/transcribe"]
-  stt --> turn["POST /voice/turn"]
-  turn --> orch[VoiceOrchestrator]
-  orch --> reads[Read_tools_server]
-  orch --> reply[Assistant_message]
-  orch --> intents[Write_intents]
-  orch --> actions[Action_buttons]
-  intents --> client[Client_sequential_execute]
-  client --> apis[Existing_REST_plus_placement]
-  apis --> conflict[Shared_conflict_sheet]
-  reply --> ui[Hero_voice_surface]
-  reply --> tts[VoiceSpeech]
-```
+`assistant` asks one question only when the utterance does not determine a single value the calendar can store, and no default fills that hole.
 
-**Rules**
+A default fills the hole. A task that is not an event and has no time is Unscheduled. A normal length is the default duration. A clock that is still ahead and has no day is today.
 
-- Reads run **on the server** during the turn (grounded answers).
-- Writes are **intents in the response**; client applies them via existing APIs.
-- Conflict sheet and Problematic inbox behave as today; agent session does not consume their outcomes in v1.
-- `parse-task` remains for fallback / tests; it is not the new UI happy path.
+The question proposes the likelier reading. When the readings are equal, it asks which and does not pick. A proposal is not a write.
+
+A placement that needs another task's time is not created when that task has none.
+
+An event with no time is a question when. A meal with other people is an event.
+
+### Ignored questions
+
+This replaces a cap of two questions. Ignoring a question means the next utterance does not answer it.
+
+- Several questions, and the user ignored some of them: the ignored ones go into a question queue.
+- Several questions, and the user ignored all of them: skip those questions.
+- One question, and the user ignored it: skip that question.
+
+Skip means that piece is not written and is not asked again. The queue is the set of ignored questions that are still waiting. A day-plan interview is not this queue: it has no question cap, and the user ends it with Apply.
 
 ---
 
-## 5. Turn outcomes
+## 3. How a turn is split
 
-| Outcome | Meaning | Typical next UI |
-|---------|---------|-----------------|
-| `answer` | Grounded Q&A; no write | Speak + thread; auto-listen |
-| `clarify` | Ask; wait for next utterance | Speak question; listen (clarify count++) |
-| `confirm` | Needs explicit confirm before intents | Show summary / plan list + `confirm`/`cancel` |
-| `act` | Client should run `intents[]` | Execute; short result; stay open |
-| `refuse` | Cannot proceed safely | Speak/show reason; listen or idle |
-| *(conflict)* | Not an orchestrator outcome | Client opens shared conflict sheet during execute |
+One planner call, then each write goes through the router and one specialist. The planner does not choose the action. The router chooses `create`, `update`, `delete`, `skip`, or `needs_clarification`. Time, other fields, and done on one existing task are one `update`. The specialist fills only that intent's fields.
 
-Clarify count is per open session. After **2** clarifications without resolution → `refuse`.
+A calendar question is answered from a read tool before the planner speaks. At most two tool rounds. A question and a write in one utterance: the answer is spoken, and each write is its own segment. The spoken reply does not describe the writes. The app summarizes those.
 
----
+A segment is one self-contained command, in the transcript's language, in the user's words. At most six, in spoken order.
 
-## 6. Logic
+- Every write is its own segment: create, one update of one task, skip, cancel, delete. An update carries that task's fields, its time, and whether it is done.
+- Dates named once are one segment each. A clock they share is repeated in each and does not join them. A repeat on those days is one segment.
+- Two errands are two segments. One errand with several objects of the same action is one segment.
+- A field change and a placement of the same task are one update. The clock is not copied onto a different task that is only being removed.
+- A later correction of a task this utterance is creating is merged into that one create. The last values win. That is not a separate move.
+- A pronoun that points at a task already in the chat or in a tool result becomes that task's name. When the planner cannot tell which task, it still emits the segment. The specialist asks.
+- A clear piece is held while an unclear piece is a question. The ignore rule in §2 decides a question the user does not answer.
+- While a clarification is open, the next utterance is the answer only when it gives the missing fact. A reply that does not is the ignore rule in §2, and the utterance is decided on its own.
+- Phases and settings are not available. That is `refuse`.
 
-### 6.1 Dates and times (LLM-first, split prompts)
-
-Parse is **two LLM steps**: (1) router → `intent` + `language`; (2) one specialist prompt per intent. Each specialist states the JSON the resolver reads, a first-match decision list, and what not to invent. Clarifying questions use the transcript language. Router intent `needs_clarification` returns a question only (`task` and `command` null) and does not create a task.
-
-Create specialist focuses on **kind** (`fixed` / `flexible` / `unscheduled` / `recurring`), **name**, and **when**. The planner only splits text; the router chooses the action. Dates named once are one-offs, and a shared clock does not join them; a clock makes a series only when the utterance is already a repeat. A day with no clock, a whole-day event, and a deadline that names a day and no clock run from Wake to Sleep. An event with no time is a question when. A task that is not an event, with no time, is Unscheduled. A place does not decide. A clock with no day that is already past is a question; the model must not write that start or move it to the next day. A clock that is still ahead, with no day, is today. Relative speech (“in 3 hours”) resolves from Local calendar anchors. The schedule day lasts through three hours after sleep and begins three hours before wake. Update changes fields; reschedule only seats the task. The server does **not** re-parse the transcript for days/clocks beyond contract guards (name required; if a past one-off start is still emitted, the normalizer keeps the rest of that civil day until 23:59; a past preferred inside an open window is dropped; recurring clocks stay).
-
-### 6.2 Resolve “this” / “current”
-
-The model uses session chat, now-overlapping app task, current habit block, and last mentioned entities. If still ambiguous → `clarify`. No hard-coded task-only rule.
-
-### 6.3 Confirm policy
-
-| Kind | Confirm |
-|------|---------|
-| Any write (create, complete, move, delete, …) | Always. One card per write, then Apply |
-| day-plan apply | Always |
-| Pure `answer` | No |
-
-Spoken yes/no and action button `confirm` / `cancel` are equivalent.
-
-### 6.4 Day-plan dialogue
-
-Shipped behavior is the list below. The dialogue test cycle follows a newer contract: the agent does not end the day-plan dialogue, and the draft grows until the user presses Apply. Oracle: [voice-agent-dialogue-test-plan.md](voice-agent-dialogue-test-plan.md). Where that file and this section differ, the test plan wins for tests and for fixes in that cycle.
-
-The planner LLM decides `plan_start` only when the user explicitly asks to plan, arrange or organize a whole day; listing to-dos for a day stays multi-intent creates (§6.6).
-
-1. **Draft.** The server opens a `planDraft` in the session for that day: up to 10 open Unscheduled tasks (earliest deadline first) plus flexible one-offs that have a single future slot that day (their current start becomes the preferred start, so they stay put unless something conflicts). Constraints and new tasks from the same utterance are applied as plan edits.
-2. **Interview (optional).** When the user wants to plan together, the reply is `clarify` with `actions: ['build_plan', 'cancel']` and `plan.stage = 'interview'`. Each answer becomes plan edits. There is no question cap and the server does not propose on its own after a count. `build_plan` seats the current draft.
-3. **Proposal.** `VoiceDayPlanner` seats the draft with `PlacementStepService.previewSequence` (dry-run, under the user lock, external calendars fetched once). Items are seated in draft order; a seated item becomes an anchor for the next ones. Plan constraints (preferred start, earliest, deadline, duration) override the stored row. Items that do not fit are listed as `unplaced` with a reason (`no_room` / `deadline_passed` / `conflict`). An empty proposal returns to the interview.
-4. **Review.** The reply is `confirm` with `plan.stage = 'review'`, `actions: ['confirm', 'cancel']` and empty `intents`; the Apply intents are held server-side. The mic stays live: every utterance is a plan edit (`add_task`, `include_task`, `remove_item`, `set_preferred_start`, `set_window`, `set_duration`, `set_order`), and the server re-seats and returns the next `revision` with `changedItemIds` (moved, new, or newly unplaced). Questions are answered while the plan stays on screen. Writes about other days run as normal intents beside the plan; the following `report` re-seats the plan against the new calendar.
-5. **Apply.** `confirm` (button or spoken yes) returns `act` with the mapped intents (D4) and drops the draft; the client applies them one by one. `cancel` drops the draft (a pending write confirm opened during review cancels back to the plan first). Closing the widget discards it.
-
-### 6.5 Close / open / stay open
-
-- Open widget → **new** `sessionId`.
-- Close → discard server session + pending UI state (no auto-create).
-- Successful write → sheet **stays open**; same session continues.
-
-### 6.6 Several intents in one utterance
-
-1. The planner returns `steps` with `answer` (spoken reply to any question, grounded in read tools) and `segments` (one self-contained command per write, in the transcript language, at most 6, in spoken order). A shared day or time is copied into each segment; pronouns become task names; a later part that changes an earlier one is merged into one segment.
-2. Each segment is parsed by the existing router + specialist (`parse-task` logic) and mapped to intents. A segment that needs a question is held (M2); refusals and parse failures become spoken notes.
-3. When every segment is resolved, the reply is `act` (or one `confirm` when any write requires it, M3) with all intents and `segments[]` statuses. The spoken line is the answer first, then each write summary, then notes.
-4. If the planner fails, one `parse-task` run on the whole transcript is the fallback (`legacyParse` set).
-
-### 6.7 Execution report
-
-After the client runs a batch without opening the conflict sheet, it sends `{ actionId: 'report', executionReport: { results: [{ summary, status }] } }` where status is `applied` / `skipped` / `conflict` / `error`. The server appends a system line to the chat history (so the next planner turn knows what really happened). If a plan is open in review with nothing pending, the reply re-seats and re-shows it; otherwise it is an empty `answer`. The client shows the batch cards with their statuses ("Done just now").
-
-### 6.8 Fast create
-
-Optional `mode` on `POST /voice/turn` (and on the parse fallback): `assistant` (default) or `fast_create`. The panel switch sends it on every turn and stores it in `localStorage` (`companion-voice-mode`).
-
-In `fast_create` the planner and the create specialist get an extra block that overrides earlier "ask" lines for a **new task** only. A move, a completion, a skip, a delete, a calendar question, and a day plan keep §6.4–§6.6. A new task is still a preview card and Apply. The one allowed question is a missing name, or a span that cannot be stored as both the event length and the placement window.
+A new errand is `create` even when an open title is close in meaning, and even when the verb sounds like update or delete ("update the resume", "delete the photos", "close the ticket"). Update, delete, and skip are only for a task they are already pointing at.
 
 ---
 
-## 7. API surface
+## 4. Create
 
-### 7.1 `POST /voice/turn`
+The specialist picks the first matching kind, then fills only that kind's fields.
 
-**Request (conceptual)**
+1. **Recurring.** The utterance is already a repeat: every day, every morning, every evening, weekdays, named weekdays, every N days, every other week, monthly, the last or first day of the month. Every N days is `DAILY` (there is no interval field). Every other week is `BIWEEKLY`. A weekday named once is not a repeat. Dates named once are not a series. A clock does not make a repeat. When the utterance is a repeat and names a clock, that clock is the series clock. No clock leaves the series start empty. Do not ask for a clock.
+2. **Fixed.** One concrete clock and no repeat. A softened hour is not this kind. "In N hours" is this kind: add N hours to now. A span that is the event itself (a meeting from one clock to another) is fixed: the span is the duration, not a placement window.
+3. **Flexible preferred.** A soft clock (around an hour, after lunch, after work, about noon, closer to evening). Morning is not this kind. A named day that is still ahead also sets earliest at Wake and deadline at Sleep that day. No named day leaves earliest and deadline empty.
+4. **Flexible window.** A span of when the errand may be done: between two clocks, after a clock, not before a clock, until a part of day, by end of day. Earliest and deadline are that span. The span length is not the task length. End of the day with no clock is deadline at Sleep today. A window with no named day is today. A preferred clock inside the window is stored too and does not make the task fixed.
+5. **Day only.** A named day and no clock. Earliest at Wake, deadline at Sleep. A named week with no day inside it is a question which day. Do not pick a weekday. An event that fills the whole day is fixed from Wake to Sleep. Do not ask for a start or an end clock.
+6. **Unscheduled.** No day, clock, span, or repeat. Do not ask which day. A place with no clock is this kind.
 
-- `transcript` (string, required after STT)
-- `sessionId` (string, required for an open widget; client generates on open)
-- `locale` / timezone: from user settings on server (same as parse-task)
-- Optional: client signal for action tap (`actionId`: `confirm` \| `cancel` \| `build_plan` \| `report`) instead of a new transcript
-- Optional `executionReport` with `actionId: 'report'` (§6.7)
-- Optional `mode`: `assistant` (default) or `fast_create` (§6.8)
+A spoken hour has two places twelve hours apart. A named morning locks the earlier place. A named afternoon or a bare hour from 1 to 7 locks the later place. A named night locks the night place. Otherwise use the place still ahead of now. If both have passed, ask. Do not write that start and do not move it to the next day. Twelve is noon. Midnight is not the other place. A clock on a named day stays on that day. A fraction toward an hour is the clock, not the length.
 
-**Response**
+Morning is the first three hours after wake. A part that has not ended is still ahead, including before wake. They named that day and the morning has already ended: ask whether they still want that morning. No named day and the morning has ended: the same morning on the next day.
 
-- `sessionId`
-- `outcome`: `answer` \| `clarify` \| `confirm` \| `act` \| `refuse` \| `legacy_parse`
-- `assistantMessage` (string; shown + optionally spoken)
-- `intents[]`: zero or more write intents (create / command shapes compatible with today’s client executor). A plan under review sends `[]`; its intents come with the Apply `act`.
-- `actions[]`: subset of `confirm` \| `cancel` \| `retry` \| `skip_speak` \| `build_plan`
-- `plan`: `{ day, stage: 'interview' | 'review', revision, items[{ itemId, taskId, source, name, start, end, durationMinutes }], unplaced[{ itemId, name, reason }], changedItemIds[] }` or `null`
-- `segments[]`: `{ summary, status: 'ready' | 'clarify' | 'refused' | 'dropped' }` for a multi-intent turn
-- `clarifyCount`, `legacyParse`
+The schedule day lasts through three hours after sleep and begins three hours before wake. That choice only picks the date.
 
-### 7.2 Existing endpoints
+Spoken length wins. A normal task with no length uses the default duration. A clocked event or a placement window with no spoken length uses that default and does not ask how long. No length, no clock, no window, and the task clearly needs longer than the default: one question how long. A span that might be either the event length or the placement window: one question which reading. Do not guess.
 
-| Endpoint | Role |
-|----------|------|
-| `POST /voice/transcribe` | Unchanged STT |
-| `POST /voice/parse-task` | Compatibility, tests, **one** orchestrator failure fallback |
+The title is the errand, in the transcript's language, not the request around it. Drop politeness, the create verb, the day, the clock, and the length. Two objects of one errand stay one title. Two errands are not one title. When neither an object nor an activity remains, ask what to call it. Do not invent a title. Priority is medium unless they named urgency.
 
-### 7.3 Write intent shapes
+Before or after another activity, with no clock of its own, looks up Open tasks. Before a task that has a start, the deadline is that start. After a task that has an end, earliest is that end. No match, or a match with no time: ask. Do not create and do not invent a clock. After work and after lunch are soft clocks, not this lookup.
 
-Reuse today’s resolved command kinds and create task payload consumed by `executeVoiceCommand` / create flow. Day-plan apply items use the same shapes (D4): `window` with `clearUnscheduled`, `shift` with `slotId`, and create.
+Phase is chosen after kind. A named phase is used only when its window contains the time already set. Otherwise the narrowest phase that contains that time. No time: a phase only when the title matches a phase name.
 
 ---
 
-## 8. Tool registry (starter + extension)
+## 5. An existing task
 
-### 8.1 Starter read tools (server)
+The spoken title is the same as an Open task title: that task. "This", "it", or "that" with no title is the app task happening now. The word for the present moment is a time. Anything else, including a merely similar title: one question which task. Do not copy the open title and do not create a task here.
 
-- `get_now_next`
-- `get_day_agenda` (today or named civil day in settings TZ)
-- `list_unscheduled`
-- `list_problematic`
-- `find_free_gaps`
-- `match_task` / `match_habit`
-- `get_habit_status` (streak / today check-in)
-- `get_task` (by id)
+A new errand they asked to add is created as they said, even when an open task is similar.
 
-### 8.2 Write intents (client-executed)
+A repeating Open task needs a scope. One day they already named, including today, is that occurrence. This day and following is the series from that day. The whole series is all. They did not say which: ask, and do not delete or edit yet. A name, priority, phase, or description change is the whole series. One day of those fields does not exist.
 
-All Voice Commander mutations: create/update/delete/complete/skip/cancel/move/window, habit CRUD/check-in/uncheck, plus day-plan apply items. No phases/settings.
+A bound is a time field on that same update. "By" or "until" a day or a part of day is the deadline. "Not before" or "after" a clock is the earliest start. The word "deadline" is not required. A day and no clock is that day's Sleep.
 
-### 8.3 Adding a voice tool
+### Update
 
-When a later product feature needs a new capability:
+One existing task. Fields, where it sits in time, and whether it is done are one update. A present field is saved. Null clears it. Nothing changed: ask what to change.
 
-1. Add a tool id to the registry (read vs write-intent).
-2. Define JSON schema + English prompt line.
-3. Implement server read **or** client intent executor — never a parallel scheduler.
-4. Unit test the tool / intent mapping.
-5. Append one short subsection under this heading (and tick roadmap if queued).
+Rename keeps the old title as the target and stores the new title beside it. A length is the duration only when they said how long the task takes. A window is not a length. Priority is set only when they said it. Clearing the time clears start, end, earliest, and deadline.
 
-Do **not** create a separate Cursor skill for tools; use [new-feature-workflow](../.cursor/skills/new-feature-workflow/SKILL.md) and update this spec in wrap-up.
+Do now is the start at the current clock. A start and an end are that window. A day and no clock is Wake to Sleep that day. A clock that is already past, with no day, is a question when. A clock and no end keeps the current duration. Morning is wake plus three hours. No day and no clock, when they asked to place the task: ask when.
 
----
+Done on a one-off sets status completed. Done on a series uses the scope above: one occurrence, from this day on, or the whole series. A name that is not an open task, said as close or finish, is a new errand. A time change with no other field still seats the task. A time change together with another field is the same update.
 
-## 9. Session
+### Delete
 
-| Rule | Detail |
-|------|--------|
-| Store | In-memory on API process |
-| Key | `sessionId` (+ user id) |
-| Scope | One chat = one open widget instance; per tab |
-| History | Current chat turns only (compact server-side copy for the LLM) |
-| TTL | None while open; delete on close; gone on process restart |
-| Open | Always new `sessionId` |
+Removes the task. It does not ask "are you sure". The app asks before it writes. It does not invent a replacement. Deleting something that is not an open task (photos, files) is a new errand.
+
+### Skip
+
+Drops the next open occurrence, or the one happening now. Another day is a question: skip only drops the next open time. The whole series is a question: skip is this occurrence only. An Unscheduled task is cancelled, not deleted. A fixed event cannot be skipped: the app refuses.
 
 ---
 
-## 10. UI (hero voice surface)
+## 6. Habits
 
-### 10.1 Layout
-
-- **Mobile:** near full-screen dismissible surface.
-- **Desktop:** large modal/sheet, same structure.
-- **Thread:** scrollable user + assistant messages for the session.
-- **Mode:** Companion / Fast create, above the thread. Companion is the default. The choice is kept in `localStorage`.
-- **Design:** current ide design system; elevated composition (mic, thread, audio visual) — not a new brand theme.
-
-### 10.2 States
-
-| State | UI | Actions |
-|-------|-----|---------|
-| `listening` | Polished **input** audio visual; mic active | Silence ends utterance; close discards |
-| `thinking` | Latest user transcript in thread; working | Close discards |
-| `speaking` | Assistant text; polished **speaking** visual; mic gated | `skip_speak` and/or `cancel` as offered |
-| `clarify` | Question in thread → return to listening | actions; close discards |
-| `confirm` | Summary + preview cards (writes) or the plan cards with changed badges and a "Did not fit" list | `confirm` / `cancel`; plan review keeps mic + composer live for edits; close discards |
-| plan interview | Question + "Planning {day}" header | **Make plan** (`build_plan`) / `cancel`; mic live |
-| `ready` | Thread; auto-listen when next input expected | close |
-| `error` | Error copy | `retry` / close |
-
-Shared **conflict sheet** remains the existing overlay (not redesigned inside voice in v1).
-
-### 10.3 End of speech (no Stop)
-
-- Primary UX: **silence detection** after speech energy (VAD / silence timeout).
-- No Stop button as the main control.
-- Auto-start listening on open and when the agent expects another user utterance (after speak ends, or immediately if TTS off).
-
-### 10.4 Two skip controls
-
-| Action id | Effect |
-|-----------|--------|
-| `skip_speak` | Stop TTS + speaking animation only; keep message, plan, pending confirm, intents |
-| `cancel` | Dismiss pending confirm / abandon that assistant act; stop speak if playing |
-
-### 10.5 Action buttons
-
-Orchestrator returns `actions[]` from the fixed vocabulary. Client renders labeled buttons (i18n). Tap equals that choice. Default speaking chrome may always expose `skip_speak`; confirm turns expose `confirm` / `cancel`.
-
-### 10.6 Audio visual (replace current equalizer)
-
-Replace `VoiceMicEqualizer` aesthetics. One visual language, two modes:
-
-- **Listening:** driven by real mic level.
-- **Speaking:** motion while TTS plays (pulse/waveform); if `speakVoiceReplies` is off, text remains; speaking motion may be omitted.
-
-Concrete CSS/SVG/canvas (or small dependency) is chosen at implementation; must read as intentional on mobile full-screen.
-
-### 10.7 TTS
-
-- Existing `VoiceSpeech` + `speakVoiceReplies`.
-- Speak: clarify, confirm summary, success/refuse, **Q&A answers**.
-- Do not speak: busy labels, mic permission errors, raw exceptions.
-- Stop speak on `skip_speak`, `cancel`, new listen start, or close.
+Companion does not create, edit, check, or delete habits.
 
 ---
 
-## 11. i18n
+## 7. Several writes in one utterance
 
-- UI chrome + TTS language follow settings `language` (`en` \| `uk`).
-- Spoken input stays multilingual via Whisper + prompts (as today).
-- New strings: full-screen voice labels, skip speak, dismiss, listening without Stop, day-plan proposal chrome, action labels, session/error copy.
+Covered by the split in §3. Writes about another day, while a day plan is open, are normal intents beside the plan. The following execution report re-seats the plan. The client runs intents one by one and stops on a conflict or an error. After a batch with no conflict sheet, the client sends `report` with each status. That call does not use the model.
+
+---
+
+## 8. Fast create
+
+`mode` is `assistant` or `fast_create`. The panel switch stores it in `localStorage`.
+
+Fast create overrides the ask lines for a new task only. Moves, completions, skips, deletes, calendar questions, and day plans stay on the sections above.
+
+A new task is a create even when it is an event with no clock, a clock whose both places have passed, or a named week with no day. The only questions are a missing name, or a span that cannot be stored both as the event length and as the placement window.
+
+Anything else is filled. No spoken length, even on a long task, uses the default duration. A past clock with no day is that clock tomorrow. A past part of the day is that part tomorrow. A named week with no day is the whole week, Wake on the first day through Sleep on the last. Do not pick one weekday. Before or after a task that is missing or has no time: still create the errand, and if no other when remains it is Unscheduled.
+
+The preview card and Apply stay.
+
+---
+
+## 9. Day plan
+
+`plan_start` only when the user asks to plan, arrange, or organize a whole day. A list of errands for a day is §3, not a plan. One event that fills a whole day is a create, not a plan.
+
+The draft holds the open Unscheduled tasks for that day and the flexible one-offs already on it. Fixed tasks, series, and external events are never moved. The planner receives this unapplied draft on every turn: day, stage, each item, and whether a proposal has seated it. `plan_edits` changes that draft. Nothing is written until Apply.
+
+The opening says what a tool just returned: a free gap, the tasks already there, or that the day has no gap. It does not invent a gap, a clock, or a task.
+
+While the plan is open, a write about that day is a plan edit, not a segment. A question is answered and the plan stays open. The agent never ends the dialogue.
+
+Edits are: add a task that does not exist yet, include an existing open task, remove an item, set a preferred start, set a window, set a duration, set the order. Earlier items get the better slots. A bare hour in a window uses the place still ahead. A named morning or night locks that half. Midday as a deadline is 12:00.
+
+1. **Interview.** `clarify`, `plan.stage = interview`, actions `build_plan` and `cancel`. Each answer edits the draft. One question at a time. Never repeat a question. The server does not close the interview by itself.
+2. **Proposal.** The placement engine seats the draft in a dry run, in draft order. A seated item blocks the next. Items that do not fit are `unplaced` (`no_room`, `deadline_passed`, `conflict`). An empty proposal returns to the interview.
+3. **Review.** `confirm`, `plan.stage = review`. The mic stays on. An utterance edits the plan and the server re-seats it. Changed items are marked.
+4. **Apply.** `confirm` or a spoken yes returns `act` with the mapped intents and drops the draft. `cancel` drops the draft. A pending write confirm during review cancels back to the plan first. Closing the panel discards it.
+
+Apply mapping: an Unscheduled task becomes `window` with `clearUnscheduled`; a flexible task becomes `shift` of its slot; a new task is a flexible create at the proposed slot with an end-of-day deadline.
+
+---
+
+## 10. Session and screen
+
+The session is in memory, one per open panel, a new `sessionId` on every open. Close discards the session and any pending question or confirm. There is no wake word. The server does not run TTS.
+
+Phone is a bottom sheet. Desktop is a floating panel. The thread shows the user and Companion. Confirm and the day plan show calendar-style cards.
+
+`skip_speak` stops speech only. `cancel` dismisses the pending confirm or the plan.
+
+---
+
+## 11. API
+
+`POST /voice/turn`
+
+- In: `transcript`, `sessionId`, `actionId`, `executionReport`, `mode`. Time zone comes from settings.
+- Out: `outcome`, `assistantMessage`, `intents[]`, `actions[]`, `plan`, `segments[]`.
+
+`POST /voice/transcribe` is speech to text. `POST /voice/parse-task` remains for a fallback and for tests. It is not the Companion path.
+
+Read tools used to ground an answer: `get_now_next`, `get_day_agenda`, `list_unscheduled`, `list_problematic`, `find_free_gaps`, `match_task`, `match_habit`, `get_habit_status`, `get_task`.
+
+Write intents the client runs: create, update, delete, complete, skip, cancel, move, window. A done-only update becomes complete. A time-only update seats the task. No phases and no settings.
 
 ---
 
 ## 12. Tests
 
-| Layer | Cover when implementing |
-|-------|-------------------------|
-| Unit | Planner decision parser; batch assembler + partial clarify; plan-draft reducer + apply mapping; `VoiceDayPlanner` with a mocked preview; orchestrator flows with mocked Groq; `previewSequence` |
-| Live eval | `npm run voice:eval:dialogue` — the dialogue corpus (one Ukrainian scenario per branch). |
-| API e2e | `/voice/turn` multi-intent act / confirm + report; day plan propose (real dry-run) → edit → apply; interview → `build_plan` → cancel; planner failure fallback |
-| Playwright | Multi-intent cards + Apply + statuses; interview → Make plan → voice edit → changed badge → Apply; close discards the plan |
-
-Extend [e2e-test-coverage.md](e2e-test-coverage.md) with A-VOI / U-VOI rows when each phase ships. Keep existing commander cases green where `parse-task` remains.
-
----
-
-## 13. Phased delivery
-
-Implement in order (one chat ≈ one phase):
-
-### P1 — Spec in repo + roadmap
-
-- This file + roadmap Now items + docs README link.
-
-### P2 — Orchestrator + session + read tools + `/voice/turn`
-
-- In-memory session; grounded `answer` / `clarify` / `refuse`; client thread + TTS for answers.
-
-### P3 — Write intents + confirm + fallback
-
-- Client executor batch; confirm policy; one `parse-task` fallback; stay open; close discard.
-
-### P4 — Day-plan propose / confirm / apply
-
-- Visual proposal list; sequential placement applies.
-- Follow-up (shipped): multi-intent utterances, execution report, and the day-plan dialogue with engine dry-run seating (§6.4, §6.6, §6.7).
-
-### P5 — Hero UX
-
-- Near full-screen mobile; silence end-of-speech; mic gate while speaking; `skip_speak` + `cancel`; polished audio visual; agent `actions[]`.
-
-### P6 — Tests + docs wrap-up
-
-- Unit / API / Playwright; overview + api-reference + e2e coverage; archive roadmap lines when done.
-
----
-
-## 14. Must not break
-
-- Existing create / complete / skip / reschedule / habit voice flows via fallback and intent parity.
-- Shared conflict sheet contract.
-- Settings IANA `timeZone` as civil-day source for agenda and placement.
-- Incremental placement rules (no invented slots; foreign Google events never moved by the agent).
+Live dialogue tests are `npm run voice:eval:dialogue`. The corpus is `backend/src/modules/voice/dialogue-corpus`. An expectation is an instance of a sentence in this file. A write turn is `confirm`. Spoken yes is `act`.

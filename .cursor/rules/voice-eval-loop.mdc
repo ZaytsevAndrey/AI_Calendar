@@ -8,4 +8,4 @@ alwaysApply: false
 
 The `parseTask` create-eval (`voice:eval:create`, intent eval, clarify eval) is removed. Do not recreate it.
 
-Live voice tests are `documentation/voice-agent-dialogue-test-plan.md` and `npm run voice:eval:dialogue` (the corpus in `backend/src/modules/voice/dialogue-corpus`). A write turn is `confirm` (preview cards). Spoken yes is `act`. Prompt rules are in `voice-dialogue-test.mdc`.
+Live voice tests are `npm run voice:eval:dialogue` (the corpus in `backend/src/modules/voice/dialogue-corpus`). A write turn is `confirm` (preview cards). Spoken yes is `act`. How a failure is fixed is `documentation/voice-fix-flow.md`. Prompt rules are in `voice-dialogue-test.mdc`.

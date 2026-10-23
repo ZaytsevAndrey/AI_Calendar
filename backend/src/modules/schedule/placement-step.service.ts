@@ -31,6 +31,7 @@ import {
   startOfLocalDayIso,
 } from '../voice/voice-local-date.util';
 import {
+  dayWakeSleepMs,
   eligibleWindowsForDay,
   type FreeSlotsPhaseLike,
   type MsInterval,
@@ -617,9 +618,9 @@ export class PlacementStepService {
       1,
       opts?.durationMinutes ?? task.estimatedTimeInMinutes ?? 30,
     );
-    let claimWindows = windowsFor(
-      linkedPhases(task).length ? linkedPhases(task) : phases,
-    );
+    // Wake/sleep is the day. The task is searched on its own start→end inside
+    // that day. A linked phase keeps only the phase slices of that interval.
+    let claimWindows = windowsFor(linkedPhases(task));
     const windowExpired = isWindowExpired(task, nowMs);
     let interval = opts?.searchHole
       ? null
@@ -709,18 +710,16 @@ export class PlacementStepService {
       timeZone,
       settings.wakeTime,
     ).getTime();
-    if (
-      !task.isRecurring &&
-      task.eventType !== TaskEventType.FIXED &&
-      task.deadline
-    ) {
-      const untilMs = new Date(task.deadline).getTime();
-      claimWindows = claimWindows
-        .map((window) => ({
-          start: window.start,
-          end: Math.min(window.end, untilMs),
-        }))
-        .filter((window) => window.end > window.start && window.end > claimNotBefore);
+    const span = flexibleSearchSpan(
+      task,
+      claimNotBefore,
+      opts?.preferredStart ?? null,
+      timeZone,
+      wake,
+      sleep,
+    );
+    if (span) {
+      claimWindows = clipWindowsToSpan(claimWindows, span.start, span.end);
     }
 
     const plan = planPlacement({
@@ -729,7 +728,7 @@ export class PlacementStepService {
         taskName: task.name,
         recurring: task.isRecurring,
         durationMinutes,
-        notBefore: claimNotBefore,
+        notBefore: span?.start ?? claimNotBefore,
         windows: claimWindows,
         interval,
         preferNearMs:
@@ -769,6 +768,32 @@ export class PlacementStepService {
         preferredStart:
           opts.preferredStart ??
           (task.scheduledStartTime ? new Date(task.scheduledStartTime) : null),
+      });
+    }
+
+    // A preferred clock is a wish, not a reason to park. One-off flexible:
+    // if that exact interval misses the window, take the nearest free hole
+    // before Problematic. Fixed overlap stays a conflict (asked above).
+    // Form edits with commit "preferred" keep the old slot instead.
+    if (
+      !opts?.seriesDay &&
+      !task.isRecurring &&
+      task.eventType !== TaskEventType.FIXED &&
+      opts?.commit !== 'preferred' &&
+      opts?.commit !== 'keep' &&
+      plan.outcome === 'problematic' &&
+      !opts?.searchHole &&
+      interval
+    ) {
+      return this.placeUnlocked(userId, taskId, {
+        ...opts,
+        searchHole: true,
+        durationMinutes,
+        preferredStart:
+          opts?.preferredStart ??
+          (task.scheduledStartTime
+            ? new Date(task.scheduledStartTime)
+            : new Date(interval.start)),
       });
     }
 
@@ -2289,6 +2314,64 @@ export class PlacementStepService {
       return [];
     }
   }
+}
+
+/**
+ * One-off flexible search bounds inside the wake/sleep day.
+ * Start is From, or the preferred clock when From is empty.
+ * End is Until, or sleep on the start's civil day when the task named a start.
+ * No start and no end leaves the horizon untouched.
+ */
+function flexibleSearchSpan(
+  task: Task,
+  notBefore: number,
+  preferredStart: Date | null,
+  timeZone: string,
+  wake: string,
+  sleep: string,
+): { start: number; end: number } | null {
+  if (task.isRecurring || task.eventType === TaskEventType.FIXED) return null;
+  const preferred =
+    preferredStart ??
+    (task.scheduledStartTime ? new Date(task.scheduledStartTime) : null);
+  const namedStart =
+    !task.earliestStartTime && preferred && Number.isFinite(preferred.getTime())
+      ? preferred.getTime()
+      : null;
+  const start = namedStart != null ? Math.max(notBefore, namedStart) : notBefore;
+  let end: number | null = null;
+  if (task.deadline) {
+    const until = new Date(task.deadline).getTime();
+    if (Number.isFinite(until)) end = until;
+  }
+  if (end == null && (task.earliestStartTime || namedStart != null)) {
+    const anchor = task.earliestStartTime
+      ? new Date(task.earliestStartTime)
+      : new Date(namedStart!);
+    if (Number.isFinite(anchor.getTime())) {
+      end = dayWakeSleepMs(
+        localYmd(anchor.toISOString(), timeZone),
+        wake,
+        sleep,
+        timeZone,
+      ).end;
+    }
+  }
+  if (end == null && namedStart == null && !task.earliestStartTime) return null;
+  return { start, end: end ?? Number.POSITIVE_INFINITY };
+}
+
+function clipWindowsToSpan(
+  windows: MsInterval[],
+  start: number,
+  end: number,
+): MsInterval[] {
+  return windows
+    .map((window) => ({
+      start: Math.max(window.start, start),
+      end: Math.min(window.end, end),
+    }))
+    .filter((window) => window.end > window.start && window.end > start);
 }
 
 function linkedPhases(task: Task): FreeSlotsPhaseLike[] {

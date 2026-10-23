@@ -2,13 +2,13 @@
 
 **Status:** working queue for roadmap **§23** (split; logging-first).  
 **Fix log:** [voice-fix-flow.md](voice-fix-flow.md).  
-**Use:** open a **new chat per mini-item** below. Product contract: [spec-voice-agent.md](spec-voice-agent.md). Dialogue test cycle (target day-plan behavior, prompt rules, pacing): [voice-agent-dialogue-test-plan.md](voice-agent-dialogue-test-plan.md). Architecture plan (Cursor): `voice_prompt_architecture_3d81fe7a`.
+**Use:** open a **new chat per mini-item** below. Product contract: [spec-voice-agent.md](spec-voice-agent.md). This file is a work queue. It does not add rules. Edits follow [voice-fix-flow.md](voice-fix-flow.md).
 
 ## Already shipped (do not redo)
 
 - Orchestrator `/voice/turn` + session + read tools + day-plan + hero UI.
 - Parse: **router** (`intent` + `language`) → **per-intent specialist** → normalize / `resolveVoiceCommand`.
-- Every intent has a **full** specialist: one system string (schema, first-match rules, fields the resolver reads). Create is assembled from [prompt-modules/](../backend/src/modules/voice/prompt-modules/). The other intents are one file each and share the task-target, habit-target, and clock fragments inside that same call. The ending schedule day lasts through three hours after sleep; the starting day begins three hours before wake. That choice only picks the date. `needs_clarification` returns a question only and does not create a task.
+- Every intent has a **full** specialist: one system string (schema, first-match rules, fields the resolver reads). Create is assembled from [prompt-modules/](../backend/src/modules/voice/prompt-modules/). The other intents are one file each and share the task-target, task-fields, and clock fragments inside that same call. The ending schedule day lasts through three hours after sleep; the starting day begins three hours before wake. That choice only picks the date. `needs_clarification` returns a question only and does not create a task.
 - Create when: a day with no clock is Wake to Sleep. Dates named once are one-offs; a shared clock does not join them. A clock makes a series only when the utterance is already a repeat. An event with no time is a question when. A task that is not an event, with no time, is Unscheduled. A place does not decide. A clock with no day that is already past is a question.
 - Placement honors `earliestStartTime` via [placement-bounds.util.ts](../backend/src/modules/schedule/placement-bounds.util.ts).
 - Debug raw LLM: `[llm:parse.router]`, `[llm:parse.create]`, … via `voice-llm-log.util.ts` (clipped).
@@ -32,17 +32,12 @@ STT → Orchestrator (answer | mutate | propose_plan | …)
 | Intent | Prompt state | What the prompt is for |
 |--------|--------------|---------------------|
 | `create` | full (modules + kind tree) | Kind, name, when |
-| `update` | full | Changed fields only. A series asks for scope; name, priority, and phase apply to the whole series |
-| `reschedule` | full | Move / do now; day window vs clock. A series asks this day, this and following, or the whole series |
-| `complete` | full | One-off marks done. A series asks: this day, this and following, or the whole series |
+| `update` | full | One existing task: fields, time, and done. Shared catalog is `prompt-modules/task-fields.ts`. A deadline needs no special word. A time-only change seats the task. Done-only on a one-off is kind `complete`. A series still asks for scope |
 | `skip` | full | Next open occurrence only; unscheduled cancels; another day asks |
 | `delete` | full | A series asks this day / this and following / whole series. Confirm stays on the orchestrator |
-| `habit_check_in` | full | Civil today only |
-| `habit_create` | full | Name; daily block needs time and length |
-| `habit_update` | full | Current title in `command.taskName`; changed habit fields only |
-| `habit_delete` | full | Habit title; confirm stays orchestrator |
-| `habit_uncheck` | full | Clear today's check-in only |
 | `needs_clarification` | full | One question; `task` null |
+
+`reschedule` and `complete` are not router intents. A model that still says them is sent to the update specialist. Companion does not create or edit habits.
 
 Router: [voice-parse.router.prompt.ts](../backend/src/modules/voice/voice-parse.router.prompt.ts) — keep tiny; create follow-ups must stay `create`, not `update`.
 
@@ -50,7 +45,7 @@ Router: [voice-parse.router.prompt.ts](../backend/src/modules/voice/voice-parse.
 
 1. **Dialogue corpus** — `npm run voice:eval:dialogue`. Writes expect `confirm` (preview). Spoken yes expects `act`.
 2. **§23.5 Harvest + router goldens** — misroutes from eval/logs.
-3. **§23.6+ Fix loops** — other clusters (edges, update/reschedule, series, habits).
+3. **§23.6+ Fix loops** — rows where the prompt, the spec, and the corpus already agree and the model missed.
 4. **§23.n Cleanup** — unused `voice.whenOrUnscheduled` i18n; archive this file when empty.
 
 ### Adding a create kind/when golden

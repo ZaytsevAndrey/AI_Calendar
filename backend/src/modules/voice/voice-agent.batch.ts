@@ -12,8 +12,6 @@ import type {
 } from './voice-agent.types';
 import type { VoiceParseResult } from './voice-parse.types';
 
-export const MAX_SEGMENT_CLARIFY = 2;
-
 export type SegmentParse =
   | { segment: string; result: VoiceParseResult }
   | { segment: string; error: string };
@@ -78,6 +76,62 @@ export function collectSegments(
   return out;
 }
 
+function dropQuestions(
+  batch: PendingBatch,
+  dropped: PendingBatch['unresolved'],
+  ctx: SummaryContext,
+): PendingBatch {
+  const droppedText = new Set(dropped.map((row) => row.segment));
+  return {
+    ...batch,
+    unresolved: batch.unresolved.filter((row) => !droppedText.has(row.segment)),
+    segments: batch.segments.map((row) =>
+      row.status === 'clarify' && droppedText.has(row.summary)
+        ? { ...row, status: 'dropped' }
+        : row,
+    ),
+    notes: [
+      ...batch.notes,
+      ...dropped.map((row) =>
+        t(language(ctx), 'voice.segmentDropped', { text: row.segment }),
+      ),
+    ],
+  };
+}
+
+/** The utterance answered none of the open questions. Skip every one of them. */
+export function skipOpenQuestions(batch: PendingBatch, ctx: SummaryContext): PendingBatch {
+  if (!batch.unresolved.length) return batch;
+  return dropQuestions(batch, batch.unresolved, ctx);
+}
+
+/**
+ * The reply did not answer the question that was asked.
+ * One open question, or every remaining question already deferred: skip them.
+ * Other questions still open: this one waits at the back of the queue.
+ */
+function ignoreUnanswered(
+  batch: PendingBatch,
+  current: PendingBatch['unresolved'][number],
+  ctx: SummaryContext,
+): PendingBatch {
+  const rest = batch.unresolved.slice(1);
+  const fresh = rest.filter((row) => !row.deferred);
+  if (current.deferred || fresh.length === 0) {
+    const dropped = [current, ...rest.filter((row) => row.deferred)];
+    const next = dropQuestions(batch, dropped, ctx);
+    return { ...next, unresolved: fresh };
+  }
+  return {
+    ...batch,
+    unresolved: [
+      ...fresh,
+      ...rest.filter((row) => row.deferred),
+      { ...current, deferred: true },
+    ],
+  };
+}
+
 /** Fold the parse of a clarification answer into a held batch. */
 export function continuePendingBatch(
   batch: PendingBatch,
@@ -85,32 +139,13 @@ export function continuePendingBatch(
   ctx: SummaryContext,
 ): PendingBatch {
   const [current, ...rest] = batch.unresolved;
+  if (!current) return batch;
   const collected = collectSegments([answer], ctx);
   const segments = batch.segments.filter(
-    (row) => !(row.status === 'clarify' && row.summary === current?.segment),
+    (row) => !(row.status === 'clarify' && row.summary === current.segment),
   );
   if (collected.unresolved.length) {
-    const nextCount = batch.clarifyCount + 1;
-    if (nextCount > MAX_SEGMENT_CLARIFY) {
-      return {
-        ...batch,
-        segments: [...segments, { summary: current.segment, status: 'dropped' }],
-        unresolved: rest,
-        clarifyCount: 1,
-        notes: [
-          ...batch.notes,
-          t(language(ctx), 'voice.segmentDropped', { text: current.segment }),
-        ],
-      };
-    }
-    return {
-      ...batch,
-      unresolved: [
-        { segment: current.segment, question: collected.unresolved[0].question },
-        ...rest,
-      ],
-      clarifyCount: nextCount,
-    };
+    return ignoreUnanswered(batch, current, ctx);
   }
   return {
     intents: [...batch.intents, ...collected.intents],

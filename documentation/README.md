@@ -15,11 +15,12 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Spec: Incremental placement](spec-incremental-placement.md) | Who is read and written per calendar edit. No Generate button. A displaced day becomes a new task; a chain runs only when everyone still fits (target; engine still full-replans) |
 | [Spec: Conflict rules](spec-conflict-rules.md) | Unscheduled vs Problematic, conflict option ids; who moves defers to incremental placement |
 | [Spec: Voice Commander](spec-voice-commander.md) | Superseded one-shot commander. Live contract is the Voice Agent spec |
-| [Spec: Voice Agent](spec-voice-agent.md) | Hybrid Companion orchestrator, `/voice/turn`, Q&A + write intents (shipped) |
+| [Spec: Voice Agent](spec-voice-agent.md) | The only Companion product contract. Ukrainian: [spec-voice-agent.uk.md](spec-voice-agent.uk.md) |
+| [Voice prompts, Ukrainian](voice-prompts.uk.md) | Reading translation of the planner, router, and specialist prompts. The model still receives English |
 | [Voice agent dialogue test plan](voice-agent-dialogue-test-plan.md) | Dialogue test cycle: target day-plan contract, prompt rules, Groq pacing, simple and complex flows |
 | [Companion panel](features/companion-panel.md) | Floating desktop panel, preview cards, multi-intent Apply with statuses, day-plan dialogue |
 | [Voice prompts — next](voice-prompt-next.md) | Handoff for roadmap **§23** (split): logging-first, then goldens, then fixes |
-| [Voice fix flow](voice-fix-flow.md) | One-rule create-prompt cycles and the sentinel log |
+| [Voice fix flow](voice-fix-flow.md) | Prompt, spec, and dialogue tests stay one sentence: list the disagreement, you choose, then spec, tests, prompt |
 | [Local TTS](tts-local.md) | Piper on the home API (`npm run start:piper`); browser voice when it is down |
 | [Spec: Intelligent scheduling](spec-intelligent-scheduling.md) | Unified items, settings, phases, queue, diff/undo, Google anchors (defers placement to conflict rules) |
 | [Task scheduling test matrix](task-scheduling-test-matrix.md) | Given/When/Then cases mapped to unit tests |

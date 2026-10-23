@@ -2,8 +2,12 @@ import type {
   DayPlanProposal,
   DayPlanProposalItem,
   VoiceIntentExecutionStatus,
+  VoiceTaskPatch,
   VoiceWriteIntent,
 } from 'api/voice.api';
+import i18n from 'i18n';
+import { localHm, localYmd } from 'utils/ianaDateTime';
+import { formatCivilYmd } from 'utils/formatDate';
 
 export type ChangePreviewKind =
   | 'create'
@@ -18,10 +22,14 @@ export type ChangePreviewKind =
   | 'end_series'
   | 'other';
 
+export type PreviewTaskType = 'fixed' | 'flexible' | 'unscheduled' | 'recurring';
+
 export type ChangePreviewCard = {
   id: string;
   name: string;
   kind: ChangePreviewKind;
+  /** Stored task kind. Null when this change does not say it. */
+  taskType: PreviewTaskType | null;
   startIso: string | null;
   endIso: string | null;
   durationMinutes: number | null;
@@ -94,11 +102,88 @@ function kindFromCommand(kind: string): ChangePreviewKind {
   }
 }
 
+function asIso(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function taskTypeOf(fields: {
+  isUnscheduled?: boolean | null;
+  isRecurring?: boolean | null;
+  eventType?: string | null;
+}, fallbackFlexible: boolean): PreviewTaskType | null {
+  if (fields.isUnscheduled) return 'unscheduled';
+  if (fields.isRecurring) return 'recurring';
+  if (fields.eventType === 'fixed') return 'fixed';
+  if (fields.eventType === 'admin' || fallbackFlexible) return 'flexible';
+  return null;
+}
+
+function typeFromPatch(patch: VoiceTaskPatch): PreviewTaskType | null {
+  if (patch.isRecurring) return 'recurring';
+  if (patch.eventType === 'fixed') return 'fixed';
+  if (patch.eventType === 'admin') return 'flexible';
+  return null;
+}
+
+/** Date in the user's zone, plus a clock when one was stored. Midnight is a day, not a time. */
+export function formatPreviewWhen(
+  card: Pick<ChangePreviewCard, 'startIso' | 'endIso'>,
+  timeZone: string,
+  unscheduledLabel: string,
+): string {
+  const start = card.startIso;
+  const end = card.endIso && card.endIso !== start ? card.endIso : null;
+  if (!start && !end) return unscheduledLabel;
+  if (start && end) {
+    const startDay = localYmd(start, timeZone);
+    const endDay = localYmd(end, timeZone);
+    if (startDay === endDay) {
+      const day = civilDay(startDay);
+      const startClock = wallClock(start, timeZone);
+      const endClock = wallClock(end, timeZone);
+      if (startClock && endClock) return `${day}, ${startClock}–${endClock}`;
+      if (startClock) return `${day}, ${startClock}`;
+      if (endClock) return `${day}, ${i18n.t('voice.seatUntil', { when: endClock })}`;
+      return day;
+    }
+    return `${stamp(start, timeZone)} – ${stamp(end, timeZone)}`;
+  }
+  return stamp((start || end) as string, timeZone);
+}
+
+function stamp(iso: string, timeZone: string): string {
+  const day = civilDay(localYmd(iso, timeZone));
+  const clock = wallClock(iso, timeZone);
+  return clock ? `${day}, ${clock}` : day;
+}
+
+function civilDay(ymd: string): string {
+  return formatCivilYmd(ymd) || ymd;
+}
+
+function wallClock(iso: string, timeZone: string): string | null {
+  if (/T00:00/.test(iso)) return null;
+  const hm = localHm(iso, timeZone);
+  return hm === '00:00' ? null : hm;
+}
+
 function cardFromIntent(intent: VoiceWriteIntent, index: number): ChangePreviewCard {
   if (intent.type === 'create') {
     const task = intent.task;
-    const startIso = task.scheduledStartTime || task.earliestStartTime || null;
-    const endIso = task.scheduledEndTime || null;
+    const scheduledStart = asIso(task.scheduledStartTime);
+    const scheduledEnd = asIso(task.scheduledEndTime);
+    const earliest = asIso(task.earliestStartTime);
+    const deadline = asIso(task.deadline);
+    let startIso = scheduledStart || earliest;
+    let endIso = scheduledEnd;
+    if (!scheduledStart && !scheduledEnd && deadline && deadline !== startIso) {
+      if (startIso) endIso = deadline;
+      else startIso = deadline;
+    }
+    if (task.isUnscheduled) {
+      startIso = deadline;
+      endIso = null;
+    }
     const duration =
       typeof task.estimatedTimeInMinutes === 'number' && task.estimatedTimeInMinutes > 0
         ? task.estimatedTimeInMinutes
@@ -107,6 +192,7 @@ function cardFromIntent(intent: VoiceWriteIntent, index: number): ChangePreviewC
       id: `create-${index}-${task.name}`,
       name: task.name || intent.summary,
       kind: 'create',
+      taskType: taskTypeOf(task, true),
       startIso,
       endIso,
       durationMinutes: duration,
@@ -116,6 +202,28 @@ function cardFromIntent(intent: VoiceWriteIntent, index: number): ChangePreviewC
 
   const command = intent.command;
   const kind = kindFromCommand(String(command.kind || ''));
+  if (command.kind === 'update') {
+    const patch = command.patch;
+    const startIso = asIso(patch.scheduledStartTime) || asIso(patch.earliestStartTime);
+    let endIso = asIso(patch.scheduledEndTime);
+    const deadline = asIso(patch.deadline);
+    if (!endIso && deadline && deadline !== startIso) endIso = deadline;
+    const duration =
+      typeof patch.estimatedTimeInMinutes === 'number' && patch.estimatedTimeInMinutes > 0
+        ? patch.estimatedTimeInMinutes
+        : minutesBetween(startIso, endIso);
+    return {
+      id: `command-${index}-${command.taskId}-${kind}`,
+      name: command.taskName || intent.summary,
+      kind,
+      taskType: typeFromPatch(patch),
+      startIso,
+      endIso,
+      durationMinutes: duration,
+      color: colorForKind(kind),
+    };
+  }
+
   let startIso: string | null = null;
   let endIso: string | null = null;
 
@@ -126,6 +234,12 @@ function cardFromIntent(intent: VoiceWriteIntent, index: number): ChangePreviewC
   }
   if (!endIso && 'scheduledEndTime' in command && typeof command.scheduledEndTime === 'string') {
     endIso = command.scheduledEndTime;
+  }
+  if (!startIso && 'earliestStartTime' in command && typeof command.earliestStartTime === 'string') {
+    startIso = command.earliestStartTime;
+  }
+  if (!endIso && 'deadline' in command && typeof command.deadline === 'string') {
+    endIso = command.deadline;
   }
   if (!startIso && 'occurrenceStart' in command && typeof command.occurrenceStart === 'string') {
     startIso = command.occurrenceStart;
@@ -140,6 +254,7 @@ function cardFromIntent(intent: VoiceWriteIntent, index: number): ChangePreviewC
     id: `command-${index}-${String(command.taskId || name)}-${kind}`,
     name,
     kind,
+    taskType: null,
     startIso,
     endIso,
     durationMinutes: minutesBetween(startIso, endIso),
@@ -160,6 +275,7 @@ export function buildChangePreviewCards(input: {
         id: `plan-${item.itemId}`,
         name: item.name,
         kind,
+        taskType: item.source === 'unscheduled' ? 'unscheduled' : 'flexible',
         startIso: item.start,
         endIso: item.end,
         durationMinutes: item.durationMinutes || minutesBetween(item.start, item.end),

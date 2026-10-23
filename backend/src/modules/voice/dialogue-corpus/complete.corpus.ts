@@ -1,4 +1,4 @@
-/** Complete specialist. A series day with no placed occurrence cannot be marked done. */
+/** Done-only updates. A one-off is kind complete. A series day with no placed occurrence cannot be marked done. */
 import { ask, created, line, noWrite, scenario } from './define';
 
 scenario(

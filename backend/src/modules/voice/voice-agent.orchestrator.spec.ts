@@ -221,7 +221,27 @@ describe('VoiceAgentOrchestrator — multi-intent', () => {
 
     expect(done.outcome).toBe('confirm');
     expect(done.intents.map((intent) => intent.type)).toEqual(['create', 'command']);
-    expect(done.segments?.map((row) => row.status)).toEqual(['ready', 'ready']);
+    expect(done.segments?.map((row) => row.status)).toEqual(['ready', 'dropped', 'ready']);
+    expect(h.session().pendingBatch).toBeNull();
+  });
+
+  it('keeps the clear write when the next utterance ignores the question', async () => {
+    const h = build();
+    h.planner({ type: 'steps', answer: '', segments: ['buy milk', 'move it'] });
+    h.parse.mockResolvedValueOnce(create('Milk')).mockResolvedValueOnce({
+      understanding: 'needs_clarification',
+      clarifyingQuestion: 'Which task should I move?',
+      task: null,
+      command: null,
+    });
+    await h.turn({ transcript: 'buy milk and move it' });
+
+    h.planner({ type: 'steps', answer: '', segments: [] });
+    const done = await h.turn({ transcript: 'never mind which' });
+
+    expect(done.outcome).toBe('confirm');
+    expect(done.intents).toHaveLength(1);
+    expect(done.intents[0].type).toBe('create');
     expect(h.session().pendingBatch).toBeNull();
   });
 

@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Voice agent dialogue tests
 
-Oracle: `documentation/voice-agent-dialogue-test-plan.md`. Read it before a live Groq run or a prompt edit in this cycle. Where it differs from `documentation/spec-voice-agent.md` §6.4, the test plan wins. Do not edit an expectation so it matches the old three-question interview.
+Product behavior is `documentation/spec-voice-agent.md`. That file is the only contract. `documentation/voice-agent-dialogue-test-plan.md` does not override it. Edits follow `documentation/voice-fix-flow.md`: spec sentence, then the one prompt block, then the corpus row. Do not edit an expectation so it matches the model.
 
 ## Prompts and TypeScript
 

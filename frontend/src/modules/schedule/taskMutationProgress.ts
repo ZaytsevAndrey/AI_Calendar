@@ -179,12 +179,15 @@ export function sleepMs(ms: number): Promise<void> {
 export async function runTaskMutationProgress<T>(
   opts: TaskMutationProgressOptions & {
     run: (progress: TaskMutationProgressHandle) => Promise<T>;
+    /** Replaces the generic done line. Empty keeps the stage label. */
+    doneDetail?: (result: T) => string | undefined;
   },
 ): Promise<T> {
   const progress = startTaskMutationProgress(opts);
   try {
     const result = await opts.run(progress);
-    progress.finish();
+    const detail = opts.doneDetail?.(result)?.trim();
+    progress.finish(detail || undefined);
     return result;
   } catch (err) {
     const detail =

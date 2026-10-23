@@ -15,6 +15,7 @@ import {
   collectSegments,
   continuePendingBatch,
   joinSpoken,
+  skipOpenQuestions,
   type SegmentParse,
   type SummaryContext,
 } from './voice-agent.batch';
@@ -53,7 +54,6 @@ import { isNoiseOrEmptyTranscript } from './voice-stt.util';
 /** Tool rounds before the planner must decide. */
 const MAX_TOOL_ROUNDS = 2;
 const MAX_TOOL_CALLS_PER_ROUND = 6;
-const MAX_PLANNER_CLARIFY = 2;
 
 export type VoiceParseFallback = (ctx: {
   transcript: string;
@@ -240,7 +240,6 @@ export class VoiceAgentOrchestrator {
           todayYmd: ctx.todayYmd,
           wakeTime: ctx.settings.wakeTime,
           sleepTime: ctx.settings.sleepTime,
-          clarifyCount: session.clarifyCount,
           history: session.turns,
           toolResults,
           pendingConfirmSummary: session.pendingIntents ? session.pendingSummary : null,
@@ -272,14 +271,26 @@ export class VoiceAgentOrchestrator {
     transcript: string,
     parseFallback: VoiceParseFallback,
   ): Promise<VoiceTurnResponse> {
+    const held = session.pendingBatch
+      ? skipOpenQuestions(session.pendingBatch, ctx.summary)
+      : null;
+    this.sessions.setPendingBatch(ctx.userId, ctx.sessionId, null);
     if (!decision.segments.length) {
+      if (held?.intents.length) {
+        return this.settleBatch(ctx, {
+          ...held,
+          answer: joinSpoken([decision.answer, held.answer]),
+        });
+      }
       if (!decision.answer) return this.fallbackParse(ctx, transcript, parseFallback);
       this.sessions.setClarifyCount(ctx.userId, ctx.sessionId, 0);
-      return this.reShowOr(ctx, session, decision.answer);
+      return this.reShowOr(
+        ctx,
+        session,
+        joinSpoken([decision.answer, ...(held?.notes ?? [])]),
+      );
     }
-    // New segments replace the open question; writes already resolved in that batch stay.
-    const held = session.pendingBatch;
-    this.sessions.setPendingBatch(ctx.userId, ctx.sessionId, null);
+    // Writes already resolved in that batch stay. Ignored questions are skipped.
     // Writes beside an open plan release its held Apply; the report re-seats the draft.
     if (session.pendingKind === 'plan') this.sessions.clearPending(ctx.userId, ctx.sessionId);
     const parses: SegmentParse[] = [];
@@ -291,10 +302,7 @@ export class VoiceAgentOrchestrator {
     });
     return this.settleBatch(ctx, {
       intents: [...(held?.intents ?? []), ...collected.intents],
-      segments: [
-        ...(held?.segments.filter((row) => row.status !== 'clarify') ?? []),
-        ...collected.segments,
-      ],
+      segments: [...(held?.segments ?? []), ...collected.segments],
       unresolved: collected.unresolved,
       clarifyCount: 1,
       answer: decision.answer,
@@ -562,17 +570,12 @@ export class VoiceAgentOrchestrator {
     decision: { outcome: 'answer' | 'clarify' | 'refuse'; assistantMessage: string },
   ): VoiceTurnResponse {
     const { userId, sessionId } = ctx;
-    let message = decision.assistantMessage;
+    const ignored = session.pendingBatch
+      ? skipOpenQuestions(session.pendingBatch, ctx.summary)
+      : null;
+    if (ignored) this.sessions.setPendingBatch(userId, sessionId, null);
+    let message = joinSpoken([decision.assistantMessage, ...(ignored?.notes ?? [])]);
     if (decision.outcome === 'clarify') {
-      const next = session.clarifyCount + 1;
-      this.sessions.setClarifyCount(userId, sessionId, next);
-      if (next > MAX_PLANNER_CLARIFY) {
-        return this.finish(userId, sessionId, {
-          outcome: 'refuse',
-          assistantMessage: message || this.vt(ctx, 'voice.stillUnclear'),
-          actions: ['retry'],
-        });
-      }
       return this.finish(userId, sessionId, {
         outcome: 'clarify',
         assistantMessage: message || this.vt(ctx, 'voice.clarifyGeneric'),
@@ -702,6 +705,7 @@ export class VoiceAgentOrchestrator {
 function statedSummary(intent: VoiceWriteIntent, lang: AppLanguage): string {
   const summary = intent.summary.trim();
   if (!summary.endsWith('?')) return intent.summary;
+  if (summary.includes(':')) return summary.replace(/\?+$/, '.');
   const name =
     intent.type === 'create'
       ? String(intent.task.name ?? '')

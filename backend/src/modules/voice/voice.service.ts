@@ -440,6 +440,7 @@ function taskDurationMinutes(settings: {
 function normalizeParseIntent(
   intent: ReturnType<typeof readVoiceIntent>,
 ): VoiceParseIntentId {
+  if (intent === 'reschedule' || intent === 'complete') return 'update';
   if ((VOICE_PARSE_INTENTS as readonly string[]).includes(intent)) {
     return intent as VoiceParseIntentId;
   }

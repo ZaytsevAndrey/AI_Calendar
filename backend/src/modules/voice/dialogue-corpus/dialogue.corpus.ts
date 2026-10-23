@@ -144,8 +144,8 @@ scenario(
   'field-and-placement',
   line('звіт терміновий і перенеси його на завтра', {
     outcome: 'confirm',
-    kinds: ['update', 'window|shift|update'],
-    maxIntents: 2,
+    kinds: ['update'],
+    maxIntents: 1,
     noPlan: true,
     nameIncludes: 'звіт',
   }),
@@ -209,24 +209,25 @@ scenario('dialogue', 'hold-then-answer', [
   },
 ]);
 
-scenario('dialogue', 'drop-after-two-blanks', [
+scenario('dialogue', 'ignored-question-keeps-the-clear-piece', [
   { transcript: 'додай стендап і перенеси оце', expect: ask },
-  { transcript: 'не знаю яку', expect: ask },
+  { transcript: 'не знаю яку', expect: created('стендап') },
+]);
+
+scenario('dialogue', 'ignored-question-is-not-a-refuse', [
+  { transcript: 'ну таке, зроби щось', expect: ask },
   {
-    transcript: 'та й байдуже',
-    expect: created('стендап'),
+    transcript: 'ну не знаю',
+    expect: { outcome: ['answer', 'clarify'], maxIntents: 0, noPlan: true },
   },
 ]);
 
-scenario('dialogue', 'no-intent-then-refuse', [
+scenario('dialogue', 'write-after-an-ignored-question', [
   { transcript: 'ну таке, зроби щось', expect: ask },
-  { transcript: 'ну не знаю', expect: ask },
-  { transcript: 'та байдуже', expect: { outcome: 'refuse', maxIntents: 0, noPlan: true } },
-]);
-
-scenario('dialogue', 'write-resets-clarify', [
-  { transcript: 'ну таке, зроби щось', expect: ask },
-  { transcript: 'ну не знаю', expect: ask },
+  {
+    transcript: 'ну не знаю',
+    expect: { outcome: ['answer', 'clarify'], maxIntents: 0, noPlan: true },
+  },
   {
     transcript: 'додай зустріч з командою на завтра',
     expect: created('зустріч'),

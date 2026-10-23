@@ -31,6 +31,7 @@ import { resolveSpokenConflictOption } from 'modules/schedule/resolveSpokenConfl
 import i18n from 'i18n';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 import { executeVoiceIntents } from '../executeVoiceIntents';
+import { summarizeCreatedTask } from '../summarizeStoredTask';
 import { VoiceSpeech } from '../speech';
 import { useAudioRecorder } from './useAudioRecorder';
 
@@ -427,9 +428,11 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
           summary: result.task.name,
           task: result.task,
         };
-        // Prefer server-shaped summary when present on a prior turn; legacy
-        // parse only returns the task — build a short created line locally.
-        const summary = i18n.t('voice.createdTask', { name: result.task.name });
+        // Legacy parse has no server summary — describe what will be stored.
+        const summary = summarizeCreatedTask(result.task, {
+          timeZone,
+          nowIso: new Date().toISOString(),
+        });
         setPendingIntents([{ ...createIntent, summary }]);
         setPendingSummary(summary);
         setServerHoldsPending(false);
@@ -438,7 +441,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
         await speakAndStage(summary, 'confirm');
       }
     },
-    [maybeListen, pushMessages, speakAndStage],
+    [maybeListen, pushMessages, speakAndStage, timeZone],
   );
 
   const routeResult = useCallback(

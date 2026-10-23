@@ -35,9 +35,7 @@ export const VOICE_PARSE_INTENTS = [
   'create',
   'update',
   'delete',
-  'complete',
   'skip',
-  'reschedule',
   'needs_clarification',
 ] as const;
 
