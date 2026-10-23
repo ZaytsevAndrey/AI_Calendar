@@ -246,7 +246,7 @@ export const VoiceApi = {
     });
   },
 
-  /** WAV from local Piper, or null when that process is not running. */
+  /** WAV from Azure Speech or local Piper, or null when neither is available. */
   speak: async (text: string, language?: string): Promise<Blob | null> => {
     try {
       const response = await apiCall({

@@ -1,6 +1,6 @@
 /**
- * Client TTS for voice replies. Local Piper when the API can synthesize,
- * otherwise the browser's Web Speech voice.
+ * Client TTS for voice replies. The API speaks with Azure when that key
+ * is set, otherwise local Piper. The browser voice is the last fallback.
  */
 import { VoiceApi } from 'api/voice.api';
 
@@ -142,8 +142,8 @@ export const VoiceSpeech = {
   },
 
   /**
-   * Speaks `text`. Prefers local Piper audio from the API.
-   * Falls back to the browser voice when Piper is not running.
+   * Speaks `text`. Prefers WAV from the API.
+   * Falls back to the browser voice when the API cannot synthesize.
    */
   async speak(text: string, options: SpeakOptions = {}): Promise<void> {
     const trimmed = text.trim();

@@ -10,7 +10,7 @@ export const CREATE_KIND_WHEN_MODULE = `Decide kind in this order. First match w
    kind recurring, isRecurring true. A time of day is not part of the name and does not make this fixed: set scheduledStart/End to that time (+ duration) on schedule today. No time of day → scheduledStart/End null. Deadline only if they named a series end.
 
 2. Fixed — one concrete clock, no uncertainty and no repeat: stamped times, bare hours, ordinal hours, "in N hours".
-   Concrete means they commit to that instant. Approximate means they soften it: the hour is a preference, not a promise. Approximate is not this branch, even when a number or an ordinal sits next to the softener. A softened "six" / "the sixth" is still approximate: kind flexible with scheduledStart at the chosen place of that hour, never fixed. Judge that meaning in the speaker's language. A digit does not make the time concrete. Do not look for the English word "around".
+   Concrete means they spoke that clock. An unspoken clock is not this branch. Approximate means they soften it: the hour is a preference, not a promise. Approximate is not this branch, even when a number or an ordinal sits next to the softener. A softened "six" / "the sixth" is still approximate: kind flexible with scheduledStart at the chosen place of that hour, never fixed. Judge that meaning in the speaker's language. A digit does not make the time concrete. Do not look for the English word "around".
    Exception: they named a clock and then cancelled it ("at 15? no, better at 17"). The last clock is a commitment, so it is concrete fixed. Not flexible and not a day envelope.
    A from–to span plus a preferred clock stays branch 4, even when they also named a duration. Do not collapse that to a fixed block at the preferred clock.
    Relative "in N hours" = add N hours to the now clock in the user message (fixed). Never unscheduled.
@@ -52,7 +52,7 @@ Duration:
 - Spoken length wins. A placement window is not a length, unless branch 2 says the span is the event itself.
 - A quarter or a half said with an hour is the clock, not the task length. Do not set estimatedTimeInMinutes to 15 from that quarter.
 - No length, and a normal task fits the default → estimatedTimeInMinutes = Default task duration from the user message.
-- A clocked event with no spoken length uses that default. understanding complete. Do not ask how long, including dinner, a visit, or a meeting.
+- A clocked event with no spoken length uses that default. understanding complete. Do not ask how long.
 - A placement window with no spoken length also uses that default. understanding complete. Do not ask how long the errand or the trip takes.
 - No length, no clock, no placement window, and the task clearly needs longer than that default → one question how long. estimatedTimeInMinutes null.
 - Not sure whether a span is the event's length or the window when to do it → one question. Do not guess.

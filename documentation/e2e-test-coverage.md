@@ -51,7 +51,7 @@ Default: **API E2E first**. UI E2E only for glue that unit/API cannot see. Do no
 | System | In E2E |
 |--------|--------|
 | Google OAuth + Calendar API | Stub. Ticket/callback covered only as HTTP redirects + redeem with a test ticket helper if the in-memory map is exposable; otherwise seed a linked user. |
-| Groq Whisper / LLM | Stub. Transcribe/parse return fixtures. |
+| Groq Whisper / LLM | Stub. Azure STT is forced off. Transcribe/parse return fixtures. |
 | SMTP / email verification | Dead with Google-only auth — do not test. |
 | Real Postgres | Not required for the first waves (SQLite matches local). |
 

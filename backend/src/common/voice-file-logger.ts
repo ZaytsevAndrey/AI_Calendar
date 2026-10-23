@@ -7,6 +7,8 @@ const VOICE_LOG_CONTEXTS = new Set([
   'VoiceService',
   'VoiceDayPlanner',
   'GroqClient',
+  'AzureSttClient',
+  'AzureTtsClient',
   'PiperSpeechService',
 ]);
 

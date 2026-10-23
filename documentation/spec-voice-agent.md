@@ -79,7 +79,7 @@ A new errand is `create` even when an open title is close in meaning, and even w
 The specialist picks the first matching kind, then fills only that kind's fields.
 
 1. **Recurring.** The utterance is already a repeat: every day, every morning, every evening, weekdays, named weekdays, every N days, every other week, monthly, the last or first day of the month. Every N days is `DAILY` (there is no interval field). Every other week is `BIWEEKLY`. A weekday named once is not a repeat. Dates named once are not a series. A clock does not make a repeat. When the utterance is a repeat and names a clock, that clock is the series clock. No clock leaves the series start empty. Do not ask for a clock.
-2. **Fixed.** One concrete clock and no repeat. A softened hour is not this kind. "In N hours" is this kind: add N hours to now. A span that is the event itself (a meeting from one clock to another) is fixed: the span is the duration, not a placement window.
+2. **Fixed.** One spoken concrete clock and no repeat. An unspoken clock is not this kind. A softened hour is not this kind. "In N hours" is this kind: add N hours to now. A span that is the event itself (a meeting from one clock to another) is fixed: the span is the duration, not a placement window.
 3. **Flexible preferred.** A soft clock (around an hour, after lunch, after work, about noon, closer to evening). Morning is not this kind. A named day that is still ahead also sets earliest at Wake and deadline at Sleep that day. No named day leaves earliest and deadline empty.
 4. **Flexible window.** A span of when the errand may be done: between two clocks, after a clock, not before a clock, until a part of day, by end of day. Earliest and deadline are that span. The span length is not the task length. End of the day with no clock is deadline at Sleep today. A window with no named day is today. A preferred clock inside the window is stored too and does not make the task fixed.
 5. **Day only.** A named day and no clock. Earliest at Wake, deadline at Sleep. A named week with no day inside it is a question which day. Do not pick a weekday. An event that fills the whole day is fixed from Wake to Sleep. Do not ask for a start or an end clock.
@@ -180,7 +180,7 @@ Apply mapping: an Unscheduled task becomes `window` with `clearUnscheduled`; a f
 
 ## 10. Session and screen
 
-The session is in memory, one per open panel, a new `sessionId` on every open. Close discards the session and any pending question or confirm. There is no wake word. The server does not run TTS.
+The session is in memory, one per open panel, a new `sessionId` on every open. Close discards the session and any pending question or confirm. There is no wake word. The turn response is text. Spoken audio is `POST /voice/speak`: Azure Speech when configured, otherwise Piper, otherwise the browser.
 
 Phone is a bottom sheet. Desktop is a floating panel. The thread shows the user and Companion. Confirm and the day plan show calendar-style cards.
 

@@ -12,6 +12,12 @@ describe('isVoiceLog', () => {
   it('keeps voice module loggers and /voice HTTP or exceptions', () => {
     expect(isVoiceLog('[llm:planner.round0] {}', 'VoiceAgentOrchestrator')).toBe(true);
     expect(isVoiceLog('REQUEST: POST /voice/turn | query: {}', 'HTTP')).toBe(true);
+    expect(
+      isVoiceLog(
+        'voice.trace POST /voice/turn 201 118432ms | llm 1x 100ms | other 0x 0ms | gap 118332ms',
+        'HTTP',
+      ),
+    ).toBe(true);
     expect(isVoiceLog('POST /voice/speak\nStatus: 500', 'Exception')).toBe(true);
     expect(isVoiceLog('REQUEST: GET /tasks', 'HTTP')).toBe(false);
     expect(isVoiceLog('boot', 'NestFactory')).toBe(false);

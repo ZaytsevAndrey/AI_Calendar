@@ -369,6 +369,45 @@ describe('GoogleCalendarService', () => {
     expect(calendarIds).toEqual(['app-cal@test.google.com']);
   });
 
+  it('reuses a covering display fetch and skips the calendar list', async () => {
+    const userId = '123';
+    const user = {
+      googleAccessToken: 'valid-token',
+      googleRefreshToken: 'refresh-token',
+      googleTokenExpiry: new Date(Date.now() + 10000),
+    };
+    jest.spyOn(userRepo, 'findOne').mockResolvedValue(user as User);
+    jest.spyOn(userSettingsRepo, 'findOne').mockResolvedValue({
+      appGoogleCalendarId: null,
+    } as UserSettings);
+    g().eventsList.mockResolvedValue({
+      data: {
+        items: [
+          { id: 'g1', summary: 'Meet', start: { dateTime: '2024-01-02T10:00:00Z' }, end: { dateTime: '2024-01-02T11:00:00Z' } },
+          { id: 'later', summary: 'Later', start: { dateTime: '2024-01-20T10:00:00Z' }, end: { dateTime: '2024-01-20T11:00:00Z' } },
+        ],
+      },
+    });
+
+    const wide = await service.getDisplayEvents(
+      userId,
+      '2024-01-01T00:00:00Z',
+      '2024-01-31T23:59:59Z',
+    );
+    expect(wide.totalEvents).toBe(2);
+    const listCalls = g().calendarListList.mock.calls.length;
+    const eventCalls = g().eventsList.mock.calls.length;
+
+    const day = await service.getDisplayEvents(
+      userId,
+      '2024-01-02T00:00:00Z',
+      '2024-01-03T00:00:00Z',
+    );
+    expect(day.events.map((event) => event.id)).toEqual(['g1']);
+    expect(g().calendarListList.mock.calls.length).toBe(listCalls);
+    expect(g().eventsList.mock.calls.length).toBe(eventCalls);
+  });
+
   it('should create event', async () => {
     const userId = '123';
     const event = { summary: 'Test Event' };

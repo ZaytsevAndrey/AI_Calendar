@@ -1,11 +1,18 @@
 import { randomUUID } from 'crypto';
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Phase } from '../phases/entities/phase.entity';
 import { ScheduledTask } from '../schedule/schedule.entity';
 import { Task, TaskStatus } from '../tasks/entities/task.entity';
 import { UserSettingsService } from '../user-settings/user-settings.service';
+import { transcodeToPcmWav } from './audio-to-wav';
+import { AzureSttClient } from './azure-stt';
 import { GroqClient } from './groq.client';
 import { ParseVoiceTaskDto } from './dto/parse-voice-task.dto';
 import { TranscribeVoiceDto } from './dto/transcribe-voice.dto';
@@ -38,6 +45,7 @@ import {
   isNoiseOrEmptyTranscript,
 } from './voice-stt.util';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
+import { traceStep } from '../../common/voice-trace';
 import { localHm, localYmd } from './voice-local-date.util';
 import type { VoiceParseResult } from './voice-parse.types';
 import { VoiceAgentOrchestrator } from './voice-agent.orchestrator';
@@ -79,6 +87,7 @@ export class VoiceService {
     private readonly tasksRepository: Repository<Task>,
     @InjectRepository(ScheduledTask)
     private readonly scheduledRepository: Repository<ScheduledTask>,
+    private readonly azureStt: AzureSttClient,
   ) {}
 
   async turn(userId: string, dto: VoiceTurnDto): Promise<VoiceTurnResponse> {
@@ -130,12 +139,17 @@ export class VoiceService {
 
     const mimeType = (dto.mimeType || 'audio/webm').split(';')[0].trim();
     const ext = MIME_EXTENSION[mimeType] || 'webm';
-    const settings = await this.userSettingsService.getSettings(userId);
+    const settings = await traceStep('other', 'db.settings', '', () =>
+      this.userSettingsService.getSettings(userId),
+    );
     // Prefer speech language (not UI language) so Whisper does not guess.
     const sttLanguage = whisperLanguageFromSettings(
       dto.language || settings.speechLanguage || settings.language,
     );
     const run = async () => {
+      if (this.azureStt.enabled()) {
+        return this.transcribeWithAzure(buffer, sttLanguage);
+      }
       const result = await this.groq.transcribe(
         buffer,
         `voice.${ext}`,
@@ -150,7 +164,7 @@ export class VoiceService {
       // Whisper often invents «дякую» / «thank you» on silence — drop it.
       const transcript = isNoiseOrEmptyTranscript(cleaned) ? '' : cleaned;
       this.logger.log(
-        `voice.stt raw=${JSON.stringify(result.text)} cleaned=${JSON.stringify(cleaned)} kept=${JSON.stringify(transcript)}`,
+        `voice.stt provider=groq raw=${JSON.stringify(result.text)} cleaned=${JSON.stringify(cleaned)} kept=${JSON.stringify(transcript)}`,
       );
       return { transcript, language: result.language || sttLanguage };
     };
@@ -159,6 +173,35 @@ export class VoiceService {
       return this.withSessionGroq(userId, sessionId, run);
     }
     return run();
+  }
+
+  /**
+   * Azure test path. The whole recording is converted to PCM WAV.
+   * Silence is left in. Whisper cleanup is not applied, so the log shows
+   * the words Azure actually returned.
+   */
+  private async transcribeWithAzure(
+    buffer: Buffer,
+    sttLanguage?: string,
+  ): Promise<{ transcript: string; language?: string }> {
+    let wav: Buffer;
+    try {
+      wav = await traceStep('other', 'audio.wav', 'ffmpeg', () =>
+        transcodeToPcmWav(buffer),
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Azure STT convert failed: ${message}`);
+      throw new ServiceUnavailableException(
+        'Could not prepare audio for speech recognition',
+      );
+    }
+    const result = await this.azureStt.transcribe(wav, sttLanguage);
+    const transcript = result.text.trim();
+    this.logger.log(
+      `voice.stt provider=azure raw=${JSON.stringify(result.text)} kept=${JSON.stringify(transcript)}`,
+    );
+    return { transcript, language: result.language || sttLanguage };
   }
 
   async parseTask(
@@ -216,19 +259,21 @@ export class VoiceService {
       throw new BadRequestException('transcript is required');
     }
 
-    const [settings, phases, tasks, slots] = await Promise.all([
-      this.userSettingsService.getSettings(userId),
-      this.phasesRepository.find({
-        where: { userId },
-        order: { name: 'ASC' },
-      }),
-      this.tasksRepository.find({ where: { userId } }),
-      this.scheduledRepository
-        .createQueryBuilder('slot')
-        .innerJoin('slot.task', 'task')
-        .where('task.userId = :userId', { userId })
-        .getMany(),
-    ]);
+    const [settings, phases, tasks, slots] = await traceStep('other', 'db.parse-context', '', () =>
+      Promise.all([
+        this.userSettingsService.getSettings(userId),
+        this.phasesRepository.find({
+          where: { userId },
+          order: { name: 'ASC' },
+        }),
+        this.tasksRepository.find({ where: { userId } }),
+        this.scheduledRepository
+          .createQueryBuilder('slot')
+          .innerJoin('slot.task', 'task')
+          .where('task.userId = :userId', { userId })
+          .getMany(),
+      ]),
+    );
 
     // Settings IANA first so "tomorrow" matches the calendar, not the browser.
     const timeZone = resolveIanaTimeZone(settings.timeZone || dto.timeZone);

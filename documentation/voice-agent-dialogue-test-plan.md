@@ -14,7 +14,7 @@ Read this before the first live Groq call. The chat that wrote it will not be in
 
 | Topic | Decision |
 |-------|----------|
-| Live planner model | Planner calls try DeepSeek, then Qwen, then Gemini, then Groq `openai/gpt-oss-120b`, skipping a step whose key is unset. Parse stays on Groq `openai/gpt-oss-20b`. `VOICE_LLM_PROVIDER=deepseek` sends every planner and parse call to DeepSeek and throws instead of falling back. Speech-to-text stays on Groq. |
+| Live planner model | Planner calls try DeepSeek, then Qwen, then Gemini, then Groq `openai/gpt-oss-120b`, skipping a step whose key is unset. Parse stays on Groq `openai/gpt-oss-20b`. `VOICE_LLM_PROVIDER=deepseek` sends every planner and parse call to DeepSeek and throws instead of falling back. Speech-to-text uses Azure when `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION` are set, otherwise Groq. |
 | Corpus language | Ukrainian only. No English twin of each case. |
 | Fail policy | A run without `--minutes` stops on the first behavior mismatch. `--minutes` walks the dialogue corpus once and continues past behavior mismatches; those do not set exit 1. A provider hard limit exits 2 and stops the run. Do not loop the pool. |
 | Habits | Hidden. Do not test them, do not add prompt rules about them, and do not route them. |

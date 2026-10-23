@@ -9,6 +9,7 @@ import { Repository } from 'typeorm';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import { UserSettingsService } from '../user-settings/user-settings.service';
 import { VoiceDailyUsage } from './entities/voice-daily-usage.entity';
+import { traceStep } from '../../common/voice-trace';
 import { localYmd } from './voice-local-date.util';
 
 /** Starting free-tier ceiling while voice has no subscription. */
@@ -44,6 +45,10 @@ export class VoiceQuotaService {
   }
 
   async assertUnderLimit(userId: string): Promise<void> {
+    await traceStep('other', 'quota', '', () => this.checkLimit(userId));
+  }
+
+  private async checkLimit(userId: string): Promise<void> {
     const limit = this.dailyLimit();
     if (limit <= 0) return;
     const dayYmd = await this.civilDayYmd(userId);
@@ -60,6 +65,10 @@ export class VoiceQuotaService {
   }
 
   async addTokens(userId: string, tokens: number): Promise<void> {
+    await traceStep('other', 'quota.save', '', () => this.saveTokens(userId, tokens));
+  }
+
+  private async saveTokens(userId: string, tokens: number): Promise<void> {
     const n = Math.floor(tokens);
     if (!Number.isFinite(n) || n <= 0) return;
     const dayYmd = await this.civilDayYmd(userId);

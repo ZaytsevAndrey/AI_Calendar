@@ -2,6 +2,7 @@ import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
+import { traceStep } from '../../common/voice-trace';
 import { t, type MessageKey } from '../../i18n/t';
 import { isAppLanguage, type AppLanguage } from '../../i18n/types';
 import { Phase } from '../phases/entities/phase.entity';
@@ -185,7 +186,8 @@ export class VoiceAgentOrchestrator {
   }
 
   private async loadContext(userId: string, dto: VoiceTurnDto): Promise<TurnContext> {
-    const [settings, phases, tasks, slots] = await Promise.all([
+    const [settings, phases, tasks, slots] = await traceStep('other', 'db.turn-context', '', () =>
+      Promise.all([
       this.userSettingsService.getSettings(userId),
       this.phasesRepository.find({ where: { userId }, order: { name: 'ASC' } }),
       this.tasksRepository.find({ where: { userId } }),
@@ -194,7 +196,8 @@ export class VoiceAgentOrchestrator {
         .innerJoin('slot.task', 'task')
         .where('task.userId = :userId', { userId })
         .getMany(),
-    ]);
+      ]),
+    );
     const timeZone = resolveIanaTimeZone(settings.timeZone || dto.timeZone);
     const nowIso = dto.clientNowIso?.trim() || new Date().toISOString();
     const speech = settings.speechLanguage || settings.language || 'en';
@@ -253,7 +256,9 @@ export class VoiceAgentOrchestrator {
       if (decision.type !== 'tools') return decision;
       if (!decision.calls.length || round === MAX_TOOL_ROUNDS) break;
       for (const call of decision.calls.slice(0, MAX_TOOL_CALLS_PER_ROUND)) {
-        const result = await this.tools.execute(call, ctx);
+        const result = await traceStep('other', `tool.${call.name}`, '', () =>
+          this.tools.execute(call, ctx),
+        );
         toolResults.push({ name: call.name, result });
         this.logger.log(
           `[llm:planner.tool] ${call.name} → ${JSON.stringify(result).slice(0, 500)}`,
@@ -490,7 +495,9 @@ export class VoiceAgentOrchestrator {
     draft: PlanDraft,
     prefix?: string,
   ): Promise<VoiceTurnResponse> {
-    const proposal = await this.dayPlanner.propose(ctx.userId, draft, ctx.timeZone);
+    const proposal = await traceStep('other', 'day-plan', '', () =>
+      this.dayPlanner.propose(ctx.userId, draft, ctx.timeZone),
+    );
     const dayLabel = this.dayLabel(ctx, draft.day);
     if (!proposal.items.length && !proposal.unplaced.length) {
       const empty: PlanDraft = { ...draft, stage: 'interview', lastProposal: null };

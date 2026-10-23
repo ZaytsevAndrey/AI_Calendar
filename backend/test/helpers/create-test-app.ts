@@ -13,6 +13,8 @@ import { AppModule } from '../../src/app.module';
 import { AllExceptionsFilter } from '../../src/common/filters/all-exceptions.filter';
 import { JwtExceptionFilter } from '../../src/modules/auth/jwt-exception.filter';
 import { GoogleCalendarService } from '../../src/modules/google-calendar/google-calendar.service';
+import { AzureSttClient } from '../../src/modules/voice/azure-stt';
+import { AzureTtsClient } from '../../src/modules/voice/azure-tts';
 import { GroqClient } from '../../src/modules/voice/groq.client';
 import { ScheduleJobProcessor } from '../../src/modules/schedule/schedule-job.processor';
 import { ReminderTickProcessor } from '../../src/modules/reminders/reminder-tick.processor';
@@ -46,6 +48,10 @@ export async function createTestApp(): Promise<E2eApp> {
     .useValue(google)
     .overrideProvider(GroqClient)
     .useValue(groq)
+    .overrideProvider(AzureSttClient)
+    .useValue({ enabled: () => false, transcribe: jest.fn() })
+    .overrideProvider(AzureTtsClient)
+    .useValue({ enabled: () => false, synthesize: jest.fn() })
     .overrideProvider(ScheduleJobProcessor)
     .useValue({
       onModuleInit: () => undefined,

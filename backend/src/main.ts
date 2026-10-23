@@ -7,7 +7,9 @@ import fastifyCors from '@fastify/cors';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { getFrontendBaseUrl } from './common/public-url';
+import { Logger } from '@nestjs/common';
 import { VoiceFileLogger } from './common/voice-file-logger';
+import { registerVoiceHttpTiming } from './common/voice-http-timing';
 
 function isAllowedOrigin(origin: string | undefined): boolean {
   if (!origin) {
@@ -72,6 +74,7 @@ async function bootstrap() {
   });
 
   const fastify = app.getHttpAdapter().getInstance();
+  registerVoiceHttpTiming(fastify, new Logger('HTTP'));
   fastify.get('/health', async () => ({ status: 'ok' }));
 
   if (process.env.E2E_BOOTSTRAP === '1') {

@@ -44,16 +44,18 @@ Create `backend/.env` from `backend/.env.example`.
 | `GROQ_API_KEY` | Free Groq API key for voice STT + task parse ([console.groq.com/keys](https://console.groq.com/keys)). Voice buttons fail with 503 if unset |
 | `GROQ_API_KEY_2` … | Optional extra Groq orgs (`_2`, `_3`, … any count). Live API rotates on TPM/TPD when two or more are set; one voice session stays on one key until a hop |
 | `VOICE_DAILY_TOKEN_LIMIT` | Optional soft per-user chat-token ceiling per civil day (default `100000`). `0` disables. Exhausted → `VOICE_QUOTA_EXCEEDED` |
-| `GROQ_STT_MODEL` | Optional. Default `whisper-large-v3-turbo` |
+| `GROQ_STT_MODEL` | Optional. Default `whisper-large-v3`. Used when Azure Speech is unset |
+| `AZURE_SPEECH_KEY` | Optional. With `AZURE_SPEECH_REGION`, speech-to-text and spoken replies use this Speech resource instead of Groq and Piper. Free (F0) |
+| `AZURE_SPEECH_REGION` | Optional. Region of that Speech resource, for example `northeurope`. No spaces. New Azure accounts are blocked from `westeurope` |
 | `GROQ_LLM_MODEL` | Optional. Default `openai/gpt-oss-20b` when chat stays on Groq |
 | `DEEPSEEK_API_KEY` | Optional. First planner in the chain (`DEEPSEEK_PLANNER_MODEL`, default `deepseek-flash`). Parse stays on Groq unless `VOICE_LLM_PROVIDER=deepseek` |
 | `QWEN_API_KEY` | Optional. Planner step after DeepSeek (`QWEN_PLANNER_MODEL`, default `qwen3.7-flash`) |
-| `GEMINI_API_KEY` | Optional free Gemini key ([aistudio.google.com/apikey](https://aistudio.google.com/apikey)). Planner step after Qwen. Parse and speech-to-text stay on Groq |
+| `GEMINI_API_KEY` | Optional free Gemini key ([aistudio.google.com/apikey](https://aistudio.google.com/apikey)). Planner step after Qwen. Parse stays on Groq. Speech-to-text stays on Groq unless Azure Speech is set |
 | `GEMINI_PLANNER_MODEL` | Optional. Default `gemini-3.8-flash` |
 | `VOICE_LLM_PROVIDER` | Optional. `deepseek` forces planner and parse onto DeepSeek and does not fall back |
-| `LLM_BASE_URL` | Optional. Local Ollama, `http://127.0.0.1:11434`. When set, chat uses `LLM_MODEL` and Groq is only speech-to-text |
+| `LLM_BASE_URL` | Optional. Local Ollama, `http://127.0.0.1:11434`. When set, chat uses `LLM_MODEL`. Groq then stays on speech-to-text unless Azure Speech is set |
 | `LLM_MODEL` | Optional. Default `calendar-voice` (Qwen3 14B, 8192 context; see `tools/calendar-voice.Modelfile`) |
-| `PIPER_URL` | Optional. Local Piper, `http://127.0.0.1:5510`. Voice replies use it; if it is down the browser voice is used |
+| `PIPER_URL` | Optional. Local Piper, `http://127.0.0.1:5510`. Voice replies use it when Azure Speech is unset; if it is down the browser voice is used |
 
 ### Frontend
 

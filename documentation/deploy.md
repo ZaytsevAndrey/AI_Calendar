@@ -60,7 +60,7 @@ The API service stays the Render web service. There are two static sites:
 | Site | Hostname | `REACT_APP_API_BASE_URL` | Voice text / speech |
 |------|----------|--------------------------|---------------------|
 | `ai-calendar-web` | `https://ai-calendar-web-o81n.onrender.com` | Render API, wired in the blueprint | Groq on the Render API, browser voice |
-| `ai-calendar-web-home` | assigned when the blueprint is synced | Dashboard value: public origin of the home API | Ollama and Piper on the home machine |
+| `ai-calendar-web-home` | assigned when the blueprint is synced | Dashboard value: public origin of the home API | Ollama on the home machine. Azure Speech when the key is set, otherwise Piper |
 
 GitHub Actions builds both bundles on every pull request and push (`frontend-sites` in `.github/workflows/ci.yml`). The home build uses the repository variable `LOCAL_API_PUBLIC_URL` when it is set. Render is what publishes each bundle to its `onrender.com` hostname after a push to `master`.
 
@@ -77,7 +77,8 @@ Set on the **API** service (Blueprint prompts the secrets):
 | `FRONTEND_URL` | From the static service |
 | `APP_URL` | From the API service |
 | `GOOGLE_*` | OAuth — redirect URI must match Google Console |
-| `GROQ_API_KEY` | Voice STT + parse (set in the Render dashboard; Blueprint `sync: false`) |
+| `GROQ_API_KEY` | Voice parse, and speech-to-text when Azure Speech is unset (set in the Render dashboard; Blueprint `sync: false`) |
+| `AZURE_SPEECH_KEY` / `AZURE_SPEECH_REGION` | Optional. Same Speech resource for transcription and spoken replies. Unset keeps Groq and Piper or the browser |
 | `GEMINI_API_KEY` | Optional. Voice planner step after DeepSeek and Qwen (`gemini-3.8-flash`). With no planner key the planner stays on Groq |
 | `DEEPSEEK_API_KEY` / `QWEN_API_KEY` | Optional earlier planner steps. `VOICE_LLM_PROVIDER=deepseek` also sends parse there |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push. Generate once with `npx web-push generate-vapid-keys`. Subject is a `mailto:` URL |

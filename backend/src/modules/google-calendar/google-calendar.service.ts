@@ -37,6 +37,26 @@ function stubExternalApis(): boolean {
   return process.env.E2E_STUB_EXTERNAL === '1';
 }
 
+/** Calendar list changes rarely. Events are reused across the page and voice. */
+const CALENDAR_LIST_TTL_MS = 10 * 60_000;
+const DISPLAY_EVENTS_TTL_MS = 2 * 60_000;
+
+type DisplayGoogleEvent = {
+  id?: string | null;
+  calendarId?: string;
+  start?: { dateTime?: string | null; date?: string | null };
+  end?: { dateTime?: string | null; date?: string | null };
+  [key: string]: unknown;
+};
+
+type GoogleEventsApi = {
+  events: {
+    list: (
+      args: Record<string, unknown>,
+    ) => Promise<{ data: { items?: DisplayGoogleEvent[]; nextPageToken?: string | null } }>;
+  };
+};
+
 function googleEventStartMs(event: {
   start?: { dateTime?: string | null; date?: string | null };
 }): number {
@@ -53,11 +73,44 @@ function googleEventStartMs(event: {
   return 0;
 }
 
+function googleEventEndMs(event: {
+  start?: { dateTime?: string | null; date?: string | null };
+  end?: { dateTime?: string | null; date?: string | null };
+}): number {
+  const dateTime = event.end?.dateTime;
+  if (dateTime) {
+    const t = new Date(dateTime).getTime();
+    if (!Number.isNaN(t)) return t;
+  }
+  const date = event.end?.date;
+  if (date) {
+    const t = new Date(`${date}T00:00:00`).getTime();
+    if (!Number.isNaN(t)) return t;
+  }
+  return googleEventStartMs(event);
+}
+
+function eventOverlapsWindow(event: DisplayGoogleEvent, startMs: number, endMs: number): boolean {
+  return googleEventEndMs(event) > startMs && googleEventStartMs(event) < endMs;
+}
+
 @Injectable()
 export class GoogleCalendarService {
   private oauth2Client;
   private readonly logger = new Logger(GoogleCalendarService.name);
   private readonly loginTickets = new Map<string, LoginTicket>();
+  private readonly calendarListCache = new Map<
+    string,
+    { at: number; items: Array<{ id?: string | null; primary?: boolean | null; selected?: boolean | null; accessRole?: string | null }> }
+  >();
+  private readonly displayEventsCache = new Map<
+    string,
+    { at: number; startMs: number; endMs: number; events: DisplayGoogleEvent[] }
+  >();
+  private readonly displayEventsInflight = new Map<
+    string,
+    { startMs: number; endMs: number; pending: Promise<{ events: DisplayGoogleEvent[]; totalEvents: number }> }
+  >();
 
   constructor(
     private configService: ConfigService,
@@ -452,6 +505,7 @@ export class GoogleCalendarService {
       );
     }
     await this.userSettingsRepo.update({ userId }, { appGoogleCalendarId: id });
+    this.calendarListCache.delete(userId);
     return id;
   }
 
@@ -556,6 +610,7 @@ export class GoogleCalendarService {
         { googleCalendarLinked: false },
       );
 
+      this.forgetGoogleDisplayCache(userId);
       this.logger.log(
         `Successfully disconnected Google Calendar for user ${userId}`,
       );
@@ -675,55 +730,192 @@ export class GoogleCalendarService {
     if (stubExternalApis()) {
       return { events: [], totalEvents: 0 };
     }
+    const startMs = new Date(timeMin).getTime();
+    const endMs = new Date(timeMax).getTime();
+    const cached = this.displayEventsFromCache(userId, startMs, endMs);
+    if (cached) return { events: cached, totalEvents: cached.length };
+
+    const covering = this.coveringDisplayFetch(userId, startMs, endMs);
+    if (covering) {
+      const loaded = await covering;
+      const events = loaded.events.filter((event) => eventOverlapsWindow(event, startMs, endMs));
+      return { events, totalEvents: events.length };
+    }
+
+    const key = `${userId}|${timeMin}|${timeMax}`;
+    const pending = this.loadDisplayEvents(userId, timeMin, timeMax, startMs, endMs, maxResults);
+    this.displayEventsInflight.set(key, { startMs, endMs, pending });
+    try {
+      return await pending;
+    } finally {
+      this.displayEventsInflight.delete(key);
+    }
+  }
+
+  private displayEventsFromCache(
+    userId: string,
+    startMs: number,
+    endMs: number,
+  ): DisplayGoogleEvent[] | null {
+    const now = Date.now();
+    for (const [key, entry] of this.displayEventsCache) {
+      if (!key.startsWith(`${userId}|`)) continue;
+      if (now - entry.at >= DISPLAY_EVENTS_TTL_MS) continue;
+      if (entry.startMs <= startMs && entry.endMs >= endMs) {
+        return entry.events.filter((event) => eventOverlapsWindow(event, startMs, endMs));
+      }
+    }
+    return null;
+  }
+
+  private coveringDisplayFetch(
+    userId: string,
+    startMs: number,
+    endMs: number,
+  ): Promise<{ events: DisplayGoogleEvent[]; totalEvents: number }> | null {
+    for (const [key, entry] of this.displayEventsInflight) {
+      if (!key.startsWith(`${userId}|`)) continue;
+      if (entry.startMs <= startMs && entry.endMs >= endMs) return entry.pending;
+    }
+    return null;
+  }
+
+  private async loadDisplayEvents(
+    userId: string,
+    timeMin: string,
+    timeMax: string,
+    startMs: number,
+    endMs: number,
+    maxResults: number,
+  ): Promise<{ events: DisplayGoogleEvent[]; totalEvents: number }> {
     const calendarIds = await this.listDisplayCalendarIds(userId);
     const appId = await this.getStoredAppCalendarId(userId);
-    const seen = new Set<string>();
-    const events: Array<{
-      id?: string | null;
-      calendarId?: string;
-      start?: { dateTime?: string | null; date?: string | null };
-      [key: string]: unknown;
-    }> = [];
+    let calendar: GoogleEventsApi;
+    try {
+      calendar = (await this.authorizedCalendar(userId)) as unknown as GoogleEventsApi;
+    } catch (error) {
+      this.logger.warn(
+        `Skip Google display events: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return { events: [], totalEvents: 0 };
+    }
 
-    for (const calendarId of calendarIds) {
-      let pageToken: string | undefined;
-      try {
-        do {
-          const page = await this.getEvents(
-            userId,
+    const chunks = await Promise.all(
+      calendarIds.map(async (calendarId) => {
+        try {
+          const pages = await this.listCalendarEventPages(
+            calendar,
+            calendarId,
             timeMin,
             timeMax,
             maxResults,
-            pageToken,
-            calendarId,
           );
-          for (const ev of page.events ?? []) {
-            if (!ev?.id) continue;
-            const key = `${calendarId}:${ev.id}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            events.push({
-              ...ev,
-              calendarId,
-              isAppGenerated: Boolean(appId && calendarId === appId),
-            });
-          }
-          pageToken = page.nextPageToken ?? undefined;
-        } while (pageToken);
-      } catch (error) {
-        this.logger.warn(
-          `Skip calendar ${calendarId} for display: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
+          return pages.map((event) => ({
+            ...event,
+            calendarId,
+            isAppGenerated: Boolean(appId && calendarId === appId),
+          }));
+        } catch (error) {
+          this.logger.warn(
+            `Skip calendar ${calendarId} for display: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+          return [] as DisplayGoogleEvent[];
+        }
+      }),
+    );
+
+    const seen = new Set<string>();
+    const events: DisplayGoogleEvent[] = [];
+    for (const chunk of chunks) {
+      for (const event of chunk) {
+        if (!event?.id) continue;
+        const key = `${event.calendarId}:${event.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        events.push(event);
       }
     }
-
     events.sort((a, b) => googleEventStartMs(a) - googleEventStartMs(b));
-    return {
+    this.displayEventsCache.set(`${userId}|${startMs}|${endMs}`, {
+      at: Date.now(),
+      startMs,
+      endMs,
       events,
-      totalEvents: events.length,
-    };
+    });
+    return { events, totalEvents: events.length };
+  }
+
+  private async listCalendarEventPages(
+    calendar: GoogleEventsApi,
+    calendarId: string,
+    timeMin: string,
+    timeMax: string,
+    maxResults: number,
+  ): Promise<DisplayGoogleEvent[]> {
+    const events: DisplayGoogleEvent[] = [];
+    let pageToken: string | undefined;
+    do {
+      const response = await calendar.events.list({
+        calendarId,
+        timeMin,
+        timeMax,
+        maxResults,
+        pageToken,
+        singleEvents: true,
+        orderBy: 'startTime',
+        fields:
+          'items(id,summary,description,start,end,location,attendees,recurringEventId,status,colorId,created,updated,htmlLink,organizer,reminders,visibility,transparency),nextPageToken',
+      });
+      events.push(...(response.data.items ?? []));
+      pageToken = response.data.nextPageToken ?? undefined;
+    } while (pageToken);
+    return events;
+  }
+
+  /** One auth setup, then every visible calendar is listed at once. */
+  private async authorizedCalendar(userId: string) {
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: {
+        googleAccessToken: true,
+        googleRefreshToken: true,
+        googleTokenExpiry: true,
+      },
+    });
+    if (!user?.googleAccessToken) {
+      throw new Error('Google Calendar not connected');
+    }
+    if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
+      if (!user.googleRefreshToken) {
+        throw new Error('Google Calendar token expired');
+      }
+      this.oauth2Client.setCredentials({
+        refresh_token: user.googleRefreshToken,
+      });
+      const { credentials } = await this.oauth2Client.refreshAccessToken();
+      await this.userRepo.update(userId, {
+        googleAccessToken: credentials.access_token,
+        googleTokenExpiry: new Date(credentials.expiry_date),
+      });
+      user.googleAccessToken = credentials.access_token;
+    }
+    this.oauth2Client.setCredentials({
+      access_token: user.googleAccessToken,
+    });
+    return google.calendar({
+      version: 'v3',
+      auth: this.oauth2Client,
+    });
+  }
+
+  private forgetGoogleDisplayCache(userId: string): void {
+    this.calendarListCache.delete(userId);
+    const prefix = `${userId}|`;
+    for (const key of this.displayEventsCache.keys()) {
+      if (key.startsWith(prefix)) this.displayEventsCache.delete(key);
+    }
   }
 
   private async listDisplayCalendarIds(userId: string): Promise<string[]> {
@@ -736,7 +928,7 @@ export class GoogleCalendarService {
     const appCalendarId = settings?.appGoogleCalendarId ?? null;
 
     try {
-      const items = await this.getCalendars(userId);
+      const items = await this.cachedCalendarList(userId);
       return displayCalendarIds({ items, hiddenIds, appCalendarId });
     } catch (error) {
       this.logger.warn(
@@ -751,6 +943,14 @@ export class GoogleCalendarService {
         listFailed: true,
       });
     }
+  }
+
+  private async cachedCalendarList(userId: string) {
+    const hit = this.calendarListCache.get(userId);
+    if (hit && Date.now() - hit.at < CALENDAR_LIST_TTL_MS) return hit.items;
+    const items = await this.getCalendars(userId);
+    this.calendarListCache.set(userId, { at: Date.now(), items });
+    return items;
   }
 
   async getEvent(
@@ -1085,6 +1285,7 @@ export class GoogleCalendarService {
       );
     }
 
+    this.forgetGoogleDisplayCache(userId);
     return {
       ...response.data,
       appCalendarId: writableCalendarId,
@@ -1188,6 +1389,7 @@ export class GoogleCalendarService {
       }
     }
 
+    this.forgetGoogleDisplayCache(userId);
     return {
       ...response.data,
       appCalendarId: writableCalendarId,
@@ -1369,6 +1571,7 @@ export class GoogleCalendarService {
       { userId },
       { appGoogleCalendarId: null },
     );
+    this.forgetGoogleDisplayCache(userId);
   }
 
   async deleteEvent(userId: string, eventId: string, calendarId?: string) {
@@ -1457,6 +1660,7 @@ export class GoogleCalendarService {
       await this.eventPhasesService.remove(link.id, String(userId));
     }
 
+    this.forgetGoogleDisplayCache(userId);
     return { success: true };
   }
 }

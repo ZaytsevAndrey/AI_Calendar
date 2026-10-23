@@ -21,7 +21,7 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Companion panel](features/companion-panel.md) | Floating desktop panel, preview cards, multi-intent Apply with statuses, day-plan dialogue |
 | [Voice prompts — next](voice-prompt-next.md) | Handoff for roadmap **§23** (split): logging-first, then goldens, then fixes |
 | [Voice fix flow](voice-fix-flow.md) | Prompt, spec, and dialogue tests stay one sentence: list the disagreement, you choose, then spec, tests, prompt |
-| [Local TTS](tts-local.md) | Piper on the home API (`npm run start:piper`); browser voice when it is down |
+| [Local TTS](tts-local.md) | Azure Speech when configured; otherwise Piper on the home API (`npm run start:piper`); browser voice when both are down |
 | [Spec: Intelligent scheduling](spec-intelligent-scheduling.md) | Unified items, settings, phases, queue, diff/undo, Google anchors (defers placement to conflict rules) |
 | [Task scheduling test matrix](task-scheduling-test-matrix.md) | Given/When/Then cases mapped to unit tests |
 | [E2E test coverage plan](e2e-test-coverage.md) | All live API/UI cases and edge cases, layers, P0 smoke, implementation waves |

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AsyncLocalStorage } from 'async_hooks';
+import { traceStep } from '../../common/voice-trace';
 import {
   DEFAULT_DEEPSEEK_PLANNER_MODEL,
   deepseekPlannerCall,
@@ -401,7 +402,7 @@ export class GroqClient {
       return form;
     };
 
-    let result = await this.transcribeOnce(buildForm);
+    let result = await this.trackStt(() => this.transcribeOnce(buildForm));
     if (!result.ok && result.status === 429) {
       if (isDailyTokenLimit(result.error) && this.canHopKey()) {
         this.retirePinnedKey();
@@ -410,7 +411,7 @@ export class GroqClient {
           const ctx = this.requestAls.getStore();
           if (ctx) ctx.keyIndex = 0;
           this.logger.warn('Groq STT TPD; hopping to next key');
-          result = await this.transcribeOnce(buildForm);
+          result = await this.trackStt(() => this.transcribeOnce(buildForm));
         }
       } else if (!isDailyTokenLimit(result.error)) {
         for (
@@ -421,12 +422,12 @@ export class GroqClient {
           const wait = result.retryAfterMs ?? 4000;
           this.logger.warn(`Groq STT rate limit; retrying in ${wait}ms`);
           await this.sleep(wait);
-          result = await this.transcribeOnce(buildForm);
+          result = await this.trackStt(() => this.transcribeOnce(buildForm));
         }
         if (!result.ok && result.status === 429 && this.canHopKey()) {
           this.advancePin();
           this.logger.warn('Groq STT TPM; hopping to next key');
-          result = await this.transcribeOnce(buildForm);
+          result = await this.trackStt(() => this.transcribeOnce(buildForm));
         }
       }
     }
@@ -592,6 +593,7 @@ export class GroqClient {
       DEFAULT_DEEPSEEK_PLANNER_MODEL;
     const base =
       this.config.get<string>('DEEPSEEK_BASE_URL')?.trim() || 'https://api.deepseek.com';
+    return this.trackLlm(`deepseek:${model}`, async () => {
     const call = deepseekPlannerCall(model, systemPrompt, userPrompt);
     let response: Response;
     try {
@@ -625,6 +627,7 @@ export class GroqClient {
     this.recordTokens(parsed.tokens);
     this.noteEvalSpend(model, parsed.tokens, null);
     return parsed.content;
+    }, (value) => value == null);
   }
 
   /**
@@ -643,6 +646,7 @@ export class GroqClient {
     const base =
       this.config.get<string>('QWEN_BASE_URL')?.trim() ||
       'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
+    return this.trackLlm(`qwen:${model}`, async () => {
     const call = qwenPlannerCall(model, systemPrompt, userPrompt);
     let response: Response;
     try {
@@ -672,6 +676,7 @@ export class GroqClient {
     this.recordTokens(parsed.tokens);
     this.noteEvalSpend(model, parsed.tokens, null);
     return parsed.content;
+    }, (value) => value == null);
   }
 
   /**
@@ -687,6 +692,7 @@ export class GroqClient {
     const model =
       this.config.get<string>('GEMINI_PLANNER_MODEL')?.trim() ||
       DEFAULT_GEMINI_PLANNER_MODEL;
+    return this.trackLlm(`gemini:${model}`, async () => {
     const call = geminiPlannerCall(model, systemPrompt, userPrompt);
     let response: Response;
     try {
@@ -718,6 +724,7 @@ export class GroqClient {
     this.recordTokens(parsed.tokens);
     this.noteEvalSpend(model, parsed.tokens, null);
     return parsed.content;
+    }, (value) => value == null);
   }
 
   private localLlmBase(): string {
@@ -746,7 +753,21 @@ export class GroqClient {
     throw new ServiceUnavailableException(error);
   }
 
-  private async ollamaChat(
+  private ollamaChat(
+    base: string,
+    model: string,
+    systemPrompt: string,
+    userPrompt: string,
+    jsonFormat: boolean,
+  ): Promise<{ ok: true; content: string } | { ok: false; error: string; status: number }> {
+    return this.trackLlm(
+      `ollama:${model}`,
+      () => this.postOllama(base, model, systemPrompt, userPrompt, jsonFormat),
+      (result) => !result.ok,
+    );
+  }
+
+  private async postOllama(
     base: string,
     model: string,
     systemPrompt: string,
@@ -902,11 +923,56 @@ export class GroqClient {
     return result;
   }
 
+  private llmStepName(): string {
+    return this.evalMeta?.label || 'llm';
+  }
+
+  private trackLlm<T>(
+    via: string,
+    fn: () => Promise<T>,
+    failed?: (value: T) => boolean,
+  ): Promise<T> {
+    return traceStep('llm', this.llmStepName(), via, fn, failed);
+  }
+
+  private trackStt<T extends { ok: boolean }>(fn: () => Promise<T>): Promise<T> {
+    return traceStep('other', 'stt', `groq:${this.sttModel()}`, fn, (result) => !result.ok);
+  }
+
   private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    if (ms <= 0) return Promise.resolve();
+    return traceStep(
+      'other',
+      'wait',
+      '',
+      () => new Promise((resolve) => setTimeout(resolve, ms)),
+    );
   }
 
   private async chatCompletion(
+    model: string,
+    systemPrompt: string,
+    userPrompt: string,
+    jsonObject: boolean,
+  ): Promise<
+    | { ok: true; content: string }
+    | {
+        ok: false;
+        error: string;
+        status: number;
+        retryAfterMs?: number;
+        failedGeneration?: string;
+      }
+  > {
+    await this.paceForEval(model, systemPrompt, userPrompt);
+    return this.trackLlm(
+      `groq:${model}`,
+      () => this.postGroqChat(model, systemPrompt, userPrompt, jsonObject),
+      (result) => !result.ok,
+    );
+  }
+
+  private async postGroqChat(
     model: string,
     systemPrompt: string,
     userPrompt: string,
@@ -932,8 +998,6 @@ export class GroqClient {
     if (jsonObject) {
       body.response_format = { type: 'json_object' };
     }
-
-    await this.paceForEval(model, systemPrompt, userPrompt);
 
     let response: Response;
     try {
