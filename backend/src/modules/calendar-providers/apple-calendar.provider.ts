@@ -13,6 +13,7 @@ import type {
   ProviderEventPatch,
 } from './calendar-provider.types';
 import { parseVEvent, patchVEventIcs } from './apple-ics.util';
+import { appleEventExtras } from './map-apple-preview';
 import {
   decodeAppleObjectId,
   encodeAppleObjectId,
@@ -384,6 +385,7 @@ export class AppleCalendarProvider implements CalendarProvider {
               transparency: parsed.transparency,
               isAppGenerated: false,
               provider: 'apple',
+              ...appleEventExtras(parsed),
             });
           }
           this.logger.log(
@@ -494,6 +496,7 @@ export class AppleCalendarProvider implements CalendarProvider {
       status: parsed.status,
       transparency: parsed.transparency,
       provider: 'apple',
+      ...appleEventExtras(parsed),
     };
   }
 

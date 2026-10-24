@@ -6,6 +6,14 @@ async function flushAsyncWork(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
 }
 
+/** UTC instant on a day that is still open relative to the test clock. */
+function futureUtc(dayOffset: number, hour: number): string {
+  const date = new Date();
+  date.setUTCHours(hour, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() + dayOffset);
+  return date.toISOString();
+}
+
 describe('DisplayedEventMoveService', () => {
   const userId = 'user-1';
   const dto = {
@@ -416,10 +424,10 @@ describe('DisplayedEventMoveService', () => {
   it('ends the old series before the dropped day and starts a new series', async () => {
     const future = {
       ...dto,
-      originalStart: '2026-10-20T09:00:00.000Z',
-      originalEnd: '2026-10-20T10:00:00.000Z',
-      start: '2026-10-20T11:00:00.000Z',
-      end: '2026-10-20T12:00:00.000Z',
+      originalStart: futureUtc(4, 9),
+      originalEnd: futureUtc(4, 10),
+      start: futureUtc(4, 11),
+      end: futureUtc(4, 12),
     };
     const evening = {
       id: 'phase-eve',
@@ -447,8 +455,8 @@ describe('DisplayedEventMoveService', () => {
         {
           id: 'slot-prev',
           taskId: 'series-1',
-          scheduledStartTime: new Date('2026-10-18T09:00:00.000Z'),
-          scheduledEndTime: new Date('2026-10-18T10:00:00.000Z'),
+          scheduledStartTime: new Date(futureUtc(2, 9)),
+          scheduledEndTime: new Date(futureUtc(2, 10)),
         },
         {
           id: 'slot-1',
@@ -483,10 +491,10 @@ describe('DisplayedEventMoveService', () => {
   it('treats series scope on the first open day as all', async () => {
     const future = {
       ...dto,
-      originalStart: '2026-10-20T09:00:00.000Z',
-      originalEnd: '2026-10-20T10:00:00.000Z',
-      start: '2026-10-20T11:00:00.000Z',
-      end: '2026-10-20T12:00:00.000Z',
+      originalStart: futureUtc(2, 9),
+      originalEnd: futureUtc(2, 10),
+      start: futureUtc(2, 11),
+      end: futureUtc(2, 12),
     };
     const saveTask = jest.fn(async (row) => ({ id: row.id ?? 'series-1', ...row }));
     const removeSlots = jest.fn().mockResolvedValue(undefined);
@@ -504,8 +512,8 @@ describe('DisplayedEventMoveService', () => {
         {
           id: 'slot-2',
           taskId: 'series-1',
-          scheduledStartTime: new Date('2026-10-21T09:00:00.000Z'),
-          scheduledEndTime: new Date('2026-10-21T10:00:00.000Z'),
+          scheduledStartTime: new Date(futureUtc(3, 9)),
+          scheduledEndTime: new Date(futureUtc(3, 10)),
         },
       ]),
     });

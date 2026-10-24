@@ -552,6 +552,7 @@ Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day,
 | U-CAL-021 | U | — | ~~Generate preview cancel~~ | removed |
 | U-CAL-022 | U | P1 | Calendars menu | Uncheck a selected Google calendar | `hiddenGoogleCalendarIds` stores that id |
 | U-CAL-023 | U | P1 | Viewports 1024×700, 1100×800, 1279×768, then 1280×720 | Week, day, month | Hour grid stays on screen, including 08:00 and 20:00. Month grid has height. Event list can be scrolled into view. Desktop hour grid still has height |
+| U-CAL-027 | U | P1 | Event with location, people, and an HTML note | Click the chip | Preview groups filled fields only. A link opens with `target=_blank`. HTML is sanitized. Covered by `eventPreviewFacts.spec.ts` and `eventPreviewText.spec.ts` |
 | U-CAL-025a | U | P1 | Problematic parked task | Banner Review | Problematic inbox opens with the task |
 | U-CAL-025b | U | P1 | Move sheet open | Inspect | Day + Phase + Start time fields visible |
 | U-CAL-025c | U | P1 | Move sheet open | Load free-slots | Listbox “Available start times” has options |

@@ -1018,6 +1018,16 @@ const CalendarPage: React.FC = () => {
             <EventPreview
                 open={eventPreview.open}
                 event={eventPreview.event}
+                calendarName={
+                    eventPreview.event
+                        ? calendarNameById[
+                              `${eventPreview.event.provider ?? 'google'}:${eventPreview.event.calendarId}`
+                          ]?.summary ||
+                          (eventPreview.event.calendarId
+                              ? calendarNameById[eventPreview.event.calendarId]?.summary
+                              : undefined)
+                        : undefined
+                }
                 task={
                     eventPreview.event
                         ? resolveTaskForCalendarEvent(tasks, eventPreview.event) ?? null

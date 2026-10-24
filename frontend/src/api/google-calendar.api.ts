@@ -17,10 +17,12 @@ export interface GoogleCalendarEvent {
         timeZone?: string;
     };
     attendees?: Array<{
-        email: string;
+        email?: string;
         displayName?: string;
-        responseStatus?: 'needsAction' | 'declined' | 'tentative' | 'accepted';
+        responseStatus?: string;
         self?: boolean;
+        optional?: boolean;
+        resource?: boolean;
     }>;
     recurringEventId?: string;
     status?: 'confirmed' | 'tentative' | 'cancelled';
@@ -30,7 +32,7 @@ export interface GoogleCalendarEvent {
     updated?: string;
     htmlLink?: string;
     organizer?: {
-        email: string;
+        email?: string;
         displayName?: string;
         self?: boolean;
     };
@@ -47,6 +49,27 @@ export interface GoogleCalendarEvent {
     isAppGenerated?: boolean;
     /** google | microsoft | apple — set by /calendar-providers/events */
     provider?: 'google' | 'microsoft' | 'apple';
+    /** Present only when the provider sent something worth a row. */
+    preview?: {
+        calendarName?: string;
+        joinLinks?: { label: string; url?: string }[];
+        phones?: string[];
+        locations?: string[];
+        attachments?: { label: string; url?: string }[];
+        source?: { label: string; url?: string };
+        categories?: string[];
+        comment?: string;
+        importance?: string;
+        sensitivity?: string;
+        showAs?: string;
+        eventKind?: string;
+        kindDetail?: string;
+        descriptionHtml?: string;
+        structuredLocation?: string;
+        priority?: number;
+        recurrenceText?: string;
+        hasAttachments?: boolean;
+    };
 }
 
 export interface GoogleCalendarListItem {

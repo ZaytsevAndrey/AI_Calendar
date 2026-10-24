@@ -45,7 +45,7 @@ Unified list across connected providers (Google; Microsoft when OAuth linked; Ap
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/calendar-providers/calendars` | `{ providers, sections, calendars }` |
-| GET | `/calendar-providers/events` | Display events for `timeMin` / `timeMax` |
+| GET | `/calendar-providers/events` | Display events for `timeMin` / `timeMax`. Each event may include attendees, organizer, `htmlLink`, reminders, and `preview` (join links, phones, attachments, categories, HTML body) when the provider sent them |
 
 ## User settings — `/user-settings`
 

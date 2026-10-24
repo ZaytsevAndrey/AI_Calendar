@@ -48,7 +48,7 @@ function formatDuration(event: GoogleCalendarEvent): string | null {
 }
 
 function attendeeLabel(person: NonNullable<GoogleCalendarEvent['attendees']>[number]): string {
-    const name = person.displayName || person.email;
+    const name = person.displayName || person.email || '';
     if (!person.responseStatus || person.responseStatus === 'needsAction') return name;
     const status =
         person.responseStatus === 'accepted'

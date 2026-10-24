@@ -1,3 +1,5 @@
+import type { EventLink, EventPerson } from './calendar-provider.types';
+
 /** Minimal iCalendar helpers for Apple CalDAV event mapping. */
 
 export type ParsedVEvent = {
@@ -10,6 +12,18 @@ export type ParsedVEvent = {
   recurringEventId?: string;
   status?: string;
   transparency?: string;
+  url?: string;
+  attachments?: EventLink[];
+  attendees?: EventPerson[];
+  organizer?: EventPerson;
+  alarmMinutes?: number[];
+  /** public | private | confidential */
+  visibility?: string;
+  categories?: string[];
+  comment?: string;
+  priority?: number;
+  structuredLocation?: string;
+  recurrenceText?: string;
 };
 
 function unfoldIcs(raw: string): string {
@@ -31,6 +45,86 @@ function propValue(block: string, name: string): string | undefined {
   const line = m[0];
   const idx = line.indexOf(':');
   return idx >= 0 ? unescapeText(line.slice(idx + 1).trim()) : undefined;
+}
+
+function allPropLines(block: string, name: string): string[] {
+  const re = new RegExp(`^${name}([^:]*):(.*)$`, 'gim');
+  const out: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(block))) out.push(match[0]);
+  return out;
+}
+
+function paramsFromLine(line: string): Record<string, string> {
+  const idx = line.indexOf(':');
+  const head = idx >= 0 ? line.slice(0, idx) : line;
+  const out: Record<string, string> = {};
+  for (const part of head.split(';').slice(1)) {
+    if (!part || !part.includes('=')) continue;
+    const eq = part.indexOf('=');
+    const key = part.slice(0, eq).trim().toUpperCase();
+    let value = part.slice(eq + 1).trim();
+    if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+    out[key] = value;
+  }
+  return out;
+}
+
+function valueFromLine(line: string): string {
+  const idx = line.indexOf(':');
+  return idx >= 0 ? unescapeText(line.slice(idx + 1).trim()) : '';
+}
+
+function personFromLine(line: string): EventPerson | undefined {
+  const params = paramsFromLine(line);
+  const raw = valueFromLine(line).replace(/^mailto:/i, '');
+  const email = raw.includes('@') ? raw : undefined;
+  const displayName = params.CN;
+  if (!email && !displayName) return undefined;
+  const part = (params.PARTSTAT || '').toUpperCase();
+  const role = (params.ROLE || '').toUpperCase();
+  const cutype = (params.CUTYPE || '').toUpperCase();
+  const responseStatus =
+    part === 'ACCEPTED'
+      ? 'accepted'
+      : part === 'DECLINED'
+        ? 'declined'
+        : part === 'TENTATIVE'
+          ? 'tentative'
+          : part === 'NEEDS-ACTION'
+            ? 'needsAction'
+            : undefined;
+  return {
+    email,
+    displayName,
+    responseStatus,
+    optional: role === 'OPT-PARTICIPANT',
+    resource: cutype === 'ROOM' || cutype === 'RESOURCE',
+  };
+}
+
+function alarmMinutes(block: string): number[] {
+  const alarms = block.match(/BEGIN:VALARM[\s\S]*?END:VALARM/gi) ?? [];
+  const minutes: number[] = [];
+  for (const alarm of alarms) {
+    const trigger = propValue(alarm, 'TRIGGER');
+    if (!trigger || trigger.startsWith('+')) continue;
+    const match = trigger.match(/P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?)?/i);
+    if (!match) continue;
+    const total =
+      Number(match[1] || 0) * 1440 +
+      Number(match[2] || 0) * 60 +
+      Number(match[3] || 0);
+    if (total > 0) minutes.push(total);
+  }
+  return minutes;
+}
+
+function structuredLocation(block: string): string | undefined {
+  const line = allPropLines(block, 'X-APPLE-STRUCTURED-LOCATION')[0];
+  if (!line) return undefined;
+  const params = paramsFromLine(line);
+  return params['X-TITLE'] || params['X-APPLE-ADDRESS'] || params['X-ADDRESS'];
 }
 
 function propParams(block: string, name: string): Record<string, string> {
@@ -140,6 +234,34 @@ export function parseVEvent(ics: string): ParsedVEvent | null {
   if (!end && start) end = { ...start };
   const statusRaw = propValue(block, 'STATUS')?.toUpperCase();
   const transp = propValue(block, 'TRANSP')?.toUpperCase();
+  const classRaw = propValue(block, 'CLASS')?.toUpperCase();
+  const visibility =
+    classRaw === 'PRIVATE'
+      ? 'private'
+      : classRaw === 'CONFIDENTIAL'
+        ? 'confidential'
+        : classRaw === 'PUBLIC'
+          ? 'public'
+          : undefined;
+  const priorityRaw = Number(propValue(block, 'PRIORITY'));
+  const categories = propValue(block, 'CATEGORIES')
+    ?.split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const attendees = allPropLines(block, 'ATTENDEE')
+    .map(personFromLine)
+    .filter((row): row is EventPerson => !!row);
+  const organizer = allPropLines(block, 'ORGANIZER').map(personFromLine)[0];
+  const attachments: EventLink[] = [];
+  for (const line of allPropLines(block, 'ATTACH')) {
+    const params = paramsFromLine(line);
+    const url = valueFromLine(line);
+    const label = params.FILENAME || url;
+    if (!label) continue;
+    attachments.push({ label, url: url || undefined });
+  }
+  const alarms = alarmMinutes(block);
+  const rrule = propValue(block, 'RRULE');
   return {
     uid,
     summary: propValue(block, 'SUMMARY'),
@@ -148,8 +270,31 @@ export function parseVEvent(ics: string): ParsedVEvent | null {
     start,
     end,
     recurringEventId: recurId ? uid : undefined,
-    status: statusRaw === 'CANCELLED' ? 'cancelled' : undefined,
-    transparency: transp === 'TRANSPARENT' ? 'transparent' : undefined,
+    status:
+      statusRaw === 'CANCELLED'
+        ? 'cancelled'
+        : statusRaw === 'TENTATIVE'
+          ? 'tentative'
+          : statusRaw === 'CONFIRMED'
+            ? 'confirmed'
+            : undefined,
+    transparency:
+      transp === 'TRANSPARENT'
+        ? 'transparent'
+        : transp === 'OPAQUE'
+          ? 'opaque'
+          : undefined,
+    url: propValue(block, 'URL'),
+    attachments: attachments.length ? attachments : undefined,
+    attendees: attendees.length ? attendees : undefined,
+    organizer,
+    alarmMinutes: alarms.length ? alarms : undefined,
+    visibility,
+    categories: categories?.length ? categories : undefined,
+    comment: propValue(block, 'COMMENT'),
+    priority: Number.isFinite(priorityRaw) ? priorityRaw : undefined,
+    structuredLocation: structuredLocation(block),
+    recurrenceText: rrule,
   };
 }
 

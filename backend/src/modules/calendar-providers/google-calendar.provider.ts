@@ -6,6 +6,7 @@ import type {
   ProviderEvent,
   ProviderEventPatch,
 } from './calendar-provider.types';
+import { googleEventExtras } from './map-google-preview';
 
 /** Adapts the existing Google Calendar service to the unified provider interface. */
 @Injectable()
@@ -55,6 +56,7 @@ export class GoogleCalendarProvider implements CalendarProvider {
           e.transparency != null ? String(e.transparency) : undefined,
         isAppGenerated: Boolean(e.isAppGenerated),
         provider: 'google' as const,
+        ...googleEventExtras(e as unknown as Record<string, unknown>),
       }));
   }
 

@@ -14,6 +14,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ## Shipped (Oct 2026)
 
+- [x] **§35 Event preview content.** A calendar click opens a grouped sheet: title, time, and chips, then only the fields that have a value (links, place, when, people, task, details) for Google, Outlook, iCloud, and app tasks. http(s) links open in a new tab. Notes render as sanitized HTML when the provider sent HTML, otherwise as plain text with links. Edit, Delete, and Done stay on the sheet.
+
 - [x] **Fast create.** Companion panel switch: Companion (dialogue) or Fast create. Fast create builds a new task from one phrase and asks at most once, only when there is no name or the span cannot be stored both as the event length and as the window. Other writes, questions, and day plans stay on the Companion rules. Preview and Apply stay. Choice is kept in the browser and sent as `mode` on `POST /voice/turn`. See [spec-voice-agent.md](spec-voice-agent.md) §6.8.
 
 - [x] **Companion multi-intent + day-plan dialogue.** The planner splits one utterance into up to 6 text segments (writes + Q&A); each goes through the router and the specialist, and the batch gets one confirm. After Apply the client reports per-intent statuses (`actionId: 'report'`) and the panel shows **Done just now** cards. "Plan my day" keeps the interview open until Apply, with no question cap, seats Unscheduled, new and flexible tasks via an engine dry-run (`previewSequence`), and accepts voice edits that mark changed cards before Apply. Old greedy packer and regex heuristics removed. Current planner chain and when-rules: [spec-voice-agent.md](spec-voice-agent.md) §6.1, §6.4.

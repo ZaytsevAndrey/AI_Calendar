@@ -41,6 +41,10 @@ function stubExternalApis(): boolean {
 const CALENDAR_LIST_TTL_MS = 10 * 60_000;
 const DISPLAY_EVENTS_TTL_MS = 2 * 60_000;
 
+/** Fields the preview can show. Named once so both list paths stay in sync. */
+export const GOOGLE_EVENT_LIST_FIELDS =
+  'items(id,summary,description,start,end,location,attendees,recurringEventId,status,colorId,created,updated,htmlLink,hangoutLink,organizer,reminders,visibility,transparency,conferenceData,attachments,source,eventType,workingLocationProperties,outOfOfficeProperties,focusTimeProperties,birthdayProperties),nextPageToken';
+
 type DisplayGoogleEvent = {
   id?: string | null;
   calendarId?: string;
@@ -696,8 +700,7 @@ export class GoogleCalendarService {
         pageToken,
         singleEvents: true,
         orderBy: 'startTime',
-        fields:
-          'items(id,summary,description,start,end,location,attendees,recurringEventId,status,colorId,created,updated,htmlLink,organizer,reminders,visibility,transparency),nextPageToken',
+        fields: GOOGLE_EVENT_LIST_FIELDS,
       });
 
       this.logger.log(
@@ -865,8 +868,7 @@ export class GoogleCalendarService {
         pageToken,
         singleEvents: true,
         orderBy: 'startTime',
-        fields:
-          'items(id,summary,description,start,end,location,attendees,recurringEventId,status,colorId,created,updated,htmlLink,organizer,reminders,visibility,transparency),nextPageToken',
+        fields: GOOGLE_EVENT_LIST_FIELDS,
       });
       events.push(...(response.data.items ?? []));
       pageToken = response.data.nextPageToken ?? undefined;

@@ -11,6 +11,10 @@ import type {
   ProviderEvent,
   ProviderEventPatch,
 } from './calendar-provider.types';
+import {
+  microsoftEventExtras,
+  type GraphEventPreviewInput,
+} from './map-microsoft-preview';
 
 type GraphCalendar = {
   id?: string;
@@ -19,18 +23,7 @@ type GraphCalendar = {
   canEdit?: boolean;
 };
 
-type GraphEvent = {
-  id?: string;
-  subject?: string;
-  bodyPreview?: string;
-  location?: { displayName?: string };
-  start?: { dateTime?: string; timeZone?: string };
-  end?: { dateTime?: string; timeZone?: string };
-  isAllDay?: boolean;
-  isCancelled?: boolean;
-  showAs?: string;
-  seriesMasterId?: string;
-};
+type GraphEvent = GraphEventPreviewInput;
 
 @Injectable()
 export class MicrosoftCalendarProvider implements CalendarProvider {
@@ -96,7 +89,7 @@ export class MicrosoftCalendarProvider implements CalendarProvider {
           `https://graph.microsoft.com/v1.0/me/calendars/${encodeURIComponent(cal.id)}/calendarView` +
           `?startDateTime=${encodeURIComponent(timeMin)}` +
           `&endDateTime=${encodeURIComponent(timeMax)}` +
-          `&$select=id,subject,bodyPreview,location,start,end,isAllDay,isCancelled,showAs,seriesMasterId` +
+          `&$select=id,subject,bodyPreview,body,location,locations,start,end,isAllDay,isCancelled,showAs,seriesMasterId,webLink,onlineMeeting,onlineMeetingUrl,isOnlineMeeting,attendees,organizer,isReminderOn,reminderMinutesBeforeStart,categories,importance,sensitivity,recurrence,createdDateTime,lastModifiedDateTime,hasAttachments` +
           `&$top=250`;
         const data = await this.graphJson<{ value?: GraphEvent[] }>(token, url, {
           Prefer: 'outlook.timezone="UTC"',
@@ -164,12 +157,13 @@ export class MicrosoftCalendarProvider implements CalendarProvider {
     const allDay = !!ev.isAllDay;
     const startDt = ev.start?.dateTime;
     const endDt = ev.end?.dateTime;
+    const extras = microsoftEventExtras(ev);
     return {
       id: String(ev.id),
       calendarId,
       summary: ev.subject,
-      description: ev.bodyPreview,
-      location: ev.location?.displayName,
+      description: extras.description,
+      location: extras.location,
       start: allDay
         ? { date: startDt?.slice(0, 10) }
         : {
@@ -183,10 +177,17 @@ export class MicrosoftCalendarProvider implements CalendarProvider {
             timeZone: ev.end?.timeZone,
           },
       recurringEventId: ev.seriesMasterId,
-      status: ev.isCancelled ? 'cancelled' : undefined,
-      transparency: ev.showAs === 'free' ? 'transparent' : undefined,
+      status: extras.status,
+      transparency: extras.transparency,
       isAppGenerated: false,
       provider: 'microsoft',
+      attendees: extras.attendees,
+      organizer: extras.organizer,
+      htmlLink: extras.htmlLink,
+      reminders: extras.reminders,
+      created: extras.created,
+      updated: extras.updated,
+      preview: extras.preview,
     };
   }
 

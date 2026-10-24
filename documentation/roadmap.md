@@ -12,40 +12,15 @@ Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Produ
 
 ## Now (ordered)
 
-Do in order unless you explicitly skip ahead. These items need no outside service and no open product decision.
+Do in order unless you explicitly skip ahead. These items need no outside service and no open product decision. Web only. The full mobile version is **§32**, after this web queue is done.
 
-### 31. Database backup
+### 33. Calendar layout
 
-The copy script wipes production tables before it writes. There is no separate backup.
-
-- [ ] Scheduled copy of Postgres and a restore that has been run once.
-
-### 32. Mobile daily path
-
-Below 768px the shell is a bottom tab bar and the calendar opens on day. That pass is not finished.
-
-- [ ] On a phone, finish the daily path: see today, create or speak a task, mark it done.
-
-### 33. Calendar card min height + crowded hour stretch
-
-Short blocks can look too thin. When many events share an hour, the hour row stays the same height.
+Card density and the current-time marker are one layout pass. Do them together.
 
 - [ ] Minimum height for a task card on the day/week grid so the title and chips stay readable.
 - [ ] Stretch that hour’s row height when it holds many overlapping or stacked events, so cards do not crush each other.
-
-### 35. Event / task preview — look + content
-
-`EventPreview` ships, but the sheet looks weak and shows almost nothing useful beyond title and time.
-
-- [ ] Redesign the preview layout (hierarchy, spacing, actions).
-- [ ] Fill it with the fields people need before Edit: type, phase, duration, deadline / window, calendar source, recurrence, status, description when present — for both app tasks and provider-only events.
-
-### 36. Now line on the calendar
-
-Day and week time grids have no current-time marker.
-
-- [ ] Draw a horizontal line at the current clock (Settings IANA `timeZone`) across today’s column.
-- [ ] Label it **Now** (i18n). Hide when the visible day/week does not include the current civil day, or when now falls outside the personal wake–sleep window.
+- [ ] Draw a horizontal **Now** line at the current clock (Settings IANA `timeZone`) across today’s column. Hide it when the visible day/week does not include the current civil day, or when now falls outside the personal wake–sleep window.
 
 ### 37. Diagnose duplicate / excess fetches
 
@@ -60,6 +35,7 @@ Network looks busy: the same resources seem to refetch too often (calendar event
 
 Do not start these. The shape is still open.
 
+- **§31 Database backup.** After production moves to a paid host. Free Neon keeps about six hours of history and has no backup schedule; Render’s disk is ephemeral and Render Cron is paid. The SQLite copy script still wipes production tables before it writes. Do not build a homegrown dump on this free stack. When the paid service is chosen: a scheduled Postgres copy and a restore that has been run once.
 - **§24 Personal-computer build, then local TTS.** Deferred from Now — do after the rest of Now. Handoff: [tts-local.md](tts-local.md). en/uk only. Other languages are [end of queue](#end--external-do-not-start). Build/run variant for a personal computer (stays awake; not the Render free service); on that build only: one Piper HTTP process, voice per request (`uk` Тетяна, `en` Lessac), behind `VoiceSpeech.speak()`.
 - **Habits.** Soft-disabled for MVP (no UI/nav/voice/schedule/reminders impact; DB rows and Google habit events left as-is). Re-enable only after we decide what habits should become.
 - **Languages beyond en/uk.** UI and speech are en and uk. Pick the set before adding catalogs.
@@ -69,6 +45,18 @@ Do not start these. The shape is still open.
 - **Outbound sync beyond Google.** Settings stores `syncTargetCalendars`, but app-task create/update/delete still writes Google only. Do not start until that write path is the task.
 - **Invite to an event (large).** Add someone to an event. Likely **per calendar provider** (Google / Microsoft / Apple differ on attendees, contact pickers, and OAuth scopes). Before any build: investigate whether we can read contacts at all; design the flow when contacts permission is denied (manual email? paste? skip?); decide where invite lives (preview, editor, voice); agree RSVP / attendees UI. Needs a dedicated product discussion — do not start from a thin ticket.
 - **User preference profile (large).** From voice / chat and from the schedule, gather durable facts about the user and inject them into day-plan and Suggestions prompts. Examples: avoid heavy work on days packed with meetings; commute home is ~40 minutes unless they stop somewhere. Before build: what is stored (structured prefs vs free-text notes), who can see/edit/delete it, how often it updates, privacy vs quality. Do not start until that shape is agreed.
+
+---
+
+## After the web
+
+Do not start until the web product is finished. Not a phone polish of one screen.
+
+### 32. Full mobile version
+
+Below 768px the shell already has a bottom tab bar and the calendar opens on day. That is not this item.
+
+- [ ] A complete mobile version of the product, after the web is done.
 
 ---
 
@@ -82,6 +70,7 @@ Third parties and publishing. Leave these until the Now list is done.
 - **Next.js landing and lead capture.**
 - **Speech for languages other than en/uk.**
 - **More calendar providers** beyond Google / Microsoft / Apple.
+- **Research only — push subscriptions for calendar updates.** Google Calendar push (watch / channels) and Microsoft Graph change notifications. Decide whether we need them at all versus poll / fetch-on-open. Do not build until that research says yes.
 
 ---
 
@@ -96,7 +85,7 @@ Third parties and publishing. Leave these until the Now list is done.
 
 ## Recommended next steps
 
-1. In progress: roadmap **§32** — mobile daily path.
-2. Then the rest of **Now**: §31 database backup, §33 card min height / crowded hour, §35 preview look + content, §36 now line on the calendar, §37 diagnose duplicate fetches. (§24 Piper is in Later.)
+1. Next: roadmap **§33** — calendar layout (card min height, crowded hour, Now line).
+2. Then **§37** diagnose duplicate fetches. (§32 full mobile version is after the web. §31 backup and §24 Piper are in Later.)
 3. Voice understanding continues in parallel via [voice-prompt-next.md](voice-prompt-next.md); do not put it back in this queue.
 4. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.
