@@ -62,11 +62,6 @@ test.describe('phone layout', () => {
     await expect(page.getByRole('button', { name: 'Day', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(hours).toBeVisible();
 
-    await page.getByRole('button', { name: 'Events', exact: true }).click();
-    const eventsDialog = page.getByRole('dialog').filter({ hasText: /events|No events found/i });
-    await expect(eventsDialog).toBeVisible();
-    await page.getByRole('button', { name: 'Close modal' }).click();
-
     await page.getByRole('link', { name: 'Tasks' }).click();
     await expect(page.getByRole('heading', { name: 'Tasks' })).toBeVisible();
 
@@ -197,11 +192,6 @@ test.describe('widths between the phone and desktop layouts', () => {
     }
 
     await page.setViewportSize({ width: 1024, height: 700 });
-    const events = page.getByText(/Week events|No events found for this period/);
-    await events.scrollIntoViewIfNeeded();
-    const eventsBox = await painted(events);
-    expect(eventsBox.visible).toBeGreaterThan(8);
-
     await page.getByRole('button', { name: 'Day', exact: true }).click();
     await expectHoursOnScreen(page, '1024x700 day');
 

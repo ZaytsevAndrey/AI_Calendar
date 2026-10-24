@@ -8,9 +8,6 @@ import {
   eventsForDay,
   eventsForHourSlot,
   eventsQueryRange,
-  eventsVisibleInView,
-  formatEventListDate,
-  formatEventListTime,
   formatEventTime,
   getDaysInView,
   gridEventsForDay,
@@ -185,20 +182,6 @@ describe('event times', () => {
     expect(chipLabel(fridayOff)).toBe('Friday off');
   });
 
-  it('list times show the local start–end range', () => {
-    expect(formatEventListTime(standup)).toMatch(/09:00/);
-    expect(formatEventListTime(standup)).toMatch(/09:30/);
-    expect(formatEventListTime(review)).toMatch(/14:15/);
-    expect(formatEventListTime(review)).toMatch(/15:00/);
-    expect(formatEventListTime(fridayOff)).toBe('All day');
-  });
-
-  it('list dates match the local day of the event', () => {
-    expect(formatEventListDate(standup)).toMatch(/9/);
-    expect(formatEventListDate(standup)).toMatch(/Sep/i);
-    expect(formatEventListDate(standup)).toMatch(/2026/);
-  });
-
   it('tooltip times include the local start and end', () => {
     expect(formatEventTime(standup)).toMatch(/9:00/i);
     expect(formatEventTime(standup)).toMatch(/9:30/i);
@@ -234,12 +217,6 @@ describe('day view', () => {
     expect(hours).toContain('10:00');
     expect(hours).not.toContain('02:00');
     expect(hours).not.toContain('08:00');
-  });
-
-  it('shows every waking timed event that starts that day', () => {
-    const visible = eventsVisibleInView('day', focusDay, displayEvents);
-    expect(ids(visible)).toEqual(['lunch', 'standup']);
-    expect(visible.map(chipLabel)).toEqual(['Standup', 'Lunch']);
   });
 });
 
@@ -367,63 +344,10 @@ describe('week view', () => {
       'prev-sun',
     ]);
   });
-
-  it('shows all events in the week except cancelled and sleep-hour items', () => {
-    const visible = eventsVisibleInView('week', focusDay, displayEvents);
-    expect(ids(visible)).toEqual(['friday-off', 'lunch', 'planning', 'review', 'standup']);
-    expect(visible.map(chipLabel).sort()).toEqual([
-      'Friday off',
-      'Lunch',
-      'Planning',
-      'Review',
-      'Standup',
-    ]);
-    expect(ids(visible)).not.toContain('cancelled');
-    expect(ids(visible)).not.toContain('late');
-    expect(ids(visible)).not.toContain('prev-sun');
-    expect(ids(visible)).not.toContain('oct');
-  });
-
-  it('keeps completed overlay chips out of the side list when they fall outside the open week', () => {
-    const oldDone = {
-      id: 'local-completed:old',
-      summary: 'Оплатити за квартиру',
-      start: { dateTime: '2026-08-11T10:00:00.000Z' },
-      end: { dateTime: '2026-08-11T10:30:00.000Z' },
-      status: 'confirmed' as const,
-      isAppGenerated: true,
-    };
-    const thisWeekDone = {
-      id: 'local-completed:week',
-      summary: 'Done this week',
-      start: { dateTime: '2026-09-09T11:00:00.000Z' },
-      end: { dateTime: '2026-09-09T11:30:00.000Z' },
-      status: 'confirmed' as const,
-      isAppGenerated: true,
-    };
-    const visible = eventsVisibleInView('week', focusDay, [
-      ...displayEvents,
-      oldDone,
-      thisWeekDone,
-    ]);
-    expect(ids(visible)).toContain('local-completed:week');
-    expect(ids(visible)).not.toContain('local-completed:old');
-  });
 });
 
 describe('month view', () => {
   it('shows every September event on its day, plus padding-day events from the grid', () => {
-    const visible = eventsVisibleInView('month', focusDay, displayEvents);
-    expect(ids(visible)).toEqual([
-      'friday-off',
-      'lunch',
-      'oct',
-      'planning',
-      'prev-sun',
-      'review',
-      'standup',
-    ]);
-
     const septemberIds = getDaysInView('month', focusDay)
       .filter((day) => day.getMonth() === 8)
       .flatMap((day) => gridEventsForDay(displayEvents, day).map((event) => event.id))

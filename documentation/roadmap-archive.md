@@ -14,6 +14,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ## Shipped (Oct 2026)
 
+- [x] **§33 Calendar layout.** A timed card of at least 30 minutes keeps its own height. On a half-hour card the chips and title are scaled down so both rows fit. Shorter cards are one line with the title and open a slightly taller stack on hover or focus. Each hour band shows its number on the background, blurred under a 30% black veil. The hour grid stays on the fixed personal-day scale. The week event list is removed.
+
 - [x] **§35 Event preview content.** A calendar click opens a grouped sheet: title, time, and chips, then only the fields that have a value (links, place, when, people, task, details) for Google, Outlook, iCloud, and app tasks. http(s) links open in a new tab. Notes render as sanitized HTML when the provider sent HTML, otherwise as plain text with links. Edit, Delete, and Done stay on the sheet.
 
 - [x] **Fast create.** Companion panel switch: Companion (dialogue) or Fast create. Fast create builds a new task from one phrase and asks at most once, only when there is no name or the span cannot be stored both as the event length and as the window. Other writes, questions, and day plans stay on the Companion rules. Preview and Apply stay. Choice is kept in the browser and sent as `mode` on `POST /voice/turn`. See [spec-voice-agent.md](spec-voice-agent.md) §6.8.

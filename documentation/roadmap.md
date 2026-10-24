@@ -14,14 +14,6 @@ Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Produ
 
 Do in order unless you explicitly skip ahead. These items need no outside service and no open product decision. Web only. The full mobile version is **§32**, after this web queue is done.
 
-### 33. Calendar layout
-
-Card density and the current-time marker are one layout pass. Do them together.
-
-- [ ] Minimum height for a task card on the day/week grid so the title and chips stay readable.
-- [ ] Stretch that hour’s row height when it holds many overlapping or stacked events, so cards do not crush each other.
-- [ ] Draw a horizontal **Now** line at the current clock (Settings IANA `timeZone`) across today’s column. Hide it when the visible day/week does not include the current civil day, or when now falls outside the personal wake–sleep window.
-
 ### 37. Diagnose duplicate / excess fetches
 
 Network looks busy: the same resources seem to refetch too often (calendar events, tasks, settings, habits, and similar).
@@ -85,7 +77,6 @@ Third parties and publishing. Leave these until the Now list is done.
 
 ## Recommended next steps
 
-1. Next: roadmap **§33** — calendar layout (card min height, crowded hour, Now line).
-2. Then **§37** diagnose duplicate fetches. (§32 full mobile version is after the web. §31 backup and §24 Piper are in Later.)
-3. Voice understanding continues in parallel via [voice-prompt-next.md](voice-prompt-next.md); do not put it back in this queue.
-4. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.
+1. Next: roadmap **§37** — diagnose duplicate / excess fetches. (§32 full mobile version is after the web. §31 backup and §24 Piper are in Later.)
+2. Voice understanding continues in parallel via [voice-prompt-next.md](voice-prompt-next.md); do not put it back in this queue.
+3. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

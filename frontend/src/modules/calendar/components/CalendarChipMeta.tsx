@@ -272,21 +272,21 @@ export function CalendarChipMeta({
               setMenuOpen((v) => !v);
             }}
           >
-            <KindIcon kind={kind} />
+            <KindIcon kind={kind} className="h-2.5 w-2.5" />
           </button>
         ) : (
           <span
             className="calendar-chip__icon-btn calendar-chip__icon-btn--static"
             title={t(KIND_I18N_KEY[kind])}
           >
-            <KindIcon kind={kind} />
+            <KindIcon kind={kind} className="h-2.5 w-2.5" />
           </span>
         )}
         <span
           className="calendar-chip__cal"
           title={calTitle}
         >
-          <ProviderLogo provider={calProvider} className="h-3 w-3" />
+          <ProviderLogo provider={calProvider} className="h-2.5 w-2.5" />
           {calName ? (
             <span className="calendar-chip__cal-name">{calName}</span>
           ) : (

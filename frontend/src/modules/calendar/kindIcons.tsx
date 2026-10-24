@@ -34,7 +34,7 @@ type KindIconProps = {
 export function KindIcon({ kind, className = 'h-3 w-3', title }: KindIconProps) {
   const Icon = KIND_ICONS[kind];
   return (
-    <span title={title}>
+    <span title={title} className="inline-flex items-center justify-center">
       <Icon className={className} strokeWidth={2.25} aria-hidden />
     </span>
   );

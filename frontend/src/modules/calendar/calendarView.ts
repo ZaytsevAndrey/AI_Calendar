@@ -1,7 +1,7 @@
 import { format } from 'date-fns';
 import i18n from 'i18n';
 import { GoogleCalendarEvent } from '../../api/google-calendar.api';
-import { dateFnsLocale, intlLocale } from '../../i18n/dateLocale';
+import { dateFnsLocale } from '../../i18n/dateLocale';
 import {
   minutesToTime,
   resolveActiveWindow,
@@ -472,29 +472,6 @@ export function getDaysInView(view: CalendarView, date: Date): Date[] {
   return days;
 }
 
-export function eventsVisibleInView(
-  view: CalendarView,
-  date: Date,
-  events: GoogleCalendarEvent[],
-  sleep?: SleepWindow,
-  phases?: ClockPhase[],
-): GoogleCalendarEvent[] {
-  const days = getDaysInView(view, date);
-  const seen = new Set<string>();
-  const visible: GoogleCalendarEvent[] = [];
-  for (const day of days) {
-    const dayEvents = gridEventsForDay(events, day, sleep, phases).filter((event) =>
-      view === 'day' ? !!event.start.dateTime : true,
-    );
-    for (const event of dayEvents) {
-      if (seen.has(event.id)) continue;
-      seen.add(event.id);
-      visible.push(event);
-    }
-  }
-  return visible;
-}
-
 export function chipLabel(event: GoogleCalendarEvent): string {
   return event.summary || i18n.t('calendar.event');
 }
@@ -510,33 +487,6 @@ export function formatEventTime(event: GoogleCalendarEvent): string {
     return startTime;
   }
   return event.start.date || i18n.t('common.allDay');
-}
-
-export function formatEventListDate(event: GoogleCalendarEvent): string {
-  const start = eventStartDate(event);
-  if (!start) return i18n.t('calendar.timeNotSet');
-  return start.toLocaleDateString(intlLocale(), {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
-export function formatEventListTime(event: GoogleCalendarEvent): string {
-  if (isAllDayEvent(event)) return i18n.t('common.allDay');
-  const start = eventStartDate(event);
-  const end = eventEndDate(event);
-  if (!start) return i18n.t('calendar.timeNotSet');
-  const locale = intlLocale();
-  const timeOpts: Intl.DateTimeFormatOptions = {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  };
-  const startLabel = start.toLocaleTimeString(locale, timeOpts);
-  if (!end) return startLabel;
-  return `${startLabel} – ${end.toLocaleTimeString(locale, timeOpts)}`;
 }
 
 export function tooltipText(event: GoogleCalendarEvent): string {

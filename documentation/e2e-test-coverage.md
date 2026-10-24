@@ -521,7 +521,7 @@ No first-class UI. Covered via API and Google create with `phaseId`.
 
 ## 18. Cases — Calendar UI (beyond Google)
 
-Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day, sleep and hours outside schedulable phases hidden) is covered by `frontend/src/modules/calendar/calendarView.spec.ts`, not a Playwright case.
+Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day, sleep and hours outside schedulable phases hidden) is covered by `frontend/src/modules/calendar/calendarView.spec.ts`, not a Playwright case. Timed-card density (half-hour stacked card, shorter micro strip) is covered by `frontend/src/modules/calendar/timedCardLayout.spec.ts`.
 
 | ID | Layer | P | Given | When | Then |
 |----|-------|---|-------|------|------|
@@ -535,7 +535,7 @@ Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day,
 | U-CAL-008 | U | — | ~~Generate warnings banner~~ | removed | |
 | U-CAL-009 | U | — | ~~Alerts older than 24h~~ | removed | |
 | U-CAL-016 | U | — | ~~Schedule → Suggestions~~ | removed | Suggestions dialog gone |
-| U-CAL-017 | U | P1 | Phone viewport 390×844 and 320×568 | Calendar day, week strip, month, events sheet, Tasks, Settings | Day is the default. Hour grid is on screen without scrolling the page. Week is one column. Month tap opens that day. Sign out sits above the tab bar |
+| U-CAL-017 | U | P1 | Phone viewport 390×844 and 320×568 | Calendar day, week strip, month, Tasks, Settings | Day is the default. Hour grid is on screen without scrolling the page. Week is one column. Month tap opens that day. Sign out sits above the tab bar |
 | U-CAL-024 | U | P1 | Phone 390×844 | Calendar action bar, then Tasks | Create task and voice each open in one tap. No More schedule actions. Scheduled task card shows To Do and Medium pills. Search and Filters share a row |
 | U-CAL-010 | U | P0 | Now overlapping block | Strip | Now title; Done if `canCompleteNowBlock` |
 | U-CAL-011 | U | P0 | Next start later today | Strip | Next shown |
@@ -551,7 +551,7 @@ Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day,
 | U-CAL-020 | U | P0 | Recurring overlapping Now (awake window pinned) | Strip Skip card | Skip; **no** Done |
 | U-CAL-021 | U | — | ~~Generate preview cancel~~ | removed |
 | U-CAL-022 | U | P1 | Calendars menu | Uncheck a selected Google calendar | `hiddenGoogleCalendarIds` stores that id |
-| U-CAL-023 | U | P1 | Viewports 1024×700, 1100×800, 1279×768, then 1280×720 | Week, day, month | Hour grid stays on screen, including 08:00 and 20:00. Month grid has height. Event list can be scrolled into view. Desktop hour grid still has height |
+| U-CAL-023 | U | P1 | Viewports 1024×700, 1100×800, 1279×768, then 1280×720 | Week, day, month | Hour grid stays on screen, including 08:00 and 20:00. Month grid has height. Desktop hour grid still has height |
 | U-CAL-027 | U | P1 | Event with location, people, and an HTML note | Click the chip | Preview groups filled fields only. A link opens with `target=_blank`. HTML is sanitized. Covered by `eventPreviewFacts.spec.ts` and `eventPreviewText.spec.ts` |
 | U-CAL-025a | U | P1 | Problematic parked task | Banner Review | Problematic inbox opens with the task |
 | U-CAL-025b | U | P1 | Move sheet open | Inspect | Day + Phase + Start time fields visible |

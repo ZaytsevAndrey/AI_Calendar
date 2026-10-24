@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useStore } from 'react-redux';
 import { useTranslation } from 'react-i18next';
-import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Columns3, List, Mic, Plus } from 'lucide-react';
+import { Calendar, CalendarDays, ChevronLeft, ChevronRight, Columns3, Mic, Plus } from 'lucide-react';
 import {
     useEventsForDay,
     useEventsForWeek,
@@ -14,7 +14,6 @@ import EventForm from 'modules/calendar/components/EventForm';
 import { EventPreview } from 'modules/calendar/components/EventPreview';
 import { GoogleCalendarEvent } from 'api/google-calendar.api';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
-import CalendarEvents from 'modules/calendar/components/CalendarEvents';
 import CalendarGrid from 'modules/calendar/components/CalendarGrid';
 import { CalendarDatePicker } from 'modules/calendar/components/CalendarDatePicker';
 import { CalendarVisibilityMenu } from 'modules/calendar/components/CalendarVisibilityMenu';
@@ -73,7 +72,6 @@ import {
     eventStartDate,
     eventEndDate,
     eventsQueryRange,
-    eventsVisibleInView,
 } from 'modules/calendar/calendarView';
 import { todayNowContext } from 'modules/now/nowBlocks';
 import { CalendarChipMeta } from 'modules/calendar/components/CalendarChipMeta';
@@ -133,7 +131,6 @@ const CalendarPage: React.FC = () => {
     const coarse = useCoarsePointer();
     const [currentView, setCurrentView] = useState<CalendarView>(defaultCalendarView);
     const [currentDate, setCurrentDate] = useState(new Date());
-    const [eventsOpen, setEventsOpen] = useState(false);
     const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
         open: boolean;
         mode: 'google' | 'task';
@@ -275,10 +272,6 @@ const CalendarPage: React.FC = () => {
         }
     }, [currentView]);
     const gridView: CalendarView = phone && currentView === 'week' ? 'day' : currentView;
-    const sleepWindow = {
-        sleepTime: userSettings?.sleepTime,
-        wakeTime: userSettings?.wakeTime,
-    };
     const hiddenCalendarIds = userSettings?.hiddenGoogleCalendarIds ?? [];
     const displayEvents = overlayCompletedTaskEvents(
         visibleGoogleEvents(eventsForRange || []).filter(
@@ -300,14 +293,6 @@ const CalendarPage: React.FC = () => {
         ),
         tasks,
     );
-    // Overlay keeps every completed seat for the grid; the side list is period-scoped.
-    const listEvents = eventsVisibleInView(
-        currentView,
-        currentDate,
-        displayEvents,
-        sleepWindow,
-    );
-
     const occurrenceStartIso = (event: GoogleCalendarEvent): string | null => {
         if (event.start.dateTime) return event.start.dateTime;
         if (event.start.date) {
@@ -386,21 +371,6 @@ const CalendarPage: React.FC = () => {
             calendarId: event.calendarId,
             provider: event.provider ?? 'google',
             eventName: name,
-        });
-    };
-
-    const handleDeleteEvent = (eventId: string, eventName: string) => {
-        const event = displayEvents.find((item) => item.id === eventId);
-        if (event) {
-            void handleDeleteCalendarEvent(event);
-            return;
-        }
-        setDeleteConfirmDialog({
-            open: true,
-            mode: 'google',
-            eventId,
-            taskId: null,
-            eventName,
         });
     };
 
@@ -830,11 +800,9 @@ const CalendarPage: React.FC = () => {
                                     </button>
                                 ))}
                             </div>
-                            <button type="button" className={`${phoneIcon} ml-auto`} onClick={() => setEventsOpen(true)}>
-                                <List className="h-4 w-4" aria-hidden />
-                                <span className="sr-only">{t('common.events')}</span>
-                            </button>
-                            <CalendarVisibilityMenu compact />
+                            <span className="ml-auto">
+                                <CalendarVisibilityMenu compact />
+                            </span>
                         </div>
                     </>
                 ) : (
@@ -980,16 +948,6 @@ const CalendarPage: React.FC = () => {
                             )}
                         />
                     </div>
-                    <div className="hidden h-80 w-full shrink-0 flex-col overflow-hidden md:flex lg:h-[min(18rem,38vh)] xl:h-auto xl:min-h-0 xl:w-[24rem]">
-                        <CalendarEvents
-                            events={listEvents}
-                            isLoading={eventsLoading}
-                            error={getEventsQuery.error}
-                            title={t('calendar.viewEvents', { view: t(`calendar.${currentView}`) })}
-                            onEditEvent={handleEditEvent}
-                            onDeleteEvent={handleDeleteEvent}
-                        />
-                    </div>
                 </div>
             )}
 
@@ -1101,29 +1059,6 @@ const CalendarPage: React.FC = () => {
             <VoiceTaskSheet voice={voice} />
             <SeriesDragHost />
 
-            <Modal
-                open={phone && eventsOpen}
-                onClose={() => setEventsOpen(false)}
-                title={t('common.events')}
-                maxWidthClass="max-w-lg"
-            >
-                <div className="max-h-[60dvh]">
-                    <CalendarEvents
-                        events={listEvents}
-                        isLoading={eventsLoading}
-                        error={getEventsQuery.error}
-                        title={t('calendar.viewEvents', { view: t(`calendar.${currentView}`) })}
-                        onEditEvent={(eventId) => {
-                            setEventsOpen(false);
-                            handleEditEvent(eventId);
-                        }}
-                        onDeleteEvent={(eventId, eventName) => {
-                            setEventsOpen(false);
-                            handleDeleteEvent(eventId, eventName);
-                        }}
-                    />
-                </div>
-            </Modal>
         </div>
     );
 };

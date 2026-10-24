@@ -11,7 +11,7 @@ type Props = {
 export function ProviderLogo({ provider, className = 'h-3 w-3', title }: Props) {
   if (provider === 'microsoft') {
     return (
-      <span title={title} className="inline-flex">
+      <span title={title} className="inline-flex items-center justify-center">
         <svg className={className} viewBox="0 0 16 16" aria-hidden>
           <rect x="1" y="1" width="6.5" height="6.5" fill="#F25022" />
           <rect x="8.5" y="1" width="6.5" height="6.5" fill="#7FBA00" />
@@ -23,7 +23,7 @@ export function ProviderLogo({ provider, className = 'h-3 w-3', title }: Props) 
   }
   if (provider === 'apple') {
     return (
-      <span title={title} className="inline-flex">
+      <span title={title} className="inline-flex items-center justify-center">
         <svg className={className} viewBox="0 0 16 16" aria-hidden>
           <path
             fill="currentColor"
@@ -35,7 +35,7 @@ export function ProviderLogo({ provider, className = 'h-3 w-3', title }: Props) 
   }
   // Google "G"
   return (
-    <span title={title} className="inline-flex">
+    <span title={title} className="inline-flex items-center justify-center">
       <svg className={className} viewBox="0 0 16 16" aria-hidden>
         <path
           fill="#4285F4"

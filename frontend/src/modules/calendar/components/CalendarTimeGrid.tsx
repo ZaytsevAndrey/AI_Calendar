@@ -25,9 +25,22 @@ import {
   layoutEventLanes,
   pointerMinutes,
 } from '../eventDrag';
+import { timedCardBox, timedCardClass } from '../timedCardLayout';
 
 const PX_PER_HOUR = 48;
 const HANDLE_PX = 4;
+
+/** Hour digits for a band, sized so they stay inside a short strip and stay quiet in a tall one. */
+function hourMark(label: string, heightPx: number): { text: string; fontSize: number; opacity: number } | null {
+  if (heightPx < 14 || !label) return null;
+  const onTheHour = /^\d{2}:00$/.test(label);
+  const text = onTheHour ? label.slice(0, 2) : label;
+  const fontSize = Math.round(
+    Math.min(onTheHour ? 52 : 18, Math.max(10, (heightPx - 4) * (onTheHour ? 0.62 : 0.4))),
+  );
+  const t = Math.min(1, Math.max(0, (fontSize - 10) / 42));
+  return { text, fontSize, opacity: 0.4 - t * 0.26 };
+}
 
 type Placement = {
   dayIndex: number;
@@ -112,6 +125,8 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
     if (dayIndex < 0) return null;
     return eventMinutes(event, dayEndMin);
   };
+
+  const yFor = (minutes: number) => ((minutes - dayStartMin) / daySpanMin) * gridHeightPx;
 
   const placementFor = (event: GoogleCalendarEvent, naturalDay: number): Placement | null => {
     if (live?.eventId === event.id) {
@@ -341,29 +356,33 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
       <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto" data-testid="calendar-hour-scroll">
       <div className="grid" style={{ gridTemplateColumns: columns, minWidth: gridMinWidth }}>
         <div className="relative border-r border-ide-border" style={{ height: gridHeightPx }}>
-          {hourBands.map((band) => {
-            const top = ((band.minutes - dayStartMin) / daySpanMin) * gridHeightPx;
-            if (days.length === 1) {
-              return (
-                <button
-                  key={band.label}
-                  type="button"
-                  className="absolute left-0 right-0 px-1 text-left text-[0.65rem] leading-none text-ide-muted"
-                  style={{ top }}
-                  onClick={() => onCreateForDate?.(days[0])}
-                >
-                  {band.label}
-                </button>
-              );
-            }
+          {hourBands.map((band, index) => {
+            const top = yFor(band.minutes);
+            const height = ((band.durationMin ?? 60) / daySpanMin) * gridHeightPx;
             return (
-              <span
+              <div
                 key={band.label}
-                className="absolute left-1 text-[0.65rem] leading-none text-ide-muted"
-                style={{ top }}
+                className="absolute left-0 right-0"
+                style={{
+                  top,
+                  height,
+                  backgroundColor: index % 2 === 1 ? 'rgba(0,0,0,0.16)' : undefined,
+                }}
               >
-                {band.label}
-              </span>
+                {days.length === 1 ? (
+                  <button
+                    type="button"
+                    className="absolute left-0 right-0 top-0 px-1 text-left text-[0.65rem] leading-none text-ide-muted"
+                    onClick={() => onCreateForDate?.(days[0])}
+                  >
+                    {band.label}
+                  </button>
+                ) : (
+                  <span className="absolute left-1 top-0 text-[0.65rem] leading-none text-ide-muted">
+                    {band.label}
+                  </span>
+                )}
+              </div>
             );
           })}
         </div>
@@ -377,32 +396,50 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
             className="relative border-l border-ide-border bg-ide-panel"
             style={{ height: gridHeightPx }}
           >
-            {hourBands.map((band) => {
-              const top = ((band.minutes - dayStartMin) / daySpanMin) * gridHeightPx;
+            {hourBands.map((band, index) => {
+              const top = yFor(band.minutes);
               const height = ((band.durationMin ?? 60) / daySpanMin) * gridHeightPx;
+              const mark = hourMark(band.label, height);
               return (
                 <div
                   key={band.label}
-                  className="absolute left-0 right-0 border-t border-ide-border/70"
+                  className="absolute left-0 right-0 overflow-hidden border-t border-ide-border/80"
                   style={{
                     top,
                     height,
-                    backgroundColor: band.color ? `${band.color}14` : undefined,
+                    backgroundColor: index % 2 === 1 ? 'rgba(0,0,0,0.16)' : undefined,
+                    backgroundImage: band.color
+                      ? `linear-gradient(${band.color}1c, ${band.color}1c)`
+                      : undefined,
                   }}
                   onClick={() => onCreateForDate?.(day)}
-                />
+                >
+                  {mark ? (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 flex select-none items-center justify-center font-medium tabular-nums tracking-tight text-ide-text blur-[1px]"
+                      style={{ fontSize: mark.fontSize, opacity: mark.opacity }}
+                    >
+                      {mark.text}
+                    </span>
+                  ) : null}
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 bg-black/30"
+                  />
+                </div>
               );
             })}
             {items.map(({ event, place }) => {
               const lane = lanes.get(event.id) ?? { lane: 0, laneCount: 1 };
-              const top = ((place.startMin - dayStartMin) / daySpanMin) * gridHeightPx;
-              const height = ((place.endMin - place.startMin) / daySpanMin) * gridHeightPx;
+              const top = yFor(place.startMin);
+              const box = timedCardBox(place.endMin - place.startMin);
+              const micro = box.mode === 'micro';
               const width = 100 / lane.laneCount;
               const mutationStage =
                 getTaskMutationStage(event.id) ??
                 getTaskMutationStage(event.recurringEventId);
               const completed = isEventCompleted?.(event) ?? false;
-              const minHeight = onEventTimeChange ? HANDLE_PX * 2 + 14 : 18;
               const chipColor = mutationStage
                 ? MUTATION_STAGE_COLORS[mutationStage]
                 : getEventColor(event);
@@ -410,16 +447,19 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                 <div
                   key={event.id}
                   data-testid={`calendar-event-${event.id}`}
-                  className={`calendar-chip group absolute z-[2] flex flex-col${
+                  data-card-mode={box.mode}
+                  className={`calendar-chip calendar-chip--stacked group absolute z-[2] flex flex-col ${timedCardClass(box.mode)}${
                     mutationStage ? ` calendar-event-stage-${mutationStage}` : ''
                   }${completed ? ' calendar-chip--done' : ''}`}
                   style={
                     {
                       top,
-                      height: Math.max(height, minHeight),
+                      height: micro ? undefined : box.heightPx,
                       left: `calc(${lane.lane * width}% + 2px)`,
                       width: `calc(${width}% - 4px)`,
                       '--chip-color': chipColor,
+                      '--chip-slot': `${box.heightPx}px`,
+                      '--chip-open': `${box.openPx}px`,
                       touchAction: 'none',
                     } as React.CSSProperties
                   }
@@ -428,14 +468,14 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                   {onEventTimeChange ? (
                     <div
                       onPointerDown={(e) => startDrag(e, event, 'resize-start', place)}
-                      className="calendar-chip__handle shrink-0 cursor-ns-resize"
+                      className="calendar-chip__handle calendar-chip__handle--start cursor-ns-resize"
                       style={{ height: HANDLE_PX }}
                     />
                   ) : null}
                   <div
                     role="button"
                     tabIndex={0}
-                    className={`relative flex min-h-0 flex-1 items-start gap-0.5 px-1.5 py-0.5 pl-2 text-[0.65rem] font-medium leading-tight ${
+                    className={`calendar-chip__body relative flex min-h-0 flex-1 flex-col items-stretch ${
                       onEventTimeChange ? 'cursor-grab' : 'cursor-pointer'
                     }`}
                     onPointerDown={(e) => startDrag(e, event, 'move', place)}
@@ -451,7 +491,16 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                       }
                     }}
                   >
-                    <span className="min-w-0 flex-1 truncate pr-3">
+                    {renderEventMeta ? (
+                      <span className="calendar-chip__lead order-1 min-w-0 max-w-full pr-3">
+                        {renderEventMeta(event, completed)}
+                      </span>
+                    ) : completed ? (
+                      <span className="calendar-chip__badge order-1">
+                        {t('calendar.completedBadge')}
+                      </span>
+                    ) : null}
+                    <span className="calendar-chip__title order-2 min-w-0">
                       {completed ? (
                         <span className="calendar-chip__check" aria-hidden>
                           ✓
@@ -459,11 +508,6 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                       ) : null}
                       {chipLabel(event)}
                     </span>
-                    {renderEventMeta ? (
-                      renderEventMeta(event, completed)
-                    ) : completed ? (
-                      <span className="calendar-chip__badge">{t('calendar.completedBadge')}</span>
-                    ) : null}
                     {onDeleteEvent ? (
                       <button
                         type="button"
@@ -482,7 +526,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                   {onEventTimeChange ? (
                     <div
                       onPointerDown={(e) => startDrag(e, event, 'resize-end', place)}
-                      className="calendar-chip__handle shrink-0 cursor-ns-resize"
+                      className="calendar-chip__handle calendar-chip__handle--end cursor-ns-resize"
                       style={{ height: HANDLE_PX }}
                     />
                   ) : null}
