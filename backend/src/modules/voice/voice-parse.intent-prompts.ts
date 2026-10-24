@@ -16,6 +16,10 @@ import type {
   VoiceParsePromptContext,
 } from './voice-parse.shared.prompt';
 import {
+  buildVoiceRemindSystemPrompt,
+  buildVoiceRemindUserPrompt,
+} from './voice-parse.remind.prompt';
+import {
   buildVoiceUpdateSystemPrompt,
   buildVoiceUpdateUserPrompt,
 } from './voice-parse.update.prompt';
@@ -54,6 +58,11 @@ export function buildVoiceIntentPrompt(
       return {
         system: buildVoiceSkipSystemPrompt(language),
         user: buildVoiceSkipUserPrompt(ctx),
+      };
+    case 'remind':
+      return {
+        system: buildVoiceRemindSystemPrompt(language),
+        user: buildVoiceRemindUserPrompt(ctx),
       };
     case 'needs_clarification':
       return {

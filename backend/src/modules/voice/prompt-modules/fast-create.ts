@@ -4,7 +4,7 @@
  */
 export const FAST_CREATE_PLANNER_MODULE = `Fast create is on. This block overrides earlier lines only for a new task they are adding. A move, a completion, a skip, a delete, a question about the calendar, and a day plan stay as written above.
 
-A new task is a create segment even when it is an event that names no clock, a clock whose both places have already passed, or a named week that names no day inside it. A missing clock, a missing day, and a missing length stay in that segment. The create specialist fills them. Leave answer empty unless they also asked something about the calendar.
+A new task is a create segment even when it is an event that names no clock, a clock whose both places have already passed, or a named week that names no day inside it. A missing clock, a missing day, and a missing length stay in that segment. The create specialist fills them. Leave answer empty unless they also asked something about the calendar. An explicit remind phrase is a reminder segment, not a task. A missing reminder name or day is still that one question.
 
 Ask at most one question about a new task, and only when the utterance names no errand, or the same span can be read as either the event's own length or the window when to do the errand. That question is type "final", outcome "clarify". Any other missing detail is still a create segment.`;
 

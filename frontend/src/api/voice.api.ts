@@ -107,6 +107,39 @@ export type VoiceCommand =
       taskId: string;
       taskName: string;
       summary: string;
+    }
+  | {
+      kind: 'remind_create';
+      name: string;
+      summary: string;
+      dueYmd: string;
+      notificationTime: string | null;
+      description: string | null;
+      recurrencePattern: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | null;
+      recurrenceWeekDays: number[] | null;
+    }
+  | {
+      kind: 'remind_update';
+      reminderId: string;
+      name: string;
+      summary: string;
+      dueYmd: string;
+      notificationTime: string | null;
+      description: string | null;
+      recurrencePattern: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | null;
+      recurrenceWeekDays: number[] | null;
+    }
+  | {
+      kind: 'remind_resolve';
+      reminderId: string;
+      name: string;
+      summary: string;
+    }
+  | {
+      kind: 'remind_delete';
+      reminderId: string;
+      name: string;
+      summary: string;
     };
 
 export type VoiceCommandAction = Exclude<VoiceCommand, { kind: 'refuse' }>;

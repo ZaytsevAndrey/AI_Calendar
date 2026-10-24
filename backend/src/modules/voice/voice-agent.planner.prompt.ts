@@ -25,19 +25,6 @@ const WEEKDAYS = [
   'Saturday',
 ];
 
-/**
- * Day reminder contract for a later voice specialist. Not part of the planner prompt.
- * A day reminder is an errand on a civil day, not a block to seat and not a phase.
- * Fields the specialist should carry: name, due day, optional notification clock,
- * optional description, optional repeat (daily, weekly, every two weeks, monthly).
- * The notification clock defaults from settings when omitted. Weekly follows the
- * due day's weekday. Monthly follows the day of the month, and a 31st uses the
- * last day when the month is shorter. Resolving closes that occurrence only.
- * A repeat continues on the next day. Deleting, including when its Google
- * notification event is deleted, removes the reminder. Do not emit a task
- * segment for it until the specialist owns the intent.
- */
-
 export const MAX_SEGMENTS = 6;
 
 export function buildPlannerSystemPrompt(
@@ -68,6 +55,7 @@ Decisions:
    - Each segment keeps its own verb. One errand that names several objects of the same action stays one segment, and a missing verb is copied only into that same errand. Dates are not such objects. Dates named once are one segment each and one one-off each, as many as were named. A clock they share is repeated in each of those segments and does not join the dates. A repeat on those days stays one segment. A clock makes a series only when the utterance is already a repeat. Two errands — two actions, or two different places — are two segments even when they share a day. Do not join them into one task name. A part that deletes, moves, completes, or skips keeps only that verb. Drop a create verb copied from an earlier part, and do not make a new task whose name is that delete, move, complete, or skip.
    - One part that updates one task and another part that places a different task are two writes. The clock stays on the task it places. Do not copy it onto a task that is only being removed.
    - Every change to the same existing task is one segment: a field, a clock, a part of the day, another day, and a done mark. Do not split them.
+   - A day reminder is not a task and is not seated in a day plan. нагадай, напомни, remind me, постав нагадування, and поставь напоминание stay their own segment and keep that verb. A clock in it is the reminder time. A question about which reminders exist is list_reminders with segments []. Done, a change, or a delete of an open reminder is its own segment too.
    - A pronoun that points at a task from the chat or the tools becomes that task name. When you cannot tell which existing task it means, still emit that segment in the user's words; the app asks which one. Never put a clarifying question into "answer" and never drop the clear parts.
    - A later part that revises a task this same utterance is creating (a new time, day, duration, or name) is not a second write and not a move, even when that part uses a move verb. Merge it into that one create and keep only the final values. A pronoun there points at the task just named, so do not emit a separate move of it and do not ask which task.
    - Keep the user's words for names. Do not summarize or invent details.
@@ -80,7 +68,7 @@ Decisions:
    Naming several errands for one day is create segments, not a plan request. One event that fills a whole day is also a create, not a plan request. Do not ask when that event starts or ends.
    Constraints and new tasks from the same utterance go into edits. The app already lists that day's flexible tasks on the draft.
 4) {"type":"plan_edits","edits":[],"answer":"<short>"}
-   Only while a day plan is open, and only for that plan day: they add, remove, or change a draft task, or answer a question about the day. A write for any other day is not this type: return steps with that write as its own segment in the same turn. Do not ask permission and do not describe that write in answer. This keeps the dialogue open. It does not finish the plan.
+   Only while a day plan is open, and only for that plan day: they add, remove, or change a draft task, or answer a question about the day. A write for any other day is not this type: return steps with that write as its own segment in the same turn. A day reminder is steps, not a draft task. Do not ask permission and do not describe that write in answer. This keeps the dialogue open. It does not finish the plan.
 5) {"type":"plan_question","question":"<one short question>","edits":[]}
    While a day plan is open, ask one useful question about the day or about one unclear task. Put what they just told you into edits. Never repeat a question. You still do not finish the plan. ${QUESTION_PROPOSAL_MODULE}
 6) {"type":"answer_pending"}

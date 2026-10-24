@@ -105,6 +105,7 @@ function build(tasks: Task[] = []) {
     phases as never,
     tasksRepo as never,
     scheduled as never,
+    { findAll: jest.fn(async () => []) } as never,
   );
   const parse = jest.fn<Promise<VoiceParseResult>, Parameters<VoiceParseFallback>>();
   const turn = (input: { transcript?: string; actionId?: string; executionReport?: unknown }) =>

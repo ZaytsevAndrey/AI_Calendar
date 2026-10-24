@@ -5,6 +5,8 @@ import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import { traceStep } from '../../common/voice-trace';
 import { t, type MessageKey } from '../../i18n/t';
 import { isAppLanguage, type AppLanguage } from '../../i18n/types';
+import { overdueDays } from '../day-reminders/day-reminder.dates';
+import { DayRemindersService } from '../day-reminders/day-reminders.service';
 import { Phase } from '../phases/entities/phase.entity';
 import { ScheduledTask } from '../schedule/schedule.entity';
 import { Task } from '../tasks/entities/task.entity';
@@ -47,7 +49,7 @@ import type {
   VoiceWriteIntent,
 } from './voice-agent.types';
 import { logVoiceLlm } from './voice-llm-log.util';
-import { addDaysToYmd, scheduleTodayYmd } from './voice-local-date.util';
+import { addDaysToYmd, localYmd, scheduleTodayYmd } from './voice-local-date.util';
 import type { VoiceParseResult } from './voice-parse.types';
 import { VoiceSessionStore } from './voice-session.store';
 import { isNoiseOrEmptyTranscript } from './voice-stt.util';
@@ -97,6 +99,7 @@ export class VoiceAgentOrchestrator {
     private readonly tasksRepository: Repository<Task>,
     @InjectRepository(ScheduledTask)
     private readonly scheduledRepository: Repository<ScheduledTask>,
+    private readonly dayReminders: DayRemindersService,
   ) {}
 
   async turn(
@@ -186,17 +189,22 @@ export class VoiceAgentOrchestrator {
   }
 
   private async loadContext(userId: string, dto: VoiceTurnDto): Promise<TurnContext> {
-    const [settings, phases, tasks, slots] = await traceStep('other', 'db.turn-context', '', () =>
-      Promise.all([
-      this.userSettingsService.getSettings(userId),
-      this.phasesRepository.find({ where: { userId }, order: { name: 'ASC' } }),
-      this.tasksRepository.find({ where: { userId } }),
-      this.scheduledRepository
-        .createQueryBuilder('slot')
-        .innerJoin('slot.task', 'task')
-        .where('task.userId = :userId', { userId })
-        .getMany(),
-      ]),
+    const [settings, phases, tasks, slots, reminderRows] = await traceStep(
+      'other',
+      'db.turn-context',
+      '',
+      () =>
+        Promise.all([
+          this.userSettingsService.getSettings(userId),
+          this.phasesRepository.find({ where: { userId }, order: { name: 'ASC' } }),
+          this.tasksRepository.find({ where: { userId } }),
+          this.scheduledRepository
+            .createQueryBuilder('slot')
+            .innerJoin('slot.task', 'task')
+            .where('task.userId = :userId', { userId })
+            .getMany(),
+          this.dayReminders.findAll(userId),
+        ]),
     );
     const timeZone = resolveIanaTimeZone(settings.timeZone || dto.timeZone);
     const nowIso = dto.clientNowIso?.trim() || new Date().toISOString();
@@ -212,6 +220,13 @@ export class VoiceAgentOrchestrator {
       tasks,
       slots,
       phases,
+      reminders: reminderRows.map((row) => ({
+        name: row.name,
+        dueYmd: row.dueYmd,
+        overdueDays: overdueDays(row.dueYmd, localYmd(nowIso, timeZone)),
+        notificationTime: row.notificationTime,
+        recurrencePattern: row.recurrencePattern,
+      })),
       todayYmd: scheduleTodayYmd(nowIso, timeZone, settings.wakeTime, settings.sleepTime),
       language,
       defaultDurationMinutes: typeof minutes === 'number' && minutes >= 5 ? minutes : 30,

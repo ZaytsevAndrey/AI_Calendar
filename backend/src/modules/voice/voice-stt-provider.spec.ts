@@ -30,6 +30,7 @@ describe('VoiceService speech provider', () => {
       {} as never,
       {} as never,
       azure as never,
+      { findAll: jest.fn(async () => []) } as never,
     );
     return { service, azure, groq };
   }

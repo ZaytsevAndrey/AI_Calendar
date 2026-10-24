@@ -20,6 +20,7 @@ export type ChangePreviewKind =
   | 'window'
   | 'shift'
   | 'end_series'
+  | 'remind'
   | 'other';
 
 export type PreviewTaskType = 'fixed' | 'flexible' | 'unscheduled' | 'recurring';
@@ -62,6 +63,7 @@ const KIND_LABEL_KEY: Record<ChangePreviewKind, string> = {
   window: 'voice.previewWindow',
   shift: 'voice.previewShift',
   end_series: 'voice.previewEndSeries',
+  remind: 'voice.previewReminder',
   other: 'voice.previewEdit',
 };
 
@@ -77,7 +79,7 @@ function minutesBetween(startIso: string | null, endIso: string | null): number 
   return Math.max(1, Math.round((end - start) / 60000));
 }
 
-function colorForKind(kind: ChangePreviewKind): string {
+function colorForKind(kind: ChangePreviewKind | string): string {
   if (kind === 'delete' || kind === 'cancel' || kind === 'end_series') return DELETE_COLOR;
   if (kind === 'complete') return COMPLETE_COLOR;
   if (kind === 'skip') return SKIP_COLOR;
@@ -201,6 +203,24 @@ function cardFromIntent(intent: VoiceWriteIntent, index: number): ChangePreviewC
   }
 
   const command = intent.command;
+  if (String(command.kind || '').startsWith('remind_')) {
+    const due = 'dueYmd' in command && typeof command.dueYmd === 'string' ? command.dueYmd : '';
+    const clock =
+      'notificationTime' in command && typeof command.notificationTime === 'string'
+        ? command.notificationTime
+        : '';
+    const name = 'name' in command && typeof command.name === 'string' ? command.name : intent.summary;
+    return {
+      id: `remind-${index}-${name}`,
+      name: name || intent.summary,
+      kind: 'remind',
+      taskType: null,
+      startIso: due ? `${due}T${clock || '00:00'}:00` : null,
+      endIso: null,
+      durationMinutes: null,
+      color: colorForKind(command.kind === 'remind_delete' ? 'delete' : 'remind'),
+    };
+  }
   const kind = kindFromCommand(String(command.kind || ''));
   if (command.kind === 'update') {
     const patch = command.patch;
@@ -251,7 +271,7 @@ function cardFromIntent(intent: VoiceWriteIntent, index: number): ChangePreviewC
     kind;
 
   return {
-    id: `command-${index}-${String(command.taskId || name)}-${kind}`,
+    id: `command-${index}-${String(('taskId' in command && command.taskId) || name)}-${kind}`,
     name,
     kind,
     taskType: null,

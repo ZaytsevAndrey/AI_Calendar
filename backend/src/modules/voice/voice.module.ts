@@ -5,6 +5,7 @@ import { ScheduleModule } from '../schedule/schedule.module';
 import { ScheduledTask } from '../schedule/schedule.entity';
 import { Task } from '../tasks/entities/task.entity';
 import { CalendarProvidersModule } from '../calendar-providers/calendar-providers.module';
+import { DayRemindersModule } from '../day-reminders/day-reminders.module';
 import { UserSettingsModule } from '../user-settings/user-settings.module';
 import { VoiceDailyUsage } from './entities/voice-daily-usage.entity';
 import { AzureSttClient } from './azure-stt';
@@ -29,6 +30,7 @@ import { VoiceSessionStore } from './voice-session.store';
       VoiceDailyUsage,
     ]),
     UserSettingsModule,
+    DayRemindersModule,
     CalendarProvidersModule,
     forwardRef(() => ScheduleModule),
   ],

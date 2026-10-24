@@ -1,3 +1,4 @@
+import { dayRemindersApi } from 'api/dayReminders.api';
 import { eventsApi } from 'api/eventsApi';
 import { eventTasksApi } from 'api/eventTasksApi';
 import { ScheduleApi } from 'api/schedule.api';
@@ -43,6 +44,16 @@ export async function executeVoiceCommand(
 
   if (command.kind === 'delete') {
     await deps.deleteTask(command.taskId).unwrap();
+    return;
+  }
+
+  if (
+    command.kind === 'remind_create' ||
+    command.kind === 'remind_update' ||
+    command.kind === 'remind_resolve' ||
+    command.kind === 'remind_delete'
+  ) {
+    await runReminderCommand(command, deps.dispatch);
     return;
   }
 
@@ -196,4 +207,32 @@ export async function executeVoiceCommand(
   if (command.scheduledEndTime) body.scheduledEndTime = command.scheduledEndTime;
   if (command.clearUnscheduled) body.isUnscheduled = false;
   await deps.updateTask({ id: command.taskId, body }).unwrap();
+}
+
+async function runReminderCommand(
+  command: Extract<
+    VoiceCommandAction,
+    { kind: 'remind_create' | 'remind_update' | 'remind_resolve' | 'remind_delete' }
+  >,
+  dispatch: (action: any) => void,
+): Promise<void> {
+  const body = {
+    name: 'name' in command ? command.name : '',
+    dueYmd: 'dueYmd' in command ? command.dueYmd : '',
+    notificationTime: 'notificationTime' in command ? command.notificationTime : null,
+    description: 'description' in command ? command.description : null,
+    recurrencePattern: 'recurrencePattern' in command ? command.recurrencePattern : null,
+    recurrenceWeekDays: 'recurrenceWeekDays' in command ? command.recurrenceWeekDays : null,
+  };
+  if (command.kind === 'remind_create') {
+    await apiCall({ url: '/day-reminders', method: 'POST', data: body });
+  } else if (command.kind === 'remind_update') {
+    await apiCall({ url: `/day-reminders/${command.reminderId}`, method: 'PATCH', data: body });
+  } else if (command.kind === 'remind_resolve') {
+    await apiCall({ url: `/day-reminders/${command.reminderId}/resolve`, method: 'POST' });
+  } else {
+    await apiCall({ url: `/day-reminders/${command.reminderId}`, method: 'DELETE' });
+  }
+  dispatch(dayRemindersApi.util.invalidateTags([{ type: 'DayReminder', id: 'LIST' }]));
+  refreshCalendar(dispatch);
 }

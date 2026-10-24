@@ -186,6 +186,8 @@ Email/password (`POST /auth/register`, `/login`, forgot/reset) **do not exist**.
 | A-DRM-006 | A | P1 | Two users | Other user PATCH | 404 |
 | A-DRM-007 | A | P0 | Reminder with a Google id | GET after `getEvent` 404 | Row deleted; `createEvent` is not called again |
 | A-DRM-008 | A | P1 | Onboarded user | PATCH `defaultReminderTime` | 200 and `08:15` persists |
+| A-DRM-009 | A | P1 | Router says `create`, transcript has `remind me` | `POST /voice/parse-task` | `command.kind=remind_create`, not a task |
+| A-DRM-010 | A | P1 | Open reminder, router says `update` | parse `done with` that name | `command.kind=remind_resolve` |
 | U-SET-001 | U | P1 | Settings page | Change wake/sleep/TZ/horizon/fixed-event buffer | Debounced auto-save (~1s), toast |
 | U-SET-002 | U | P1 | Empty TZ on first login | App loads | Client PATCHes browser IANA **once** |
 | U-SET-003 | U | P1 | TZ already set | Reload | No overwrite |
@@ -695,6 +697,7 @@ backend/test/tasks.e2e-spec.ts
 backend/test/schedule.e2e-spec.ts
 backend/test/habits.e2e-spec.ts
 backend/test/day-reminders.e2e-spec.ts
+backend/test/voice-reminders.e2e-spec.ts
 backend/test/voice.e2e-spec.ts
 backend/test/google-calendar.e2e-spec.ts
 backend/test/event-phases.e2e-spec.ts

@@ -1065,6 +1065,7 @@
     "previewWindow": "Перепланувати",
     "previewShift": "Зсунути",
     "previewEndSeries": "Завершити серію",
+    "previewReminder": "Нагадування",
     "previewUnscheduled": "Без часу",
     "previewDuration": "{{count}} хв",
     "taskCompleted": "Задачу виконано",

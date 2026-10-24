@@ -135,6 +135,16 @@ Drops the next open occurrence, or the one happening now. Another day is a quest
 
 Companion does not create, edit, check, or delete habits.
 
+## 6.1 Day reminders
+
+A day reminder is not a task and is not seated. Companion creates one only when the utterance has an explicit remind phrase: `нагадай`, `напомни`, `remind me`, `постав нагадування`, `поставь напоминание`. Without that phrase, an errand stays a task, including a bill or an unsubscribe.
+
+Done, a change, or a delete that names an open reminder uses that reminder. The same name on an open task asks which one. Resolve closes one occurrence. A missing name or a missing day is the one question. A missing clock uses the settings default. A missing repeat stays off. A week with no day asks which day.
+
+`list_reminders` answers which reminders are open. That is not a write. During a day plan, a reminder is its own segment and is not a draft item.
+
+Apply calls `/day-reminders`. There is no placement and no conflict sheet.
+
 ---
 
 ## 7. Several writes in one utterance
@@ -197,7 +207,7 @@ Phone is a bottom sheet. Desktop is a floating panel. The thread shows the user 
 
 `POST /voice/transcribe` is speech to text. `POST /voice/parse-task` remains for a fallback and for tests. It is not the Companion path.
 
-Read tools used to ground an answer: `get_now_next`, `get_day_agenda`, `list_unscheduled`, `list_problematic`, `find_free_gaps`, `match_task`, `match_habit`, `get_habit_status`, `get_task`.
+Read tools used to ground an answer: `get_now_next`, `get_day_agenda`, `list_unscheduled`, `list_problematic`, `find_free_gaps`, `match_task`, `match_habit`, `get_habit_status`, `get_task`, `list_reminders`.
 
 Write intents the client runs: create, update, delete, complete, skip, cancel, move, window. A done-only update becomes complete. A time-only update seats the task. No phases and no settings.
 

@@ -7,6 +7,9 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { t } from '../../i18n/t';
+import { isAppLanguage } from '../../i18n/types';
+import { DayRemindersService } from '../day-reminders/day-reminders.service';
 import { Phase } from '../phases/entities/phase.entity';
 import { ScheduledTask } from '../schedule/schedule.entity';
 import { Task, TaskStatus } from '../tasks/entities/task.entity';
@@ -24,6 +27,11 @@ import {
   resolveVoiceCommand,
   sniffCommandIntent,
 } from './voice-command.resolve';
+import {
+  resolveDayReminderVoice,
+  routeReminderIntent,
+  type VoiceReminderRow,
+} from './voice-day-reminder';
 import type { VoiceCommandSlot, VoiceCommandTask } from './voice-command.types';
 import { buildVoiceIntentPrompt } from './voice-parse.intent-prompts';
 import {
@@ -88,6 +96,7 @@ export class VoiceService {
     @InjectRepository(ScheduledTask)
     private readonly scheduledRepository: Repository<ScheduledTask>,
     private readonly azureStt: AzureSttClient,
+    private readonly dayReminders: DayRemindersService,
   ) {}
 
   async turn(userId: string, dto: VoiceTurnDto): Promise<VoiceTurnResponse> {
@@ -259,21 +268,35 @@ export class VoiceService {
       throw new BadRequestException('transcript is required');
     }
 
-    const [settings, phases, tasks, slots] = await traceStep('other', 'db.parse-context', '', () =>
-      Promise.all([
-        this.userSettingsService.getSettings(userId),
-        this.phasesRepository.find({
-          where: { userId },
-          order: { name: 'ASC' },
-        }),
-        this.tasksRepository.find({ where: { userId } }),
-        this.scheduledRepository
-          .createQueryBuilder('slot')
-          .innerJoin('slot.task', 'task')
-          .where('task.userId = :userId', { userId })
-          .getMany(),
-      ]),
+    const [settings, phases, tasks, slots, reminderRows] = await traceStep(
+      'other',
+      'db.parse-context',
+      '',
+      () =>
+        Promise.all([
+          this.userSettingsService.getSettings(userId),
+          this.phasesRepository.find({
+            where: { userId },
+            order: { name: 'ASC' },
+          }),
+          this.tasksRepository.find({ where: { userId } }),
+          this.scheduledRepository
+            .createQueryBuilder('slot')
+            .innerJoin('slot.task', 'task')
+            .where('task.userId = :userId', { userId })
+            .getMany(),
+          this.dayReminders.findAll(userId),
+        ]),
     );
+    const openReminderRows: VoiceReminderRow[] = reminderRows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      dueYmd: row.dueYmd,
+      notificationTime: row.notificationTime,
+      description: row.description,
+      recurrencePattern: row.recurrencePattern,
+      recurrenceWeekDays: row.recurrenceWeekDays,
+    }));
 
     // Settings IANA first so "tomorrow" matches the calendar, not the browser.
     const timeZone = resolveIanaTimeZone(settings.timeZone || dto.timeZone);
@@ -311,6 +334,7 @@ export class VoiceService {
         previousTranscript: dto.previousTranscript,
         clarificationAnswer: dto.clarificationAnswer,
         openTaskNames,
+        openReminders: openReminderRows,
       }),
       { label: 'router' },
     );
@@ -326,12 +350,45 @@ export class VoiceService {
     const sniffed = sniffCommandIntent(speech) ?? sniffCommandIntent(transcript);
     const routerIntent = readVoiceIntent(routerParsed);
     let intent = routerIntent;
-    // A create the router already chose stays create. Sniff only fills a blank.
-    if (sniffed && intent === 'needs_clarification') {
-      intent = sniffed;
-    }
     const speechLanguage = readRouterLanguage(routerParsed) ||
       whisperLangToApp(settings.speechLanguage || settings.language);
+    const routed = routeReminderIntent({
+      transcript: speech,
+      reminders: openReminderRows,
+      taskNames: openTaskNames,
+    });
+    if (routed.kind === 'clarify') {
+      const result: VoiceParseResult = {
+        understanding: 'needs_clarification',
+        clarifyingQuestion: t(isAppLanguage(speechLanguage) ? speechLanguage : 'en', 'voice.remindWhich', {
+          name: routed.name,
+        }),
+        task: null,
+        command: null,
+      };
+      this.logger.log(
+        formatVoiceParseResultLog(
+          buildVoiceParseResultLog({
+            parseId,
+            transcript: speech,
+            previousTranscript: dto.previousTranscript,
+            clarificationAnswer: dto.clarificationAnswer,
+            timeZone,
+            nowIso,
+            routerIntent,
+            sniffed,
+            intent: 'remind',
+            specialistIntent: 'remind',
+            language: speechLanguage ?? null,
+            result,
+          }),
+        ),
+      );
+      return result;
+    }
+    if (routed.kind === 'remind') intent = 'remind';
+    else if (intent === 'remind') intent = 'create';
+    else if (sniffed && intent === 'needs_clarification') intent = sniffed;
 
     const promptCtx = {
       transcript,
@@ -342,6 +399,7 @@ export class VoiceService {
       previousTranscript: dto.previousTranscript,
       clarificationAnswer: dto.clarificationAnswer,
       openTaskNames,
+      openReminders: openReminderRows,
       language: speechLanguage,
       defaultTaskDurationMinutes: taskDurationMinutes(settings),
       openTasks,
@@ -371,6 +429,28 @@ export class VoiceService {
     let result: VoiceParseResult;
     if (intent === 'needs_clarification') {
       result = clarificationOnlyResult(parsed, speechLanguage);
+    } else if (intent === 'remind') {
+      const resolved = resolveDayReminderVoice({
+        raw: parsed,
+        reminders: openReminderRows,
+        taskNames: openTaskNames,
+        language: speechLanguage,
+      });
+      if (resolved.type === 'clarify') {
+        result = {
+          understanding: 'needs_clarification',
+          clarifyingQuestion: resolved.question,
+          task: null,
+          command: null,
+        };
+      } else {
+        result = {
+          understanding: 'complete',
+          clarifyingQuestion: null,
+          task: null,
+          command: resolved.command,
+        };
+      }
     } else if (intent === 'create') {
       result = {
         ...normalizeVoiceParse(parsed, {

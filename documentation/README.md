@@ -28,4 +28,4 @@ Single source of truth for the project. Keep these files in sync with code chang
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** October 2026 (day reminders: civil-day errand, default notification time, Google popup for the current occurrence).
+**Last documentation update:** October 2026 (voice creates a day reminder only from an explicit remind phrase).

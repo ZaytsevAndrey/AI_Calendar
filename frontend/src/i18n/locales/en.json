@@ -1063,6 +1063,7 @@
     "previewWindow": "Reschedule",
     "previewShift": "Shift",
     "previewEndSeries": "End series",
+    "previewReminder": "Reminder",
     "previewUnscheduled": "Unscheduled",
     "previewDuration": "{{count}} min",
     "taskCompleted": "Task completed",

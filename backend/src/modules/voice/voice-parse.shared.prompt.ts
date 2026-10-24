@@ -20,6 +20,13 @@ export type VoiceParsePromptContext = {
   defaultTaskDurationMinutes?: number;
   /** Fast create tightens the create specialist. Other intents ignore it. */
   mode?: VoiceCompanionMode;
+  /** Open day reminders. The remind specialist is the only reader. */
+  openReminders?: Array<{
+    name: string;
+    dueYmd: string;
+    notificationTime?: string | null;
+    recurrencePattern?: string | null;
+  }>;
 };
 
 export type VoiceParseOpenTask = {
@@ -36,6 +43,7 @@ export const VOICE_PARSE_INTENTS = [
   'update',
   'delete',
   'skip',
+  'remind',
   'needs_clarification',
 ] as const;
 

@@ -156,7 +156,7 @@ A timed block (visible Google event, or a local task slot when that event is not
 
 ## Day reminders — `/day-reminders`
 
-A day reminder is a named errand on a civil day (`YYYY-MM-DD` in the user’s settings timezone). It is not a task: it is not placed, it does not occupy the hour grid or the all-day strip, and `syncGoogleDeletions` does not apply. JWT on every route. There is no global `ValidationPipe`; the service rejects a blank name, a date that is not a real civil day, a clock that is not `HH:mm`, and a repeat other than `DAILY`, `WEEKLY`, `BIWEEKLY`, or `MONTHLY`.
+A day reminder is a named errand on a civil day (`YYYY-MM-DD` in the user’s settings timezone). It is not a task: it is not placed, it does not occupy the hour grid or the all-day strip, and `syncGoogleDeletions` does not apply. JWT on every route. There is no global `ValidationPipe`; the service rejects a blank name, a date that is not a real civil day, a clock that is not `HH:mm`, and a repeat other than `DAILY`, `WEEKLY`, `BIWEEKLY`, or `MONTHLY`. Voice writes these through the same routes after Apply: an explicit remind phrase creates one; done, change, and delete target an open reminder. `list_reminders` is a read tool on `POST /voice/turn`.
 
 | Method | Path | Description |
 |--------|------|-------------|

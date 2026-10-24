@@ -19,6 +19,14 @@ import {
   startOfLocalDayIso,
 } from './voice-local-date.util';
 
+export type VoiceReminderSnapshot = {
+  name: string;
+  dueYmd: string;
+  overdueDays: number;
+  notificationTime: string | null;
+  recurrencePattern: string | null;
+};
+
 export type VoiceToolContext = {
   userId: string;
   timeZone: string;
@@ -27,6 +35,7 @@ export type VoiceToolContext = {
   tasks: Task[];
   slots: ScheduledTask[];
   phases: Phase[];
+  reminders: VoiceReminderSnapshot[];
 };
 
 export type VoiceToolCall = {
@@ -43,6 +52,7 @@ export const VOICE_READ_TOOL_NAMES = [
   'find_free_gaps',
   'match_task',
   'get_task',
+  'list_reminders',
 ] as const;
 
 export type VoiceReadToolName = (typeof VOICE_READ_TOOL_NAMES)[number];
@@ -75,6 +85,8 @@ export class VoiceAgentTools {
           return this.matchTask(ctx, String(args.name));
         }
         return this.getTask(ctx, String(args.taskId ?? args.id ?? ''));
+      case 'list_reminders':
+        return { reminders: ctx.reminders };
       default:
         return { error: `Unknown tool: ${name}` };
     }

@@ -50,6 +50,31 @@ describe('buildChangePreviewCards', () => {
     expect(cards[0].name).toBe('Report');
   });
 
+  it('maps a reminder create to a reminder card without a duration', () => {
+    const intents: VoiceWriteIntent[] = [
+      {
+        type: 'command',
+        summary: 'Reminder Pay rent on 2026-11-01 at 18:30.',
+        command: {
+          kind: 'remind_create',
+          name: 'Pay rent',
+          summary: 'Reminder Pay rent on 2026-11-01 at 18:30.',
+          dueYmd: '2026-11-01',
+          notificationTime: '18:30',
+          description: null,
+          recurrencePattern: 'MONTHLY',
+          recurrenceWeekDays: null,
+        },
+      },
+    ];
+    const cards = buildChangePreviewCards({ intents });
+    expect(cards[0].kind).toBe('remind');
+    expect(cards[0].name).toBe('Pay rent');
+    expect(cards[0].durationMinutes).toBeNull();
+    expect(cards[0].taskType).toBeNull();
+    expect(cards[0].startIso).toBe('2026-11-01T18:30:00');
+  });
+
   it('prefers day-plan proposal items when present', () => {
     const cards = buildChangePreviewCards({
       intents: [

@@ -160,7 +160,7 @@ export function sniffCommandIntent(transcript: string): VoiceCommandIntent | nul
 
 export function readVoiceIntent(
   raw: unknown,
-): VoiceCommandIntent | 'create' | 'needs_clarification' {
+): VoiceCommandIntent | 'create' | 'remind' | 'needs_clarification' {
   const intent =
     raw && typeof raw === 'object' && !Array.isArray(raw)
       ? String((raw as { intent?: unknown }).intent ?? '')
@@ -177,6 +177,7 @@ export function readVoiceIntent(
     intent === 'update' ||
     intent === 'delete' ||
     intent === 'create' ||
+    intent === 'remind' ||
     intent === 'needs_clarification'
   ) {
     return intent;
