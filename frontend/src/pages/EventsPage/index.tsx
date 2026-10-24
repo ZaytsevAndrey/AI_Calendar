@@ -28,6 +28,7 @@ import { Modal } from '../../ui/Modal';
 import { showErrorToast } from '../../utils/toast';
 import { extractApiErrorMessage } from '../../utils/extractApiErrorMessage';
 import type { TaskDTO } from 'api/tasks.api';
+import { ReminderList } from 'modules/day-reminders/ReminderList';
 
 type Priority = 'urgent' | 'high' | 'medium' | 'low';
 type SortField = 'name' | 'priority' | 'deadline' | 'estimatedTimeInMinutes';
@@ -107,7 +108,7 @@ const TasksPage: React.FC = () => {
   const [deleteEvent] = useDeleteEventMutation();
   const [updateEvent] = useUpdateEventMutation();
   const [busyId, setBusyId] = useState<string | null>(null);
-  const { openCreate, openCreateFromPrefill, openEdit, openSchedule, createFromPayload, editorModal } =
+  const { openCreate, openCreateFromPrefill, openEdit, openEditReminder, openSchedule, createFromPayload, editorModal } =
     useEventEditor();
   const voice = useVoiceTask({
     onComplete: createFromPayload,
@@ -234,6 +235,7 @@ const TasksPage: React.FC = () => {
       </header>
 
       <div className="page-scroll space-y-6 max-md:pb-28">
+        <ReminderList scope="all" onEdit={openEditReminder} />
         <section>
           <div className="mb-3">
             <h2 className="text-sm font-medium uppercase tracking-wide text-ide-muted">{t('tasks.unscheduled')}</h2>

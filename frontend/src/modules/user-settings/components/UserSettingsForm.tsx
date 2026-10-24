@@ -6,8 +6,8 @@ import { useUpdateUserSettingsMutation } from '../../../api/userSettingsApi';
 import { googleCalendarAPI } from '../../../api/google-calendar.api';
 import { Spinner } from '../../../ui/Spinner';
 import { Input } from 'ui/Input';
-import { Select } from 'ui/Select';
 import { TimeField } from 'ui/TimeField';
+import { Select } from 'ui/Select';
 import { timeZoneSelectOptions } from '../ianaTimeZones';
 import { ReminderSettingsSection } from '../../pwa/ReminderSettingsSection';
 import { VoiceSettingsSection } from '../../voice/components/VoiceSettingsSection';
@@ -36,6 +36,7 @@ interface UserSettingsFormData {
     recurringScheduleHorizonDays: number;
     fixedEventBufferMinutes: number;
     defaultTaskDurationMinutes: number;
+    defaultReminderTime: string;
 }
 
 const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
@@ -92,6 +93,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                 typeof initialData?.defaultTaskDurationMinutes === 'number'
                     ? initialData.defaultTaskDurationMinutes
                     : 30,
+            defaultReminderTime: initialData?.defaultReminderTime || '09:00',
         },
     });
 
@@ -468,6 +470,29 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                         />
                         <p className="max-w-xs text-xs text-ide-muted">
                             {t('settings.defaultTaskDurationHint')}
+                        </p>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <label htmlFor="default-reminder-time" className="ui-label">
+                            {t('settings.defaultReminderTime')}
+                        </label>
+                        <TimeField
+                            id="default-reminder-time"
+                            value={watch('defaultReminderTime') || '09:00'}
+                            onChange={(value) => {
+                                const next = value || '09:00';
+                                setValue('defaultReminderTime', next);
+                                void updateUserSettings({ defaultReminderTime: next })
+                                    .unwrap()
+                                    .then(() => showSuccessToast({ title: t('settings.saved') }))
+                                    .catch((error: { response?: { status?: number } }) => {
+                                        if (error?.response?.status === 401) return;
+                                        showErrorToast({ title: t('settings.saveFailed') });
+                                    });
+                            }}
+                        />
+                        <p className="max-w-xs text-xs text-ide-muted">
+                            {t('settings.defaultReminderTimeHint')}
                         </p>
                     </div>
                     <div className="flex flex-col gap-1">

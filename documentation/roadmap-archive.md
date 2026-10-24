@@ -14,6 +14,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ## Shipped (Oct 2026)
 
+- [x] **Day reminders.** A named errand on a civil day, from the task form’s Reminder segment. It is not placed and does not appear on the hour grid or the all-day strip. Today and overdue items stay in a row under Now / Next and get redder with the overdue day count until resolved; later ones stay on the Tasks page. Repeat (daily, weekly, every two weeks, monthly) is under more options; monthly day 31 uses the last day of a shorter month. Notification time defaults from Settings (`defaultReminderTime`, `09:00`) and can be set on the reminder. Google gets one short free popup for the current occurrence; deleting that event deletes the reminder. Voice does not create these yet.
+
 - [x] **Select a time to create a task.** On the day and week grids, a mouse or trackpad drag on empty space highlights a 15-minute range in that column and opens a fixed task for that start and end. Escape cancels. A click without a drag still creates a task for the civil day. Touch scrolling does not start a selection.
 - [x] **Current time line.** Day and week grids draw a red line on today’s column at the current minute, when that minute is inside the visible personal day. The line updates about every 30 seconds. Week view shows the clock on that line. Day view shows it on the time scale.
 

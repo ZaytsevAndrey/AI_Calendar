@@ -13,6 +13,8 @@
 | **Recurring** | не fixed, recurring Daily, split увімкнено, дні Mon–Fri |
 | **Unscheduled** | inbox: `isUnscheduled`, без слота, без replan/Google, опційний deadline. У формі пресету Unscheduled на кнопках більше немає; inbox лишається на сторінці Tasks |
 
+**Reminder** is not a row in this table. The fifth form segment writes a day reminder (`/day-reminders`), a separate record with a civil day, an optional clock, and an optional repeat. It is not an `eventType`, it is not placed, and it does not become an inbox task.
+
 У API/БД для нових записів `eventType` лише **`fixed`** або **`admin`** (усі не-fixed). Старі значення на кшталт `learning` / `daily_routine` читаються як flexible.
 
 ## 2) Базові правила створення

@@ -3,6 +3,20 @@ import {
   type VoiceParsePromptContext,
 } from './voice-parse.shared.prompt';
 
+/**
+ * Day reminder contract for a later voice specialist. Not sent to the model.
+ * A day reminder is not a scheduled task: no phase, no duration, no slot.
+ * It is a named errand on a civil day. Fields: name, due day (YYYY-MM-DD),
+ * optional notification clock (HH:mm; empty uses settings defaultReminderTime),
+ * optional description, optional repeat (DAILY, WEEKLY, BIWEEKLY, MONTHLY).
+ * Weekly uses the weekday of that day (or an explicit weekday set). Monthly
+ * uses that day of the month; day 31 falls on the last day of a shorter month.
+ * It stays open until resolved and grows more overdue each civil day.
+ * Resolve closes one occurrence; a repeat then moves to the next day.
+ * Delete removes it. A Google deletion of its notification event removes it too.
+ * Do not route this through task create until that specialist adds an intent.
+ */
+
 /** Step 1: classify intent + language only. No task body. */
 export function buildVoiceRouterSystemPrompt(): string {
   return `You classify a spoken calendar utterance (Ukrainian, English, or Russian).

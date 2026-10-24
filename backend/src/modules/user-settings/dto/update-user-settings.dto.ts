@@ -229,6 +229,19 @@ export class UpdateUserSettingsDto {
   remindersEnabled?: boolean;
 
   @ApiProperty({
+    example: '09:00',
+    description:
+      'Default clock for a day reminder that does not set its own time',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
+    message: 'Time must be in format HH:MM',
+  })
+  defaultReminderTime?: string;
+
+  @ApiProperty({
     example: false,
     description:
       'When true, deleting a linked external calendar event also removes it in the app. Off by default.',

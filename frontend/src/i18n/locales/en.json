@@ -77,6 +77,8 @@
     "horizonHint": "How far ahead recurring tasks stay scheduled. The app extends this window in the background; you do not need Review schedule to keep series alive.",
     "defaultTaskDuration": "Default task length (minutes)",
     "defaultTaskDurationHint": "Used for a new task when you do not set a length. Voice uses the same value.",
+    "defaultReminderTime": "Default reminder time",
+    "defaultReminderTimeHint": "Google notifies at this time when a reminder does not set its own.",
     "buffer": "Fixed-event buffer (minutes)",
     "language": "App language",
     "languageEn": "English",
@@ -663,7 +665,9 @@
       "recurring": "Recurring",
       "recurringHint": "Repeats on a pattern. Planner may move occurrences.",
       "unscheduled": "Unscheduled",
-      "unscheduledHint": "A to-do with no calendar slot until you schedule it."
+      "unscheduledHint": "A to-do with no calendar slot until you schedule it.",
+      "reminder": "Reminder",
+      "reminderHint": "Something to remember on a day. It does not take a time slot."
     },
     "priority": {
       "low": "Low",
@@ -1073,6 +1077,25 @@
     "habitUpdated": "Habit updated",
     "habitDeleted": "Habit deleted",
     "habitUnchecked": "Habit check-in cleared"
+  },
+  "dayReminders": {
+    "title": "Reminders",
+    "empty": "Nothing to remember yet.",
+    "name": "Name",
+    "day": "Day",
+    "time": "Notification time",
+    "timeHint": "Empty uses the default, {{time}}.",
+    "description": "Note",
+    "repeat": "Repeat",
+    "repeatNone": "Does not repeat",
+    "create": "Create reminder",
+    "createTitle": "New reminder",
+    "edit": "Edit reminder",
+    "dueToday": "Today",
+    "overdue": "Overdue {{count}} d",
+    "saveFailed": "Could not save the reminder",
+    "resolveFailed": "Could not mark the reminder done",
+    "deleteFailed": "Could not delete the reminder"
   },
   "reminders": {
     "title": "Reminders",

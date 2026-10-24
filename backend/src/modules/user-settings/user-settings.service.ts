@@ -1,9 +1,10 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserSettings } from './entities/user-settings.entity';
 import { UpdateUserSettingsDto } from './dto/update-user-settings.dto';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
+import { DayRemindersService } from '../day-reminders/day-reminders.service';
 import { normalizeHiddenCalendarIds } from './hidden-google-calendars.util';
 
 @Injectable()
@@ -14,6 +15,9 @@ export class UserSettingsService {
     @InjectRepository(UserSettings)
     private userSettingsRepository: Repository<UserSettings>,
     private readonly googleCalendarService: GoogleCalendarService,
+    @Optional()
+    @Inject(DayRemindersService)
+    private readonly dayReminders?: DayRemindersService,
   ) {}
 
   async getSettings(userId: string): Promise<UserSettings> {
@@ -67,6 +71,9 @@ export class UserSettingsService {
         userSettings.appGoogleCalendarName = defaults.appGoogleCalendarName;
       if (userSettings.remindersEnabled === undefined || userSettings.remindersEnabled === null)
         userSettings.remindersEnabled = false;
+      if (!userSettings.defaultReminderTime) {
+        userSettings.defaultReminderTime = defaults.defaultReminderTime;
+      }
       if (
         userSettings.syncGoogleDeletions === undefined ||
         userSettings.syncGoogleDeletions === null
@@ -107,6 +114,7 @@ export class UserSettingsService {
   ): Promise<UserSettings> {
     const userSettings = await this.getSettings(userId);
     const previousAppCalendarName = userSettings.appGoogleCalendarName;
+    const previousReminderTime = userSettings.defaultReminderTime;
     const nextMin =
       updateUserSettingsDto.minSplitMinutes ?? userSettings.minSplitMinutes;
     const nextMax =
@@ -132,6 +140,16 @@ export class UserSettingsService {
       updateUserSettingsDto,
     );
     const saved = await this.userSettingsRepository.save(updatedSettings);
+
+    if (
+      updateUserSettingsDto.defaultReminderTime &&
+      saved.defaultReminderTime !== previousReminderTime
+    ) {
+      await this.dayReminders?.retargetDefaultTime(
+        userId,
+        saved.defaultReminderTime,
+      );
+    }
 
     if (
       updateUserSettingsDto.appGoogleCalendarName !== undefined &&
@@ -169,6 +187,7 @@ export class UserSettingsService {
       recurringScheduleHorizonDays: 30,
       appGoogleCalendarName: 'AI Calendar Assistant',
       remindersEnabled: false,
+      defaultReminderTime: '09:00',
       syncGoogleDeletions: false,
       syncTargetCalendars: null,
       dismissWarnExternalWriteBack: false,

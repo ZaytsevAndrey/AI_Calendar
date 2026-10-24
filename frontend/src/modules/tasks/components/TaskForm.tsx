@@ -25,7 +25,7 @@ import {
   mergeSavedPreferredStartIntoOptions,
 } from '../task-wizard/phaseSchedulingBounds';
 import { GoogleEventSettingsFields } from '../../calendar/components/GoogleEventSettingsFields';
-import { Check, Plus, SkipForward, Trash2, X } from 'lucide-react';
+import { Bell, Check, Plus, SkipForward, Trash2, X } from 'lucide-react';
 import { Button } from 'ui/Button';
 import { Input } from 'ui/Input';
 import { Select } from 'ui/Select';
@@ -50,6 +50,7 @@ interface TaskFormProps {
   onDelete?: () => void;
   isDeleting?: boolean;
   mode: 'create' | 'edit';
+  onPickReminder?: () => void;
 }
 
 const TaskForm: React.FC<TaskFormProps> = ({
@@ -63,6 +64,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
   onDelete,
   isDeleting = false,
   mode,
+  onPickReminder,
 }) => {
   const { t } = useTranslation();
   const { data: userSettings } = useGetUserSettingsQuery();
@@ -229,7 +231,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
   return (
     <form onSubmit={handleSubmit((data) => onSubmit(buildTaskPayload(data, timeZone)))} className="task-form">
       <div className="space-y-3">
-        <div className="inline-flex rounded-lg border border-ide-border p-0.5">
+        <div className="inline-flex max-w-full flex-wrap rounded-lg border border-ide-border p-0.5">
           {TASK_PRESETS.map((preset) => {
             const active = preset.id === activePreset;
             return (
@@ -250,6 +252,18 @@ const TaskForm: React.FC<TaskFormProps> = ({
               </button>
             );
           })}
+          {onPickReminder ? (
+            <button
+              type="button"
+              title={`${t('tasks.preset.reminder')}: ${t('tasks.preset.reminderHint')}`}
+              aria-label={t('tasks.preset.reminder')}
+              onClick={onPickReminder}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-ide-muted hover:text-ide-text"
+            >
+              <Bell className="h-3.5 w-3.5" aria-hidden />
+              <span className="hidden sm:inline">{t('tasks.preset.reminder')}</span>
+            </button>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_8.5rem]">

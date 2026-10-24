@@ -125,6 +125,13 @@ export class UserSettings {
   remindersEnabled: boolean;
 
   /**
+   * Default clock for a day reminder that does not set its own time.
+   * Google popup is placed at this time.
+   */
+  @Column({ type: 'varchar', length: 5, default: '09:00' })
+  defaultReminderTime: string;
+
+  /**
    * When true, voice complete / skip / reschedule waits for a confirmation.
    * Creating a task by voice is never gated by this flag.
    * Delete / cancel always confirm regardless of this flag.

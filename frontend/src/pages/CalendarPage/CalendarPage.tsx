@@ -30,6 +30,8 @@ import {
 } from 'modules/schedule/seriesDragChoice';
 import { isActiveProblematicTask, todayYmdInZone } from 'modules/schedule/problematicDays';
 import { NowStrip } from 'modules/now/components/NowStrip';
+import { useGetDayRemindersQuery } from 'api/dayReminders.api';
+import { ReminderList, reminderGoogleEventIds } from 'modules/day-reminders/ReminderList';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
 import {
@@ -205,8 +207,10 @@ const CalendarPage: React.FC = () => {
     const { parkDayHints } = useScheduleActions();
     const { data: userSettings } = useGetUserSettingsQuery();
     const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
-    const { openCreate, openCreateFromPrefill, openEdit, openSchedule, createFromPayload, editorModal } =
+    const { openCreate, openCreateFromPrefill, openEdit, openEditReminder, openSchedule, createFromPayload, editorModal } =
         useEventEditor();
+    const { data: dayReminders = [] } = useGetDayRemindersQuery();
+    const reminderEventIds = reminderGoogleEventIds(dayReminders);
     const { data: tasks = [] } = useGetTasksQuery();
     const todayYmd = todayYmdInZone(timeZone);
     const problematicTasks = tasks.filter((task) =>
@@ -278,6 +282,7 @@ const CalendarPage: React.FC = () => {
     const displayEvents = overlayCompletedTaskEvents(
         visibleGoogleEvents(eventsForRange || []).filter(
             (event) => {
+                if (reminderEventIds.has(event.id)) return false;
                 if (
                     !isCalendarVisible(
                         event.provider,
@@ -849,7 +854,9 @@ const CalendarPage: React.FC = () => {
                     onOpenPreview={(event) =>
                         setEventPreview({ open: true, event })
                     }
+                    hiddenEventIds={reminderEventIds}
                 />
+                <ReminderList scope="due" onEdit={openEditReminder} />
                 {problematicTasks.length > 0 ? (
                     <ProblematicInboxBanner
                         count={problematicTasks.length}

@@ -178,6 +178,14 @@ Email/password (`POST /auth/register`, `/login`, forgot/reset) **do not exist**.
 | A-REM-002 | A | P1 | Cron secret set, VAPID unset | `POST /reminders/tick` | 401 without/with a bad secret; 200 `{ users: 0, sent: 0 }` with the secret |
 | A-REM-003 | A | P1 | Settings | PATCH `remindersEnabled: true` | 200 and the flag persists |
 | A-REM-004 | A | P1 | Two users | POST/DELETE subscription | https stored; other user cannot delete it; owner delete removes the row |
+| A-DRM-001 | A | P0 | Onboarded user | POST then GET `/day-reminders` | 201 with name, day, clock; Google stub gets a transparent popup at that clock; GET returns the row |
+| A-DRM-002 | A | P1 | Onboarded user | Blank name or `2026-02-31` | 400 |
+| A-DRM-003 | A | P0 | One-off reminder | POST `/:id/resolve` | `completed`; gone from GET; Google delete called |
+| A-DRM-004 | A | P1 | Monthly due `2026-01-31` | Resolve | Stays open; `dueYmd` is `2026-02-28` |
+| A-DRM-005 | A | P1 | Open reminder | DELETE | `{ deleted: true }`; GET is empty |
+| A-DRM-006 | A | P1 | Two users | Other user PATCH | 404 |
+| A-DRM-007 | A | P0 | Reminder with a Google id | GET after `getEvent` 404 | Row deleted; `createEvent` is not called again |
+| A-DRM-008 | A | P1 | Onboarded user | PATCH `defaultReminderTime` | 200 and `08:15` persists |
 | U-SET-001 | U | P1 | Settings page | Change wake/sleep/TZ/horizon/fixed-event buffer | Debounced auto-save (~1s), toast |
 | U-SET-002 | U | P1 | Empty TZ on first login | App loads | Client PATCHes browser IANA **once** |
 | U-SET-003 | U | P1 | TZ already set | Reload | No overwrite |
@@ -331,10 +339,10 @@ Do **not** hit real Groq. Stub transcribe + parse.
 | U-VOI-004 | U | P2 | Mic permission denied | Start | Error in sheet, no crash |
 | U-VOI-005 | U | P2 | `GROQ` stub missing | Transcribe | **Current:** error text in the voice sheet (`Could not transcribe audio`), not a toast |
 | A-VOI-013 | A | P1 | Named incomplete task, intent complete | `POST /voice/parse-task` | `command.kind=complete`, that task id, `task` null |
-| A-VOI-014 | A | P1 | Named habit, intent habit_check_in | `POST /voice/parse-task` | `command.kind=habit_check_in`, habit id, today `date`, `task` null |
+| A-VOI-014 | A | P1 | Intent `habit_check_in` while habits are soft-disabled | `POST /voice/parse-task` | `needs_clarification`, `command` null, `task` null |
 | A-VOI-015 | A | P1 | Named task, intent update with duration | `POST /voice/parse-task` | `command.kind=update`, patch includes `estimatedTimeInMinutes` |
 | A-VOI-016 | A | P1 | Named task, intent delete | `POST /voice/parse-task` | `command.kind=delete`, that task id |
-| A-VOI-017 | A | P1 | Habit create + uncheck | `POST /voice/parse-task` | `habit_create` fields; `habit_uncheck` with today |
+| A-VOI-017 | A | P1 | `habit_create` and `habit_uncheck` while soft-disabled | `POST /voice/parse-task` | Each returns `needs_clarification` with `command` null |
 | U-VOI-006 | U | P1 | Stub `command.complete` | Voice complete | Complete preview card, then Apply. Card stays as Done just now |
 | U-VOI-007 | U | P1 | Stub create + job `conflicts[]` | Voice create, reopen, spoken option | Shared conflict sheet opens; reopen voice picks `move_new` via speech |
 | U-VOI-008 | U | P1 | Stub `command.delete`, confirm off | Voice delete | Delete preview card always shown; Apply deletes |
@@ -686,6 +694,7 @@ backend/test/phases.e2e-spec.ts
 backend/test/tasks.e2e-spec.ts
 backend/test/schedule.e2e-spec.ts
 backend/test/habits.e2e-spec.ts
+backend/test/day-reminders.e2e-spec.ts
 backend/test/voice.e2e-spec.ts
 backend/test/google-calendar.e2e-spec.ts
 backend/test/event-phases.e2e-spec.ts

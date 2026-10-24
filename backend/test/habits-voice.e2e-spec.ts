@@ -219,15 +219,8 @@ describe('Habits and voice API e2e', () => {
     expect(body.command).toMatchObject({ kind: 'complete', taskId: id, taskName: 'Report' });
   });
 
-  it('A-VOI-014 habit check-in resolves a named habit', async () => {
+  it('A-VOI-014 habit check-in is refused while habits are soft-disabled', async () => {
     const { token } = await seedOnboardedUser(ctx.app);
-    const created = await api(ctx.app, 'POST', '/habits', {
-      token,
-      payload: { name: 'Stretch' },
-    });
-    expect(created.statusCode).toBe(201);
-    const id = String(jsonBody(created).id);
-    const today = String(jsonBody(await api(ctx.app, 'GET', '/habits', { token })).today);
     mockVoiceParseTurn(
       ctx.groq,
       {
@@ -243,13 +236,10 @@ describe('Habits and voice API e2e', () => {
       payload: { transcript: 'check in Stretch', timeZone: 'Europe/Kyiv' },
     });
     expect(parsed.statusCode).toBe(201);
-    const body = jsonBody(parsed);
-    expect(body.task).toBeNull();
-    expect(body.command).toMatchObject({
-      kind: 'habit_check_in',
-      habitId: id,
-      habitName: 'Stretch',
-      date: today,
+    expect(jsonBody(parsed)).toMatchObject({
+      understanding: 'needs_clarification',
+      task: null,
+      command: null,
     });
   });
 
@@ -344,7 +334,7 @@ describe('Habits and voice API e2e', () => {
     });
   });
 
-  it('A-VOI-017 habit create and uncheck resolve', async () => {
+  it('A-VOI-017 habit create and uncheck are refused while habits are soft-disabled', async () => {
     const { token } = await seedOnboardedUser(ctx.app);
     mockVoiceParseTurn(
       ctx.groq,
@@ -362,18 +352,12 @@ describe('Habits and voice API e2e', () => {
       payload: { transcript: 'create habit Meditation', timeZone: 'Europe/Kyiv' },
     });
     expect(created.statusCode).toBe(201);
-    expect(jsonBody(created).command).toMatchObject({
-      kind: 'habit_create',
-      fields: { name: 'Meditation', color: '#22c55e' },
+    expect(jsonBody(created)).toMatchObject({
+      understanding: 'needs_clarification',
+      task: null,
+      command: null,
     });
 
-    const habit = await api(ctx.app, 'POST', '/habits', {
-      token,
-      payload: { name: 'Stretch' },
-    });
-    expect(habit.statusCode).toBe(201);
-    const habitId = String(jsonBody(habit).id);
-    const today = String(jsonBody(await api(ctx.app, 'GET', '/habits', { token })).today);
     mockVoiceParseTurn(
       ctx.groq,
       {
@@ -389,10 +373,10 @@ describe('Habits and voice API e2e', () => {
       payload: { transcript: 'uncheck Stretch', timeZone: 'Europe/Kyiv' },
     });
     expect(unchecked.statusCode).toBe(201);
-    expect(jsonBody(unchecked).command).toMatchObject({
-      kind: 'habit_uncheck',
-      habitId,
-      date: today,
+    expect(jsonBody(unchecked)).toMatchObject({
+      understanding: 'needs_clarification',
+      task: null,
+      command: null,
     });
   });
 });

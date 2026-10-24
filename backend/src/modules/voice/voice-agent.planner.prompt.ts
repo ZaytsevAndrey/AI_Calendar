@@ -25,6 +25,19 @@ const WEEKDAYS = [
   'Saturday',
 ];
 
+/**
+ * Day reminder contract for a later voice specialist. Not part of the planner prompt.
+ * A day reminder is an errand on a civil day, not a block to seat and not a phase.
+ * Fields the specialist should carry: name, due day, optional notification clock,
+ * optional description, optional repeat (daily, weekly, every two weeks, monthly).
+ * The notification clock defaults from settings when omitted. Weekly follows the
+ * due day's weekday. Monthly follows the day of the month, and a 31st uses the
+ * last day when the month is shorter. Resolving closes that occurrence only.
+ * A repeat continues on the next day. Deleting, including when its Google
+ * notification event is deleted, removes the reminder. Do not emit a task
+ * segment for it until the specialist owns the intent.
+ */
+
 export const MAX_SEGMENTS = 6;
 
 export function buildPlannerSystemPrompt(

@@ -34,6 +34,28 @@ const stripIconBtn =
   'ui-icon-btn h-7 w-7 text-ide-muted hover:text-ide-text';
 const stripIconPrimary = `${stripIconBtn} text-ide-link hover:text-ide-link`;
 
+/**
+ * Action row sits above the card. On a phone it stays in flow; from `md` it
+ * floats on the card's top edge and only appears on hover, so it never shares
+ * the title row.
+ */
+const actionBar =
+  'z-20 mb-1 flex max-w-full justify-end md:pointer-events-none md:absolute md:right-1 md:top-0 md:z-20 md:mb-0 md:w-max md:max-w-[calc(100%-0.5rem)] md:-translate-y-2 md:opacity-0 md:transition-opacity md:duration-200 md:group-hover/card:pointer-events-auto md:group-hover/card:opacity-100 md:group-focus-within/card:pointer-events-auto md:group-focus-within/card:opacity-100';
+const actionBarChip =
+  'flex max-w-full flex-wrap items-center justify-end gap-0.5 md:rounded-md md:border md:border-ide-border md:bg-ide-panel md:p-0.5 md:shadow-ide';
+
+function StripActions({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className={actionBar}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      <div className={actionBarChip}>{children}</div>
+    </div>
+  );
+}
+
 type StripTone = 'now' | 'next' | 'inbox';
 
 /** Gentle column tint — present, not neon. */
@@ -108,6 +130,8 @@ export type NowStripProps = {
   onEditTask?: (task: TaskDTO) => void;
   onScheduleTask?: (task: TaskDTO) => void;
   onOpenPreview?: (event: GoogleCalendarEvent) => void;
+  /** Google event ids that belong to day reminders and stay off the clock. */
+  hiddenEventIds?: Set<string>;
 };
 
 function previewEventForBlock(block: NowBlock): GoogleCalendarEvent | null {
@@ -200,32 +224,9 @@ function BlockRow({
     >
       <ColumnHeader tone={tone} label={label} />
       {block && kind ? (
-        <div
-          role={onOpenPreview && previewEvent ? 'button' : undefined}
-          tabIndex={onOpenPreview && previewEvent ? 0 : undefined}
-          data-testid="now-strip-card"
-          className={`${cardBase} mt-1.5 ${toneStyle.card} ${
-            onOpenPreview && previewEvent ? 'cursor-pointer' : ''
-          }`}
-          onClick={openPreview}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              openPreview();
-            }
-          }}
-        >
-          <KindBadge kind={kind} title={t(KIND_I18N_KEY[kind])} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-ide-text">{block.title}</p>
-            <p className="text-xs text-ide-muted">{formatRange(block, timeZone)}</p>
-          </div>
+        <div className="group/card relative mt-1.5 flex min-w-0 flex-col md:mt-3">
           {showDone || showSkip ? (
-            <div
-              className="flex shrink-0 items-center gap-0.5 opacity-100 transition-opacity duration-200 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
-            >
+            <StripActions>
               {showSkip && block.task ? (
                 <button
                   type="button"
@@ -250,8 +251,29 @@ function BlockRow({
                   <Check className="h-3.5 w-3.5" aria-hidden />
                 </button>
               ) : null}
-            </div>
+            </StripActions>
           ) : null}
+          <div
+            role={onOpenPreview && previewEvent ? 'button' : undefined}
+            tabIndex={onOpenPreview && previewEvent ? 0 : undefined}
+            data-testid="now-strip-card"
+            className={`${cardBase} ${toneStyle.card} ${
+              onOpenPreview && previewEvent ? 'cursor-pointer' : ''
+            }`}
+            onClick={openPreview}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openPreview();
+              }
+            }}
+          >
+            <KindBadge kind={kind} title={t(KIND_I18N_KEY[kind])} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-ide-text">{block.title}</p>
+              <p className="text-xs text-ide-muted">{formatRange(block, timeZone)}</p>
+            </div>
+          </div>
         </div>
       ) : (
         <p className="mt-1.5 text-sm text-ide-muted">{empty}</p>
@@ -266,6 +288,7 @@ export function NowStrip({
   onEditTask,
   onScheduleTask,
   onOpenPreview,
+  hiddenEventIds,
 }: NowStripProps = {}) {
   const { t } = useTranslation();
   const nowMs = useNowMs();
@@ -282,9 +305,10 @@ export function NowStrip({
     },
     { skip: skipEventsFetch },
   );
-  const events = skipEventsFetch
+  const events = (skipEventsFetch
     ? (sharedEvents ?? [])
-    : (todayEvents?.events ?? sharedEvents ?? []);
+    : (todayEvents?.events ?? sharedEvents ?? [])
+  ).filter((event) => !hiddenEventIds?.has(event.id));
   const { data: tasks = [] } = useGetTasksQuery();
   const [updateTask] = useUpdateEventMutation();
   const [skipOccurrence] = useSkipOccurrenceMutation();
@@ -459,7 +483,7 @@ export function NowStrip({
         >
           <ColumnHeader tone="inbox" label={t('now.unscheduled')} count={inbox.length} />
           {inbox.length ? (
-            <ul className="mt-1.5 max-h-48 space-y-1.5 overflow-y-auto overscroll-contain pr-0.5">
+            <ul className="mt-1.5 max-h-48 space-y-1.5 overflow-y-auto overscroll-contain pr-0.5 md:mt-0 md:pt-3">
               {inbox.map((task) => {
                 const busy = busyId === task.id;
                 const actions = canActOnInbox(task);
@@ -467,34 +491,9 @@ export function NowStrip({
                   if (onOpenPreview) onOpenPreview(previewEventFromTask(task));
                 };
                 return (
-                  <li
-                    key={task.id}
-                    role={onOpenPreview ? 'button' : undefined}
-                    tabIndex={onOpenPreview ? 0 : undefined}
-                    className={`${cardBase} ${TONE.inbox.card} ${
-                      onOpenPreview ? 'cursor-pointer' : ''
-                    }`}
-                    onClick={openInboxPreview}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        openInboxPreview();
-                      }
-                    }}
-                  >
-                    <KindBadge
-                      kind="unscheduled"
-                      title={t(KIND_I18N_KEY.unscheduled)}
-                    />
-                    <span className="min-w-0 flex-1 truncate text-sm text-ide-text" title={task.name}>
-                      {task.name}
-                    </span>
+                  <li key={task.id} className="group/card relative flex min-w-0 flex-col">
                     {actions ? (
-                      <div
-                        className="flex shrink-0 items-center gap-0.5 opacity-100 transition-opacity duration-200 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => e.stopPropagation()}
-                      >
+                      <StripActions>
                         <button
                           type="button"
                           className={stripIconBtn}
@@ -549,8 +548,30 @@ export function NowStrip({
                             <Pencil className="h-3.5 w-3.5" aria-hidden />
                           </button>
                         ) : null}
-                      </div>
+                      </StripActions>
                     ) : null}
+                    <div
+                      role={onOpenPreview ? 'button' : undefined}
+                      tabIndex={onOpenPreview ? 0 : undefined}
+                      className={`${cardBase} ${TONE.inbox.card} ${
+                        onOpenPreview ? 'cursor-pointer' : ''
+                      }`}
+                      onClick={openInboxPreview}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          openInboxPreview();
+                        }
+                      }}
+                    >
+                      <KindBadge
+                        kind="unscheduled"
+                        title={t(KIND_I18N_KEY.unscheduled)}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-sm text-ide-text" title={task.name}>
+                        {task.name}
+                      </span>
+                    </div>
                   </li>
                 );
               })}

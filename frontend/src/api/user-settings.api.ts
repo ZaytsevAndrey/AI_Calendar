@@ -28,6 +28,8 @@ export interface UserSettingsDTO {
   /** Spoken language for voice STT / TTS (independent of UI `language`). */
   speechLanguage?: string;
   remindersEnabled?: boolean;
+  /** HH:mm clock used when a day reminder does not set its own time. */
+  defaultReminderTime?: string;
   /** When true, a Google delete of an app event also removes it in the app. */
   syncGoogleDeletions?: boolean;
   /** Outbound sync targets; null = default; [] = nowhere. */
@@ -68,6 +70,8 @@ export interface UpdateUserSettingsDTO {
   language?: string;
   speechLanguage?: string;
   remindersEnabled?: boolean;
+  /** HH:mm clock used when a day reminder does not set its own time. */
+  defaultReminderTime?: string;
   syncGoogleDeletions?: boolean;
   syncTargetCalendars?: Array<{ provider: string; calendarId: string }> | null;
   dismissWarnExternalWriteBack?: boolean;

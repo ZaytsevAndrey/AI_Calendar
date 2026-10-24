@@ -107,6 +107,10 @@ describe('UserSettingsService', () => {
     expect(service.getDefaultSettings().defaultTaskDurationMinutes).toBe(30);
   });
 
+  it('defaults the day-reminder clock to 09:00', () => {
+    expect(service.getDefaultSettings().defaultReminderTime).toBe('09:00');
+  });
+
   it('fills a missing task duration when loading settings', async () => {
     const existing = {
       userId: 'user-1',

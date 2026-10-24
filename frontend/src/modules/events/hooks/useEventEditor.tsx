@@ -10,6 +10,15 @@ import {
 import { useGetAllPhasesQuery } from 'api/phasesApi';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import { CreateTaskDTO, TaskDTO, UpdateTaskDTO } from 'api/tasks.api';
+import {
+  type DayReminderDTO,
+  type WriteDayReminderDTO,
+  useCreateDayReminderMutation,
+  useDeleteDayReminderMutation,
+  useUpdateDayReminderMutation,
+} from 'api/dayReminders.api';
+import { ReminderForm } from 'modules/day-reminders/ReminderForm';
+import { localYmd } from 'utils/ianaDateTime';
 import { formValuesFromCreatePayload } from 'modules/tasks/task-wizard/buildPayload';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { SeriesDeleteHost } from 'modules/schedule/components/SeriesDeleteHost';
@@ -46,6 +55,8 @@ export function useEventEditor() {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<TaskDTO | null>(null);
+  const [editingReminder, setEditingReminder] = useState<DayReminderDTO | null>(null);
+  const [creatingReminder, setCreatingReminder] = useState(false);
   const [occurrence, setOccurrence] = useState<TaskOccurrenceContext | null>(null);
   const [actionsMode, setActionsMode] = useState<EditorActionsMode>('full');
   const [createDefaults, setCreateDefaults] = useState<CreateTaskDefaults | undefined>();
@@ -64,14 +75,24 @@ export function useEventEditor() {
   const [skipOccurrence] = useSkipOccurrenceMutation();
   const [endSeriesFrom] = useEndSeriesFromMutation();
   const [deleteEvent] = useDeleteEventMutation();
+  const [createReminder, createReminderState] = useCreateDayReminderMutation();
+  const [updateReminder, updateReminderState] = useUpdateDayReminderMutation();
+  const [deleteReminder, deleteReminderState] = useDeleteDayReminderMutation();
   const [localSubmitting, setLocalSubmitting] = useState(false);
   const isSubmitting =
-    localSubmitting || createState.isLoading || updateState.isLoading;
+    localSubmitting ||
+    createState.isLoading ||
+    updateState.isLoading ||
+    createReminderState.isLoading ||
+    updateReminderState.isLoading;
+  const isReminderDeleting = deleteReminderState.isLoading;
 
   const close = () => {
-    if (isSubmitting || isDeleting) return;
+    if (isSubmitting || isDeleting || isReminderDeleting) return;
     setOpen(false);
     setEditingEvent(null);
+    setEditingReminder(null);
+    setCreatingReminder(false);
     setOccurrence(null);
     setActionsMode('full');
     setCreateDefaults(undefined);
@@ -82,9 +103,23 @@ export function useEventEditor() {
 
   const openCreate = (defaults?: CreateTaskDefaults) => {
     setEditingEvent(null);
+    setEditingReminder(null);
+    setCreatingReminder(false);
     setOccurrence(null);
     setActionsMode('full');
     setCreateDefaults(defaults);
+    setFormPrefill(undefined);
+    setAfterCreate(null);
+    setOpen(true);
+  };
+
+  const openEditReminder = (reminder: DayReminderDTO) => {
+    setEditingEvent(null);
+    setCreatingReminder(false);
+    setEditingReminder(reminder);
+    setOccurrence(null);
+    setActionsMode('full');
+    setCreateDefaults(undefined);
     setFormPrefill(undefined);
     setAfterCreate(null);
     setOpen(true);
@@ -95,6 +130,8 @@ export function useEventEditor() {
     options?: { afterCreate?: () => Promise<void> },
   ) => {
     setEditingEvent(null);
+    setEditingReminder(null);
+    setCreatingReminder(false);
     setOccurrence(null);
     setActionsMode('full');
     setCreateDefaults(undefined);
@@ -305,7 +342,56 @@ export function useEventEditor() {
     [formPrefill, createDefaults],
   );
 
-  const editorTitle = editingEvent
+  const finishReminder = () => {
+    setOpen(false);
+    setEditingEvent(null);
+    setEditingReminder(null);
+    setCreatingReminder(false);
+    setOccurrence(null);
+    setCreateDefaults(undefined);
+    setFormPrefill(undefined);
+    setAfterCreate(null);
+  };
+
+  const submitReminder = async (body: WriteDayReminderDTO) => {
+    try {
+      if (editingReminder) {
+        await updateReminder({ id: editingReminder.id, body }).unwrap();
+      } else {
+        await createReminder(body).unwrap();
+      }
+      finishReminder();
+    } catch (err) {
+      showErrorToast({
+        title: t('dayReminders.saveFailed'),
+        detail: extractApiErrorMessage(err),
+      });
+    }
+  };
+
+  const deleteReminderFromEditor = async () => {
+    if (!editingReminder) return;
+    try {
+      await deleteReminder(editingReminder.id).unwrap();
+      finishReminder();
+    } catch (err) {
+      showErrorToast({
+        title: t('dayReminders.deleteFailed'),
+        detail: extractApiErrorMessage(err),
+      });
+    }
+  };
+
+  const reminderDueYmd = createDefaults?.earliestStartTime
+    ? localYmd(createDefaults.earliestStartTime, timeZone)
+    : undefined;
+  const showingReminder = creatingReminder || !!editingReminder;
+
+  const editorTitle = showingReminder
+    ? editingReminder
+      ? t('dayReminders.edit')
+      : t('dayReminders.createTitle')
+    : editingEvent
     ? createDefaults?.scheduleIntent
       ? t('tasks.editor.schedule')
       : t('tasks.editor.edit')
@@ -323,6 +409,24 @@ export function useEventEditor() {
         footer={null}
       >
         <Suspense fallback={<div className="px-1 py-6 text-sm text-ide-muted">{t('common.loading')}</div>}>
+          {showingReminder ? (
+            <ReminderForm
+              initial={editingReminder ?? undefined}
+              suggestedDueYmd={reminderDueYmd}
+              onSubmit={(body) => void submitReminder(body)}
+              onCancel={close}
+              onDelete={editingReminder ? () => void deleteReminderFromEditor() : undefined}
+              onPickTaskPreset={
+                editingReminder
+                  ? undefined
+                  : () => {
+                      setCreatingReminder(false);
+                    }
+              }
+              isSubmitting={isSubmitting}
+              isDeleting={isReminderDeleting}
+            />
+          ) : (
           <TaskForm
             key={
               editingEvent
@@ -349,7 +453,9 @@ export function useEventEditor() {
             }
             isDeleting={isDeleting}
             mode={editingEvent ? 'edit' : 'create'}
+            onPickReminder={editingEvent ? undefined : () => setCreatingReminder(true)}
           />
+          )}
         </Suspense>
       </Modal>
       <Modal
@@ -401,5 +507,13 @@ export function useEventEditor() {
     </>
   );
 
-  return { openCreate, openCreateFromPrefill, openEdit, openSchedule, createFromPayload, editorModal };
+  return {
+    openCreate,
+    openCreateFromPrefill,
+    openEdit,
+    openEditReminder,
+    openSchedule,
+    createFromPayload,
+    editorModal,
+  };
 }
