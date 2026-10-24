@@ -1,4 +1,5 @@
 import React from 'react';
+import { Input } from 'ui/Input';
 
 interface ColorFieldProps {
   errors: any;
@@ -11,19 +12,20 @@ export const ColorField = ({ errors, colorValue = '#000000', setColor }: ColorFi
     <div className="form-group">
       <label htmlFor="color">Color*</label>
       <div className="color-input-container">
-        <input 
-          id="color" 
+        <Input
+          id="color"
           type="color"
           value={colorValue}
           onChange={(event) => setColor(event.target.value)}
-          className={errors.color ? 'error' : ''} 
+          error={!!errors.color}
         />
-        <input 
+        <Input
           id="colorText"
-          type="text" 
+          type="text"
           value={colorValue}
           onChange={(event) => setColor(event.target.value)}
-          className={`color-text ${errors.color ? 'error' : ''}`}
+          error={!!errors.color}
+          className="color-text"
         />
       </div>
       {errors.color && <span className="error-message">{errors.color.message}</span>}

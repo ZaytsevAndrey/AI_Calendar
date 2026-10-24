@@ -1,10 +1,11 @@
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Clock } from 'lucide-react';
+import { Check, Clock, Pencil, Trash2 } from 'lucide-react';
 import type { GoogleCalendarEvent } from 'api/google-calendar.api';
 import type { TaskDTO } from 'api/tasks.api';
 import type { SeriesDragScope } from 'modules/schedule/seriesDragChoice';
 import { Modal } from 'ui/Modal';
+import { Button } from 'ui/Button';
 import { formatDateTime, formatDateTimeRange } from 'utils/formatDate';
 import { eventEndDate, eventStartDate } from '../calendarView';
 import { getEventColor } from '../hooks/eventAppearance';
@@ -262,24 +263,28 @@ export function EventPreview({
                 onChoose={(scope) => onDelete(scope)}
               />
             ) : (
-              <button
+              <Button
                 type="button"
-                className="ui-btn-danger w-full sm:w-auto"
+                variant="danger"
+                className="w-full sm:w-auto"
                 disabled={busy}
                 onClick={() => onDelete()}
+                icon={Trash2}
               >
                 {t('common.delete')}
-              </button>
+              </Button>
             )}
             {showDone ? (
-              <button
+              <Button
                 type="button"
-                className="ui-btn-secondary w-full sm:w-auto"
+                variant="secondary"
+                className="w-full sm:w-auto"
                 disabled={busy}
                 onClick={() => onDone?.()}
+                icon={Check}
               >
                 {t('common.done')}
-              </button>
+              </Button>
             ) : null}
             {editPlan === 'series_menu' ? (
               <SeriesScopeMenu
@@ -289,14 +294,15 @@ export function EventPreview({
                 onChoose={(scope) => onEdit(scope)}
               />
             ) : (
-              <button
+              <Button
                 type="button"
-                className="ui-btn-primary w-full sm:w-auto"
+                className="w-full sm:w-auto"
                 disabled={busy}
                 onClick={() => onEdit()}
+                icon={Pencil}
               >
                 {t('common.edit')}
-              </button>
+              </Button>
             )}
           </div>
       }

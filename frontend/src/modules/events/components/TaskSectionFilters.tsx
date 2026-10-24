@@ -1,9 +1,12 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ListFilter, Search, X } from 'lucide-react';
+import { Check, ListFilter, Search, X } from 'lucide-react';
 import type { ScheduleModeFilter, TaskStatusFilter } from '../utils/taskListFilters';
 import { usePhoneLayout } from 'modules/common/hooks/useMediaQuery';
 import { Modal } from '../../../ui/Modal';
+import { Button } from 'ui/Button';
+import { IconButton } from 'ui/IconButton';
+import { Select } from 'ui/Select';
 
 type SortField = 'name' | 'priority' | 'deadline' | 'estimatedTimeInMinutes';
 
@@ -206,9 +209,12 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
             </button>
           ) : null}
         </div>
-        <button
+        <IconButton
           type="button"
-          className="ui-icon-btn relative !h-9 !w-9 shrink-0 border border-ide-border md:hidden"
+          variant="secondary"
+          size="sm"
+          label={t('common.filters')}
+          className="relative md:hidden"
           onClick={() => setSheetOpen(true)}
         >
           <ListFilter className="h-4 w-4" aria-hidden />
@@ -216,7 +222,7 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
           {narrowed ? (
             <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-ide-link" aria-hidden />
           ) : null}
-        </button>
+        </IconButton>
         </div>
 
         <label htmlFor={statusId} className="sr-only max-md:hidden">
@@ -271,14 +277,14 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
                     <label htmlFor={`${idPrefix}Phase`} className="mb-1 block text-xs text-ide-muted">
                       {t('common.phase')}
                     </label>
-                    <select
+                    <Select
                       id={`${idPrefix}Phase`}
                       value={phaseId}
+                      size="sm"
                       onChange={(event) => onPhaseIdChange(event.target.value)}
-                      className="ui-select h-9 py-1"
                     >
                       {phaseOptions}
-                    </select>
+                    </Select>
                   </div>
                 ) : null}
                 {showMode && onModeChange && mode !== undefined ? (
@@ -286,14 +292,14 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
                     <label htmlFor={`${idPrefix}Mode`} className="mb-1 block text-xs text-ide-muted">
                       {t('tasks.filters.scheduleType')}
                     </label>
-                    <select
+                    <Select
                       id={`${idPrefix}Mode`}
                       value={mode}
+                      size="sm"
                       onChange={(event) => onModeChange(event.target.value as ScheduleModeFilter)}
-                      className="ui-select h-9 py-1"
                     >
                       {modeOptions}
-                    </select>
+                    </Select>
                   </div>
                 ) : null}
                 {showSort && onSortFieldChange && sortField !== undefined ? (
@@ -301,14 +307,14 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
                     <label htmlFor={`${idPrefix}Sort`} className="mb-1 block text-xs text-ide-muted">
                       {t('tasks.filters.sortBy')}
                     </label>
-                    <select
+                    <Select
                       id={`${idPrefix}Sort`}
                       value={sortField}
+                      size="sm"
                       onChange={(event) => onSortFieldChange(event.target.value as SortField)}
-                      className="ui-select h-9 py-1"
                     >
                       {sortOptions}
-                    </select>
+                    </Select>
                   </div>
                 ) : null}
               </div>
@@ -318,6 +324,7 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
 
         {narrowed ? (
           <button type="button" onClick={reset} className="filter-chip border-transparent bg-transparent text-ide-muted hover:text-ide-text">
+            <X className="h-3.5 w-3.5" aria-hidden />
             {t('common.clear')}
           </button>
         ) : null}
@@ -360,15 +367,14 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
               <label htmlFor={`${idPrefix}SheetStatus`} className="mb-1 block text-xs text-ide-muted">
                 {t('common.status')}
               </label>
-              <select
+              <Select
                 id={`${idPrefix}SheetStatus`}
                 value={status}
                 aria-label={statusAriaLabel}
                 onChange={(event) => onStatusChange(event.target.value as TaskStatusFilter)}
-                className="ui-select w-full"
               >
                 {statusOptions}
-              </select>
+              </Select>
             </div>
             <button
               type="button"
@@ -384,14 +390,13 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
                 <label htmlFor={`${idPrefix}SheetPhase`} className="mb-1 block text-xs text-ide-muted">
                   {t('common.phase')}
                 </label>
-                <select
+                <Select
                   id={`${idPrefix}SheetPhase`}
                   value={phaseId}
                   onChange={(event) => onPhaseIdChange(event.target.value)}
-                  className="ui-select w-full"
                 >
                   {phaseOptions}
-                </select>
+                </Select>
               </div>
             ) : null}
             {showMode && onModeChange && mode !== undefined ? (
@@ -399,14 +404,13 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
                 <label htmlFor={`${idPrefix}SheetMode`} className="mb-1 block text-xs text-ide-muted">
                   {t('tasks.filters.scheduleType')}
                 </label>
-                <select
+                <Select
                   id={`${idPrefix}SheetMode`}
                   value={mode}
                   onChange={(event) => onModeChange(event.target.value as ScheduleModeFilter)}
-                  className="ui-select w-full"
                 >
                   {modeOptions}
-                </select>
+                </Select>
               </div>
             ) : null}
             {showSort && onSortFieldChange && sortField !== undefined ? (
@@ -414,25 +418,24 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
                 <label htmlFor={`${idPrefix}SheetSort`} className="mb-1 block text-xs text-ide-muted">
                   {t('tasks.filters.sortBy')}
                 </label>
-                <select
+                <Select
                   id={`${idPrefix}SheetSort`}
                   value={sortField}
                   onChange={(event) => onSortFieldChange(event.target.value as SortField)}
-                  className="ui-select w-full"
                 >
                   {sortOptions}
-                </select>
+                </Select>
               </div>
             ) : null}
             <div className="flex justify-end gap-2 pt-2">
               {narrowed ? (
-                <button type="button" className="h-8 rounded-md px-3 text-sm text-ide-muted" onClick={reset}>
+                <Button type="button" variant="ghost" size="sm" onClick={reset} icon={X}>
                   {t('common.clear')}
-                </button>
+                </Button>
               ) : null}
-              <button type="button" className="h-8 rounded-md bg-ide-accentBlue px-3 text-sm text-white" onClick={() => setSheetOpen(false)}>
+              <Button type="button" size="sm" onClick={() => setSheetOpen(false)} icon={Check}>
                 {t('common.done')}
-              </button>
+              </Button>
             </div>
           </div>
         </Modal>

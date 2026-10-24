@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   useCreateHabitMutation,
@@ -13,6 +13,8 @@ import HabitForm from 'modules/habits/components/HabitForm';
 import HabitAchievementBadges from 'modules/habits/components/HabitAchievementBadges';
 import { HABIT_ACHIEVEMENT_IDS } from 'modules/habits/habitAchievements';
 import type { HabitAchievementsMap } from 'api/habits.api';
+import { Button } from 'ui/Button';
+import { dialogButtonSize } from 'ui/controlSize';
 import { Modal } from '../../ui/Modal';
 import { showErrorToast, showSuccessToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
@@ -115,6 +117,7 @@ const HabitsPage: React.FC = () => {
           <p className="page-lead">{t('habits.lead')}</p>
         </div>
         <button type="button" onClick={openCreate} className="ui-btn-primary max-md:hidden">
+          <Plus className="h-4 w-4" aria-hidden />
           {t('habits.add')}
         </button>
         <button type="button" onClick={openCreate} className="ui-icon-btn text-ide-link md:hidden">
@@ -174,21 +177,27 @@ const HabitsPage: React.FC = () => {
         title={t('habits.deleteTitle')}
         footer={
           <>
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size={dialogButtonSize}
               onClick={() => setDeleteConfirm(null)}
-              className="ui-btn-secondary w-full sm:w-auto"
+              className="w-full sm:w-auto"
+              icon={X}
             >
               {t('common.cancel')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="danger"
+              size={dialogButtonSize}
               onClick={() => void confirmDelete()}
-              className="ui-btn-danger w-full sm:w-auto"
+              className="w-full sm:w-auto"
               disabled={isDeleting}
+              icon={Trash2}
             >
               {isDeleting ? t('common.deleting') : t('common.delete')}
-            </button>
+            </Button>
           </>
         }
       >

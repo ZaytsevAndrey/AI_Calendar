@@ -17,6 +17,9 @@ import {
 import { ProviderLogo } from 'modules/calendar/components/ProviderLogo';
 import { showErrorToast, showSuccessToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
+import { Check, Link2, Unlink, X } from 'lucide-react';
+import { Button } from 'ui/Button';
+import { Input } from 'ui/Input';
 
 /** Connect Microsoft/Apple + choose outbound sync targets. */
 export function CalendarAccountsSection() {
@@ -208,22 +211,26 @@ export function CalendarAccountsSection() {
             )}
           </span>
           {microsoftLinked ? (
-            <button
+            <Button
               type="button"
-              className="ui-btn-ghost text-sm"
+              variant="ghost"
+              size="sm"
               onClick={() => void disconnect('microsoft')}
+              icon={Unlink}
             >
               {t('settings.disconnect')}
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
               type="button"
-              className="ui-btn-secondary inline-flex items-center gap-2 text-sm"
+              variant="secondary"
+              size="sm"
               disabled={status?.microsoft === false}
               onClick={() => void connectMicrosoft()}
+              icon={Link2}
             >
               {t('settings.connectMicrosoft')}
-            </button>
+            </Button>
           )}
         </li>
         <li className="rounded-lg border border-ide-border px-3 py-2">
@@ -245,24 +252,28 @@ export function CalendarAccountsSection() {
               )}
             </span>
             {appleLinked ? (
-              <button
+              <Button
                 type="button"
-                className="ui-btn-ghost text-sm"
+                variant="ghost"
+                size="sm"
                 onClick={() => void disconnect('apple')}
+                icon={Unlink}
               >
                 {t('settings.disconnect')}
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 type="button"
-                className="ui-btn-secondary inline-flex items-center gap-2 text-sm"
+                variant="secondary"
+                size="sm"
                 onClick={() => {
                   setAppleFormOpen((v) => !v);
                   setShowAppleHelp(true);
                 }}
+                icon={Link2}
               >
                 {t('settings.connectApple')}
-              </button>
+              </Button>
             )}
           </div>
           {!appleLinked && appleFormOpen ? (
@@ -284,10 +295,10 @@ export function CalendarAccountsSection() {
                   <span className="mb-1 block text-xs text-ide-muted">
                     {t('settings.appleIdLabel')}
                   </span>
-                  <input
+                  <Input
                     type="email"
                     autoComplete="username"
-                    className="ui-input w-full"
+                    size="sm"
                     value={appleId}
                     onChange={(e) => setAppleId(e.target.value)}
                     disabled={appleBusy}
@@ -297,10 +308,10 @@ export function CalendarAccountsSection() {
                   <span className="mb-1 block text-xs text-ide-muted">
                     {t('settings.appleAppPasswordLabel')}
                   </span>
-                  <input
+                  <Input
                     type="password"
                     autoComplete="current-password"
-                    className="ui-input w-full"
+                    size="sm"
                     value={applePassword}
                     onChange={(e) => setApplePassword(e.target.value)}
                     disabled={appleBusy}
@@ -308,25 +319,28 @@ export function CalendarAccountsSection() {
                 </label>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button
+                <Button
                   type="button"
-                  className="ui-btn-primary text-sm"
+                  size="sm"
                   disabled={appleBusy || !appleId.trim() || !applePassword.trim()}
                   onClick={() => void submitAppleCalDav()}
+                  icon={Link2}
                 >
                   {t('settings.appleConnectSubmit')}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="ui-btn-ghost text-sm"
+                  variant="ghost"
+                  size="sm"
                   disabled={appleBusy}
                   onClick={() => {
                     setAppleFormOpen(false);
                     setApplePassword('');
                   }}
+                  icon={X}
                 >
                   {t('settings.appleConnectCancel')}
-                </button>
+                </Button>
               </div>
             </div>
           ) : null}
@@ -336,7 +350,7 @@ export function CalendarAccountsSection() {
       <h3 className="mb-2 text-sm font-semibold text-ide-text">{t('settings.syncTargets')}</h3>
       <p className="mb-3 text-xs text-ide-muted">{t('settings.syncTargetsHint')}</p>
       <label className="mb-2 flex items-center gap-2 text-sm text-ide-text">
-        <input
+        <Input
           type="checkbox"
           checked={syncNowhere}
           onChange={(e) => {
@@ -353,7 +367,7 @@ export function CalendarAccountsSection() {
             return (
               <li key={key}>
                 <label className="flex items-center gap-2 text-sm text-ide-text">
-                  <input
+                  <Input
                     type="checkbox"
                     checked={selected.includes(key)}
                     onChange={(e) => {
@@ -372,9 +386,9 @@ export function CalendarAccountsSection() {
           })}
         </ul>
       ) : null}
-      <button type="button" className="ui-btn-primary" onClick={() => void saveTargets()}>
+      <Button type="button" onClick={() => void saveTargets()} icon={Check}>
         {t('common.save')}
-      </button>
+      </Button>
     </section>
   );
 }

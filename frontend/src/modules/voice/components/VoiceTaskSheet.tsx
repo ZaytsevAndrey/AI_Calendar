@@ -1,8 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Mic, MicOff, Send } from 'lucide-react';
+import { Check, ListChecks, Mic, MicOff, RotateCcw, Send, SkipForward, Square, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '../../../ui/Modal';
 import { Spinner } from '../../../ui/Spinner';
+import { Button } from 'ui/Button';
+import { dialogButtonSize } from 'ui/controlSize';
+import { IconButton } from 'ui/IconButton';
+import { Input } from 'ui/Input';
 import { usePhoneLayout } from 'modules/common/hooks/useMediaQuery';
 import type { useVoiceTask } from '../hooks/useVoiceTask';
 import { VoiceAudioVisual } from './VoiceAudioVisual';
@@ -52,10 +56,11 @@ function MicToggle({ voice, primary }: { voice: VoiceController; primary?: boole
   const { t } = useTranslation();
   const { micEnabled, setMicEnabled, isWorking } = voice;
   return (
-    <button
+    <Button
       type="button"
-      className={primary && micEnabled ? 'ui-btn-primary' : 'ui-btn-secondary'}
-      aria-pressed={micEnabled}
+      variant={primary && micEnabled ? 'primary' : 'secondary'}
+      size={dialogButtonSize}
+      pressed={micEnabled}
       aria-label={micEnabled ? t('voice.micOn') : t('voice.micOff')}
       title={micEnabled ? t('voice.micOn') : t('voice.micOff')}
       disabled={isWorking}
@@ -63,7 +68,7 @@ function MicToggle({ voice, primary }: { voice: VoiceController; primary?: boole
     >
       {micEnabled ? <Mic className="h-4 w-4" aria-hidden /> : <MicOff className="h-4 w-4" aria-hidden />}
       <span className="sr-only">{micEnabled ? t('voice.micOn') : t('voice.micOff')}</span>
-    </button>
+    </Button>
   );
 }
 
@@ -97,21 +102,21 @@ function CompanionFooter({
   if (isRecording && plan) {
     return (
       <div className="flex w-full flex-wrap items-center justify-end gap-2">
-        <button type="button" className="ui-btn-secondary" onClick={() => void runAction('cancel')}>
+        <Button type="button" variant="secondary" size={dialogButtonSize} onClick={() => void runAction('cancel')} icon={X}>
           {t('voice.dismissTurn')}
-        </button>
-        <button type="button" className="ui-btn-secondary" onClick={() => void finishRecording()}>
+        </Button>
+        <Button type="button" variant="secondary" size={dialogButtonSize} onClick={() => void finishRecording()} icon={Square}>
           {t('voice.stop')}
-        </button>
+        </Button>
         {showConfirm ? (
-          <button type="button" className="ui-btn-primary" onClick={confirmCommand}>
+          <Button type="button" size={dialogButtonSize} onClick={confirmCommand} icon={Check}>
             {t('voice.apply')}
-          </button>
+          </Button>
         ) : null}
         {showBuildPlan ? (
-          <button type="button" className="ui-btn-primary" onClick={() => void runAction('build_plan')}>
+          <Button type="button" size={dialogButtonSize} onClick={() => void runAction('build_plan')} icon={ListChecks}>
             {t('voice.buildPlan')}
-          </button>
+          </Button>
         ) : null}
       </div>
     );
@@ -120,18 +125,20 @@ function CompanionFooter({
   if (showConfirm) {
     return (
       <div className="flex w-full flex-wrap items-center justify-end gap-2">
-        <button
+        <Button
           type="button"
-          className="ui-btn-secondary"
+          variant="secondary"
+          size={dialogButtonSize}
           onClick={() => void runAction('cancel')}
           disabled={isWorking}
+          icon={X}
         >
           {t('voice.dismissTurn')}
-        </button>
+        </Button>
         {plan ? <MicToggle voice={voice} /> : null}
-        <button type="button" className="ui-btn-primary" onClick={confirmCommand} disabled={isWorking}>
+        <Button type="button" size={dialogButtonSize} onClick={confirmCommand} disabled={isWorking} icon={Check}>
           {t('voice.apply')}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -139,23 +146,26 @@ function CompanionFooter({
   if (showBuildPlan && !isSpeaking) {
     return (
       <div className="flex w-full flex-wrap items-center justify-end gap-2">
-        <button
+        <Button
           type="button"
-          className="ui-btn-secondary"
+          variant="secondary"
+          size={dialogButtonSize}
           onClick={() => void runAction('cancel')}
           disabled={isWorking}
+          icon={X}
         >
           {t('voice.dismissTurn')}
-        </button>
+        </Button>
         <MicToggle voice={voice} />
-        <button
+        <Button
           type="button"
-          className="ui-btn-primary"
+          size={dialogButtonSize}
           onClick={() => void runAction('build_plan')}
           disabled={isWorking}
+          icon={ListChecks}
         >
           {t('voice.buildPlan')}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -163,17 +173,18 @@ function CompanionFooter({
   if (showRetry) {
     return (
       <div className="flex w-full flex-wrap items-center justify-end gap-2">
-        <button type="button" className="ui-btn-secondary" onClick={close} disabled={isWorking}>
+        <Button type="button" variant="secondary" size={dialogButtonSize} onClick={close} disabled={isWorking} icon={X}>
           {t('common.close')}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="ui-btn-primary"
+          size={dialogButtonSize}
           onClick={() => void runAction('retry')}
           disabled={isWorking}
+          icon={RotateCcw}
         >
           {t('common.retry')}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -181,9 +192,9 @@ function CompanionFooter({
   if (isSpeaking || showSkipSpeak) {
     return (
       <div className="flex w-full flex-wrap items-center justify-end gap-2">
-        <button type="button" className="ui-btn-secondary" onClick={() => void runAction('skip_speak')}>
+        <Button type="button" variant="secondary" size={dialogButtonSize} onClick={() => void runAction('skip_speak')} icon={SkipForward}>
           {t('voice.skipSpeak')}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -191,28 +202,29 @@ function CompanionFooter({
   if (isRecording) {
     return (
       <div className="flex w-full flex-wrap items-center justify-end gap-2">
-        <button
+        <Button
           type="button"
-          className="ui-btn-secondary"
-          aria-pressed={micEnabled}
+          variant="secondary"
+          size={dialogButtonSize}
+          pressed={micEnabled}
           aria-label={micEnabled ? t('voice.micOn') : t('voice.micOff')}
           title={micEnabled ? t('voice.micOn') : t('voice.micOff')}
           onClick={() => void setMicEnabled(!micEnabled)}
         >
           {micEnabled ? <Mic className="h-4 w-4" aria-hidden /> : <MicOff className="h-4 w-4" aria-hidden />}
-        </button>
-        <button type="button" className="ui-btn-primary" onClick={() => void finishRecording()}>
+        </Button>
+        <Button type="button" size={dialogButtonSize} onClick={() => void finishRecording()} icon={Square}>
           {t('voice.stop')}
-        </button>
+        </Button>
       </div>
     );
   }
 
   return (
     <div className="flex w-full flex-wrap items-center justify-end gap-2">
-      <button type="button" className="ui-btn-secondary" onClick={close} disabled={isWorking}>
+      <Button type="button" variant="secondary" size={dialogButtonSize} onClick={close} disabled={isWorking} icon={X}>
         {t('common.close')}
-      </button>
+      </Button>
       <MicToggle voice={voice} primary />
     </div>
   );
@@ -375,25 +387,26 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
         <label className="sr-only" htmlFor="voice-typed-message">
           {t('voice.typePlaceholder')}
         </label>
-        <input
+        <Input
           id="voice-typed-message"
           type="text"
-          className="ui-input min-w-0 flex-1"
+          className="min-w-0 flex-1"
           value={draft}
           disabled={!canType}
           placeholder={t('voice.typePlaceholder')}
           autoComplete="off"
           onChange={(event) => setDraft(event.target.value)}
         />
-        <button
+        <IconButton
           type="submit"
-          className="ui-btn-primary shrink-0 px-3"
-          disabled={!canSend}
-          aria-label={t('voice.send')}
+          variant="primary"
+          size="md"
+          label={t('voice.send')}
           title={t('voice.send')}
+          disabled={!canSend}
         >
           <Send className="h-4 w-4" aria-hidden />
-        </button>
+        </IconButton>
       </form>
     </div>
   );

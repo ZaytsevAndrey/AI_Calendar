@@ -1,7 +1,7 @@
 import { useGetAllPhasesQuery, useCreatePhaseMutation, useUpdatePhaseMutation, useDeletePhaseMutation, useApplyPhasePresetMutation } from 'api/phasesApi';
 import type { PhasePresetId } from 'api/phasesApi';
 import React, { lazy, Suspense, useCallback, useState } from 'react';
-import { LayoutTemplate, Pencil, Plus, Trash2 } from 'lucide-react';
+import { LayoutTemplate, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { PhaseDTO } from 'api/phases.api';
 import PhasesCalendar from 'modules/phases/components/PhasesCalendar';
@@ -9,6 +9,7 @@ import { PhasePresetPicker, messageFromApiError } from 'modules/phases/component
 import { WeekDaysSelector } from 'modules/phases/components/WeekDaysSelector';
 import { showErrorToast } from 'utils/toast';
 import { Modal } from '../../ui/Modal';
+import { Button } from 'ui/Button';
 
 function weekDaysForPreset(phases: PhaseDTO[]): number[] {
     const named = phases.filter((phase) => phase.type !== 'sleep_time' && phase.type !== 'main_phase');
@@ -150,9 +151,11 @@ const PhasesPage: React.FC = () => {
                 </div>
                 <div className="hidden gap-2 md:flex">
                     <button type="button" onClick={openPreset} className="ui-btn-secondary">
+                        <LayoutTemplate className="h-4 w-4" aria-hidden />
                         {t('phases.usePreset')}
                     </button>
                     <button type="button" onClick={handleAdd} className="ui-btn-primary">
+                        <Plus className="h-4 w-4" aria-hidden />
                         {t('phases.add')}
                     </button>
                 </div>
@@ -204,22 +207,25 @@ const PhasesPage: React.FC = () => {
                     />
                 </div>
                 <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
-                    <button
+                    <Button
                         type="button"
-                        className="ui-btn-secondary w-full sm:w-auto"
+                        variant="secondary"
+                        className="w-full sm:w-auto"
                         onClick={() => setShowPreset(false)}
                         disabled={isApplyingPreset}
+                        icon={X}
                     >
                         {t('common.cancel')}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         type="button"
-                        className="ui-btn-primary w-full sm:w-auto"
+                        className="w-full sm:w-auto"
                         onClick={handleApplyPreset}
                         disabled={isApplyingPreset || presetDays.length === 0}
+                        icon={RefreshCw}
                     >
                         {t('phases.replacePhases')}
-                    </button>
+                    </Button>
                 </div>
             </Modal>
 
@@ -259,7 +265,7 @@ const PhasesPage: React.FC = () => {
                                         className="edit-button"
                                         onClick={() => handleEdit(phase)}
                                     >
-                                        <Pencil className="h-4 w-4 md:hidden" aria-hidden />
+                                        <Pencil className="h-4 w-4" aria-hidden />
                                         <span className="max-md:sr-only">{t('common.edit')}</span>
                                     </button>
                                     <button
@@ -268,7 +274,7 @@ const PhasesPage: React.FC = () => {
                                         onClick={() => handleDelete(phase.id)}
                                         disabled={isDeleting}
                                     >
-                                        <Trash2 className="h-4 w-4 md:hidden" aria-hidden />
+                                        <Trash2 className="h-4 w-4" aria-hidden />
                                         <span className="max-md:sr-only">{t('common.delete')}</span>
                                     </button>
                                 </div>

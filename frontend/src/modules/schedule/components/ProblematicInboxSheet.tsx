@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CalendarPlus, Pencil, SkipForward, CheckCircle2 } from 'lucide-react';
+import { CalendarPlus, CheckCircle2, Pencil, SkipForward, X } from 'lucide-react';
 import type { TaskDTO } from 'api/tasks.api';
 import {
   useSkipOccurrenceMutation,
   useUpdateEventMutation,
 } from 'api/eventTasksApi';
 import { Modal } from '../../../ui/Modal';
+import { Button } from 'ui/Button';
+import { dialogButtonSize } from 'ui/controlSize';
 import { Spinner } from '../../../ui/Spinner';
 import { formatCivilYmd, formatMinutes } from '../../../utils/formatDate';
 import { showErrorToast } from '../../../utils/toast';
@@ -31,9 +33,6 @@ type Props = {
 
 const pill =
   'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium leading-none';
-const iconBtn =
-  'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-ide-text hover:bg-white/10 disabled:opacity-50';
-
 function reasonKey(reason: string | null | undefined): string {
   switch (reason) {
     case 'phase_full':
@@ -172,13 +171,16 @@ export function ProblematicInboxSheet({
       title={t('schedule.problematicTitle')}
       maxWidthClass="max-w-md"
       footer={
-        <button
+        <Button
           type="button"
-          className="ui-btn-secondary w-full sm:w-auto"
+          variant="secondary"
+          size={dialogButtonSize}
+          className="w-full sm:w-auto"
           onClick={onClose}
+          icon={X}
         >
           {t('common.close')}
-        </button>
+        </Button>
       }
     >
       <p className="mb-4 text-sm text-ide-muted">{t('schedule.problematicIntro')}</p>
@@ -273,9 +275,8 @@ export function ProblematicInboxSheet({
                         >
                           <span className="text-sm text-ide-text">{label}</span>
                           <span className="flex flex-wrap gap-2">
-                            <button
+                            <Button variant="secondary" size="sm"
                               type="button"
-                              className={iconBtn}
                               disabled={rowBusy}
                               onClick={() => void skipDay(task, ymd)}
                             >
@@ -285,10 +286,10 @@ export function ProblematicInboxSheet({
                                 <SkipForward className="h-4 w-4" aria-hidden />
                               )}
                               {t('schedule.problematicSkipDay')}
-                            </button>
-                            <button
+                            </Button>
+                            <Button variant="ghost" size="sm"
                               type="button"
-                              className={`${iconBtn} text-ide-link`}
+                              className="text-ide-link"
                               disabled={rowBusy}
                               onClick={() =>
                                 setMoveTarget({ task, occurrenceYmd: ymd })
@@ -296,7 +297,7 @@ export function ProblematicInboxSheet({
                             >
                               <CalendarPlus className="h-4 w-4" aria-hidden />
                               {t('schedule.problematicMoveDay')}
-                            </button>
+                            </Button>
                           </span>
                         </li>
                       );
@@ -307,9 +308,8 @@ export function ProblematicInboxSheet({
                 <div className="flex flex-wrap items-center justify-end gap-2 border-t border-white/10 pt-3">
                   {recurring && days.length === 1 ? (
                     <>
-                      <button
+                      <Button variant="secondary" size="sm"
                         type="button"
-                        className={iconBtn}
                         disabled={rowBusy}
                         onClick={() => void skipDay(task, days[0])}
                       >
@@ -319,10 +319,10 @@ export function ProblematicInboxSheet({
                           <SkipForward className="h-4 w-4" aria-hidden />
                         )}
                         {t('schedule.problematicSkipDay')}
-                      </button>
-                      <button
+                      </Button>
+                      <Button variant="ghost" size="sm"
                         type="button"
-                        className={`${iconBtn} text-ide-link`}
+                        className="text-ide-link"
                         disabled={rowBusy}
                         onClick={() =>
                           setMoveTarget({ task, occurrenceYmd: days[0] })
@@ -330,13 +330,13 @@ export function ProblematicInboxSheet({
                       >
                         <CalendarPlus className="h-4 w-4" aria-hidden />
                         {t('schedule.problematicMoveDay')}
-                      </button>
+                      </Button>
                     </>
                   ) : null}
                   {!recurring ? (
-                    <button
+                    <Button variant="ghost" size="sm"
                       type="button"
-                      className={`${iconBtn} text-ide-link`}
+                      className="text-ide-link"
                       disabled={rowBusy}
                       onClick={() => {
                         const ymd =
@@ -347,11 +347,10 @@ export function ProblematicInboxSheet({
                     >
                       <CalendarPlus className="h-4 w-4" aria-hidden />
                       {t('schedule.problematicMove')}
-                    </button>
+                    </Button>
                   ) : null}
-                  <button
+                  <Button variant="secondary" size="sm"
                     type="button"
-                    className={iconBtn}
                     disabled={rowBusy}
                     onClick={() => {
                       onEdit(task);
@@ -360,10 +359,10 @@ export function ProblematicInboxSheet({
                   >
                     <Pencil className="h-4 w-4" aria-hidden />
                     {t('schedule.problematicEdit')}
-                  </button>
-                  <button
+                  </Button>
+                  <Button variant="ghost" size="sm"
                     type="button"
-                    className={`${iconBtn} text-ide-link`}
+                    className="text-ide-link"
                     disabled={rowBusy}
                     onClick={() => void resolve(task)}
                   >
@@ -373,7 +372,7 @@ export function ProblematicInboxSheet({
                       <CheckCircle2 className="h-4 w-4" aria-hidden />
                     )}
                     {t('schedule.problematicResolve')}
-                  </button>
+                  </Button>
                 </div>
               </li>
             );

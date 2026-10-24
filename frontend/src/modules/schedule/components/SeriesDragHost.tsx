@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Calendar, CalendarRange, Layers, X } from 'lucide-react';
 import { Modal } from 'ui/Modal';
+import { Button } from 'ui/Button';
+import { dialogButtonSize } from 'ui/controlSize';
 import {
   registerSeriesDragAsker,
   type SeriesDragScope,
@@ -37,36 +40,24 @@ export function SeriesDragHost() {
       onClose={() => choose(null)}
       title={t('calendar.seriesDragTitle')}
       footer={
-        <button type="button" className="ui-btn-secondary w-full sm:w-auto" onClick={() => choose(null)}>
+        <Button type="button" variant="secondary" size={dialogButtonSize} className="w-full sm:w-auto" onClick={() => choose(null)} icon={X}>
           {t('common.cancel')}
-        </button>
+        </Button>
       }
     >
       <p className="mb-4 text-sm text-ide-muted">
         {t('calendar.seriesDragBody', { name: pending?.taskName ?? '' })}
       </p>
       <div className="flex flex-col gap-2">
-        <button
-          type="button"
-          className="ui-btn-secondary w-full justify-center"
-          onClick={() => choose('occurrence')}
-        >
+        <Button type="button" variant="secondary" className="w-full" onClick={() => choose('occurrence')} icon={Calendar}>
           {t('calendar.seriesDragThisDay')}
-        </button>
-        <button
-          type="button"
-          className="ui-btn-secondary w-full justify-center"
-          onClick={() => choose('series')}
-        >
+        </Button>
+        <Button type="button" variant="secondary" className="w-full" onClick={() => choose('series')} icon={CalendarRange}>
           {t('calendar.seriesDragFollowing')}
-        </button>
-        <button
-          type="button"
-          className="ui-btn-primary w-full justify-center"
-          onClick={() => choose('all')}
-        >
+        </Button>
+        <Button type="button" className="w-full" onClick={() => choose('all')} icon={Layers}>
           {t('calendar.seriesDragAll')}
-        </button>
+        </Button>
       </div>
     </Modal>
   );

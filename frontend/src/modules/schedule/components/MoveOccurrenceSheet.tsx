@@ -8,8 +8,14 @@ import {
   useUpdateEventMutation,
 } from 'api/eventTasksApi';
 import { useGetAllPhasesQuery } from 'api/phasesApi';
+import { CalendarCheck, X } from 'lucide-react';
 import { Modal } from '../../../ui/Modal';
 import { Spinner } from '../../../ui/Spinner';
+import { Button } from 'ui/Button';
+import { dialogButtonSize } from 'ui/controlSize';
+import { Input } from 'ui/Input';
+import { Select } from 'ui/Select';
+import { TimeField } from 'ui/TimeField';
 import { formatCivilYmd } from '../../../utils/formatDate';
 import {
   addDaysToYmd,
@@ -287,23 +293,28 @@ export function MoveOccurrenceSheet({
       bodyOverflowHidden
       footer={
         <>
-          <button
+          <Button
             type="button"
-            className="ui-btn-secondary w-full sm:w-auto"
+            variant="secondary"
+            size={dialogButtonSize}
+            className="w-full sm:w-auto"
             disabled={busy}
             onClick={onClose}
+            icon={X}
           >
             {t('common.cancel')}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="ui-btn-primary w-full sm:w-auto"
+            size={dialogButtonSize}
+            className="w-full sm:w-auto"
             disabled={!canPlace}
             onClick={() => void confirm()}
+            icon={CalendarCheck}
           >
             {busy ? <Spinner className="h-4 w-4" /> : null}
             {t('schedule.problematicMoveDayConfirm')}
-          </button>
+          </Button>
         </>
       }
     >
@@ -325,9 +336,8 @@ export function MoveOccurrenceSheet({
           <span className="mb-1 block text-ide-muted">
             {t('schedule.problematicSlotDay')}
           </span>
-          <input
+          <Input
             type="date"
-            className="ui-input w-full"
             value={placeYmd}
             min={minYmd}
             disabled={busy}
@@ -338,8 +348,7 @@ export function MoveOccurrenceSheet({
           <span className="mb-1 block text-ide-muted">
             {t('schedule.problematicSlotPhase')}
           </span>
-          <select
-            className="ui-input w-full"
+          <Select
             value={phaseId}
             disabled={busy}
             onChange={(e) => onPhaseSelect(e.target.value)}
@@ -350,20 +359,18 @@ export function MoveOccurrenceSheet({
                 {p.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="block text-sm text-ide-text">
           <span className="mb-1 block text-ide-muted">
             {t('schedule.problematicSlotTime')}
           </span>
-          <input
-            type="time"
-            step={900}
-            className="ui-input w-full"
+          <TimeField
             value={timeDraft}
+            minuteStep={15}
             disabled={busy || loading}
             aria-label={t('schedule.problematicSlotTime')}
-            onChange={(e) => onTimeCommit(e.target.value)}
+            onChange={onTimeCommit}
           />
         </label>
       </div>

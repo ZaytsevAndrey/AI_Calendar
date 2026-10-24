@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Mic, Plus } from 'lucide-react';
+import { Mic, Plus, Trash2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useGetEventsQuery, useDeleteEventMutation, useUpdateEventMutation } from 'api/eventTasksApi';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
@@ -13,6 +13,8 @@ import { VoiceTaskSheet } from 'modules/voice/components/VoiceTaskSheet';
 import { SeriesDragHost } from 'modules/schedule/components/SeriesDragHost';
 import { useVoiceTask } from 'modules/voice/hooks/useVoiceTask';
 import { setConflictVoiceOpener } from 'modules/schedule/conflictChoiceBus';
+import { Button } from 'ui/Button';
+import { dialogButtonSize } from 'ui/controlSize';
 import { deadlineTone } from 'modules/events/utils/deadlineTone';
 import { usePhoneLayout } from 'modules/common/hooks/useMediaQuery';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
@@ -222,7 +224,8 @@ const TasksPage: React.FC = () => {
         </div>
         {phone ? null : (
           <div className="flex w-full shrink-0 flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
-            <button type="button" onClick={() => openCreate()} className="ui-btn-primary min-w-[9rem] flex-1 sm:flex-none">
+            <button type="button" onClick={() => openCreate()} className="ui-btn-primary w-auto flex-none">
+              <Plus className="h-4 w-4" aria-hidden />
               {t('calendar.createTask')}
             </button>
             <VoiceTaskButton onClick={voice.open} />
@@ -309,20 +312,26 @@ const TasksPage: React.FC = () => {
         title={deleteConfirm.group ? t('tasks.group.deleteTitle') : t('tasks.deleteTitle')}
         footer={
           <>
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size={dialogButtonSize}
               onClick={() => setDeleteConfirm({ open: false, ids: [], name: '', group: false })}
-              className="ui-btn-secondary w-full sm:w-auto"
+              className="w-full sm:w-auto"
+              icon={X}
             >
               {t('common.cancel')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="danger"
+              size={dialogButtonSize}
               onClick={confirmDelete}
-              className="ui-btn-danger w-full sm:w-auto"
+              className="w-full sm:w-auto"
+              icon={Trash2}
             >
               {t('common.delete')}
-            </button>
+            </Button>
           </>
         }
       >

@@ -1,4 +1,5 @@
 import React from 'react';
+import { RotateCcw } from 'lucide-react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../store';
@@ -39,6 +40,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
                         Could not reach the API. The production instance may still be waking up.
                     </p>
                     <button type="button" className="ui-btn-primary" onClick={() => void refetch()}>
+                        <RotateCcw className="h-4 w-4" aria-hidden />
                         Retry
                     </button>
                 </div>

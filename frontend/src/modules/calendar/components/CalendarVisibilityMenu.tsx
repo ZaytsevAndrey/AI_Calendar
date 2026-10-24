@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { useTranslation } from 'react-i18next';
 import type { AppDispatch } from '../../../store';
-import { ChevronDown, Eye } from 'lucide-react';
+import { Calendar, ChevronDown, Eye } from 'lucide-react';
 import { eventsApi } from '../../../api/eventsApi';
 import {
   getAuthProvidersStatus,
@@ -121,6 +121,7 @@ export function CalendarVisibilityMenu({ compact = false }: { compact?: boolean 
           <Eye className="h-4 w-4" aria-hidden />
         ) : (
           <>
+            <Calendar className="h-4 w-4" aria-hidden />
             {t('calendar.calendars')}
             <ChevronDown className="h-4 w-4" aria-hidden />
           </>

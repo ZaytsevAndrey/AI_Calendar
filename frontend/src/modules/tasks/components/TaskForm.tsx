@@ -25,9 +25,12 @@ import {
   mergeSavedPreferredStartIntoOptions,
 } from '../task-wizard/phaseSchedulingBounds';
 import { GoogleEventSettingsFields } from '../../calendar/components/GoogleEventSettingsFields';
+import { Check, Plus, SkipForward, Trash2, X } from 'lucide-react';
+import { Button } from 'ui/Button';
+import { Input } from 'ui/Input';
+import { Select } from 'ui/Select';
+import { Textarea } from 'ui/Textarea';
 
-const inp =
-  'w-full rounded border border-ide-border bg-ide-input px-2.5 py-1.5 text-sm text-ide-text focus:border-ide-link focus:outline-none focus:ring-1 focus:ring-ide-link';
 const lbl = 'mb-0.5 block text-xs font-medium text-ide-text';
 
 interface TaskFormProps {
@@ -258,12 +261,13 @@ const TaskForm: React.FC<TaskFormProps> = ({
               name="name"
               control={control}
               render={({ field }) => (
-                <input
+                <Input
                   {...field}
                   id="task-form-name"
                   autoComplete="off"
                   placeholder={t('tasks.form.namePlaceholder')}
-                  className={`${inp} ${errors.name ? 'border-ide-error' : ''}`}
+                  size="sm"
+                  error={!!errors.name}
                 />
               )}
             />
@@ -281,13 +285,13 @@ const TaskForm: React.FC<TaskFormProps> = ({
               name="priority"
               control={control}
               render={({ field }) => (
-                <select {...field} id="task-form-priority" className={inp}>
+                <Select {...field} id="task-form-priority" size="sm">
                   {PRIORITY_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
                   ))}
-                </select>
+                </Select>
               )}
             />
           </div>
@@ -302,11 +306,11 @@ const TaskForm: React.FC<TaskFormProps> = ({
               name="description"
               control={control}
               render={({ field }) => (
-                <textarea
+                <Textarea
                   {...field}
                   id="task-form-description"
                   rows={2}
-                  className={inp}
+                  size="sm"
                   placeholder={t('tasks.form.descriptionPlaceholder')}
                 />
               )}
@@ -396,7 +400,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
             control={control}
             render={({ field }) => (
               <label className="inline-flex cursor-pointer items-center gap-2">
-                <input
+                <Input
                   type="checkbox"
                   checked={!!field.value}
                   onChange={(e) => field.onChange(e.target.checked)}
@@ -415,7 +419,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                 control={control}
                 render={({ field }) => (
                   <label className="inline-flex cursor-pointer items-center gap-2">
-                    <input
+                    <Input
                       type="checkbox"
                       checked={!!field.value}
                       onChange={(e) => field.onChange(e.target.checked)}
@@ -432,7 +436,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                 control={control}
                 render={({ field }) => (
                   <label className="inline-flex cursor-pointer items-center gap-2" title={t('tasks.form.allowSplitHint')}>
-                    <input
+                    <Input
                       type="checkbox"
                       checked={!!field.value}
                       onChange={(e) => field.onChange(e.target.checked)}
@@ -458,11 +462,12 @@ const TaskForm: React.FC<TaskFormProps> = ({
                 name="scheduledStartTime"
                 control={control}
                 render={({ field }) => (
-                  <input
+                  <Input
                     {...field}
                     id="task-form-start"
                     type="datetime-local"
-                    className={`${inp} ${errors.scheduledStartTime ? 'border-ide-error' : ''}`}
+                    size="sm"
+                    error={!!errors.scheduledStartTime}
                   />
                 )}
               />
@@ -478,11 +483,12 @@ const TaskForm: React.FC<TaskFormProps> = ({
                 name="scheduledEndTime"
                 control={control}
                 render={({ field }) => (
-                  <input
+                  <Input
                     {...field}
                     id="task-form-end"
                     type="datetime-local"
-                    className={`${inp} ${errors.scheduledEndTime ? 'border-ide-error' : ''}`}
+                    size="sm"
+                    error={!!errors.scheduledEndTime}
                   />
                 )}
               />
@@ -503,13 +509,13 @@ const TaskForm: React.FC<TaskFormProps> = ({
                     name="recurrencePattern"
                     control={control}
                     render={({ field }) => (
-                      <select {...field} id="task-form-recurrence" className={inp}>
+                      <Select {...field} id="task-form-recurrence" size="sm">
                         {RECURRENCE_PATTERN_OPTIONS.map((opt) => (
                           <option key={opt.value} value={opt.value}>
                             {opt.label}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     )}
                   />
                   {errors.recurrencePattern ? (
@@ -521,15 +527,17 @@ const TaskForm: React.FC<TaskFormProps> = ({
                     <span className={lbl}>{t('tasks.form.days')}</span>
                     <div className="weekdays-toggle">
                       {WEEKDAY_OPTIONS.map(({ value, label }) => (
-                        <button
+                        <Button
                           key={value}
                           type="button"
-                          className={`weekday-btn${selectedDays.includes(value) ? ' active' : ''}`}
+                          variant="secondary"
+                          size="sm"
+                          pressed={selectedDays.includes(value)}
+                          className="min-w-8 px-2"
                           onClick={() => toggleDay(value)}
-                          aria-pressed={selectedDays.includes(value)}
                         >
                           {label}
-                        </button>
+                        </Button>
                       ))}
                     </div>
                     <p className="mt-1 text-xs text-ide-muted">
@@ -549,13 +557,14 @@ const TaskForm: React.FC<TaskFormProps> = ({
                   name="estimatedTimeInMinutes"
                   control={control}
                   render={({ field }) => (
-                    <input
+                    <Input
                       {...field}
                       id="task-form-duration"
                       type="number"
                       min={1}
                       max={1440}
-                      className={`${inp} ${errors.estimatedTimeInMinutes ? 'border-ide-error' : ''}`}
+                      size="sm"
+                      error={!!errors.estimatedTimeInMinutes}
                       onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
                     />
                   )}
@@ -584,9 +593,9 @@ const TaskForm: React.FC<TaskFormProps> = ({
                       ? selected
                       : '';
                     return (
-                      <select
+                      <Select
                         id="task-form-preferred-start"
-                        className={inp}
+                        size="sm"
                         value={displayValue}
                         onChange={(e) => field.onChange(e.target.value)}
                         onBlur={field.onBlur}
@@ -598,7 +607,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                             {opt.value === '' ? t('tasks.form.noPreference') : opt.label}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     );
                   }}
                 />
@@ -614,11 +623,11 @@ const TaskForm: React.FC<TaskFormProps> = ({
                   name="earliestStartTime"
                   control={control}
                   render={({ field }) => (
-                    <input
+                    <Input
                       {...field}
                       id="task-form-from"
                       type="datetime-local"
-                      className={inp}
+                      size="sm"
                     />
                   )}
                 />
@@ -631,11 +640,12 @@ const TaskForm: React.FC<TaskFormProps> = ({
                   name="deadline"
                   control={control}
                   render={({ field }) => (
-                    <input
+                    <Input
                       {...field}
                       id="task-form-deadline"
                       type="datetime-local"
-                      className={`${inp} ${errors.deadline ? 'border-ide-error' : ''}`}
+                      size="sm"
+                      error={!!errors.deadline}
                     />
                   )}
                 />
@@ -653,15 +663,17 @@ const TaskForm: React.FC<TaskFormProps> = ({
                 <span className={lbl}>{t('tasks.form.onlyTheseDays')}</span>
                 <div className="weekdays-toggle">
                   {WEEKDAY_OPTIONS.map(({ value, label }) => (
-                    <button
+                    <Button
                       key={value}
                       type="button"
-                      className={`weekday-btn${selectedEligibleDays.includes(value) ? ' active' : ''}`}
+                      variant="secondary"
+                      size="sm"
+                      pressed={selectedEligibleDays.includes(value)}
+                      className="min-w-8 px-2"
                       onClick={() => toggleEligibleDay(value)}
-                      aria-pressed={selectedEligibleDays.includes(value)}
                     >
                       {label}
-                    </button>
+                    </Button>
                   ))}
                 </div>
                 <p className="mt-1 text-xs text-ide-muted">
@@ -681,11 +693,11 @@ const TaskForm: React.FC<TaskFormProps> = ({
               name="deadline"
               control={control}
               render={({ field }) => (
-                <input
+                <Input
                   {...field}
                   id="task-form-fixed-deadline"
                   type="datetime-local"
-                  className={inp}
+                  size="sm"
                 />
               )}
             />
@@ -701,11 +713,11 @@ const TaskForm: React.FC<TaskFormProps> = ({
               name="deadline"
               control={control}
               render={({ field }) => (
-                <input
+                <Input
                   {...field}
                   id="task-form-unscheduled-deadline"
                   type="datetime-local"
-                  className={inp}
+                  size="sm"
                 />
               )}
             />
@@ -748,46 +760,51 @@ const TaskForm: React.FC<TaskFormProps> = ({
 
       <div className="mt-4 flex flex-col-reverse gap-2 border-t border-ide-border pt-3 sm:flex-row sm:items-center sm:justify-end">
         {mode === 'edit' && onDelete ? (
-          <button
+          <Button
             type="button"
+            variant="danger"
             onClick={onDelete}
-            className="ui-btn-danger w-full sm:mr-auto sm:w-auto"
+            className="w-full sm:mr-auto sm:w-auto"
             disabled={isSubmitting || isDeleting}
+            icon={Trash2}
           >
             {isDeleting ? t('common.deleting') : t('common.delete')}
-          </button>
+          </Button>
         ) : null}
         {onSkipOccurrence ? (
-          <button
+          <Button
             type="button"
+            variant="secondary"
             onClick={onSkipOccurrence}
-            className={`ui-btn-secondary w-full sm:w-auto${
-              mode === 'edit' && onDelete ? '' : ' sm:mr-auto'
-            }`}
+            className={`w-full sm:w-auto${mode === 'edit' && onDelete ? '' : ' sm:mr-auto'}`}
             disabled={isSubmitting || isDeleting}
+            icon={SkipForward}
           >
             {t('tasks.form.skipOccurrence')}
-          </button>
+          </Button>
         ) : null}
-        <button
+        <Button
           type="button"
+          variant="secondary"
           onClick={onCancel}
-          className="ui-btn-secondary w-full sm:w-auto"
+          className="w-full sm:w-auto"
           disabled={isSubmitting || isDeleting}
+          icon={X}
         >
           {t('common.cancel')}
-        </button>
-        <button
+        </Button>
+        <Button
           type="submit"
-          className="ui-btn-primary w-full sm:w-auto"
+          className="w-full sm:w-auto"
           disabled={isSubmitting || isDeleting}
+          icon={mode === 'create' ? Plus : Check}
         >
           {isSubmitting
             ? t('common.saving')
             : mode === 'create'
               ? t('tasks.form.createTask')
               : t('tasks.form.saveChanges')}
-        </button>
+        </Button>
       </div>
     </form>
   );

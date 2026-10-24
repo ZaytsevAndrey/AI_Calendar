@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { useTranslation } from 'react-i18next';
-import { LogOut } from 'lucide-react';
+import { LogOut, RotateCcw } from 'lucide-react';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import UserSettingsForm from 'modules/user-settings/components/UserSettingsForm';
 import { logout } from 'modules/auth/actions/logoutActions';
@@ -48,6 +48,7 @@ const SettingsPage: React.FC = () => {
                         <h2 className="mb-2 text-lg font-semibold text-ide-error">{t('settings.loadErrorTitle')}</h2>
                         <p className="mb-4 text-sm text-ide-muted">{t('settings.loadErrorHint')}</p>
                         <button type="button" onClick={handleRetry} className="ui-btn-danger">
+                            <RotateCcw className="h-4 w-4" aria-hidden />
                             {t('common.retry')}
                         </button>
                     </div>

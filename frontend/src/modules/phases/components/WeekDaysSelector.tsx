@@ -1,6 +1,6 @@
 import React from 'react';
-import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
+import { Button } from 'ui/Button';
 
 interface WeekDaysSelectorProps {
   selectedDays: number[];
@@ -38,14 +38,16 @@ export const WeekDaysSelector = ({
       <label htmlFor="weekDays-toggle">{t('phases.daysOfWeek')}</label>
       <div id="weekDays-toggle" className="weekdays-toggle">
         {weekDays.map(({ value, label }) => (
-          <button
+          <Button
             type="button"
             key={value}
-            className={clsx('weekday-btn', selectedDays.includes(value) && 'active')}
+            variant="secondary"
+            pressed={selectedDays.includes(value)}
+            className="min-w-12 px-3"
             onClick={() => toggleDay(value)}
           >
             {label}
-          </button>
+          </Button>
         ))}
       </div>
       {errors.weekDays && <span className="error-message">{errors.weekDays.message}</span>}

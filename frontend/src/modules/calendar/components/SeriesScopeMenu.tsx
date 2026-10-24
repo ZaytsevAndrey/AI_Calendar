@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Pencil, Trash2 } from 'lucide-react';
+import { Button } from 'ui/Button';
 import type { SeriesDragScope } from 'modules/schedule/seriesDragChoice';
 
 type Props = {
@@ -30,8 +31,6 @@ export function SeriesScopeMenu({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const btnClass = variant === 'danger' ? 'ui-btn-danger' : 'ui-btn-secondary';
-
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
@@ -43,17 +42,19 @@ export function SeriesScopeMenu({
 
   return (
     <div className="relative min-w-0 flex-1 sm:flex-none" ref={rootRef}>
-      <button
+      <Button
         type="button"
-        className={`${btnClass} flex w-full min-w-[9rem] items-center justify-center gap-1 sm:w-auto`}
+        variant={variant === 'danger' ? 'danger' : 'secondary'}
+        className="w-full min-w-[9rem] sm:w-auto"
         disabled={disabled}
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={() => setOpen((v) => !v)}
+        icon={variant === 'danger' ? Trash2 : Pencil}
       >
         {label}
-        <ChevronDown className="h-4 w-4" aria-hidden />
-      </button>
+        <ChevronDown aria-hidden />
+      </Button>
       {open ? (
         <div
           role="menu"

@@ -14,7 +14,10 @@ import { formValuesFromCreatePayload } from 'modules/tasks/task-wizard/buildPayl
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { SeriesDeleteHost } from 'modules/schedule/components/SeriesDeleteHost';
 import { askSeriesDeleteScope } from 'modules/schedule/seriesDragChoice';
+import { Trash2, X } from 'lucide-react';
 import { Modal } from '../../../ui/Modal';
+import { Button } from 'ui/Button';
+import { dialogButtonSize } from 'ui/controlSize';
 import { showErrorToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 import { planEditorDelete } from '../planEditorDelete';
@@ -359,22 +362,28 @@ export function useEventEditor() {
         }
         footer={
           <>
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size={dialogButtonSize}
               onClick={() => setDeleteConfirm({ open: false, entireSeries: false })}
-              className="ui-btn-secondary w-full sm:w-auto"
+              className="w-full sm:w-auto"
               disabled={isDeleting}
+              icon={X}
             >
               {t('common.cancel')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="danger"
+              size={dialogButtonSize}
               onClick={confirmDeleteFromEditor}
-              className="ui-btn-danger w-full sm:w-auto"
+              className="w-full sm:w-auto"
               disabled={isDeleting}
+              icon={Trash2}
             >
               {isDeleting ? t('common.deleting') : t('common.delete')}
-            </button>
+            </Button>
           </>
         }
       >

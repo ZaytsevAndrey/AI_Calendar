@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Download, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 const DISMISS_KEY = 'pwa-install-dismissed';
@@ -70,10 +71,12 @@ export function PwaInstallBanner() {
         <div className="flex shrink-0 gap-2">
           {deferred ? (
             <button type="button" className="ui-btn-primary min-h-[40px] px-3 py-1.5" onClick={() => void install()}>
+              <Download className="h-4 w-4" aria-hidden />
               {t('pwa.install')}
             </button>
           ) : null}
           <button type="button" className="ui-btn-ghost min-h-[40px] px-3 py-1.5" onClick={dismiss}>
+            <X className="h-4 w-4" aria-hidden />
             {t('pwa.notNow')}
           </button>
         </div>

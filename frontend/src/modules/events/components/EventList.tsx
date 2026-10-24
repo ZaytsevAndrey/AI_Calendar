@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { Plus } from 'lucide-react';
 import { TaskDTO } from '../../../api/tasks.api';
 import { groupTasksBySeriesGroup } from '../utils/groupTasksBySeriesGroup';
 import EventItem from './EventItem';
@@ -47,6 +48,7 @@ const EventList: React.FC<EventListProps> = ({
       <div className="empty-list">
         <p>{emptyTitle || t('tasks.list.empty')}</p>
         <button type="button" onClick={onCreate} className="ui-btn-primary mt-4">
+          <Plus className="h-4 w-4" aria-hidden />
           {t('tasks.list.createTask')}
         </button>
       </div>

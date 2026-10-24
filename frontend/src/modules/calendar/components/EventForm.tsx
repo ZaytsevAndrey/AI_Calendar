@@ -4,6 +4,11 @@ import { GoogleCalendarEvent, CreateEventParams, UpdateEventParams } from '../..
 import { useTimePhases, getPhaseByTime, useSleepTimePhases } from '../../phases/hooks/usePhases';
 import { useGetUserSettingsQuery } from '../../../api/userSettingsApi';
 import { Modal } from '../../../ui/Modal';
+import { Check, Plus, Smile, X } from 'lucide-react';
+import { Button } from 'ui/Button';
+import { Input } from 'ui/Input';
+import { Select } from 'ui/Select';
+import { Textarea } from 'ui/Textarea';
 import { toLocalDateTimeInput } from '../../../utils/formatDate';
 import { GoogleEventSettingsFields } from './GoogleEventSettingsFields';
 
@@ -14,8 +19,6 @@ const EmojiPickerPanel = lazy(
 const PRIORITY_VALUES = ['urgent', 'normal', 'medium'] as const;
 const STATUS_VALUES = ['in_progress', 'done', 'postponed', 'cancelled'] as const;
 
-const inp =
-    'w-full rounded border border-ide-border bg-ide-input px-2.5 py-1.5 text-sm text-ide-text focus:border-ide-link focus:outline-none focus:ring-1 focus:ring-ide-link';
 const lbl = 'mb-0.5 block text-xs font-medium text-ide-text';
 
 interface EventFormProps {
@@ -305,12 +308,11 @@ const EventForm: React.FC<EventFormProps> = ({
                             <label htmlFor="ev-summary" className={lbl}>
                                 {t('common.name')} <span className="text-ide-error">*</span>
                             </label>
-                            <input
+                            <Input size="sm"
                                 id="ev-summary"
                                 required
                                 autoComplete="off"
                                 placeholder={t('calendar.form.namePlaceholder')}
-                                className={inp}
                                 value={summary}
                                 onChange={(e) => setSummary(e.target.value)}
                             />
@@ -319,9 +321,8 @@ const EventForm: React.FC<EventFormProps> = ({
                             <label htmlFor="ev-prio" className={lbl}>
                                 {t('common.priority')}
                             </label>
-                            <select
+                            <Select size="sm"
                                 id="ev-prio"
-                                className={inp}
                                 value={priority}
                                 onChange={(e) => setPriority(e.target.value)}
                             >
@@ -330,7 +331,7 @@ const EventForm: React.FC<EventFormProps> = ({
                                         {priorityLabel(value)}
                                     </option>
                                 ))}
-                            </select>
+                            </Select>
                         </div>
                     </div>
 
@@ -339,10 +340,9 @@ const EventForm: React.FC<EventFormProps> = ({
                             <label htmlFor="ev-desc" className={lbl}>
                                 {t('common.description')}
                             </label>
-                            <textarea
+                            <Textarea size="sm"
                                 id="ev-desc"
                                 rows={2}
-                                className={inp}
                                 placeholder={t('calendar.form.descriptionPlaceholder')}
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
@@ -362,9 +362,8 @@ const EventForm: React.FC<EventFormProps> = ({
                         <label htmlFor="ev-phase" className={lbl}>
                             {t('common.phase')}
                         </label>
-                        <select
+                        <Select size="sm"
                             id="ev-phase"
-                            className={inp}
                             value={selectedPhaseId}
                             onChange={(e) => handlePhaseChange(e.target.value)}
                         >
@@ -378,12 +377,12 @@ const EventForm: React.FC<EventFormProps> = ({
                                     {phase.name} ({phase.startTime}–{phase.endTime})
                                 </option>
                             ))}
-                        </select>
+                        </Select>
                     </div>
 
                     <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-ide-text">
                         <label className="inline-flex cursor-pointer items-center gap-2">
-                            <input
+                            <Input size="sm"
                                 type="checkbox"
                                 checked={isRecurring}
                                 onChange={(e) => setIsRecurring(e.target.checked)}
@@ -391,7 +390,7 @@ const EventForm: React.FC<EventFormProps> = ({
                             {t('calendar.form.recurring')}
                         </label>
                         <label className="inline-flex cursor-pointer items-center gap-2">
-                            <input
+                            <Input size="sm"
                                 type="checkbox"
                                 checked={splitTasks}
                                 onChange={(e) => setSplitTasks(e.target.checked)}
@@ -405,11 +404,10 @@ const EventForm: React.FC<EventFormProps> = ({
                             <label htmlFor="ev-start" className={lbl}>
                                 {t('calendar.form.start')} <span className="text-ide-error">*</span>
                             </label>
-                            <input
+                            <Input size="sm"
                                 id="ev-start"
                                 type="datetime-local"
                                 required
-                                className={inp}
                                 value={start}
                                 onChange={(e) => handleStartChange(e.target.value)}
                             />
@@ -418,11 +416,10 @@ const EventForm: React.FC<EventFormProps> = ({
                             <label htmlFor="ev-end" className={lbl}>
                                 {t('calendar.form.end')} <span className="text-ide-error">*</span>
                             </label>
-                            <input
+                            <Input size="sm"
                                 id="ev-end"
                                 type="datetime-local"
                                 required
-                                className={inp}
                                 value={end}
                                 onChange={(e) => setEnd(e.target.value)}
                             />
@@ -434,9 +431,8 @@ const EventForm: React.FC<EventFormProps> = ({
                             <label htmlFor="ev-rrule" className={lbl}>
                                 {t('calendar.form.repeatRrule')}
                             </label>
-                            <input
+                            <Input size="sm"
                                 id="ev-rrule"
-                                className={inp}
                                 placeholder="FREQ=DAILY;COUNT=5"
                                 value={recurrenceRule}
                                 onChange={(e) => setRecurrenceRule(e.target.value)}
@@ -447,10 +443,9 @@ const EventForm: React.FC<EventFormProps> = ({
                             <label htmlFor="ev-deadline" className={lbl}>
                                 {t('common.deadline')}
                             </label>
-                            <input
+                            <Input size="sm"
                                 id="ev-deadline"
                                 type="datetime-local"
-                                className={inp}
                                 value={deadline}
                                 onChange={(e) => setDeadline(e.target.value)}
                             />
@@ -461,11 +456,10 @@ const EventForm: React.FC<EventFormProps> = ({
                         <label htmlFor="ev-est" className={lbl}>
                             {t('calendar.form.durationMin')}
                         </label>
-                        <input
+                        <Input size="sm"
                             id="ev-est"
                             type="number"
                             min={1}
-                            className={inp}
                             value={estimatedTime}
                             onChange={(e) => setEstimatedTime(e.target.value)}
                         />
@@ -475,18 +469,16 @@ const EventForm: React.FC<EventFormProps> = ({
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <div>
                                 <label className={lbl}>{t('calendar.form.minSplit')}</label>
-                                <input
+                                <Input size="sm"
                                     type="number"
-                                    className={inp}
                                     value={splitMin}
                                     onChange={(e) => setSplitMin(e.target.value)}
                                 />
                             </div>
                             <div>
                                 <label className={lbl}>{t('calendar.form.maxSplit')}</label>
-                                <input
+                                <Input size="sm"
                                     type="number"
-                                    className={inp}
                                     value={splitMax}
                                     onChange={(e) => setSplitMax(e.target.value)}
                                 />
@@ -530,9 +522,8 @@ const EventForm: React.FC<EventFormProps> = ({
                                 <label htmlFor="ev-stat" className={lbl}>
                                     {t('common.status')}
                                 </label>
-                                <select
+                                <Select size="sm"
                                     id="ev-stat"
-                                    className={inp}
                                     value={status}
                                     onChange={(e) => setStatus(e.target.value)}
                                 >
@@ -541,18 +532,20 @@ const EventForm: React.FC<EventFormProps> = ({
                                             {statusLabel(value)}
                                         </option>
                                     ))}
-                                </select>
+                                </Select>
                             </div>
                             <div>
                                 <span className={lbl}>{t('calendar.form.icon')}</span>
                                 <div className="flex flex-wrap items-center gap-2">
-                                    <button
+                                    <Button
                                         type="button"
-                                        className="rounded border border-ide-border px-2.5 py-1.5 text-sm text-ide-text hover:bg-ide-surface"
+                                        variant="secondary"
+                                        size="sm"
                                         onClick={() => setShowEmojiPicker((v) => !v)}
+                                        icon={emoji ? undefined : Smile}
                                     >
                                         {emoji || t('common.select')}
-                                    </button>
+                                    </Button>
                                     {showEmojiPicker ? (
                                         <div className="w-full">
                                             <Suspense
@@ -586,25 +579,28 @@ const EventForm: React.FC<EventFormProps> = ({
                 </div>
 
                 <div className="mt-4 flex flex-col-reverse gap-2 border-t border-ide-border pt-3 sm:flex-row sm:justify-end">
-                    <button
+                    <Button
                         type="button"
+                        variant="secondary"
                         onClick={onClose}
-                        className="ui-btn-secondary w-full sm:w-auto"
+                        className="w-full sm:w-auto"
                         disabled={isSubmitting}
+                        icon={X}
                     >
                         {t('common.cancel')}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         type="submit"
-                        className="ui-btn-primary w-full sm:w-auto"
+                        className="w-full sm:w-auto"
                         disabled={isSubmitting || !summary}
+                        icon={event ? Check : Plus}
                     >
                         {isSubmitting
                             ? t('common.saving')
                             : event
                               ? t('calendar.form.saveChanges')
                               : t('calendar.form.createEventSubmit')}
-                    </button>
+                    </Button>
                 </div>
             </form>
         </Modal>

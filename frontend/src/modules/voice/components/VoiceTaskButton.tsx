@@ -13,7 +13,7 @@ export function VoiceTaskButton({ onClick, className = '' }: VoiceTaskButtonProp
     <button
       type="button"
       onClick={onClick}
-      className={`ui-btn-secondary min-w-[9rem] flex-1 sm:w-auto sm:flex-none ${className}`}
+      className={`ui-btn-secondary w-auto flex-none ${className}`}
       aria-label={t('voice.addByVoice')}
     >
       <Mic className="h-4 w-4" aria-hidden />

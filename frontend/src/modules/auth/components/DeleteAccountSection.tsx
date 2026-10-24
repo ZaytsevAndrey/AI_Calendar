@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { useTranslation } from 'react-i18next';
-import { Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Trash2, X } from 'lucide-react';
 import { Modal } from '../../../ui/Modal';
+import { Button } from 'ui/Button';
+import { dialogButtonSize } from 'ui/controlSize';
+import { Input } from 'ui/Input';
 import apiCall from 'modules/common/utils/apiCall';
 import { clientLogout } from '../actions/logoutActions';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
@@ -75,15 +78,16 @@ export function DeleteAccountSection() {
         {error && step === 'closed' ? (
           <p className="mb-3 text-sm text-ide-error">{error}</p>
         ) : null}
-        <button
+        <Button
           type="button"
-          className="ui-btn-danger inline-flex items-center gap-2 max-md:h-8 max-md:min-h-0 max-md:px-3 max-md:py-0"
+          variant="danger"
+          size={dialogButtonSize}
           onClick={() => void openFlow()}
           disabled={busy}
         >
           <Trash2 className="h-4 w-4" aria-hidden />
           {t('settings.deleteAccount')}
-        </button>
+        </Button>
       </div>
 
       <Modal
@@ -92,22 +96,26 @@ export function DeleteAccountSection() {
         title={t('settings.deleteAccountCalendarsTitle')}
         footer={
           <>
-            <button
+            <Button
               type="button"
-              className="ui-btn-secondary"
+              variant="secondary"
+              size={dialogButtonSize}
               disabled={busy}
               onClick={() => setStep('closed')}
+              icon={X}
             >
               {t('common.cancel')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="ui-btn-danger"
+              variant="danger"
+              size={dialogButtonSize}
               disabled={busy}
               onClick={() => setStep('confirm')}
+              icon={ArrowRight}
             >
               {t('settings.deleteAccountContinue')}
-            </button>
+            </Button>
           </>
         }
       >
@@ -120,22 +128,26 @@ export function DeleteAccountSection() {
         title={t('settings.deleteAccountConfirmTitle')}
         footer={
           <>
-            <button
+            <Button
               type="button"
-              className="ui-btn-secondary"
+              variant="secondary"
+              size={dialogButtonSize}
               disabled={busy}
               onClick={() => setStep('calendars')}
+              icon={ArrowLeft}
             >
               {t('settings.deleteAccountBack')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="ui-btn-danger"
+              variant="danger"
+              size={dialogButtonSize}
               disabled={busy || !confirmation.trim()}
               onClick={() => void submitDelete()}
+              icon={Trash2}
             >
               {busy ? t('common.deleting') : t('settings.deleteAccountForever')}
-            </button>
+            </Button>
           </>
         }
       >
@@ -150,9 +162,8 @@ export function DeleteAccountSection() {
           )}
           <label className="block">
             <span className="sr-only">{t('settings.deleteAccountConfirmLabel')}</span>
-            <input
+            <Input
               type="text"
-              className="ui-input w-full"
               autoComplete="off"
               value={confirmation}
               disabled={busy}

@@ -4,6 +4,8 @@ import { useUpdateUserSettingsMutation } from 'api/userSettingsApi';
 import { showErrorToast, showSuccessToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
 import { isAppLanguage, type AppLanguage } from 'i18n';
+import { Input } from 'ui/Input';
+import { Select } from 'ui/Select';
 
 export function VoiceSettingsSection({
   speakVoiceReplies,
@@ -77,9 +79,9 @@ export function VoiceSettingsSection({
           <label htmlFor="voice-language" className="ui-label">
             {t('voice.communicationLanguage')}
           </label>
-          <select
+          <Select
             id="voice-language"
-            className="ui-input mt-1 max-w-xs"
+            className="mt-1 max-w-xs"
             value={voiceLang}
             disabled={busy !== null}
             onChange={(event) => void changeSpeechLanguage(event.target.value as AppLanguage)}
@@ -89,13 +91,12 @@ export function VoiceSettingsSection({
                 {code === 'en' ? t('settings.languageEn') : t('settings.languageUk')}
               </option>
             ))}
-          </select>
+          </Select>
           <p className="mt-1 max-w-md text-xs text-ide-muted">{t('voice.communicationLanguageHint')}</p>
         </div>
         <label className="flex items-center gap-2 text-sm text-ide-text">
-          <input
+          <Input
             type="checkbox"
-            className="h-4 w-4"
             checked={speakEnabled}
             disabled={busy !== null}
             onChange={(event) => void toggleSpeak(event.target.checked)}

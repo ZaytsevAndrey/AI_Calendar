@@ -66,7 +66,7 @@ export const Modal: React.FC<ModalProps> = ({
                     {children}
                 </div>
                 {footer ? (
-                    <div className="flex flex-shrink-0 flex-row flex-wrap justify-end gap-2 border-t border-ide-border p-3 max-md:[&>button]:!h-8 max-md:[&>button]:!min-h-0 max-md:[&>button]:!w-auto max-md:[&>button]:!flex-none max-md:[&>button]:!px-3 sm:p-4">
+                    <div className="flex flex-shrink-0 flex-row flex-wrap justify-end gap-2 border-t border-ide-border p-3 max-md:[&>button]:w-auto max-md:[&>button]:flex-none sm:p-4">
                         {footer}
                     </div>
                 ) : null}

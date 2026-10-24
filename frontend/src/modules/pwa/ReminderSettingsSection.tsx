@@ -3,6 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { useUpdateUserSettingsMutation } from 'api/userSettingsApi';
 import { showErrorToast, showSuccessToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
+import { Bell } from 'lucide-react';
+import { Button } from 'ui/Button';
+import { Input } from 'ui/Input';
 import {
   browserHasPushSubscription,
   disableBrowserReminders,
@@ -87,9 +90,8 @@ export function ReminderSettingsSection({ remindersEnabled }: { remindersEnabled
       <p className="mb-4 text-sm text-ide-muted">{t('reminders.hint')}</p>
 
       <label className="flex items-center gap-2 text-sm text-ide-text">
-        <input
+        <Input
           type="checkbox"
-          className="h-4 w-4"
           checked={enabled}
           disabled={busy}
           onChange={(event) => {
@@ -101,14 +103,16 @@ export function ReminderSettingsSection({ remindersEnabled }: { remindersEnabled
       </label>
 
       {enabled && !browserReady ? (
-        <button
+        <Button
           type="button"
-          className="ui-btn-secondary mt-4"
+          variant="secondary"
+          className="mt-4"
           disabled={busy}
           onClick={() => void turnOn()}
+          icon={Bell}
         >
           {t('reminders.allowBrowser')}
-        </button>
+        </Button>
       ) : null}
 
       {message ? <p className="mt-3 text-sm text-ide-error">{message}</p> : null}

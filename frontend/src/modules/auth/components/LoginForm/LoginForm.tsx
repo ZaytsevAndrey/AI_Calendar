@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { ProviderLogo } from 'modules/calendar/components/ProviderLogo';
+import { Button } from 'ui/Button';
 
 export interface LoginFormProps {
     requestStatus: string;
@@ -29,25 +30,15 @@ const LoginForm: React.FC<LoginFormProps> = ({
             </p>
             {errorMessage ? <p className="auth-form-error mb-4">{errorMessage}</p> : null}
             <div className="flex flex-col gap-2">
-              <button
-                  type="button"
-                  className="auth-form-submit inline-flex items-center justify-center gap-2"
-                  disabled={pending}
-                  onClick={onGoogleSignIn}
-              >
+              <Button type="button" className="mt-2 w-full" disabled={pending} onClick={onGoogleSignIn}>
                   <ProviderLogo provider="google" className="h-4 w-4" />
                   {pending ? t('auth.redirecting') : t('auth.continueGoogle')}
-              </button>
+              </Button>
               {microsoftAvailable && onMicrosoftSignIn ? (
-                <button
-                  type="button"
-                  className="auth-form-submit inline-flex items-center justify-center gap-2"
-                  disabled={pending}
-                  onClick={onMicrosoftSignIn}
-                >
+                <Button type="button" className="w-full" disabled={pending} onClick={onMicrosoftSignIn}>
                   <ProviderLogo provider="microsoft" className="h-4 w-4" />
                   {t('auth.continueMicrosoft')}
-                </button>
+                </Button>
               ) : null}
             </div>
         </div>

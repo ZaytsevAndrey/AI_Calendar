@@ -17,6 +17,9 @@ import {
 import { logout } from 'modules/auth/actions/logoutActions';
 import { showErrorToast } from 'utils/toast';
 import { phaseSetupOffersDayShape, type PhaseSetupStep } from './phaseSetupStep';
+import { ArrowLeft, ArrowRight, Check, SkipForward } from 'lucide-react';
+import { Button } from 'ui/Button';
+import { TimeField } from 'ui/TimeField';
 
 const PhaseSetupPage: React.FC = () => {
     const { t } = useTranslation();
@@ -158,24 +161,24 @@ const PhaseSetupPage: React.FC = () => {
                                     <label htmlFor="setup-wake" className="ui-label">
                                         {t('phases.wake')}
                                     </label>
-                                    <input
+                                    <TimeField
                                         id="setup-wake"
-                                        type="time"
                                         value={wakeTime}
-                                        onChange={(e) => setWakeTime(e.target.value)}
-                                        className="ui-input max-w-xs"
+                                        onChange={setWakeTime}
+                                        className="max-w-xs"
+                                        aria-label={t('phases.wake')}
                                     />
                                 </div>
                                 <div>
                                     <label htmlFor="setup-sleep" className="ui-label">
                                         {t('phases.sleep')}
                                     </label>
-                                    <input
+                                    <TimeField
                                         id="setup-sleep"
-                                        type="time"
                                         value={sleepTime}
-                                        onChange={(e) => setSleepTime(e.target.value)}
-                                        className="ui-input max-w-xs"
+                                        onChange={setSleepTime}
+                                        className="max-w-xs"
+                                        aria-label={t('phases.sleep')}
                                     />
                                 </div>
                             </div>
@@ -184,40 +187,46 @@ const PhaseSetupPage: React.FC = () => {
                         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                             {showDayShape ? (
                                 <>
-                                    <button
+                                    <Button
                                         type="button"
                                         disabled={busy || selectedDays.length === 0}
                                         onClick={handleSave}
-                                        className="ui-btn-primary flex-1 sm:flex-initial sm:min-w-[200px]"
+                                        className="flex-1 sm:flex-initial sm:min-w-[200px]"
+                                        icon={Check}
                                     >
                                         {t('phases.saveCreate')}
-                                    </button>
-                                    <button
+                                    </Button>
+                                    <Button
                                         type="button"
+                                        variant="secondary"
                                         disabled={busy}
                                         onClick={handleSkip}
-                                        className="ui-btn-secondary flex-1 sm:flex-initial"
+                                        className="flex-1 sm:flex-initial"
+                                        icon={SkipForward}
                                     >
                                         {t('phases.skipDefaults')}
-                                    </button>
-                                    <button
+                                    </Button>
+                                    <Button
                                         type="button"
+                                        variant="secondary"
                                         disabled={busy}
                                         onClick={() => setStep('sleep')}
-                                        className="ui-btn-secondary flex-1 sm:flex-initial"
+                                        className="flex-1 sm:flex-initial"
+                                        icon={ArrowLeft}
                                     >
                                         {t('phases.setupBack')}
-                                    </button>
+                                    </Button>
                                 </>
                             ) : (
-                                <button
+                                <Button
                                     type="button"
                                     disabled={busy}
                                     onClick={handleContinue}
-                                    className="ui-btn-primary flex-1 sm:flex-initial sm:min-w-[200px]"
+                                    className="flex-1 sm:flex-initial sm:min-w-[200px]"
+                                    icon={ArrowRight}
                                 >
                                     {t('phases.setupContinue')}
-                                </button>
+                                </Button>
                             )}
                         </div>
                         <button

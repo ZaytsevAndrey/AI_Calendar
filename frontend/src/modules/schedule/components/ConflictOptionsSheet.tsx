@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Mic, X } from 'lucide-react';
 import axios from 'api/axios';
 import {
   useSkipOccurrenceMutation,
@@ -7,6 +8,8 @@ import {
 } from 'api/eventTasksApi';
 import type { SkipOccurrenceDTO, UpdateTaskDTO } from 'api/tasks.api';
 import { Modal } from '../../../ui/Modal';
+import { Button } from 'ui/Button';
+import { dialogButtonSize } from 'ui/controlSize';
 import { showErrorToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 import { applyConflictOption } from '../applyConflictOption';
@@ -139,22 +142,26 @@ export function ConflictOptionsSheet({ conflict, onClose }: Props) {
       maxWidthClass="max-w-md"
       footer={
         <>
-          <button
+          <Button
             type="button"
-            className="ui-btn-secondary"
+            variant="secondary"
+            size={dialogButtonSize}
             disabled={!!busyId}
             onClick={() => openVoiceForConflictChoice()}
+            icon={Mic}
           >
             {t('schedule.conflictAnswerVoice')}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="ui-btn-ghost"
+            variant="ghost"
+            size={dialogButtonSize}
             disabled={!!busyId}
             onClick={() => void dismiss()}
+            icon={X}
           >
             {t('schedule.conflictDismiss')}
-          </button>
+          </Button>
         </>
       }
     >

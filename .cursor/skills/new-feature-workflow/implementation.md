@@ -8,6 +8,7 @@
 
 - **Smallest viable change** that meets the agreed scope.
 - **Match existing patterns** in the codebase (naming, layers, error handling, tests).
+- **Shared controls**: if `.cursor/rules/shared-ui.mdc` exists, follow it before adding a button, input, select, textarea, or time field. Do not add a raw element when a shared component already covers that job.
 - **No drive-by refactors** unrelated to the feature.
 - **English in code**: use **English only** for identifiers, comments, JSDoc/TSDoc, and technical strings you add or change (logs aimed at developers, non-localized API messages, etc.). **End-user UI copy** may stay in the product language if that is already the convention in the same area—when in doubt, confirm in Phase 1.
 

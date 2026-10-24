@@ -8,7 +8,7 @@
 */
 
 @layer base {
-    /* Темний фон на всьому ланцюжку: сторонні стилі (напр. Rsuite) інколи перефарбовують лише body */
+    /* Dark background on the whole chain so a third-party stylesheet cannot repaint only body. */
     html {
         @apply h-full min-h-[100dvh] bg-ide-bg;
     }
@@ -44,6 +44,44 @@
     select,
     textarea {
         @apply transition-colors duration-150;
+    }
+
+    input[data-ui-control][type='date']::-webkit-calendar-picker-indicator,
+    input[data-ui-control][type='datetime-local']::-webkit-calendar-picker-indicator {
+        display: none;
+        -webkit-appearance: none;
+    }
+
+    @keyframes ui-pop-down {
+        from {
+            opacity: 0;
+            transform: translateY(-6px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes ui-pop-up {
+        from {
+            opacity: 0;
+            transform: translateY(6px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .ui-pop-down {
+            animation: ui-pop-down 180ms ease-out;
+        }
+
+        .ui-pop-up {
+            animation: ui-pop-up 180ms ease-out;
+        }
     }
 
     /* Global scrollbar (dark theme, stable on hover) */
@@ -200,12 +238,12 @@
         @apply ui-label;
     }
 
-    .task-form .form-group input:not([type='checkbox']):not([type='color']),
-    .task-form .form-group textarea,
-    .task-form .form-group select,
-    .phase-form .form-group input:not([type='checkbox']):not([type='color']),
-    .phase-form .form-group textarea,
-    .phase-form .form-group select {
+    .task-form .form-group input:not([type='checkbox']):not([type='color']):not([data-ui-control]),
+    .task-form .form-group textarea:not([data-ui-control]),
+    .task-form .form-group select:not([data-ui-control]),
+    .phase-form .form-group input:not([type='checkbox']):not([type='color']):not([data-ui-control]),
+    .phase-form .form-group textarea:not([data-ui-control]),
+    .phase-form .form-group select:not([data-ui-control]) {
         @apply ui-input;
     }
 
@@ -281,38 +319,9 @@
         @apply mt-10 pt-2 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end;
     }
 
-    .primary-button {
-        @apply inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-ide-accentBlue px-4 py-2.5 text-sm font-medium text-white transition hover:brightness-110;
-        @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link;
-        @apply disabled:pointer-events-none disabled:opacity-50 sm:w-auto;
-    }
-
-    .phase-form .form-actions .primary-button {
-        @apply w-full sm:w-40;
-    }
-
-    .phase-form .form-actions .ui-btn-secondary {
-        @apply w-full sm:w-40;
-    }
-
-    /* Дні тижня (PhaseForm + PhaseSetup) */
     .phase-form .weekdays-toggle,
     .weekdays-toggle {
         @apply flex flex-wrap gap-2;
-    }
-
-    .phase-form .weekday-btn,
-    .weekday-btn {
-        @apply min-h-[44px] min-w-[48px] rounded-lg border border-ide-link bg-transparent px-3 py-2 text-sm font-medium text-ide-link transition hover:bg-ide-link/10;
-    }
-
-    .phase-form .weekday-btn.active,
-    .weekday-btn.active {
-        @apply border-ide-link bg-ide-selection text-ide-text;
-    }
-
-    .task-form .weekday-btn {
-        @apply min-h-8 min-w-8 px-2 py-1 text-xs;
     }
 
     /* form-group поза .phase-form (WeekDaysSelector на setup) */
@@ -544,102 +553,5 @@
     /* Settings */
     .settings-card {
         @apply rounded-xl border border-ide-border bg-ide-panel p-5 shadow-ide sm:p-6;
-    }
-
-    /* Rsuite popups */
-    .rs-picker-daterange-menu,
-    .rs-picker-popup,
-    .rs-picker-menu {
-        z-index: 4000 !important;
-    }
-
-    .phase-time-range-picker.rs-picker {
-        width: 100%;
-    }
-
-    .phase-time-range-picker .rs-picker-toggle {
-        border: 1px solid #515151 !important;
-        background-color: #3c3f41 !important;
-        color: #a9b7c6 !important;
-    }
-
-    .phase-time-range-picker .rs-picker-toggle .rs-picker-toggle-placeholder,
-    .phase-time-range-picker .rs-picker-toggle .rs-picker-toggle-clean,
-    .phase-time-range-picker .rs-picker-toggle .rs-picker-toggle-indicator {
-        color: #808080 !important;
-    }
-
-    .phase-time-range-picker .rs-input-group-addon {
-        border-left: 1px solid #515151 !important;
-        background-color: #3c3f41 !important;
-        color: #a9b7c6 !important;
-    }
-
-    .rs-picker-popup .rs-picker-toolbar,
-    .rs-picker-popup .rs-picker-time-menu,
-    .rs-picker-popup .rs-picker-time-menu-column {
-        background-color: #2b2b2b !important;
-        border-color: #515151 !important;
-        color: #a9b7c6 !important;
-    }
-
-    .rs-picker-popup .rs-picker-time-menu-cell-content {
-        color: #a9b7c6 !important;
-    }
-
-    .rs-picker-popup .rs-picker-time-menu-cell-content:hover {
-        background-color: #214283 !important;
-        color: #a9b7c6 !important;
-    }
-
-    .rs-picker-popup .rs-picker-time-menu-cell-active .rs-picker-time-menu-cell-content {
-        background-color: #214283 !important;
-        color: #a9b7c6 !important;
-    }
-
-    .phase-time-range-popup {
-        z-index: 10000 !important;
-    }
-
-    .phase-time-range-popup.rs-picker-popup,
-    .phase-time-range-popup .rs-picker-menu,
-    .phase-time-range-popup .rs-picker-menu-content,
-    .phase-time-range-popup .rs-picker-menu-items,
-    .phase-time-range-popup .rs-picker-menu-group,
-    .phase-time-range-popup .rs-picker-toolbar,
-    .phase-time-range-popup .rs-picker-time-menu,
-    .phase-time-range-popup .rs-picker-time-menu-column,
-    .phase-time-range-popup .rs-picker-time-menu-cell,
-    .phase-time-range-popup .rs-picker-time-menu-group {
-        background-color: #2b2b2b !important;
-        border-color: #515151 !important;
-        color: #a9b7c6 !important;
-    }
-
-    .phase-time-range-popup .rs-picker-menu-item,
-    .phase-time-range-popup .rs-picker-toolbar-btn,
-    .phase-time-range-popup .rs-btn {
-        color: #a9b7c6 !important;
-    }
-
-    .phase-time-range-popup .rs-picker-menu-item:hover,
-    .phase-time-range-popup .rs-picker-toolbar-btn:hover,
-    .phase-time-range-popup .rs-btn:hover {
-        background-color: #214283 !important;
-        color: #a9b7c6 !important;
-    }
-
-    .phase-time-range-popup .rs-picker-time-menu-cell-content {
-        color: #a9b7c6 !important;
-    }
-
-    .phase-time-range-popup .rs-picker-time-menu-cell-content:hover {
-        background-color: #214283 !important;
-        color: #a9b7c6 !important;
-    }
-
-    .phase-time-range-popup .rs-picker-time-menu-cell-active .rs-picker-time-menu-cell-content {
-        background-color: #214283 !important;
-        color: #a9b7c6 !important;
     }
 }

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { Check, X } from 'lucide-react';
 import type { GoogleCalendarEvent } from 'api/google-calendar.api';
 import type { TaskDTO } from 'api/tasks.api';
 import {
@@ -10,6 +11,9 @@ import {
 import { useUpdateUserSettingsMutation } from 'api/userSettingsApi';
 import { useUpdateEventMutation } from 'api/eventTasksApi';
 import { Modal } from '../../../ui/Modal';
+import { Button } from 'ui/Button';
+import { dialogButtonSize } from 'ui/controlSize';
+import { Input } from 'ui/Input';
 import { showErrorToast, showSuccessToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 import { KindIcon, KIND_I18N_KEY } from '../kindIcons';
@@ -311,22 +315,25 @@ export function CalendarChipMeta({
         }
         footer={
           <>
-            <button
+            <Button
               type="button"
-              className="rounded-md px-3 py-1.5 text-sm text-ide-muted hover:bg-ide-surface"
+              variant="ghost"
+              size={dialogButtonSize}
               disabled={busy}
               onClick={() => setPending(null)}
+              icon={X}
             >
               {t('common.cancel')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="rounded-md bg-ide-link px-3 py-1.5 text-sm text-white"
+              size={dialogButtonSize}
               disabled={busy}
               onClick={() => void confirmPending()}
+              icon={Check}
             >
               {t('common.confirm')}
-            </button>
+            </Button>
           </>
         }
       >
@@ -336,7 +343,7 @@ export function CalendarChipMeta({
             : t('calendar.kind.warnFlexibleBody')}
         </p>
         <label className="mt-3 flex items-center gap-2 text-sm text-ide-muted">
-          <input
+          <Input
             type="checkbox"
             checked={dontShowAgain}
             onChange={(e) => setDontShowAgain(e.target.checked)}

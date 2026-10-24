@@ -9,6 +9,10 @@ import { usePhaseValidation } from '../hooks/usePhaseValidation';
 import { TimeRangeField } from './TimeRangeField';
 import { WeekDaysSelector } from './WeekDaysSelector';
 import { ColorField } from './ColorField';
+import { Check, Plus, Trash2, X } from 'lucide-react';
+import { Button } from 'ui/Button';
+import { Input } from 'ui/Input';
+import { Textarea } from 'ui/Textarea';
 
 export type PhaseFormData = {
   name: string;
@@ -97,7 +101,7 @@ const PhaseForm = ({
     <form onSubmit={handleSubmit(submitHandler)} className="phase-form space-y-1">
       <div className="form-group">
         <label htmlFor="name">{t('phases.name')}</label>
-        <input {...register('name')} id="name" className={errors.name ? 'error' : ''} />
+        <Input {...register('name')} id="name" error={!!errors.name} />
         {errors.name && <span className="error-message">{errors.name.message}</span>}
       </div>
 
@@ -109,7 +113,7 @@ const PhaseForm = ({
 
       <div className="form-group">
         <label htmlFor="description">{t('phases.description')}</label>
-        <textarea {...register('description')} id="description" rows={3} />
+        <Textarea {...register('description')} id="description" rows={3} />
       </div>
 
       <TimeRangeField<PhaseFormData> control={control} errors={errors} />
@@ -130,35 +134,34 @@ const PhaseForm = ({
 
       <div className="form-actions">
         {initialData && onDelete ? (
-          <button
+          <Button
             type="button"
+            variant="danger"
             onClick={onDelete}
             disabled={isDeleting || isSubmitting}
-            className="ui-btn-danger"
+            className="w-full sm:mr-auto sm:w-auto"
+            icon={Trash2}
           >
             {isDeleting ? t('common.deleting') : t('common.delete')}
-          </button>
+          </Button>
         ) : null}
         {onCancel ? (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="ui-btn-secondary"
-          >
+          <Button type="button" variant="secondary" onClick={onCancel} className="w-full sm:w-40" icon={X}>
             {t('common.cancel')}
-          </button>
+          </Button>
         ) : null}
-        <button 
-          type="submit" 
-          disabled={isSubmitting || !!sleepError} 
-          className="primary-button"
+        <Button
+          type="submit"
+          disabled={isSubmitting || !!sleepError}
+          className="w-full sm:w-40"
+          icon={initialData ? Check : Plus}
         >
           {isSubmitting
             ? t('common.saving')
             : initialData
               ? t('phases.update')
               : t('phases.create')}
-        </button>
+        </Button>
       </div>
     </form>
   );

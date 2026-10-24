@@ -1,4 +1,18 @@
+import type { Locator, Page } from '@playwright/test';
 import { test, expect, openAs, apiJson, expectOk, uniqueName, completeOpenTasks } from '../helpers/fixtures';
+
+/** The move sheet start time is a shared TimeField, not a native time input. */
+async function setStartTime(page: Page, move: Locator, value: string) {
+  const [hour, minute] = value.split(':');
+  const trigger = move.getByRole('button', { name: 'Start time' });
+  if ((await trigger.getAttribute('aria-expanded')) !== 'true') {
+    await trigger.click();
+  }
+  const list = page.getByRole('listbox', { name: 'Start time' });
+  await list.getByRole('option', { name: hour, exact: true }).click();
+  await list.getByRole('option', { name: minute, exact: true }).click();
+  await page.keyboard.press('Escape');
+}
 
 /** Future civil days in Europe/Kyiv so park rows stay on the Problematic banner. */
 function futureYmd(daysAhead: number, timeZone = 'Europe/Kyiv'): string {
@@ -95,8 +109,8 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     const { move } = await openMoveSheet(page, auth, name);
     await expect(move.getByRole('textbox', { name: 'Day' })).toHaveValue(placeYmd);
     await expect(move.getByLabel('Phase')).toBeVisible();
-    await expect(move.locator('input[type="time"]')).toBeVisible();
-    await expect(move.locator('input[type="time"]')).toHaveCount(1);
+    await expect(move.getByRole('button', { name: 'Start time' })).toBeVisible();
+    await expect(move.getByRole('button', { name: 'Start time' })).toHaveCount(1);
   });
 
   test('U-CAL-025c snap timeline listbox appears with slot options', async ({
@@ -409,7 +423,7 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     });
 
     // Manual seek into the busy band — must not soft-snap back onto a free slot.
-    await move.locator('input[type="time"]').fill('12:00');
+    await setStartTime(page, move, '12:00');
     await expect(move.getByText(/12:00\s*[–-]\s*12:30/).first()).toBeVisible({
       timeout: 10_000,
     });
@@ -520,7 +534,7 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     });
     const { move } = await openMoveSheet(page, auth, name);
     await expect(move.getByRole('listbox')).toBeVisible({ timeout: 30_000 });
-    await move.locator('input[type="time"]').fill('14:00');
+    await setStartTime(page, move, '14:00');
     await expect(move.getByText(/14:00\s*[–-]\s*14:30/).first()).toBeVisible({
       timeout: 10_000,
     });
@@ -607,7 +621,7 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     await expect(
       move.getByLabel('Phase').locator(`option[value="${afternoonId}"]`),
     ).toBeAttached({ timeout: 15_000 });
-    await move.locator('input[type="time"]').fill('14:00');
+    await setStartTime(page, move, '14:00');
     await expect
       .poll(async () => move.getByLabel('Phase').inputValue(), { timeout: 10_000 })
       .toBe(afternoonId);
@@ -667,23 +681,21 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     const { move } = await openMoveSheet(page, auth, name);
     await expect(move.getByRole('listbox')).toBeVisible({ timeout: 30_000 });
     const place = move.getByRole('button', { name: 'Place' });
-    const time = move.locator('input[type="time"]');
-
-    await time.fill('10:00');
+    await setStartTime(page, move, '10:00');
     await expect(move.getByText(/10:00\s*[–-]\s*10:30/).first()).toBeVisible({
       timeout: 10_000,
     });
     await expect(place).toBeEnabled();
     await expect(move.getByText(/Busy — can't place here/i)).toHaveCount(0);
 
-    await time.fill('13:00');
+    await setStartTime(page, move, '13:00');
     await expect(move.getByText(/13:00\s*[–-]\s*13:30/).first()).toBeVisible({
       timeout: 10_000,
     });
     await expect(move.getByText(/Busy — can't place here/i)).toBeVisible();
     await expect(place).toBeDisabled();
 
-    await time.fill('15:30');
+    await setStartTime(page, move, '15:30');
     await expect(move.getByText(/15:30\s*[–-]\s*16:00/).first()).toBeVisible({
       timeout: 10_000,
     });

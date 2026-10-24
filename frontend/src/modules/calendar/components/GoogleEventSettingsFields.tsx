@@ -6,9 +6,9 @@ import {
   GOOGLE_VISIBILITY_OPTIONS,
   type GoogleReminderRow,
 } from '../googleEventSettings';
+import { Input } from 'ui/Input';
+import { Select } from 'ui/Select';
 
-const inp =
-  'w-full rounded border border-ide-border bg-ide-input px-2.5 py-1.5 text-sm text-ide-text focus:border-ide-link focus:outline-none focus:ring-1 focus:ring-ide-link';
 const lbl = 'mb-0.5 block text-xs font-medium text-ide-text';
 
 export type GoogleEventSettingsValue = {
@@ -54,9 +54,9 @@ export function GoogleEventSettingsFields({
         <label htmlFor="google-event-location" className={lbl}>
           {t('calendar.eventSettings.location')}
         </label>
-        <input
+        <Input
           id="google-event-location"
-          className={inp}
+          size="sm"
           value={value.location}
           onChange={(e) => patch({ location: e.target.value })}
         />
@@ -99,9 +99,9 @@ export function GoogleEventSettingsFields({
           <label htmlFor="google-event-visibility" className={lbl}>
             {t('calendar.eventSettings.visibility')}
           </label>
-          <select
+          <Select
             id="google-event-visibility"
-            className={inp}
+            size="sm"
             value={value.visibility}
             onChange={(e) => patch({ visibility: e.target.value })}
           >
@@ -110,15 +110,15 @@ export function GoogleEventSettingsFields({
                 {visibilityLabel(opt.value)}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div>
           <label htmlFor="google-event-show-as" className={lbl}>
             {t('calendar.eventSettings.showAs')}
           </label>
-          <select
+          <Select
             id="google-event-show-as"
-            className={inp}
+            size="sm"
             value={value.transparency || 'opaque'}
             onChange={(e) => patch({ transparency: e.target.value })}
           >
@@ -127,13 +127,13 @@ export function GoogleEventSettingsFields({
                 {transparencyLabel(opt.value)}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
       <div>
         <span className={lbl}>{t('calendar.eventSettings.reminders')}</span>
         <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm text-ide-text">
-          <input
+          <Input
             type="checkbox"
             checked={value.keepDefaultReminders}
             onChange={(e) => patch({ keepDefaultReminders: e.target.checked })}
@@ -143,8 +143,9 @@ export function GoogleEventSettingsFields({
         {!value.keepDefaultReminders
           ? value.reminders.map((rem, idx) => (
               <div key={idx} className="mb-2 flex flex-wrap items-center gap-2">
-                <select
-                  className={`${inp} w-auto min-w-[100px]`}
+                <Select
+                  size="sm"
+                  className="w-auto min-w-[100px]"
                   value={rem.method}
                   onChange={(e) =>
                     patch({
@@ -158,11 +159,12 @@ export function GoogleEventSettingsFields({
                 >
                   <option value="popup">{t('calendar.eventSettings.popup')}</option>
                   <option value="email">{t('calendar.eventSettings.email')}</option>
-                </select>
-                <input
+                </Select>
+                <Input
                   type="number"
                   min={0}
-                  className={`${inp} w-24`}
+                  size="sm"
+                  className="w-24"
                   value={rem.minutes}
                   onChange={(e) =>
                     patch({

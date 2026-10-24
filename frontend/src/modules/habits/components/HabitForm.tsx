@@ -4,6 +4,11 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
 import type { CreateHabitDTO, HabitDTO, UpdateHabitDTO } from 'api/habits.api';
+import { Check, Plus, Trash2, X } from 'lucide-react';
+import { Button } from 'ui/Button';
+import { Input } from 'ui/Input';
+import { Textarea } from 'ui/Textarea';
+import { TimeField } from 'ui/TimeField';
 
 type HabitFormData = {
   name: string;
@@ -114,10 +119,10 @@ const HabitForm: React.FC<HabitFormProps> = ({
         <label htmlFor="habit-name" className="ui-label">
           {t('habits.name')}
         </label>
-        <input
+        <Input
           id="habit-name"
           {...register('name')}
-          className={`ui-input ${errors.name ? 'ui-input-error' : ''}`}
+          error={!!errors.name}
           placeholder={t('habits.namePlaceholder')}
           autoFocus
         />
@@ -129,19 +134,18 @@ const HabitForm: React.FC<HabitFormProps> = ({
           {t('habits.color')}
         </label>
         <div className="flex items-center gap-3">
-          <input
+          <Input
             id="habit-color"
             type="color"
             value={colorValue}
             onChange={(event) =>
               setValue('color', event.target.value, { shouldDirty: true, shouldValidate: true })
             }
-            className="h-11 w-14 cursor-pointer rounded-lg border border-ide-border bg-ide-surface p-1"
           />
-          <input
+          <Input
             aria-label={t('habits.hexColor')}
             {...register('color')}
-            className={`ui-input ${errors.color ? 'ui-input-error' : ''}`}
+            error={!!errors.color}
           />
         </div>
         {errors.color ? <span className="ui-error">{errors.color.message}</span> : null}
@@ -151,11 +155,11 @@ const HabitForm: React.FC<HabitFormProps> = ({
         <label htmlFor="habit-description" className="ui-label">
           {t('habits.description')}
         </label>
-        <textarea
+        <Textarea
           id="habit-description"
           {...register('description')}
           rows={3}
-          className={`ui-textarea ${errors.description ? 'ui-input-error' : ''}`}
+          error={!!errors.description}
         />
         {errors.description ? (
           <span className="ui-error">{errors.description.message}</span>
@@ -166,7 +170,7 @@ const HabitForm: React.FC<HabitFormProps> = ({
 
       <div className="ui-field">
         <label className="flex items-center gap-2 text-sm text-ide-text">
-          <input type="checkbox" {...register('reserveBlock')} className="h-4 w-4" />
+          <Input type="checkbox" {...register('reserveBlock')} />
           {t('habits.reserveBlock')}
         </label>
         {reserveBlock ? (
@@ -176,11 +180,14 @@ const HabitForm: React.FC<HabitFormProps> = ({
                 <label htmlFor="habit-block-start" className="ui-label">
                   {t('habits.starts')}
                 </label>
-                <input
+                <TimeField
                   id="habit-block-start"
-                  type="time"
-                  {...register('blockStartTime')}
-                  className={`ui-input ${errors.blockStartTime ? 'ui-input-error' : ''}`}
+                  value={watch('blockStartTime')}
+                  onChange={(next) =>
+                    setValue('blockStartTime', next, { shouldDirty: true, shouldValidate: true })
+                  }
+                  error={!!errors.blockStartTime}
+                  aria-label={t('habits.starts')}
                 />
                 {errors.blockStartTime ? (
                   <span className="ui-error">{errors.blockStartTime.message}</span>
@@ -190,14 +197,14 @@ const HabitForm: React.FC<HabitFormProps> = ({
                 <label htmlFor="habit-block-minutes" className="ui-label">
                   {t('habits.minutes')}
                 </label>
-                <input
+                <Input
                   id="habit-block-minutes"
                   type="number"
                   min={5}
                   max={240}
                   step={5}
                   {...register('blockMinutes')}
-                  className={`ui-input ${errors.blockMinutes ? 'ui-input-error' : ''}`}
+                  error={!!errors.blockMinutes}
                 />
                 {errors.blockMinutes ? (
                   <span className="ui-error">{errors.blockMinutes.message}</span>
@@ -211,25 +218,27 @@ const HabitForm: React.FC<HabitFormProps> = ({
 
       <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         {initialData && onDelete ? (
-          <button
+          <Button
             type="button"
+            variant="danger"
             onClick={onDelete}
             disabled={isDeleting || isSubmitting}
-            className="ui-btn-danger sm:mr-auto"
+            className="sm:mr-auto"
+            icon={Trash2}
           >
             {isDeleting ? t('common.deleting') : t('common.delete')}
-          </button>
+          </Button>
         ) : null}
-        <button type="button" onClick={onCancel} className="ui-btn-secondary">
+        <Button type="button" variant="secondary" onClick={onCancel} icon={X}>
           {t('common.cancel')}
-        </button>
-        <button type="submit" disabled={isSubmitting} className="ui-btn-primary">
+        </Button>
+        <Button type="submit" disabled={isSubmitting} icon={initialData ? Check : Plus}>
           {isSubmitting
             ? t('common.saving')
             : initialData
               ? t('common.save')
               : t('habits.createHabit')}
-        </button>
+        </Button>
       </div>
     </form>
   );

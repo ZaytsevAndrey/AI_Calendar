@@ -5,6 +5,9 @@ import { UserSettingsDTO } from '../../../api/user-settings.api';
 import { useUpdateUserSettingsMutation } from '../../../api/userSettingsApi';
 import { googleCalendarAPI } from '../../../api/google-calendar.api';
 import { Spinner } from '../../../ui/Spinner';
+import { Input } from 'ui/Input';
+import { Select } from 'ui/Select';
+import { TimeField } from 'ui/TimeField';
 import { timeZoneSelectOptions } from '../ianaTimeZones';
 import { ReminderSettingsSection } from '../../pwa/ReminderSettingsSection';
 import { VoiceSettingsSection } from '../../voice/components/VoiceSettingsSection';
@@ -34,8 +37,6 @@ interface UserSettingsFormData {
     fixedEventBufferMinutes: number;
     defaultTaskDurationMinutes: number;
 }
-
-const fieldClass = 'ui-input max-w-xs';
 
 const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
     const { t, i18n } = useTranslation();
@@ -341,9 +342,9 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                         <label htmlFor="time-zone" className="ui-label">
                             {t('settings.timeZone')}
                         </label>
-                        <select
+                        <Select
                             id="time-zone"
-                            className="ui-select max-w-xs"
+                            className="max-w-xs"
                             value={timeZone || ''}
                             onChange={(e) => setValue('timeZone', e.target.value)}
                         >
@@ -357,15 +358,15 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                                     {zone}
                                 </option>
                             ))}
-                        </select>
+                        </Select>
                     </div>
                     <div className="flex flex-col gap-1">
                         <label htmlFor="app-language" className="ui-label">
                             {t('settings.language')}
                         </label>
-                        <select
+                        <Select
                             id="app-language"
-                            className="ui-select max-w-xs"
+                            className="max-w-xs"
                             value={language}
                             onChange={(e) => onLanguageChange(e.target.value)}
                         >
@@ -374,49 +375,49 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                                     {code === 'en' ? t('settings.languageEn') : t('settings.languageUk')}
                                 </option>
                             ))}
-                        </select>
+                        </Select>
                         <p className="max-w-xs text-xs text-ide-muted">{t('settings.languageHint')}</p>
                     </div>
                     <div className="flex flex-col gap-1">
                         <label htmlFor="wake-time" className="ui-label">
                             {t('settings.wakeTime')}
                         </label>
-                        <input
+                        <TimeField
                             id="wake-time"
-                            type="time"
-                            className={fieldClass}
+                            className="max-w-xs"
                             value={wakeTimeController.field.value || ''}
-                            onChange={(e) => wakeTimeController.field.onChange(e.target.value)}
+                            onChange={wakeTimeController.field.onChange}
                             onBlur={wakeTimeController.field.onBlur}
                             name={wakeTimeController.field.name}
                             ref={wakeTimeController.field.ref}
+                            aria-label={t('settings.wakeTime')}
                         />
                     </div>
                     <div className="flex flex-col gap-1">
                         <label htmlFor="sleep-time" className="ui-label">
                             {t('settings.sleepTime')}
                         </label>
-                        <input
+                        <TimeField
                             id="sleep-time"
-                            type="time"
-                            className={fieldClass}
+                            className="max-w-xs"
                             value={sleepTimeController.field.value || ''}
-                            onChange={(e) => sleepTimeController.field.onChange(e.target.value)}
+                            onChange={sleepTimeController.field.onChange}
                             onBlur={sleepTimeController.field.onBlur}
                             name={sleepTimeController.field.name}
                             ref={sleepTimeController.field.ref}
+                            aria-label={t('settings.sleepTime')}
                         />
                     </div>
                     <div className="flex flex-col gap-1">
                         <label htmlFor="min-split-minutes" className="ui-label">
                             {t('settings.minSplit')}
                         </label>
-                        <input
+                        <Input
                             id="min-split-minutes"
                             type="number"
                             min={5}
                             max={240}
-                            className={fieldClass}
+                            className="max-w-xs"
                             value={minSplitMinutes || 30}
                             onChange={(e) => {
                                 const parsed = parseInt(e.target.value, 10);
@@ -432,12 +433,12 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                         <label htmlFor="max-split-minutes" className="ui-label">
                             {t('settings.maxSplit')}
                         </label>
-                        <input
+                        <Input
                             id="max-split-minutes"
                             type="number"
                             min={5}
                             max={480}
-                            className={fieldClass}
+                            className="max-w-xs"
                             value={maxSplitMinutes || 30}
                             onChange={(e) => {
                                 const parsed = parseInt(e.target.value, 10);
@@ -450,12 +451,12 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                         <label htmlFor="default-task-duration-minutes" className="ui-label">
                             {t('settings.defaultTaskDuration')}
                         </label>
-                        <input
+                        <Input
                             id="default-task-duration-minutes"
                             type="number"
                             min={5}
                             max={480}
-                            className={fieldClass}
+                            className="max-w-xs"
                             value={defaultTaskDurationMinutes || 30}
                             onChange={(e) => {
                                 const parsed = parseInt(e.target.value, 10);
@@ -473,12 +474,12 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                         <label htmlFor="fixed-event-buffer-minutes" className="ui-label">
                             {t('settings.buffer')}
                         </label>
-                        <input
+                        <Input
                             id="fixed-event-buffer-minutes"
                             type="number"
                             min={0}
                             max={180}
-                            className={fieldClass}
+                            className="max-w-xs"
                             value={fixedEventBufferMinutes ?? 0}
                             onChange={(e) => {
                                 const parsed = parseInt(e.target.value, 10);
@@ -496,12 +497,12 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                         <label htmlFor="recurring-horizon-days" className="ui-label">
                             {t('settings.horizon')}
                         </label>
-                        <input
+                        <Input
                             id="recurring-horizon-days"
                             type="number"
                             min={1}
                             max={365}
-                            className={fieldClass}
+                            className="max-w-xs"
                             value={recurringScheduleHorizonDays || 30}
                             onChange={(e) => {
                                 const parsed = parseInt(e.target.value, 10);
@@ -520,10 +521,10 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                     <label htmlFor="app-google-calendar-name" className="ui-label">
                         {t('settings.appCalendarName')}
                     </label>
-                    <input
+                    <Input
                         id="app-google-calendar-name"
                         type="text"
-                        className={fieldClass}
+                        className="max-w-xs"
                         maxLength={200}
                         value={appGoogleCalendarName ?? ''}
                         onChange={(e) => setValue('appGoogleCalendarName', e.target.value, { shouldDirty: true })}

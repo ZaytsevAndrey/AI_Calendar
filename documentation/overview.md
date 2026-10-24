@@ -23,6 +23,7 @@ AI_Calendar/
 - Redux Toolkit + **RTK Query** (`@reduxjs/toolkit/query`) for part of the API  
 - Axios (`src/api/axios.ts`) with `baseURL` from `REACT_APP_API_BASE_URL` (see [setup-and-build](setup-and-build.md))  
 - React Router, React Hook Form, react-toastify (IDE-dark toasts: type colors, title + detail; task CRUD includes name and scheduled time)  
+- Shared form controls in `frontend/src/ui` (`Button`, `IconButton`, `Input`, `Select`, `Textarea`, `TimeField`) with `sm` / `md` / `lg` and per-breakpoint sizes. Time fields are `HH:mm` and use the same chrome as other inputs.  
 - Build: **Webpack** (`npm run build` in the `frontend` package)  
 - Tests: Jest (`frontend/src/**/*.spec.ts`, e.g. toast date copy)
 
