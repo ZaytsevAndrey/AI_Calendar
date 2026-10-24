@@ -1,5 +1,6 @@
 import {
   buildTaskPayload,
+  formValuesFromCreatePayload,
   initialFormValues,
   windowSpansMultipleDays,
 } from './buildPayload';
@@ -207,5 +208,29 @@ describe('initialFormValues', () => {
     expect(values.isUnscheduled).toBe(true);
     expect(values.name).toBe('');
     expect(values.googleReminderUseDefault).toBe(true);
+  });
+});
+
+describe('formValuesFromCreatePayload', () => {
+  it('prefills a fixed task from a selected calendar range', () => {
+    const values = formValuesFromCreatePayload(
+      {
+        name: '',
+        eventType: 'fixed',
+        allowSplit: false,
+        isRecurring: false,
+        estimatedTimeInMinutes: 90,
+        scheduledStartTime: '2026-10-24T07:00:00.000Z',
+        scheduledEndTime: '2026-10-24T08:30:00.000Z',
+      },
+      'UTC',
+    );
+    expect(values.isFixed).toBe(true);
+    expect(values.isRecurring).toBe(false);
+    expect(values.allowSplit).toBe(false);
+    expect(values.name).toBe('');
+    expect(values.scheduledStartTime).toBe('2026-10-24T07:00');
+    expect(values.scheduledEndTime).toBe('2026-10-24T08:30');
+    expect(values.estimatedTimeInMinutes).toBe(90);
   });
 });

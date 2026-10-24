@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { format } from 'date-fns';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { formatClock } from '../../../utils/formatDate';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 import { dateFnsOptions } from '../../../i18n/dateLocale';
 import {
@@ -26,6 +27,7 @@ import {
   pointerMinutes,
 } from '../eventDrag';
 import { timedCardBox, timedCardClass } from '../timedCardLayout';
+import { applyTimeSelection } from '../timeSelection';
 
 const PX_PER_HOUR = 48;
 const HANDLE_PX = 4;
@@ -62,6 +64,12 @@ interface CalendarTimeGridProps {
   minutesToDate?: (day: Date, minutes: number) => Date;
   onEditEvent?: (eventId: string) => void;
   onCreateForDate?: (day: Date) => void;
+  /** Drag on empty space: fixed task for the selected start and end. */
+  onCreateForRange?: (day: Date, start: Date, end: Date) => void;
+  /** Current instant, used to label the now line. */
+  now?: Date;
+  /** Display-axis minute of `now` on a column, or null when that column is not today. */
+  nowDisplayMin?: (day: Date) => number | null;
   onEventTimeChange?: (
     event: GoogleCalendarEvent,
     start: Date,
@@ -99,6 +107,9 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
   minutesToDate,
   onEditEvent,
   onCreateForDate,
+  onCreateForRange,
+  now,
+  nowDisplayMin,
   onEventTimeChange,
   onDeleteEvent,
   isEventCompleted,
@@ -111,8 +122,11 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
   const colRefs = useRef<(HTMLDivElement | null)[]>([]);
   const onChangeRef = useRef(onEventTimeChange);
   onChangeRef.current = onEventTimeChange;
+  const onCreateRangeRef = useRef(onCreateForRange);
+  onCreateRangeRef.current = onCreateForRange;
   const skipClickRef = useRef(false);
   const [live, setLive] = useState<(Placement & { eventId: string }) | null>(null);
+  const [draft, setDraft] = useState<Placement | null>(null);
   const [pending, setPending] = useState<Record<string, Placement>>({});
   useTaskMutationStagesTick();
 
@@ -127,6 +141,9 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
   };
 
   const yFor = (minutes: number) => ((minutes - dayStartMin) / daySpanMin) * gridHeightPx;
+
+  const clockAt = (day: Date, minutes: number) =>
+    formatClock((minutesToDate ?? dateOnDayAtMinutes)(day, minutes));
 
   const placementFor = (event: GoogleCalendarEvent, naturalDay: number): Placement | null => {
     if (live?.eventId === event.id) {
@@ -261,6 +278,93 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
     );
   };
 
+  const startSelection = (e: React.PointerEvent, dayIndex: number) => {
+    if (!onCreateRangeRef.current || e.button !== 0 || e.pointerType === 'touch') return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('.calendar-chip, button, a, input, textarea')) return;
+    const col = colRefs.current[dayIndex];
+    if (!col) return;
+
+    const originRect = col.getBoundingClientRect();
+    const anchorMin = pointerMinutes(
+      e.clientY,
+      originRect.top,
+      originRect.height,
+      dayStartMin,
+      daySpanMin,
+    );
+    const originX = e.clientX;
+    const originY = e.clientY;
+    let moved = false;
+    let allowCreate = true;
+    let done = false;
+    let current = applyTimeSelection({
+      anchorMin,
+      pointerMin: anchorMin,
+      dayStartMin,
+      dayEndMin,
+    });
+
+    const handleMove = (ev: PointerEvent) => {
+      if (!allowCreate) return;
+      if (!moved && Math.hypot(ev.clientX - originX, ev.clientY - originY) < 4) return;
+      moved = true;
+      const liveRect = col.getBoundingClientRect();
+      current = applyTimeSelection({
+        anchorMin,
+        pointerMin: pointerMinutes(
+          ev.clientY,
+          liveRect.top,
+          liveRect.height,
+          dayStartMin,
+          daySpanMin,
+        ),
+        dayStartMin,
+        dayEndMin,
+      });
+      setDraft({ dayIndex, ...current });
+    };
+
+    const finish = () => {
+      if (done) return;
+      done = true;
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handleCancel);
+      window.removeEventListener('keydown', handleKey);
+      setDraft(null);
+      if (!moved && allowCreate) return;
+      skipClickRef.current = true;
+      window.setTimeout(() => {
+        skipClickRef.current = false;
+      }, 0);
+      if (!moved || !allowCreate || !onCreateRangeRef.current) return;
+      const day = days[dayIndex];
+      if (!day) return;
+      const toDate = minutesToDate ?? dateOnDayAtMinutes;
+      const start = toDate(day, current.startMin);
+      const end = toDate(day, current.endMin);
+      if (!(end > start)) return;
+      onCreateRangeRef.current(day, start, end);
+    };
+
+    const handleUp = () => finish();
+    const handleCancel = () => {
+      allowCreate = false;
+      finish();
+    };
+    const handleKey = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Escape') return;
+      allowCreate = false;
+      setDraft(null);
+    };
+
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    window.addEventListener('pointercancel', handleCancel);
+    window.addEventListener('keydown', handleKey);
+  };
+
   const positioned = days.map((day, dayIndex) => {
     const items = events
       .map((event) => {
@@ -284,6 +388,9 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
     );
     return { day, dayIndex, items, lanes };
   });
+
+  const nowMinutes = days.map((day) => nowDisplayMin?.(day) ?? null);
+  const gutterNow = nowMinutes.find((value): value is number => value != null) ?? null;
 
   const columns = `56px repeat(${days.length}, minmax(${days.length > 1 ? '88px' : '0px'}, 1fr))`;
   const gridMinWidth = days.length > 1 ? 56 + days.length * 88 : undefined;
@@ -385,6 +492,17 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
               </div>
             );
           })}
+          {days.length === 1 && gutterNow != null && now ? (
+            <div
+              className="pointer-events-none absolute inset-x-0 z-[3] h-4 -translate-y-1/2"
+              style={{ top: yFor(gutterNow) }}
+              aria-hidden
+            >
+              <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[0.65rem] font-medium leading-none text-ide-error">
+                {formatClock(now)}
+              </span>
+            </div>
+          ) : null}
         </div>
 
         {positioned.map(({ day, dayIndex, items, lanes }) => (
@@ -393,8 +511,12 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
             ref={(el) => {
               colRefs.current[dayIndex] = el;
             }}
-            className="relative border-l border-ide-border bg-ide-panel"
+            className={`relative border-l border-ide-border bg-ide-panel${
+              onCreateForRange ? ' cursor-crosshair select-none' : ''
+            }`}
             style={{ height: gridHeightPx }}
+            onPointerDown={(e) => startSelection(e, dayIndex)}
+            data-testid={`calendar-day-column-${dayIndex}`}
           >
             {hourBands.map((band, index) => {
               const top = yFor(band.minutes);
@@ -412,7 +534,10 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                       ? `linear-gradient(${band.color}1c, ${band.color}1c)`
                       : undefined,
                   }}
-                  onClick={() => onCreateForDate?.(day)}
+                  onClick={() => {
+                    if (skipClickRef.current) return;
+                    onCreateForDate?.(day);
+                  }}
                 >
                   {mark ? (
                     <span
@@ -430,6 +555,20 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                 </div>
               );
             })}
+            {draft && draft.dayIndex === dayIndex ? (
+              <div
+                data-testid="calendar-time-selection"
+                className="pointer-events-none absolute left-0.5 right-0.5 z-[1] overflow-hidden rounded border border-ide-link bg-ide-link/25"
+                style={{
+                  top: yFor(draft.startMin),
+                  height: Math.max(2, yFor(draft.endMin) - yFor(draft.startMin)),
+                }}
+              >
+                <span className="block truncate px-1 pt-0.5 text-[10px] font-medium leading-tight text-ide-text">
+                  {`${clockAt(day, draft.startMin)}–${clockAt(day, draft.endMin)}`}
+                </span>
+              </div>
+            ) : null}
             {items.map(({ event, place }) => {
               const lane = lanes.get(event.id) ?? { lane: 0, laneCount: 1 };
               const top = yFor(place.startMin);
@@ -533,6 +672,23 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                 </div>
               );
             })}
+            {nowMinutes[dayIndex] != null ? (
+              <div
+                data-testid="calendar-now-line"
+                role="img"
+                aria-label={t('calendar.nowLine')}
+                className="pointer-events-none absolute inset-x-0 z-[3] h-0.5 -translate-y-1/2 bg-ide-error"
+                style={{ top: yFor(nowMinutes[dayIndex] as number) }}
+              >
+                {days.length > 1 && now ? (
+                  <span className="absolute left-1 top-1/2 -translate-y-1/2 rounded-sm bg-ide-error px-1 py-0.5 text-[0.65rem] font-medium leading-none text-white">
+                    {formatClock(now)}
+                  </span>
+                ) : (
+                  <span className="absolute left-0 top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ide-error" />
+                )}
+              </div>
+            ) : null}
           </div>
         ))}
       </div>

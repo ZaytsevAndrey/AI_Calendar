@@ -91,12 +91,12 @@ export async function completeOpenTasks(
 
 export function stripBlock(page: Page, name: string) {
   // Now/Next cards only — not Generate warning <li> rows that quote the task name.
-  return page.locator('div.rounded-md.border').filter({ hasText: name });
+  return page.getByTestId('now-strip-card').filter({ hasText: name });
 }
 
 export function skippableStripCard(page: Page, name: string) {
   return page
-    .locator('div.rounded-md.border')
+    .getByTestId('now-strip-card')
     .filter({ hasText: name })
     .filter({ has: page.getByRole('button', { name: 'Skip' }) });
 }

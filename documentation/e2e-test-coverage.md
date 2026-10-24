@@ -10,7 +10,7 @@ Related docs: [task-scheduling-test-matrix.md](task-scheduling-test-matrix.md) (
 
 Protect the daily loop: **sign in (JWT seed in CI) → settings/phases gate → capture a task → placement seats it → conflict sheet when needed → Now/Done**. Habits are soft-disabled for MVP (UI/e2e cases skipped; API returns empty list / 410 on writes). Every live HTTP route and every user-facing screen has named cases. Placement math stays in unit tests on `PlacementStepService.place` / `planPlacement`; E2E asserts the HTTP/UI contract around that math. Generate / Clear / Undo APIs are removed.
 
-Out of scope until a later cycle: snooze, text-add, in-app guide, real Google OAuth in CI, real Groq in CI. Day/week drag-and-drop math and the move plan are unit-tested (`eventDrag.spec.ts`, `move-displayed-event.util.spec.ts`, `displayed-event-move.service.spec.ts` — app moves use placement + `jobId`). A browser drag needs a live Google event, which CI does not have.
+Out of scope until a later cycle: snooze, text-add, in-app guide, real Google OAuth in CI, real Groq in CI. Day/week drag-and-drop math and the move plan are unit-tested (`eventDrag.spec.ts`, `timeSelection.spec.ts`, `move-displayed-event.util.spec.ts`, `displayed-event-move.service.spec.ts` — app moves use placement + `jobId`). A browser drag of an existing event needs a live Google event, which CI does not have. Dragging empty space to create a fixed task is `U-CAL-027`.
 
 ---
 
@@ -288,7 +288,7 @@ Mutation jobs: POST/PATCH tasks return a `jobId` for place + Google sync progres
 | U-TSK-009 | U | P0 | Inbox **Do now** | Clears `isUnscheduled`, from-now window | Lands in Scheduled after placement |
 | U-TSK-010 | U | P0 | Inbox **Done** | Confirm path | `completed`; disappears from inbox; **no** calendar block |
 | U-TSK-011 | U | P0 | Inbox **Skip** | Cancels | `canceled`; disappears from active inbox |
-| U-TSK-012 | U | P0 | Inbox **Open** | Opens editor | Prefills name; edit form |
+| U-TSK-012 | U | P0 | Inbox **Edit** | Opens editor | Prefills name; edit form |
 | U-TSK-024 | U | P0 | Inbox **Schedule** | Opens schedule form | Title Schedule task; phase fields visible; name prefilled |
 | U-TSK-025 | U | P0 | Edit modal **Delete** (one-off) | Confirm then delete | Task leaves inbox; progress toast |
 | U-TSK-011 | U | P1 | Uncheck Fixed | Form | Allow split restored (preset rules) |
@@ -521,13 +521,14 @@ No first-class UI. Covered via API and Google create with `phaseId`.
 
 ## 18. Cases — Calendar UI (beyond Google)
 
-Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day, sleep and hours outside schedulable phases hidden) is covered by `frontend/src/modules/calendar/calendarView.spec.ts`, not a Playwright case. Timed-card density (half-hour stacked card, shorter micro strip) is covered by `frontend/src/modules/calendar/timedCardLayout.spec.ts`.
+Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day, sleep and hours outside schedulable phases hidden) and the current-time line position are covered by `frontend/src/modules/calendar/calendarView.spec.ts`, not a separate Playwright case. U-CAL-027 still checks the line is on today’s day column. Timed-card density (half-hour stacked card, shorter micro strip) is covered by `frontend/src/modules/calendar/timedCardLayout.spec.ts`.
 
 | ID | Layer | P | Given | When | Then |
 |----|-------|---|-------|------|------|
 | U-CAL-001 | U | P0 | Authenticated onboarded | Open `/` | Calendar + NowStrip + Create task; no Schedule / Suggestions menu |
 | U-CAL-002 | U | P1 | Day / week / month | Switch views + date picker + prev/next | Range changes; events reload |
 | U-CAL-003 | U | P0 | Click empty civil day | Create | From/Until = that day in **Settings** TZ (not browser TZ) |
+| U-CAL-027 | U | P0 | Drag empty day column | Create | Current-time line is on today’s column. Highlight stays up while dragging; release opens a fixed task whose start and end are 15-minute steps and end is after start. A click without a drag stays U-CAL-003. Touch does not select |
 | U-CAL-004 | U | — | ~~Generate / Suggestions~~ | removed | Generate / Clear / Undo / Suggestions UI and APIs gone |
 | U-CAL-005 | U | — | ~~Undo~~ | removed | |
 | U-CAL-006 | U | — | ~~Clear~~ | removed | |

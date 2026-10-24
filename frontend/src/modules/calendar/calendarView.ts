@@ -250,6 +250,17 @@ export function personalToDisplay(axis: CalendarAxis, personalMin: number): numb
   return null;
 }
 
+/** Display-axis minute of `now` on this personal-day column, or null when now is off the column. */
+export function nowMarkerDisplay(
+  now: Date,
+  columnDay: Date,
+  axis: CalendarAxis,
+): number | null {
+  const personal = instantPersonalMinutes(now, columnDay, axis, false);
+  if (personal == null) return null;
+  return personalToDisplay(axis, personal);
+}
+
 /**
  * Inverse of `personalToDisplay`. A shared boundary between two visible
  * stretches belongs to the later stretch, so a drop lands on the next phase

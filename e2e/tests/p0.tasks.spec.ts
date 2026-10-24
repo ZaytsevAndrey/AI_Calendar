@@ -152,7 +152,7 @@ test.describe('P0 tasks UI', () => {
 
     await openAs(page, auth.onboarded, '/tasks');
     const row = page.locator('.task-item').filter({ hasText: name });
-    await row.getByRole('button', { name: 'Open' }).click();
+    await row.getByRole('button', { name: 'Edit' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('textbox', { name: /Name/ })).toHaveValue(name);
   });
@@ -184,7 +184,7 @@ test.describe('P0 tasks UI', () => {
 
     await openAs(page, auth.onboarded, '/tasks');
     const row = page.locator('.task-item').filter({ hasText: name });
-    await row.getByRole('button', { name: 'Open' }).click();
+    await row.getByRole('button', { name: 'Edit' }).click();
     const editor = page.getByRole('dialog', { name: 'Edit task' });
     await editor.getByRole('button', { name: 'Delete' }).click();
     const confirm = page.getByRole('dialog', { name: 'Delete task' });

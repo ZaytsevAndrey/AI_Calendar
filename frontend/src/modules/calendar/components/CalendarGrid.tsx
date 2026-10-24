@@ -13,6 +13,7 @@ import {
     displayToPersonal,
     eventDisplayRange,
     getDaysInView,
+    nowMarkerDisplay,
     gridEventsForDay,
     visibleHourBands,
     isAllDayEvent,
@@ -38,6 +39,7 @@ interface CalendarGridProps {
     events: GoogleCalendarEvent[];
     onEditEvent?: (eventId: string) => void;
     onCreateForDate?: (day: Date) => void;
+    onCreateForRange?: (day: Date, start: Date, end: Date) => void;
     onEventTimeChange?: (
         event: GoogleCalendarEvent,
         start: Date,
@@ -57,6 +59,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     events,
     onEditEvent,
     onCreateForDate,
+    onCreateForRange,
     onEventTimeChange,
     onDeleteEvent,
     isEventCompleted,
@@ -68,6 +71,11 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     const { data: timePhases = [] } = useTimePhasesForDate(date);
     const { data: allTimePhases = [] } = useTimePhases();
     const { data: userSettings } = useGetUserSettingsQuery();
+    const [now, setNow] = React.useState(() => new Date());
+    React.useEffect(() => {
+        const id = window.setInterval(() => setNow(new Date()), 30_000);
+        return () => window.clearInterval(id);
+    }, []);
 
     const sleepWindow = {
         sleepTime: userSettings?.sleepTime,
@@ -280,6 +288,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                     hourBands={hourBands}
                     onEditEvent={onEditEvent}
                     onCreateForDate={onCreateForDate}
+                    onCreateForRange={onCreateForRange}
+                    now={now}
+                    nowDisplayMin={(day) => nowMarkerDisplay(now, day, axis)}
                     eventRange={(event, day) => eventDisplayRange(event, day, axis)}
                     minutesToDate={(day, minutes) =>
                         dateOnDayAtMinutes(day, displayToPersonal(axis, minutes))

@@ -720,6 +720,19 @@ const CalendarPage: React.FC = () => {
         });
     };
 
+    const handleCreateForRange = (_day: Date, start: Date, end: Date) => {
+        const minutes = Math.max(15, Math.round((end.getTime() - start.getTime()) / 60_000));
+        openCreateFromPrefill({
+            name: '',
+            eventType: 'fixed',
+            allowSplit: false,
+            isRecurring: false,
+            estimatedTimeInMinutes: minutes,
+            scheduledStartTime: start.toISOString(),
+            scheduledEndTime: end.toISOString(),
+        });
+    };
+
     const nowStripReuseCalendarEvents = React.useMemo(() => {
         const sleep = {
             sleepTime: userSettings?.sleepTime,
@@ -910,6 +923,7 @@ const CalendarPage: React.FC = () => {
                             events={displayEvents}
                             onEditEvent={handleEditEvent}
                             onCreateForDate={handleCreateForDate}
+                            onCreateForRange={coarse ? undefined : handleCreateForRange}
                             onEventTimeChange={coarse ? undefined : handleEventTimeChange}
                             onDeleteEvent={(event) => void handleDeleteCalendarEvent(event)}
                             isEventCompleted={(event) => isCompletedCalendarEvent(event, tasks)}

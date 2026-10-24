@@ -30,7 +30,7 @@ test.describe('P1 calendar UI', () => {
 
   test('U-CAL-015 all-day Google event can occupy Now', async ({ page, auth, request }) => {
     await completeOpenTasks(request, auth.onboarded.access_token);
-    await page.route('**/google-calendar/events**', async (route) => {
+    await page.route('**/calendar-providers/events**', async (route) => {
       if (route.request().method() !== 'GET') {
         await route.continue();
         return;
@@ -60,23 +60,27 @@ test.describe('P1 calendar UI', () => {
   });
 
   test('U-CAL-022 calendars menu hides a Google calendar on this page', async ({ page, auth, request }) => {
-    await page.route('**/google-calendar/calendars', async (route) => {
+    await page.route('**/calendar-providers/calendars', async (route) => {
       if (route.request().method() !== 'GET') {
         await route.continue();
         return;
       }
+      const calendars = [
+        { id: 'user@gmail.com', summary: 'Primary', primary: true, provider: 'google' },
+        {
+          id: 'holidays@group.v.calendar.google.com',
+          summary: 'Holidays',
+          provider: 'google',
+        },
+      ];
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify([
-          { id: 'user@gmail.com', summary: 'Primary', primary: true, selected: true, accessRole: 'owner' },
-          {
-            id: 'holidays@group.v.calendar.google.com',
-            summary: 'Holidays',
-            selected: true,
-            accessRole: 'reader',
-          },
-        ]),
+        body: JSON.stringify({
+          providers: ['google'],
+          sections: { google: calendars },
+          calendars,
+        }),
       });
     });
 

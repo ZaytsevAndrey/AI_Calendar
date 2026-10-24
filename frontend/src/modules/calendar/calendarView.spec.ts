@@ -4,6 +4,7 @@ import {
   buildCalendarAxis,
   chipLabel,
   displayToPersonal,
+  nowMarkerDisplay,
   eventDisplayRange,
   eventsForDay,
   eventsForHourSlot,
@@ -243,6 +244,25 @@ describe('personal day', () => {
     expect(at('01:00')!.displayMin).toBe(at('00:00')!.displayMin + 60);
     expect(at('22:00')!.displayMin).toBe(at('11:00')!.displayMin + 60);
     expect(at('09:00')!.displayMin).toBe(0);
+  });
+
+  it('places now on the visible morning stretch', () => {
+    const axis = buildCalendarAxis(nightOwl, phases);
+    const atTenThirty = localDate(2026, 8, 9, 10, 30);
+    expect(nowMarkerDisplay(atTenThirty, atTenThirty, axis)).toBe(90);
+  });
+
+  it('hides now while it sits in the hidden afternoon gap', () => {
+    const axis = buildCalendarAxis(nightOwl, phases);
+    const afternoon = localDate(2026, 8, 9, 15, 0);
+    expect(nowMarkerDisplay(afternoon, afternoon, axis)).toBeNull();
+  });
+
+  it('keeps 01:00 on the personal day that is still awake', () => {
+    const axis = buildCalendarAxis(nightOwl, phases);
+    const thursdayMorning = localDate(2026, 8, 10, 1, 0);
+    expect(nowMarkerDisplay(thursdayMorning, wednesday, axis)).not.toBeNull();
+    expect(nowMarkerDisplay(thursdayMorning, localDate(2026, 8, 10, 12, 0), axis)).toBeNull();
   });
 
   it('maps a drop on the later phase, not into the hidden gap', () => {

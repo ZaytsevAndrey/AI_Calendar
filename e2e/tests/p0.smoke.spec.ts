@@ -72,6 +72,7 @@ test.describe('P0 UI smoke', () => {
     await openAs(page, auth.onboarded);
     const nowCard = stripBlock(page, name);
     await expect(nowCard).toBeVisible({ timeout: 15_000 });
+    await nowCard.hover();
     await nowCard.getByRole('button', { name: 'Done' }).click();
     await expectMutationProgressToast(page, name);
     // Completed stays on the calendar grid; Now strip drops it.

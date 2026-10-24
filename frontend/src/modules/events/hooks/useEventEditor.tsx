@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   useCreateEventMutation,
@@ -297,6 +297,11 @@ export function useEventEditor() {
     void runDeleteTask(task);
   };
 
+  const taskFormDefaults = useMemo(
+    () => (formPrefill ? { formPrefill } : createDefaults),
+    [formPrefill, createDefaults],
+  );
+
   const editorTitle = editingEvent
     ? createDefaults?.scheduleIntent
       ? t('tasks.editor.schedule')
@@ -319,15 +324,12 @@ export function useEventEditor() {
             key={
               editingEvent
                 ? `${editingEvent.id}-${createDefaults?.scheduleIntent ? 'schedule' : 'edit'}`
-                : formPrefill?.name ??
-                  `${createDefaults?.deadline ?? 'new'}-${createDefaults?.unscheduled ? 'unscheduled' : 'task'}`
+                : formPrefill
+                  ? `prefill-${formPrefill.scheduledStartTime ?? ''}-${formPrefill.scheduledEndTime ?? ''}-${formPrefill.name}`
+                  : `${createDefaults?.deadline ?? 'new'}-${createDefaults?.unscheduled ? 'unscheduled' : 'task'}`
             }
             initialData={editingEvent || undefined}
-            createDefaults={
-              formPrefill
-                ? { formPrefill }
-                : createDefaults
-            }
+            createDefaults={taskFormDefaults}
             phases={phases}
             onSubmit={submit}
             isSubmitting={isSubmitting}

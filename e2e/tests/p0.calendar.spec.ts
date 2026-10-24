@@ -135,6 +135,52 @@ test.describe('P0 calendar UI', () => {
     });
   });
 
+  test.describe('U-CAL-027 drag empty time to create', () => {
+    test.use({ timezoneId: 'Europe/Kyiv' });
+
+    test('dragging an empty day column opens a fixed task for that range', async ({
+      page,
+      auth,
+      request,
+    }) => {
+      const token = auth.onboarded.access_token;
+      await deleteUnusedTimePhases(request, token);
+      await deleteAllTasks(request, token);
+      const unpin = await pinAwakeAllDay(request, token);
+      try {
+        await openAs(page, auth.onboarded);
+        await page.getByRole('button', { name: 'Day', exact: true }).click();
+        await expect(page.getByTestId('calendar-day-column-0')).toBeVisible();
+        await expect(page.getByTestId('calendar-now-line')).toBeVisible();
+        const scroll = page.getByTestId('calendar-hour-scroll');
+        await scroll.evaluate((node) => {
+          node.scrollTop = 240;
+        });
+        const box = await scroll.boundingBox();
+        expect(box).toBeTruthy();
+        const x = box!.x + box!.width / 2;
+        const y1 = box!.y + 48;
+        const y2 = box!.y + 168;
+        await page.mouse.move(x, y1);
+        await page.mouse.down();
+        await page.mouse.move(x, y2, { steps: 12 });
+        await expect(page.getByTestId('calendar-time-selection')).toBeVisible();
+        await page.mouse.up();
+
+        const dialog = page.getByRole('dialog');
+        await expect(dialog).toBeVisible();
+        await expect(dialog.getByRole('checkbox', { name: 'Fixed time' })).toBeChecked();
+        const start = await dialog.locator('#task-form-start').inputValue();
+        const end = await dialog.locator('#task-form-end').inputValue();
+        expect(start).toMatch(/T\d{2}:(00|15|30|45)$/);
+        expect(end).toMatch(/T\d{2}:(00|15|30|45)$/);
+        expect(end > start).toBe(true);
+      } finally {
+        await unpin();
+      }
+    });
+  });
+
   test('U-CAL-010/011 Now and Next show timed blocks', async ({ page, auth, request }) => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const nowName = uniqueName('E2E now');
@@ -258,7 +304,7 @@ test.describe('P0 calendar UI', () => {
     expectOk(created);
     await waitForScheduleJob(request, auth.onboarded.access_token, created.body.jobId);
 
-    await page.route('**/google-calendar/events**', async (route) => {
+    await page.route('**/calendar-providers/events**', async (route) => {
       if (route.request().method() !== 'GET') {
         await route.continue();
         return;
@@ -335,6 +381,7 @@ test.describe('P0 calendar UI', () => {
       await openAs(page, auth.onboarded);
       const skipCard = skippableStripCard(page, name);
       await expect(skipCard).toBeVisible({ timeout: 15_000 });
+      await skipCard.hover();
       await skipCard.getByRole('button', { name: 'Skip' }).click();
       await expectMutationProgressToast(page, name);
       await expect(skipCard).toHaveCount(0);

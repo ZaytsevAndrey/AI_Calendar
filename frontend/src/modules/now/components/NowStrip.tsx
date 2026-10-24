@@ -203,6 +203,7 @@ function BlockRow({
         <div
           role={onOpenPreview && previewEvent ? 'button' : undefined}
           tabIndex={onOpenPreview && previewEvent ? 0 : undefined}
+          data-testid="now-strip-card"
           className={`${cardBase} mt-1.5 ${toneStyle.card} ${
             onOpenPreview && previewEvent ? 'cursor-pointer' : ''
           }`}

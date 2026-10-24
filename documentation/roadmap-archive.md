@@ -14,6 +14,9 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 ## Shipped (Oct 2026)
 
+- [x] **Select a time to create a task.** On the day and week grids, a mouse or trackpad drag on empty space highlights a 15-minute range in that column and opens a fixed task for that start and end. Escape cancels. A click without a drag still creates a task for the civil day. Touch scrolling does not start a selection.
+- [x] **Current time line.** Day and week grids draw a red line on today’s column at the current minute, when that minute is inside the visible personal day. The line updates about every 30 seconds. Week view shows the clock on that line. Day view shows it on the time scale.
+
 - [x] **§33 Calendar layout.** A timed card of at least 30 minutes keeps its own height. On a half-hour card the chips and title are scaled down so both rows fit. Shorter cards are one line with the title and open a slightly taller stack on hover or focus. Each hour band shows its number on the background, blurred under a 30% black veil. The hour grid stays on the fixed personal-day scale. The week event list is removed.
 
 - [x] **§35 Event preview content.** A calendar click opens a grouped sheet: title, time, and chips, then only the fields that have a value (links, place, when, people, task, details) for Google, Outlook, iCloud, and app tasks. http(s) links open in a new tab. Notes render as sanitized HTML when the provider sent HTML, otherwise as plain text with links. Edit, Delete, and Done stay on the sheet.

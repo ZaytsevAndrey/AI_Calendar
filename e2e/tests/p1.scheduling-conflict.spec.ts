@@ -210,6 +210,7 @@ test.describe('P1 scheduling conflict (real placement, JWT openAs)', () => {
     await openAs(page, auth.onboarded);
     const nowCard = stripBlock(page, name);
     await expect(nowCard).toBeVisible({ timeout: 15_000 });
+    await nowCard.hover();
     await nowCard.getByRole('button', { name: 'Done' }).click();
     await expectMutationProgressToast(page, name);
     await expect(stripBlock(page, name)).toHaveCount(0);
