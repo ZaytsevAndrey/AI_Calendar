@@ -266,7 +266,9 @@ function taskFacts(task: TaskDTO, event: GoogleCalendarEvent): PreviewFact[] {
   if (task.estimatedTimeInMinutes > 0) {
     push('duration', 'duration', String(task.estimatedTimeInMinutes));
   }
-  push('deadline', 'deadline', task.deadline);
+  if (!task.isUnscheduled && task.eventType !== 'fixed' && !task.isFixedExternal) {
+    push('deadline', 'deadline', task.deadline);
+  }
   push('windowFrom', 'windowFrom', task.earliestStartTime);
   const eligible = (task.eligibleWeekDays ?? [])
     .map(weekdayKey)

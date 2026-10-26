@@ -120,6 +120,13 @@ export class DisplayedEventMoveService {
         phaseIds,
       });
       if (!sitsAt(saved.scheduledStartTime, start)) {
+        this.logger.warn(
+          `[move-rejected] fixed task=${plan.taskId} "${saved.name}" ` +
+            `drop=${start.toISOString()}–${end.toISOString()} ` +
+            `saved=${saved.scheduledStartTime ? new Date(saved.scheduledStartTime).toISOString() : 'null'}` +
+            `–${saved.scheduledEndTime ? new Date(saved.scheduledEndTime).toISOString() : 'null'} ` +
+            `state=${saved.scheduleState}`,
+        );
         throw new BadRequestException('That time is already taken.');
       }
       return { kind: 'fixed', jobId: saved.jobId ?? null };
@@ -267,8 +274,35 @@ export class DisplayedEventMoveService {
         preferredStart: start,
         durationMinutes: minutes,
         commit: 'preferred',
+        drag: true,
       });
       if (!seatedAt(placed, start)) {
+        if (placed.outcome === 'conflict') {
+          await this.scheduleJobs.completeMutationJob(jobId, {
+            conflicts: [placed.conflict],
+          });
+          return;
+        }
+        if (
+          placed.outcome === 'problematic' ||
+          placed.outcome === 'unscheduled'
+        ) {
+          await this.scheduleJobs.setMutationStage(jobId, 'syncing');
+          await this.pendingGoogleWrites.syncTask(userId, taskId);
+          await this.placementStep.seatOpenHoles(userId);
+          await this.scheduleJobs.completeMutationJob(jobId, {
+            parked: placed.outcome,
+            reason:
+              placed.outcome === 'problematic' ? placed.reason : 'window',
+          });
+          return;
+        }
+        this.logger.warn(
+          `[move-rejected] job=${jobId} task=${taskId} "${task.name}" ` +
+            `drop=${start.toISOString()}–${end.toISOString()} ` +
+            `plan=${JSON.stringify(summarizeMovePlan(placed))} ` +
+            `detail=preferred-miss`,
+        );
         throw new BadRequestException('That time is already taken.');
       }
       await this.scheduleJobs.setMutationStage(jobId, 'syncing');
@@ -563,4 +597,26 @@ function sitsAt(value: Date | string | null | undefined, start: Date): boolean {
 
 function seatedAt(plan: PlacementPlan, start: Date): boolean {
   return plan.outcome === 'seated' && Math.abs(plan.start - start.getTime()) < 1000;
+}
+
+function summarizeMovePlan(plan: PlacementPlan): Record<string, unknown> {
+  if (plan.outcome === 'seated') {
+    return {
+      outcome: 'seated',
+      start: new Date(plan.start).toISOString(),
+      end: new Date(plan.end).toISOString(),
+      moves: plan.moves.length,
+    };
+  }
+  if (plan.outcome === 'problematic') {
+    return { outcome: 'problematic', reason: plan.reason };
+  }
+  if (plan.outcome === 'conflict') {
+    return {
+      outcome: 'conflict',
+      reason: plan.conflict.reason,
+      options: plan.conflict.options,
+    };
+  }
+  return { outcome: plan.outcome };
 }

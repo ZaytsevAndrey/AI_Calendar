@@ -90,9 +90,6 @@ export function describeStoredTask(fields: StoredTaskFields, opts?: StoredTaskOp
   if (start && earliest && earliest !== start) {
     parts.push(say('voice.seatFrom', { when: stamp(earliest, opts) }));
   }
-  if (fields.isUnscheduled && deadline) {
-    parts.push(say('voice.seatUntil', { when: stamp(deadline, opts) }));
-  }
 
   if (fields.scheduleState === 'problematic') parts.push(say('voice.seatUnplaced'));
 

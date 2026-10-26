@@ -12,6 +12,7 @@ import {
   matchPreset,
   presetPatch,
   PRIORITY_OPTIONS,
+  STATUS_OPTIONS,
   RECURRENCE_PATTERN_OPTIONS,
   TASK_PRESETS,
   WEEKDAY_OPTIONS,
@@ -25,8 +26,11 @@ import {
   mergeSavedPreferredStartIntoOptions,
 } from '../task-wizard/phaseSchedulingBounds';
 import { GoogleEventSettingsFields } from '../../calendar/components/GoogleEventSettingsFields';
+import { dateTimeLocalYmd } from '../../../utils/ianaDateTime';
 import { Bell, Check, Plus, SkipForward, Trash2, X } from 'lucide-react';
 import { Button } from 'ui/Button';
+import { DateRangeField } from 'ui/DateRangeField';
+import { FixedSlotFields } from './FixedSlotFields';
 import { Input } from 'ui/Input';
 import { Select } from 'ui/Select';
 import { Textarea } from 'ui/Textarea';
@@ -129,6 +133,8 @@ const TaskForm: React.FC<TaskFormProps> = ({
   const recurrencePattern = useWatch({ control, name: 'recurrencePattern' });
   const phaseId = useWatch({ control, name: 'phaseId' });
   const selectedDays = useWatch({ control, name: 'recurrenceWeekDays' }) ?? [];
+  const scheduledStartTime = useWatch({ control, name: 'scheduledStartTime' });
+  const scheduledEndTime = useWatch({ control, name: 'scheduledEndTime' });
   const earliestStartTime = useWatch({ control, name: 'earliestStartTime' });
   const deadline = useWatch({ control, name: 'deadline' });
   const location = useWatch({ control, name: 'location' });
@@ -140,18 +146,6 @@ const TaskForm: React.FC<TaskFormProps> = ({
   const selectedEligibleDays = useWatch({ control, name: 'eligibleWeekDays' }) ?? [];
   const showWindowDays =
     !isUnscheduled && !isFixed && !isRecurring && windowSpansMultipleDays(earliestStartTime, deadline);
-
-  const wasFixed = useRef(!!isFixed);
-  useEffect(() => {
-    if (isFixed) {
-      setValue('allowSplit', false);
-      setValue('isRecurring', false);
-      setValue('preferredStartTime', '');
-    } else if (wasFixed.current) {
-      setValue('allowSplit', true);
-    }
-    wasFixed.current = !!isFixed;
-  }, [isFixed, setValue]);
 
   useEffect(() => {
     if (isRecurring && !getValues('recurrencePattern')) {
@@ -266,11 +260,10 @@ const TaskForm: React.FC<TaskFormProps> = ({
           ) : null}
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_8.5rem]">
-          <div>
-            <label htmlFor="task-form-name" className={lbl}>
-              {t('tasks.form.name')} <span className="text-ide-error">*</span>
-            </label>
+        <div>
+          <label htmlFor="task-form-name" className={lbl}>
+            {t('tasks.form.name')} <span className="text-ide-error">*</span>
+          </label>
             <Controller
               name="name"
               control={control}
@@ -285,12 +278,13 @@ const TaskForm: React.FC<TaskFormProps> = ({
                 />
               )}
             />
-            {errors.name ? (
-              <p className="mt-0.5 text-xs text-ide-error" role="alert">
-                {errors.name.message}
-              </p>
-            ) : null}
-          </div>
+          {errors.name ? (
+            <p className="mt-0.5 text-xs text-ide-error" role="alert">
+              {errors.name.message}
+            </p>
+          ) : null}
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor="task-form-priority" className={lbl}>
               {t('tasks.form.priority')}
@@ -301,6 +295,29 @@ const TaskForm: React.FC<TaskFormProps> = ({
               render={({ field }) => (
                 <Select {...field} id="task-form-priority" size="sm">
                   {PRIORITY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            />
+          </div>
+          <div>
+            <label htmlFor="task-form-status" className={lbl}>
+              {t('tasks.form.status')}
+            </label>
+            <Controller
+              name="status"
+              control={control}
+              render={({ field }) => (
+                <Select
+                  {...field}
+                  id="task-form-status"
+                  size="sm"
+                  value={field.value ?? 'todo'}
+                >
+                  {STATUS_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -342,6 +359,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
 
         {!isUnscheduled ? (
         <>
+        {!isFixed ? (
         <div>
           <span id="task-form-phase-label" className={lbl}>
             {t('tasks.form.phase')}
@@ -407,110 +425,16 @@ const TaskForm: React.FC<TaskFormProps> = ({
             }}
           />
         </div>
-
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-ide-text">
-          <Controller
-            name="isFixed"
-            control={control}
-            render={({ field }) => (
-              <label className="inline-flex cursor-pointer items-center gap-2">
-                <Input
-                  type="checkbox"
-                  checked={!!field.value}
-                  onChange={(e) => field.onChange(e.target.checked)}
-                  onBlur={field.onBlur}
-                  ref={field.ref}
-                  name={field.name}
-                />
-                {t('tasks.form.fixedTime')}
-              </label>
-            )}
-          />
-          {!isFixed ? (
-            <>
-              <Controller
-                name="isRecurring"
-                control={control}
-                render={({ field }) => (
-                  <label className="inline-flex cursor-pointer items-center gap-2">
-                    <Input
-                      type="checkbox"
-                      checked={!!field.value}
-                      onChange={(e) => field.onChange(e.target.checked)}
-                      onBlur={field.onBlur}
-                      ref={field.ref}
-                      name={field.name}
-                    />
-                    {t('tasks.form.recurring')}
-                  </label>
-                )}
-              />
-              <Controller
-                name="allowSplit"
-                control={control}
-                render={({ field }) => (
-                  <label className="inline-flex cursor-pointer items-center gap-2" title={t('tasks.form.allowSplitHint')}>
-                    <Input
-                      type="checkbox"
-                      checked={!!field.value}
-                      onChange={(e) => field.onChange(e.target.checked)}
-                      onBlur={field.onBlur}
-                      ref={field.ref}
-                      name={field.name}
-                    />
-                    {t('tasks.form.allowSplit')}
-                  </label>
-                )}
-              />
-            </>
-          ) : null}
-        </div>
+        ) : null}
 
         {isFixed ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <label htmlFor="task-form-start" className={lbl}>
-                {t('tasks.form.start')} <span className="text-ide-error">*</span>
-              </label>
-              <Controller
-                name="scheduledStartTime"
-                control={control}
-                render={({ field }) => (
-                  <Input
-                    {...field}
-                    id="task-form-start"
-                    type="datetime-local"
-                    size="sm"
-                    error={!!errors.scheduledStartTime}
-                  />
-                )}
-              />
-              {errors.scheduledStartTime ? (
-                <p className="mt-0.5 text-xs text-ide-error">{errors.scheduledStartTime.message}</p>
-              ) : null}
-            </div>
-            <div>
-              <label htmlFor="task-form-end" className={lbl}>
-                {t('tasks.form.end')} <span className="text-ide-error">*</span>
-              </label>
-              <Controller
-                name="scheduledEndTime"
-                control={control}
-                render={({ field }) => (
-                  <Input
-                    {...field}
-                    id="task-form-end"
-                    type="datetime-local"
-                    size="sm"
-                    error={!!errors.scheduledEndTime}
-                  />
-                )}
-              />
-              {errors.scheduledEndTime ? (
-                <p className="mt-0.5 text-xs text-ide-error">{errors.scheduledEndTime.message}</p>
-              ) : null}
-            </div>
-          </div>
+          <FixedSlotFields
+            startValue={scheduledStartTime}
+            endValue={scheduledEndTime}
+            setValue={setValue}
+            startError={errors.scheduledStartTime?.message}
+            endError={errors.scheduledEndTime?.message}
+          />
         ) : (
           <>
             {isRecurring ? (
@@ -628,49 +552,44 @@ const TaskForm: React.FC<TaskFormProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div>
-                <label htmlFor="task-form-from" className={lbl}>
-                  {t('tasks.form.from')}
-                </label>
-                <Controller
-                  name="earliestStartTime"
-                  control={control}
-                  render={({ field }) => (
-                    <Input
-                      {...field}
-                      id="task-form-from"
-                      type="datetime-local"
-                      size="sm"
-                    />
-                  )}
-                />
-              </div>
-              <div>
-                <label htmlFor="task-form-deadline" className={lbl}>
-                  {t('tasks.form.until')}
-                </label>
-                <Controller
-                  name="deadline"
-                  control={control}
-                  render={({ field }) => (
-                    <Input
-                      {...field}
-                      id="task-form-deadline"
-                      type="datetime-local"
-                      size="sm"
-                      error={!!errors.deadline}
-                    />
-                  )}
-                />
-                {errors.deadline ? (
-                  <p className="mt-0.5 text-xs text-ide-error">{errors.deadline.message}</p>
-                ) : null}
-              </div>
+            <div>
+              <span id="task-form-window-label" className={lbl}>
+                {t('tasks.form.dates')}
+              </span>
+              <DateRangeField
+                id="task-form-window"
+                labelledBy="task-form-window-label"
+                start={dateTimeLocalYmd(earliestStartTime) ?? dateTimeLocalYmd(deadline) ?? ''}
+                end={dateTimeLocalYmd(deadline) ?? dateTimeLocalYmd(earliestStartTime) ?? ''}
+                error={!!errors.deadline}
+                emptyLabel={t('tasks.form.dateRangeEmpty')}
+                clearLabel={t('tasks.form.dateRangeClear')}
+                onChange={(start, end) => {
+                  setValue('earliestStartTime', start ? `${start}T00:00` : '', {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  });
+                  setValue('deadline', end ? `${end}T23:59` : '', {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  });
+                }}
+              />
+              {errors.deadline ? (
+                <p className="mt-0.5 text-xs text-ide-error">{errors.deadline.message}</p>
+              ) : null}
+              <p className="mt-1 text-xs text-ide-muted">
+                {t('tasks.form.windowHint', { timeZone })}
+              </p>
             </div>
-            <p className="text-xs text-ide-muted">
-              {t('tasks.form.windowHint', { timeZone })}
-            </p>
+
+            <label
+              className="inline-flex items-center gap-2 text-sm text-ide-muted"
+              title={t('tasks.form.allowSplitHint')}
+            >
+              <Input type="checkbox" checked={!!allowSplit} disabled />
+              {t('tasks.form.allowSplit')}
+            </label>
 
             {showWindowDays ? (
               <div>
@@ -698,48 +617,8 @@ const TaskForm: React.FC<TaskFormProps> = ({
           </>
         )}
 
-        {isFixed ? (
-          <div>
-            <label htmlFor="task-form-fixed-deadline" className={lbl}>
-              {t('tasks.form.deadline')}
-            </label>
-            <Controller
-              name="deadline"
-              control={control}
-              render={({ field }) => (
-                <Input
-                  {...field}
-                  id="task-form-fixed-deadline"
-                  type="datetime-local"
-                  size="sm"
-                />
-              )}
-            />
-          </div>
-        ) : null}
         </>
-        ) : (
-          <div>
-            <label htmlFor="task-form-unscheduled-deadline" className={lbl}>
-              {t('tasks.form.deadline')}
-            </label>
-            <Controller
-              name="deadline"
-              control={control}
-              render={({ field }) => (
-                <Input
-                  {...field}
-                  id="task-form-unscheduled-deadline"
-                  type="datetime-local"
-                  size="sm"
-                />
-              )}
-            />
-            <p className="mt-1 text-xs text-ide-muted">
-              {t('tasks.form.unscheduledDeadlineHint', { timeZone })}
-            </p>
-          </div>
-        )}
+        ) : null}
 
         {showMore ? (
           <GoogleEventSettingsFields

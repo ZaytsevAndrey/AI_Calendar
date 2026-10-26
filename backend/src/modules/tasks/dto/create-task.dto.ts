@@ -15,7 +15,7 @@ import {
   MaxLength,
   Matches,
 } from 'class-validator';
-import { ScheduleState, TaskPriority } from '../entities/task.entity';
+import { ScheduleState, TaskPriority, TaskStatus } from '../entities/task.entity';
 import { TaskEventType } from '../../scheduling/event-type.enum';
 
 export class CreateTaskDto {
@@ -108,6 +108,15 @@ export class CreateTaskDto {
   @IsEnum(TaskPriority)
   @IsOptional()
   priority?: TaskPriority;
+
+  @ApiProperty({
+    enum: TaskStatus,
+    default: TaskStatus.TODO,
+    required: false,
+  })
+  @IsEnum(TaskStatus)
+  @IsOptional()
+  status?: TaskStatus;
 
   @ApiProperty({ required: false })
   @IsDateString()

@@ -272,6 +272,25 @@ export class TasksService {
     before: ScheduleSnapshot,
     task: Task,
   ): Promise<SchedulingConflict | null> {
+    if (
+      task.scheduleState === ScheduleState.RESOLVED &&
+      task.scheduledStartTime &&
+      task.scheduledEndTime
+    ) {
+      const rescheduled = resolvedScheduleChanged(before, task);
+      // Keep the chosen interval and do not shift peers. A real reschedule
+      // then drops the second-layer flag so the next edit uses normal placement.
+      await this.placementStep.place(userId, task.id);
+      if (rescheduled) {
+        this.logger.log(
+          `Resolved "${task.name}" rescheduled to ${new Date(task.scheduledStartTime).toISOString()}–${new Date(task.scheduledEndTime).toISOString()}; clearing resolved`,
+        );
+        task.scheduleState = ScheduleState.NONE;
+        clearParkMetadata(task);
+        await this.tasksRepository.save(task);
+      }
+      return null;
+    }
     const opts = this.placeOptions(before, task);
     if (!opts) return null;
     const plan = await this.placementStep.place(userId, task.id, opts);
@@ -1163,6 +1182,14 @@ type ScheduleSnapshot = {
   eligibleWeekDays: string;
   allowSplit: boolean;
 };
+
+function resolvedScheduleChanged(before: ScheduleSnapshot, task: Task): boolean {
+  return (
+    before.scheduledStartTime !== isoInstant(task.scheduledStartTime) ||
+    before.scheduledEndTime !== isoInstant(task.scheduledEndTime) ||
+    before.estimatedTimeInMinutes !== (task.estimatedTimeInMinutes ?? 0)
+  );
+}
 
 function isoInstant(value: Date | string | null | undefined): string | null {
   if (!value) return null;

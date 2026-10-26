@@ -40,7 +40,6 @@ describe('buildEventPreviewFacts', () => {
         'type',
         'phase',
         'priority',
-        'deadline',
         'allowSplit',
       ]),
     );

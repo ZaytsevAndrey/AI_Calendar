@@ -75,6 +75,13 @@ export type PlaceOptions = {
   deferSeriesDayPark?: boolean;
   /** Restrict hole search / windows to this civil day (YYYY-MM-DD). */
   windowYmd?: string;
+  /**
+   * Calendar drag. The old From/Until does not clip the drop day away.
+   * A free in-phase drop is seated and the window moves onto that day.
+   * A drop that still cannot sit is parked (Problematic / Unscheduled)
+   * instead of being discarded.
+   */
+  drag?: boolean;
   /** Compute a plan only — no slot / park / expand writes. */
   dryRun?: boolean;
   /**
@@ -460,12 +467,39 @@ export class PlacementStepService {
       task.scheduledStartTime &&
       task.scheduledEndTime
     ) {
-      return {
-        outcome: 'seated',
-        start: new Date(task.scheduledStartTime).getTime(),
-        end: new Date(task.scheduledEndTime).getTime(),
-        moves: [],
-      };
+      // A resolved layer is not re-packed. A requested clock still wins, and
+      // that reschedule clears the flag without shifting anyone else.
+      let start = new Date(task.scheduledStartTime).getTime();
+      let end = new Date(task.scheduledEndTime).getTime();
+      if (opts?.preferredStart && Number.isFinite(opts.preferredStart.getTime())) {
+        start = opts.preferredStart.getTime();
+        const minutes = Math.max(
+          1,
+          opts.durationMinutes ??
+            Math.round((end - new Date(task.scheduledStartTime).getTime()) / 60_000),
+        );
+        end = start + minutes * 60_000;
+      }
+      if (!opts?.dryRun) {
+        const moved =
+          Math.abs(start - new Date(task.scheduledStartTime).getTime()) >= 1000 ||
+          Math.abs(end - new Date(task.scheduledEndTime).getTime()) >= 1000;
+        if (moved) {
+          task.scheduledStartTime = new Date(start);
+          task.scheduledEndTime = new Date(end);
+          if (opts?.durationMinutes) {
+            task.estimatedTimeInMinutes = opts.durationMinutes;
+          }
+          task.scheduleState = ScheduleState.NONE;
+          clearParkMetadata(task);
+          await this.taskRepo.save(task);
+          this.logger.log(
+            `Resolved "${task.name}" moved to ${new Date(start).toISOString()}–${new Date(end).toISOString()}; clearing resolved`,
+          );
+        }
+        await this.mirrorResolvedSeat(task);
+      }
+      return { outcome: 'seated', start, end, moves: [] };
     }
 
     // Recurring create/update: plan every horizon day first, then write
@@ -522,6 +556,7 @@ export class PlacementStepService {
       const linked = linkedPhases(owner);
       const windows = windowsFor(linked.length ? linked : phases);
       if (owner.scheduleState === ScheduleState.RESOLVED) {
+        seenFixed.add(owner.id);
         seats.push(seatFrom(slot, owner, 'resolved', start, end, windows, nowMs, timeZone));
         continue;
       }
@@ -595,7 +630,7 @@ export class PlacementStepService {
         id: `fixed:${peer.id}`,
         taskId: peer.id,
         taskName: peer.name,
-        role: 'anchor',
+        role: peer.scheduleState === ScheduleState.RESOLVED ? 'resolved' : 'anchor',
         start,
         end,
         windows: [],
@@ -710,7 +745,7 @@ export class PlacementStepService {
       timeZone,
       settings.wakeTime,
     ).getTime();
-    const span = flexibleSearchSpan(
+    let span = flexibleSearchSpan(
       task,
       claimNotBefore,
       opts?.preferredStart ?? null,
@@ -718,6 +753,14 @@ export class PlacementStepService {
       wake,
       sleep,
     );
+    // A drag is a chosen interval. The stored From/Until must not erase the
+    // drop day's phase windows before we know whether that interval fits.
+    if (opts?.drag && interval && span) {
+      span = {
+        start: Math.min(span.start, interval.start),
+        end: Number.isFinite(span.end) ? Math.max(span.end, interval.end) : span.end,
+      };
+    }
     if (span) {
       claimWindows = clipWindowsToSpan(claimWindows, span.start, span.end);
     }
@@ -735,13 +778,26 @@ export class PlacementStepService {
           opts?.searchHole && opts?.preferredStart
             ? opts.preferredStart.getTime()
             : null,
-        windowExpired,
+        windowExpired: opts?.drag ? false : windowExpired,
         mustFitWindow: task.eventType !== TaskEventType.FIXED,
+        allowResolvedOverlap: opts?.commit === 'preferred',
       },
       seats,
       bufferMinutes: normalizeFixedEventBufferMinutes(
         settings.fixedEventBufferMinutes,
       ),
+    });
+    this.logPreferredMiss({
+      task,
+      opts,
+      timeZone,
+      durationMinutes,
+      windowExpired,
+      interval,
+      span,
+      claimWindows,
+      seats,
+      plan,
     });
 
     if (opts?.dryRun && opts.seriesDay && dayYmd) {
@@ -860,6 +916,14 @@ export class PlacementStepService {
           nowMs,
         },
       );
+    }
+    if (
+      opts?.drag &&
+      plan.outcome === 'seated' &&
+      opts.preferredStart &&
+      Math.abs(plan.start - opts.preferredStart.getTime()) < 1000
+    ) {
+      followWindowToDrop(task, plan.start, plan.end, timeZone);
     }
     await this.persist(task, plan, now, timeZone, opts?.durationMinutes);
     // Horizon days must exist before the HTTP response — otherwise recurring
@@ -1205,6 +1269,7 @@ export class PlacementStepService {
         timeZone,
         'pass1',
         cachedExternalSeats,
+        durationMinutes,
       );
       const hm = hmOf(plan);
       dayPlans.push({ ymd, plan, hm });
@@ -1268,6 +1333,7 @@ export class PlacementStepService {
           timeZone,
           'unify',
           cachedExternalSeats,
+          durationMinutes,
         );
         const retryHm = hmOf(retry);
         if (retryHm === primaryHm) {
@@ -1406,6 +1472,7 @@ export class PlacementStepService {
     if (fresh && firstPrimary.plan.outcome === 'seated') {
       fresh.scheduledStartTime = new Date(firstPrimary.plan.start);
       fresh.scheduledEndTime = new Date(firstPrimary.plan.end);
+      fresh.estimatedTimeInMinutes = durationMinutes;
       fresh.scheduleState = ScheduleState.NONE;
       fresh.isUnscheduled = false;
       fresh.seriesGroupId = groupId;
@@ -1509,9 +1576,12 @@ export class PlacementStepService {
     timeZone: string,
     phase: 'pass1' | 'unify' = 'pass1',
     cachedExternalSeats?: PlacementSeat[],
+    durationMinutes?: number,
   ): Promise<PlacementPlan> {
     const googleOpts =
       cachedExternalSeats != null ? { cachedExternalSeats } : {};
+    const durationOpts =
+      durationMinutes != null ? { durationMinutes } : {};
     if (preferredHm) {
       const preferredStart = new Date(
         localDateTimeIso(ymd, preferredHm, timeZone),
@@ -1524,6 +1594,7 @@ export class PlacementStepService {
         windowYmd: ymd,
         dryRun: true,
         ...googleOpts,
+        ...durationOpts,
       });
       if (
         preferredPlan.outcome === 'seated' &&
@@ -1546,6 +1617,7 @@ export class PlacementStepService {
         dryRun: true,
         deferSeriesDayPark: true,
         ...googleOpts,
+        ...durationOpts,
       });
     }
     this.logger.log(
@@ -1558,6 +1630,7 @@ export class PlacementStepService {
       dryRun: true,
       deferSeriesDayPark: true,
       ...googleOpts,
+      ...durationOpts,
     });
   }
 
@@ -1894,6 +1967,17 @@ export class PlacementStepService {
         ? siblings.find((series) => series.id === task.parentSeriesId && clockMatch(series))
         : undefined) ?? siblings.find(clockMatch);
     if (!match) return null;
+    // A resize keeps the clock and changes the length. Absorbing it would
+    // throw away that length and restore the series duration.
+    if (
+      !durationsMatch(
+        task.scheduledStartTime,
+        task.scheduledEndTime,
+        seriesBlockMinutes(match),
+      )
+    ) {
+      return null;
+    }
 
     match.skippedOccurrenceYmds = removeSkippedOccurrenceYmd(
       match.skippedOccurrenceYmds,
@@ -2262,6 +2346,127 @@ export class PlacementStepService {
     }
   }
 
+  /**
+   * A preferred commit that missed the drop is reported to the user as
+   * "That time is already taken." Log the real plan reason before that
+   * collapse: phase window, deadline span, or an actual overlap.
+   */
+  private logPreferredMiss(input: {
+    task: Task;
+    opts?: PlaceOptions;
+    timeZone: string;
+    durationMinutes: number;
+    windowExpired: boolean;
+    interval: MsInterval | null;
+    span: { start: number; end: number } | null;
+    claimWindows: MsInterval[];
+    seats: PlacementSeat[];
+    plan: PlacementPlan;
+  }): void {
+    const wanted = input.opts?.preferredStart?.getTime();
+    if (
+      input.opts?.commit !== 'preferred' ||
+      wanted == null ||
+      !Number.isFinite(wanted)
+    ) {
+      return;
+    }
+    if (
+      input.plan.outcome === 'seated' &&
+      Math.abs(input.plan.start - wanted) < 1000
+    ) {
+      return;
+    }
+    const { task, timeZone, durationMinutes, span, claimWindows, seats, plan } =
+      input;
+    const hm = (ms: number) => {
+      if (!Number.isFinite(ms)) return 'open';
+      const iso = new Date(ms).toISOString();
+      return `${localYmd(iso, timeZone)} ${normalizeClockHm(localHm(iso, timeZone))}`;
+    };
+    const range = (start: number, end: number) => `${hm(start)}–${hm(end)}`;
+    const dropEnd = wanted + durationMinutes * 60_000;
+    const fits =
+      !!input.interval &&
+      claimWindows.some(
+        (window) =>
+          input.interval!.start >= window.start &&
+          input.interval!.end <= window.end,
+      );
+    const overlaps = seats
+      .filter(
+        (seat) =>
+          seat.taskId !== task.id && seat.start < dropEnd && wanted < seat.end,
+      )
+      .map((seat) => `${seat.role}:${seat.taskName}@${range(seat.start, seat.end)}`)
+      .join(' | ');
+    const windows = claimWindows.map((window) => range(window.start, window.end)).join(' | ');
+    const phases = linkedPhases(task)
+      .map(
+        (phase) =>
+          `${phase.name ?? phase.id ?? '?'} ${phase.startTime}-${phase.endTime}`,
+      )
+      .join(', ');
+    this.logger.warn(
+      `[preferred-miss] task=${task.id} "${task.name}" type=${task.eventType} ` +
+        `state=${task.scheduleState} drop=${range(wanted, dropEnd)} ` +
+        `utc=${new Date(wanted).toISOString()} duration=${durationMinutes}m ` +
+        `earliest=${task.earliestStartTime ? new Date(task.earliestStartTime).toISOString() : 'none'} ` +
+        `deadline=${task.deadline ? new Date(task.deadline).toISOString() : 'none'} ` +
+        `span=${span ? range(span.start, span.end) : 'none'} ` +
+        `windowExpired=${input.windowExpired} phases=[${phases || 'none'}] ` +
+        `windows=[${windows || 'none'}] ` +
+        `interval=${input.interval ? range(input.interval.start, input.interval.end) : 'none'} ` +
+        `fitsWindow=${fits} overlaps=[${overlaps || 'none'}] ` +
+        `plan=${JSON.stringify(summarizePlan(plan, timeZone))} ` +
+        `persisted=${
+          input.opts?.drag &&
+          (plan.outcome === 'problematic' || plan.outcome === 'unscheduled')
+            ? 'yes'
+            : 'no'
+        }`,
+    );
+  }
+
+  /** Point the resolved layer's open slot at the task clock without clearing Resolved. */
+  private async mirrorResolvedSeat(task: Task): Promise<void> {
+    if (!task.scheduledStartTime || !task.scheduledEndTime) return;
+    const start = new Date(task.scheduledStartTime);
+    const end = new Date(task.scheduledEndTime);
+    const now = Date.now();
+    const rows = await this.scheduledRepo.find({ where: { taskId: task.id } });
+    const open = rows.filter(
+      (row) => new Date(row.scheduledEndTime).getTime() > now,
+    );
+    const matches = (row: ScheduledTask) =>
+      Math.abs(new Date(row.scheduledStartTime).getTime() - start.getTime()) <
+        1000 &&
+      Math.abs(new Date(row.scheduledEndTime).getTime() - end.getTime()) < 1000;
+    if (open.length === 1 && matches(open[0])) return;
+    const previous =
+      open.length === 1
+        ? `${new Date(open[0].scheduledStartTime).toISOString()}–${new Date(open[0].scheduledEndTime).toISOString()}`
+        : `${open.length} open slots`;
+    this.logger.log(
+      `Resolved "${task.name}" calendar slot ${previous} -> ${start.toISOString()}–${end.toISOString()}`,
+    );
+    if (open.length === 1) {
+      open[0].scheduledStartTime = start;
+      open[0].scheduledEndTime = end;
+      await this.scheduledRepo.save(open[0]);
+      return;
+    }
+    if (open.length) await this.scheduledRepo.remove(open);
+    await this.scheduledRepo.save(
+      this.scheduledRepo.create({
+        taskId: task.id,
+        scheduledStartTime: start,
+        scheduledEndTime: end,
+        isAutoGenerated: true,
+      }),
+    );
+  }
+
   private async deleteOpenSlots(
     slots: Repository<ScheduledTask>,
     taskId: string,
@@ -2442,8 +2647,64 @@ function seatFrom(
 function shouldWritePlan(plan: PlacementPlan, opts?: PlaceOptions): boolean {
   if (plan.outcome === 'conflict') return false;
   if (opts?.commit !== 'preferred') return true;
+  if (
+    opts.drag &&
+    (plan.outcome === 'problematic' || plan.outcome === 'unscheduled')
+  ) {
+    return true;
+  }
   if (plan.outcome !== 'seated' || !opts.preferredStart) return false;
   return Math.abs(plan.start - opts.preferredStart.getTime()) < 1000;
+}
+
+/**
+ * A drag that landed outside From/Until keeps the same local clocks and
+ * moves them onto the drop day. Clocks that still miss the interval expand
+ * to cover it, so the next placement does not pull the slot back.
+ */
+export function followWindowToDrop(
+  task: Task,
+  start: number,
+  end: number,
+  timeZone: string,
+): void {
+  if (task.isRecurring || task.eventType === TaskEventType.FIXED) return;
+  const earliestMs = task.earliestStartTime
+    ? new Date(task.earliestStartTime).getTime()
+    : null;
+  const deadlineMs = task.deadline ? new Date(task.deadline).getTime() : null;
+  if (earliestMs == null && deadlineMs == null) return;
+  const coversStart = earliestMs == null || start >= earliestMs;
+  const coversEnd = deadlineMs == null || end <= deadlineMs;
+  if (coversStart && coversEnd) return;
+
+  const dropYmd = localYmd(new Date(start).toISOString(), timeZone);
+  const anchorMs = earliestMs ?? deadlineMs!;
+  const shift = ymdDayOffset(
+    localYmd(new Date(anchorMs).toISOString(), timeZone),
+    dropYmd,
+  );
+  const shiftInstant = (ms: number): Date => {
+    const ymd = addDaysToYmd(localYmd(new Date(ms).toISOString(), timeZone), shift);
+    const hm = normalizeClockHm(localHm(new Date(ms).toISOString(), timeZone));
+    return new Date(localDateTimeIso(ymd, hm, timeZone));
+  };
+  if (earliestMs != null) task.earliestStartTime = shiftInstant(earliestMs);
+  if (deadlineMs != null) task.deadline = shiftInstant(deadlineMs);
+  if (task.earliestStartTime && start < new Date(task.earliestStartTime).getTime()) {
+    task.earliestStartTime = new Date(start);
+  }
+  if (task.deadline && end > new Date(task.deadline).getTime()) {
+    task.deadline = new Date(end);
+  }
+}
+
+function ymdDayOffset(fromYmd: string, toYmd: string): number {
+  const [fromYear, fromMonth, fromDay] = fromYmd.split('-').map(Number);
+  const [toYear, toMonth, toDay] = toYmd.split('-').map(Number);
+  const from = Date.UTC(fromYear, fromMonth - 1, fromDay);
+  const to = Date.UTC(toYear, toMonth - 1, toDay);
+  return Math.round((to - from) / 86_400_000);
 }
 
 /** Keep only phase windows that overlap the given civil day. */
@@ -2491,6 +2752,35 @@ function claimInterval(
       : null;
   if (start == null || !Number.isFinite(start)) return null;
   return { start, end: start + durationMs };
+}
+
+/** True when a detached block is still the series length, so it can rejoin. */
+export function durationsMatch(
+  start: Date | string,
+  end: Date | string,
+  seriesMinutes: number,
+): boolean {
+  const minutes = Math.round(
+    (new Date(end).getTime() - new Date(start).getTime()) / 60_000,
+  );
+  if (!Number.isFinite(minutes) || minutes < 1) return false;
+  return Math.abs(minutes - Math.max(1, Math.round(seriesMinutes))) < 1;
+}
+
+export function seriesBlockMinutes(series: {
+  scheduledStartTime?: Date | string | null;
+  scheduledEndTime?: Date | string | null;
+  estimatedTimeInMinutes?: number | null;
+}): number {
+  if (series.scheduledStartTime && series.scheduledEndTime) {
+    const minutes = Math.round(
+      (new Date(series.scheduledEndTime).getTime() -
+        new Date(series.scheduledStartTime).getTime()) /
+        60_000,
+    );
+    if (minutes >= 1) return minutes;
+  }
+  return Math.max(1, series.estimatedTimeInMinutes || 30);
 }
 
 function isWindowExpired(task: Task, nowMs: number): boolean {

@@ -19,6 +19,7 @@ export const taskFormSchema = z
     recurrenceWeekDays: z.array(z.number().int().min(0).max(6)).optional(),
     allowSplit: z.boolean().optional(),
     priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
+    status: z.enum(['todo', 'in_progress', 'completed', 'canceled']).optional(),
     deadline: z.string().optional(),
     earliestStartTime: z.string().optional(),
     eligibleWeekDays: z.array(z.number().int().min(0).max(6)).optional(),

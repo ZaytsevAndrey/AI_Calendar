@@ -57,6 +57,11 @@ export type PlacementClaim = {
   windowExpired?: boolean;
   /** Fixed clocks may sit outside a phase window. */
   mustFitWindow?: boolean;
+  /**
+   * Explicit drop. A resolved layer may share this interval; it is not a
+   * reason to slide the claimant onto another hole.
+   */
+  allowResolvedOverlap?: boolean;
 };
 
 export type PlacementMove =
@@ -652,9 +657,9 @@ export function planPlacement(input: {
     return { outcome: 'problematic', reason: 'phase_full' };
   }
 
-  const resolvedHit = others.some(
-    (seat) => seat.role === 'resolved' && overlaps(seat, interval),
-  );
+  const resolvedHit =
+    !claim.allowResolvedOverlap &&
+    others.some((seat) => seat.role === 'resolved' && overlaps(seat, interval));
   if (resolvedHit) {
     const hole = findHole({
       durationMinutes: claim.durationMinutes,

@@ -85,6 +85,20 @@ describe('applyEventDrag', () => {
     });
   });
 
+  it('resizes from the grabbed edge, not from the pointer itself', () => {
+    const next = applyEventDrag({
+      mode: 'resize-end',
+      startMin: 9 * 60,
+      endMin: 10 * 60,
+      pointerMin: 11 * 60,
+      grabOffsetMin: 30,
+      ...bounds,
+      dayIndex: 0,
+      pointerDayIndex: 0,
+    });
+    expect(next).toEqual({ startMin: 9 * 60, endMin: 10 * 60 + 30, dayIndex: 0 });
+  });
+
   it('resizes the end and clamps to the visible day', () => {
     const next = applyEventDrag({
       mode: 'resize-end',

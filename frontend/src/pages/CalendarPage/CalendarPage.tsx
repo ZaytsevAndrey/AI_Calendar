@@ -687,11 +687,23 @@ const CalendarPage: React.FC = () => {
                 },
             );
             const active = ensureProgress();
-            const { recurringMoved } = await settleReplanJob(moved.jobId, (stage) => {
-                active.setStage(stage);
-            });
+            const { recurringMoved, conflicts, parked } = await settleReplanJob(
+                moved.jobId,
+                (stage) => {
+                    active.setStage(stage);
+                },
+            );
             dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));
             dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+            if (conflicts.length) {
+                undoPatches.forEach((patch) => patch.undo());
+                active.dismiss();
+                return;
+            }
+            if (parked) {
+                active.finish();
+                return;
+            }
             active.finish(formatDateTimeRange(startIso, endIso) ?? undefined);
             if (recurringMoved.length && !event.recurringEventId) {
                 showSuccessToast({

@@ -6,22 +6,25 @@ alwaysApply: false
 
 # Shared form controls
 
-Before adding a button, icon button, text field, select, textarea, or time field, read `frontend/src/ui` and use the shared component. Do not add a raw `<button>`, `<input>`, `<select>`, or `<textarea>` with one-off classes for those jobs.
+Before adding a button, icon button, text field, select, textarea, date picker, or time field, read `frontend/src/ui` and use the shared component. Do not add a raw `<button>`, `<input>`, `<select>`, or `<textarea>` with one-off classes for those jobs.
 
 | Need | Use |
 | --- | --- |
 | Button | `ui/Button` — `variant`: `primary`, `secondary`, `danger`, `ghost`. `pressed` for a toggle. `icon` is a Lucide icon before the label |
 | Icon-only button | `ui/IconButton` — `label` is the accessible name |
 | Label, error, hint | `ui/Field` |
-| Text, number, date, checkbox, color | `ui/Input` |
+| Text, number, checkbox, color | `ui/Input` |
 | Select | `ui/Select` |
 | Multiline text | `ui/Textarea` |
+| One civil day (`YYYY-MM-DD`) | `ui/DatePicker` |
+| Inclusive civil-day range | `ui/DateRangeField` |
 | Clock time (`HH:mm`) | `ui/TimeField` |
+| Clock range (`HH:mm`–`HH:mm`) | `ui/TimeRangeField` |
 | Dialog | `ui/Modal` |
 | Spinner | `ui/Spinner` |
 
 `size` is `sm` (32px), `md` (44px, default), or `lg` (48px). Per breakpoint: `{ base: 'sm', md: 'md' }`. Dialog footer actions use `dialogButtonSize` from `ui/controlSize`.
 
-`Input` draws the icon for email, search, date, and date-time, and a show/hide control for password. `TimeField` draws a clock. `Select` draws a chevron. Do not add a second icon for those.
+`Input` draws the icon for email, search, and a show/hide control for password. `DatePicker` and `DateRangeField` draw a calendar. `TimeField` and `TimeRangeField` draw a clock. `Select` draws a chevron. Do not add a second icon for those. A native `datetime-local` input is not a date or time control.
 
 If a control needs a new variant, extend the shared component. A raw element is for UI that is not in this list: calendar cells, chips, color swatches, menu rows.

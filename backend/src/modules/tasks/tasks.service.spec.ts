@@ -709,6 +709,56 @@ describe('TasksService', () => {
       allowSplit: false,
     };
 
+    it('moves the calendar slot when a resolved task is resized', async () => {
+      lastSaved = {
+        ...seated,
+        eventType: TaskEventType.FIXED,
+        scheduleState: 'resolved',
+        parentSeriesId: 'series-1',
+        problematicDay: '2026-10-08',
+      };
+
+      await service.update('task-1', 'user-1', {
+        scheduledStartTime: '2026-10-08T12:00:00.000Z',
+        scheduledEndTime: '2026-10-08T14:00:00.000Z',
+        estimatedTimeInMinutes: 120,
+      } as any);
+      await flushMutationFollowUp();
+
+      expect(lastSaved?.scheduleState).toBe('none');
+      expect(lastSaved?.parentSeriesId).toBeNull();
+      expect(lastSaved?.problematicDay).toBeNull();
+      expect(lastSaved?.scheduledStartTime).toEqual(
+        new Date('2026-10-08T12:00:00.000Z'),
+      );
+      expect(lastSaved?.scheduledEndTime).toEqual(
+        new Date('2026-10-08T14:00:00.000Z'),
+      );
+      expect(placementStep.place).toHaveBeenCalledWith('user-1', 'task-1');
+      expect(pendingGoogleWrites.syncTask).toHaveBeenCalledWith(
+        'user-1',
+        'task-1',
+      );
+    });
+
+    it('keeps resolved when a resolved task is renamed', async () => {
+      lastSaved = {
+        ...seated,
+        eventType: TaskEventType.FIXED,
+        scheduleState: 'resolved',
+        problematicDay: '2026-10-08',
+      };
+
+      await service.update('task-1', 'user-1', {
+        name: 'Write the brief',
+      } as any);
+      await flushMutationFollowUp();
+
+      expect(lastSaved?.scheduleState).toBe('resolved');
+      expect(lastSaved?.problematicDay).toBe('2026-10-08');
+      expect(placementStep.place).toHaveBeenCalledWith('user-1', 'task-1');
+    });
+
     it('updates the same Google event for a cosmetic save and does not place', async () => {
       lastSaved = { ...seated };
       googleCalendarService.checkConnection.mockResolvedValue({ connected: true });

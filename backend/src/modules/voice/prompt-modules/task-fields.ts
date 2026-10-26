@@ -11,7 +11,7 @@ export const TASK_FIELDS_MODULE = `Fields. A key you omit is left alone. On an u
 - eventType: "fixed" when the task is tied to a start and an end. "admin" when it may move. Otherwise omit it.
 - estimatedTimeInMinutes: how long the task takes. A placement window is not a length. Create uses the spoken length, or the default duration when they gave none and the task is an ordinary one. Update sets this only when they said the length changed.
 - priority: low, medium, high, or urgent, only when they named it. Create uses medium when they named none. Update omits it when they named none.
-- deadline: when the task must be done by, or the end of the span when it may be done. "By Friday", "until evening", and "by end of day" are a deadline. The word "deadline" is not required. A day and no clock is Sleep that day.
+- deadline: the end of a flexible or recurring placement window (until). It is not a separate due date. Leave it null on a fixed task and on an unscheduled task. "By Friday", "until evening", and "by end of day" are this window end on a flexible task. A day and no clock is Sleep that day.
 - earliestStartTime: the moment it must not start before. "Not before 17" and "after 18" are this field, not a deadline.
 - scheduledStartTime and scheduledEndTime: a committed start and end. A clock and no end keeps the current duration: set the start and leave the end null on an update. Create fills the end from the duration.
 - isUnscheduled: true when there is no day, clock, window, or repeat. Clearing the time on an update sets scheduledStartTime, scheduledEndTime, earliestStartTime, and deadline to null.

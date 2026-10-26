@@ -1462,6 +1462,7 @@ export class GoogleCalendarService {
         eventId,
         requestBody: body,
       });
+      this.forgetGoogleDisplayCache(userId);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Google Calendar time patch failed: ${msg}`);

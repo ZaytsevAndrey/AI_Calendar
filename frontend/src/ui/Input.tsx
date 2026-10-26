@@ -68,7 +68,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
                 disabled={disabled}
                 data-ui-control=""
                 className={cx(
-                    'h-4 w-4 shrink-0 cursor-pointer rounded border-ide-border accent-ide-accentBlue',
+                    'h-4 w-4 shrink-0 cursor-pointer rounded border-ide-border accent-ide-accentBlue disabled:cursor-not-allowed disabled:opacity-50',
                     'transition duration-150 motion-reduce:transition-none motion-safe:active:scale-90',
                     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link',
                     className,

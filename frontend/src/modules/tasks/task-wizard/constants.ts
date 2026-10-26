@@ -11,21 +11,21 @@ export type TaskPreset = {
 
 export const TASK_PRESETS: TaskPreset[] = [
   {
-    id: 'flexible',
-    get label() {
-      return i18n.t('tasks.preset.flexible');
-    },
-    get hint() {
-      return i18n.t('tasks.preset.flexibleHint');
-    },
-  },
-  {
     id: 'fixed',
     get label() {
       return i18n.t('tasks.preset.fixed');
     },
     get hint() {
       return i18n.t('tasks.preset.fixedHint');
+    },
+  },
+  {
+    id: 'flexible',
+    get label() {
+      return i18n.t('tasks.preset.flexible');
+    },
+    get hint() {
+      return i18n.t('tasks.preset.flexibleHint');
     },
   },
   {
@@ -44,6 +44,33 @@ export const TASK_PRESETS: TaskPreset[] = [
     },
     get hint() {
       return i18n.t('tasks.preset.unscheduledHint');
+    },
+  },
+];
+
+export const STATUS_OPTIONS = [
+  {
+    value: 'todo' as const,
+    get label() {
+      return i18n.t('tasks.status.todo');
+    },
+  },
+  {
+    value: 'in_progress' as const,
+    get label() {
+      return i18n.t('tasks.status.inProgress');
+    },
+  },
+  {
+    value: 'completed' as const,
+    get label() {
+      return i18n.t('tasks.status.completed');
+    },
+  },
+  {
+    value: 'canceled' as const,
+    get label() {
+      return i18n.t('tasks.status.canceled');
     },
   },
 ];
@@ -181,6 +208,7 @@ export function presetPatch(
       scheduledStartTime: '',
       scheduledEndTime: '',
       earliestStartTime: '',
+      deadline: '',
       eligibleWeekDays: [],
     };
   }
@@ -191,6 +219,9 @@ export function presetPatch(
       isRecurring: false,
       allowSplit: false,
       preferredStartTime: '',
+      earliestStartTime: '',
+      deadline: '',
+      phaseId: '',
       recurrencePattern: undefined,
       recurrenceWeekDays: [],
     };
@@ -225,16 +256,7 @@ export function matchPreset(
 ): TaskPresetId | null {
   if (values.isUnscheduled) return 'unscheduled';
   if (values.isFixed && !values.isRecurring) return 'fixed';
-  if (
-    !values.isFixed &&
-    values.isRecurring &&
-    values.allowSplit !== false &&
-    values.recurrencePattern === 'DAILY'
-  ) {
-    return 'recurring';
-  }
-  if (!values.isFixed && !values.isRecurring && values.allowSplit !== false) {
-    return 'flexible';
-  }
+  if (!values.isFixed && values.isRecurring) return 'recurring';
+  if (!values.isFixed && !values.isRecurring) return 'flexible';
   return null;
 }

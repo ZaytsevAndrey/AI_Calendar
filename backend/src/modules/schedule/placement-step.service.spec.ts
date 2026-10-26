@@ -1,7 +1,12 @@
-import { PlacementStepService } from './placement-step.service';
+import {
+  durationsMatch,
+  followWindowToDrop,
+  PlacementStepService,
+  seriesBlockMinutes,
+} from './placement-step.service';
 import { TaskEventType } from '../scheduling/event-type.enum';
-import { ScheduleState, TaskStatus } from '../tasks/entities/task.entity';
-import { localDateTimeIso } from '../voice/voice-local-date.util';
+import { ScheduleState, Task, TaskStatus } from '../tasks/entities/task.entity';
+import { addDaysToYmd, localDateTimeIso } from '../voice/voice-local-date.util';
 
 const TZ = 'UTC';
 
@@ -115,6 +120,7 @@ describe('PlacementStepService.place (dryRun crowded day)', () => {
       find: jest.fn().mockResolvedValue([]),
       save: jest.fn(async (row) => row),
       remove: jest.fn(),
+      create: jest.fn((row) => row),
     };
 
     const externalBusy = {
@@ -143,7 +149,7 @@ describe('PlacementStepService.place (dryRun crowded day)', () => {
       externalBusy as never,
     );
 
-    return { service, externalBusy, taskRepo, phase };
+    return { service, externalBusy, taskRepo, scheduledRepo, phase };
   }
 
   it('PV01 previews an unsaved draft task without loading it', async () => {
@@ -630,5 +636,217 @@ describe('PlacementStepService.place (dryRun crowded day)', () => {
     expect(plan.outcome).toBe('seated');
     if (plan.outcome !== 'seated') return;
     expect(plan.start).toBe(wall('16:00').getTime());
+  });
+
+  it('moves a resolved layer slot to the dragged interval', async () => {
+    const { service, scheduledRepo } = build({
+      claim: {
+        eventType: TaskEventType.FIXED,
+        scheduleState: ScheduleState.RESOLVED,
+        scheduledStartTime: wall('21:15'),
+        scheduledEndTime: wall('23:00'),
+        estimatedTimeInMinutes: 105,
+      },
+      linked: false,
+    });
+    const slot = {
+      id: 'slot-1',
+      taskId: 'claim-1',
+      scheduledStartTime: wall('18:00'),
+      scheduledEndTime: wall('23:00'),
+      googleEventId: 'g1',
+    };
+    scheduledRepo.find.mockResolvedValue([slot]);
+
+    const plan = await service.place('user-1', 'claim-1');
+
+    expect(plan).toMatchObject({
+      outcome: 'seated',
+      start: wall('21:15').getTime(),
+      end: wall('23:00').getTime(),
+    });
+    expect(slot.scheduledStartTime).toEqual(wall('21:15'));
+    expect(slot.scheduledEndTime).toEqual(wall('23:00'));
+    expect(slot.googleEventId).toBe('g1');
+    expect(scheduledRepo.save).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears resolved when a resolved task is placed at a new clock', async () => {
+    const { service, taskRepo, scheduledRepo } = build({
+      claim: {
+        eventType: TaskEventType.FIXED,
+        scheduleState: ScheduleState.RESOLVED,
+        scheduledStartTime: wall('18:00'),
+        scheduledEndTime: wall('23:00'),
+        estimatedTimeInMinutes: 300,
+        parentSeriesId: 'series-1',
+      },
+      linked: false,
+    });
+    scheduledRepo.find.mockResolvedValue([
+      {
+        id: 'slot-1',
+        taskId: 'claim-1',
+        scheduledStartTime: wall('18:00'),
+        scheduledEndTime: wall('23:00'),
+        googleEventId: 'g1',
+      },
+    ]);
+
+    const plan = await service.place('user-1', 'claim-1', {
+      preferredStart: wall('21:15'),
+      durationMinutes: 105,
+    });
+
+    expect(plan).toMatchObject({
+      outcome: 'seated',
+      start: wall('21:15').getTime(),
+      end: wall('23:00').getTime(),
+    });
+    const saved = taskRepo.save.mock.calls.at(-1)?.[0] as {
+      scheduleState: string;
+      parentSeriesId: string | null;
+      estimatedTimeInMinutes: number;
+    };
+    expect(saved.scheduleState).toBe(ScheduleState.NONE);
+    expect(saved.parentSeriesId).toBeNull();
+    expect(saved.estimatedTimeInMinutes).toBe(105);
+  });
+
+  it('lets an explicit drop overlap a resolved layer', async () => {
+    const { service, taskRepo } = build({
+      claim: {
+        estimatedTimeInMinutes: 60,
+        scheduledStartTime: wall('18:00'),
+        scheduledEndTime: wall('19:00'),
+      },
+      attachPhase: false,
+      wakeTime: '09:00',
+      sleepTime: '23:00',
+      peerSlots: [
+        {
+          id: 'layer',
+          start: '16:00',
+          end: '22:00',
+          task: {
+            id: 'layer-task',
+            name: 'Layer',
+            eventType: TaskEventType.FIXED,
+            scheduleState: ScheduleState.RESOLVED,
+          },
+        },
+      ],
+      linked: false,
+    });
+    taskRepo.find.mockResolvedValue([
+      {
+        id: 'layer-task',
+        name: 'Layer',
+        eventType: TaskEventType.FIXED,
+        scheduleState: ScheduleState.RESOLVED,
+        status: TaskStatus.TODO,
+        scheduledStartTime: wall('16:00'),
+        scheduledEndTime: wall('22:00'),
+        isUnscheduled: false,
+      },
+    ]);
+
+    const dropped = await service.place('user-1', 'claim-1', {
+      dryRun: true,
+      commit: 'preferred',
+      preferredStart: wall('20:00'),
+      durationMinutes: 60,
+    });
+    expect(dropped).toMatchObject({
+      outcome: 'seated',
+      start: wall('20:00').getTime(),
+    });
+
+    const searched = await service.place('user-1', 'claim-1', {
+      dryRun: true,
+      preferredStart: wall('20:00'),
+      durationMinutes: 60,
+    });
+    expect(searched.outcome).toBe('seated');
+    if (searched.outcome !== 'seated') return;
+    expect(searched.start).not.toBe(wall('20:00').getTime());
+  });
+
+  it('seats a drag on a later day that the old From/Until does not cover', async () => {
+    const later = addDaysToYmd(ymd, 1);
+    const laterAt = (hm: string) => new Date(localDateTimeIso(later, hm, TZ));
+    const { service } = build({
+      claim: {
+        estimatedTimeInMinutes: 60,
+        earliestStartTime: wall('09:00'),
+        deadline: wall('12:00'),
+        scheduledStartTime: wall('10:00'),
+        scheduledEndTime: wall('11:00'),
+      },
+      linked: false,
+    });
+
+    const dropped = await service.place('user-1', 'claim-1', {
+      dryRun: true,
+      drag: true,
+      commit: 'preferred',
+      preferredStart: laterAt('10:00'),
+      durationMinutes: 60,
+    });
+    expect(dropped).toMatchObject({
+      outcome: 'seated',
+      start: laterAt('10:00').getTime(),
+    });
+
+    const kept = await service.place('user-1', 'claim-1', {
+      dryRun: true,
+      commit: 'preferred',
+      preferredStart: laterAt('10:00'),
+      durationMinutes: 60,
+    });
+    expect(kept).toMatchObject({ outcome: 'problematic', reason: 'phase_full' });
+  });
+});
+
+describe('followWindowToDrop', () => {
+  const ymd = firstFreeMorningYmd();
+  const wall = (hm: string) => new Date(localDateTimeIso(ymd, hm, TZ));
+
+  it('shifts From/Until onto the drop day and keeps the local clocks', () => {
+    const from = addDaysToYmd(ymd, -2);
+    const task = {
+      eventType: TaskEventType.ADMIN,
+      isRecurring: false,
+      earliestStartTime: new Date(localDateTimeIso(from, '14:30', TZ)),
+      deadline: new Date(localDateTimeIso(from, '23:59', TZ)),
+    } as Task;
+    followWindowToDrop(task, wall('22:45').getTime(), wall('23:45').getTime(), TZ);
+    expect(task.earliestStartTime?.toISOString()).toBe(wall('14:30').toISOString());
+    expect(task.deadline?.toISOString()).toBe(wall('23:59').toISOString());
+  });
+});
+
+describe('series re-merge duration', () => {
+  it('keeps a resized block from rejoining the series length', () => {
+    const series = {
+      scheduledStartTime: '2026-10-24T09:00:00.000Z',
+      scheduledEndTime: '2026-10-24T10:00:00.000Z',
+      estimatedTimeInMinutes: 60,
+    };
+    expect(seriesBlockMinutes(series)).toBe(60);
+    expect(
+      durationsMatch(
+        '2026-10-24T09:00:00.000Z',
+        '2026-10-24T10:00:00.000Z',
+        seriesBlockMinutes(series),
+      ),
+    ).toBe(true);
+    expect(
+      durationsMatch(
+        '2026-10-24T09:00:00.000Z',
+        '2026-10-24T11:00:00.000Z',
+        seriesBlockMinutes(series),
+      ),
+    ).toBe(false);
   });
 });

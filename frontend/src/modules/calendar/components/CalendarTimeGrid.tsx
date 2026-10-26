@@ -265,14 +265,13 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
     if (!col) return;
     const rect = col.getBoundingClientRect();
     const pointerMin = pointerMinutes(e.clientY, rect.top, rect.height, dayStartMin, daySpanMin);
-    const blockTop = ((place.startMin - dayStartMin) / daySpanMin) * rect.height;
-    const grabOffsetMin = pointerMin - (dayStartMin + (blockTop / rect.height) * daySpanMin);
+    const anchorMin = mode === 'resize-end' ? place.endMin : place.startMin;
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     bindDrag(
       event,
       mode,
       place,
-      mode === 'move' ? grabOffsetMin : 0,
+      pointerMin - anchorMin,
       e.clientX,
       e.clientY,
     );

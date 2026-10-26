@@ -649,6 +649,20 @@ export class PendingGoogleWriteService {
     const start =
       anchor?.scheduledStartTime ?? task.scheduledStartTime ?? null;
     const end = anchor?.scheduledEndTime ?? task.scheduledEndTime ?? null;
+    if (
+      task.scheduledStartTime &&
+      task.scheduledEndTime &&
+      start &&
+      end &&
+      (Math.abs(new Date(start).getTime() - new Date(task.scheduledStartTime).getTime()) >
+        1000 ||
+        Math.abs(new Date(end).getTime() - new Date(task.scheduledEndTime).getTime()) >
+          1000)
+    ) {
+      this.logger.warn(
+        `Google sync for "${task.name}" publishes slot ${new Date(start).toISOString()}–${new Date(end).toISOString()} instead of task ${new Date(task.scheduledStartTime).toISOString()}–${new Date(task.scheduledEndTime).toISOString()}`,
+      );
+    }
     const payload: Record<string, unknown> = {
       summary: task.name,
       description: task.description || undefined,

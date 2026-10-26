@@ -54,22 +54,40 @@ export function mutationStageFromJob(
 }
 
 /** Poll a mutation/replan job: progress stages + conflict sheet + recurring moves. */
+export function parkedFromJobResult(
+  result: unknown,
+): 'problematic' | 'unscheduled' | null {
+  if (!result || typeof result !== 'object') return null;
+  const parked = (result as { parked?: unknown }).parked;
+  if (parked === 'problematic' || parked === 'unscheduled') return parked;
+  return null;
+}
+
 export async function settleReplanJob(
   jobId: string | null | undefined,
   onStage?: (stage: MutationStage) => void,
-): Promise<{ recurringMoved: string[] }> {
+): Promise<{
+  recurringMoved: string[];
+  conflicts: SchedulingConflictDTO[];
+  parked: 'problematic' | 'unscheduled' | null;
+}> {
   if (!jobId) {
     notifyScheduleJobSettled();
-    return { recurringMoved: [] };
+    return { recurringMoved: [], conflicts: [], parked: null };
   }
   try {
     const job = await waitForScheduleJob(jobId, 120_000, (snapshot) => {
       const stage = mutationStageFromJob(snapshot);
       if (stage) onStage?.(stage);
     });
-    emitScheduleConflicts(conflictsFromJobResult(job.result));
+    const conflicts = conflictsFromJobResult(job.result);
+    emitScheduleConflicts(conflicts);
     onStage?.('done');
-    return { recurringMoved: recurringMovedNamesFromJobResult(job.result) };
+    return {
+      recurringMoved: recurringMovedNamesFromJobResult(job.result),
+      conflicts,
+      parked: parkedFromJobResult(job.result),
+    };
   } catch (err) {
     onStage?.('error');
     notifyScheduleJobSettled();

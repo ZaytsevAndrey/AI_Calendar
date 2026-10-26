@@ -1,7 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  AlarmClock,
   CalendarClock,
   CalendarPlus,
   Check,
@@ -22,7 +21,6 @@ import {
   formatSeriesSpanSummary,
 } from '../../../utils/formatDate';
 import { buildUnscheduledIconMeta } from '../unscheduledCardMeta';
-import { deadlineTone } from '../utils/deadlineTone';
 import type { SeriesMemberKind } from '../utils/groupTasksBySeriesGroup';
 
 interface EventItemProps {
@@ -54,20 +52,7 @@ const statusPill = {
   canceled: 'border-ide-border bg-white/5 text-ide-muted',
 };
 
-const tonePill = {
-  overdue: 'border-ide-error/50 bg-ide-error/20 text-ide-error',
-  today: 'border-ide-warn/50 bg-ide-warn/20 text-ide-warn',
-  soon: 'border-ide-warn/40 bg-ide-warn/15 text-ide-warn',
-  none: 'border-white/10 bg-white/5 text-ide-text',
-};
-
-const toneIcon = {
-  overdue: 'border-ide-error/50 bg-ide-error/20 text-ide-error',
-  today: 'border-ide-warn/50 bg-ide-warn/20 text-ide-warn',
-  soon: 'border-ide-warn/40 bg-ide-warn/15 text-ide-warn',
-  none: 'border-white/10 bg-white/5 text-ide-text',
-  phase: 'border-white/10 bg-white/5 text-ide-text',
-};
+const plainPill = 'border-white/10 bg-white/5 text-ide-text';
 
 const pill = 'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium leading-none';
 
@@ -107,17 +92,15 @@ const EventItem: React.FC<EventItemProps> = ({
   memberKind,
 }) => {
   const { t } = useTranslation();
-  const deadline = formatDateTime(event.deadline);
+  const until = formatDateTime(event.deadline);
   const from = formatDateTime(event.earliestStartTime);
   const slot = formatDateTimeRange(event.scheduledStartTime, event.scheduledEndTime);
-  const tone = event.status === 'completed' ? 'none' : deadlineTone(event.deadline);
   const unscheduled = !!event.isUnscheduled;
   const busy = busyId === event.id;
   const color = priorityColors[event.priority];
-  const when = slot || (!unscheduled && from && deadline ? `${from} – ${deadline}` : null);
+  const when = slot || (!unscheduled && from && until ? `${from} – ${until}` : null);
   const editLabel = openLabel || t('common.edit');
   const EditIcon = openLabel ? ExternalLink : Pencil;
-  const overdue = unscheduled && tone === 'overdue';
   const kindLabel =
     memberKind === 'series'
       ? t('tasks.group.kind.series')
@@ -126,19 +109,11 @@ const EventItem: React.FC<EventItemProps> = ({
         : memberKind === 'oneOff'
           ? t('tasks.group.kind.oneOff')
           : null;
-  const tonePrefix =
-    tone === 'overdue'
-      ? t('tasks.item.overduePrefix')
-      : tone === 'today'
-        ? t('tasks.item.dueSoonPrefix')
-        : tone === 'soon'
-          ? t('tasks.item.approachingPrefix')
-          : '';
-
-  const dueText =
-    deadline && (!when || tone !== 'none')
-      ? `${tonePrefix}${deadline}`
-      : !deadline && from && !when
+  const dueText = unscheduled
+    ? null
+    : !when && until
+      ? t('tasks.item.until', { when: until })
+      : !when && from
         ? t('tasks.item.from', { time: from })
         : null;
 
@@ -157,13 +132,7 @@ const EventItem: React.FC<EventItemProps> = ({
         phaseName: event.phase?.name,
         phaseColor: event.phase?.color,
         earliestFormatted: from,
-        deadlineFormatted: deadline,
-        tone,
         fromLabel: (time) => t('tasks.item.from', { time }),
-        dueLabel: (whenDue) => t('tasks.item.due', { when: whenDue }),
-        overduePrefix: t('tasks.item.overduePrefix'),
-        dueSoonPrefix: t('tasks.item.dueSoonPrefix'),
-        approachingPrefix: t('tasks.item.approachingPrefix'),
       })
     : [];
 
@@ -300,7 +269,7 @@ const EventItem: React.FC<EventItemProps> = ({
         className="flex items-center gap-2 rounded-lg border border-white/10 px-2.5 py-1.5"
         style={{
           borderLeftWidth: 3,
-          borderLeftColor: overdue ? '#f44336' : color,
+          borderLeftColor: color,
           backgroundColor: '#35383A',
         }}
       >
@@ -354,9 +323,9 @@ const EventItem: React.FC<EventItemProps> = ({
 
   return (
     <div
-      className={`task-item flex flex-col gap-3 border-l-4 ${overdue ? 'ring-1 ring-ide-error/40' : ''}`}
+      className="task-item flex flex-col gap-3 border-l-4"
       style={{
-        borderLeftColor: overdue ? '#f44336' : color,
+        borderLeftColor: color,
         backgroundColor: '#3C3F41',
         backgroundImage: `linear-gradient(135deg, ${color}38, ${color}14 46%, transparent)`,
       }}
@@ -381,12 +350,8 @@ const EventItem: React.FC<EventItemProps> = ({
             <Inbox className="h-4 w-4" aria-hidden />
           </span>
           {unscheduledMeta.map((meta) => {
-            const Icon =
-              meta.id === 'phase' ? CircleDot : meta.id === 'earliest' ? CalendarClock : AlarmClock;
-            const className =
-              meta.id === 'phase'
-                ? iconMetaBtn
-                : `${iconMetaBtn} ${toneIcon[meta.tone === 'phase' ? 'none' : meta.tone]}`;
+            const Icon = meta.id === 'phase' ? CircleDot : CalendarClock;
+            const className = `${iconMetaBtn} ${plainPill}`;
             return (
               <span
                 key={meta.id}
@@ -441,8 +406,8 @@ const EventItem: React.FC<EventItemProps> = ({
           {event.isRecurring ? (
             <Pill className="border-ide-link/40 bg-ide-link/15 text-ide-link">{t('tasks.item.repeats')}</Pill>
           ) : null}
-          {when ? <Pill className={tonePill.none}>{when}</Pill> : null}
-          {dueText ? <Pill className={tonePill[tone]}>{dueText}</Pill> : null}
+          {when ? <Pill className={plainPill}>{when}</Pill> : null}
+          {dueText ? <Pill className={plainPill}>{dueText}</Pill> : null}
         </div>
       )}
 

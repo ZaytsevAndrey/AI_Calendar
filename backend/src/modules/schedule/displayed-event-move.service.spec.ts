@@ -60,6 +60,8 @@ describe('DisplayedEventMoveService', () => {
         moves: [],
       }));
     const seatOpenHoles = opts.seatOpenHoles ?? jest.fn().mockResolvedValue(undefined);
+    const completeMutationJob = jest.fn().mockResolvedValue(undefined);
+    const failMutationJob = opts.failMutationJob ?? jest.fn().mockResolvedValue(undefined);
     const slots = opts.slots ?? [];
     const tasks = opts.tasks ?? [];
     const taskRepo = {
@@ -107,9 +109,8 @@ describe('DisplayedEventMoveService', () => {
       {
         beginMutationJob: jest.fn().mockResolvedValue({ id: 'job-1' }),
         setMutationStage: jest.fn().mockResolvedValue(undefined),
-        completeMutationJob: jest.fn().mockResolvedValue(undefined),
-        failMutationJob:
-          opts.failMutationJob ?? jest.fn().mockResolvedValue(undefined),
+        completeMutationJob,
+        failMutationJob,
       } as never,
     );
     return {
@@ -121,6 +122,8 @@ describe('DisplayedEventMoveService', () => {
       place,
       seatOpenHoles,
       taskRepo,
+      completeMutationJob,
+      failMutationJob,
     };
   }
 
@@ -179,10 +182,10 @@ describe('DisplayedEventMoveService', () => {
   it('does not patch Google when a flexible drag cannot take the time', async () => {
     const place = jest.fn().mockResolvedValue({
       outcome: 'conflict',
-      conflict: { reason: 'preferred_on_fixed' },
+      conflict: { reason: 'preferred_on_fixed', options: ['leave_problematic'] },
     });
     const failMutationJob = jest.fn().mockResolvedValue(undefined);
-    const { move, patch, seatOpenHoles } = service({
+    const { move, patch, seatOpenHoles, completeMutationJob } = service({
       tasks: [
         {
           id: 'task-flex',
@@ -210,7 +213,10 @@ describe('DisplayedEventMoveService', () => {
     await flushAsyncWork();
     expect(patch).not.toHaveBeenCalled();
     expect(seatOpenHoles).not.toHaveBeenCalled();
-    expect(failMutationJob).toHaveBeenCalled();
+    expect(failMutationJob).not.toHaveBeenCalled();
+    expect(completeMutationJob).toHaveBeenCalledWith('job-1', {
+      conflicts: [{ reason: 'preferred_on_fixed', options: ['leave_problematic'] }],
+    });
   });
 
   it('skips Google patch when a flexible drag re-merges into a series', async () => {
@@ -280,6 +286,7 @@ describe('DisplayedEventMoveService', () => {
       preferredStart: new Date('2026-09-22T11:00:00.000Z'),
       durationMinutes: 60,
       commit: 'preferred',
+      drag: true,
     });
     expect(patch).toHaveBeenCalledWith(
       userId,
@@ -289,6 +296,54 @@ describe('DisplayedEventMoveService', () => {
       'primary',
     );
     expect(seatOpenHoles).toHaveBeenCalledWith(userId);
+  });
+
+  it('parks a drag that cannot sit instead of reporting the time as taken', async () => {
+    const place = jest.fn().mockResolvedValue({
+      outcome: 'problematic',
+      reason: 'phase_full',
+    });
+    const {
+      move,
+      completeMutationJob,
+      failMutationJob,
+      syncTask,
+      patch,
+      seatOpenHoles,
+    } = service({
+      tasks: [
+        {
+          id: 'task-flex',
+          name: 'microfrontend',
+          eventType: 'admin',
+          isRecurring: false,
+          googleEventId: 'evt-1',
+          phases: [],
+        },
+      ],
+      slots: [
+        {
+          id: 'slot-1',
+          taskId: 'task-flex',
+          googleEventId: 'evt-1',
+          scheduledStartTime: new Date('2026-09-22T09:00:00.000Z'),
+        },
+      ],
+      place,
+    });
+    await expect(move.move(userId, dto)).resolves.toEqual({
+      kind: 'slot',
+      jobId: 'job-1',
+    });
+    await flushAsyncWork();
+    expect(failMutationJob).not.toHaveBeenCalled();
+    expect(patch).not.toHaveBeenCalled();
+    expect(syncTask).toHaveBeenCalledWith(userId, 'task-flex');
+    expect(seatOpenHoles).toHaveBeenCalledWith(userId);
+    expect(completeMutationJob).toHaveBeenCalledWith('job-1', {
+      parked: 'problematic',
+      reason: 'phase_full',
+    });
   });
 
   it('patches an external Google event without placement', async () => {

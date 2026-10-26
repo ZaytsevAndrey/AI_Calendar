@@ -29,29 +29,23 @@ import {
 } from '../nowBlocks';
 import { usePhoneLayout } from 'modules/common/hooks/useMediaQuery';
 
-/** Compact icon actions — same vocabulary as Tasks Unscheduled cards. */
+/** Full-height icon actions pinned to the card's right edge. */
 const stripIconBtn =
-  'ui-icon-btn h-7 w-7 text-ide-muted hover:text-ide-text';
+  'inline-flex h-full w-7 shrink-0 items-center justify-center text-ide-muted transition-colors hover:text-ide-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ide-link disabled:pointer-events-none disabled:opacity-50';
 const stripIconPrimary = `${stripIconBtn} text-ide-link hover:text-ide-link`;
 
-/**
- * Action row sits above the card. On a phone it stays in flow; from `md` it
- * floats on the card's top edge and only appears on hover, so it never shares
- * the title row.
- */
-const actionBar =
-  'z-20 mb-1 flex max-w-full justify-end md:pointer-events-none md:absolute md:right-1 md:top-0 md:z-20 md:mb-0 md:w-max md:max-w-[calc(100%-0.5rem)] md:-translate-y-2 md:opacity-0 md:transition-opacity md:duration-200 md:group-hover/card:pointer-events-auto md:group-hover/card:opacity-100 md:group-focus-within/card:pointer-events-auto md:group-focus-within/card:opacity-100';
-const actionBarChip =
-  'flex max-w-full flex-wrap items-center justify-end gap-0.5 md:rounded-md md:border md:border-ide-border md:bg-ide-panel md:p-0.5 md:shadow-ide';
+const cardFill = 'bg-[#363738]';
 
 function StripActions({ children }: { children: React.ReactNode }) {
   return (
-    <div
-      className={actionBar}
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => e.stopPropagation()}
-    >
-      <div className={actionBarChip}>{children}</div>
+    <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-stretch bg-[linear-gradient(to_left,#363738_calc(100%-1.75rem),transparent)] pl-7 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 max-md:opacity-100">
+      <div
+        className="pointer-events-none flex h-full items-stretch group-hover:pointer-events-auto group-focus-within:pointer-events-auto max-md:pointer-events-auto"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -63,20 +57,17 @@ const TONE: Record<StripTone, { column: string; header: string; card: string }> 
   now: {
     column: 'border-ide-accent/25 bg-ide-accent/[0.05]',
     header: 'text-ide-accent/90',
-    card:
-      'border-ide-accent/20 bg-ide-surface/60 hover:border-ide-accent/35 hover:bg-ide-accent/[0.08]',
+    card: `border-ide-accent/20 ${cardFill} hover:border-ide-accent/35`,
   },
   next: {
     column: 'border-ide-link/25 bg-ide-link/[0.05]',
     header: 'text-ide-link/90',
-    card:
-      'border-ide-link/20 bg-ide-surface/60 hover:border-ide-link/35 hover:bg-ide-link/[0.08]',
+    card: `border-ide-link/20 ${cardFill} hover:border-ide-link/35`,
   },
   inbox: {
     column: 'border-ide-warn/25 bg-ide-warn/[0.05]',
     header: 'text-ide-warn/90',
-    card:
-      'border-ide-warn/20 bg-ide-surface/60 hover:border-ide-warn/35 hover:bg-ide-warn/[0.08]',
+    card: `border-ide-warn/20 ${cardFill} hover:border-ide-warn/35`,
   },
 };
 
@@ -89,7 +80,7 @@ const KIND_BADGE: Record<SchedulingKind, string> = {
 };
 
 const cardBase =
-  'group flex min-w-0 items-center gap-1.5 rounded-lg border px-2 py-1.5 shadow-ide transition duration-200 ease-out hover:-translate-y-px hover:shadow-ide-md';
+  'group relative flex min-w-0 items-center gap-1.5 overflow-hidden rounded-lg border px-2 py-1.5 shadow-ide transition duration-200 ease-out hover:-translate-y-px hover:shadow-ide-md';
 
 function kindForBlock(block: NowBlock): SchedulingKind {
   if (block.event) {
@@ -224,7 +215,26 @@ function BlockRow({
     >
       <ColumnHeader tone={tone} label={label} />
       {block && kind ? (
-        <div className="group/card relative mt-1.5 flex min-w-0 flex-col md:mt-3">
+        <div
+          role={onOpenPreview && previewEvent ? 'button' : undefined}
+          tabIndex={onOpenPreview && previewEvent ? 0 : undefined}
+          data-testid="now-strip-card"
+          className={`${cardBase} mt-1.5 ${toneStyle.card} ${
+            onOpenPreview && previewEvent ? 'cursor-pointer' : ''
+          }`}
+          onClick={openPreview}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              openPreview();
+            }
+          }}
+        >
+          <KindBadge kind={kind} title={t(KIND_I18N_KEY[kind])} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-ide-text">{block.title}</p>
+            <p className="text-xs text-ide-muted">{formatRange(block, timeZone)}</p>
+          </div>
           {showDone || showSkip ? (
             <StripActions>
               {showSkip && block.task ? (
@@ -253,27 +263,6 @@ function BlockRow({
               ) : null}
             </StripActions>
           ) : null}
-          <div
-            role={onOpenPreview && previewEvent ? 'button' : undefined}
-            tabIndex={onOpenPreview && previewEvent ? 0 : undefined}
-            data-testid="now-strip-card"
-            className={`${cardBase} ${toneStyle.card} ${
-              onOpenPreview && previewEvent ? 'cursor-pointer' : ''
-            }`}
-            onClick={openPreview}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                openPreview();
-              }
-            }}
-          >
-            <KindBadge kind={kind} title={t(KIND_I18N_KEY[kind])} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-ide-text">{block.title}</p>
-              <p className="text-xs text-ide-muted">{formatRange(block, timeZone)}</p>
-            </div>
-          </div>
         </div>
       ) : (
         <p className="mt-1.5 text-sm text-ide-muted">{empty}</p>
@@ -483,7 +472,7 @@ export function NowStrip({
         >
           <ColumnHeader tone="inbox" label={t('now.unscheduled')} count={inbox.length} />
           {inbox.length ? (
-            <ul className="mt-1.5 max-h-48 space-y-1.5 overflow-y-auto overscroll-contain pr-0.5 md:mt-0 md:pt-3">
+            <ul className="mt-1.5 max-h-48 space-y-1.5 overflow-y-auto overscroll-contain pr-0.5">
               {inbox.map((task) => {
                 const busy = busyId === task.id;
                 const actions = canActOnInbox(task);
@@ -491,65 +480,7 @@ export function NowStrip({
                   if (onOpenPreview) onOpenPreview(previewEventFromTask(task));
                 };
                 return (
-                  <li key={task.id} className="group/card relative flex min-w-0 flex-col">
-                    {actions ? (
-                      <StripActions>
-                        <button
-                          type="button"
-                          className={stripIconBtn}
-                          disabled={busy}
-                          aria-label={t('common.done')}
-                          title={t('common.done')}
-                          onClick={() => void markInboxDone(task)}
-                        >
-                          <Check className="h-3.5 w-3.5" aria-hidden />
-                        </button>
-                        <button
-                          type="button"
-                          className={stripIconBtn}
-                          disabled={busy}
-                          aria-label={t('tasks.item.skip')}
-                          title={t('tasks.item.skip')}
-                          onClick={() => void markInboxSkip(task)}
-                        >
-                          <SkipForward className="h-3.5 w-3.5" aria-hidden />
-                        </button>
-                        <button
-                          type="button"
-                          className={stripIconPrimary}
-                          disabled={busy}
-                          aria-label={t('tasks.item.doNow')}
-                          title={t('tasks.item.doNow')}
-                          onClick={() => void doNowInbox(task)}
-                        >
-                          <Zap className="h-3.5 w-3.5" aria-hidden />
-                        </button>
-                        {onScheduleTask ? (
-                          <button
-                            type="button"
-                            className={stripIconPrimary}
-                            disabled={busy}
-                            aria-label={t('tasks.item.schedule')}
-                            title={t('tasks.item.schedule')}
-                            onClick={() => onScheduleTask(task)}
-                          >
-                            <CalendarPlus className="h-3.5 w-3.5" aria-hidden />
-                          </button>
-                        ) : null}
-                        {onEditTask ? (
-                          <button
-                            type="button"
-                            className={stripIconBtn}
-                            disabled={busy}
-                            aria-label={t('common.edit')}
-                            title={t('common.edit')}
-                            onClick={() => onEditTask(task)}
-                          >
-                            <Pencil className="h-3.5 w-3.5" aria-hidden />
-                          </button>
-                        ) : null}
-                      </StripActions>
-                    ) : null}
+                  <li key={task.id} className="min-w-0">
                     <div
                       role={onOpenPreview ? 'button' : undefined}
                       tabIndex={onOpenPreview ? 0 : undefined}
@@ -571,6 +502,64 @@ export function NowStrip({
                       <span className="min-w-0 flex-1 truncate text-sm text-ide-text" title={task.name}>
                         {task.name}
                       </span>
+                      {actions ? (
+                        <StripActions>
+                          <button
+                            type="button"
+                            className={stripIconBtn}
+                            disabled={busy}
+                            aria-label={t('common.done')}
+                            title={t('common.done')}
+                            onClick={() => void markInboxDone(task)}
+                          >
+                            <Check className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            className={stripIconBtn}
+                            disabled={busy}
+                            aria-label={t('tasks.item.skip')}
+                            title={t('tasks.item.skip')}
+                            onClick={() => void markInboxSkip(task)}
+                          >
+                            <SkipForward className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            className={stripIconPrimary}
+                            disabled={busy}
+                            aria-label={t('tasks.item.doNow')}
+                            title={t('tasks.item.doNow')}
+                            onClick={() => void doNowInbox(task)}
+                          >
+                            <Zap className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                          {onScheduleTask ? (
+                            <button
+                              type="button"
+                              className={stripIconPrimary}
+                              disabled={busy}
+                              aria-label={t('tasks.item.schedule')}
+                              title={t('tasks.item.schedule')}
+                              onClick={() => onScheduleTask(task)}
+                            >
+                              <CalendarPlus className="h-3.5 w-3.5" aria-hidden />
+                            </button>
+                          ) : null}
+                          {onEditTask ? (
+                            <button
+                              type="button"
+                              className={stripIconBtn}
+                              disabled={busy}
+                              aria-label={t('common.edit')}
+                              title={t('common.edit')}
+                              onClick={() => onEditTask(task)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" aria-hidden />
+                            </button>
+                          ) : null}
+                        </StripActions>
+                      ) : null}
                     </div>
                   </li>
                 );

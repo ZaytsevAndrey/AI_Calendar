@@ -72,7 +72,10 @@ export function applyEventDrag(input: {
   }
 
   if (input.mode === 'resize-start') {
-    let nextStart = snapMinutes(input.pointerMin, EVENT_DRAG_SNAP_MIN);
+    let nextStart = snapMinutes(
+      input.pointerMin - input.grabOffsetMin,
+      EVENT_DRAG_SNAP_MIN,
+    );
     nextStart = Math.max(
       input.dayStartMin,
       Math.min(input.endMin - minDur, nextStart),
@@ -84,7 +87,10 @@ export function applyEventDrag(input: {
     };
   }
 
-  let nextEnd = snapMinutes(input.pointerMin, EVENT_DRAG_SNAP_MIN);
+  let nextEnd = snapMinutes(
+    input.pointerMin - input.grabOffsetMin,
+    EVENT_DRAG_SNAP_MIN,
+  );
   nextEnd = Math.max(input.startMin + minDur, Math.min(input.dayEndMin, nextEnd));
   return {
     startMin: input.startMin,

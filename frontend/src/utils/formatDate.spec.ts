@@ -65,8 +65,8 @@ describe('describeTaskWhen', () => {
     expect(text).toContain('45 min');
   });
 
-  it('uses Due / From when only one bound exists', () => {
-    expect(describeTaskWhen({ deadline: localIso(2026, 8, 10, 18, 0) })).toMatch(/^Due /);
+  it('uses Until / From when only one bound exists', () => {
+    expect(describeTaskWhen({ deadline: localIso(2026, 8, 10, 18, 0) })).toMatch(/^Until /);
     expect(describeTaskWhen({ earliestStartTime: localIso(2026, 8, 9, 8, 0) })).toMatch(/^From /);
   });
 
@@ -97,17 +97,16 @@ describe('describeTaskToastDetail', () => {
       isUnscheduled: true,
     });
     expect(text).toMatch(/Buy milk/);
-    expect(text).toMatch(/Unscheduled/);
+    expect(text).toMatch(/Later/);
   });
 
-  it('adds the deadline on an unscheduled toast when present', () => {
+  it('does not add a due date on a later task', () => {
     const text = describeTaskToastDetail({
       name: 'Buy milk',
       isUnscheduled: true,
       deadline: localIso(2026, 8, 11, 23, 59),
     });
-    expect(text).toMatch(/Unscheduled/);
-    expect(text).toMatch(/Due /);
+    expect(text).toBe('Buy milk · Later');
   });
 });
 

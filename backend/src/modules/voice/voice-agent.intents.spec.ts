@@ -74,7 +74,7 @@ describe('voice-agent.intents', () => {
       { language: 'uk', timeZone: 'Europe/Kyiv', nowIso: '2026-09-07T16:00:00.000Z' },
     );
     expect(mapped.intents[0].summary).toBe(
-      'Створив задачу «Молоко»: без часу, 15 хв.',
+      'Створив задачу «Молоко»: на потім, 15 хв.',
     );
   });
 

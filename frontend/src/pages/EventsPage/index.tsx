@@ -15,7 +15,6 @@ import { useVoiceTask } from 'modules/voice/hooks/useVoiceTask';
 import { setConflictVoiceOpener } from 'modules/schedule/conflictChoiceBus';
 import { Button } from 'ui/Button';
 import { dialogButtonSize } from 'ui/controlSize';
-import { deadlineTone } from 'modules/events/utils/deadlineTone';
 import { usePhoneLayout } from 'modules/common/hooks/useMediaQuery';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import {
@@ -40,8 +39,6 @@ const PRIORITY_ORDER: Record<Priority, number> = {
   low: 3,
 };
 
-const TONE_ORDER = { overdue: 0, today: 1, soon: 2, none: 3 } as const;
-
 function sortTasks(list: TaskDTO[], sortField: SortField): TaskDTO[] {
   return [...list].sort((a, b) => {
     switch (sortField) {
@@ -65,12 +62,6 @@ function sortTasks(list: TaskDTO[], sortField: SortField): TaskDTO[] {
 
 function sortUnscheduled(list: TaskDTO[]): TaskDTO[] {
   return [...list].sort((a, b) => {
-    const tone = TONE_ORDER[deadlineTone(a.deadline)] - TONE_ORDER[deadlineTone(b.deadline)];
-    if (tone !== 0) return tone;
-    if (a.deadline && b.deadline) {
-      const due = new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
-      if (due !== 0) return due;
-    }
     const priority = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
     if (priority !== 0) return priority;
     return a.createdAt.localeCompare(b.createdAt);
@@ -87,7 +78,6 @@ const TasksPage: React.FC = () => {
   const [scheduledOverdue, setScheduledOverdue] = useState(false);
   const [inboxQuery, setInboxQuery] = useState('');
   const [inboxStatus, setInboxStatus] = useState<TaskStatusFilter>('active');
-  const [inboxOverdue, setInboxOverdue] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{
     open: boolean;
     ids: string[];
@@ -129,7 +119,7 @@ const TasksPage: React.FC = () => {
   const inboxFilters = {
     query: inboxQuery,
     status: inboxStatus,
-    overdueOnly: inboxOverdue,
+    overdueOnly: false,
   };
   const sortedEvents = sortTasks(filterScheduledTasks(events, scheduledFilters), sortField);
 
@@ -211,8 +201,7 @@ const TasksPage: React.FC = () => {
   };
 
   const unscheduledInbox = sortUnscheduled(filterUnscheduledTasks(events, inboxFilters));
-  const inboxFiltersNarrow =
-    inboxQuery.trim() !== '' || inboxStatus !== 'active' || inboxOverdue;
+  const inboxFiltersNarrow = inboxQuery.trim() !== '' || inboxStatus !== 'active';
 
   return (
     <div className="page-shell-fill">
@@ -247,8 +236,9 @@ const TasksPage: React.FC = () => {
             onQueryChange={setInboxQuery}
             status={inboxStatus}
             onStatusChange={setInboxStatus}
-            overdueOnly={inboxOverdue}
-            onOverdueOnlyChange={setInboxOverdue}
+            overdueOnly={false}
+            onOverdueOnlyChange={() => undefined}
+            showOverdue={false}
             searchAriaLabel={t('tasks.searchUnscheduled')}
             statusAriaLabel={t('tasks.statusUnscheduled')}
             overdueAriaLabel={t('tasks.overdueUnscheduled')}

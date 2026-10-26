@@ -38,6 +38,8 @@ interface TaskSectionFiltersProps {
   searchAriaLabel: string;
   statusAriaLabel?: string;
   overdueAriaLabel: string;
+  /** Later inbox has no due date, so the overdue chip stays off. */
+  showOverdue?: boolean;
   phases?: { id: string; name: string }[];
   phaseId?: string;
   onPhaseIdChange?: (value: string) => void;
@@ -58,6 +60,7 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
   searchAriaLabel,
   statusAriaLabel,
   overdueAriaLabel,
+  showOverdue = true,
   phases,
   phaseId,
   onPhaseIdChange,
@@ -129,7 +132,7 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
   };
 
   const sortLabel = (value: SortField) => {
-    if (value === 'deadline') return t('common.deadline');
+    if (value === 'deadline') return t('tasks.form.until');
     if (value === 'priority') return t('common.priority');
     if (value === 'name') return t('common.name');
     return t('common.duration');
@@ -173,7 +176,7 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
 
   const sortOptions = (
     <>
-      <option value="deadline">{t('common.deadline')}</option>
+      <option value="deadline">{t('tasks.form.until')}</option>
       <option value="priority">{t('common.priority')}</option>
       <option value="name">{t('common.name')}</option>
       <option value="estimatedTimeInMinutes">{t('common.duration')}</option>
@@ -238,15 +241,17 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
           {statusOptions}
         </select>
 
-        <button
-          type="button"
-          aria-pressed={overdueOnly}
-          aria-label={overdueAriaLabel}
-          onClick={() => onOverdueOnlyChange(!overdueOnly)}
-          className={`filter-chip max-md:hidden ${overdueOnly ? 'border-ide-error bg-ide-error/15 text-white' : ''}`}
-        >
-          {t('tasks.filters.overdue')}
-        </button>
+        {showOverdue ? (
+          <button
+            type="button"
+            aria-pressed={overdueOnly}
+            aria-label={overdueAriaLabel}
+            onClick={() => onOverdueOnlyChange(!overdueOnly)}
+            className={`filter-chip max-md:hidden ${overdueOnly ? 'border-ide-error bg-ide-error/15 text-white' : ''}`}
+          >
+            {t('tasks.filters.overdue')}
+          </button>
+        ) : null}
 
         {hasMore ? (
           <div className="relative max-md:hidden" ref={moreRef}>
@@ -376,15 +381,17 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
                 {statusOptions}
               </Select>
             </div>
-            <button
-              type="button"
-              aria-pressed={overdueOnly}
-              aria-label={overdueAriaLabel}
-              onClick={() => onOverdueOnlyChange(!overdueOnly)}
-              className={`filter-chip ${overdueOnly ? 'border-ide-error bg-ide-error/15 text-white' : ''}`}
-            >
-              {t('tasks.filters.overdue')}
-            </button>
+            {showOverdue ? (
+              <button
+                type="button"
+                aria-pressed={overdueOnly}
+                aria-label={overdueAriaLabel}
+                onClick={() => onOverdueOnlyChange(!overdueOnly)}
+                className={`filter-chip ${overdueOnly ? 'border-ide-error bg-ide-error/15 text-white' : ''}`}
+              >
+                {t('tasks.filters.overdue')}
+              </button>
+            ) : null}
             {showPhase && onPhaseIdChange && phaseId !== undefined ? (
               <div>
                 <label htmlFor={`${idPrefix}SheetPhase`} className="mb-1 block text-xs text-ide-muted">

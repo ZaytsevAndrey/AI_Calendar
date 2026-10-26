@@ -95,6 +95,7 @@ export interface CreateTaskDTO {
   recurrenceWeekDays?: number[] | null;
   allowSplit?: boolean;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
+  status?: 'todo' | 'in_progress' | 'completed' | 'canceled';
   deadline?: string | null;
   earliestStartTime?: string | null;
   eligibleWeekDays?: number[] | null;

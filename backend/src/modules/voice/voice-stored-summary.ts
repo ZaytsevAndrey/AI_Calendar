@@ -140,9 +140,6 @@ export function describeStoredFields(
   if (start && earliest && earliest !== start) {
     parts.push(t(lang, 'voice.seatFrom', { when: stamp(earliest, lang, opts) }));
   }
-  if (fields.isUnscheduled && text(fields.deadline)) {
-    parts.push(t(lang, 'voice.seatUntil', { when: stamp(text(fields.deadline)!, lang, opts) }));
-  }
 
   if (fields.scheduleState === 'problematic') {
     parts.push(t(lang, 'voice.seatUnplaced'));

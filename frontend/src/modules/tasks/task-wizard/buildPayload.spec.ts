@@ -64,11 +64,41 @@ describe('buildTaskPayload', () => {
     expect(payload.scheduledStartTime).toBeNull();
     expect(payload.scheduledEndTime).toBeNull();
     expect(payload.earliestStartTime).toBeNull();
-    expect(payload.deadline).toBe('2026-09-11T23:59:00+03:00');
+    expect(payload.deadline).toBeNull();
     expect(payload.location).toBe('Home');
     expect(payload.googleColorId).toBe('7');
     expect(payload.isRecurring).toBe(false);
     expect(payload.googleReminders).toEqual({ useDefault: true });
+  });
+
+  it('drops the phase on a fixed task and keeps the chosen status', () => {
+    const payload = buildTaskPayload(
+      flexible({
+        isFixed: true,
+        phaseId: 'phase-1',
+        status: 'in_progress',
+        scheduledStartTime: '2026-09-11T09:00',
+        scheduledEndTime: '2026-09-11T10:00',
+      }),
+      NICOSIA,
+    );
+    expect(payload.phaseIds).toEqual([]);
+    expect(payload.phaseId).toBeUndefined();
+    expect(payload.status).toBe('in_progress');
+  });
+
+  it('drops a deadline on a fixed task', () => {
+    const payload = buildTaskPayload(
+      flexible({
+        isFixed: true,
+        deadline: '2026-09-11T23:59',
+        scheduledStartTime: '2026-09-11T09:00',
+        scheduledEndTime: '2026-09-11T10:00',
+      }),
+      NICOSIA,
+    );
+    expect(payload.eventType).toBe('fixed');
+    expect(payload.deadline).toBeNull();
   });
 
   it('writes custom Google reminders when defaults are turned off', () => {
@@ -173,7 +203,7 @@ describe('initialFormValues', () => {
     );
     expect(values.isUnscheduled).toBe(true);
     expect(values.isFixed).toBe(false);
-    expect(values.deadline).toBe('2026-09-11T23:59');
+    expect(values.deadline).toBe('');
     expect(values.location).toBe('Store');
     expect(values.googleColorId).toBe('4');
     expect(values.googleVisibility).toBe('private');
@@ -208,6 +238,50 @@ describe('initialFormValues', () => {
     expect(values.isUnscheduled).toBe(true);
     expect(values.name).toBe('');
     expect(values.googleReminderUseDefault).toBe(true);
+  });
+
+  it('opens a fixed task without a phase and with its status', () => {
+    const values = initialFormValues(
+      {
+        id: 't1',
+        name: 'Call',
+        eventType: 'fixed',
+        estimatedTimeInMinutes: 30,
+        isRecurring: false,
+        allowSplit: false,
+        priority: 'medium',
+        status: 'in_progress',
+        phaseId: 'phase-1',
+        createdAt: '',
+        updatedAt: '',
+      },
+      undefined,
+      NICOSIA,
+    );
+    expect(values.isFixed).toBe(true);
+    expect(values.phaseId).toBe('');
+    expect(values.status).toBe('in_progress');
+  });
+
+  it('opens a blank create on the fixed tab', () => {
+    const values = initialFormValues(undefined, undefined, NICOSIA);
+    expect(values.isFixed).toBe(true);
+    expect(values.isUnscheduled).toBe(false);
+    expect(values.allowSplit).toBe(false);
+  });
+
+  it('opens a civil-day window on the flexible tab', () => {
+    const values = initialFormValues(
+      undefined,
+      {
+        earliestStartTime: '2026-10-24T00:00:00+03:00',
+        deadline: '2026-10-24T23:59:00+03:00',
+      },
+      NICOSIA,
+    );
+    expect(values.isFixed).toBe(false);
+    expect(values.earliestStartTime).toBe('2026-10-24T00:00');
+    expect(values.deadline).toBe('2026-10-24T23:59');
   });
 });
 

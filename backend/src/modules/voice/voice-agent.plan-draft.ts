@@ -129,16 +129,13 @@ function itemFromTask(
   };
 }
 
-/** Open Unscheduled (oldest deadline first) + flexible one-offs already on that day. */
+/** Open Later tasks (oldest first) + flexible one-offs already on that day. */
 export function initialPlanDraft(day: string, ctx: PlanDraftContext): PlanDraft {
   const unscheduled = ctx.tasks
     .filter((task) => isOpen(task) && task.isUnscheduled && !task.isRecurring)
-    .sort((a, b) => {
-      const da = a.deadline ? new Date(a.deadline).getTime() : Infinity;
-      const db = b.deadline ? new Date(b.deadline).getTime() : Infinity;
-      if (da !== db) return da - db;
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    })
+    .sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    )
     .slice(0, MAX_INITIAL_UNSCHEDULED);
   const flexible = ctx.tasks.filter(
     (task) => isReseatable(task) && daySlotFor(task.id, day, ctx) != null,

@@ -51,7 +51,7 @@ function ctx(tasks: Task[], slots: ScheduledTask[] = []): PlanDraftContext {
 }
 
 describe('initialPlanDraft', () => {
-  it('takes Unscheduled by deadline, then flexible one-offs on that day', () => {
+  it('takes Later tasks oldest first, then flexible one-offs on that day', () => {
     const tasks = [
       task('u-late', { isUnscheduled: true, deadline: new Date('2026-10-30T00:00:00Z') }),
       task('u-soon', { isUnscheduled: true, deadline: new Date('2026-10-20T00:00:00Z') }),
@@ -68,7 +68,7 @@ describe('initialPlanDraft', () => {
       slot('s3', 'other-day', '2026-10-19T10:00:00.000Z'),
     ];
     const draft = initialPlanDraft(DAY, ctx(tasks, slots));
-    expect(draft.items.map((item) => item.id)).toEqual(['u-soon', 'u-late', 'u-none', 'flex']);
+    expect(draft.items.map((item) => item.id)).toEqual(['u-late', 'u-soon', 'u-none', 'flex']);
     const flex = draft.items.find((item) => item.id === 'flex');
     expect(flex).toMatchObject({ source: 'flexible', preferredHm: '13:00' });
     expect(draft.stage).toBe('review');

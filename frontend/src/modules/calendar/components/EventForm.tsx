@@ -74,7 +74,6 @@ const EventForm: React.FC<EventFormProps> = ({
     const [status, setStatus] = useState((event as { status?: string })?.status || 'in_progress');
     const [isRecurring, setIsRecurring] = useState(false);
     const [recurrenceRule, setRecurrenceRule] = useState('');
-    const [deadline, setDeadline] = useState('');
     const [estimatedTime, setEstimatedTime] = useState('');
     const [splitTasks, setSplitTasks] = useState(false);
     const [splitMin, setSplitMin] = useState('');
@@ -168,7 +167,6 @@ const EventForm: React.FC<EventFormProps> = ({
         }
         setIsRecurring(false);
         setRecurrenceRule('');
-        setDeadline('');
         setEstimatedTime('');
         setSplitTasks(false);
         setSplitMin('');
@@ -176,10 +174,6 @@ const EventForm: React.FC<EventFormProps> = ({
         setShowEmojiPicker(false);
         setSleepError(null);
     }, [event, open]);
-
-    React.useEffect(() => {
-        if (isRecurring) setDeadline('');
-    }, [isRecurring]);
 
     const handleStartChange = (value: string) => {
         setStart(value);
@@ -240,7 +234,6 @@ const EventForm: React.FC<EventFormProps> = ({
             status,
             phaseId: selectedPhaseId || undefined,
             recurrence: isRecurring && recurrenceRule ? [recurrenceRule] : undefined,
-            deadline,
             estimatedTime,
             splitTasks,
             splitMin,
@@ -438,19 +431,7 @@ const EventForm: React.FC<EventFormProps> = ({
                                 onChange={(e) => setRecurrenceRule(e.target.value)}
                             />
                         </div>
-                    ) : (
-                        <div>
-                            <label htmlFor="ev-deadline" className={lbl}>
-                                {t('common.deadline')}
-                            </label>
-                            <Input size="sm"
-                                id="ev-deadline"
-                                type="datetime-local"
-                                value={deadline}
-                                onChange={(e) => setDeadline(e.target.value)}
-                            />
-                        </div>
-                    )}
+                    ) : null}
 
                     <div>
                         <label htmlFor="ev-est" className={lbl}>

@@ -33,6 +33,18 @@ describe('matchPreset', () => {
     ).toBe('unscheduled');
   });
 
+  it('matches a weekly series even when split is off', () => {
+    expect(
+      matchPreset({
+        isUnscheduled: false,
+        isFixed: false,
+        isRecurring: true,
+        allowSplit: false,
+        recurrencePattern: 'WEEKLY',
+      }),
+    ).toBe('recurring');
+  });
+
   it('matches flexible when the inbox flag is off', () => {
     expect(
       matchPreset({

@@ -120,11 +120,7 @@ export function describeTaskWhen(task: {
   recurrencePattern?: string | null;
 }): string | undefined {
   if (task.isUnscheduled) {
-    const due = formatDateTime(task.deadline);
-    return joinToastDetail(
-      i18n.t('tasks.item.unscheduled'),
-      due ? i18n.t('tasks.item.due', { when: due }) : undefined,
-    );
+    return i18n.t('tasks.item.unscheduled');
   }
   const slot = formatDateTimeRange(task.scheduledStartTime, task.scheduledEndTime);
   let when: string | undefined;
@@ -134,8 +130,8 @@ export function describeTaskWhen(task: {
     const window = formatDateTimeRange(task.earliestStartTime, task.deadline);
     when = window ? i18n.t('tasks.item.between', { when: window }) : undefined;
   } else if (task.deadline) {
-    const due = formatDateTime(task.deadline);
-    when = due ? i18n.t('tasks.item.due', { when: due }) : undefined;
+    const until = formatDateTime(task.deadline);
+    when = until ? i18n.t('tasks.item.until', { when: until }) : undefined;
   } else if (task.earliestStartTime) {
     const from = formatDateTime(task.earliestStartTime);
     when = from ? i18n.t('tasks.item.from', { time: from }) : undefined;

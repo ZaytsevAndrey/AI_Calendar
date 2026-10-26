@@ -4,14 +4,14 @@
 
 ## 1) Модель: налаштування, не типи
 
-Поведінку задають **прапорці та поля**. У UI «Flexible / Fixed / Recurring» — лише **пресети**, які заповнюють ці налаштування; після вибору все можна змінити вручну. Окремої кнопки **Unscheduled** у формі немає. Інбокс лишається секцією на Tasks; порожній інбокс і далі створює задачу без слота.
+Поведінку задають **вкладка** і поля. Fixed / Flexible / Recurring / Later заповнюють прапорці; чекбоксів Fixed і Recurring у формі немає. Нова задача відкривається на Fixed. Later — задачі, які залишили на потім, коли буде час (API лишається `isUnscheduled`).
 
-| Режим (пресет) | Що сетиться |
-|----------------|-------------|
-| **Flexible** (дефолт) | не fixed, не recurring, split увімкнено, 30 хв |
-| **Fixed** | fixed time, split вимкнено, потрібні старт і кінець |
-| **Recurring** | не fixed, recurring Daily, split увімкнено, дні Mon–Fri |
-| **Unscheduled** | inbox: `isUnscheduled`, без слота, без replan/Google, опційний deadline. У формі пресету Unscheduled на кнопках більше немає; inbox лишається на сторінці Tasks |
+| Режим (вкладка) | Що сетиться |
+|-----------------|-------------|
+| **Fixed** (дефолт) | fixed time, split вимкнено, один день і діапазон годин на ньому, `deadline` null |
+| **Flexible** | не fixed, не recurring, split у даних увімкнено, чекбокс вимкнений, 30 хв |
+| **Recurring** | не fixed, recurring Daily, дні Mon–Fri |
+| **Later** | `isUnscheduled`, без слота, без replan/Google, без deadline |
 
 **Reminder** is not a row in this table. The fifth form segment writes a day reminder (`/day-reminders`), a separate record with a civil day, an optional clock, and an optional repeat. It is not an `eventType`, it is not placed, and it does not become an inbox task.
 
@@ -19,17 +19,17 @@
 
 ## 2) Базові правила створення
 
-- Обов’язкові в UI: **назва**; для non-fixed (не Unscheduled) — **тривалість**; для fixed — **старт і кінець** (end > start). **Unscheduled** — лише назва; опційний **deadline** (підсвітка, якщо близько / прострочено). Не синкається з Google і не потрапляє в Generate/replan, поки користувач не натисне **Schedule** (форма стає Flexible/Fixed) або не збереже без `isUnscheduled`.
-- День / проміжок без години у формі **From / Until** — **`earliestStartTime`** 00:00 першого дня і **deadline** 23:59 останнього у **таймзоні з Settings**. Форма показує civil time в цій же зоні (не в зоні браузера). Планувальник ставить задачу лише в цьому **локальному** дні/діапазоні і **не затирає** `earliestStartTime` після replan. Кілька окремих днів у формі додатково ставлять `eligibleWeekDays`. Фіксований слот лише якщо є конкретний час.
-- Голос: день без годинника, подія на цілий день і дедлайн, названий лише днем, ідуть від пробудження до сну, не від 00:00 до 23:59. Кілька дат, кожна названа один раз, — окремі одноразові справи. Спільний годинник їх не зліплює в серію.
-- `priority` у формі завжди є (дефолт medium); в API опційний.
-- Задача може мати **тільки одну фазу** (`phaseId` / `phaseIds` max 1). Порожня фаза = будь-який час у межах wake/sleep.
+- Обов’язкові в UI: **назва**; для flexible/recurring — **тривалість**; для fixed — **один день і початок/кінець** на ньому (end > start). Вкладка Fixed використовує спільні `DatePicker` і `TimeRangeField`: обидва годинники записуються на обраний цивільний день як `YYYY-MM-DDTHH:mm`. **Later** — лише назва, без дедлайну. Не синкається з Google і не потрапляє в Generate/replan, поки користувач не натисне **Schedule** або не збереже без `isUnscheduled`. Тип задачі задає вкладка форми, не чекбокси Fixed/Recurring. Нова задача відкривається на вкладці Fixed. Клік по дню календаря відкриває Flexible з цим днем у діапазоні.
+- Діапазон днів у формі (не нативний datetime) пише **`earliestStartTime`** 00:00 першого дня і **`deadline`** 23:59 останнього у **таймзоні з Settings**. Порожній діапазон — будь-коли. `deadline` тут лише кінець вікна flexible/recurring, не окремий дедлайн. Fixed і Later зберігають `deadline: null`. Планувальник ставить задачу лише в цьому **локальному** дні/діапазоні і **не затирає** `earliestStartTime` після replan. Кілька днів у діапазоні додатково дають `eligibleWeekDays`. Фіксований слот лише якщо є конкретний час.
+- Голос: день без годинника, подія на цілий день і вікно, назване лише днем, ідуть від пробудження до сну, не від 00:00 до 23:59. Fixed і Later не отримують `deadline`. Кілька дат, кожна названа один раз, — окремі одноразові справи. Спільний годинник їх не зліплює в серію.
+- `priority` у формі завжди є (дефолт medium); в API опційний. **Статус** у формі завжди є (дефолт todo): todo, in_progress, completed, canceled.
+- Задача може мати **тільки одну фазу** (`phaseId` / `phaseIds` max 1). Порожня фаза = будь-який час у межах wake/sleep. **Fixed фази не має:** форма її не показує і зберігає `phaseIds: []`.
 - **XOR часу:**
   - Fixed → `scheduledStartTime` + `scheduledEndTime`.
   - Non-fixed → optional **preferred start** (час доби). Якщо задано, кінець = старт + `estimatedTimeInMinutes`; зберігається в `scheduledStartTime` / `scheduledEndTime` (після replan це вже поставлений слот). Вікно днів — окремі `earliestStartTime` + `deadline`.
 - Recurring: `isRecurring` + `recurrencePattern` (`DAILY` / `WEEKLY` / `BIWEEKLY` / `MONTHLY`).
 - Optional: `recurrenceWeekDays` (0 = Sunday … 6 = Saturday). Порожньо або всі 7 днів = без додаткового фільтра днів.
-- `allowSplit` — лише для non-fixed; фактичний спліт = цей прапорець **і** user setting `allowSplitScheduling`.
+- `allowSplit` — лише для non-fixed; у формі чекбокс вимкнений (функції дроблення в UI ще немає). Фактичний спліт = цей прапорець **і** user setting `allowSplitScheduling`.
 
 ### 2.1 Voice create vs form
 
@@ -60,12 +60,12 @@
 - **Fixed:** не пересуваємо; fixed vs fixed → завжди питати.
 - **Flexible:** шукаємо в наступні дні (в рамках горизонту); silent relocate у межах фази коли це вона «заважає» після вибору користувача.
 
-### 3.4 Deadline / schedule window
+### 3.4 Placement window
 
 - `earliestStartTime` — hard «не раніше» (instant у **таймзоні Settings**, не midnight UTC-хоста). Day-only From (локальні **00:00**) snap до wake того локального дня. На Postgres `wakeTime` приходить як `HH:mm:ss` — енджин нормалізує до `HH:mm` (інакше на проді 00:00 падає на «сьогодні», а 00:01 працює).
-- `deadline` — hard «не пізніше»; усі сегменти мають закінчитись до нього.
-- `eligibleWeekDays` — опційний фільтр днів усередині From–Until (лише non-recurring).
-- Якщо задача не влазить у вікно дедлайну → **Unscheduled** (не Problematic); warning без «підняти пріоритет» — фаза / тривалість / спліт / дедлайн.
+- `deadline` — кінець вікна flexible/recurring, hard «не пізніше». Окремого дедлайну немає. Fixed і Later пишуть null.
+- `eligibleWeekDays` — опційний фільтр днів усередині діапазону (лише non-recurring).
+- Якщо задача не влазить у вікно → **Later** (не Problematic); warning без «підняти пріоритет» — фаза / тривалість / спліт / вікно.
 
 ### 3.5 Weekend vs phase
 

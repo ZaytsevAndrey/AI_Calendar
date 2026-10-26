@@ -21,6 +21,13 @@ Network looks busy: the same resources seem to refetch too often (calendar event
 - [ ] Trace Network / RTK Query / axios on Calendar, Tasks, and Settings: which endpoints fire, how often, and what triggers them (mount, focus, invalidation, polling, overlapping hooks).
 - [ ] Write down the duplicate clusters and the smallest fix list (shared cache key, skip duplicate subscribers, tighter invalidation, debounce). Do not rewrite fetching until that note exists.
 
+### 38. Move / place a task into the past
+
+Dragging or saving a task onto a past clock is inconsistent or wrong. Rules already exist in places (voice normalize drops past preferred/fixed slots; placement and drag may differ).
+
+- [ ] Research what today allows or blocks: drag / resize, form edit, `POST /schedule/move-event`, create/placement, voice. Note specs and code paths that disagree.
+- [ ] Decide the product rule (block, warn, allow within today, allow completed history, etc.), then implement that one rule everywhere. Do not patch one surface alone.
+
 ---
 
 ## Later — decide before building
@@ -77,6 +84,6 @@ Third parties and publishing. Leave these until the Now list is done.
 
 ## Recommended next steps
 
-1. Next: roadmap **§37** — diagnose duplicate / excess fetches. (§32 full mobile version is after the web. §31 backup and §24 Piper are in Later.)
+1. Next: roadmap **§37** — diagnose duplicate / excess fetches. Then **§38** — research + fix move/place into the past. (§32 full mobile version is after the web. §31 backup and §24 Piper are in Later.)
 2. Voice understanding continues in parallel via [voice-prompt-next.md](voice-prompt-next.md); do not put it back in this queue.
 3. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

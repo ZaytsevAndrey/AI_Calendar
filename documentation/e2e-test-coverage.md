@@ -291,10 +291,11 @@ Mutation jobs: POST/PATCH tasks return a `jobId` for place + Google sync progres
 | U-TSK-002 | U | P0 | Flexible | Name + duration submit | Mutation progress toast (title = name; Saving…→Done); appears in list; calendar refresh after job |
 | U-TSK-003 | U | P0 | Fixed | Missing end | Client error; no POST |
 | U-TSK-004 | U | P0 | Fixed | Valid slot | Created; Google stub event if connected |
+| U-TSK-026 | U | P1 | Fixed tab | Pick a day and a start/end clock | `scheduledStartTime` / `scheduledEndTime` are that civil day plus those clocks; no native datetime input |
 | U-TSK-005 | U | P0 | Recurring | No pattern | Client blocks |
 | U-TSK-006 | U | P0 | Recurring Daily Mon–Fri | Submit | Created |
 | U-TSK-007 | U | P0 | Unscheduled | Name only | Inbox section; Unscheduled icon (`aria-label`); create dialog shows Unscheduled preset |
-| U-TSK-008 | U | P1 | Unscheduled with phase + earliest + overdue deadline | List | Icon meta labels for Unscheduled / phase / From / Overdue; icon-only Done/Do now; no duration text |
+| U-TSK-008 | U | P1 | Later task with phase + earliest | List | Icon meta for Later / phase / From; no due date; icon-only Done/Do now; no duration text |
 | U-TSK-009 | U | P0 | Inbox **Do now** | Clears `isUnscheduled`, from-now window | Lands in Scheduled after placement |
 | U-TSK-010 | U | P0 | Inbox **Done** | Confirm path | `completed`; disappears from inbox; **no** calendar block |
 | U-TSK-011 | U | P0 | Inbox **Skip** | Cancels | `canceled`; disappears from active inbox |
@@ -302,7 +303,7 @@ Mutation jobs: POST/PATCH tasks return a `jobId` for place + Google sync progres
 | U-TSK-024 | U | P0 | Inbox **Schedule** | Opens schedule form | Title Schedule task; phase fields visible; name prefilled |
 | U-TSK-025 | U | P0 | Edit modal **Delete** (one-off) | Confirm then delete | Task leaves inbox; progress toast |
 | U-TSK-011 | U | P1 | Uncheck Fixed | Form | Allow split restored (preset rules) |
-| U-TSK-012 | U | P1 | Clear phase / deadline on edit | Phase chips → **Any time**; clear deadline; Save | PATCH `phaseIds: []` / `deadline: null`. Deadline clears. **Current:** GET still returns previous `phaseId` after `phaseIds: []` |
+| U-TSK-012 | U | P1 | Clear phase / date range on edit | Phase chips → **Any time**; clear the date range; Save | PATCH `phaseIds: []` / `deadline: null`. Window end clears. **Current:** GET still returns previous `phaseId` after `phaseIds: []` |
 | U-TSK-023 | U | P1 | Completed/canceled Unscheduled | Status filter completed / all | Not listed in Unscheduled; no local-completed calendar chip (unit: `taskListFilters`, `completedTaskEvents`) |
 | U-TSK-013 | U | P1 | Expand Google options | location/color/visibility/reminders | Persisted |
 | U-TSK-014 | U | P1 | Filter active / todo / in_progress / completed / canceled / all | Change filter | List matches |

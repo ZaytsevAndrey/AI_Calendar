@@ -44,6 +44,6 @@ describe('summarizeStoredTask', () => {
       { estimatedTimeInMinutes: 45, deadline: null },
       { mentionDefaults: true, mentionClears: true },
     );
-    expect(line).toBe('45 хв, прибрано дедлайн');
+    expect(line).toBe('45 хв, прибрано кінець вікна');
   });
 });
