@@ -52,5 +52,7 @@ describe('fast create prompts', () => {
     expect(planner).toMatch(/day plan stay as written above/);
     expect(planner).toMatch(/create specialist fills them/);
     expect(planner).toMatch(/names no errand/);
+    expect(planner).toMatch(/That question is type "final", outcome "clarify"/);
+    expect(planner).toMatch(/Any other missing detail is still a create segment/);
   });
 });

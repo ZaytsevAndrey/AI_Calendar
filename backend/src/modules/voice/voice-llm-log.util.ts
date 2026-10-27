@@ -1,7 +1,10 @@
 import type { Logger } from '@nestjs/common';
+import { clipVoiceBody, currentVoiceTrace, voiceTraceBodiesEnabled } from '../../common/voice-trace';
 
 export type PlannerFaultCode =
+  | 'invalid_json'
   | 'invalid_decision'
+  | 'segment_limit_exceeded'
   | 'tool_limit_exceeded'
   | 'planner_execution_error';
 
@@ -11,24 +14,31 @@ export function logPlannerEvent(
   event: 'planner.decision' | 'planner.fault',
   fields: Record<string, string | number | boolean>,
 ): void {
-  const line = `[${event}] ${JSON.stringify(fields)}`;
+  const traceId = currentVoiceTrace()?.traceId;
+  const payload = traceId ? { traceId, ...fields } : fields;
+  const line = `[${event}] ${JSON.stringify(payload)}`;
   if (event === 'planner.fault') logger.warn(line);
   else logger.log(line);
 }
 
-/** Compact one-line log of an LLM JSON reply for voice debugging. */
+/** `traceId=...` for a file line that is not the voice.trace summary. */
+export function voiceTracePrefix(): string {
+  const traceId = currentVoiceTrace()?.traceId;
+  return traceId ? `traceId=${traceId}` : '';
+}
+
+/**
+ * Raw model text for debugging. Off unless VOICE_TRACE_BODY is explicitly enabled,
+ * and in production also VOICE_TRACE_BODY_PRODUCTION. Secrets are redacted either way.
+ */
 export function logVoiceLlm(
   logger: Logger,
   step: string,
   raw: string,
   maxChars = 2000,
 ): void {
-  const compact = String(raw || '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const clipped =
-    compact.length > maxChars
-      ? `${compact.slice(0, maxChars)}…(+${compact.length - maxChars})`
-      : compact;
-  logger.log(`[llm:${step}] ${clipped}`);
+  if (!voiceTraceBodiesEnabled()) return;
+  const traceId = currentVoiceTrace()?.traceId;
+  const prefix = traceId ? `[llm:${step}] traceId=${traceId} ` : `[llm:${step}] `;
+  logger.log(`${prefix}${clipVoiceBody(raw, maxChars)}`);
 }

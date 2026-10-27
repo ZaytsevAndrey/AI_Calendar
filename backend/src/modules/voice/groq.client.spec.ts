@@ -1,5 +1,6 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { runWithVoiceTrace, VoiceTrace } from '../../common/voice-trace';
 import {
   discoverGroqKeyNames,
   GroqClient,
@@ -301,6 +302,52 @@ describe('GroqClient local LLM', () => {
       (call) => (JSON.parse((call[1] as { body: string }).body) as { model: string }).model,
     );
     expect(models).toEqual(['openai/gpt-oss-120b', 'openai/gpt-oss-20b']);
+  });
+
+  it('records a model fallback on the next call without hiding the failed attempt', async () => {
+    const tpd = {
+      ok: false,
+      status: 429,
+      headers: { get: () => null },
+      json: async () => ({
+        error: {
+          message:
+            'Rate limit reached: tokens per day (TPD). Please try again in 19m9.984s.',
+        },
+      }),
+    };
+    const ok = {
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({
+        choices: [{ message: { content: '{"ok":true}' } }],
+        usage: { total_tokens: 7 },
+      }),
+    };
+    global.fetch = jest.fn().mockResolvedValueOnce(tpd).mockResolvedValueOnce(ok) as unknown as typeof fetch;
+    const groq = new GroqClient({
+      get: (key: string) => (key === 'GROQ_API_KEY' ? 'test-key' : undefined),
+    } as ConfigService);
+    const trace = new VoiceTrace('fallback');
+
+    const result = await runWithVoiceTrace(trace, () =>
+      groq.runWithPin(0, () => groq.completeJson('system', 'user', { role: 'planner' })),
+    );
+
+    expect(result.value).toBe('{"ok":true}');
+    const llm = trace.steps.filter((step) => step.kind === 'llm');
+    expect(llm.map((step) => step.via)).toEqual([
+      'groq:openai/gpt-oss-120b',
+      'groq:openai/gpt-oss-20b',
+    ]);
+    expect(llm[0]).toMatchObject({ ok: false, component: 'planner' });
+    expect(llm[1]).toMatchObject({
+      ok: true,
+      component: 'planner',
+      reason: 'model_fallback',
+      tokens: 7,
+    });
   });
 
   it('sends planner calls to Gemini and keeps parse on Groq', async () => {

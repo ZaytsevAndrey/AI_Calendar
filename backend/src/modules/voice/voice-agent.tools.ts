@@ -15,6 +15,7 @@ import {
   localHm,
   localYmd,
   normalizeClockHm,
+  resolveScheduleDayYmd,
   scheduleTodayYmd,
   startOfLocalDayIso,
 } from './voice-local-date.util';
@@ -205,20 +206,23 @@ export class VoiceAgentTools {
     };
   }
 
-  /** Tool args must be YYYY-MM-DD (LLM resolves speech). Empty → schedule today. */
-  private resolveDayYmd(ctx: VoiceToolContext, raw: string): string {
-    const trimmed = raw.trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-    return scheduleTodayYmd(
-      ctx.nowIso,
-      ctx.timeZone,
-      ctx.settings.wakeTime,
-      ctx.settings.sleepTime,
+  /** Empty → schedule today. A present value must be a real civil day, or the tool errors. */
+  private resolveDayYmd(ctx: VoiceToolContext, raw: string): string | null {
+    const resolved = resolveScheduleDayYmd(
+      raw,
+      scheduleTodayYmd(
+        ctx.nowIso,
+        ctx.timeZone,
+        ctx.settings.wakeTime,
+        ctx.settings.sleepTime,
+      ),
     );
+    return 'error' in resolved ? null : resolved.day;
   }
 
   private async getDayAgenda(ctx: VoiceToolContext, dayRaw: string) {
     const ymd = this.resolveDayYmd(ctx, dayRaw);
+    if (!ymd) return { error: 'invalid_day' };
     const dayStart = new Date(startOfLocalDayIso(ymd, ctx.timeZone)).getTime();
     const dayEnd = new Date(endOfLocalDayIso(ymd, ctx.timeZone)).getTime();
     const open = this.openTasks(ctx);
@@ -285,6 +289,7 @@ export class VoiceAgentTools {
 
   private async findFreeGaps(ctx: VoiceToolContext, dayRaw: string) {
     const ymd = this.resolveDayYmd(ctx, dayRaw);
+    if (!ymd) return { error: 'invalid_day' };
     const wake = normalizeClockHm(ctx.settings.wakeTime || '08:00');
     const sleep = normalizeClockHm(ctx.settings.sleepTime || '23:00');
     const dayStart = new Date(

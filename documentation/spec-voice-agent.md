@@ -2,7 +2,7 @@
 
 **Status:** the only product contract for Companion.  
 **Language:** English  
-**Last updated:** 23 October 2026
+**Last updated:** 27 October 2026
 
 Companion (Ukrainian: Помічник) talks with the user and returns write intents. The server does not change the calendar. The client applies intents through the existing task, habit, and placement APIs. Placement and conflict stay in [spec-conflict-rules.md](spec-conflict-rules.md) and [spec-incremental-placement.md](spec-incremental-placement.md). The screen is [features/companion-panel.md](features/companion-panel.md). HTTP fields are in [api-reference.md](api-reference.md).
 
@@ -50,26 +50,30 @@ This replaces a cap of two questions. Ignoring a question means the next utteran
 
 Skip means that piece is not written and is not asked again. The queue is the set of ignored questions that are still waiting. A day-plan interview is not this queue: it has no question cap, and the user ends it with Apply.
 
+An open clarification batch is not that queue. A new command does not answer the open question and is not `answer_pending`. It also does not cancel or confirm the batch. Until the user answers that question or cancels the batch, the orchestrator does not apply the new command and does not change the batch. It repeats the stored question. The planner is not the component that blocks the write.
+
 ---
 
 ## 3. How a turn is split
 
-One planner call, then each write goes through the router and one specialist. The planner does not choose the action. The router chooses `create`, `update`, `delete`, `skip`, or `needs_clarification`. Time, other fields, and done on one existing task are one `update`. The specialist fills only that intent's fields.
+One planner call, then each write goes through the router and one specialist. That call is `buildPlannerSystemPrompt`. Experimental Planner C2 is a separate prompt and `/voice/turn` does not call it. The planner does not choose the action. The router chooses `create`, `update`, `delete`, `skip`, or `needs_clarification`. Time, other fields, and done on one existing task are one `update`. The specialist fills only that intent's fields.
 
 A calendar question is answered from a read tool before the planner speaks. At most two tool rounds. A question and a write in one utterance: the answer is spoken, and each write is its own segment. The spoken reply does not describe the writes. The app summarizes those.
 
-A planner reply that is not a known decision, a tool request with no calls, tools still requested on the last round, or any other planner failure is a refusal. That utterance is not parsed as a task. Rate limit and timeout are still those errors. An open day plan stays on screen. The server log is `planner.fault` with `invalid_decision`, `tool_limit_exceeded`, or `planner_execution_error`. An accepted decision is `planner.decision`.
+A planner reply that is not JSON, not a known decision, or a known decision with a bad field is a refusal. So is a tool request with no calls, a tool request with more calls than one round runs, tools still requested on the last round, and any other planner failure. A plan edit when no day plan is open, and an answer to a question that is not open, are the same refusal. Steps with no segments and no answer are that refusal too. While a clarification batch is open, that empty decision does not settle the batch. Rate limit and timeout are still those errors. An open day plan stays on screen. The server log is `planner.fault` with `invalid_json`, `invalid_decision`, `tool_limit_exceeded`, or `planner_execution_error`. An accepted decision is `planner.decision`.
 
-A segment is one self-contained command, in the transcript's language, in the user's words. At most six, in spoken order.
+A segment is one self-contained command, in the transcript's language, in the user's words. At most six, in spoken order. More than six applies nothing. The reply asks to say them in smaller groups. That log code is `segment_limit_exceeded`.
 
 - Every write is its own segment: create, one update of one task, skip, cancel, delete. An update carries that task's fields, its time, and whether it is done.
 - Dates named once are one segment each. A clock they share is repeated in each and does not join them. A repeat on those days is one segment.
 - Two errands are two segments. One errand with several objects of the same action is one segment.
 - A field change and a placement of the same task are one update. The clock is not copied onto a different task that is only being removed.
-- A later correction of a task this utterance is creating is merged into that one create. The last values win. That is not a separate move.
-- A pronoun that points at a task already in the chat or in a tool result becomes that task's name. When the planner cannot tell which task, it still emits the segment. The specialist asks.
-- A clear piece is held while an unclear piece is a question. The ignore rule in §2 decides a question the user does not answer.
-- While a clarification is open, the next utterance is the answer only when it gives the missing fact. A reply that does not is the ignore rule in §2, and the utterance is decided on its own.
+- A later correction of a task this utterance is creating is merged into that one create. The last value of each parameter wins. That is not a separate move. A later day, clock, or length replaces only that parameter. A clock or length this utterance did not restate stays with the task.
+- A delete that unambiguously targets the task this utterance is creating removes that create. No operation remains, and the specialist does not receive a create or a delete. A delete of a task that already existed stays its own operation beside the create. A delete that does not settle one target leaves the create in place.
+- A bare pronoun is not the task a `get_now_next` result marks as happening now. A pronoun may name an object that this utterance, or the dialogue history, has already established as the only candidate. Explicit selection of the current task may use that `get_now_next` result, and the segment names the task. Several candidates are not a choice: the segment keeps the reference and does not pick one. An unsettled reference does not take an open title. The segment still goes out, and the specialist asks.
+- A later correction folds into the create from this utterance only when the reference has that one antecedent. One create in the utterance does not by itself settle a pronoun when another task was also named.
+- A clear piece is held while an unclear piece is a question. An open clarification batch stays as §2 says. It is not dropped because a later utterance ignores it.
+- While a clarification batch is open, the utterance is `answer_pending` only when it answers that one question and adds no new command. A new command is not that answer. `cancel_pending` is how they drop the whole batch. Any other planner decision leaves the batch unchanged. The orchestrator repeats the stored question and does not apply the new command.
 - Phases and settings are not available. That is `refuse`.
 
 A new errand is `create` even when an open title is close in meaning, and even when the verb sounds like update or delete ("update the resume", "delete the photos", "close the ticket"). Update, delete, and skip are only for a task they are already pointing at.
@@ -105,7 +109,7 @@ Phase is chosen after kind. A named phase is used only when its window contains 
 
 ## 5. An existing task
 
-The spoken title is the same as an Open task title: that task. "This", "it", or "that" with no title is the app task happening now. The word for the present moment is a time. Anything else, including a merely similar title: one question which task. Do not copy the open title and do not create a task here.
+The spoken title is the same as an Open task title: that task. A bare pronoun with no settled antecedent is not the task happening now. The word for the present moment is a time, not a target. Explicit selection of the current task is that task. Anything else, including a merely similar title or several possible targets: one question which task. Do not copy the open title and do not create a task here.
 
 A new errand they asked to add is created as they said, even when an open task is similar.
 
@@ -125,7 +129,7 @@ Done on a one-off sets status completed. Done on a series uses the scope above: 
 
 ### Delete
 
-Removes the task. It does not ask "are you sure". The app asks before it writes. It does not invent a replacement. Deleting something that is not an open task (photos, files) is a new errand.
+Removes the task. It does not ask "are you sure". The app asks before it writes. It does not invent a replacement. Deleting something that is not an open task (photos, files) is a new errand. A delete aimed at the task this same utterance is creating is not this delete: that create is withdrawn and nothing is written.
 
 ### Skip
 
@@ -181,6 +185,8 @@ While the plan is open, a write about that day is a plan edit, not a segment. A 
 
 Edits are: add a task that does not exist yet, include an existing open task, remove an item, set a preferred start, set a window, set a duration, set the order. Earlier items get the better slots. A bare hour in a window uses the place still ahead. A named morning or night locks that half. Midday as a deadline is 12:00.
 
+A missing clock stays as it is. An explicit null clears a preferred start or one side of a window, and on a new task it means no clock. A length left out uses the default. A clock that is not a real time, or a length that was given but is not usable, is not applied and does not replace what was there. A new task with such a clock or length is not added. The other edits in that list still apply, and the reply says the unusable ones were left out. A row that is not an applicable edit is left out too, and the reply counts those rows in a separate sentence. The draft does not grow past 16 tasks. An add or include that does not fit is left out and counted on its own. A task already in the draft is not that case. A blank plan day is today. A plan day that is not a real calendar date does not open a plan and is not moved onto today. A read of a day that is not a real date returns `{ error: "invalid_day" }` with no schedule. The planner receives that result unchanged.
+
 1. **Interview.** `clarify`, `plan.stage = interview`, actions `build_plan` and `cancel`. Each answer edits the draft. One question at a time. Never repeat a question. The server does not close the interview by itself.
 2. **Proposal.** The placement engine seats the draft in a dry run, in draft order. A seated item blocks the next. Items that do not fit are `unplaced` (`no_room`, `deadline_passed`, `conflict`). An empty proposal returns to the interview.
 3. **Review.** `confirm`, `plan.stage = review`. The mic stays on. An utterance edits the plan and the server re-seats it. Changed items are marked.
@@ -207,7 +213,7 @@ Phone is a bottom sheet. Desktop is a floating panel. The thread shows the user 
 - In: `transcript`, `sessionId`, `actionId`, `executionReport`, `mode`. Time zone comes from settings.
 - Out: `outcome`, `assistantMessage`, `intents[]`, `actions[]`, `plan`, `segments[]`.
 
-`POST /voice/transcribe` is speech to text. `POST /voice/parse-task` remains for tests and when a planner decision does not fit the session: a segment, an edit with no open draft, or an answer with no open question. A planner fault does not call it. It is not the Companion path.
+`POST /voice/transcribe` is speech to text. `POST /voice/parse-task` remains for tests and for each write segment the planner already split out. A planner fault does not call it. Neither does a plan edit with no open draft, an answer with no open question, empty steps, or a segment list past the limit. It is not the Companion path for those turns.
 
 Read tools used to ground an answer: `get_now_next`, `get_day_agenda`, `list_unscheduled`, `list_problematic`, `find_free_gaps`, `match_task`, `match_habit`, `get_habit_status`, `get_task`, `list_reminders`.
 
@@ -217,4 +223,4 @@ Write intents the client runs: create, update, delete, complete, skip, cancel, m
 
 ## 12. Tests
 
-Live dialogue tests are `npm run voice:eval:dialogue`. The corpus is `backend/src/modules/voice/dialogue-corpus`. An expectation is an instance of a sentence in this file. A write turn is `confirm`. Spoken yes is `act`.
+Live dialogue tests are `npm run voice:eval:dialogue`. The corpus is `backend/src/modules/voice/dialogue-corpus`. An expectation is an instance of a sentence in this file. A write turn is `confirm`. Spoken yes is `act`. Each turn in the report carries one `traceId` and the `steps` of that turn. After each planner segment, including a successful one, an orchestrator step named `segment` records `outcome` (`accepted`, `clarify`, `refused`, or `dropped`). `decision` stays the planner decision type. Production does not write transcripts, calendar bodies, or raw model replies unless `VOICE_TRACE_BODY=1`, and in production also `VOICE_TRACE_BODY_PRODUCTION=1`.

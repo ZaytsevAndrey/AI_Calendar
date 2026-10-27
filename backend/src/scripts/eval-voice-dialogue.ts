@@ -17,6 +17,8 @@ import { NestFactory } from '@nestjs/core';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AppModule } from '../app.module';
+import { runWithVoiceTrace, VoiceTrace, voiceTraceReport } from '../common/voice-trace';
+import { dialogueEvalCase } from '../modules/voice/voice-eval-report';
 import { User } from '../modules/users/user.entity';
 import { UserSettingsService } from '../modules/user-settings/user-settings.service';
 import { Task, TaskStatus } from '../modules/tasks/entities/task.entity';
@@ -267,25 +269,29 @@ async function main(): Promise<void> {
       const createdIds: string[] = [];
       let failed = false;
       const scenarioStarted = Date.now();
+      let turnTrace: VoiceTrace | undefined;
       try {
         for (let turnIndex = 0; turnIndex < scenario.turns.length; turnIndex += 1) {
           const turn = scenario.turns[turnIndex];
           const before = groq.evalSpends().length;
           const turnStarted = Date.now();
-          const response = await voice.turn(userId, {
-            sessionId,
-            transcript: turn.transcript,
-            actionId: turn.actionId,
-            executionReport: turn.executionReport,
-            timeZone: VOICE_EVAL_ANCHORS.timeZone,
-            clientNowIso: VOICE_EVAL_ANCHORS.nowIso,
-            mode: scenario.mode,
-          });
+          turnTrace = new VoiceTrace();
+          const response = await runWithVoiceTrace(turnTrace, () =>
+            voice.turn(userId, {
+              sessionId,
+              transcript: turn.transcript,
+              actionId: turn.actionId,
+              executionReport: turn.executionReport,
+              timeZone: VOICE_EVAL_ANCHORS.timeZone,
+              clientNowIso: VOICE_EVAL_ANCHORS.nowIso,
+              mode: scenario.mode,
+            }),
+          );
           const calls = groq.evalSpends().slice(before);
           const failures = matchTurn(turn.expect, response, calls);
-          const row = {
+          const traced = voiceTraceReport(turnTrace);
+          const row = dialogueEvalCase({
             id: scenario.turns.length > 1 ? `${scenario.id}.${turnIndex + 1}` : scenario.id,
-            ok: failures.length === 0,
             failures,
             outcome: response.outcome,
             kinds: response.intents.map(intentKind),
@@ -299,7 +305,9 @@ async function main(): Promise<void> {
               tokens: call.tokens,
               keyIndex: call.keyIndex,
             })),
-          };
+            traceId: traced.traceId,
+            steps: traced.steps,
+          });
           cases.push(row);
           if (!row.ok) {
             console.log(`FAIL t${turnIndex + 1} ${failures.join('; ')}`);
@@ -340,7 +348,13 @@ async function main(): Promise<void> {
           i -= 1;
           continue;
         }
-        cases.push({ id: scenario.id, ok: false, error: message });
+        const traced = turnTrace ? voiceTraceReport(turnTrace) : undefined;
+        cases.push({
+          id: scenario.id,
+          ok: false,
+          error: message,
+          ...(traced ? { traceId: traced.traceId, steps: traced.steps } : {}),
+        });
         console.log(`ERROR ${message}`);
         const hardLimit = /insufficient|balance|quota|billing|unauthorized|invalid api key/i.test(message);
         if ((isDailyLimit(message) && groq.liveKeyCount() === 0) || hardLimit || minuteLimit) {

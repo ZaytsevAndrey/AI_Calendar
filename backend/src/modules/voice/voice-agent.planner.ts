@@ -1,5 +1,5 @@
-import type { VoiceToolCall } from './voice-agent.tools';
-import { parsePlanEdits, type PlanEdit } from './voice-agent.plan-draft';
+import { VOICE_READ_TOOL_NAMES, type VoiceToolCall } from './voice-agent.tools';
+import { parsePlanEdits, type PlanEdit, type SkippedPlanEdit } from './voice-agent.plan-draft';
 import { MAX_SEGMENTS } from './voice-agent.planner.prompt';
 import { extractJsonObject } from './voice-parse.util';
 
@@ -12,9 +12,10 @@ export type PlannerDecision =
       interview: boolean;
       question: string;
       edits: PlanEdit[];
+      skipped: SkippedPlanEdit[];
     }
-  | { type: 'plan_edits'; edits: PlanEdit[]; answer: string }
-  | { type: 'plan_question'; question: string; edits: PlanEdit[] }
+  | { type: 'plan_edits'; edits: PlanEdit[]; answer: string; skipped: SkippedPlanEdit[] }
+  | { type: 'plan_question'; question: string; edits: PlanEdit[]; skipped: SkippedPlanEdit[] }
   | { type: 'answer_pending' }
   | { type: 'confirm_pending' }
   | { type: 'cancel_pending' }
@@ -24,84 +25,168 @@ export type PlannerDecision =
       assistantMessage: string;
     };
 
+const READ_TOOLS: ReadonlySet<string> = new Set(VOICE_READ_TOOL_NAMES);
+
 function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-/** The reply parsed as JSON, but `type` is not a planner decision. */
+function plainObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+/** The reply was not a JSON object. */
+export class PlannerInvalidJsonError extends Error {
+  readonly code = 'invalid_json' as const;
+
+  constructor() {
+    super('Planner reply was not a JSON object');
+    this.name = 'PlannerInvalidJsonError';
+  }
+}
+
+/** The reply parsed as JSON, but it is not a usable planner decision. */
 export class PlannerInvalidDecisionError extends Error {
   readonly code = 'invalid_decision' as const;
 
-  constructor(readonly typeName: string) {
-    super(`Unknown planner decision type: ${typeName || '(missing)'}`);
+  constructor(
+    readonly typeName: string,
+    readonly reason?: string,
+  ) {
+    super(
+      reason
+        ? `Invalid planner decision (${typeName || '(missing)'}): ${reason}`
+        : `Unknown planner decision type: ${typeName || '(missing)'}`,
+    );
     this.name = 'PlannerInvalidDecisionError';
   }
 }
 
-/** Parse one planner reply. Throws when the reply is not a JSON object or the type is unknown. */
+/** More write segments than one turn can apply. Nothing from the list is kept. */
+export class PlannerSegmentLimitError extends Error {
+  readonly code = 'segment_limit_exceeded' as const;
+
+  constructor(
+    readonly count: number,
+    readonly limit: number,
+  ) {
+    super(`Planner returned ${count} segments; limit is ${limit}`);
+    this.name = 'PlannerSegmentLimitError';
+  }
+}
+
+function invalid(typeName: string, reason: string): never {
+  throw new PlannerInvalidDecisionError(typeName, reason);
+}
+
+function parseToolCalls(rows: unknown): VoiceToolCall[] {
+  if (!Array.isArray(rows)) invalid('tools', 'calls');
+  const calls: VoiceToolCall[] = [];
+  for (const row of rows) {
+    const call = plainObject(row);
+    if (!call) invalid('tools', 'call');
+    const name = text(call.name);
+    if (!name) invalid('tools', 'call');
+    if (!READ_TOOLS.has(name)) invalid('tools', 'unknown_tool');
+    if ('args' in call && call.args !== undefined && !plainObject(call.args)) {
+      invalid('tools', 'args');
+    }
+    const args = plainObject(call.args);
+    calls.push({ name, args: args ?? {} });
+  }
+  return calls;
+}
+
+function parseSegmentText(row: unknown): string {
+  if (typeof row === 'string') return row.trim();
+  const segment = plainObject(row);
+  if (!segment || typeof segment.text !== 'string') invalid('steps', 'segment');
+  return segment.text.trim();
+}
+
+function parseSteps(parsed: Record<string, unknown>): PlannerDecision {
+  if (!Array.isArray(parsed.segments)) invalid('steps', 'segments');
+  if ('answer' in parsed && parsed.answer != null && typeof parsed.answer !== 'string') {
+    invalid('steps', 'answer');
+  }
+  const segments: string[] = [];
+  for (const row of parsed.segments) {
+    const segment = parseSegmentText(row);
+    if (segment) segments.push(segment);
+  }
+  if (segments.length > MAX_SEGMENTS) {
+    throw new PlannerSegmentLimitError(segments.length, MAX_SEGMENTS);
+  }
+  return {
+    type: 'steps',
+    answer: typeof parsed.answer === 'string' ? parsed.answer.trim() : '',
+    segments,
+  };
+}
+
+function parseFinal(parsed: Record<string, unknown>): PlannerDecision {
+  const outcome = parsed.outcome;
+  if (outcome !== 'answer' && outcome !== 'clarify' && outcome !== 'refuse') {
+    invalid('final', 'outcome');
+  }
+  if (
+    'assistantMessage' in parsed &&
+    parsed.assistantMessage != null &&
+    typeof parsed.assistantMessage !== 'string'
+  ) {
+    invalid('final', 'assistantMessage');
+  }
+  return {
+    type: 'final',
+    outcome,
+    assistantMessage: text(parsed.assistantMessage),
+  };
+}
+
+/** Parse one planner reply. Throws when the reply is not a usable decision. */
 export function parsePlannerDecision(raw: string): PlannerDecision {
-  const parsed = extractJsonObject(raw) as Record<string, unknown>;
-  const type = text(parsed.type);
+  let parsed: unknown;
+  try {
+    parsed = extractJsonObject(raw);
+  } catch {
+    throw new PlannerInvalidJsonError();
+  }
+  const decision = plainObject(parsed);
+  if (!decision) throw new PlannerInvalidJsonError();
+  const type = text(decision.type);
   switch (type) {
-    case 'tools': {
-      const rows = Array.isArray(parsed.calls) ? parsed.calls : [];
-      const calls = rows
-        .map((row): VoiceToolCall | null => {
-          if (!row || typeof row !== 'object') return null;
-          const name = text((row as { name?: unknown }).name);
-          if (!name) return null;
-          const args = (row as { args?: unknown }).args;
-          return {
-            name,
-            args:
-              args && typeof args === 'object' && !Array.isArray(args)
-                ? (args as Record<string, unknown>)
-                : {},
-          };
-        })
-        .filter((call): call is VoiceToolCall => call != null);
-      return { type, calls };
-    }
-    case 'steps': {
-      const rows = Array.isArray(parsed.segments) ? parsed.segments : [];
-      const segments = rows
-        .map((row) =>
-          typeof row === 'string' ? row.trim() : text((row as { text?: unknown })?.text),
-        )
-        .filter(Boolean)
-        .slice(0, MAX_SEGMENTS);
-      return { type, answer: text(parsed.answer), segments };
-    }
-    case 'plan_start':
+    case 'tools':
+      return { type, calls: parseToolCalls(decision.calls) };
+    case 'steps':
+      return parseSteps(decision);
+    case 'plan_start': {
+      const parsed = parsePlanEdits(decision.edits);
       return {
         type,
-        day: text(parsed.day),
-        interview: parsed.interview === true,
-        question: text(parsed.question),
-        edits: parsePlanEdits(parsed.edits),
+        day: text(decision.day),
+        interview: decision.interview === true,
+        question: text(decision.question),
+        edits: parsed.edits,
+        skipped: parsed.skipped,
       };
-    case 'plan_edits':
-      return { type, edits: parsePlanEdits(parsed.edits), answer: text(parsed.answer) };
+    }
+    case 'plan_edits': {
+      const parsed = parsePlanEdits(decision.edits);
+      return { type, edits: parsed.edits, answer: text(decision.answer), skipped: parsed.skipped };
+    }
     case 'plan_question': {
-      const question = text(parsed.question);
-      if (!question) {
-        return { type: 'plan_edits', edits: parsePlanEdits(parsed.edits), answer: '' };
-      }
-      return { type, question, edits: parsePlanEdits(parsed.edits) };
+      const question = text(decision.question);
+      if (!question) invalid('plan_question', 'empty_question');
+      const parsed = parsePlanEdits(decision.edits);
+      return { type, question, edits: parsed.edits, skipped: parsed.skipped };
     }
     case 'answer_pending':
     case 'confirm_pending':
     case 'cancel_pending':
       return { type };
-    case 'final': {
-      const outcome = text(parsed.outcome);
-      return {
-        type: 'final',
-        outcome:
-          outcome === 'clarify' || outcome === 'refuse' ? outcome : 'answer',
-        assistantMessage: text(parsed.assistantMessage),
-      };
-    }
+    case 'final':
+      return parseFinal(decision);
     default:
       throw new PlannerInvalidDecisionError(type || '(missing)');
   }

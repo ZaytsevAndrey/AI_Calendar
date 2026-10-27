@@ -241,7 +241,21 @@ export function resolveVoiceCommand(input: {
   wakeTime?: string | null;
 }): VoiceCommandResolveResult {
   const lang = resolveLang(input.language);
-  const draft = normalizeDraft(input.draft, input.transcript);
+  const normalized = normalizeDraft(input.draft, input.transcript);
+  const ground = groundReference(input.transcript, input.tasks, normalized);
+  if (ground.kind === 'clarify') {
+    const question = vt(lang, 'voice.whichTask');
+    return input.alreadyClarified
+      ? { type: 'command', command: { kind: 'refuse', message: question } }
+      : { type: 'clarify', question };
+  }
+  const draft = ground.kind === 'unchanged'
+    ? normalized
+    : {
+        ...normalized,
+        target: ground.kind,
+        taskName: ground.kind === 'named' ? ground.name : null,
+      };
 
   if (draft.intent === 'update' || draft.intent === 'delete') {
     const picked = pickTask({ ...input, draft, language: lang });
@@ -951,6 +965,70 @@ function pickTask(input: {
     return { type: 'refuse', message: vt(lang, 'voice.nothingInProgress') };
   }
   return { type: 'clarify', question: vt(lang, 'voice.whichTask') };
+}
+
+const PRONOUNS = new Set([
+  'this', 'it', 'that',
+  'це', 'цього', 'цьому', 'цим', 'ця', 'цю', 'цієї', 'цій', 'цей',
+  'його', 'її', 'йому', 'їй', 'нього', 'неї',
+  'той', 'та', 'ту', 'те',
+  'это', 'эту', 'этот', 'его', 'её',
+]);
+
+function groundReference(
+  transcript: string,
+  tasks: VoiceCommandTask[],
+  draft: VoiceCommandDraft,
+): { kind: 'unchanged' } | { kind: 'current' } | { kind: 'named'; name: string } | { kind: 'clarify' } {
+  const open = tasks.filter((task) => task.status !== 'completed' && task.status !== 'canceled');
+  const mentioned = mentionedTasks(transcript, open);
+  const current = explicitCurrent(transcript);
+  if (mentioned.length > 1 || (mentioned.length === 1 && current)) return { kind: 'clarify' };
+  if (mentioned.length === 1) return { kind: 'named', name: mentioned[0].name };
+  if (current) return { kind: 'current' };
+  if (tokensOf(transcript).some((token) => PRONOUNS.has(token))) return { kind: 'clarify' };
+  if (draft.taskName && !textMentionsName(transcript, draft.taskName)) return { kind: 'clarify' };
+  return { kind: 'unchanged' };
+}
+
+function textMentionsName(transcript: string, name: string): boolean {
+  const needle = normalizeName(name);
+  if (!needle) return false;
+  return tokensOf(transcript).some((word) => nameMatchesWord(needle, word) || nameMatchesWord(word, needle));
+}
+
+function explicitCurrent(transcript: string): boolean {
+  const speech = normalizeName(transcript);
+  if (/current task|task happening now/.test(speech)) return true;
+  if (/поточн\p{L}*\s+задач/u.test(speech)) return true;
+  if (/задач\p{L}*\s+(?:що|яка|який)\s+зараз/u.test(speech)) return true;
+  return false;
+}
+
+function mentionedTasks(transcript: string, open: VoiceCommandTask[]): VoiceCommandTask[] {
+  const words = tokensOf(transcript).filter((token) => !PRONOUNS.has(token));
+  return open.filter((task) => {
+    const name = normalizeName(task.name);
+    if (name.length < 3) return false;
+    return words.some((word) => nameMatchesWord(name, word));
+  });
+}
+
+function nameMatchesWord(name: string, word: string): boolean {
+  if (word === name) return true;
+  const prefix = commonPrefixLength(word, name);
+  return prefix >= 4 && prefix >= Math.min(word.length, name.length) - 1;
+}
+
+function commonPrefixLength(left: string, right: string): number {
+  const limit = Math.min(left.length, right.length);
+  let index = 0;
+  while (index < limit && left[index] === right[index]) index += 1;
+  return index;
+}
+
+function tokensOf(text: string): string[] {
+  return normalizeName(text).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 }
 
 function normalizeDraft(draft: VoiceCommandDraft, transcript: string): VoiceCommandDraft {

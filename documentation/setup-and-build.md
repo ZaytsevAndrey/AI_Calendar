@@ -109,7 +109,7 @@ npm run voice:eval:dialogue  # live planner dialogue corpus (see voice-agent-dia
 npm run clean        # remove node_modules / build / dist (see scripts/clean.js)
 ```
 
-`voice:eval:dialogue` runs the planner dialogue corpus ([voice-agent-dialogue-test-plan.md](voice-agent-dialogue-test-plan.md)). A write turn is `confirm` (preview cards). Spoken yes is `act`.
+`voice:eval:dialogue` runs the planner dialogue corpus ([voice-agent-dialogue-test-plan.md](voice-agent-dialogue-test-plan.md)). A write turn is `confirm` (preview cards). Spoken yes is `act`. The report at `backend/.tmp/voice-dialogue-eval-report.json` adds `traceId` and `steps` for each turn beside the existing pace `calls`. One user turn, whether it arrived over HTTP or through `VoiceService.turn`, has one trace id. Each planner segment adds an orchestrator `segment` step with `outcome`. `VOICE_TRACE_BODY` defaults off. Set it to `1` to log redacted, length-capped transcripts and model text; production also requires `VOICE_TRACE_BODY_PRODUCTION=1`.
 
 Tests run **one after another**. Jest uses `--runInBand` (one process; the next file starts only after the previous file’s tests finish). From the repo root, `npm test` runs the backend suite and then the frontend suite. Backend API e2e (`npm run test:e2e` in `backend`) is also `--runInBand`. Playwright uses a single worker.
 

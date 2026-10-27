@@ -45,8 +45,10 @@ export function registerVoiceHttpTiming(
     if (isVoicePath(request.url)) bindVoiceTrace(request);
   });
   server.addHook('onResponse', async (request, reply) => {
-    const steps: VoiceStep[] = readVoiceTrace(request)?.steps ?? [];
+    const trace = readVoiceTrace(request);
+    const steps: VoiceStep[] = trace?.steps ?? [];
     const line = formatVoiceTrace({
+      traceId: trace?.traceId ?? 'none',
       method: request.method,
       url: request.url,
       statusCode: reply.statusCode,

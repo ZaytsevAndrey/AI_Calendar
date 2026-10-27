@@ -24,6 +24,11 @@ describe('voice parse prompt split', () => {
     expect(system).toMatch(/classify/i);
     expect(system).toMatch(/"language"/);
     expect(system).not.toMatch(/scheduledStartTime/);
+    expect(system).toMatch(/explicit request for a new task is create even when an open task has the same title/);
+    expect(system).toMatch(/Placing that task is update/);
+    expect(system).toMatch(/does not settle a new task versus a change to an existing one, needs_clarification/);
+    expect(system).toMatch(/Do not guess/);
+    expect(system).not.toMatch(/An utterance that states an errand is create/);
   });
 
   it('exposes a specialist prompt for every intent', () => {

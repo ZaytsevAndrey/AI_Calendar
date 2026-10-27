@@ -2,7 +2,17 @@ import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
-import { traceStep } from '../../common/voice-trace';
+import {
+  annotateLatestStep,
+  clipVoiceBody,
+  currentVoiceTrace,
+  recordVoiceStep,
+  traceStep,
+  voiceTraceBodiesEnabled,
+  withTurnTrace,
+  withVoiceSegment,
+  type VoiceStep,
+} from '../../common/voice-trace';
 import { t, type MessageKey } from '../../i18n/t';
 import { isAppLanguage, type AppLanguage } from '../../i18n/types';
 import { overdueDays } from '../day-reminders/day-reminder.dates';
@@ -29,10 +39,13 @@ import {
   planToIntents,
   type PlanDraftContext,
   type PlanEdit,
+  type SkippedPlanEdit,
 } from './voice-agent.plan-draft';
 import {
   parsePlannerDecision,
   PlannerInvalidDecisionError,
+  PlannerInvalidJsonError,
+  PlannerSegmentLimitError,
   type PlannerDecision,
 } from './voice-agent.planner';
 import {
@@ -57,16 +70,22 @@ import {
   logVoiceLlm,
   type PlannerFaultCode,
 } from './voice-llm-log.util';
-import { addDaysToYmd, localYmd, scheduleTodayYmd } from './voice-local-date.util';
+import {
+  addDaysToYmd,
+  localYmd,
+  resolveScheduleDayYmd,
+  scheduleTodayYmd,
+} from './voice-local-date.util';
 import type { VoiceParseResult } from './voice-parse.types';
 import { VoiceSessionStore } from './voice-session.store';
+import { unappliedIntentLine } from './voice-unapplied';
 import { isNoiseOrEmptyTranscript } from './voice-stt.util';
 
 /** Tool rounds before the planner must decide. Rounds 0 and 1 may run tools. Round 2 must decide. */
 const MAX_TOOL_ROUNDS = 2;
 const MAX_TOOL_CALLS_PER_ROUND = 6;
 
-type ToolLimitReason = 'empty_calls' | 'max_rounds';
+type ToolLimitReason = 'empty_calls' | 'too_many_calls' | 'max_rounds';
 
 class PlannerToolLimitError extends Error {
   readonly code = 'tool_limit_exceeded' as const;
@@ -83,7 +102,7 @@ class PlannerToolLimitError extends Error {
 type PlannerFault = {
   code: PlannerFaultCode;
   typeName?: string;
-  reason?: ToolLimitReason;
+  reason?: string;
   round?: number;
   message?: string;
 };
@@ -92,6 +111,8 @@ export type VoiceParseFallback = (ctx: {
   transcript: string;
   previousTranscript?: string;
   clarificationAnswer?: string;
+  /** Index in this turn's segment list. Blank planner rows never receive one. */
+  segment?: number;
 }) => Promise<VoiceParseResult>;
 
 type TurnContext = VoiceToolContext & {
@@ -137,11 +158,20 @@ export class VoiceAgentOrchestrator {
     dto: VoiceTurnDto,
     parseFallback: VoiceParseFallback,
   ): Promise<VoiceTurnResponse> {
+    if (!currentVoiceTrace()) {
+      return withTurnTrace(() => this.turn(userId, dto, parseFallback));
+    }
     const sessionId = dto.sessionId;
     const session = this.sessions.getOrCreate(userId, sessionId);
     const actionId = dto.actionId?.trim();
     const transcript = (dto.transcript || '').trim();
 
+    if (this.hasOpenQuestion(session)) {
+      if (actionId === 'cancel') return this.cancelOpenBatch(userId, dto, session);
+      if (actionId || isNoiseOrEmptyTranscript(transcript)) {
+        return this.repeatOpenQuestion(userId, sessionId, session);
+      }
+    }
     if (actionId === 'report') {
       return this.report(userId, dto, session);
     }
@@ -175,11 +205,22 @@ export class VoiceAgentOrchestrator {
       decision = await this.decide(ctx, session, transcript);
     } catch (err) {
       if (isVoiceRateLimit(err) || isVoiceLlmTimeout(err)) throw err;
+      if (this.hasOpenQuestion(session)) {
+        this.noteCaughtPlannerFault(err);
+        return this.repeatOpenQuestion(userId, sessionId, session);
+      }
+      if (err instanceof PlannerInvalidJsonError) {
+        return this.plannerFault(ctx, session, { code: 'invalid_json' });
+      }
       if (err instanceof PlannerInvalidDecisionError) {
         return this.plannerFault(ctx, session, {
           code: 'invalid_decision',
           typeName: err.typeName,
+          ...(err.reason ? { reason: err.reason } : {}),
         });
+      }
+      if (err instanceof PlannerSegmentLimitError) {
+        return this.segmentLimit(ctx, session, err);
       }
       if (err instanceof PlannerToolLimitError) {
         return this.plannerFault(ctx, session, {
@@ -194,24 +235,44 @@ export class VoiceAgentOrchestrator {
       });
     }
 
+    if (
+      this.hasOpenQuestion(session) &&
+      decision.type !== 'answer_pending' &&
+      decision.type !== 'cancel_pending'
+    ) {
+      return this.repeatOpenQuestion(userId, sessionId, session);
+    }
+
     switch (decision.type) {
       case 'steps':
-        return this.steps(ctx, session, decision, transcript, parseFallback);
+        return this.steps(ctx, session, decision, parseFallback);
       case 'plan_start':
-        return this.planStart(ctx, decision);
+        return this.planStart(ctx, session, decision);
       case 'plan_edits':
-        if (!session.planDraft) return this.fallbackParse(ctx, transcript, parseFallback);
-        return this.planEdits(ctx, session.planDraft, decision.edits, decision.answer);
+        if (!session.planDraft) {
+          return this.plannerFault(ctx, session, {
+            code: 'invalid_decision',
+            typeName: 'plan_edits',
+            reason: 'no_open_plan',
+          });
+        }
+        return this.planEdits(ctx, session.planDraft, decision);
       case 'plan_question':
         if (!session.planDraft) {
           return this.finish(userId, sessionId, {
             outcome: 'clarify',
-            assistantMessage: decision.question,
+            assistantMessage: this.spokenWithSkips(ctx, decision.question, decision.skipped),
           });
         }
         return this.planQuestion(ctx, session.planDraft, decision);
       case 'answer_pending':
-        if (!session.pendingBatch) return this.fallbackParse(ctx, transcript, parseFallback);
+        if (!session.pendingBatch) {
+          return this.plannerFault(ctx, session, {
+            code: 'invalid_decision',
+            typeName: 'answer_pending',
+            reason: 'no_pending_batch',
+          });
+        }
         return this.answerPending(ctx, session.pendingBatch, transcript, parseFallback);
       case 'confirm_pending':
         if (session.pendingIntents) return this.confirm(userId, sessionId, session);
@@ -308,20 +369,74 @@ export class VoiceAgentOrchestrator {
       logVoiceLlm(this.logger, `planner.round${round}`, raw);
       const decision = parsePlannerDecision(raw);
       logPlannerEvent(this.logger, 'planner.decision', decisionFields(decision, round));
+      this.markPlannerAccepted(decision);
       if (decision.type !== 'tools') return decision;
       if (!decision.calls.length) throw new PlannerToolLimitError('empty_calls', round);
+      if (decision.calls.length > MAX_TOOL_CALLS_PER_ROUND) {
+        throw new PlannerToolLimitError('too_many_calls', round);
+      }
       if (round === MAX_TOOL_ROUNDS) throw new PlannerToolLimitError('max_rounds', round);
-      for (const call of decision.calls.slice(0, MAX_TOOL_CALLS_PER_ROUND)) {
-        const result = await traceStep('other', `tool.${call.name}`, '', () =>
-          this.tools.execute(call, ctx),
+      for (const call of decision.calls) {
+        const result = await traceStep(
+          'other',
+          `tool.${call.name}`,
+          '',
+          () => this.tools.execute(call, ctx),
+          undefined,
+          {
+            component: 'tool',
+            describe: (value) => {
+              const errorCode = toolErrorCode(value);
+              return errorCode ? { valid: false, errorCode } : {};
+            },
+          },
         );
         toolResults.push({ name: call.name, result });
-        this.logger.log(
-          `[llm:planner.tool] ${call.name} → ${JSON.stringify(result).slice(0, 500)}`,
-        );
+        this.logToolResult(call.name, result);
       }
     }
     throw new PlannerToolLimitError('max_rounds', MAX_TOOL_ROUNDS);
+  }
+
+  /** Record a planner failure without replacing the open question. */
+  private noteCaughtPlannerFault(err: unknown): void {
+    if (err instanceof PlannerInvalidJsonError) {
+      logPlannerEvent(this.logger, 'planner.fault', { code: 'invalid_json' });
+      this.markPlannerRejected('invalid_json');
+      return;
+    }
+    if (err instanceof PlannerInvalidDecisionError) {
+      logPlannerEvent(this.logger, 'planner.fault', {
+        code: 'invalid_decision',
+        typeName: err.typeName,
+        ...(err.reason ? { reason: err.reason } : {}),
+      });
+      this.markPlannerRejected('invalid_decision', err.reason, err.typeName);
+      return;
+    }
+    if (err instanceof PlannerSegmentLimitError) {
+      logPlannerEvent(this.logger, 'planner.fault', {
+        code: 'segment_limit_exceeded',
+        count: err.count,
+        limit: err.limit,
+      });
+      this.markPlannerRejected('segment_limit_exceeded', `count:${err.count}`);
+      return;
+    }
+    if (err instanceof PlannerToolLimitError) {
+      logPlannerEvent(this.logger, 'planner.fault', {
+        code: 'tool_limit_exceeded',
+        reason: err.reason,
+        round: err.round,
+      });
+      this.markPlannerRejected('tool_limit_exceeded', err.reason);
+      return;
+    }
+    logPlannerEvent(this.logger, 'planner.fault', {
+      code: 'planner_execution_error',
+      message: errorMessage(err).slice(0, 300),
+    });
+    this.markPlannerRejected('planner_execution_error', errorMessage(err).slice(0, 300));
   }
 
   /** A planner fault is a refusal. It is not a task parse and it does not drop the session. */
@@ -336,6 +451,7 @@ export class VoiceAgentOrchestrator {
     if (typeof fault.round === 'number') fields.round = fault.round;
     if (fault.message) fields.message = fault.message.slice(0, 300);
     logPlannerEvent(this.logger, 'planner.fault', fields);
+    this.markPlannerRejected(fault.code, fault.reason, fault.typeName);
 
     const plan = openPlanPayload(session);
     return this.finish(ctx.userId, ctx.sessionId, {
@@ -346,12 +462,32 @@ export class VoiceAgentOrchestrator {
     });
   }
 
+  /** Ask to split the utterance. No segment is parsed or applied. */
+  private segmentLimit(
+    ctx: TurnContext,
+    session: VoiceAgentSession,
+    err: PlannerSegmentLimitError,
+  ): VoiceTurnResponse {
+    logPlannerEvent(this.logger, 'planner.fault', {
+      code: 'segment_limit_exceeded',
+      count: err.count,
+      limit: err.limit,
+    });
+    this.markPlannerRejected('segment_limit_exceeded', `count:${err.count}`);
+    const plan = openPlanPayload(session);
+    return this.finish(ctx.userId, ctx.sessionId, {
+      outcome: 'clarify',
+      assistantMessage: this.vt(ctx, 'voice.segmentLimit'),
+      actions: plan ? planActions(session) : ['retry'],
+      ...(plan ? { plan } : {}),
+    });
+  }
+
   /** Multi-intent: each write segment goes through the existing router + specialist. */
   private async steps(
     ctx: TurnContext,
     session: VoiceAgentSession,
     decision: { answer: string; segments: string[] },
-    transcript: string,
     parseFallback: VoiceParseFallback,
   ): Promise<VoiceTurnResponse> {
     const held = session.pendingBatch
@@ -365,7 +501,14 @@ export class VoiceAgentOrchestrator {
           answer: joinSpoken([decision.answer, held.answer]),
         });
       }
-      if (!decision.answer) return this.fallbackParse(ctx, transcript, parseFallback);
+      if (!decision.answer) {
+        if (held?.notes.length) return this.settleBatch(ctx, held);
+        return this.plannerFault(ctx, session, {
+          code: 'invalid_decision',
+          typeName: 'steps',
+          reason: 'empty',
+        });
+      }
       this.sessions.setClarifyCount(ctx.userId, ctx.sessionId, 0);
       return this.reShowOr(
         ctx,
@@ -377,8 +520,10 @@ export class VoiceAgentOrchestrator {
     // Writes beside an open plan release its held Apply; the report re-seats the draft.
     if (session.pendingKind === 'plan') this.sessions.clearPending(ctx.userId, ctx.sessionId);
     const parses: SegmentParse[] = [];
-    for (const segment of decision.segments) {
-      parses.push(await this.parseSegment(segment, parseFallback));
+    for (let index = 0; index < decision.segments.length; index += 1) {
+      const parsed = await this.parseSegment(decision.segments[index], parseFallback, index);
+      parses.push(parsed);
+      this.noteSegment(index, parsed);
     }
     const collected = collectSegments(parses, {
       ...ctx.summary,
@@ -401,20 +546,25 @@ export class VoiceAgentOrchestrator {
     parseFallback: VoiceParseFallback,
   ): Promise<VoiceTurnResponse> {
     const current = batch.unresolved[0];
+    const segment = segmentIndex(batch, current.segment);
     let parse: SegmentParse;
     try {
       parse = {
         segment: current.segment,
-        result: await parseFallback({
-          transcript,
-          previousTranscript: current.segment,
-          clarificationAnswer: transcript,
-        }),
+        result: await this.parseIndexed(segment, () =>
+          parseFallback({
+            transcript,
+            previousTranscript: current.segment,
+            clarificationAnswer: transcript,
+            ...(segment != null ? { segment } : {}),
+          }),
+        ),
       };
     } catch (err) {
       if (isVoiceRateLimit(err) || isVoiceLlmTimeout(err)) throw err;
       parse = { segment: current.segment, error: errorMessage(err) };
     }
+    this.noteSegment(segment, parse);
     const next = continuePendingBatch(batch, parse, {
       ...ctx.summary,
     });
@@ -468,87 +618,169 @@ export class VoiceAgentOrchestrator {
     });
   }
 
+  /** One disposition per planner segment. The text of the segment is not stored. */
+  private noteSegment(index: number | undefined, parse: SegmentParse): void {
+    recordVoiceStep({
+      component: 'orchestrator',
+      name: 'segment',
+      ...(index != null ? { segment: index } : {}),
+      ...segmentDisposition(parse, index),
+    });
+  }
+
   private async parseSegment(
     segment: string,
     parseFallback: VoiceParseFallback,
+    index: number,
   ): Promise<SegmentParse> {
     try {
-      return { segment, result: await parseFallback({ transcript: segment }) };
+      return {
+        segment,
+        result: await this.parseIndexed(index, () =>
+          parseFallback({ transcript: segment, segment: index }),
+        ),
+      };
     } catch (err) {
       if (isVoiceRateLimit(err) || isVoiceLlmTimeout(err)) throw err;
       return { segment, error: errorMessage(err) };
     }
   }
 
-  /** Parse the whole utterance when a decision does not fit the session. Planner faults do not use this. */
-  private async fallbackParse(
-    ctx: TurnContext,
-    transcript: string,
-    parseFallback: VoiceParseFallback,
-  ): Promise<VoiceTurnResponse> {
-    if (!transcript) {
-      return this.finish(ctx.userId, ctx.sessionId, {
-        outcome: 'answer',
-        assistantMessage: '',
-      });
+  /** Keep the segment index for router, specialist, and normalizer inside this parse. */
+  private parseIndexed<T>(segment: number | undefined, fn: () => Promise<T>): Promise<T> {
+    if (segment == null) return fn();
+    return withVoiceSegment(segment, fn);
+  }
+
+  /** The model call succeeded. Validation is recorded separately from that technical result. */
+  private markPlannerAccepted(decision: PlannerDecision): void {
+    const counts = formatSkipCounts(decisionSkips(decision));
+    annotateLatestStep(isPlannerStep, {
+      component: 'planner',
+      valid: true,
+      decision: decision.type,
+      ...(counts ? { reason: counts } : {}),
+    });
+  }
+
+  private markPlannerRejected(errorCode: string, reason?: string, decision?: string): void {
+    annotateLatestStep(isPlannerStep, {
+      component: 'planner',
+      valid: false,
+      errorCode,
+      ...(decision ? { decision } : {}),
+      ...(reason ? { reason } : {}),
+    });
+  }
+
+  /** Cap and other apply-time rejects. Counts only — no task text. */
+  private noteAppliedSkips(type: string, skipped: SkippedPlanEdit[]): void {
+    const counts = formatSkipCounts(skipped);
+    if (!counts) return;
+    logPlannerEvent(this.logger, 'planner.decision', { type, stage: 'apply', skipped: counts });
+    annotateLatestStep(isPlannerStep, (step) => ({
+      reason: step.reason ? `${step.reason},apply:${counts}` : `apply:${counts}`,
+    }));
+  }
+
+  private logToolResult(name: string, result: unknown): void {
+    const traceId = currentVoiceTrace()?.traceId;
+    const code = toolErrorCode(result);
+    const head = `[llm:planner.tool]${traceId ? ` traceId=${traceId}` : ''} name=${name}${
+      code ? ` error=${code}` : ''
+    }`;
+    if (!voiceTraceBodiesEnabled()) {
+      this.logger.log(head);
+      return;
     }
-    this.sessions.setPendingBatch(ctx.userId, ctx.sessionId, null);
-    const parse = await this.parseSegment(transcript, parseFallback);
-    const collected = collectSegments([parse], {
-      ...ctx.summary,
-    });
-    const response = this.settleBatch(ctx, {
-      intents: collected.intents,
-      segments: collected.segments,
-      unresolved: collected.unresolved,
-      clarifyCount: 1,
-      answer: '',
-      notes: collected.notes,
-      needsConfirm: collected.needsConfirm,
-    });
-    return { ...response, legacyParse: 'result' in parse ? parse.result : null };
+    this.logger.log(`${head} ${clipVoiceBody(JSON.stringify(result), 500)}`);
   }
 
   private async planStart(
     ctx: TurnContext,
-    decision: { day: string; interview: boolean; question: string; edits: PlanEdit[] },
+    session: VoiceAgentSession,
+    decision: {
+      day: string;
+      interview: boolean;
+      question: string;
+      edits: PlanEdit[];
+      skipped: SkippedPlanEdit[];
+    },
   ): Promise<VoiceTurnResponse> {
+    const resolved = resolveScheduleDayYmd(decision.day, ctx.todayYmd);
+    if ('error' in resolved) return this.invalidPlanDay(ctx, session);
     this.sessions.setPendingBatch(ctx.userId, ctx.sessionId, null);
     this.sessions.clearPending(ctx.userId, ctx.sessionId);
-    const day = /^\d{4}-\d{2}-\d{2}$/.test(decision.day) ? decision.day : ctx.todayYmd;
     const draftCtx = this.draftContext(ctx);
-    const draft = applyPlanEdits(initialPlanDraft(day, draftCtx), decision.edits, draftCtx);
+    const applied = applyPlanEdits(initialPlanDraft(resolved.day, draftCtx), decision.edits, draftCtx);
+    this.noteAppliedSkips('plan_start', applied.skipped);
     return this.holdInterview(
       ctx,
       {
-        ...draft,
+        ...applied.draft,
         stage: 'interview',
         interviewAsked: decision.question ? 1 : 0,
       },
-      decision.question,
+      this.spokenWithSkips(ctx, decision.question, [...decision.skipped, ...applied.skipped]),
     );
+  }
+
+  /** A present day that is not a real date does not open or replace a plan. */
+  private invalidPlanDay(ctx: TurnContext, session: VoiceAgentSession): VoiceTurnResponse {
+    logPlannerEvent(this.logger, 'planner.fault', {
+      code: 'invalid_decision',
+      typeName: 'plan_start',
+      reason: 'invalid_day',
+    });
+    this.markPlannerRejected('invalid_decision', 'invalid_day', 'plan_start');
+    const plan = openPlanPayload(session);
+    return this.finish(ctx.userId, ctx.sessionId, {
+      outcome: 'clarify',
+      assistantMessage: this.vt(ctx, 'voice.planDayInvalid'),
+      actions: plan ? planActions(session) : ['retry'],
+      ...(plan ? { plan } : {}),
+    });
+  }
+
+  private spokenWithSkips(ctx: TurnContext, text: string, skipped: SkippedPlanEdit[]): string {
+    const parts = [text];
+    const time = skipped.filter(
+      (row) => row.reason === 'invalid_time' || row.reason === 'invalid_duration',
+    ).length;
+    const rejected = skipped.filter((row) => row.reason === 'invalid_edit').length;
+    const full = skipped.filter((row) => row.reason === 'plan_full').length;
+    if (time) parts.push(this.vt(ctx, 'voice.planEditSkipped', { count: time }));
+    if (rejected) parts.push(this.vt(ctx, 'voice.planEditRejected', { count: rejected }));
+    if (full) parts.push(this.vt(ctx, 'voice.planFull', { count: full }));
+    if (parts.length === 1) return text;
+    return joinSpoken(parts);
   }
 
   private async planEdits(
     ctx: TurnContext,
     draft: PlanDraft,
-    edits: PlanEdit[],
-    answer: string,
+    decision: { edits: PlanEdit[]; answer: string; skipped: SkippedPlanEdit[] },
   ): Promise<VoiceTurnResponse> {
-    const next = applyPlanEdits(draft, edits, this.draftContext(ctx));
-    return this.holdInterview(ctx, { ...next, stage: 'interview' }, answer);
+    const applied = applyPlanEdits(draft, decision.edits, this.draftContext(ctx));
+    this.noteAppliedSkips('plan_edits', applied.skipped);
+    return this.holdInterview(
+      ctx,
+      { ...applied.draft, stage: 'interview' },
+      this.spokenWithSkips(ctx, decision.answer, [...decision.skipped, ...applied.skipped]),
+    );
   }
 
   private async planQuestion(
     ctx: TurnContext,
     draft: PlanDraft,
-    decision: { question: string; edits: PlanEdit[] },
+    decision: { question: string; edits: PlanEdit[]; skipped: SkippedPlanEdit[] },
   ): Promise<VoiceTurnResponse> {
-    const next = applyPlanEdits(draft, decision.edits, this.draftContext(ctx));
+    const applied = applyPlanEdits(draft, decision.edits, this.draftContext(ctx));
+    this.noteAppliedSkips('plan_question', applied.skipped);
     return this.holdInterview(
       ctx,
-      { ...next, stage: 'interview', interviewAsked: next.interviewAsked + 1 },
-      decision.question,
+      { ...applied.draft, stage: 'interview', interviewAsked: applied.draft.interviewAsked + 1 },
+      this.spokenWithSkips(ctx, decision.question, [...decision.skipped, ...applied.skipped]),
     );
   }
 
@@ -697,6 +929,47 @@ export class VoiceAgentOrchestrator {
     });
   }
 
+  /** True while a specialist question is still stored on the batch. */
+  private hasOpenQuestion(session: VoiceAgentSession): boolean {
+    return Boolean(session.pendingBatch?.unresolved.length);
+  }
+
+  /** The open question again. The batch and the day draft stay as they are. */
+  private repeatOpenQuestion(
+    userId: string,
+    sessionId: string,
+    session: VoiceAgentSession,
+  ): VoiceTurnResponse {
+    const batch = session.pendingBatch;
+    return this.finish(userId, sessionId, {
+      outcome: 'clarify',
+      assistantMessage: batch?.unresolved[0]?.question ?? '',
+      segments: batch?.segments ?? [],
+    });
+  }
+
+  /** Drop the open batch only. A day-plan draft is a different confirm. */
+  private async cancelOpenBatch(
+    userId: string,
+    dto: VoiceTurnDto,
+    session: VoiceAgentSession,
+  ): Promise<VoiceTurnResponse> {
+    const batch = session.pendingBatch;
+    const settings = await this.userSettingsService.getSettings(userId);
+    const speech = settings.speechLanguage || settings.language;
+    const lang = isAppLanguage(speech) ? speech : 'en';
+    const withheld = (batch?.intents ?? [])
+      .map((intent) => unappliedIntentLine(intent, lang))
+      .map((line) => line.trim())
+      .filter(Boolean);
+    this.sessions.setPendingBatch(userId, dto.sessionId, null);
+    return this.finish(userId, dto.sessionId, {
+      outcome: 'answer',
+      assistantMessage: joinSpoken([t(lang, 'voice.cancelled'), ...withheld]),
+      segments: batch?.segments ?? [],
+    });
+  }
+
   /** Cancel a write confirm first (the plan stays); a second cancel drops the plan. */
   private async cancel(
     userId: string,
@@ -704,6 +977,7 @@ export class VoiceAgentOrchestrator {
     session: VoiceAgentSession,
   ): Promise<VoiceTurnResponse> {
     const sessionId = dto.sessionId;
+    if (this.hasOpenQuestion(session)) return this.cancelOpenBatch(userId, dto, session);
     const keepPlan = session.pendingKind === 'writes' && session.planDraft != null;
     this.sessions.clearPending(userId, sessionId);
     this.sessions.setPendingBatch(userId, sessionId, null);
@@ -798,6 +1072,63 @@ function statedSummary(intent: VoiceWriteIntent, lang: AppLanguage): string {
   return name ? t(lang, 'voice.appliedChange', { name }) : summary.replace(/\?+$/, '.');
 }
 
+const SKIP_COUNT_KEYS = [
+  'invalid_time',
+  'invalid_duration',
+  'invalid_edit.unknown_op',
+  'invalid_edit.not_an_object',
+  'invalid_edit.not_an_array',
+  'invalid_edit.missing_name',
+  'invalid_edit.missing_task_id',
+  'invalid_edit.missing_item_id',
+  'invalid_edit.missing_item_ids',
+  'plan_full',
+] as const;
+
+/** Reason counts only. Task names and clock text stay out of the trace. */
+function formatSkipCounts(skipped: SkippedPlanEdit[]): string {
+  const counts = new Map<string, number>();
+  for (const row of skipped) {
+    const key = row.reason === 'invalid_edit' ? `invalid_edit.${row.cause}` : row.reason;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return SKIP_COUNT_KEYS.filter((key) => counts.has(key))
+    .map((key) => `${key}:${counts.get(key)}`)
+    .join(',');
+}
+
+function decisionSkips(decision: PlannerDecision): SkippedPlanEdit[] {
+  if (
+    decision.type === 'plan_start' ||
+    decision.type === 'plan_edits' ||
+    decision.type === 'plan_question'
+  ) {
+    return decision.skipped;
+  }
+  return [];
+}
+
+function isPlannerStep(step: VoiceStep): boolean {
+  return step.component === 'planner' || step.name.startsWith('planner');
+}
+
+function toolErrorCode(result: unknown): string | undefined {
+  if (!result || typeof result !== 'object' || !('error' in result)) return undefined;
+  const error = (result as { error?: unknown }).error;
+  if (typeof error !== 'string' || !error.trim()) return undefined;
+  if (/^[a-z0-9_]+$/i.test(error)) return error;
+  if (error.startsWith('Unknown tool:')) return 'unknown_tool';
+  return 'tool_error';
+}
+
+/** Index of a still-open segment. Dropped neighbors keep their own earlier indexes. */
+function segmentIndex(batch: PendingBatch, text: string): number | undefined {
+  const index = batch.segments.findIndex(
+    (row) => row.status === 'clarify' && row.summary === text,
+  );
+  return index >= 0 ? index : undefined;
+}
+
 function decisionFields(
   decision: PlannerDecision,
   round: number,
@@ -814,6 +1145,8 @@ function decisionFields(
     decision.type === 'plan_question'
   ) {
     fields.edits = decision.edits.length;
+    const counts = formatSkipCounts(decision.skipped);
+    if (counts) fields.skipped = counts;
   } else if (decision.type === 'final') {
     fields.outcome = decision.outcome;
   }
@@ -866,6 +1199,51 @@ export function describeReport(report: VoiceExecutionReport | undefined): string
   if (applied.length) parts.push(`App applied: ${applied.join('; ')}`);
   if (missed.length) parts.push(`Not applied: ${missed.join('; ')}`);
   return parts.join('. ');
+}
+
+/**
+ * Same order as collectSegments: a thrown parse, then a refuse command, then a
+ * question, then an accepted write. The question and the refuse message stay
+ * out of the trace.
+ */
+function segmentDisposition(
+  parse: SegmentParse,
+  index: number | undefined,
+): Pick<VoiceStep, 'outcome' | 'valid' | 'errorCode' | 'reason'> {
+  if ('error' in parse) {
+    const located = locateDroppedSegment(index);
+    return {
+      outcome: 'dropped',
+      valid: false,
+      errorCode: located.errorCode,
+      ...(located.reason ? { reason: located.reason } : {}),
+    };
+  }
+  const result = parse.result;
+  const command = result.command;
+  if (command?.kind === 'refuse') return { outcome: 'refused', reason: 'command_refuse' };
+  if (command) return { outcome: 'accepted' };
+  if (result.understanding === 'needs_clarification' || !result.task?.name) {
+    return { outcome: 'clarify', reason: 'needs_clarification' };
+  }
+  return { outcome: 'accepted' };
+}
+
+/** Point a dropped segment at the step that already failed. Never copy its text. */
+function locateDroppedSegment(index: number | undefined): { errorCode: string; reason?: string } {
+  if (index == null) return { errorCode: 'parse_error' };
+  const steps = currentVoiceTrace()?.steps ?? [];
+  const mine = steps.filter((step) => step.name !== 'segment' && step.segment === index);
+  const invalid = [...mine].reverse().find((step) => step.valid === false && step.errorCode);
+  if (invalid?.errorCode) {
+    return {
+      errorCode: invalid.errorCode,
+      ...(invalid.component ? { reason: invalid.component } : {}),
+    };
+  }
+  const failed = [...mine].reverse().find((step) => !step.ok);
+  if (failed?.component) return { errorCode: 'call_failed', reason: failed.component };
+  return { errorCode: 'parse_error' };
 }
 
 function errorMessage(err: unknown): string {

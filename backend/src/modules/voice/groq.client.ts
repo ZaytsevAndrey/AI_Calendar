@@ -5,7 +5,16 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AsyncLocalStorage } from 'async_hooks';
-import { traceStep } from '../../common/voice-trace';
+import {
+  annotateLatestStep,
+  armNextLlmReason,
+  clipVoiceBody,
+  currentVoiceTrace,
+  noteVoiceStep,
+  traceStep,
+  voiceComponentForStep,
+  voiceTraceBodiesEnabled,
+} from '../../common/voice-trace';
 import {
   DEFAULT_DEEPSEEK_PLANNER_MODEL,
   deepseekPlannerCall,
@@ -505,12 +514,18 @@ export class GroqClient {
       return forced;
     }
     if (role === 'planner') {
+      const deepseekKey = this.config.get<string>('DEEPSEEK_API_KEY')?.trim();
       const viaDeepSeek = await this.tryDeepSeekPlanner(systemPrompt, userPrompt);
       if (viaDeepSeek != null) return viaDeepSeek;
+      if (deepseekKey) armNextLlmReason('model_fallback');
+      const qwenKey = this.config.get<string>('QWEN_API_KEY')?.trim();
       const viaQwen = await this.tryQwenPlanner(systemPrompt, userPrompt);
       if (viaQwen != null) return viaQwen;
+      if (qwenKey) armNextLlmReason('model_fallback');
+      const geminiKey = this.config.get<string>('GEMINI_API_KEY')?.trim();
       const viaGemini = await this.tryGeminiPlanner(systemPrompt, userPrompt);
       if (viaGemini != null) return viaGemini;
+      if (geminiKey) armNextLlmReason('model_fallback');
     }
 
     const localBase = this.localLlmBase();
@@ -547,6 +562,7 @@ export class GroqClient {
           this.logger.warn(
             `Groq JSON mode failed on ${model}; recovered without response_format`,
           );
+          this.markJsonMode();
           return soft.content;
         }
         lastError = soft.error;
@@ -556,6 +572,7 @@ export class GroqClient {
 
       if (hasNext && shouldTryNextModel(strict.status, lastError)) {
         this.logger.warn(`${lastError}; trying fallback model`);
+        armNextLlmReason('model_fallback');
         continue;
       }
       this.logger.warn(lastError);
@@ -626,6 +643,7 @@ export class GroqClient {
     }
     this.recordTokens(parsed.tokens);
     this.noteEvalSpend(model, parsed.tokens, null);
+    this.noteStepTokens(parsed.tokens);
     return parsed.content;
     }, (value) => value == null);
   }
@@ -675,6 +693,7 @@ export class GroqClient {
     }
     this.recordTokens(parsed.tokens);
     this.noteEvalSpend(model, parsed.tokens, null);
+    this.noteStepTokens(parsed.tokens);
     return parsed.content;
     }, (value) => value == null);
   }
@@ -723,6 +742,7 @@ export class GroqClient {
     }
     this.recordTokens(parsed.tokens);
     this.noteEvalSpend(model, parsed.tokens, null);
+    this.noteStepTokens(parsed.tokens);
     return parsed.content;
     }, (value) => value == null);
   }
@@ -746,6 +766,7 @@ export class GroqClient {
     const soft = await this.ollamaChat(base, model, systemPrompt, userPrompt, false);
     if (soft.ok) {
       this.logger.warn(`Local JSON mode failed on ${model}; recovered without format`);
+      this.markJsonMode();
       return soft.content;
     }
     const error = strict.ok ? soft.error : strict.error;
@@ -866,6 +887,7 @@ export class GroqClient {
           const ctx = this.requestAls.getStore();
           if (ctx) ctx.keyIndex = 0;
           this.logger.warn(`Groq TPD on ${model}; hopping to next key`);
+          armNextLlmReason('key_hop');
           result = await this.chatCompletion(
             model,
             systemPrompt,
@@ -903,6 +925,7 @@ export class GroqClient {
         this.advancePin();
       }
       this.logger.warn(`Groq rate limit on ${model}; hopping to next key`);
+      armNextLlmReason('key_hop');
       result = await this.chatCompletion(
         model,
         systemPrompt,
@@ -927,12 +950,33 @@ export class GroqClient {
     return this.evalMeta?.label || 'llm';
   }
 
+  private noteStepTokens(tokens: number | undefined): void {
+    const used = Math.floor(tokens ?? 0);
+    if (used > 0) noteVoiceStep({ tokens: used });
+  }
+
+  private markJsonMode(): void {
+    annotateLatestStep(
+      (step) => step.kind === 'llm',
+      (step) => (step.reason ? {} : { reason: 'json_mode' }),
+    );
+  }
+
   private trackLlm<T>(
     via: string,
     fn: () => Promise<T>,
     failed?: (value: T) => boolean,
   ): Promise<T> {
-    return traceStep('llm', this.llmStepName(), via, fn, failed);
+    const name = this.llmStepName();
+    const component = voiceComponentForStep(name);
+    const segment =
+      component === 'router' || component === 'specialist'
+        ? currentVoiceTrace()?.activeSegment
+        : undefined;
+    return traceStep('llm', name, via, fn, failed, {
+      ...(component ? { component } : {}),
+      ...(segment != null ? { segment } : {}),
+    });
   }
 
   private trackStt<T extends { ok: boolean }>(fn: () => Promise<T>): Promise<T> {
@@ -1045,6 +1089,7 @@ export class GroqClient {
       payload.usage?.total_tokens,
       response.headers?.get('x-ratelimit-limit-tokens') ?? null,
     );
+    this.noteStepTokens(payload.usage?.total_tokens);
     return { ok: true, content };
   }
 }
@@ -1094,9 +1139,11 @@ function readFailedGeneration(payload: GroqChatPayload): string | undefined {
 
 function logFailedGeneration(logger: Logger, snippet?: string): void {
   if (!snippet) return;
-  logger.warn(
-    `Groq failed_generation (truncated): ${snippet.slice(0, 400).replace(/\s+/g, ' ')}`,
-  );
+  if (!voiceTraceBodiesEnabled()) {
+    logger.warn('Groq failed_generation');
+    return;
+  }
+  logger.warn(`Groq failed_generation (truncated): ${clipVoiceBody(snippet, 400)}`);
 }
 
 function isFailedJsonGeneration(message: string): boolean {

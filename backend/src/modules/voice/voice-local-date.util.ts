@@ -1,3 +1,5 @@
+import { isYmd } from '../day-reminders/day-reminder.dates';
+
 const WEEKDAY_NAMES = [
   'Sunday',
   'Monday',
@@ -56,6 +58,20 @@ export function scheduleTodayYmd(
     return compareYmdHm(now, sleepPlus) > 0 ? cal : addDaysToYmd(cal, -1);
   }
   return compareYmdHm(now, wakeMinus) >= 0 ? cal : addDaysToYmd(cal, -1);
+}
+
+/**
+ * Blank day stays `todayYmd`. A present value must be a real civil date.
+ * `2026-02-31` is rejected; it is not rolled into March.
+ */
+export function resolveScheduleDayYmd(
+  raw: string,
+  todayYmd: string,
+): { day: string } | { error: 'invalid_day' } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { day: todayYmd };
+  if (!isYmd(trimmed)) return { error: 'invalid_day' };
+  return { day: trimmed };
 }
 
 function shiftClock(ymd: string, hm: string, deltaMinutes: number): YmdHm {

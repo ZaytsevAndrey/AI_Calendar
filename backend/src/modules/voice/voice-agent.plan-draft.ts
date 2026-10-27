@@ -21,7 +21,35 @@ import {
 } from './voice-local-date.util';
 
 const MAX_INITIAL_UNSCHEDULED = 10;
+/** Draft cap. An add or include past it is `plan_full`; the cap is not raised. */
 const MAX_PLAN_ITEMS = 16;
+
+/** Why a row is not an applicable edit. The reply counts these and does not read the cause aloud. */
+export type InvalidEditCause =
+  | 'unknown_op'
+  | 'not_an_object'
+  | 'not_an_array'
+  | 'missing_name'
+  | 'missing_task_id'
+  | 'missing_item_id'
+  | 'missing_item_ids';
+
+/** A plan edit the draft did not apply. The reply must say so. */
+export type SkippedPlanEdit =
+  | { reason: 'invalid_time' }
+  | { reason: 'invalid_duration' }
+  | { reason: 'plan_full' }
+  | { reason: 'invalid_edit'; cause: InvalidEditCause };
+
+export type PlanEditApplication = {
+  draft: PlanDraft;
+  skipped: SkippedPlanEdit[];
+};
+
+export type PlanEditParse = {
+  edits: PlanEdit[];
+  skipped: SkippedPlanEdit[];
+};
 
 /** Voice edits on a day-plan draft. Clocks are HH:MM on the plan day. */
 export type PlanEdit =
@@ -154,84 +182,182 @@ export function initialPlanDraft(day: string, ctx: PlanDraftContext): PlanDraft 
   };
 }
 
-function cleanHm(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
+type ClockField =
+  | { state: 'absent' }
+  | { state: 'clear' }
+  | { state: 'valid'; hm: string }
+  | { state: 'invalid' };
+
+type DurationField =
+  | { state: 'absent' }
+  | { state: 'clear' }
+  | { state: 'valid'; minutes: number }
+  | { state: 'invalid' };
+
+/** Missing key, explicit null, a real clock, and anything else stay distinct. */
+function readClock(row: Record<string, unknown>, key: string): ClockField {
+  if (!(key in row)) return { state: 'absent' };
+  const value = row[key];
+  if (value === null) return { state: 'clear' };
+  if (typeof value !== 'string') return { state: 'invalid' };
   const trimmed = value.trim();
-  if (!/^\d{1,2}:\d{2}$/.test(trimmed)) return null;
+  if (!/^\d{1,2}:\d{2}$/.test(trimmed)) return { state: 'invalid' };
   const [hour, minute] = trimmed.split(':').map(Number);
-  if (hour > 23 || minute > 59) return null;
-  return normalizeClockHm(trimmed);
+  if (hour > 23 || minute > 59) return { state: 'invalid' };
+  return { state: 'valid', hm: normalizeClockHm(trimmed) };
 }
 
-function optionalHm(row: Record<string, unknown>, key: string): string | null | undefined {
-  if (!(key in row)) return undefined;
-  return cleanHm(row[key]);
+/** Missing and explicit null are unspecified. A present unusable number is invalid. */
+function readDuration(row: Record<string, unknown>, key: string): DurationField {
+  if (!(key in row)) return { state: 'absent' };
+  const value = row[key];
+  if (value === null) return { state: 'clear' };
+  const minutes =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && value.trim()
+        ? Number(value.trim())
+        : Number.NaN;
+  if (typeof value !== 'number' && typeof value !== 'string') return { state: 'invalid' };
+  if (!Number.isFinite(minutes) || minutes < 5) return { state: 'invalid' };
+  return { state: 'valid', minutes: Math.round(minutes) };
 }
 
-/** Validate LLM edit rows; unknown ops and malformed rows are dropped. */
-export function parsePlanEdits(raw: unknown): PlanEdit[] {
-  if (!Array.isArray(raw)) return [];
+function clockOrNull(field: ClockField): string | null {
+  return field.state === 'valid' ? field.hm : null;
+}
+
+function rejectEdit(skipped: SkippedPlanEdit[], cause: InvalidEditCause): void {
+  skipped.push({ reason: 'invalid_edit', cause });
+}
+
+/**
+ * Validate LLM edit rows. A row that cannot be applied is `skipped` with a cause.
+ * An unusable clock or length is not applied; `skipped` is the reply about it.
+ * `undefined` means the caller sent no edits.
+ */
+export function parsePlanEdits(raw: unknown): PlanEditParse {
+  if (raw === undefined) return { edits: [], skipped: [] };
+  if (!Array.isArray(raw)) {
+    return { edits: [], skipped: [{ reason: 'invalid_edit', cause: 'not_an_array' }] };
+  }
   const edits: PlanEdit[] = [];
+  const skipped: SkippedPlanEdit[] = [];
   for (const entry of raw) {
-    if (!entry || typeof entry !== 'object') continue;
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      rejectEdit(skipped, 'not_an_object');
+      continue;
+    }
     const row = entry as Record<string, unknown>;
     const op = String(row.op || '').trim();
     const itemId = typeof row.itemId === 'string' ? row.itemId.trim() : '';
     switch (op) {
       case 'add_task': {
         const name = typeof row.name === 'string' ? row.name.trim() : '';
-        if (!name) break;
-        const minutes = Number(row.durationMinutes);
+        if (!name) {
+          rejectEdit(skipped, 'missing_name');
+          break;
+        }
+        const duration = readDuration(row, 'durationMinutes');
+        const preferred = readClock(row, 'preferredHm');
+        const earliest = readClock(row, 'earliestHm');
+        const deadline = readClock(row, 'deadlineHm');
+        const badClock = [preferred, earliest, deadline].some((field) => field.state === 'invalid');
+        if (badClock || duration.state === 'invalid') {
+          skipped.push({ reason: badClock ? 'invalid_time' : 'invalid_duration' });
+          break;
+        }
         edits.push({
           op,
           name,
-          durationMinutes: Number.isFinite(minutes) && minutes >= 5 ? Math.round(minutes) : null,
-          preferredHm: cleanHm(row.preferredHm),
-          earliestHm: cleanHm(row.earliestHm),
-          deadlineHm: cleanHm(row.deadlineHm),
+          durationMinutes: duration.state === 'valid' ? duration.minutes : null,
+          preferredHm: clockOrNull(preferred),
+          earliestHm: clockOrNull(earliest),
+          deadlineHm: clockOrNull(deadline),
         });
         break;
       }
       case 'include_task': {
         const taskId = typeof row.taskId === 'string' ? row.taskId.trim() : '';
-        if (taskId) edits.push({ op, taskId });
+        if (!taskId) {
+          rejectEdit(skipped, 'missing_task_id');
+          break;
+        }
+        edits.push({ op, taskId });
         break;
       }
       case 'remove_item':
-        if (itemId) edits.push({ op, itemId });
+        if (!itemId) {
+          rejectEdit(skipped, 'missing_item_id');
+          break;
+        }
+        edits.push({ op, itemId });
         break;
-      case 'set_preferred_start':
-        if (itemId) edits.push({ op, itemId, hm: cleanHm(row.hm) });
+      case 'set_preferred_start': {
+        if (!itemId) {
+          rejectEdit(skipped, 'missing_item_id');
+          break;
+        }
+        const hm = readClock(row, 'hm');
+        if (hm.state === 'absent') break;
+        if (hm.state === 'invalid') {
+          skipped.push({ reason: 'invalid_time' });
+          break;
+        }
+        edits.push({ op, itemId, hm: hm.state === 'clear' ? null : hm.hm });
         break;
+      }
       case 'set_window': {
-        if (!itemId) break;
-        const edit: PlanEdit = { op, itemId };
-        const earliest = optionalHm(row, 'earliestHm');
-        const deadline = optionalHm(row, 'deadlineHm');
-        if (earliest !== undefined) edit.earliestHm = earliest;
-        if (deadline !== undefined) edit.deadlineHm = deadline;
-        edits.push(edit);
+        if (!itemId) {
+          rejectEdit(skipped, 'missing_item_id');
+          break;
+        }
+        const earliest = readClock(row, 'earliestHm');
+        const deadline = readClock(row, 'deadlineHm');
+        if (earliest.state === 'invalid' || deadline.state === 'invalid') {
+          skipped.push({ reason: 'invalid_time' });
+        }
+        const edit: Extract<PlanEdit, { op: 'set_window' }> = { op, itemId };
+        if (earliest.state === 'clear') edit.earliestHm = null;
+        else if (earliest.state === 'valid') edit.earliestHm = earliest.hm;
+        if (deadline.state === 'clear') edit.deadlineHm = null;
+        else if (deadline.state === 'valid') edit.deadlineHm = deadline.hm;
+        if (edit.earliestHm !== undefined || edit.deadlineHm !== undefined) edits.push(edit);
         break;
       }
       case 'set_duration': {
-        const minutes = Number(row.minutes);
-        if (itemId && Number.isFinite(minutes) && minutes >= 5) {
-          edits.push({ op, itemId, minutes: Math.round(minutes) });
+        if (!itemId) {
+          rejectEdit(skipped, 'missing_item_id');
+          break;
         }
+        const minutes = readDuration(row, 'minutes');
+        if (minutes.state === 'absent') break;
+        if (minutes.state !== 'valid') {
+          skipped.push({ reason: 'invalid_duration' });
+          break;
+        }
+        edits.push({ op, itemId, minutes: minutes.minutes });
         break;
       }
       case 'set_order': {
-        const ids = Array.isArray(row.itemIds)
-          ? row.itemIds.map((id) => String(id || '').trim()).filter(Boolean)
-          : [];
-        if (ids.length) edits.push({ op, itemIds: ids });
+        if (!Array.isArray(row.itemIds)) {
+          rejectEdit(skipped, 'missing_item_ids');
+          break;
+        }
+        const ids = row.itemIds.map((id) => String(id || '').trim()).filter(Boolean);
+        if (!ids.length) {
+          rejectEdit(skipped, 'missing_item_ids');
+          break;
+        }
+        edits.push({ op, itemIds: ids });
         break;
       }
       default:
+        rejectEdit(skipped, 'unknown_op');
         break;
     }
   }
-  return edits;
+  return { edits, skipped };
 }
 
 /** Pure reducer: returns a new draft with the edits applied (unknown ids are ignored). */
@@ -239,7 +365,8 @@ export function applyPlanEdits(
   draft: PlanDraft,
   edits: PlanEdit[],
   ctx: PlanDraftContext,
-): PlanDraft {
+): PlanEditApplication {
+  const skipped: SkippedPlanEdit[] = [];
   let items = draft.items.map((item) => ({ ...item }));
   let nextNewId = draft.nextNewId;
   const patch = (itemId: string, fn: (item: PlanItem) => void) => {
@@ -250,12 +377,16 @@ export function applyPlanEdits(
   for (const edit of edits) {
     switch (edit.op) {
       case 'add_task': {
-        if (items.length >= MAX_PLAN_ITEMS) break;
+        if (items.length >= MAX_PLAN_ITEMS) {
+          skipped.push({ reason: 'plan_full' });
+          break;
+        }
         items.push({
           id: `new:${nextNewId}`,
           taskId: null,
           source: 'new',
           name: edit.name,
+          // null is an omitted length (missing key or schema null), never a rejected number.
           durationMinutes: edit.durationMinutes ?? ctx.defaultDurationMinutes,
           preferredHm: edit.preferredHm,
           earliestHm: edit.earliestHm,
@@ -265,11 +396,15 @@ export function applyPlanEdits(
         break;
       }
       case 'include_task': {
-        if (items.length >= MAX_PLAN_ITEMS) break;
         if (items.some((item) => item.taskId === edit.taskId)) break;
         const task = ctx.tasks.find((row) => row.id === edit.taskId);
         const item = task ? itemFromTask(task, draft.day, ctx) : null;
-        if (item) items.push(item);
+        if (!item) break;
+        if (items.length >= MAX_PLAN_ITEMS) {
+          skipped.push({ reason: 'plan_full' });
+          break;
+        }
+        items.push(item);
         break;
       }
       case 'remove_item':
@@ -310,10 +445,13 @@ export function applyPlanEdits(
     }
   }
   return {
-    ...draft,
-    items,
-    nextNewId,
-    revision: edits.length ? draft.revision + 1 : draft.revision,
+    draft: {
+      ...draft,
+      items,
+      nextNewId,
+      revision: edits.length ? draft.revision + 1 : draft.revision,
+    },
+    skipped,
   };
 }
 

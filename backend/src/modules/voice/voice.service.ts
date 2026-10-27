@@ -53,12 +53,20 @@ import {
   isNoiseOrEmptyTranscript,
 } from './voice-stt.util';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
-import { traceStep } from '../../common/voice-trace';
+import {
+  annotateLatestStep,
+  clipVoiceBody,
+  currentVoiceTrace,
+  traceStep,
+  voiceTraceBodiesEnabled,
+  withTurnTrace,
+  withVoiceSegment,
+} from '../../common/voice-trace';
 import { localHm, localYmd } from './voice-local-date.util';
 import type { VoiceParseResult } from './voice-parse.types';
 import { VoiceAgentOrchestrator } from './voice-agent.orchestrator';
 import type { VoiceTurnResponse } from './voice-agent.types';
-import { logVoiceLlm } from './voice-llm-log.util';
+import { logVoiceLlm, voiceTracePrefix } from './voice-llm-log.util';
 import {
   buildVoiceParseResultLog,
   formatVoiceParseResultLog,
@@ -100,6 +108,7 @@ export class VoiceService {
   ) {}
 
   async turn(userId: string, dto: VoiceTurnDto): Promise<VoiceTurnResponse> {
+    if (!currentVoiceTrace()) return withTurnTrace(() => this.turn(userId, dto));
     await this.quota.assertUnderLimit(userId);
     return this.withSessionGroq(userId, dto.sessionId, () =>
       this.agentOrchestrator.turn(userId, dto, (ctx) => {
@@ -107,14 +116,16 @@ export class VoiceService {
         if (!transcript) {
           throw new BadRequestException('transcript is required');
         }
-        return this.parseTask(userId, {
-          transcript,
-          timeZone: dto.timeZone,
-          clientNowIso: dto.clientNowIso,
-          previousTranscript: ctx.previousTranscript,
-          clarificationAnswer: ctx.clarificationAnswer,
-          mode: dto.mode,
-        });
+        const parse = () =>
+          this.parseTask(userId, {
+            transcript,
+            timeZone: dto.timeZone,
+            clientNowIso: dto.clientNowIso,
+            previousTranscript: ctx.previousTranscript,
+            clarificationAnswer: ctx.clarificationAnswer,
+            mode: dto.mode,
+          });
+        return ctx.segment == null ? parse() : withVoiceSegment(ctx.segment, parse);
       }),
     );
   }
@@ -173,7 +184,13 @@ export class VoiceService {
       // Whisper often invents «дякую» / «thank you» on silence — drop it.
       const transcript = isNoiseOrEmptyTranscript(cleaned) ? '' : cleaned;
       this.logger.log(
-        `voice.stt provider=groq raw=${JSON.stringify(result.text)} cleaned=${JSON.stringify(cleaned)} kept=${JSON.stringify(transcript)}`,
+        `voice.stt provider=groq ${voiceTracePrefix()} kept=${transcript ? 'yes' : 'no'}`.replace(
+          /\s+/g,
+          ' ',
+        ),
+      );
+      this.logVoiceBody(
+        `voice.stt.raw provider=groq raw=${JSON.stringify(result.text)} cleaned=${JSON.stringify(cleaned)} kept=${JSON.stringify(transcript)}`,
       );
       return { transcript, language: result.language || sttLanguage };
     };
@@ -208,7 +225,13 @@ export class VoiceService {
     const result = await this.azureStt.transcribe(wav, sttLanguage);
     const transcript = result.text.trim();
     this.logger.log(
-      `voice.stt provider=azure raw=${JSON.stringify(result.text)} kept=${JSON.stringify(transcript)}`,
+      `voice.stt provider=azure ${voiceTracePrefix()} kept=${transcript ? 'yes' : 'no'}`.replace(
+        /\s+/g,
+        ' ',
+      ),
+    );
+    this.logVoiceBody(
+      `voice.stt.raw provider=azure raw=${JSON.stringify(result.text)} kept=${JSON.stringify(transcript)}`,
     );
     return { transcript, language: result.language || sttLanguage };
   }
@@ -323,9 +346,20 @@ export class VoiceService {
 
     const parseId = randomUUID();
     const mode = voiceCompanionMode(dto.mode);
+    const segment = currentVoiceTrace()?.activeSegment;
+    const traceId = currentVoiceTrace()?.traceId;
     this.logger.log(
-      `voice.parse transcript=${JSON.stringify(transcript)} parseId=${parseId} mode=${mode}`,
+      [
+        'voice.parse',
+        traceId ? `traceId=${traceId}` : '',
+        `parseId=${parseId}`,
+        `mode=${mode}`,
+        segment != null ? `segment=${segment}` : '',
+      ]
+        .filter(Boolean)
+        .join(' '),
     );
+    this.logVoiceBody(`voice.parse.body transcript=${JSON.stringify(transcript)}`);
 
     const routerRaw = await this.groq.completeJson(
       buildVoiceRouterSystemPrompt(),
@@ -344,6 +378,10 @@ export class VoiceService {
     try {
       routerParsed = extractJsonObject(routerRaw);
     } catch {
+      annotateLatestStep((step) => step.component === 'router' || step.name === 'router', {
+        valid: false,
+        errorCode: 'invalid_json',
+      });
       throw new BadRequestException('Could not classify the voice request');
     }
 
@@ -366,24 +404,20 @@ export class VoiceService {
         task: null,
         command: null,
       };
-      this.logger.log(
-        formatVoiceParseResultLog(
-          buildVoiceParseResultLog({
-            parseId,
-            transcript: speech,
-            previousTranscript: dto.previousTranscript,
-            clarificationAnswer: dto.clarificationAnswer,
-            timeZone,
-            nowIso,
-            routerIntent,
-            sniffed,
-            intent: 'remind',
-            specialistIntent: 'remind',
-            language: speechLanguage ?? null,
-            result,
-          }),
-        ),
-      );
+      this.logParseResult({
+        parseId,
+        transcript: speech,
+        previousTranscript: dto.previousTranscript,
+        clarificationAnswer: dto.clarificationAnswer,
+        timeZone,
+        nowIso,
+        routerIntent,
+        sniffed,
+        intent: 'remind',
+        specialistIntent: 'remind',
+        language: speechLanguage ?? null,
+        result,
+      });
       return result;
     }
     if (routed.kind === 'remind') intent = 'remind';
@@ -419,6 +453,10 @@ export class VoiceService {
     try {
       parsed = extractJsonObject(content);
     } catch {
+      annotateLatestStep(
+        (step) => step.component === 'specialist' || step.name.startsWith('specialist'),
+        { valid: false, errorCode: 'invalid_json' },
+      );
       throw new BadRequestException('Could not parse the voice request into a task');
     }
     // Specialist may omit intent; keep router/sniffed intent authoritative.
@@ -452,27 +490,40 @@ export class VoiceService {
         };
       }
     } else if (intent === 'create') {
-      result = {
-        ...normalizeVoiceParse(parsed, {
-          validPhaseIds: new Set(phases.map((phase) => phase.id)),
-          phases: phases.map((phase) => ({
-            id: phase.id,
-            startTime: phase.startTime,
-            endTime: phase.endTime,
-            weekDays: phase.weekDays,
-            type: phase.type,
-          })),
-          alreadyClarified,
-          timeZone,
-          nowIso,
-          wakeTime: settings.wakeTime,
-          transcript: speech,
-          clarificationAnswer: dto.clarificationAnswer,
-          language: speechLanguage,
-          defaultTaskDurationMinutes: taskDurationMinutes(settings),
-        }),
-        command: null,
-      };
+      const normalized = await traceStep(
+        'other',
+        'normalizer',
+        '',
+        async () =>
+          normalizeVoiceParse(parsed, {
+            validPhaseIds: new Set(phases.map((phase) => phase.id)),
+            phases: phases.map((phase) => ({
+              id: phase.id,
+              startTime: phase.startTime,
+              endTime: phase.endTime,
+              weekDays: phase.weekDays,
+              type: phase.type,
+            })),
+            alreadyClarified,
+            timeZone,
+            nowIso,
+            wakeTime: settings.wakeTime,
+            transcript: speech,
+            clarificationAnswer: dto.clarificationAnswer,
+            language: speechLanguage,
+            defaultTaskDurationMinutes: taskDurationMinutes(settings),
+          }),
+        undefined,
+        {
+          component: 'normalizer',
+          ...(segment != null ? { segment } : {}),
+          describe: (value) => {
+            const reason = normalizerCodes(parsed, value);
+            return reason ? { reason } : {};
+          },
+        },
+      );
+      result = { ...normalized, command: null };
     } else if (specialistAsksWhichTask(parsed)) {
       result = {
         understanding: 'needs_clarification',
@@ -509,25 +560,47 @@ export class VoiceService {
       }
     }
 
-    this.logger.log(
-      formatVoiceParseResultLog(
-        buildVoiceParseResultLog({
-          parseId,
-          transcript: speech,
-          previousTranscript: dto.previousTranscript,
-          clarificationAnswer: dto.clarificationAnswer,
-          timeZone,
-          nowIso,
-          routerIntent,
-          sniffed,
-          intent,
-          specialistIntent,
-          language: speechLanguage ?? null,
-          result,
-        }),
-      ),
-    );
+    this.logParseResult({
+      parseId,
+      transcript: speech,
+      previousTranscript: dto.previousTranscript,
+      clarificationAnswer: dto.clarificationAnswer,
+      timeZone,
+      nowIso,
+      routerIntent,
+      sniffed,
+      intent,
+      specialistIntent,
+      language: speechLanguage ?? null,
+      result,
+    });
     return result;
+  }
+
+  private logVoiceBody(text: string): void {
+    if (!voiceTraceBodiesEnabled()) return;
+    const traceId = currentVoiceTrace()?.traceId;
+    const prefix = traceId ? `traceId=${traceId} ` : '';
+    this.logger.log(clipVoiceBody(`${prefix}${text}`));
+  }
+
+  private logParseResult(input: Parameters<typeof buildVoiceParseResultLog>[0]): void {
+    const trace = currentVoiceTrace();
+    if (!voiceTraceBodiesEnabled()) {
+      this.logger.log(
+        `voice.parse.result ${JSON.stringify({
+          ...(trace?.traceId ? { traceId: trace.traceId } : {}),
+          parseId: input.parseId,
+          ...(trace?.activeSegment != null ? { segment: trace.activeSegment } : {}),
+          routerIntent: input.routerIntent,
+          intent: input.intent,
+          specialistIntent: input.specialistIntent,
+          understanding: input.result.understanding,
+        })}`,
+      );
+      return;
+    }
+    this.logger.log(clipVoiceBody(formatVoiceParseResultLog(buildVoiceParseResultLog(input))));
   }
 }
 
@@ -627,6 +700,25 @@ function stripDataUrl(value: string): string {
     return trimmed.slice(comma + 1);
   }
   return trimmed;
+}
+
+/** Codes only. The normalizer result itself is unchanged. */
+function normalizerCodes(raw: unknown, result: VoiceParseResult): string | undefined {
+  const codes: string[] = [];
+  const taskRaw =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? (raw as { task?: unknown }).task
+      : undefined;
+  const minutes =
+    taskRaw && typeof taskRaw === 'object' && taskRaw && 'estimatedTimeInMinutes' in taskRaw
+      ? (taskRaw as { estimatedTimeInMinutes?: unknown }).estimatedTimeInMinutes
+      : undefined;
+  const out = result.task?.estimatedTimeInMinutes;
+  if (typeof minutes === 'number' && typeof out === 'number' && minutes !== out) {
+    codes.push('duration_clamped');
+  }
+  if (result.scheduleNotice) codes.push('schedule_adjusted');
+  return codes.length ? codes.join(',') : undefined;
 }
 
 /** Map app language to Whisper ISO-639-1. */

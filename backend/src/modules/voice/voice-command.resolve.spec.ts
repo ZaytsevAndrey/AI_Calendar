@@ -136,10 +136,10 @@ describe('resolveVoiceCommand', () => {
     });
   });
 
-  it('uses the block in progress when no name is spoken', () => {
+  it('uses the block in progress when they ask for the current task', () => {
     const result = resolveVoiceCommand({
       draft: draft({ intent: 'skip', target: 'current' }),
-      transcript: 'skip this',
+      transcript: 'skip the current task',
       timeZone: ZONE,
       nowIso: NOW,
       alreadyClarified: false,
@@ -150,6 +150,19 @@ describe('resolveVoiceCommand', () => {
       type: 'command',
       command: { kind: 'skip', taskId: 't1' },
     });
+  });
+
+  it('does not treat a bare pronoun as the task in progress', () => {
+    const result = resolveVoiceCommand({
+      draft: draft({ intent: 'skip', target: 'current', taskName: 'Dentist' }),
+      transcript: 'skip this',
+      timeZone: ZONE,
+      nowIso: NOW,
+      alreadyClarified: false,
+      tasks: [dentist],
+      slots: [slot({ id: 's1', taskId: 't1' })],
+    });
+    expect(result).toMatchObject({ type: 'clarify' });
   });
 
   it('refuses when nothing is in progress', () => {
@@ -419,6 +432,93 @@ describe('resolveVoiceCommand', () => {
         transcript: 'delete the whole series gym',
       }),
     ).toMatchObject({ type: 'command', command: { kind: 'delete', taskId: 't2' } });
+  });
+
+  it('keeps an explicitly named task and does not replace a bare pronoun with it', () => {
+    const report = task({ id: 'zvit', name: 'Звіт' });
+    const meeting = task({ id: 'narada', name: 'Нарада' });
+    const base = {
+      timeZone: ZONE,
+      nowIso: NOW,
+      alreadyClarified: false,
+      tasks: [report, meeting],
+      slots: [slot({ id: 's-zvit', taskId: 'zvit' })],
+    };
+    expect(resolveVoiceCommand({
+      ...base,
+      draft: draft({ intent: 'reschedule', target: 'current', taskName: 'Звіт', spokenStart: '2026-09-22T18:00:00+03:00' }),
+      transcript: 'Перенеси це на вечір',
+    })).toMatchObject({ type: 'clarify' });
+    expect(resolveVoiceCommand({
+      ...base,
+      draft: draft({ intent: 'reschedule', target: 'current', taskName: 'Звіт', spokenStart: '2026-09-22T18:00:00+03:00' }),
+      transcript: 'move it to the evening',
+    })).toMatchObject({ type: 'clarify' });
+    expect(resolveVoiceCommand({
+      ...base,
+      draft: draft({ intent: 'reschedule', target: 'named', taskName: 'Звіт', spokenStart: '2026-09-22T18:00:00+03:00' }),
+      transcript: 'Перенеси нараду на вечір',
+    })).toMatchObject({ type: 'command', command: { taskId: 'narada', taskName: 'Нарада' } });
+    expect(resolveVoiceCommand({
+      ...base,
+      draft: draft({ intent: 'reschedule', target: 'current', spokenStart: '2026-09-22T18:00:00+03:00' }),
+      transcript: 'Перенеси поточну задачу на вечір',
+    })).toMatchObject({ type: 'command', command: { taskId: 'zvit', taskName: 'Звіт' } });
+    expect(resolveVoiceCommand({
+      ...base,
+      draft: draft({ intent: 'reschedule', target: 'current', taskName: 'Звіт', spokenStart: '2026-09-23T11:00:00+03:00' }),
+      transcript: 'Замов таксі і перенеси його на завтра',
+      tasks: [...base.tasks, task({ id: 'taxi', name: 'Таксі' })],
+    })).toMatchObject({ type: 'command', command: { taskId: 'taxi', taskName: 'Таксі' } });
+    expect(resolveVoiceCommand({
+      ...base,
+      draft: draft({ intent: 'reschedule', target: 'current', taskName: 'Звіт' }),
+      transcript: 'перенеси його, молоко чи звіт',
+      tasks: [...base.tasks, task({ id: 'milk', name: 'Молоко' })],
+    })).toMatchObject({ type: 'clarify' });
+    expect(resolveVoiceCommand({
+      ...base,
+      draft: draft({ intent: 'reschedule', target: 'current', taskName: 'Звіт', spokenStart: '2026-09-22T18:00:00+03:00' }),
+      transcript: 'Перенеси це на вечір Нараду',
+      alreadyClarified: true,
+    })).toMatchObject({ type: 'command', command: { taskId: 'narada', taskName: 'Нарада' } });
+    expect(resolveVoiceCommand({
+      ...base,
+      language: 'uk',
+      draft: draft({ intent: 'reschedule', target: 'current', taskName: 'Звіт', spokenStart: '2026-09-22T18:00:00+03:00' }),
+      transcript: 'Перенеси це на вечір Я мав на увазі нараду',
+      alreadyClarified: true,
+    })).toMatchObject({ type: 'command', command: { taskId: 'narada', taskName: 'Нарада' } });
+    expect(resolveVoiceCommand({
+      ...base,
+      draft: draft({ intent: 'reschedule', target: 'current', taskName: 'Звіт', spokenStart: '2026-09-22T20:00:00+03:00' }),
+      transcript: 'Перенеси це на вечір Нараду на 20:00',
+      alreadyClarified: true,
+    })).toMatchObject({
+      type: 'command',
+      command: { taskId: 'narada', taskName: 'Нарада', earliestStartTime: '2026-09-22T20:00:00+03:00' },
+    });
+    expect(resolveVoiceCommand({
+      ...base,
+      language: 'uk',
+      draft: draft({ intent: 'reschedule', target: 'current', taskName: 'Звіт', spokenStart: '2026-09-22T18:00:00+03:00' }),
+      transcript: 'Перенеси це на вечір не знаю',
+      alreadyClarified: true,
+    })).toMatchObject({ type: 'command', command: { kind: 'refuse' } });
+    expect(resolveVoiceCommand({
+      ...base,
+      language: 'uk',
+      draft: draft({ intent: 'reschedule', target: 'current', taskName: 'Звіт', spokenStart: '2026-09-22T18:00:00+03:00' }),
+      transcript: 'Перенеси це на вечір Нараду чи звіт',
+      alreadyClarified: true,
+    })).toMatchObject({ type: 'command', command: { kind: 'refuse' } });
+    expect(resolveVoiceCommand({
+      ...base,
+      language: 'uk',
+      draft: draft({ intent: 'reschedule', target: 'current', taskName: 'Звіт', spokenStart: '2026-09-22T18:00:00+03:00' }),
+      transcript: 'Перенеси нараду на вечір',
+      tasks: [...base.tasks, task({ id: 'narada-client', name: 'Нарада з клієнтом' })],
+    })).toMatchObject({ type: 'clarify' });
   });
 
 });

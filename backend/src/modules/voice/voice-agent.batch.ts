@@ -105,33 +105,6 @@ export function skipOpenQuestions(batch: PendingBatch, ctx: SummaryContext): Pen
   return dropQuestions(batch, batch.unresolved, ctx);
 }
 
-/**
- * The reply did not answer the question that was asked.
- * One open question, or every remaining question already deferred: skip them.
- * Other questions still open: this one waits at the back of the queue.
- */
-function ignoreUnanswered(
-  batch: PendingBatch,
-  current: PendingBatch['unresolved'][number],
-  ctx: SummaryContext,
-): PendingBatch {
-  const rest = batch.unresolved.slice(1);
-  const fresh = rest.filter((row) => !row.deferred);
-  if (current.deferred || fresh.length === 0) {
-    const dropped = [current, ...rest.filter((row) => row.deferred)];
-    const next = dropQuestions(batch, dropped, ctx);
-    return { ...next, unresolved: fresh };
-  }
-  return {
-    ...batch,
-    unresolved: [
-      ...fresh,
-      ...rest.filter((row) => row.deferred),
-      { ...current, deferred: true },
-    ],
-  };
-}
-
 /** Fold the parse of a clarification answer into a held batch. */
 export function continuePendingBatch(
   batch: PendingBatch,
@@ -141,15 +114,35 @@ export function continuePendingBatch(
   const [current, ...rest] = batch.unresolved;
   if (!current) return batch;
   const collected = collectSegments([answer], ctx);
-  const segments = batch.segments.filter(
-    (row) => !(row.status === 'clarify' && row.summary === current.segment),
-  );
   if (collected.unresolved.length) {
-    return ignoreUnanswered(batch, current, ctx);
+    const question = collected.unresolved[0].question.trim() || current.question;
+    return {
+      ...batch,
+      unresolved: [{ segment: current.segment, question }, ...rest],
+    };
   }
+  const slot = batch.segments.findIndex(
+    (row) => row.status === 'clarify' && row.summary === current.segment,
+  );
+  const segments =
+    slot < 0
+      ? [...batch.segments, ...collected.segments]
+      : [
+          ...batch.segments.slice(0, slot),
+          ...collected.segments,
+          ...batch.segments.slice(slot + 1),
+        ];
+  const readyBefore =
+    slot < 0
+      ? batch.intents.length
+      : batch.segments.slice(0, slot).filter((row) => row.status === 'ready').length;
   return {
-    intents: [...batch.intents, ...collected.intents],
-    segments: [...segments, ...collected.segments],
+    intents: [
+      ...batch.intents.slice(0, readyBefore),
+      ...collected.intents,
+      ...batch.intents.slice(readyBefore),
+    ],
+    segments,
     unresolved: rest,
     clarifyCount: 1,
     answer: batch.answer,

@@ -28,4 +28,4 @@ Single source of truth for the project. Keep these files in sync with code chang
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** October 2026 (A planner fault is a refusal and is not parsed as a task. Logs: `planner.decision`, `planner.fault`).
+**Last documentation update:** 27 October 2026. Voice contract: [spec-voice-agent.md](spec-voice-agent.md). Experimental Planner C2 is not the production planner. C3 is rejected. Record: [voice-prompt-next.md](voice-prompt-next.md).

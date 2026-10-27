@@ -85,5 +85,5 @@ Third parties and publishing. Leave these until the Now list is done.
 ## Recommended next steps
 
 1. Next: roadmap **§37** — diagnose duplicate / excess fetches. Then **§38** — research + fix move/place into the past. (§32 full mobile version is after the web. §31 backup and §24 Piper are in Later.)
-2. Voice understanding continues in parallel via [voice-prompt-next.md](voice-prompt-next.md); do not put it back in this queue.
+2. Voice understanding continues in parallel via [voice-prompt-next.md](voice-prompt-next.md). The production planner stays `buildPlannerSystemPrompt`. Experimental Planner C2 is not used. C3 is rejected. Do not put that work back in this queue.
 3. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.
