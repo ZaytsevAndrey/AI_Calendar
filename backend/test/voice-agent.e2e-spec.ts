@@ -217,14 +217,16 @@ describe('Voice agent /voice/turn e2e', () => {
     expect(again.intents).toEqual([]);
   });
 
-  it('A-VOI-024 planner failure falls back to a single parse', async () => {
+  it('A-VOI-024 planner failure refuses instead of parsing', async () => {
     const token = await user();
+    const callsBefore = ctx.groq.completeJson.mock.calls.length;
     ctx.groq.completeJson.mockResolvedValueOnce('not json at all');
-    mockVoiceParseTurn(ctx.groq, createMilk);
 
     const body = await turn(token, randomUUID(), { transcript: 'buy milk' });
-    expect(body.outcome).toBe('confirm');
-    expect(body.intents).toHaveLength(1);
-    expect(body.legacyParse?.task?.name).toBe('Buy milk');
+    expect(body.outcome).toBe('refuse');
+    expect(body.assistantMessage).toBe('I could not help with that.');
+    expect(body.intents).toEqual([]);
+    expect(body.legacyParse).toBeNull();
+    expect(ctx.groq.completeJson).toHaveBeenCalledTimes(callsBefore + 1);
   });
 });

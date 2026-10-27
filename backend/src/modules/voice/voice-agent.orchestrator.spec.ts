@@ -1,3 +1,4 @@
+import { Logger, ServiceUnavailableException } from '@nestjs/common';
 import { TaskEventType } from '../scheduling/event-type.enum';
 import { ScheduleState, type Task, TaskStatus } from '../tasks/entities/task.entity';
 import type { GroqClient } from './groq.client';
@@ -125,6 +126,29 @@ function build(tasks: Task[] = []) {
   return { turn, planner, parse, propose, completeJson, session, tools };
 }
 
+function loggedJson(spy: jest.SpyInstance, event: string): Array<Record<string, unknown>> {
+  return spy.mock.calls
+    .map((call) => String(call[0] ?? ''))
+    .filter((line) => line.startsWith(`[${event}] `))
+    .map((line) => JSON.parse(line.slice(event.length + 3)) as Record<string, unknown>);
+}
+
+function faultLogs(): () => Array<Record<string, unknown>> {
+  const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  warn.mockClear();
+  return () => loggedJson(warn, 'planner.fault');
+}
+
+function decisionLogs(): () => Array<Record<string, unknown>> {
+  const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+  log.mockClear();
+  return () => loggedJson(log, 'planner.decision');
+}
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
 describe('VoiceAgentOrchestrator — multi-intent', () => {
   it('previews every write and applies them together', async () => {
     const h = build();
@@ -246,25 +270,91 @@ describe('VoiceAgentOrchestrator — multi-intent', () => {
     expect(h.session().pendingBatch).toBeNull();
   });
 
-  it('falls back to one parse when the planner fails', async () => {
+  it('refuses when the planner call fails', async () => {
     const h = build();
+    const faults = faultLogs();
     h.completeJson.mockRejectedValueOnce(new Error('bad json'));
     h.parse.mockResolvedValueOnce(create('Milk'));
 
-    const res = await h.turn({ transcript: 'buy milk' });
-    expect(res.outcome).toBe('confirm');
-    expect(res.intents).toHaveLength(1);
-    expect(res.legacyParse?.task?.name).toBe('Milk');
+    const res = await h.turn({ transcript: 'what is on tomorrow' });
+    expect(res).toMatchObject({
+      outcome: 'refuse',
+      assistantMessage: 'I could not help with that.',
+      actions: ['retry'],
+    });
+    expect(res.intents).toHaveLength(0);
+    expect(h.parse).not.toHaveBeenCalled();
+    expect(faults()).toEqual([
+      expect.objectContaining({ code: 'planner_execution_error', message: 'bad json' }),
+    ]);
+  });
+
+  it('refuses an unknown planner type without speaking its message', async () => {
+    const h = build();
+    const faults = faultLogs();
+    h.planner({ type: 'step', assistantMessage: 'Tomorrow you have the dentist.' });
+
+    const res = await h.turn({ transcript: 'what is on tomorrow' });
+    expect(res.assistantMessage).toBe('I could not help with that.');
+    expect(res.outcome).toBe('refuse');
+    expect(h.parse).not.toHaveBeenCalled();
+    expect(faults()).toEqual([
+      expect.objectContaining({ code: 'invalid_decision', typeName: 'step' }),
+    ]);
+  });
+
+  it('refuses a tool decision that has no calls', async () => {
+    const h = build();
+    const faults = faultLogs();
+    h.planner({ type: 'tools', calls: [] });
+
+    const res = await h.turn({ transcript: 'what is on tomorrow' });
+    expect(res.outcome).toBe('refuse');
+    expect(h.parse).not.toHaveBeenCalled();
+    expect(h.tools.execute).not.toHaveBeenCalled();
+    expect(faults()).toEqual([
+      expect.objectContaining({ code: 'tool_limit_exceeded', reason: 'empty_calls', round: 0 }),
+    ]);
+  });
+
+  it('refuses when tools are still requested on the last round', async () => {
+    const h = build();
+    const faults = faultLogs();
+    h.planner({ type: 'tools', calls: [{ name: 'get_day_agenda', args: { day: 'tomorrow' } }] });
+    h.planner({ type: 'tools', calls: [{ name: 'get_day_agenda', args: { day: 'tomorrow' } }] });
+    h.planner({ type: 'tools', calls: [{ name: 'list_unscheduled', args: {} }] });
+
+    const res = await h.turn({ transcript: 'what is on tomorrow' });
+    expect(res.outcome).toBe('refuse');
+    expect(h.parse).not.toHaveBeenCalled();
+    expect(h.tools.execute).toHaveBeenCalledTimes(2);
+    expect(faults()).toEqual([
+      expect.objectContaining({ code: 'tool_limit_exceeded', reason: 'max_rounds', round: 2 }),
+    ]);
+  });
+
+  it('rethrows a voice rate limit', async () => {
+    const h = build();
+    h.completeJson.mockRejectedValueOnce(
+      new ServiceUnavailableException({ code: 'VOICE_RATE_LIMIT', message: 'busy' }),
+    );
+    await expect(h.turn({ transcript: 'buy milk' })).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(h.parse).not.toHaveBeenCalled();
   });
 
   it('runs read tools before deciding', async () => {
     const h = build();
+    const decisions = decisionLogs();
     h.planner({ type: 'tools', calls: [{ name: 'get_now_next', args: {} }] });
     h.planner({ type: 'final', outcome: 'answer', assistantMessage: 'Next is Gym.' });
 
     const res = await h.turn({ transcript: 'what is next' });
     expect(h.tools.execute).toHaveBeenCalledTimes(1);
     expect(res).toMatchObject({ outcome: 'answer', assistantMessage: 'Next is Gym.' });
+    expect(decisions()).toEqual([
+      expect.objectContaining({ type: 'tools', round: 0, calls: 1, tools: 'get_now_next' }),
+      expect.objectContaining({ type: 'final', round: 1, outcome: 'answer' }),
+    ]);
   });
 
   it('ignores noise without calling the LLM', async () => {
@@ -335,6 +425,27 @@ describe('VoiceAgentOrchestrator — day plan', () => {
     expect(res.actions).toContain('build_plan');
     expect(res.plan?.items).toHaveLength(2);
     expect(h.session().planDraft?.stage).toBe('interview');
+  });
+
+  it('keeps an open day plan on screen when the planner reply is invalid', async () => {
+    const h = build(tasks);
+    h.planner({
+      type: 'plan_start',
+      day: '2026-10-18',
+      interview: true,
+      question: 'Anything fixed?',
+      edits: [],
+    });
+    await h.turn({ transcript: 'plan my day' });
+
+    h.planner({ type: 'step', assistantMessage: 'The day is free.' });
+    const res = await h.turn({ transcript: 'what about lunch' });
+    expect(res.outcome).toBe('refuse');
+    expect(res.assistantMessage).toBe('I could not help with that.');
+    expect(res.plan?.stage).toBe('interview');
+    expect(res.actions).toEqual(['build_plan', 'cancel']);
+    expect(h.session().planDraft?.stage).toBe('interview');
+    expect(h.parse).not.toHaveBeenCalled();
   });
 
   it('switches to the interview when nothing can be planned', async () => {

@@ -1,4 +1,4 @@
-import { parsePlannerDecision } from './voice-agent.planner';
+import { parsePlannerDecision, PlannerInvalidDecisionError } from './voice-agent.planner';
 import { MAX_SEGMENTS } from './voice-agent.planner.prompt';
 
 describe('parsePlannerDecision', () => {
@@ -85,15 +85,26 @@ describe('parsePlannerDecision', () => {
     },
   );
 
-  it('falls back to a final answer for unknown types', () => {
+  it('parses a final answer', () => {
     expect(
       parsePlannerDecision(JSON.stringify({ type: 'final', outcome: 'clarify', assistantMessage: 'Which one?' })),
     ).toEqual({ type: 'final', outcome: 'clarify', assistantMessage: 'Which one?' });
-    expect(parsePlannerDecision(JSON.stringify({ outcome: 'weird', assistantMessage: 'Hi' }))).toEqual({
-      type: 'final',
-      outcome: 'answer',
-      assistantMessage: 'Hi',
-    });
+  });
+
+  it('rejects an unknown decision type', () => {
+    expect(() =>
+      parsePlannerDecision(
+        JSON.stringify({ type: 'step', assistantMessage: 'Tomorrow you have the dentist.' }),
+      ),
+    ).toThrow(PlannerInvalidDecisionError);
+    let caught: unknown;
+    try {
+      parsePlannerDecision(JSON.stringify({ outcome: 'weird', assistantMessage: 'Hi' }));
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(PlannerInvalidDecisionError);
+    expect((caught as PlannerInvalidDecisionError).typeName).toBe('(missing)');
   });
 
   it('extracts JSON wrapped in prose', () => {

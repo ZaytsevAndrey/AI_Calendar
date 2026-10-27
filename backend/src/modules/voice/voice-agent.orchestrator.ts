@@ -30,7 +30,11 @@ import {
   type PlanDraftContext,
   type PlanEdit,
 } from './voice-agent.plan-draft';
-import { parsePlannerDecision, type PlannerDecision } from './voice-agent.planner';
+import {
+  parsePlannerDecision,
+  PlannerInvalidDecisionError,
+  type PlannerDecision,
+} from './voice-agent.planner';
 import {
   buildPlannerSystemPrompt,
   buildPlannerUserPrompt,
@@ -48,15 +52,41 @@ import type {
   VoiceTurnResponse,
   VoiceWriteIntent,
 } from './voice-agent.types';
-import { logVoiceLlm } from './voice-llm-log.util';
+import {
+  logPlannerEvent,
+  logVoiceLlm,
+  type PlannerFaultCode,
+} from './voice-llm-log.util';
 import { addDaysToYmd, localYmd, scheduleTodayYmd } from './voice-local-date.util';
 import type { VoiceParseResult } from './voice-parse.types';
 import { VoiceSessionStore } from './voice-session.store';
 import { isNoiseOrEmptyTranscript } from './voice-stt.util';
 
-/** Tool rounds before the planner must decide. */
+/** Tool rounds before the planner must decide. Rounds 0 and 1 may run tools. Round 2 must decide. */
 const MAX_TOOL_ROUNDS = 2;
 const MAX_TOOL_CALLS_PER_ROUND = 6;
+
+type ToolLimitReason = 'empty_calls' | 'max_rounds';
+
+class PlannerToolLimitError extends Error {
+  readonly code = 'tool_limit_exceeded' as const;
+
+  constructor(
+    readonly reason: ToolLimitReason,
+    readonly round: number,
+  ) {
+    super(`Planner tool limit: ${reason} at round ${round}`);
+    this.name = 'PlannerToolLimitError';
+  }
+}
+
+type PlannerFault = {
+  code: PlannerFaultCode;
+  typeName?: string;
+  reason?: ToolLimitReason;
+  round?: number;
+  message?: string;
+};
 
 export type VoiceParseFallback = (ctx: {
   transcript: string;
@@ -140,22 +170,31 @@ export class VoiceAgentOrchestrator {
       return this.proposeAndHold(ctx, { ...session.planDraft, stage: 'review' });
     }
 
-    let decision: PlannerDecision;
+    let decision: Exclude<PlannerDecision, { type: 'tools' }>;
     try {
       decision = await this.decide(ctx, session, transcript);
     } catch (err) {
       if (isVoiceRateLimit(err) || isVoiceLlmTimeout(err)) throw err;
-      this.logger.warn(
-        `Planner LLM failed; falling back to parse-task: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-      return this.fallbackParse(ctx, transcript, parseFallback);
+      if (err instanceof PlannerInvalidDecisionError) {
+        return this.plannerFault(ctx, session, {
+          code: 'invalid_decision',
+          typeName: err.typeName,
+        });
+      }
+      if (err instanceof PlannerToolLimitError) {
+        return this.plannerFault(ctx, session, {
+          code: 'tool_limit_exceeded',
+          reason: err.reason,
+          round: err.round,
+        });
+      }
+      return this.plannerFault(ctx, session, {
+        code: 'planner_execution_error',
+        message: errorMessage(err),
+      });
     }
 
     switch (decision.type) {
-      case 'tools':
-        return this.fallbackParse(ctx, transcript, parseFallback);
       case 'steps':
         return this.steps(ctx, session, decision, transcript, parseFallback);
       case 'plan_start':
@@ -245,7 +284,7 @@ export class VoiceAgentOrchestrator {
     ctx: TurnContext,
     session: VoiceAgentSession,
     transcript: string,
-  ): Promise<PlannerDecision> {
+  ): Promise<Exclude<PlannerDecision, { type: 'tools' }>> {
     const toolResults: Array<{ name: string; result: unknown }> = [];
     const pendingQuestion = session.pendingBatch?.unresolved[0] ?? null;
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round += 1) {
@@ -268,8 +307,10 @@ export class VoiceAgentOrchestrator {
       );
       logVoiceLlm(this.logger, `planner.round${round}`, raw);
       const decision = parsePlannerDecision(raw);
+      logPlannerEvent(this.logger, 'planner.decision', decisionFields(decision, round));
       if (decision.type !== 'tools') return decision;
-      if (!decision.calls.length || round === MAX_TOOL_ROUNDS) break;
+      if (!decision.calls.length) throw new PlannerToolLimitError('empty_calls', round);
+      if (round === MAX_TOOL_ROUNDS) throw new PlannerToolLimitError('max_rounds', round);
       for (const call of decision.calls.slice(0, MAX_TOOL_CALLS_PER_ROUND)) {
         const result = await traceStep('other', `tool.${call.name}`, '', () =>
           this.tools.execute(call, ctx),
@@ -280,7 +321,29 @@ export class VoiceAgentOrchestrator {
         );
       }
     }
-    return { type: 'tools', calls: [] };
+    throw new PlannerToolLimitError('max_rounds', MAX_TOOL_ROUNDS);
+  }
+
+  /** A planner fault is a refusal. It is not a task parse and it does not drop the session. */
+  private plannerFault(
+    ctx: TurnContext,
+    session: VoiceAgentSession,
+    fault: PlannerFault,
+  ): VoiceTurnResponse {
+    const fields: Record<string, string | number | boolean> = { code: fault.code };
+    if (fault.typeName) fields.typeName = fault.typeName;
+    if (fault.reason) fields.reason = fault.reason;
+    if (typeof fault.round === 'number') fields.round = fault.round;
+    if (fault.message) fields.message = fault.message.slice(0, 300);
+    logPlannerEvent(this.logger, 'planner.fault', fields);
+
+    const plan = openPlanPayload(session);
+    return this.finish(ctx.userId, ctx.sessionId, {
+      outcome: 'refuse',
+      assistantMessage: this.vt(ctx, 'voice.couldNotHelp'),
+      actions: plan ? planActions(session) : ['retry'],
+      ...(plan ? { plan } : {}),
+    });
   }
 
   /** Multi-intent: each write segment goes through the existing router + specialist. */
@@ -417,7 +480,7 @@ export class VoiceAgentOrchestrator {
     }
   }
 
-  /** T5: one parse-task run on the whole transcript when the planner cannot decide. */
+  /** Parse the whole utterance when a decision does not fit the session. Planner faults do not use this. */
   private async fallbackParse(
     ctx: TurnContext,
     transcript: string,
@@ -733,6 +796,44 @@ function statedSummary(intent: VoiceWriteIntent, lang: AppLanguage): string {
       ? String(intent.task.name ?? '')
       : String(intent.command.taskName ?? intent.command.name ?? '');
   return name ? t(lang, 'voice.appliedChange', { name }) : summary.replace(/\?+$/, '.');
+}
+
+function decisionFields(
+  decision: PlannerDecision,
+  round: number,
+): Record<string, string | number | boolean> {
+  const fields: Record<string, string | number | boolean> = { type: decision.type, round };
+  if (decision.type === 'tools') {
+    fields.calls = decision.calls.length;
+    fields.tools = decision.calls.map((call) => call.name).join(',');
+  } else if (decision.type === 'steps') {
+    fields.segments = decision.segments.length;
+  } else if (
+    decision.type === 'plan_start' ||
+    decision.type === 'plan_edits' ||
+    decision.type === 'plan_question'
+  ) {
+    fields.edits = decision.edits.length;
+  } else if (decision.type === 'final') {
+    fields.outcome = decision.outcome;
+  }
+  return fields;
+}
+
+function openPlanPayload(session: VoiceAgentSession): DayPlanProposal | null {
+  const draft = session.planDraft;
+  if (draft?.stage === 'review' && draft.lastProposal && session.pendingKind === 'plan') {
+    return draft.lastProposal;
+  }
+  if (draft?.stage === 'interview') return interviewPayload(draft);
+  return null;
+}
+
+function planActions(session: VoiceAgentSession): VoiceAgentActionId[] {
+  if (session.planDraft?.stage === 'review' && session.pendingKind === 'plan') {
+    return ['confirm', 'cancel'];
+  }
+  return ['build_plan', 'cancel'];
 }
 
 function interviewPayload(draft: PlanDraft): DayPlanProposal {

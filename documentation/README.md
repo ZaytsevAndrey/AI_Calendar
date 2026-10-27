@@ -28,4 +28,4 @@ Single source of truth for the project. Keep these files in sync with code chang
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** October 2026 (a calendar drag onto a free in-phase slot ignores the old From/Until day and moves that window with the drop; a drop that cannot sit is parked instead of “time taken”).
+**Last documentation update:** October 2026 (A planner fault is a refusal and is not parsed as a task. Logs: `planner.decision`, `planner.fault`).

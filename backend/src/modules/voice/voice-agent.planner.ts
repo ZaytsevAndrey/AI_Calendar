@@ -28,7 +28,17 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-/** Parse one planner reply. Throws when the reply is not a JSON object. */
+/** The reply parsed as JSON, but `type` is not a planner decision. */
+export class PlannerInvalidDecisionError extends Error {
+  readonly code = 'invalid_decision' as const;
+
+  constructor(readonly typeName: string) {
+    super(`Unknown planner decision type: ${typeName || '(missing)'}`);
+    this.name = 'PlannerInvalidDecisionError';
+  }
+}
+
+/** Parse one planner reply. Throws when the reply is not a JSON object or the type is unknown. */
 export function parsePlannerDecision(raw: string): PlannerDecision {
   const parsed = extractJsonObject(raw) as Record<string, unknown>;
   const type = text(parsed.type);
@@ -83,7 +93,7 @@ export function parsePlannerDecision(raw: string): PlannerDecision {
     case 'confirm_pending':
     case 'cancel_pending':
       return { type };
-    default: {
+    case 'final': {
       const outcome = text(parsed.outcome);
       return {
         type: 'final',
@@ -92,5 +102,7 @@ export function parsePlannerDecision(raw: string): PlannerDecision {
         assistantMessage: text(parsed.assistantMessage),
       };
     }
+    default:
+      throw new PlannerInvalidDecisionError(type || '(missing)');
   }
 }

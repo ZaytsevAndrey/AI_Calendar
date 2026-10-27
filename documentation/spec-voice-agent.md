@@ -58,6 +58,8 @@ One planner call, then each write goes through the router and one specialist. Th
 
 A calendar question is answered from a read tool before the planner speaks. At most two tool rounds. A question and a write in one utterance: the answer is spoken, and each write is its own segment. The spoken reply does not describe the writes. The app summarizes those.
 
+A planner reply that is not a known decision, a tool request with no calls, tools still requested on the last round, or any other planner failure is a refusal. That utterance is not parsed as a task. Rate limit and timeout are still those errors. An open day plan stays on screen. The server log is `planner.fault` with `invalid_decision`, `tool_limit_exceeded`, or `planner_execution_error`. An accepted decision is `planner.decision`.
+
 A segment is one self-contained command, in the transcript's language, in the user's words. At most six, in spoken order.
 
 - Every write is its own segment: create, one update of one task, skip, cancel, delete. An update carries that task's fields, its time, and whether it is done.
@@ -205,7 +207,7 @@ Phone is a bottom sheet. Desktop is a floating panel. The thread shows the user 
 - In: `transcript`, `sessionId`, `actionId`, `executionReport`, `mode`. Time zone comes from settings.
 - Out: `outcome`, `assistantMessage`, `intents[]`, `actions[]`, `plan`, `segments[]`.
 
-`POST /voice/transcribe` is speech to text. `POST /voice/parse-task` remains for a fallback and for tests. It is not the Companion path.
+`POST /voice/transcribe` is speech to text. `POST /voice/parse-task` remains for tests and when a planner decision does not fit the session: a segment, an edit with no open draft, or an answer with no open question. A planner fault does not call it. It is not the Companion path.
 
 Read tools used to ground an answer: `get_now_next`, `get_day_agenda`, `list_unscheduled`, `list_problematic`, `find_free_gaps`, `match_task`, `match_habit`, `get_habit_status`, `get_task`, `list_reminders`.
 

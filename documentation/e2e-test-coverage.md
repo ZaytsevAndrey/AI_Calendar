@@ -357,7 +357,7 @@ Do **not** hit real Groq. Stub transcribe + parse.
 | A-VOI-021 | A | P0 | Batch with a delete | turn → `confirm` action → `report` | One combined confirm; `act` with both; report returns empty `answer` |
 | A-VOI-022 | A | P0 | Two Unscheduled tasks, planner `plan_start` (day +2) | turn → `plan_edits` → `confirm` → `report` | Real dry-run seats both without overlap; edit drops one (revision 2); DB untouched before Apply; Apply → `window` + `clearUnscheduled`; plan gone after report |
 | A-VOI-023 | A | P1 | Planner `plan_start` interview | turn → `build_plan` → `cancel` | `clarify` + `build_plan` action + interview plan; build → `confirm` plan; cancel drops the draft |
-| A-VOI-024 | A | P1 | Planner returns non-JSON | turn | One parse fallback; `act` + `legacyParse` |
+| A-VOI-024 | A | P1 | Planner returns non-JSON | turn | Refusal; no task parse; `legacyParse` empty |
 | A-VOI-025 | A | P1 | Command specialist `needs_clarification` + question, no task name | `POST /voice/parse-task` | That question returned; no "current task" fallback / refuse |
 | U-VOI-013 | U | P1 | Stub `confirm` with two create intents | Type, Apply | Both cards; both tasks created; report sent with `applied` ×2; **Done just now** cards with statuses |
 | U-VOI-014 | U | P1 | Stub interview → plan → edited plan | Type, Make plan, type edit, Apply | **Planning** header + Make plan; plan cards; edit marks only the new card **Changed** and lists **Did not fit**; Apply creates the task; turns `text → build_plan → text → confirm → report` |
