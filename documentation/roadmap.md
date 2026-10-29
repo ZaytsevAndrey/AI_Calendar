@@ -12,7 +12,7 @@ Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Produ
 
 ## Now (ordered)
 
-Do in order unless you explicitly skip ahead. These items need no outside service and no open product decision. Web only. The full mobile version is **§32**, after this web queue is done.
+Do in order unless you explicitly skip ahead. These items need no outside service and no open product decision. Web only. The full mobile version is part of **§71**.
 
 ### 39. Voice MVP: check P0 on a live model and a real calendar
 
@@ -63,6 +63,23 @@ Dragging or saving a task onto a past clock is inconsistent or wrong. Rules alre
 
 ---
 
+### 71. Design system and mobile version
+
+Plan: [design/design-fix-plan.md](design/design-fix-plan.md). Audit: [design/design-audit.md](design/design-audit.md). Spec: [design/design-system.md](design/design-system.md).
+
+Decided: phases move into Settings → «Мій день»; font Onest; phase colors only from the 10-color palette (existing colors mapped to the nearest); the full mobile version (old §32) is in this item.
+
+- [ ] Stage 0 — screenshot tool (5 sizes × 2 themes).
+- [ ] Stage 1 — P0: unreadable light theme, hidden calendar grid at 1440×900, clipped Calendars menu, reminder delete without confirm, 16 px inputs on phone.
+- [ ] Stage 2 — tokens, Onest, phase palette + migration, no hard-coded colors.
+- [ ] Stage 3 — Calendar: Today panel / sheet, new chips, touch create and drag, 3-day phone view.
+- [ ] Stage 4 — Settings sections + Phases inside Settings.
+- [ ] Stage 5 — Tasks as rows, swipe actions.
+- [ ] Stage 6 — dialogs and onboarding.
+- [ ] Stage 7 — phone shell: full-width tab bar, sheets, tap targets, safe areas, loading states.
+
+---
+
 ## Later — decide before building
 
 Do not start these. The shape is still open.
@@ -77,18 +94,6 @@ Do not start these. The shape is still open.
 - **Outbound sync beyond Google.** Settings stores `syncTargetCalendars`, but app-task create/update/delete still writes Google only. Do not start until that write path is the task.
 - **Invite to an event (large).** Add someone to an event. Likely **per calendar provider** (Google / Microsoft / Apple differ on attendees, contact pickers, and OAuth scopes). Before any build: investigate whether we can read contacts at all; design the flow when contacts permission is denied (manual email? paste? skip?); decide where invite lives (preview, editor, voice); agree RSVP / attendees UI. Needs a dedicated product discussion — do not start from a thin ticket.
 - **Learned preference profile (large).** Beyond §40: infer durable facts from the schedule itself and feed Suggestions too. Examples: avoid heavy work on days packed with meetings; commute home is ~40 minutes unless they stop somewhere. Before build: what is stored, who can see/edit/delete it, how often it updates, privacy vs quality. Do not start until that shape is agreed.
-
----
-
-## After the web
-
-Do not start until the web product is finished. Not a phone polish of one screen.
-
-### 32. Full mobile version
-
-Below 768px the shell already has a bottom tab bar and the calendar opens on day. That is not this item.
-
-- [ ] A complete mobile version of the product, after the web is done.
 
 ---
 
@@ -117,6 +122,6 @@ Third parties and publishing. Leave these until the Now list is done.
 
 ## Recommended next steps
 
-1. Next: **§39** — check voice P0 on a live model and a real calendar, then §40–§43 in order. **§37** fetches and **§38** past placement are independent web items. (§32 full mobile version is after the web. §31 backup and §24 Piper are in Later.)
+1. Next: **§39** — check voice P0 on a live model and a real calendar, then §40–§43 in order. **§37** fetches and **§38** past placement are independent web items. **§71** design system and mobile version is independent web work; start with its stages 0–1. (§31 backup and §24 Piper are in Later.)
 2. Old planner prompt work ([voice-prompt-next.md](voice-prompt-next.md), Planner C2 / C3) stays with the legacy engine. Do not put it back in this queue.
 3. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.
