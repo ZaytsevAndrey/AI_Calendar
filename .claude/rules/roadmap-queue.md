@@ -1,0 +1,17 @@
+---
+paths:
+  - "documentation/roadmap.md"
+  - "documentation/roadmap-archive.md"
+---
+
+# Roadmap queue
+
+`documentation/roadmap.md` is the live queue. `documentation/roadmap-archive.md` is shipped work.
+
+When a roadmap item is done:
+
+- Delete it from `roadmap.md`. Do not leave `[x]` (or any other completed line) in the live file.
+- Add one short behavior note to `roadmap-archive.md`.
+- Point **Recommended next steps** at the next open item.
+
+A checked box in the live roadmap is a mistake. Checked history belongs only in the archive.
