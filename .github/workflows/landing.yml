@@ -1,0 +1,72 @@
+name: Site (landing + app)
+
+# Builds the public site exactly as Render does: React app + Next.js landing, assembled into site/.
+on:
+  pull_request:
+    paths: ['landing/**', 'frontend/**', 'scripts/*site*.mjs', 'render.yaml', '.github/workflows/landing.yml']
+  push:
+    branches: [develop, master, 'feat/seo-landing']
+    paths: ['landing/**', 'frontend/**', 'scripts/*site*.mjs', 'render.yaml', '.github/workflows/landing.yml']
+
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install (frontend workspace)
+        run: npm ci --workspace=frontend --include-workspace-root --include=dev
+
+      - name: Typecheck landing
+        run: cd landing && npm ci && npx tsc --noEmit
+
+      - name: Build site
+        run: npm run build:site
+        env:
+          REACT_APP_API_BASE_URL: https://api.luefy.example
+          REACT_APP_LANDING_URL: /
+          NEXT_PUBLIC_API_BASE_URL: https://api.luefy.example
+          NEXT_PUBLIC_SITE_URL: https://luefy.example
+          NEXT_PUBLIC_AUTH_PROVIDERS: google,microsoft
+
+      - name: Check the assembled site
+        run: |
+          set -e
+          test -f site/app.html && test -f site/bundle.js
+          for f in site/index.html site/uk/index.html; do
+            grep -q '<link rel="canonical"' "$f"
+            grep -q 'hrefLang="uk"' "$f"
+            grep -q 'application/ld+json' "$f"
+            grep -q 'og:image' "$f"
+            grep -q 'location.replace' "$f"
+          done
+          grep -q '<html lang="uk"' site/uk/index.html
+          grep -q 'noindex' site/app.html
+          test -f site/sitemap.xml && test -f site/robots.txt && test -f site/manifest.webmanifest
+          echo "Site checks passed"
+
+      # Review aid while this branch is in progress: the assembled site is pushed to an orphan
+      # branch so it can be inspected without artifact downloads. Remove before merging.
+      - name: Publish preview branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/seo-landing'
+        run: |
+          set -e
+          tmp=$(mktemp -d)
+          cp -r site "$tmp/site"
+          cd "$tmp"
+          git init -q -b landing-preview
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Site preview for ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" landing-preview

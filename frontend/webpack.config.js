@@ -38,6 +38,9 @@ export default async (_env, argv) => {
     const mode = argv?.mode === 'production' ? 'production' : 'development';
     const isProd = mode === 'production';
     const apiBaseUrl = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
+    // Public landing (Next.js, landing/) on the same domain; "/" in production. When set, /login hands
+    // signed-out visitors over to it. Unset (local `npm start`) keeps the in-app sign-in form.
+    const landingUrl = (process.env.REACT_APP_LANDING_URL || '').trim();
     const buildSha = resolveBuildSha();
     const buildTime = formatBuildTimeUtc();
 
@@ -114,6 +117,7 @@ export default async (_env, argv) => {
             }),
             new webpack.DefinePlugin({
                 'process.env.REACT_APP_API_BASE_URL': JSON.stringify(apiBaseUrl),
+                'process.env.REACT_APP_LANDING_URL': JSON.stringify(landingUrl),
                 __BUILD_SHA__: JSON.stringify(buildSha),
                 __BUILD_TIME__: JSON.stringify(buildTime),
             }),

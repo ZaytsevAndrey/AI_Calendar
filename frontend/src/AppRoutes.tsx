@@ -55,13 +55,15 @@ const AppRoutes = () => {
     return (
         <div className="flex min-h-full flex-col max-md:h-full max-md:min-h-0 max-md:overflow-hidden lg:h-full lg:min-h-0 lg:overflow-hidden">
             <Routes>
-                <Route path="/" element={<LazyRoute chunk={routeChunks.calendar} access="protected" />} />
+                {/* "/" itself is the public landing (landing/, same domain). A full load of "/" never reaches
+                    this app; in-app links to "/" land on the calendar's own path. */}
+                <Route path="/" element={<Navigate to="/calendar" replace />} />
+                <Route path="/calendar" element={<LazyRoute chunk={routeChunks.calendar} access="protected" />} />
                 <Route path="/tasks" element={<LazyRoute chunk={routeChunks.tasks} access="protected" />} />
                 <Route path="/events" element={<Navigate to="/tasks" replace />} />
-                <Route path="/schedule" element={<Navigate to="/" replace />} />
-                <Route path="/calendar" element={<Navigate to="/" replace />} />
+                <Route path="/schedule" element={<Navigate to="/calendar" replace />} />
                 <Route path="/phases" element={<LazyRoute chunk={routeChunks.phases} access="protected" />} />
-                <Route path="/habits" element={<Navigate to="/" replace />} />
+                <Route path="/habits" element={<Navigate to="/calendar" replace />} />
                 <Route path="/settings" element={<LazyRoute chunk={routeChunks.settings} access="protected" />} />
                 <Route
                     path="/setup/phases"
@@ -79,7 +81,7 @@ const AppRoutes = () => {
                 <Route path="/register" element={<Navigate to="/login" replace />} />
                 <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
                 <Route path="/reset-password" element={<Navigate to="/login" replace />} />
-                <Route path="*" element={<Navigate to="/" />} />
+                <Route path="*" element={<Navigate to="/calendar" replace />} />
             </Routes>
         </div>
     );
