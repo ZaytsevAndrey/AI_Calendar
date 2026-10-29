@@ -1,9 +1,13 @@
 import { isYmd, normalizeHm } from '../../../day-reminders/day-reminder.dates';
 import { VOICE_READ_TOOL_NAMES } from '../../voice-agent.tools';
+import { FIND_EVENTS_ARGS, FIND_EVENTS_TOOL } from '../search/find-events';
+import { FIND_TASKS_ARGS, FIND_TASKS_TOOL } from '../search/find-tasks';
 import {
+  RECURRENCE_PATTERNS,
   SEMANTIC_ACTIONS,
   TIME_OF_DAY_LABELS,
   type DayPlanEditV1,
+  type RecurrencePatternV1,
   type TimeOfDayLabelV1,
   type OperationChangesV1,
   type ReadRequestV1,
@@ -81,7 +85,8 @@ function normalizeEnvelopeShape(parsed: Record<string, unknown>): void {
     }
   }
 }
-const READ_TOOLS = new Set<string>(VOICE_READ_TOOL_NAMES);
+// find_tasks is the structured voice's trusted set search; the legacy planner does not have it.
+const READ_TOOLS = new Set<string>([...VOICE_READ_TOOL_NAMES, FIND_TASKS_TOOL, FIND_EVENTS_TOOL]);
 const CHANGE_KEYS = new Set([
   'title',
   'notes',
@@ -103,6 +108,8 @@ const READ_ARG_KEYS: Record<string, string[]> = {
   match_task: ['query'],
   get_task: ['taskId'],
   list_reminders: [],
+  [FIND_TASKS_TOOL]: [...FIND_TASKS_ARGS],
+  [FIND_EVENTS_TOOL]: [...FIND_EVENTS_ARGS],
 };
 
 export type ValidationResult =
@@ -247,12 +254,25 @@ function parseConstraint(value: unknown, path: string, errors: ValidationIssue[]
       return { kind: 'duration', minutes: value.minutes };
     }
     case 'recurrence': {
-      rejectUnknown(errors, value, ['kind', 'expression'], path);
+      rejectUnknown(errors, value, ['kind', 'expression', 'pattern', 'weekDays'], path);
       if (typeof value.expression !== 'string' || !value.expression.trim()) {
         issue(errors, 'empty_recurrence', path, 'expression');
         return null;
       }
-      return { kind: 'recurrence', expression: value.expression.trim() };
+      if (value.pattern !== undefined && !(RECURRENCE_PATTERNS as readonly string[]).includes(String(value.pattern))) {
+        issue(errors, 'invalid_recurrence', path, String(value.pattern));
+        return null;
+      }
+      if (value.weekDays !== undefined && (!Array.isArray(value.weekDays) || !value.weekDays.length || value.weekDays.some((day) => !Number.isInteger(day) || day < 0 || day > 6))) {
+        issue(errors, 'invalid_recurrence', path, 'weekDays');
+        return null;
+      }
+      return {
+        kind: 'recurrence',
+        expression: value.expression.trim(),
+        ...(value.pattern ? { pattern: value.pattern as RecurrencePatternV1 } : {}),
+        ...(Array.isArray(value.weekDays) ? { weekDays: [...new Set(value.weekDays as number[])].sort() } : {}),
+      };
     }
     case 'ordering': {
       rejectUnknown(errors, value, ['kind', 'relation', 'target'], path);
@@ -385,7 +405,7 @@ function parseOperation(value: unknown, path: string, errors: ValidationIssue[],
     return null;
   }
   liftAllDay(value);
-  rejectUnknown(errors, value, ['opId', 'action', 'target', 'changes', 'constraints', 'dependsOn', 'source', 'scope', 'seriesScope'], path);
+  rejectUnknown(errors, value, ['opId', 'action', 'target', 'changes', 'constraints', 'dependsOn', 'source', 'scope', 'seriesScope', 'occurrence'], path);
   const opId = typeof value.opId === 'string' ? value.opId.trim() : '';
   if (!/^op-[A-Za-z0-9-]{1,40}$/.test(opId)) issue(errors, 'invalid_op_id', path, opId || '(missing)');
   if (!(SEMANTIC_ACTIONS as readonly string[]).includes(String(value.action))) {
@@ -434,6 +454,11 @@ function parseOperation(value: unknown, path: string, errors: ValidationIssue[],
       issue(errors, 'invalid_scope', path, String(value.seriesScope));
     } else seriesScope = value.seriesScope;
   }
+  let occurrence: string | undefined;
+  if (value.occurrence !== undefined) {
+    if (typeof value.occurrence !== 'string' || !isYmd(value.occurrence)) issue(errors, 'invalid_occurrence', path, String(value.occurrence));
+    else occurrence = value.occurrence;
+  }
   if (!opId || !(SEMANTIC_ACTIONS as readonly string[]).includes(String(value.action)) || !target || !isRecord(value.source)) {
     return null;
   }
@@ -446,6 +471,7 @@ function parseOperation(value: unknown, path: string, errors: ValidationIssue[],
     dependsOn,
     ...(scope ? { scope } : {}),
     ...(seriesScope ? { seriesScope } : {}),
+    ...(occurrence ? { occurrence } : {}),
     source: {
       text: String(value.source.text),
       ...(Array.isArray(value.source.span) ? { span: [value.source.span[0] as number, value.source.span[1] as number] } : {}),

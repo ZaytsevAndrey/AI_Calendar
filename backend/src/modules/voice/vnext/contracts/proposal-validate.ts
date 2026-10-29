@@ -1,10 +1,12 @@
 /**
  * Pure checks for a proposal group. Does not assign ids and does not touch a session.
  */
-import type { SemanticActionV1 } from './types';
+import { RECURRENCE_PATTERNS, TIME_OF_DAY_LABELS, type RecurrencePatternV1, type SemanticActionV1, type TimeOfDayLabelV1 } from './types';
 import type { ValidationIssue } from './types';
 import {
+  CLOCK_ROLES,
   PROPOSAL_CONTROLS,
+  type ClockRole,
   PROPOSAL_ENTITY_TYPES,
   SCHEDULING_STATES,
   type ConstraintPatch,
@@ -13,6 +15,7 @@ import {
   type ProposalContext,
   type ProposalGroup,
   type SemanticOperationProposal,
+  type SeriesScope,
   type TemporalProposal,
 } from './proposal';
 
@@ -55,8 +58,22 @@ function parseTemporal(value: unknown, path: string, errors: ValidationIssue[]):
   if (value.kind === 'date' && typeof value.value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.value)) {
     return { kind: 'date', value: value.value };
   }
-  if (value.kind === 'clock' && typeof value.value === 'string' && hm(value.value) != null && (value.role === 'start' || value.role === 'end')) {
-    return { kind: 'clock', value: value.value, role: value.role };
+  if (value.kind === 'clock' && typeof value.value === 'string' && hm(value.value) != null && (CLOCK_ROLES as readonly string[]).includes(String(value.role))) {
+    return { kind: 'clock', value: value.value, role: value.role as ClockRole };
+  }
+  if (value.kind === 'all_day' && Object.keys(value).every((key) => key === 'kind' || key === 'localRef')) {
+    return { kind: 'all_day' };
+  }
+  if (value.kind === 'day_bound' && (value.edge === 'wake' || value.edge === 'sleep') && (value.role === 'earliest' || value.role === 'deadline')) {
+    return { kind: 'day_bound', edge: value.edge, role: value.role };
+  }
+  if (
+    value.kind === 'relative'
+    && value.direction === 'after'
+    && (value.unit === 'minute' || value.unit === 'hour' || value.unit === 'day')
+    && typeof value.amount === 'number' && Number.isInteger(value.amount) && value.amount > 0 && value.amount <= 366 * 24 * 60
+  ) {
+    return { kind: 'relative', direction: 'after', amount: value.amount, unit: value.unit };
   }
   if (value.kind === 'interval' && typeof value.startHm === 'string' && typeof value.endHm === 'string' && hm(value.startHm) != null && hm(value.endHm) != null && hm(value.startHm)! <= hm(value.endHm)!) {
     return { kind: 'interval', startHm: value.startHm, endHm: value.endHm };
@@ -66,6 +83,18 @@ function parseTemporal(value: unknown, path: string, errors: ValidationIssue[]):
   }
   if (value.kind === 'ordering' && (value.relation === 'before' || value.relation === 'after') && typeof value.entityId === 'string' && value.entityId.trim()) {
     return { kind: 'ordering', relation: value.relation, entityId: value.entityId.trim() };
+  }
+  if (value.kind === 'recurrence' && (RECURRENCE_PATTERNS as readonly string[]).includes(String(value.pattern))) {
+    const days = value.weekDays;
+    if (days !== undefined && (!Array.isArray(days) || !days.length || days.some((day) => !Number.isInteger(day) || day < 0 || day > 6))) {
+      issue(errors, 'invalid_temporal', path, 'weekDays');
+      return null;
+    }
+    return {
+      kind: 'recurrence',
+      pattern: value.pattern as RecurrencePatternV1,
+      ...(Array.isArray(days) ? { weekDays: [...new Set(days as number[])].sort() } : {}),
+    };
   }
   if (
     value.kind === 'weekday'
@@ -81,8 +110,11 @@ function parseTemporal(value: unknown, path: string, errors: ValidationIssue[]):
       ...(value.which === 'this' || value.which === 'next' ? { which: value.which } : {}),
     };
   }
-  if (value.kind === 'unresolved' && Object.keys(value).every((key) => key === 'kind' || key === 'localRef')) {
-    return { kind: 'unresolved' };
+  if (value.kind === 'unresolved' && Object.keys(value).every((key) => key === 'kind' || key === 'localRef' || key === 'label')) {
+    if (value.label === undefined) return { kind: 'unresolved' };
+    if (typeof value.label === 'string' && (TIME_OF_DAY_LABELS as readonly string[]).includes(value.label)) {
+      return { kind: 'unresolved', label: value.label as TimeOfDayLabelV1 };
+    }
   }
   issue(errors, 'invalid_temporal', path, String(value.kind));
   return null;
@@ -148,7 +180,7 @@ function parseProposal(value: unknown, path: string, context: ProposalContext, e
     target = { kind: 'unresolved', reason: value.target.reason };
   }
   if (!target) issue(errors, 'invalid_target', `${path}.target`, String(value.target.kind));
-  if (target?.kind === 'new' && action !== 'create') issue(errors, 'unsupported_combination', path, `${action}:new`);
+  if (target?.kind === 'new' && action !== 'create' && action !== 'remind') issue(errors, 'unsupported_combination', path, `${action}:new`);
   if (target && target.kind !== 'new' && target.kind !== 'unresolved' && action === 'create') issue(errors, 'unsupported_combination', path, 'create:existing');
   if (action === 'remind' && entityType !== 'reminder') issue(errors, 'unsupported_combination', path, 'remind');
   if (action !== 'remind' && action !== 'create' && entityType === 'reminder') issue(errors, 'unsupported_combination', path, `${action}:reminder`);
@@ -200,6 +232,16 @@ function parseProposal(value: unknown, path: string, context: ProposalContext, e
     });
   }
   if (!isRecord(value.source) || typeof value.source.text !== 'string') issue(errors, 'invalid_type', `${path}.source`, 'source');
+  let seriesScope: SeriesScope | undefined;
+  if (value.seriesScope !== undefined) {
+    if (value.seriesScope === 'occurrence' || value.seriesScope === 'from_day' || value.seriesScope === 'all') seriesScope = value.seriesScope;
+    else issue(errors, 'invalid_series_scope', path, String(value.seriesScope));
+  }
+  let occurrenceDate: string | undefined;
+  if (value.occurrenceDate !== undefined) {
+    if (typeof value.occurrenceDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.occurrenceDate)) occurrenceDate = value.occurrenceDate;
+    else issue(errors, 'invalid_occurrence', path, String(value.occurrenceDate));
+  }
   if (!target || !localRef) return null;
   return {
     localRef,
@@ -213,6 +255,8 @@ function parseProposal(value: unknown, path: string, context: ProposalContext, e
     known: Array.isArray(value.known) ? value.known.filter((item): item is string => typeof item === 'string') : [],
     missing: Array.isArray(value.missing) ? value.missing.filter((item): item is string => typeof item === 'string') : [],
     source: { text: isRecord(value.source) && typeof value.source.text === 'string' ? value.source.text : '' },
+    ...(seriesScope ? { seriesScope } : {}),
+    ...(occurrenceDate ? { occurrenceDate } : {}),
   };
 }
 

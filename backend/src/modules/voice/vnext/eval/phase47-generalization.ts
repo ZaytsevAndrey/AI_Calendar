@@ -5,7 +5,8 @@
  */
 import type { EntityRecord } from '../reference/reference-resolver';
 import type { TurnExpect } from './phase477-score';
-import { worldOf, type WorldName } from './phase477-run';
+import type { WorldName } from './phase477-fixtures';
+import { worldOf } from './phase477-run';
 
 export const GENERALIZATION_SUITE = 'phase47-generalization-1';
 

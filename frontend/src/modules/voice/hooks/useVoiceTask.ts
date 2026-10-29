@@ -10,6 +10,7 @@ import {
   VoiceApi,
   type DayPlanProposal,
   type VoiceAgentActionId,
+  type VoiceExecutionClaim,
   type VoiceExecutionReport,
   type VoiceIntentExecutionStatus,
   type VoiceParseResult,
@@ -115,6 +116,8 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
   const sessionIdRef = useRef<string | null>(null);
   const micEnabledRef = useRef(true);
   const planRef = useRef<DayPlanProposal | null>(null);
+  /** The server preview on screen. Its claim goes with every turn so only that preview can be confirmed. */
+  const executionRef = useRef<VoiceExecutionClaim | null>(null);
   const routeResultRef = useRef<(result: VoiceTurnResult) => Promise<void>>(async () => undefined);
 
   const setPlan = useCallback((next: DayPlanProposal | null) => {
@@ -170,6 +173,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     resetLocal();
     setMessages([]);
     sessionIdRef.current = null;
+    executionRef.current = null;
     setSessionId(null);
     setIsOpen(false);
     if (id) void VoiceApi.endSession(id).catch(() => undefined);
@@ -180,6 +184,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     resetLocal();
     setMessages([]);
     sessionIdRef.current = null;
+    executionRef.current = null;
     setSessionId(null);
     setIsOpen(false);
     if (id) void VoiceApi.endSession(id).catch(() => undefined);
@@ -280,7 +285,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
 
   /** Tell the session what actually ran; it may answer with a re-seated open plan. */
   const sendReport = useCallback(
-    async (report: VoiceExecutionReport): Promise<VoiceTurnResult | null> => {
+    async (report: VoiceExecutionReport, executionId?: string): Promise<VoiceTurnResult | null> => {
       const id = sessionIdRef.current;
       if (!id || !report.results.length) return null;
       try {
@@ -289,7 +294,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
           timeZone,
           clientNowIso: new Date().toISOString(),
           actionId: 'report',
-          executionReport: report,
+          executionReport: executionId ? { ...report, executionId } : report,
         });
       } catch {
         return null;
@@ -299,7 +304,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
   );
 
   const runIntents = useCallback(
-    async (intents: VoiceWriteIntent[], summary?: string) => {
+    async (intents: VoiceWriteIntent[], summary?: string, executionId?: string) => {
       setBusyLabel(i18n.t('voice.saving'));
       setStage('working');
       const hasCreate = intents.some((intent) => intent.type === 'create');
@@ -325,6 +330,8 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
         },
       });
       if (conflict) {
+        // The write landed; the sheet only picks a placement. Tell the server before handing off.
+        void sendReport(report, executionId);
         if (summary) pushMessages(msg('assistant', summary));
         dismissForConflictSheet();
         return;
@@ -334,7 +341,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
           ? { intents, statuses: report.results.map((row) => row.status) }
           : null,
       );
-      const followUp = await sendReport(report);
+      const followUp = await sendReport(report, executionId);
       if (runError && !(runError instanceof SeriesMoveCancelled)) {
         setError(extractApiErrorMessage(runError));
         setStage('error');
@@ -448,9 +455,11 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
     async (result: VoiceTurnResult) => {
       setActions(result.actions?.length ? result.actions : []);
       setPlan(result.plan ?? null);
+      executionRef.current = result.execution?.state === 'open' ? result.execution : null;
 
       if (result.intents?.length && result.outcome === 'act') {
-        await runIntents(result.intents, result.assistantMessage);
+        const dispatched = result.execution?.state === 'dispatched' ? result.execution.executionId : undefined;
+        await runIntents(result.intents, result.assistantMessage, dispatched);
         return;
       }
 
@@ -521,6 +530,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
       setLastRun(null);
       if (text) pushMessages(msg('user', text));
 
+      const shown = executionRef.current;
       const result = await VoiceApi.turn({
         transcript: text || undefined,
         sessionId: activeSession,
@@ -528,6 +538,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
         clientNowIso: new Date().toISOString(),
         actionId,
         mode: companionModeRef.current,
+        ...(shown ? { executionId: shown.executionId, previewRevision: shown.previewRevision } : {}),
       });
       await routeResult(result);
     },

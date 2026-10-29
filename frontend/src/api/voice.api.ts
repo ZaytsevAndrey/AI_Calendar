@@ -68,12 +68,24 @@ export type VoiceCommand =
       summary: string;
       googleEventId: string;
       calendarId: string | null;
+      /** Set for a provider event that is not a Luefy task. */
+      provider?: 'google' | 'microsoft' | 'apple';
       recurringEventId: string | null;
       originalStart: string;
       originalEnd: string;
       start: string;
       end: string;
       seriesScope?: 'occurrence' | 'series' | 'all';
+    }
+  | {
+      /** Delete a provider calendar event that is not a Luefy task. */
+      kind: 'delete_event';
+      taskId: string;
+      taskName: string;
+      summary: string;
+      eventId: string;
+      calendarId: string | null;
+      provider: 'google' | 'microsoft' | 'apple';
     }
   | {
       kind: 'shift';
@@ -175,7 +187,21 @@ export type VoiceWriteIntent =
 export type VoiceIntentExecutionStatus = 'applied' | 'skipped' | 'conflict' | 'error';
 
 export type VoiceExecutionReport = {
-  results: Array<{ summary: string; status: VoiceIntentExecutionStatus }>;
+  /** The dispatched execution these rows belong to. Rows follow the intent order the server returned. */
+  executionId?: string;
+  results: Array<{
+    summary: string;
+    status: VoiceIntentExecutionStatus;
+    /** `error` only: the server rejected the write with a client error, so nothing was stored. */
+    definite?: boolean;
+  }>;
+};
+
+/** Identity of a server preview. Sent back to confirm or cancel exactly that preview. */
+export type VoiceExecutionClaim = {
+  executionId: string;
+  previewRevision: number;
+  state: 'open' | 'dispatched';
 };
 
 export type VoiceSegmentSummary = {
@@ -220,6 +246,8 @@ export type VoiceTurnResult = {
   segments: VoiceSegmentSummary[];
   clarifyCount: number;
   legacyParse: VoiceParseResult | null;
+  /** Open preview to confirm, or the execution to report after Apply. */
+  execution?: VoiceExecutionClaim | null;
 };
 
 export const VoiceApi = {
@@ -262,6 +290,9 @@ export const VoiceApi = {
     actionId?: VoiceAgentActionId;
     executionReport?: VoiceExecutionReport;
     mode?: CompanionVoiceMode;
+    /** The open preview the user is looking at. Without it the server will not confirm. */
+    executionId?: string;
+    previewRevision?: number;
   }): Promise<VoiceTurnResult> => {
     const response = await apiCall({
       method: 'POST',

@@ -6,6 +6,7 @@
 import type { VoiceWriteIntent } from '../../voice-agent.types';
 import type { ProposalGroup } from '../contracts/proposal';
 import type { ApplyItem } from '../apply/apply-preview';
+import type { VNextLanguage } from '../copy';
 import { normalizeDrafts } from './normalize-drafts';
 import { projectApply } from './project-apply';
 import { fingerprintsForOperations, withFingerprints } from './revalidate-preview';
@@ -22,6 +23,7 @@ export type PreparedPreview =
       state: StructuredState;
       intents: VoiceWriteIntent[];
       items: ApplyItem[];
+      preservedLabels: string[];
     }
   | {
       ok: false;
@@ -39,9 +41,11 @@ export function prepareStructuredPreview(input: {
   catalogEntityIds: readonly string[];
   userId: string;
   defaultDurationMinutes?: number;
+  defaultReminderTime?: string;
   nowIso?: string;
   wakeHm?: string;
   sleepHm?: string;
+  language?: VNextLanguage;
 }): PreparedPreview {
   const previous = input.state;
   const applied = applyProposalGroup({
@@ -59,11 +63,15 @@ export function prepareStructuredPreview(input: {
     timeZone: input.timeZone,
     catalogEntityIds: input.catalogEntityIds,
     defaultDurationMinutes: input.defaultDurationMinutes,
+    defaultReminderTime: input.defaultReminderTime,
     nowIso: input.nowIso,
     wakeHm: input.wakeHm,
     sleepHm: input.sleepHm,
+    language: input.language,
+    references: input.entities,
   });
   if (!projected.ok) return { ok: false, code: projected.code, detail: projected.detail, state: previous };
+  // `entities` is already scoped to the authenticated user (entitiesToKnown), so the owner is that user.
   const fingerprints = fingerprintsForOperations(
     normalized.state.operations,
     input.entities.map((entity) => ({
@@ -73,13 +81,33 @@ export function prepareStructuredPreview(input: {
       writable: entity.writable,
       googleEventId: entity.googleEventId,
       userId: input.userId,
-      status: 'open' as const,
+      status: entity.status ?? 'open',
     })),
   );
+  // A row an ordering bound was read from is checked at confirm too; it is read, not written.
+  for (const operation of normalized.state.operations) {
+    for (const constraint of operation.constraints) {
+      if (constraint.kind !== 'ordering' || fingerprints[constraint.entityId]) continue;
+      const row = input.entities.find((entity) => entity.entityId === constraint.entityId);
+      if (!row) continue;
+      fingerprints[constraint.entityId] = {
+        entityId: row.entityId,
+        revision: row.revision,
+        calendarId: row.calendarId,
+        writable: row.writable,
+        googleEventId: row.googleEventId ?? null,
+        status: row.status ?? 'open',
+        userId: input.userId,
+        requiresMoveIdentity: false,
+        reference: true,
+      };
+    }
+  }
   return {
     ok: true,
     state: withFingerprints(normalized.state, fingerprints),
     intents: projected.intents,
     items: projected.items,
+    preservedLabels: projected.preservedLabels,
   };
 }

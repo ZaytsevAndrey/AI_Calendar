@@ -59,11 +59,15 @@ export type SemanticConstraintV1 =
       role: 'start' | 'end' | 'preferred' | 'earliest' | 'deadline';
     }
   | { kind: 'duration'; minutes: number }
-  | { kind: 'recurrence'; expression: string }
+  /** expression is the user's words; pattern and weekDays are the model's structured reading of them. */
+  | { kind: 'recurrence'; expression: string; pattern?: RecurrencePatternV1; weekDays?: number[] }
   | { kind: 'ordering'; relation: 'before' | 'after'; target: TargetRefV1 }
   | { kind: 'day_bound'; edge: 'wake' | 'sleep'; role: 'earliest' | 'deadline' }
   | { kind: 'weekday'; weekday: number; which: 'next' | 'this' }
   | { kind: 'all_day' };
+
+export const RECURRENCE_PATTERNS = ['DAILY', 'WEEKLY', 'BIWEEKLY', 'MONTHLY'] as const;
+export type RecurrencePatternV1 = (typeof RECURRENCE_PATTERNS)[number];
 
 export type ReminderChangeV1 = {
   op: 'create' | 'update' | 'resolve' | 'delete';
@@ -97,6 +101,8 @@ export type SemanticOperationV1 = {
    * `from_day` is the product's "this day and following", stored on the client as `series`.
    */
   seriesScope?: 'occurrence' | 'from_day' | 'all';
+  /** Current date (YYYY-MM-DD) of the occurrence the user means, for a recurring series. */
+  occurrence?: string;
   /**
    * Runtime-only marker set by trusted bulk expansion.
    * The envelope parser does not copy this from model JSON.

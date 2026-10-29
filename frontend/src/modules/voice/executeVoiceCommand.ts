@@ -47,6 +47,20 @@ export async function executeVoiceCommand(
     return;
   }
 
+  if (command.kind === 'delete_event') {
+    // RTK returns the mutation promise from dispatch; the deps type only says void.
+    const request = deps.dispatch(
+      eventsApi.endpoints.deleteEvent.initiate({
+        eventId: command.eventId,
+        calendarId: command.calendarId ?? undefined,
+        provider: command.provider,
+      }),
+    ) as unknown as { unwrap: () => Promise<unknown> };
+    await request.unwrap();
+    refreshCalendar(deps.dispatch);
+    return;
+  }
+
   if (
     command.kind === 'remind_create' ||
     command.kind === 'remind_update' ||
@@ -138,6 +152,7 @@ export async function executeVoiceCommand(
         {
           googleEventId: command.googleEventId,
           calendarId: command.calendarId ?? undefined,
+          ...(command.provider ? { provider: command.provider } : {}),
           recurringEventId: command.recurringEventId ?? undefined,
           originalStart: command.originalStart,
           originalEnd: command.originalEnd,

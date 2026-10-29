@@ -2,7 +2,16 @@
  * Stage 2 proposal contract.
  * These types are not read by runVNextTurn. A localRef is not a stored id.
  */
-import type { OperationChangesV1, SemanticActionV1 } from './types';
+import type { OperationChangesV1, RecurrencePatternV1, SemanticActionV1, TimeOfDayLabelV1 } from './types';
+
+/** Which part of a recurring series a command touches. from_day is that occurrence and the ones after it. */
+export const CLOCK_ROLES = ['start', 'end', 'earliest', 'deadline'] as const;
+export type ClockRole = (typeof CLOCK_ROLES)[number];
+
+export type SeriesScope = 'occurrence' | 'from_day' | 'all';
+
+/** One placed occurrence of a recurring row, from the authorized catalog. */
+export type EntityOccurrence = { start: string; end: string; googleEventId: string | null };
 
 export const PROPOSAL_ENTITY_TYPES = ['task', 'reminder', 'external_event', 'day_plan_item'] as const;
 export type ProposalEntityType = (typeof PROPOSAL_ENTITY_TYPES)[number];
@@ -26,12 +35,22 @@ export type ProposalControl = (typeof PROPOSAL_CONTROLS)[number];
 /** Normalized time from the model. A label such as "evening" is not a backend window. */
 export type TemporalProposal =
   | { kind: 'date'; value: string }
-  | { kind: 'clock'; value: string; role: 'start' | 'end' }
+  /** earliest and deadline bound when the task may run; start and end place it. */
+  | { kind: 'clock'; value: string; role: ClockRole }
+  /** The whole waking day of the date constraint, from the user's wake and sleep settings. */
+  | { kind: 'all_day' }
+  /** A bound at the user's own wake or sleep time on the date constraint. */
+  | { kind: 'day_bound'; edge: 'wake' | 'sleep'; role: 'earliest' | 'deadline' }
+  /** Start an amount of time from now. The model supplies the numbers; the backend only adds them. */
+  | { kind: 'relative'; direction: 'after'; amount: number; unit: 'minute' | 'hour' | 'day' }
   | { kind: 'interval'; startHm: string; endHm: string }
   | { kind: 'duration'; minutes: number }
   | { kind: 'weekday'; weekday: number; which?: 'this' | 'next' }
   | { kind: 'ordering'; relation: 'before' | 'after'; entityId: string }
-  | { kind: 'unresolved' };
+  /** Structured repeat for a new task. weekDays are 0 (Sunday) to 6. */
+  | { kind: 'recurrence'; pattern: RecurrencePatternV1; weekDays?: number[] }
+  /** Time the contract cannot place. A time-of-day label is kept so the preview can say it was not placed. */
+  | { kind: 'unresolved'; label?: TimeOfDayLabelV1 };
 
 export type ProposalConstraint = TemporalProposal & { localRef: string };
 
@@ -63,6 +82,9 @@ export type SemanticOperationProposal = {
   scopeDescription?: string;
   /** Optional calendar filter for bulk receipt validation. */
   calendarId?: string;
+  /** Recurring targets only: the part of the series, and the date of the occurrence meant. */
+  seriesScope?: SeriesScope;
+  occurrenceDate?: string;
 };
 
 export type FieldPatch =
@@ -103,6 +125,15 @@ export type ResolvedEntityReference = {
   googleEventId?: string | null;
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
+  /** Catalog status at preview. Only open rows are eligible for a write. */
+  status?: 'open' | 'completed' | 'canceled';
+  /** A recurring row needs a series scope the structured contract cannot carry yet. */
+  recurring?: boolean;
+  /** Provider of an external event. Absent for Luefy tasks and reminders. */
+  provider?: 'google' | 'microsoft' | 'apple';
+  /** Recurring rows: placed occurrences and the series event id. */
+  occurrences?: EntityOccurrence[];
+  seriesEventId?: string | null;
 };
 
 export type PendingOperation = {
@@ -117,6 +148,8 @@ export type PendingOperation = {
   known: string[];
   missing: string[];
   sourceText: string;
+  seriesScope?: SeriesScope;
+  occurrenceDate?: string;
 };
 
 export type PreviewSnapshot = {

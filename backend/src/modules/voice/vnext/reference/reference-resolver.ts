@@ -16,6 +16,11 @@ export type EntityRecord = {
   googleEventId?: string | null;
   /** External events are writable only when this is explicitly true. */
   writable?: boolean;
+  /** Calendar provider that owns an external event. Kept so a write goes to the same provider. */
+  provider?: 'google' | 'microsoft' | 'apple';
+  /** Recurring rows: each placed occurrence with its calendar event id, and the series event id. */
+  occurrences?: Array<{ start: string; end: string; googleEventId: string | null }>;
+  seriesEventId?: string | null;
 };
 
 export type ReferentBinding = { entityId?: string; localId?: string; phrase: string };

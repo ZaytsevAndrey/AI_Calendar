@@ -39,33 +39,38 @@ export function fingerprintsForOperations(
     if (operation.target.kind !== 'entity') continue;
     const target = operation.target;
     const row = byId.get(target.entityId);
+    const previous = fingerprints[target.entityId];
     fingerprints[target.entityId] = {
       entityId: target.entityId,
       revision: target.revision,
       calendarId: target.calendarId,
       writable: target.writable,
       googleEventId: target.googleEventId ?? null,
-      status: row?.status ?? 'open',
+      status: target.status ?? row?.status ?? 'open',
+      // An empty owner never verifies: compareEntityFingerprint fails closed on it.
       userId: row?.userId ?? '',
-      requiresMoveIdentity: operation.action === 'move',
+      // A series move is anchored on an occurrence; the row revision already covers every slot.
+      requiresMoveIdentity: (previous?.requiresMoveIdentity ?? false) || (operation.action === 'move' && !target.recurring),
     };
   }
   return fingerprints;
 }
 
+/**
+ * Compare a fresh authorized read with what the preview captured.
+ * A field the read cannot vouch for fails closed. Nothing is re-resolved by title.
+ */
 export function compareEntityFingerprint(expected: EntityFingerprint, current: EntityReadResult, userId: string): Revalidation {
   if (!current.exists) return { ok: false, code: 'stale_deleted', detail: expected.entityId };
-  if (current.userId != null && current.userId !== userId) return { ok: false, code: 'unauthorized_entity', detail: expected.entityId };
-  if (expected.userId && current.userId == null) {
-    /* catalog fallback without userId is allowed only when the caller already scoped the row */
+  if (!expected.userId || expected.userId !== userId) return { ok: false, code: 'unauthorized_entity', detail: expected.entityId };
+  if (current.userId == null || current.revision == null || current.status == null || current.writable == null || current.calendarId === undefined) {
+    return { ok: false, code: 'revalidation_incomplete', detail: expected.entityId };
   }
-  if (current.status != null && current.status !== 'open') return { ok: false, code: 'stale_ineligible', detail: expected.entityId };
-  if (current.revision == null) return { ok: false, code: 'revalidation_incomplete', detail: expected.entityId };
+  if (current.userId !== userId) return { ok: false, code: 'unauthorized_entity', detail: expected.entityId };
+  if (current.writable === false && !expected.reference) return { ok: false, code: 'unauthorized_entity', detail: expected.entityId };
+  if (current.status !== expected.status) return { ok: false, code: 'stale_ineligible', detail: expected.entityId };
   if (current.revision !== expected.revision) return { ok: false, code: 'stale_preview', detail: expected.entityId };
-  if (current.calendarId !== undefined && (current.calendarId ?? null) !== expected.calendarId) {
-    return { ok: false, code: 'stale_preview', detail: expected.entityId };
-  }
-  if (current.writable === false) return { ok: false, code: 'unauthorized_entity', detail: expected.entityId };
+  if ((current.calendarId ?? null) !== expected.calendarId) return { ok: false, code: 'stale_preview', detail: expected.entityId };
   if (expected.requiresMoveIdentity) {
     const currentEvent = current.googleEventId ?? null;
     if (!expected.googleEventId || currentEvent !== expected.googleEventId) {

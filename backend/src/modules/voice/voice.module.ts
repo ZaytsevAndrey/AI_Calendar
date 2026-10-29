@@ -20,6 +20,7 @@ import { VoiceController } from './voice.controller';
 import { VoiceQuotaService } from './voice-quota.service';
 import { VoiceService } from './voice.service';
 import { VoiceSessionStore } from './voice-session.store';
+import { StructuredVoiceService } from './vnext/production/structured-voice.service';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { VoiceSessionStore } from './voice-session.store';
     VoiceAgentTools,
     VoiceDayPlanner,
     VoiceAgentOrchestrator,
+    StructuredVoiceService,
     VoiceTraceInterceptor,
   ],
   exports: [GroqClient],

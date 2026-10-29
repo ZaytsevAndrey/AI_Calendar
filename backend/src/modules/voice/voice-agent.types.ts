@@ -37,7 +37,22 @@ export type VoiceIntentExecutionStatus =
 
 /** Client → server after running intents (`actionId: 'report'`). */
 export type VoiceExecutionReport = {
-  results: Array<{ summary: string; status: VoiceIntentExecutionStatus }>;
+  /** Structured voice: the execution the intents came from. Rows follow the returned intent order. */
+  executionId?: string;
+  results: Array<{
+    summary: string;
+    status: VoiceIntentExecutionStatus;
+    /** `error` only: the server answered with a client error, so nothing was stored. */
+    definite?: boolean;
+  }>;
+};
+
+/** Structured voice preview identity. The client returns it to confirm or cancel that exact preview. */
+export type VoiceExecutionClaim = {
+  executionId: string;
+  previewRevision: number;
+  /** `open` = awaiting confirm; `dispatched` = intents returned for Apply; report with this id. */
+  state: 'open' | 'dispatched';
 };
 
 /** One understood piece of a multi-intent utterance. */
@@ -138,6 +153,8 @@ export type VoiceTurnResponse = {
   clarifyCount: number;
   /** Compatibility / e2e; prefer `intents` when non-empty. */
   legacyParse: VoiceParseResult | null;
+  /** Structured voice only. Absent on the legacy path. */
+  execution?: VoiceExecutionClaim | null;
 };
 
 export type VoiceSessionTurn = {

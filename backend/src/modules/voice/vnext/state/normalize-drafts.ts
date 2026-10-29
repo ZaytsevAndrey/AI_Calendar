@@ -25,6 +25,7 @@ export function normalizeDrafts(state: StructuredState, ids: IdAllocator): Draft
   const folds = new Map<string, PendingOperation[]>();
   for (const operation of state.operations) {
     if (operation.target.kind !== 'new' || operation.action === 'create') continue;
+    if (standaloneReminder(operation, byLocalId)) continue;
     const matches = byLocalId.get(operation.target.localId) ?? [];
     if (matches.length !== 1) return fail(state, matches.length === 0 ? 'invalid_draft_reference' : 'ambiguous_draft', operation.target.localId);
     const create = matches[0];
@@ -76,6 +77,10 @@ export function normalizeDrafts(state: StructuredState, ids: IdAllocator): Draft
   }
   for (const operation of state.operations) {
     if (removedIds.has(operation.pendingId) || (operation.action === 'create' && operation.target.kind === 'new')) continue;
+    if (standaloneReminder(operation, byLocalId)) {
+      nextOperations.push(operation);
+      continue;
+    }
     if (operation.target.kind === 'new') return fail(state, 'invalid_draft_reference', operation.target.localId);
     nextOperations.push(operation);
   }
@@ -133,6 +138,11 @@ function applyFolds(create: PendingOperation, dependents: PendingOperation[]): {
     ok: true,
     operation: { ...create, changes, scheduling, constraints, revision: changed ? create.revision + 1 : create.revision },
   };
+}
+
+/** A remind on a fresh draft id with no create behind it is its own reminder, not a draft reference. */
+function standaloneReminder(operation: PendingOperation, creates: Map<string, PendingOperation[]>): boolean {
+  return operation.action === 'remind' && operation.target.kind === 'new' && !creates.has(operation.target.localId);
 }
 
 function claim(written: Map<string, string>, key: string, value: string): boolean {

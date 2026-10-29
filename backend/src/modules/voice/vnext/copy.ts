@@ -37,6 +37,7 @@ const UK: Record<string, string> = {
   past_clock: 'Ця година вже минула. Назвіть день.',
   which_series: 'Це повторювана задача. Сказати про цей день, про цей день і далі, чи про всю серію?',
   predecessor: 'Спочатку потрібен час іншої задачі. Я не вигадую його.',
+  no_room: 'На цей день не знайшлося вільного часу для цих задач. Нічого не змінюю.',
 };
 
 const EN: Record<string, string> = {
@@ -76,6 +77,7 @@ const EN: Record<string, string> = {
   past_clock: 'That time has already passed. Which day do you mean?',
   which_series: 'This repeats. Do you mean this day, this day and following, or the whole series?',
   predecessor: 'The other task has no time yet. I will not invent one.',
+  no_room: 'There is no free time that day for these tasks. Nothing was changed.',
 };
 
 export function voiceCopy(language: VNextLanguage, code: string): string {

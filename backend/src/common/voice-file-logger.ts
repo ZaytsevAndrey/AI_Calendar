@@ -1,9 +1,10 @@
 import { ConsoleLogger } from '@nestjs/common';
-import { appendFileSync, mkdirSync } from 'fs';
+import { appendFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 
 const VOICE_LOG_CONTEXTS = new Set([
   'VoiceAgentOrchestrator',
+  'StructuredVoiceService',
   'VoiceService',
   'VoiceDayPlanner',
   'GroqClient',
@@ -15,9 +16,19 @@ const VOICE_LOG_CONTEXTS = new Set([
 const RESPONSE_KEEP = 2000;
 const LINE_KEEP = 16000;
 
-/** backend/logs/voice-agent.log from both src/ and dist/. */
-export function defaultVoiceLogPath(): string {
-  return join(__dirname, '..', '..', 'logs', 'voice-agent.log');
+/**
+ * backend/logs/voice-agent.log from src/, dist/, and dist/src/. The build nests output one level
+ * deeper when it includes benchmark/, so the backend root is found by nest-cli.json, not by depth.
+ */
+export function defaultVoiceLogPath(start = __dirname): string {
+  let dir = start;
+  for (let depth = 0; depth < 6; depth += 1) {
+    if (existsSync(join(dir, 'nest-cli.json'))) return join(dir, 'logs', 'voice-agent.log');
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return join(start, '..', '..', 'logs', 'voice-agent.log');
 }
 
 export function isVoiceLog(message: string, context?: string): boolean {
@@ -45,6 +56,8 @@ export function sanitizeVoiceLogLine(text: string): string {
   let out = text.replace(/\s*\|\s*headers:\s*\{[\s\S]*$/i, '');
   out = out.replace(/\nHeaders:\s*\{[\s\S]*$/i, '\nHeaders: [omitted]');
   out = redactSecrets(out);
+  // Recorded audio is not readable in a log line; keep only its size.
+  out = out.replace(/("audioBase64"\s*:\s*")([^"]*)"/g, (_match, key: string, data: string) => `${key}[${data.length} chars omitted]"`);
   const marker = '| response:';
   const idx = out.indexOf(marker);
   if (idx >= 0 && out.length - (idx + marker.length) > RESPONSE_KEEP) {

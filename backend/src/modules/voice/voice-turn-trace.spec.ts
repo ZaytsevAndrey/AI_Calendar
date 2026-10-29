@@ -38,6 +38,7 @@ function service(): {
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
   );
   jest.spyOn(voice, 'parseTask').mockImplementation(async () => {
     segments.push(currentVoiceTrace()?.activeSegment);
@@ -56,6 +57,16 @@ function dto(sessionId: string, transcript: string) {
 }
 
 describe('VoiceService.turn trace', () => {
+  // These cases cover the legacy orchestrator, reachable through the VOICE_TURN_ENGINE rollback switch.
+  const engine = process.env.VOICE_TURN_ENGINE;
+  beforeAll(() => {
+    process.env.VOICE_TURN_ENGINE = 'legacy';
+  });
+  afterAll(() => {
+    if (engine === undefined) delete process.env.VOICE_TURN_ENGINE;
+    else process.env.VOICE_TURN_ENGINE = engine;
+  });
+
   it('reuses the trace that HTTP already opened', async () => {
     const { turn, ids } = service();
     const http = new VoiceTrace('http-turn');

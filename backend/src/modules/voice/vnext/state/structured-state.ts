@@ -6,6 +6,7 @@
  */
 import type { OperationChangesV1, SemanticActionV1 } from '../contracts/types';
 import type {
+  EntityOccurrence,
   ExecutionRecord,
   ExecutionState,
   FieldPatch,
@@ -14,6 +15,7 @@ import type {
   PreviewSnapshot,
   ProposalGroup,
   SchedulingState,
+  SeriesScope,
   TemporalProposal,
 } from '../contracts/proposal';
 import { validateProposalGroup } from '../contracts/proposal-validate';
@@ -27,6 +29,11 @@ export type KnownEntity = {
   googleEventId?: string | null;
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
+  status?: 'open' | 'completed' | 'canceled';
+  recurring?: boolean;
+  provider?: 'google' | 'microsoft' | 'apple';
+  occurrences?: EntityOccurrence[];
+  seriesEventId?: string | null;
 };
 
 export type EntityFingerprint = {
@@ -38,6 +45,8 @@ export type EntityFingerprint = {
   status: 'open' | 'completed' | 'canceled';
   userId: string;
   requiresMoveIdentity: boolean;
+  /** Read for a bound, not written: write access is not required, but it must not have changed. */
+  reference?: boolean;
 };
 
 export type StructuredState = {
@@ -122,24 +131,27 @@ export function applyProposalGroup(input: {
   const { state, ids } = input;
   const version = expectVersion(state, input.expectedSessionVersion);
   if (version) return version;
-  const open = expectOpenPreview(state);
-  if (open) return open;
   if (input.group.control === 'confirm' || input.group.control === 'pause') {
     return fail(state, 'unvalidated_mutation', input.group.control);
   }
-  const validated = validateProposalGroup(input.group, contextFrom(state, input.entities));
+  // A dispatched or superseded preview is settled. Its operations are not carried into the next preview,
+  // and a patch that names one of them fails validation as an unknown pending id.
+  const current: StructuredState = state.preview && state.preview.executionState !== 'open'
+    ? { ...state, operations: [], dependencies: {} }
+    : state;
+  const validated = validateProposalGroup(input.group, contextFrom(current, input.entities));
   if (!validated.ok) return fail(state, validated.errors[0]?.code ?? 'invalid_group', validated.errors[0]?.detail ?? '');
   const group = validated.group;
-  const boundary = boundaryFor(state, group);
+  const boundary = boundaryFor(current, group);
   if (typeof boundary !== 'string') return fail(state, boundary.code, boundary.detail);
 
-  const removed = removalSet(state, group, boundary);
-  const surviving = state.operations.filter((operation) => !removed.has(operation.pendingId));
+  const removed = removalSet(current, group, boundary);
+  const surviving = current.operations.filter((operation) => !removed.has(operation.pendingId));
   const patched = planPatches(surviving, group.patches, input.entities);
   if (!patched.ok) return fail(state, patched.code, patched.detail);
   const drafted = planProposals(group, input.entities, patched.operations);
   if (!drafted.ok) return fail(state, drafted.code, drafted.detail);
-  const linked = linkDependencies(state, group, patched.operations, drafted.proposals, removed);
+  const linked = linkDependencies(current, group, patched.operations, drafted.proposals, removed);
   if (!linked.ok) return fail(state, linked.code, linked.detail);
 
   const forbidden = new Set<string>([
@@ -153,7 +165,7 @@ export function applyProposalGroup(input: {
     ...drafted.proposals.map((proposal) => sealProposal(proposal, pendingIds.get(proposal.localRef)!, ids, forbidden)),
   ];
   const dependencies = sealDependencies(linked.edges, pendingIds);
-  return commitPreview(state, operations, dependencies, ids);
+  return commitPreview(current, operations, dependencies, ids);
 }
 
 export function confirmPreview(input: {
@@ -296,6 +308,8 @@ type PlannedProposal = {
   known: string[];
   missing: string[];
   sourceText: string;
+  seriesScope?: SeriesScope;
+  occurrenceDate?: string;
 };
 
 function planPatches(
@@ -393,7 +407,7 @@ function planProposals(
     if (proposal.action === 'create' && proposal.target.kind !== 'new') {
       return { ok: false, code: 'unsupported_combination', detail: 'create' };
     }
-    if (proposal.action !== 'create' && proposal.target.kind === 'new') {
+    if (proposal.action !== 'create' && proposal.action !== 'remind' && proposal.target.kind === 'new') {
       return { ok: false, code: 'unsupported_combination', detail: proposal.action };
     }
     const incompatible = incompatibleConstraints(proposal.constraints);
@@ -411,6 +425,8 @@ function planProposals(
       known: [...proposal.known],
       missing: [...proposal.missing],
       sourceText: proposal.source.text,
+      ...(proposal.seriesScope ? { seriesScope: proposal.seriesScope } : {}),
+      ...(proposal.occurrenceDate ? { occurrenceDate: proposal.occurrenceDate } : {}),
     });
   }
   return { ok: true, proposals };
@@ -491,6 +507,8 @@ function sealProposal(proposal: PlannedProposal, pendingId: string, ids: IdAlloc
     known: proposal.known,
     missing: proposal.missing,
     sourceText: proposal.sourceText,
+    ...(proposal.seriesScope ? { seriesScope: proposal.seriesScope } : {}),
+    ...(proposal.occurrenceDate ? { occurrenceDate: proposal.occurrenceDate } : {}),
   };
 }
 
@@ -598,11 +616,6 @@ function expectVersion(state: StructuredState, expectedSessionVersion: number): 
   return null;
 }
 
-function expectOpenPreview(state: StructuredState): StateTransition | null {
-  if (state.preview && state.preview.executionState !== 'open') return fail(state, 'preview_not_open', state.preview.executionState);
-  return null;
-}
-
 function contextFrom(state: StructuredState, entities: readonly KnownEntity[]) {
   return {
     entityIds: entities.map((entity) => entity.entityId),
@@ -624,6 +637,11 @@ function entityReference(entity: KnownEntity): Extract<PendingOperation['target'
     ...(entity.googleEventId != null ? { googleEventId: entity.googleEventId } : {}),
     ...(entity.scheduledStart != null ? { scheduledStart: entity.scheduledStart } : {}),
     ...(entity.scheduledEnd != null ? { scheduledEnd: entity.scheduledEnd } : {}),
+    ...(entity.status ? { status: entity.status } : {}),
+    ...(entity.recurring ? { recurring: true } : {}),
+    ...(entity.provider ? { provider: entity.provider } : {}),
+    ...(entity.occurrences ? { occurrences: entity.occurrences } : {}),
+    ...(entity.seriesEventId != null ? { seriesEventId: entity.seriesEventId } : {}),
   };
 }
 

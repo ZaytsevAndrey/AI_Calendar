@@ -1,7 +1,9 @@
 /**
  * Mechanical V1 envelope → ProposalGroup bridge for the structured cutover.
  * Maps shapes only. It does not recover clocks, titles, targets, or weekdays from language.
- * Weekday numbers are preserved for the deterministic temporal normalizer / projectApply.
+ * Weekday numbers and the model's `which` are preserved for projectApply's documented calendar arithmetic.
+ * A V1 field the proposal contract cannot carry becomes an explicit `unresolved` constraint or rejects
+ * the group. It is never dropped.
  */
 import type { SemanticConstraintV1, SemanticEnvelopeV1, SemanticOperationV1 } from './types';
 import type { ProposalConstraint, ProposalGroup, ProposalTarget, SemanticOperationProposal, TemporalProposal } from './proposal';
@@ -22,36 +24,66 @@ export function envelopeToProposalGroup(envelope: SemanticEnvelopeV1, _clock?: E
     return null;
   }
   if (envelope.kind !== 'operations') return null;
-  const byOp = new Map(envelope.operations.map((operation) => [operation.opId, operation]));
-  const folded = new Set<string>();
+  // Same-envelope edits of a new object are folded into that create here, because a proposal can
+  // address a draft only across turns. The dependent's action decides the fold:
+  // update/move add their fields and constraints, complete sets the status, delete/cancel drop the
+  // create, remind becomes its own reminder named after the create (a reminder holds no task id),
+  // and anything else rejects the group. A later op on a dropped create also rejects it.
+  const creates = new Map<string, SemanticOperationV1>();
+  const dropped = new Set<string>();
+  const reminders = new Map<string, SemanticOperationV1>();
+  const reminderBase = new Map<string, string>();
+  for (const operation of envelope.operations) {
+    if (operation.action === 'create' && operation.target.kind === 'new') creates.set(operation.opId, operation);
+  }
+  for (const operation of envelope.operations) {
+    if (operation.target.kind !== 'operation_result') continue;
+    const baseId = operation.target.opId;
+    const base = creates.get(baseId);
+    if (!base || dropped.has(baseId)) return null;
+    if (operation.action === 'delete' || operation.action === 'cancel') {
+      dropped.add(baseId);
+      continue;
+    }
+    if (operation.action === 'remind') {
+      const reminder = operation.changes.reminder;
+      if (reminder && reminder.op !== 'create') return null;
+      reminderBase.set(operation.opId, baseId);
+      reminders.set(operation.opId, {
+        ...operation,
+        target: { kind: 'new', localId: operation.opId },
+        changes: { ...operation.changes, reminder: { ...reminder, op: 'create', name: reminder?.name || base.changes.title } },
+        dependsOn: operation.dependsOn.filter((opId) => opId !== baseId),
+      });
+      continue;
+    }
+    if (operation.action !== 'update' && operation.action !== 'move' && operation.action !== 'complete') return null;
+    creates.set(baseId, {
+      ...base,
+      changes: {
+        ...base.changes,
+        ...operation.changes,
+        ...(operation.action === 'complete' ? { status: 'completed' as const } : {}),
+      },
+      constraints: [...base.constraints, ...operation.constraints],
+    });
+  }
+  // A reminder about a create the same utterance withdrew has nothing to be about.
+  if ([...reminderBase.values()].some((baseId) => dropped.has(baseId))) return null;
   const proposals: SemanticOperationProposal[] = [];
   for (const operation of envelope.operations) {
-    if (folded.has(operation.opId)) continue;
-    if (operation.target.kind === 'operation_result') {
-      const base = byOp.get(operation.target.opId);
-      if (base?.action === 'create' && base.target.kind === 'new') {
-        const merged = mapOperation({
-          ...base,
-          changes: { ...base.changes, ...operation.changes },
-          constraints: [...base.constraints, ...operation.constraints],
-          source: operation.source.text ? operation.source : base.source,
-        });
-        if (!merged) return null;
-        const index = proposals.findIndex((item) => item.localRef === base.opId);
-        if (index >= 0) proposals[index] = { ...merged, localRef: base.opId };
-        else proposals.push({ ...merged, localRef: base.opId });
-        folded.add(operation.opId);
-        continue;
-      }
-      return null;
-    }
-    const mapped = mapOperation(operation);
+    const standalone = reminders.get(operation.opId);
+    if ((operation.target.kind === 'operation_result' && !standalone) || dropped.has(operation.opId)) continue;
+    const mapped = mapOperation(standalone ?? creates.get(operation.opId) ?? operation);
     if (!mapped) return null;
     proposals.push(mapped);
   }
   return {
     version: '1',
     control: 'none',
+    // A V1 envelope cannot address a pending operation or say "also". A new utterance therefore
+    // replaces the open preview; extending it would keep a corrected item next to its correction.
+    previewBoundary: 'replace',
     proposals,
     patches: [],
   };
@@ -60,12 +92,10 @@ export function envelopeToProposalGroup(envelope: SemanticEnvelopeV1, _clock?: E
 function mapOperation(operation: SemanticOperationV1): SemanticOperationProposal | null {
   const target = mapTarget(operation);
   if (!target) return null;
-  const constraints: ProposalConstraint[] = [];
-  for (let index = 0; index < operation.constraints.length; index += 1) {
-    const temporal = mapConstraint(operation.constraints[index]);
-    if (!temporal) continue;
-    constraints.push({ ...temporal, localRef: `${operation.opId}-c${index}` });
-  }
+  const constraints: ProposalConstraint[] = operation.constraints.map((constraint, index) => ({
+    ...mapConstraint(constraint),
+    localRef: `${operation.opId}-c${index}`,
+  }));
   const hasSchedule = constraints.some((constraint) =>
     constraint.kind === 'clock' || constraint.kind === 'date' || constraint.kind === 'interval' || constraint.kind === 'weekday');
   const description = operation.target.kind === 'existing'
@@ -89,6 +119,8 @@ function mapOperation(operation: SemanticOperationV1): SemanticOperationProposal
     ...(operation.scope ? { scope: operation.scope } : {}),
     ...(description ? { scopeDescription: description } : {}),
     ...(calendarId ? { calendarId } : {}),
+    ...(operation.seriesScope ? { seriesScope: operation.seriesScope } : {}),
+    ...(operation.occurrence ? { occurrenceDate: operation.occurrence } : {}),
   };
 }
 
@@ -108,10 +140,21 @@ function mapTarget(operation: SemanticOperationV1): ProposalTarget | null {
   return null;
 }
 
-function mapConstraint(constraint: SemanticConstraintV1): TemporalProposal | null {
+/** Field-for-field. Anything without a proposal equivalent is `unresolved`, which projection refuses to preview. */
+function mapConstraint(constraint: SemanticConstraintV1): TemporalProposal {
   if (constraint.kind === 'date') return { kind: 'date', value: constraint.value };
-  if (constraint.kind === 'clock' && (constraint.role === 'start' || constraint.role === 'end')) {
+  // preferred is a wish, not a placement or a bound; it stays unresolved.
+  if (constraint.kind === 'clock' && constraint.role !== 'preferred') {
     return { kind: 'clock', value: constraint.value, role: constraint.role };
+  }
+  if (constraint.kind === 'all_day') return { kind: 'all_day' };
+  if (constraint.kind === 'day_bound') return { kind: 'day_bound', edge: constraint.edge, role: constraint.role };
+  // Only a delay from now is arithmetic on the model's numbers. Other anchors stay unresolved.
+  if (
+    constraint.kind === 'relative_time' && constraint.anchor === 'now' && constraint.direction === 'after'
+    && typeof constraint.amount === 'number' && Number.isInteger(constraint.amount) && constraint.amount > 0 && constraint.unit
+  ) {
+    return { kind: 'relative', direction: 'after', amount: constraint.amount, unit: constraint.unit };
   }
   if (constraint.kind === 'duration') return { kind: 'duration', minutes: constraint.minutes };
   if (constraint.kind === 'ordering' && constraint.target.kind === 'existing' && constraint.target.proposedId) {
@@ -124,6 +167,12 @@ function mapConstraint(constraint: SemanticConstraintV1): TemporalProposal | nul
       ...(constraint.which === 'this' || constraint.which === 'next' ? { which: constraint.which } : {}),
     };
   }
-  if (constraint.kind === 'time_of_day' || constraint.kind === 'relative_time') return { kind: 'unresolved' };
-  return null;
+  // The expression stays the user's words; only the model's structured pattern is carried.
+  if (constraint.kind === 'recurrence' && constraint.pattern) {
+    return { kind: 'recurrence', pattern: constraint.pattern, ...(constraint.weekDays ? { weekDays: constraint.weekDays } : {}) };
+  }
+  if (constraint.kind === 'time_of_day' && (constraint.bound === undefined || constraint.bound === 'at')) {
+    return { kind: 'unresolved', label: constraint.label };
+  }
+  return { kind: 'unresolved' };
 }

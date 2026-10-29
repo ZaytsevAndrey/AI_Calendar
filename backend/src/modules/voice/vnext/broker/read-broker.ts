@@ -1,8 +1,10 @@
 import { VOICE_READ_TOOL_NAMES } from '../../voice-agent.tools';
 import type { ReadRequestV1 } from '../contracts/types';
+import { FIND_EVENTS_TOOL } from '../search/find-events';
+import { FIND_TASKS_TOOL } from '../search/find-tasks';
 import type { ReadRecord } from '../evidence/evidence';
 
-const ALLOWED = new Set<string>(VOICE_READ_TOOL_NAMES);
+const ALLOWED = new Set<string>([...VOICE_READ_TOOL_NAMES, FIND_TASKS_TOOL, FIND_EVENTS_TOOL]);
 
 export type ToolExecutor = (name: string, args: Record<string, unknown>) => Promise<unknown>;
 

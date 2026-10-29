@@ -17,7 +17,9 @@ export class VoiceTraceInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler) {
     if (context.getType() !== 'http') return next.handle();
     const trace = bindVoiceTrace(context.switchToHttp().getRequest<object>());
-    const source = next.handle();
+    // Nest binds the handler to the async context current when handle() is called,
+    // so handle() must run inside the trace, not only the subscription.
+    const source = runWithVoiceTrace(trace, () => next.handle());
     const ObservableCtor = source.constructor as new (
       subscribe: (subscriber: {
         next: (value: unknown) => void;

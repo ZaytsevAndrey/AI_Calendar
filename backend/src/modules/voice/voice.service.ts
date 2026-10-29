@@ -73,6 +73,12 @@ import {
 } from './voice-parse-result-log.util';
 import { VoiceQuotaService } from './voice-quota.service';
 import { VoiceSessionStore } from './voice-session.store';
+import { StructuredVoiceService } from './vnext/production/structured-voice.service';
+
+/** `/voice/turn` runs the structured pipeline. VOICE_TURN_ENGINE=legacy is the rollback switch. */
+function legacyVoiceEngine(): boolean {
+  return process.env.VOICE_TURN_ENGINE?.trim().toLowerCase() === 'legacy';
+}
 
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
 
@@ -105,11 +111,15 @@ export class VoiceService {
     private readonly scheduledRepository: Repository<ScheduledTask>,
     private readonly azureStt: AzureSttClient,
     private readonly dayReminders: DayRemindersService,
+    private readonly structuredVoice: StructuredVoiceService,
   ) {}
 
   async turn(userId: string, dto: VoiceTurnDto): Promise<VoiceTurnResponse> {
     if (!currentVoiceTrace()) return withTurnTrace(() => this.turn(userId, dto));
     await this.quota.assertUnderLimit(userId);
+    if (!legacyVoiceEngine()) {
+      return this.withSessionGroq(userId, dto.sessionId, () => this.structuredVoice.turn(userId, dto));
+    }
     return this.withSessionGroq(userId, dto.sessionId, () =>
       this.agentOrchestrator.turn(userId, dto, (ctx) => {
         const transcript = (ctx.transcript || '').trim();
@@ -132,6 +142,7 @@ export class VoiceService {
 
   endVoiceSession(userId: string, sessionId: string): { ok: true } {
     this.agentOrchestrator.endSession(userId, sessionId);
+    this.structuredVoice.endSession(userId, sessionId);
     return { ok: true };
   }
 

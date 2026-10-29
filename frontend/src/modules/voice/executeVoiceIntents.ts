@@ -22,6 +22,16 @@ type ExecuteDeps = {
   onCreate: (task: VoiceParsedTask) => Promise<void>;
 };
 
+/**
+ * A client error (4xx other than timeout or rate limit) means the server refused the write.
+ * Anything else, including a lost connection, may have stored it.
+ */
+export function isDefiniteFailure(err: unknown): boolean {
+  const value = err as { status?: unknown; response?: { status?: unknown } } | null;
+  const status = typeof value?.status === 'number' ? value.status : value?.response?.status;
+  return typeof status === 'number' && status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
+
 export type ExecuteVoiceIntentsResult = {
   conflict: SchedulingConflictDTO | null;
   /** First failure; intents after it are reported as skipped. */
@@ -38,6 +48,7 @@ export async function executeVoiceIntents(
   deps: ExecuteDeps,
 ): Promise<ExecuteVoiceIntentsResult> {
   const statuses: VoiceIntentExecutionStatus[] = intents.map(() => 'skipped');
+  let definiteIndex = -1;
   const done = (
     conflict: SchedulingConflictDTO | null,
     error: unknown,
@@ -48,6 +59,7 @@ export async function executeVoiceIntents(
       results: intents.map((intent, index) => ({
         summary: intent.summary,
         status: statuses[index],
+        ...(index === definiteIndex ? { definite: true } : {}),
       })),
     },
   });
@@ -67,6 +79,7 @@ export async function executeVoiceIntents(
       }
     } catch (err) {
       statuses[index] = 'error';
+      if (isDefiniteFailure(err)) definiteIndex = index;
       return done(null, err);
     }
     const conflict = await waitConflict;

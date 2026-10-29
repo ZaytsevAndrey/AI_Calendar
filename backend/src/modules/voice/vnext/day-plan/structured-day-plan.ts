@@ -16,13 +16,14 @@ import { voiceCopy } from '../copy';
 import { mapQualitative } from '../qualitative/policy';
 import { clearDialogue } from '../session/dialogue';
 import { clearPending, type VNextSession } from '../session/session';
+import { localHm, localYmd } from '../../voice-local-date.util';
 import {
   createStructuredState,
   sequenceAllocator,
+  type EntityFingerprint,
   type StructuredState,
 } from '../state/structured-state';
-import { fingerprintsForOperations, withFingerprints } from '../state/revalidate-preview';
-import type { EntityRecord } from '../reference/reference-resolver';
+import { withFingerprints } from '../state/revalidate-preview';
 import type { PipelineResult, TraceEvent, TurnInput, InterpretOutput } from '../pipeline';
 
 function reply(sessionId: string, partial: Partial<import('../../voice-agent.types').VoiceTurnResponse> & Pick<import('../../voice-agent.types').VoiceTurnResponse, 'outcome' | 'assistantMessage'>): import('../../voice-agent.types').VoiceTurnResponse {
@@ -140,6 +141,78 @@ function proposalProblems(draft: PlanDraft, proposal: DayPlanProposal): string[]
   return [...new Set(problems)];
 }
 
+/**
+ * Check the planner's placements against the draft and the agenda that was read.
+ * The planner is trusted to search; it is not trusted to have found a real gap.
+ */
+function placementProblems(draft: PlanDraft, proposal: DayPlanProposal, context: PlanDraftContext): string[] {
+  const problems: string[] = [];
+  const byId = new Map(draft.items.map((item) => [item.id, item]));
+  const reseated = new Set(proposal.items.flatMap((item) => (item.taskId ? [item.taskId] : [])));
+  const spans: Array<{ start: number; end: number }> = [];
+  for (const item of proposal.items) {
+    const start = Date.parse(item.start);
+    const end = Date.parse(item.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+      problems.push('proposal_invalid_span');
+      continue;
+    }
+    if (localYmd(item.start, context.timeZone) !== proposal.day) problems.push('proposal_day');
+    const planned = byId.get(item.itemId);
+    if (planned && planned.durationMinutes > 0 && Math.round((end - start) / 60_000) !== planned.durationMinutes) {
+      problems.push('proposal_duration');
+    }
+    if (planned?.earliestHm && localHm(item.start, context.timeZone) < planned.earliestHm) problems.push('proposal_window');
+    if (planned?.deadlineHm && localHm(item.end, context.timeZone) > planned.deadlineHm) problems.push('proposal_window');
+    if (spans.some((span) => start < span.end && span.start < end)) problems.push('proposal_overlap');
+    spans.push({ start, end });
+  }
+  // A slot of a task the plan does not re-seat is a fixed event on the agenda.
+  for (const slot of context.slots) {
+    if (reseated.has(slot.taskId)) continue;
+    const start = new Date(slot.scheduledStartTime).getTime();
+    const end = new Date(slot.scheduledEndTime).getTime();
+    if (spans.some((span) => start < span.end && span.start < end)) problems.push('proposal_overlap');
+  }
+  return [...new Set(problems)];
+}
+
+/**
+ * Freshness baseline for every stored task the plan writes. Only the authorized catalog vouches for
+ * a revision; a row it does not carry is not given a made-up one.
+ */
+function planFingerprints(
+  intents: VoiceWriteIntent[],
+  input: TurnInput,
+): { ok: true; fingerprints: Record<string, EntityFingerprint>; entityIds: string[] } | { ok: false; code: string } {
+  const fingerprints: Record<string, EntityFingerprint> = {};
+  const entityIds: string[] = [];
+  for (const intent of intents) {
+    if (intent.type !== 'command' || typeof intent.command.taskId !== 'string' || !intent.command.taskId) continue;
+    const entityId = intent.command.taskId;
+    const row = input.entities.find((entity) => entity.id === entityId);
+    const task = input.planContext?.tasks.find((item) => item.id === entityId);
+    if (!row || row.userId !== input.userId || row.type !== 'task' || (task?.userId != null && task.userId !== input.userId)) {
+      return { ok: false, code: 'unauthorized_entity' };
+    }
+    if (row.writable === false) return { ok: false, code: 'unauthorized_entity' };
+    if (row.status !== 'open') return { ok: false, code: 'ineligible' };
+    if (row.revision == null) return { ok: false, code: 'revalidation_incomplete' };
+    if (!entityIds.includes(entityId)) entityIds.push(entityId);
+    fingerprints[entityId] = {
+      entityId,
+      revision: row.revision,
+      calendarId: row.calendarId ?? null,
+      writable: true,
+      googleEventId: row.googleEventId ?? null,
+      status: 'open',
+      userId: input.userId,
+      requiresMoveIdentity: false,
+    };
+  }
+  return { ok: true, fingerprints, entityIds };
+}
+
 function intentCovers(
   item: DayPlanProposalItem,
   intents: VoiceWriteIntent[],
@@ -164,52 +237,13 @@ function intentCovers(
 function publishPlanPreview(
   session: VNextSession,
   intents: VoiceWriteIntent[],
-  entities: EntityRecord[],
+  entityIds: string[],
+  fingerprints: Record<string, EntityFingerprint>,
 ): StructuredState {
   const previous = session.structured ?? createStructuredState(session.sessionId);
   const ids = sequenceAllocator(previous.sessionVersion * 100 + 1);
   const executionId = ids.executionId();
-  const entityIds: string[] = [];
-  for (const intent of intents) {
-    if (intent.type === 'command' && typeof intent.command.taskId === 'string' && intent.command.taskId) {
-      entityIds.push(intent.command.taskId);
-    }
-  }
-  const fakeOps = entityIds.map((entityId) => {
-    const row = entities.find((entity) => entity.id === entityId);
-    return {
-      pendingId: `plan_${entityId}`,
-      revision: 1,
-      action: 'update' as const,
-      entityType: 'task' as const,
-      target: {
-        kind: 'entity' as const,
-        entityId,
-        entityType: 'task' as const,
-        revision: row?.revision ?? 1,
-        calendarId: row?.calendarId ?? null,
-        writable: true,
-      },
-      scheduling: 'unscheduled' as const,
-      changes: {},
-      constraints: [] as Array<import('../contracts/proposal').TemporalProposal & { constraintId: string }>,
-      known: [] as string[],
-      missing: [] as string[],
-      sourceText: 'day_plan',
-    };
-  });
-  const fingerprints = fingerprintsForOperations(
-    fakeOps,
-    entities.map((entity) => ({
-      entityId: entity.id,
-      revision: entity.revision ?? 1,
-      calendarId: entity.calendarId ?? null,
-      writable: entity.type === 'external_event' ? entity.writable === true : entity.writable !== false,
-      googleEventId: entity.googleEventId,
-      userId: entity.userId,
-      status: entity.status,
-    })),
-  );
+  const items = entityIds.map((entityId) => ({ pendingId: `plan_${entityId}`, revision: 1 }));
   const previewRevision = (previous.preview?.previewRevision ?? 0) + 1;
   const state = withFingerprints({
     ...previous,
@@ -220,7 +254,7 @@ function publishPlanPreview(
       previewRevision,
       executionId,
       executionState: 'open' as const,
-      items: fakeOps.map((operation) => ({ pendingId: operation.pendingId, revision: operation.revision })),
+      items,
     },
     executions: [
       ...previous.executions,
@@ -378,7 +412,7 @@ export async function handleStructuredDayPlan(
         preservedLabels: qualitative,
       });
     }
-    const problems = proposalProblems(draft, proposal);
+    const problems = [...proposalProblems(draft, proposal), ...placementProblems(draft, proposal, input.planContext)];
     if (problems.length) {
       return done(input, reply(input.session.sessionId, { outcome: 'refuse', assistantMessage: voiceCopy(input.language, 'invalid'), actions: ['retry'] }), {
         traces,
@@ -409,12 +443,31 @@ export async function handleStructuredDayPlan(
       intents = planToIntents(proposal, { ...input.planContext, language: input.language });
       blocked.push('proposal_unplaced');
     }
+    if (!intents.length) {
+      // Nothing to write: either nothing fit or every item already sits where the plan puts it. No preview opens.
+      const code = proposal.unplaced.length ? 'no_room' : 'no_pending';
+      return done(input, reply(input.session.sessionId, { outcome: 'answer', assistantMessage: voiceCopy(input.language, code), plan: proposal }), {
+        traces,
+        usage: interpreted.usage,
+        blocked: [...blocked, proposal.unplaced.length ? 'no_room' : 'no_change'],
+        preservedLabels: qualitative,
+      });
+    }
+    const baseline = planFingerprints(intents, input);
+    if (!baseline.ok) {
+      return done(input, reply(input.session.sessionId, { outcome: 'refuse', assistantMessage: voiceCopy(input.language, 'cannot_change') }), {
+        traces,
+        usage: interpreted.usage,
+        blocked: [...blocked, baseline.code],
+        preservedLabels: qualitative,
+      });
+    }
     clearDialogue(input.session);
     input.session.pendingClarification = null;
     input.session.heldIntents = [];
     input.session.adaptedOpIds = [];
     input.session.canceledOpIds = [];
-    publishPlanPreview(input.session, intents, input.entities);
+    publishPlanPreview(input.session, intents, baseline.entityIds, baseline.fingerprints);
     return done(
       input,
       reply(input.session.sessionId, {

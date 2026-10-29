@@ -1,7 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
   IsIn,
+  IsInt,
   IsObject,
+  Min,
   IsOptional,
   IsString,
   MinLength,
@@ -59,6 +61,24 @@ export class VoiceTurnDto {
   @IsOptional()
   @IsObject()
   executionReport?: VoiceExecutionReport;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Structured voice: executionId of the preview the user is looking at. Required to confirm it.',
+  })
+  @IsString()
+  @IsOptional()
+  executionId?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Structured voice: previewRevision of that preview. Sent with executionId.',
+  })
+  @ValidateIf((dto: VoiceTurnDto) => dto.executionId != null)
+  @IsInt()
+  @Min(1)
+  previewRevision?: number;
 
   @ApiProperty({
     required: false,

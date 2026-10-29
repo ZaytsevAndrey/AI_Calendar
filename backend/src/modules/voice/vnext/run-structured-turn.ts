@@ -11,7 +11,7 @@ import { voiceCopy } from './copy';
 import { handleStructuredDayPlan } from './day-plan/structured-day-plan';
 import { evidenceCovers } from './evidence/evidence';
 import { ask as askDialogue, clearDialogue } from './session/dialogue';
-import { appendTurn, clearPending, invalidateLegacyPreview, pinArm, type VNextSession } from './session/session';
+import { appendTurn, clearPending, intentKey, invalidateLegacyPreview, pinArm, type VNextSession } from './session/session';
 import { prepareStructuredPreview } from './state/prepare-preview';
 import { readPreviewEntities, revalidateFingerprints } from './state/revalidate-preview';
 import {
@@ -74,7 +74,24 @@ export function entitiesToKnown(entities: EntityRecord[], userId: string): Known
       ...(entity.googleEventId != null ? { googleEventId: entity.googleEventId } : {}),
       ...(entity.scheduledStart != null ? { scheduledStart: entity.scheduledStart } : {}),
       ...(entity.scheduledEnd != null ? { scheduledEnd: entity.scheduledEnd } : {}),
+      ...(entity.status ? { status: entity.status } : {}),
+      ...(entity.recurring ? { recurring: true } : {}),
+      ...(entity.provider ? { provider: entity.provider } : {}),
+      ...(entity.occurrences ? { occurrences: entity.occurrences } : {}),
+      ...(entity.seriesEventId != null ? { seriesEventId: entity.seriesEventId } : {}),
     }));
+}
+
+/** Copy for a preview that could not be prepared. The code stays in `blocked`; this only picks the question. */
+function blockedCopy(code: string): Parameters<typeof voiceCopy>[1] {
+  if (code === 'ineligible') return 'cannot_change';
+  if (code === 'wrong_calendar') return 'calendar';
+  if (code === 'missing_series_scope') return 'which_series';
+  if (code === 'missing_day') return 'which_day';
+  if (code === 'missing_title') return 'need_title';
+  if (code === 'gap') return 'dst_gap';
+  if (code === 'fold') return 'dst_fold';
+  return 'which_task';
 }
 
 function ensureStructured(session: VNextSession): StructuredState {
@@ -174,6 +191,14 @@ async function handleGroup(input: TurnInput, group: ProposalGroup, interpreted: 
     });
   }
 
+  // Nothing left to change (for example a create that the same utterance deleted). An open preview stays as it was.
+  if (!group.proposals.length && !group.patches.length) {
+    return done(input, reply(input.session.sessionId, { outcome: 'answer', assistantMessage: voiceCopy(input.language, 'no_pending') }), {
+      traces,
+      usage: interpreted.usage,
+    });
+  }
+
   const expanded = expandStructuredScope(
     group.proposals,
     input.userId,
@@ -188,7 +213,16 @@ async function handleGroup(input: TurnInput, group: ProposalGroup, interpreted: 
       blocked: [expanded.code],
     });
   }
-  const working: ProposalGroup = { ...group, proposals: expanded.proposals };
+  // The V1 bridge cannot tell a task from a provider event. The authorized catalog row decides.
+  const working: ProposalGroup = {
+    ...group,
+    proposals: expanded.proposals.map((proposal) => {
+      if (proposal.target.kind !== 'entity' || proposal.entityType !== 'task') return proposal;
+      const entityId = proposal.target.entityId;
+      const row = input.entities.find((entity) => entity.id === entityId && entity.userId === input.userId);
+      return row?.type === 'external_event' ? { ...proposal, entityType: 'external_event' as const } : proposal;
+    }),
+  };
 
   if (working.proposals.some((proposal) => proposal.target.kind === 'unresolved')) {
     const reason = working.proposals.find((proposal) => proposal.target.kind === 'unresolved')?.target;
@@ -210,6 +244,19 @@ async function handleGroup(input: TurnInput, group: ProposalGroup, interpreted: 
       blocked: ['unauthorized_entity'],
     });
   }
+  // A calendar the model named must be the calendar the authorized row is on. The id is not re-resolved.
+  const wrongCalendar = working.proposals.some((proposal) => {
+    if (proposal.target.kind !== 'entity' || !proposal.calendarId) return false;
+    const entityId = proposal.target.entityId;
+    return known.find((entity) => entity.entityId === entityId)?.calendarId !== proposal.calendarId;
+  });
+  if (wrongCalendar) {
+    return done(input, reply(input.session.sessionId, { outcome: 'clarify', assistantMessage: voiceCopy(input.language, 'calendar'), clarifyCount: 1 }), {
+      traces,
+      usage: interpreted.usage,
+      blocked: ['wrong_calendar'],
+    });
+  }
   const previous = ensureStructured(input.session);
   const prepared = prepareStructuredPreview({
     state: previous,
@@ -225,9 +272,11 @@ async function handleGroup(input: TurnInput, group: ProposalGroup, interpreted: 
     catalogEntityIds: catalogIds,
     userId: input.userId,
     defaultDurationMinutes: input.defaultDurationMinutes,
+    defaultReminderTime: input.defaultReminderTime,
     nowIso: input.nowIso,
     wakeHm: input.wakeHm,
     sleepHm: input.sleepHm,
+    language: input.language,
   });
   if (!prepared.ok) {
     traces.push({ name: 'prepare', fields: { ok: false, code: prepared.code } });
@@ -245,10 +294,11 @@ async function handleGroup(input: TurnInput, group: ProposalGroup, interpreted: 
           : [prepared.code],
       });
     }
-    return done(input, reply(input.session.sessionId, { outcome: 'clarify', assistantMessage: voiceCopy(input.language, 'which_task'), clarifyCount: 1 }), {
+    return done(input, reply(input.session.sessionId, { outcome: 'clarify', assistantMessage: voiceCopy(input.language, blockedCopy(prepared.code)), clarifyCount: 1 }), {
       traces,
       usage: interpreted.usage,
       blocked: [prepared.code],
+      preservedLabels: prepared.code === 'unmapped_time' ? prepared.detail.split(',').filter(Boolean) : [],
     });
   }
   const summary = summarize(prepared.intents);
@@ -268,7 +318,7 @@ async function handleGroup(input: TurnInput, group: ProposalGroup, interpreted: 
     assistantMessage: summary,
     intents: prepared.intents,
     actions: ['confirm', 'cancel'],
-  }), { traces, usage: interpreted.usage, specialist: interpreted.specialist });
+  }), { traces, usage: interpreted.usage, specialist: interpreted.specialist, preservedLabels: prepared.preservedLabels });
 }
 
 async function handleConfirm(input: TurnInput, group: ProposalGroup, interpreted: InterpretOutput, traces: TraceEvent[]): Promise<PipelineResult> {
@@ -279,8 +329,24 @@ async function handleConfirm(input: TurnInput, group: ProposalGroup, interpreted
       blocked: ['confirm_with_mutation'],
     });
   }
+  // An open question outranks a yes: the yes is not an answer to it.
+  if (input.session.openQuestion || input.session.pendingClarification || input.session.structured?.blocksConfirmation) {
+    return done(input, reply(input.session.sessionId, { outcome: 'clarify', assistantMessage: input.session.openQuestion || voiceCopy(input.language, 'which_task'), clarifyCount: 1 }), {
+      traces,
+      usage: interpreted.usage,
+      blocked: ['clarification_open'],
+    });
+  }
   const claim = input.confirmation;
   if (!claim?.executionId || claim.previewRevision == null) {
+    const open = input.session.protocol === 'structured' && input.session.structured?.preview?.executionState === 'open';
+    if (!open) {
+      return done(input, reply(input.session.sessionId, { outcome: 'answer', assistantMessage: voiceCopy(input.language, 'no_pending') }), {
+        traces,
+        usage: interpreted.usage,
+        blocked: ['no_pending'],
+      });
+    }
     return done(input, reply(input.session.sessionId, { outcome: 'refuse', assistantMessage: voiceCopy(input.language, 'confirm_not_explicit') }), {
       traces,
       usage: interpreted.usage,
@@ -296,22 +362,16 @@ async function handleConfirm(input: TurnInput, group: ProposalGroup, interpreted
   }
   const stateAtStart = input.session.structured;
   const expectedSessionVersion = stateAtStart.sessionVersion;
-  if (input.session.openQuestion || input.session.pendingClarification || stateAtStart.blocksConfirmation) {
-    return done(input, reply(input.session.sessionId, { outcome: 'clarify', assistantMessage: input.session.openQuestion || voiceCopy(input.language, 'which_task'), clarifyCount: 1 }), {
-      traces,
-      usage: interpreted.usage,
-      blocked: ['clarification_open'],
-    });
-  }
   if (
     !stateAtStart.preview
     || stateAtStart.preview.executionId !== claim.executionId
     || stateAtStart.preview.previewRevision !== claim.previewRevision
     || stateAtStart.preview.executionState !== 'open'
   ) {
-    const duplicate = stateAtStart.preview?.executionState === 'dispatched'
-      && stateAtStart.preview.executionId === claim.executionId
-      && stateAtStart.preview.previewRevision === claim.previewRevision;
+    const duplicate = stateAtStart.executions.some((record) =>
+      record.state === 'dispatched'
+      && record.executionId === claim.executionId
+      && record.previewRevision === claim.previewRevision);
     return done(input, reply(input.session.sessionId, {
       outcome: duplicate ? 'answer' : 'clarify',
       assistantMessage: voiceCopy(input.language, duplicate ? 'already_applied' : 'stale'),
@@ -338,6 +398,16 @@ async function handleConfirm(input: TurnInput, group: ProposalGroup, interpreted
     }
   }
 
+  // A write whose earlier outcome is unknown may already be stored. It is not sent again until that is known.
+  const previewKeys = new Set((input.session.structuredIntents ?? input.session.pendingIntents ?? []).map(intentKey));
+  if (input.session.applyLedger.some((row) => row.status === 'unknown' && previewKeys.has(row.key))) {
+    return done(input, reply(input.session.sessionId, { outcome: 'answer', assistantMessage: voiceCopy(input.language, 'unknown') }), {
+      traces,
+      usage: interpreted.usage,
+      blocked: ['unknown_apply'],
+    });
+  }
+
   const fingerprints = stateAtStart.entityFingerprints ?? {};
   const reads = await readPreviewEntities(
     fingerprints,
@@ -362,6 +432,18 @@ async function handleConfirm(input: TurnInput, group: ProposalGroup, interpreted
   }
   const revalidated = revalidateFingerprints(fingerprints, reads.reads, input.userId);
   if (!revalidated.ok) {
+    // Retire only the preview this claim named. A correction that landed during the reads owns the session now.
+    const current = input.session.structured;
+    const unchanged = current?.sessionVersion === expectedSessionVersion
+      && current.preview?.executionId === claim.executionId
+      && current.preview.previewRevision === claim.previewRevision;
+    if (!unchanged) {
+      return done(input, reply(input.session.sessionId, { outcome: 'clarify', assistantMessage: voiceCopy(input.language, 'stale'), clarifyCount: 1 }), {
+        traces,
+        usage: interpreted.usage,
+        blocked: [revalidated.code, 'version_conflict'],
+      });
+    }
     clearPending(input.session);
     if (input.session.structured?.preview?.executionState === 'open') {
       const preview = input.session.structured.preview;
@@ -429,7 +511,7 @@ async function handleConfirm(input: TurnInput, group: ProposalGroup, interpreted
   input.session.protocol = 'structured';
   input.session.structured = confirmed.state;
   for (const intent of intents) {
-    const key = JSON.stringify({ type: intent.type, summary: intent.summary });
+    const key = intentKey(intent);
     if (!input.session.appliedKeys.includes(key)) input.session.appliedKeys.push(key);
     if (!input.session.applyLedger.some((row) => row.key === key)) input.session.applyLedger.push({ key, status: 'pending' });
   }
@@ -440,21 +522,35 @@ async function handleConfirm(input: TurnInput, group: ProposalGroup, interpreted
   }), { traces, usage: interpreted.usage, specialist: interpreted.specialist });
 }
 
+/**
+ * Cancel never dispatches, so it does not need a claim. A claim names the preview to cancel; without one
+ * the open preview is cancelled. Either way the structured preview is retired, so a later yes or a later
+ * preview cannot bring its operations back.
+ */
 function handleCancel(input: TurnInput, interpreted: InterpretOutput, traces: TraceEvent[]): PipelineResult {
   const claim = input.confirmation;
   const state = input.session.structured;
-  if (state?.preview && claim?.executionId && claim.previewRevision != null) {
+  if (state?.preview?.executionState === 'open') {
+    const named = claim?.executionId && claim.previewRevision != null;
     const cancelled = cancelPreview({
       state,
       expectedSessionVersion: state.sessionVersion,
-      executionId: claim.executionId,
-      previewRevision: claim.previewRevision,
+      executionId: named ? claim.executionId : state.preview.executionId,
+      previewRevision: named ? claim.previewRevision : state.preview.previewRevision,
     });
-    if (cancelled.ok) input.session.structured = cancelled.state;
+    if (!cancelled.ok) {
+      // The claim names a preview that is no longer the open one. The newer preview stays.
+      return done(input, reply(input.session.sessionId, { outcome: 'clarify', assistantMessage: voiceCopy(input.language, 'stale'), clarifyCount: 1 }), {
+        traces,
+        usage: interpreted.usage,
+        blocked: [cancelled.code],
+      });
+    }
+    input.session.structured = cancelled.state;
   }
   clearPending(input.session);
   clearDialogue(input.session);
-  input.session.planDraft = null;
+  // An open day-plan draft is independent of the preview; the day plan has its own cancel phase.
   return done(input, reply(input.session.sessionId, { outcome: 'answer', assistantMessage: voiceCopy(input.language, 'canceled') }), {
     traces,
     usage: interpreted.usage,

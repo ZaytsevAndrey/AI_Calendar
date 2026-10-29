@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
+  defaultVoiceLogPath,
   isVoiceLog,
   redactSecrets,
   sanitizeVoiceLogLine,
@@ -75,5 +76,22 @@ describe('VoiceFileLogger', () => {
     expect(text).toContain('POST /voice/speak failed');
     expect(text).toContain('at VoiceController.speak');
     expect(text).not.toContain('GET /tasks');
+  });
+});
+
+describe('defaultVoiceLogPath', () => {
+  it('finds backend/logs from src/common and from a nested dist/src/common', () => {
+    const backend = join(__dirname, '..', '..');
+    const expected = join(backend, 'logs', 'voice-agent.log');
+    expect(defaultVoiceLogPath(__dirname)).toBe(expected);
+    expect(defaultVoiceLogPath(join(backend, 'dist', 'src', 'common'))).toBe(expected);
+    expect(defaultVoiceLogPath(join(backend, 'dist', 'common'))).toBe(expected);
+  });
+});
+
+describe('sanitizeVoiceLogLine audio', () => {
+  it('replaces recorded audio with its size', () => {
+    const line = sanitizeVoiceLogLine('Body: {"audioBase64":"GkXfo59ChoEBQveBAULygQ","mimeType":"audio/webm"}');
+    expect(line).toBe('Body: {"audioBase64":"[22 chars omitted]","mimeType":"audio/webm"}');
   });
 });

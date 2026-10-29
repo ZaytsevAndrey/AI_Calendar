@@ -22,8 +22,9 @@ export type ScopeExpandResult =
   | { ok: false; code: NonNullable<StructuredScopeBlock> };
 
 /**
- * When the model marks scope:all, the authoritative target set is the complete receipt.
- * Catalog rows validate authorization and optional calendar filters; titles are not used to invent ids.
+ * When the model marks scope:all, the authoritative target set is the complete receipt from a trusted
+ * search. The model's description chose the search; TypeScript does not judge membership by title.
+ * Each member must be owned, open, writable task data, inside the requested calendar, and under the cap.
  */
 export function expandStructuredScope(
   proposals: SemanticOperationProposal[],
@@ -63,12 +64,12 @@ export function expandStructuredScope(
       if (calendarId && entity.calendarId !== calendarId) {
         return { ok: false, code: 'scope_mismatch' };
       }
-      if (description && entity.name.trim().toLocaleLowerCase() !== description.trim().toLocaleLowerCase()) {
-        return { ok: false, code: 'scope_mismatch' };
-      }
+      if (entity.writable === false) return { ok: false, code: 'scope_mismatch' };
       matches.push(entity);
     }
 
+    // Guard only: a catalog row titled exactly as described that the receipt left out means the receipt
+    // is not the whole set. This can block an expansion; it never adds a member.
     if (description) {
       const candidates = catalogCandidates(entities, userId, calendarId, description);
       if (candidates.some((entity) => !receiptIds.includes(entity.id))) {
