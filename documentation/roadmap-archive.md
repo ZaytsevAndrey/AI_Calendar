@@ -1,6 +1,6 @@
 # Roadmap archive
 
-Shipped work, moved out of [roadmap](roadmap.md). The live queue is **§23.4+** voice understanding (live create-eval fix loop) → **§24** personal PC / Piper. Product behavior: [overview](overview.md).
+Shipped work, moved out of [roadmap](roadmap.md). The live queue is the voice MVP (§39–§43), then §37–§38. Product behavior: [overview](overview.md).
 
 On 11 Oct 2026 the checked live-queue items left [roadmap](roadmap.md): scheduling redesign §1–§8, habits §9–§10, problematic slot pick §11, incremental placement §12, Unscheduled §13, calendar/edit delete §14, Voice Agent §15–§19, and Later polish (UI language, voice habit check-in, problematic sheet). Former open §20–§21 were folded into the Oct rebuild (§22–§24). Behavior notes are the bullets below.
 
@@ -13,6 +13,10 @@ Sign-in is **Google only**. Password register, login, reset, and email verificat
 Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-coverage.md)). Each route screen is its own lazy chunk (`splitChunks`); production is no longer one `bundle.js`.
 
 ## Shipped (Oct 2026)
+
+- [x] **Voice MVP P0 (branch `voice-mvp-p0`).** `/voice/turn` runs the structured pipeline. Bulk moves select through an authorized search with an explicit scope and fail closed on a truncated result. Provider events keep their calendar, id, access, and recurrence through preview and Apply; done on a provider event is refused. Series writes ask this occurrence / this and following / the whole series. Relative time, all-day, deadline-only windows, and a day with no clock are kept apart. A command on a task created in the same request runs after that create, in order. Day plans only offer Later tasks.
+
+- [x] **Voice dialogue fixes from the 29 Oct logs.** Later tasks no longer fill the day-plan draft; the model offers one and includes it on a yes. Plan items reach the model with ids, so an edit changes the item instead of adding a duplicate. A plan edit replies with what changed and the current plan. Previews name the stored title, not the transcript. Calendar events can be renamed. A flexible task moves to a day or after another task through a window; a fixed one asks for a clock. Refusals say what is wrong instead of "which task?". Reads of one round run in parallel and a day's provider events are read once per turn.
 
 - [x] **Planner faults stay visible.** An unknown planner decision, a tool request the planner cannot run, or a planner failure other than rate limit and timeout is a refusal. The utterance is not parsed as a task. An open day plan stays on screen. Logs: `planner.decision` and `planner.fault` (`invalid_decision`, `tool_limit_exceeded`, `planner_execution_error`).
 

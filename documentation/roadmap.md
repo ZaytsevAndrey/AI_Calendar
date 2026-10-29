@@ -6,13 +6,46 @@ Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Produ
 
 **Product pillars (Oct 2026 rebuild):** the two features that define the product are **auto-scheduling** and the **voice agent**. Auto-scheduling is the base; the agent is the differentiator. Do not polish TTS / deploy variants until both pillars are trustworthy. Specs: [spec-incremental-placement.md](spec-incremental-placement.md), [spec-conflict-rules.md](spec-conflict-rules.md), [spec-voice-agent.md](spec-voice-agent.md), [voice-prompt-next.md](voice-prompt-next.md).
 
-**Voice understanding (§23)** is the planner dialogue corpus ([voice-agent-dialogue-test-plan.md](voice-agent-dialogue-test-plan.md)). The old `parseTask` create-eval is removed.
+**Voice engine.** `POST /voice/turn` runs the structured pipeline (`StructuredVoiceService`): interpret → resolve authorized entities → preview → explicit confirm → client Apply → outcome report. `VOICE_TURN_ENGINE=legacy` switches back to the old planner (`buildPlannerSystemPrompt`). Voice MVP work is §39–§43 below; finish this pipeline, do not redesign it.
 
 ---
 
 ## Now (ordered)
 
 Do in order unless you explicitly skip ahead. These items need no outside service and no open product decision. Web only. The full mobile version is **§32**, after this web queue is done.
+
+### 39. Voice MVP: check P0 on a live model and a real calendar
+
+P0 (bulk selection, provider events, recurrence scope, time semantics, same-request dependencies) is in on branch `voice-mvp-p0`, covered by offline tests only.
+
+- [ ] Run the P0 flows through `/voice/turn` with the live model and a real Google calendar. Fix what breaks.
+- [ ] Replay the 29 Oct log dialogues (day plan with Later tasks, plan edits, rename / delete of a calendar event, done on an event, agenda latency). The prompt changed: plan items carry ids, Later tasks are a separate list, an agreed clock stays a clock.
+- [ ] Agenda: one cold provider read can still take about 5 s. Measure after the parallel-read change.
+- Known gaps, by decision: a task with several slots is not moved (the engine does not split yet). Ordering after a new task with no clock asks for the predecessor instead of guessing.
+
+### 40. Voice MVP: preference profile
+
+- [ ] Reuse existing user settings first (wake/sleep, phases, default duration).
+- [ ] Voice "remember that …" saves a preference only after a confirm. Preferences are soft constraints for placement and day plans, never an entity id.
+
+### 41. Voice MVP: bounded context
+
+- [ ] Stop putting every open record in the prompt. Give the model targeted read / search tools instead.
+- [ ] Measure tokens, cost, and latency per turn without logging raw content.
+
+### 42. Voice MVP: hardening
+
+- [ ] Etag / revision preconditions on Apply.
+- [ ] Session store shared across instances, or run a single instance.
+- [ ] Idempotent Apply; reconcile an unknown outcome instead of writing twice.
+- [ ] A lint command that runs. Fix the known `WorldName` typecheck error.
+
+### 43. Voice MVP: polish
+
+- [ ] Shorter clarifications.
+- [ ] Preview shows a before → after diff.
+- [ ] Day planning uses the preferences from §40.
+- [ ] Fast create skips the preview only under an explicit confirmation policy.
 
 ### 37. Diagnose duplicate / excess fetches
 
@@ -43,7 +76,7 @@ Do not start these. The shape is still open.
 - **Hide app calendar.** Visibility toggle for the app-owned calendar — product nuances still open.
 - **Outbound sync beyond Google.** Settings stores `syncTargetCalendars`, but app-task create/update/delete still writes Google only. Do not start until that write path is the task.
 - **Invite to an event (large).** Add someone to an event. Likely **per calendar provider** (Google / Microsoft / Apple differ on attendees, contact pickers, and OAuth scopes). Before any build: investigate whether we can read contacts at all; design the flow when contacts permission is denied (manual email? paste? skip?); decide where invite lives (preview, editor, voice); agree RSVP / attendees UI. Needs a dedicated product discussion — do not start from a thin ticket.
-- **User preference profile (large).** From voice / chat and from the schedule, gather durable facts about the user and inject them into day-plan and Suggestions prompts. Examples: avoid heavy work on days packed with meetings; commute home is ~40 minutes unless they stop somewhere. Before build: what is stored (structured prefs vs free-text notes), who can see/edit/delete it, how often it updates, privacy vs quality. Do not start until that shape is agreed.
+- **Learned preference profile (large).** Beyond §40: infer durable facts from the schedule itself and feed Suggestions too. Examples: avoid heavy work on days packed with meetings; commute home is ~40 minutes unless they stop somewhere. Before build: what is stored, who can see/edit/delete it, how often it updates, privacy vs quality. Do not start until that shape is agreed.
 
 ---
 
@@ -84,6 +117,6 @@ Third parties and publishing. Leave these until the Now list is done.
 
 ## Recommended next steps
 
-1. Next: roadmap **§37** — diagnose duplicate / excess fetches. Then **§38** — research + fix move/place into the past. (§32 full mobile version is after the web. §31 backup and §24 Piper are in Later.)
-2. Voice understanding continues in parallel via [voice-prompt-next.md](voice-prompt-next.md). The production planner stays `buildPlannerSystemPrompt`. Experimental Planner C2 is not used. C3 is rejected. Do not put that work back in this queue.
+1. Next: **§39** — check voice P0 on a live model and a real calendar, then §40–§43 in order. **§37** fetches and **§38** past placement are independent web items. (§32 full mobile version is after the web. §31 backup and §24 Piper are in Later.)
+2. Old planner prompt work ([voice-prompt-next.md](voice-prompt-next.md), Planner C2 / C3) stays with the legacy engine. Do not put it back in this queue.
 3. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.
