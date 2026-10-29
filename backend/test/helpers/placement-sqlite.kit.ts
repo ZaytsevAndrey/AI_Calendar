@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Logger } from '@nestjs/common';
 import { join } from 'path';
 import { DataSource, Repository } from 'typeorm';
@@ -17,6 +18,8 @@ import { ProblematicPlaceService } from '../../src/modules/schedule/problematic-
 
 /**
  * In-memory SQLite with the real entities and a real PlacementStepService.
+ * With `postgresUrl`: a throwaway Postgres database instead (dropped on destroy;
+ * DATABASE_URL must point at Postgres too, for the timestamp column type).
  * Settings, Google writes, and external calendars are stubs.
  * The clock is frozen at `now`; timers stay real so SQLite I/O runs.
  */
@@ -28,6 +31,7 @@ export async function createPlacementKit(opts: {
   wakeTime?: string;
   sleepTime?: string;
   horizonDays?: number;
+  postgresUrl?: string;
 }) {
   jest.useFakeTimers({
     now: new Date(opts.now),
@@ -47,12 +51,23 @@ export async function createPlacementKit(opts: {
   Logger.overrideLogger(['error']);
   const timeZone = opts.timeZone ?? 'UTC';
 
-  const ds = new DataSource({
-    type: 'sqlite',
-    database: ':memory:',
-    synchronize: true,
-    entities: [join(__dirname, '..', '..', 'src', 'modules', '**', '*.entity.{ts,js}').replace(/\\/g, '/')],
-  });
+  const entities = [join(__dirname, '..', '..', 'src', 'modules', '**', '*.entity.{ts,js}').replace(/\\/g, '/')];
+  let dropDatabase = async (): Promise<void> => undefined;
+  let ds: DataSource;
+  if (opts.postgresUrl) {
+    const admin = await new DataSource({ type: 'postgres', url: opts.postgresUrl }).initialize();
+    const name = `luefy_kit_${randomUUID().slice(0, 8)}`;
+    await admin.query(`CREATE DATABASE "${name}"`);
+    const target = new URL(opts.postgresUrl);
+    target.pathname = `/${name}`;
+    ds = new DataSource({ type: 'postgres', url: target.toString(), synchronize: true, entities });
+    dropDatabase = async () => {
+      await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      await admin.destroy();
+    };
+  } else {
+    ds = new DataSource({ type: 'sqlite', database: ':memory:', synchronize: true, entities });
+  }
   await ds.initialize();
 
   const taskRepo: Repository<Task> = ds.getRepository(Task);
@@ -191,6 +206,7 @@ export async function createPlacementKit(opts: {
 
   async function destroy() {
     await ds.destroy();
+    await dropDatabase();
     jest.useRealTimers();
   }
 

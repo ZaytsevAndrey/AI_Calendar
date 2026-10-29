@@ -43,7 +43,8 @@ Runtime assumptions found: production runs one Render instance, Neon Postgres, `
 | 6 | F2 live voice eval, F3/F4, H frontend states, I matrix, J operations doc | done | d8a3b4b |
 | 7 | Phase 2: OAuth client shared across users (found while auditing Google sync) | done | 85188d4 |
 | 8 | Phase 2: Google write queue lifecycle + no duplicate events on retry | done | 0c34220 |
-| 9 | Phase 2: idempotent task create (Idempotency-Key) | done | (stage 9 commit) |
+| 9 | Phase 2: idempotent task create (Idempotency-Key) | done | 3e90e3f |
+| 10 | Phase 2: Postgres tests in CI; placement on Postgres | done | (stage 10 commit) |
 
 ## Stage A — durable placement (done)
 
@@ -184,6 +185,13 @@ Voice is out of scope for this phase; no voice code or test expectation was chan
 - Limits: a key outlives only its task — after the task is deleted, the same key creates again. Reusing a key with a different body returns the original task (no body fingerprint).
 - Tests: `task-create-idempotency.spec` (SQLite: replay returns first task + job, different/no keys make separate tasks, 3 concurrent identical requests → one task, a race past the lock caught by the unique index), `tasks.controller.spec` (header trim, null, 400), e2e `A-TSK-030` over HTTP, frontend `customBaseQuery.spec`, `migrations.pg.spec` (fourth migration, no drift).
 - Results: backend unit 1054 pass + 11 skipped, 0 fail; tasks e2e 19/19; frontend 308/308.
+
+### Stage 10 — Postgres in CI (done)
+
+- CI job `build-and-test` has a `postgres:16-alpine` service and a step **Backend Postgres tests** (`npm run test:pg`, in band). `test/require-pg-env.js` makes the script fail when `PG_TEST_URL`/`DATABASE_URL` are missing or differ, so CI cannot pass by skipping.
+- The placement kit runs on Postgres with `postgresUrl` (own throwaway database, dropped on destroy). New `schedule/placement.pg.spec`: the task + job transaction rolls back as a whole (job write fails → no task, no job), a task committed just before a crash is placed by the recovery sweep, a job left running by a dead worker is taken over after its lease, six concurrent creates are all placed without overlap.
+- The Postgres suite now covers: advisory lock (`user-lock.pg`), concurrent job claims (`mutation-jobs.pg`), migrations fresh/upgrade/rerun/no drift (`migrations.pg`), Google queue claims and lease takeover (`pending-google-write.pg`), placement rollback/recovery/concurrency (`placement.pg`): 5 suites, 15 tests, all pass locally on Postgres 16.
+- Not verified: the workflow itself on GitHub (needs a push; the YAML parses and the same commands pass locally).
 
 ## Final status (2026-10-30)
 

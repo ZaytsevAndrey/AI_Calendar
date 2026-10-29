@@ -18,6 +18,7 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
+    "test:pg": "node test/require-pg-env.js && jest --runInBand --testPathPattern=[.]pg[.]spec[.]ts$",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand --forceExit",
     "test:vnext:structured": "jest --config ./jest.vnext-structured.config.js --runInBand",
     "test:vnext:historical": "jest --config ./jest.vnext-historical.config.js --runInBand",
