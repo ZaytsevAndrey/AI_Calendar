@@ -387,8 +387,7 @@ describe('Phase 4.3 day plan repair', () => {
     const started = await turn(session, { version: '1', kind: 'day_plan', operations: [], dayPlan: { phase: 'start', day: '2026-10-19' } }, {
       planContext: { ...context, tasks: [task] },
     });
-    expect(started.response.plan?.items.map((row) => row.name)).toEqual(['Report']);
-    expect(started.response.plan?.items[0]?.start).toBe('');
+    expect(started.response.plan?.items).toEqual([]);
     expect(started.response.plan?.unplaced).toEqual([]);
 
     const edited = await turn(session, {
@@ -399,7 +398,7 @@ describe('Phase 4.3 day plan repair', () => {
     }, { planContext: { ...context, tasks: [task] } });
     expect(edited.response.outcome).toBe('refuse');
     expect(edited.blocked).toContain('unknown_task');
-    expect(session.planDraft?.items).toHaveLength(1);
+    expect(session.planDraft?.items).toHaveLength(0);
 
     const applied = await turn(session, {
       version: '1',

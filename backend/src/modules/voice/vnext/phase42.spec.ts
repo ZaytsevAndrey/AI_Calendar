@@ -251,7 +251,8 @@ describe('phase 4.2 day plan', () => {
     }, { planContext });
     expect(result.response.outcome).toBe('clarify');
     expect(result.response.intents).toEqual([]);
-    expect(session.planDraft?.items.map((item) => item.taskId)).toEqual(['task-9']);
+    // Later tasks are offered, not seeded: the plan starts empty.
+    expect(session.planDraft?.items).toEqual([]);
     expect(result.serverWrites).toBe(0);
   });
 
