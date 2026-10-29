@@ -67,7 +67,14 @@ describe('DisplayedEventMoveService', () => {
     const taskRepo = {
       save: opts.saveTask ?? jest.fn(async (row) => ({ id: 'series-new', ...row })),
       create: jest.fn((row) => row),
-      find: opts.findSlots ?? jest.fn().mockResolvedValue([]),
+      // The drop loads its candidate tasks with one `find({ where: [...] })`.
+      find: jest.fn(async (query?: { where?: unknown }) =>
+        Array.isArray(query?.where)
+          ? tasks
+          : opts.findSlots
+            ? opts.findSlots(query)
+            : [],
+      ),
       findOne: jest.fn(async ({ where }: { where?: { id?: string } }) => {
         const id = where?.id;
         return tasks.find((row) => row.id === id) ?? null;
@@ -78,6 +85,7 @@ describe('DisplayedEventMoveService', () => {
         createQueryBuilder: () => ({
           innerJoin: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
           getMany: jest.fn().mockResolvedValue(slots),
         }),
         find: opts.findSlots ?? jest.fn().mockResolvedValue([]),

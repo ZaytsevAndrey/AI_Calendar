@@ -534,10 +534,30 @@ export class PlacementStepService {
       new Date().toISOString(),
       resolveIanaTimeZone(settings.timeZone),
     );
-    for (const task of parked) {
-      if (task.id === exceptTaskId) continue;
-      const opts = autoSeatOptions(task, today);
-      if (opts) await this.placeUnlocked(userId, task.id, opts);
+    const candidates = parked
+      .filter((task) => task.id !== exceptTaskId)
+      .map((task) => ({ task, opts: autoSeatOptions(task, today) }))
+      .filter((row): row is { task: Task; opts: PlaceOptions } => !!row.opts);
+    if (!candidates.length) return;
+    // PE-27: one external-calendar read for the whole pass. Seating parked
+    // tasks never changes external events, so the snapshot stays valid here;
+    // it is not kept beyond this pass.
+    const now = new Date();
+    const horizon = planningHorizonRange(settings, now);
+    const openSlots = await this.scheduledRepo
+      .createQueryBuilder('st')
+      .innerJoinAndSelect('st.task', 't')
+      .where('t.userId = :userId', { userId })
+      .andWhere('st.scheduledEndTime > :now', { now })
+      .getMany();
+    const cachedExternalSeats = await this.externalAnchors(
+      userId,
+      now,
+      horizon.end,
+      openSlots,
+    );
+    for (const { task, opts } of candidates) {
+      await this.placeUnlocked(userId, task.id, { ...opts, cachedExternalSeats });
     }
   }
 
@@ -748,7 +768,8 @@ export class PlacementStepService {
     const external =
       opts?.cachedExternalSeats ??
       (await this.externalAnchors(userId, now, horizon.end, slots));
-    seats.push(...external);
+    // Copies: seat windows are clipped per call; a shared cache must stay clean.
+    seats.push(...external.map((seat) => ({ ...seat })));
     if (opts?.dryRun && opts.extraSeats?.length) {
       seats.push(...opts.extraSeats.map((seat) => ({ ...seat })));
     }

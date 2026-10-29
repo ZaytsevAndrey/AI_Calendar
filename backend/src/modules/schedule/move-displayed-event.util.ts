@@ -1,6 +1,7 @@
 import { isFixedEventType } from '../scheduling/event-type.enum';
 
-const SLOT_MATCH_MS = 60_000;
+/** A dragged block matches a slot that starts within this window. */
+export const SLOT_MATCH_MS = 60_000;
 
 export type MoveTaskRef = {
   id: string;

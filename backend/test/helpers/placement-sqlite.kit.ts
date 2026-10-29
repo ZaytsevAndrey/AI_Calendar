@@ -75,6 +75,8 @@ export async function createPlacementKit(opts: {
     syncTaskSoon: jest.fn(),
   };
 
+  /** External calendars (Google / Microsoft) seen by placement. */
+  const externalBusy = { listVisibleEvents: jest.fn().mockResolvedValue([]) };
   const service = new PlacementStepService(
     ds,
     taskRepo,
@@ -85,7 +87,7 @@ export async function createPlacementKit(opts: {
         phaseRepo.find({ where: { userId }, order: { name: 'ASC' } }),
     } as never,
     pendingGoogleWrites as never,
-    { listVisibleEvents: jest.fn().mockResolvedValue([]) } as never,
+    externalBusy as never,
   );
 
   await ds.getRepository(UserSettings).save({ ...settings } as never);
@@ -186,12 +188,12 @@ export async function createPlacementKit(opts: {
     findAllForScheduling: (userId: string) =>
       phaseRepo.find({ where: { userId }, order: { name: 'ASC' } }),
   };
-  /** Real calendar drag service (Google patch is a stub that always fails → sync). */
+  /** Real calendar drag service (Google patch is a stub that succeeds). */
   const moveService = new DisplayedEventMoveService(
     slotRepo,
     taskRepo,
     tasksService,
-    { patchEventTimes: jest.fn().mockRejectedValue(new Error('no google')) } as never,
+    { patchEventTimes: jest.fn().mockResolvedValue(undefined) } as never,
     {} as never,
     pendingGoogleWrites as never,
     service,
@@ -220,6 +222,7 @@ export async function createPlacementKit(opts: {
     user,
     settings,
     pendingGoogleWrites,
+    externalBusy,
     at,
     ymdOf,
     hmOf,

@@ -4,7 +4,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { PendingGoogleWriteService } from '../google-calendar/pending-google-write.service';
 import { CalendarProvidersRegistry } from '../calendar-providers/calendar-providers.registry';
@@ -26,6 +26,7 @@ import { MoveDisplayedEventDto } from './dto/move-displayed-event.dto';
 import { phaseIdAtFocus, phaseWindowsForDay } from './free-slots.util';
 import {
   planDisplayedEventMove,
+  SLOT_MATCH_MS,
   type DisplayedMovePlan,
 } from './move-displayed-event.util';
 import { PlacementStepService } from './placement-step.service';
@@ -69,12 +70,44 @@ export class DisplayedEventMoveService {
       throw new BadRequestException('Event end must be after start.');
     }
 
-    const tasks = await this.tasksService.findAll(userId);
-    const slots = await this.scheduledRepo
-      .createQueryBuilder('st')
-      .innerJoin('st.task', 'task')
-      .where('task.userId = :userId', { userId })
-      .getMany();
+    // PE-27: load only what this drop can mean — the slot with its event id,
+    // the voice slot, or a slot starting within the match window of the
+    // dragged block — and the tasks behind them; not the user's whole history.
+    const eventIds = [dto.googleEventId, dto.recurringEventId].filter(
+      (id): id is string => !!id,
+    );
+    const origin = dto.originalStart ? new Date(dto.originalStart).getTime() : NaN;
+    const match: string[] = [];
+    const params: Record<string, unknown> = {};
+    if (dto.googleEventId) {
+      match.push('st.googleEventId = :gid');
+      params.gid = dto.googleEventId;
+    }
+    if (dto.slotId) {
+      match.push('st.id = :slotId');
+      params.slotId = dto.slotId;
+    }
+    if (Number.isFinite(origin)) {
+      match.push('st.scheduledStartTime BETWEEN :from AND :to');
+      params.from = new Date(origin - SLOT_MATCH_MS);
+      params.to = new Date(origin + SLOT_MATCH_MS);
+    }
+    const slots = match.length
+      ? await this.scheduledRepo
+          .createQueryBuilder('st')
+          .innerJoin('st.task', 'task')
+          .where('task.userId = :userId', { userId })
+          .andWhere(`(${match.join(' OR ')})`, params)
+          .getMany()
+      : [];
+    const taskIds = [...new Set(slots.map((slot) => slot.taskId))];
+    const taskWhere = [
+      ...(taskIds.length ? [{ userId, id: In(taskIds) }] : []),
+      ...(eventIds.length ? [{ userId, googleEventId: In(eventIds) }] : []),
+    ];
+    const tasks = taskWhere.length
+      ? await this.taskRepo.find({ where: taskWhere, relations: ['phase', 'phases'] })
+      : [];
 
     // Voice names the app slot: same path as a drag of that block.
     const named = dto.slotId ? slots.find((row) => row.id === dto.slotId) : null;

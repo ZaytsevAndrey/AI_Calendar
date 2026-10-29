@@ -25,9 +25,9 @@ Recurrence and scheduling behavior are independent everywhere (fixed/flexible ×
 |---|-------|--------|--------|
 | 0 | Baseline commit, branch, test baseline, progress file | done | 453770f |
 | 1 | Domain semantics: frontend `taskTraits`, occurrence-identity backfill migration, UI classification (chips, Now, preview facts, voice cards, task list, filters) | done | 2148694 |
-| 2 | PE-30: engine class, undo-of-Generate and dead Google replan code removed; live helpers in `planning-horizon.util.ts` / `scheduling-conflict.types.ts`; `POST/PATCH/DELETE /schedule` removed; e2e seed slots via `test/helpers/slots.ts` | done | see git log (PE-30 commit) |
-| 3 | PE-18: atomic `moveSeriesDay`, `moveSeriesTail`, `placeSeriesDay`; retry/idempotency; failure-injection tests | todo | |
-| 4 | PE-27: one external-calendar fetch per `seatOpenHoles` pass; drag loads only what it needs | todo | |
+| 2 | PE-30: engine class, undo-of-Generate and dead Google replan code removed; live helpers in `planning-horizon.util.ts` / `scheduling-conflict.types.ts`; `POST/PATCH/DELETE /schedule` removed; e2e seed slots via `test/helpers/slots.ts` | done | 12b68ea |
+| 3 | PE-18: `PlacementStepService.writeAndPlace`; atomic `moveSeriesDay`, `moveSeriesTail`, Problematic Move (series day + one-off); retry/idempotency by occurrence identity; fixed series day skippable; failure-injection tests (`series-exception.spec.ts`) | done | 4522ac2 |
+| 4 | PE-27: one external-calendar fetch per `seatOpenHoles` pass (cached seats copied per call); drag loads only candidate slots/tasks (`placement-load.spec.ts`) | done | (stage 4 commit, see git log) |
 | 5 | Voice (structured pipeline): fixed vs flexible recurring, preferred time, occurrence/future scope — spec → goldens → code/prompt | todo | |
 | 6 | Docs and test scenarios: engine doc, specs, test matrix scenarios, invariant tests | todo | |
 
@@ -59,6 +59,21 @@ Script used: scratchpad `baseline.sh` (runs all of the above); rerun after each 
 - **Stage 1** — backend unit 1270 pass / same 77 historical fails; e2e 132 / same 5 voice fails; frontend 304/304; builds ok. Intentional test change: task-list Flexible filter now includes flexible series and their copies (behavior and recurrence are independent filters); chip kind for a series is its behavior + repeat marker.
 - **Stage 2** — backend unit 1216 pass / same 77 historical fails (−54 = deleted specs of removed code: engine `run` ~40, undo snapshot, warning utils, job-service wipe/undo; live-helper tests moved to `planning-horizon.util.spec.ts` unchanged + one DST case); structured voice 224/224; e2e 132 / same 5; frontend 304/304. A-SCH-001…004/008 replaced by a 404 contract test (raw slot writes removed); A-SCH-005/007 keep the GET checks with a repository-seeded slot. `ScheduleJob.undoSnapshotJson` / `undoConsumedAt` columns are kept (schema sync would drop data).
 
+- **Stage 3** — backend unit 1223 pass / same 77 historical fails; e2e 132 / same 5; structured voice 224/224; frontend 304/304. Two mocked move tests that mirrored the old call order (`skipOccurrence` then `create`) were replaced by real SQLite tests in `series-exception.spec.ts`; ProblematicPlace spec now fakes `writeAndPlace` with snapshot/rollback and asserts the rollback, not the old compensation.
+- **Stage 4** — backend unit 1225 pass / same 77 historical fails; e2e 132 / same 5; structured voice 224/224; frontend 304/304.
+
+## Decisions (stages 3–4)
+
+5. **`writeAndPlace` instead of an outbox.** The rows a change writes and the placement are one DB transaction under the user lock; an unwanted plan throws inside the transaction (rollback). External calendars are read before the transaction; Google syncs are collected and sent after commit (`inOneTransaction` already defers them). There is no in-memory callback between a committed write and its placement any more for these three operations. A Google failure after commit leaves the committed state; a retry is idempotent (copy found by `seriesGroupId` + `originalOccurrenceYmd`; tail series found by group + From = split day). No new table or job type was needed.
+6. **`moveSeriesDay` behavior change:** onto an anchor it now rolls back completely and reports the conflict on its mutation job (before: the day was already skipped and the copy was left to a background create job). A full day still parks the copy, as before.
+7. **Still not durable (documented risk):** `TasksService.update/create` save the task, then `queuePlaceAndSync` places it in a background promise. A crash in between leaves a saved task without a slot until the next edit. Not changed in this refactor; candidate for a reconcile pass in the background tick.
+8. **PE-27:** the external-calendar snapshot lives for one `seatOpenHoles` pass or one `writeAndPlace` call only; cached seats are copied per placement because placement clips seat windows in place. Drag lookup: slots matching the event id, the voice `slotId`, or a start within `SLOT_MATCH_MS` (60 s) of the dragged block, plus tasks behind them or with the dragged event id.
+
+## Working rules learned
+
+- Stage files explicitly (`git add <paths>`); never `git add -A` — the tree holds another chat's uncommitted files. (A first stage-2 commit swept them in and was redone with `git reset --soft` before anything was pushed.)
+- Bash mangles backticks in inline `node -e` / heredoc strings: put scripts in the scratchpad and run them, or use the Edit tool.
+
 ## Decisions (continued)
 
 3. **PE-30 scope** — besides `run`, `ScheduleJobService` lost every member only reachable from it (undo of Generate, warnings → Problematic/Unscheduled, Google replan reconcile, wipe range). Remaining job service: mutation-job lifecycle, `processNextPending` (marks leftovers failed), `deleteSyncedGoogleEventsForTask`.
@@ -66,7 +81,7 @@ Script used: scratchpad `baseline.sh` (runs all of the above); rerun after each 
 
 ## Current work
 
-Stage 3 (PE-18).
+Stage 5 (voice).
 
 ## Next steps
 
