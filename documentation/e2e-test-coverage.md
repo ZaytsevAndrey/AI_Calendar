@@ -194,6 +194,7 @@ Email/password (`POST /auth/register`, `/login`, forgot/reset) **do not exist**.
 | U-SET-004 | U | P1 | Google status | Settings | Shows connected from `check-connection` (no disconnect button — feature missing) |
 | U-SET-005 | U | P1 | Delete account | Two modals + type DELETE | Calls `DELETE /auth/account` (stubbed) |
 | U-SET-005 | U | P2 | Settings loading / error | Slow/fail API | Loading then retry |
+| U-SET-006 | U | P2 | Theme | Header, login, or Settings select | `localStorage` `luefy.theme` is `light` or `dark`; `html[data-theme]` matches; `--ide-bg` follows that palette. Unit-covered in `applyTheme.spec.ts` |
 | U-ONB-001 | U | P0 | `/setup/phases` | Continue (saves wake/sleep), then Save with ≥1 weekday | `setup-defaults` or `apply-preset` → calendar |
 | U-ONB-002 | U | P0 | `/setup/phases` | Continue, then Skip | `setup-defaults` all days → calendar |
 | U-ONB-003 | U | P1 | Weekday picker empty | Save | Blocked (client: ≥1 day) |
@@ -291,7 +292,7 @@ Mutation jobs: POST/PATCH tasks return a `jobId` for place + Google sync progres
 | U-TSK-002 | U | P0 | Flexible | Name + duration submit | Mutation progress toast (title = name; Saving…→Done); appears in list; calendar refresh after job |
 | U-TSK-003 | U | P0 | Fixed | Missing end | Client error; no POST |
 | U-TSK-004 | U | P0 | Fixed | Valid slot | Created; Google stub event if connected |
-| U-TSK-026 | U | P1 | Fixed tab | Pick a day and a start/end clock | `scheduledStartTime` / `scheduledEndTime` are that civil day plus those clocks; no native datetime input |
+| U-TSK-026 | U | P1 | Fixed tab | Pick a date range and a start/end clock | `scheduledStartTime` is the first day plus the start clock; `scheduledEndTime` is the last day plus the end clock; no native datetime input |
 | U-TSK-005 | U | P0 | Recurring | No pattern | Client blocks |
 | U-TSK-006 | U | P0 | Recurring Daily Mon–Fri | Submit | Created |
 | U-TSK-007 | U | P0 | Unscheduled | Name only | Inbox section; Unscheduled icon (`aria-label`); create dialog shows Unscheduled preset |

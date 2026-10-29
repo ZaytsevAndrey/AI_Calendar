@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 /*
-  Design system: IDE-dark, mobile-first.
-  Комбінуйте класи: ui-btn + ui-btn-primary, page-shell, тощо.
+  Design system: IDE tokens, mobile-first. Light and dark palettes live in theme/themeColors.ts.
+  Combine classes: ui-btn + ui-btn-primary, page-shell, and so on.
 */
 
 @layer base {
@@ -22,7 +22,52 @@
     }
 
     :root {
+        color-scheme: dark;
         --phone-tab-offset: 0px;
+        /* Pre-paint copy of THEME_COLORS.dark. applyTheme overwrites these from the constants. */
+        --ide-bg: 43 43 43;
+        --ide-panel: 60 63 65;
+        --ide-surface: 50 50 50;
+        --ide-elevated: 69 73 74;
+        --ide-border: 81 81 81;
+        --ide-line: 49 51 53;
+        --ide-text: 169 183 198;
+        --ide-muted: 128 128 128;
+        --ide-dim: 106 135 89;
+        --ide-link: 88 157 246;
+        --ide-accent: 78 159 78;
+        --ide-accentBlue: 40 123 222;
+        --ide-keyword: 204 120 50;
+        --ide-error: 188 63 60;
+        --ide-warn: 187 181 41;
+        --ide-selection: 33 66 131;
+        --ide-input: 69 73 74;
+        --ide-shadow: 0 1px 3px rgba(0,0,0,0.45);
+        --ide-shadow-md: 0 4px 12px rgba(0,0,0,0.5);
+    }
+
+    :root[data-theme='light'] {
+        color-scheme: light;
+        /* Pre-paint copy of THEME_COLORS.light. */
+        --ide-bg: 244 245 247;
+        --ide-panel: 255 255 255;
+        --ide-surface: 238 241 244;
+        --ide-elevated: 226 230 235;
+        --ide-border: 208 213 220;
+        --ide-line: 228 231 236;
+        --ide-text: 28 33 40;
+        --ide-muted: 92 103 112;
+        --ide-dim: 62 107 53;
+        --ide-link: 21 101 192;
+        --ide-accent: 46 125 50;
+        --ide-accentBlue: 21 101 192;
+        --ide-keyword: 163 77 0;
+        --ide-error: 180 35 24;
+        --ide-warn: 138 101 0;
+        --ide-selection: 214 228 247;
+        --ide-input: 255 255 255;
+        --ide-shadow: 0 1px 3px rgba(15,23,42,0.08);
+        --ide-shadow-md: 0 4px 12px rgba(15,23,42,0.12);
     }
 
     @media (max-width: 767px) {
@@ -84,10 +129,9 @@
         }
     }
 
-    /* Global scrollbar (dark theme, stable on hover) */
     * {
         scrollbar-width: thin;
-        scrollbar-color: #515151 #2b2b2b;
+        scrollbar-color: rgb(var(--ide-border)) rgb(var(--ide-bg));
     }
 
     *::-webkit-scrollbar {
@@ -96,22 +140,22 @@
     }
 
     *::-webkit-scrollbar-track {
-        background: #2b2b2b;
+        background: rgb(var(--ide-bg));
     }
 
     *::-webkit-scrollbar-thumb {
-        background-color: #515151;
+        background-color: rgb(var(--ide-border));
         border-radius: 9999px;
-        border: 2px solid #2b2b2b;
+        border: 2px solid rgb(var(--ide-bg));
     }
 
     *::-webkit-scrollbar-thumb:hover,
     *::-webkit-scrollbar-thumb:active {
-        background-color: #515151;
+        background-color: rgb(var(--ide-border));
     }
 
     *::-webkit-scrollbar-corner {
-        background: #2b2b2b;
+        background: rgb(var(--ide-bg));
     }
 }
 
@@ -177,7 +221,7 @@
     }
 
     .ui-icon-btn {
-        @apply inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md p-0 text-ide-text transition hover:bg-white/5;
+        @apply inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md p-0 text-ide-text transition hover:bg-ide-text/5;
         @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link;
         @apply disabled:pointer-events-none disabled:opacity-50;
     }
@@ -188,7 +232,7 @@
     }
 
     .ui-btn-ghost {
-        @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-ide-text transition hover:bg-white/5;
+        @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-ide-text transition hover:bg-ide-text/5;
         @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link;
         @apply disabled:pointer-events-none disabled:opacity-50;
     }

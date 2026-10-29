@@ -109,7 +109,7 @@ export function CalendarVisibilityMenu({ compact = false }: { compact?: boolean 
         type="button"
         className={
           compact
-            ? 'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ide-text hover:bg-white/5'
+            ? 'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ide-text hover:bg-ide-text/5'
             : 'ui-btn-secondary px-4'
         }
         aria-expanded={open}

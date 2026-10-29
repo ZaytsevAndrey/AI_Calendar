@@ -6,7 +6,7 @@
     "habits": "Habits",
     "settings": "Settings",
     "main": "Main",
-    "brand": "AI Calendar"
+    "brand": "luefy"
   },
   "common": {
     "loading": "Loading…",
@@ -80,6 +80,12 @@
     "defaultReminderTime": "Default reminder time",
     "defaultReminderTimeHint": "Google notifies at this time when a reminder does not set its own.",
     "buffer": "Fixed-event buffer (minutes)",
+    "theme": "Theme",
+    "themeDark": "Dark",
+    "themeLight": "Light",
+    "themeHint": "Colors for the app. Saved in this browser.",
+    "themeToggleToLight": "Switch to light theme",
+    "themeToggleToDark": "Switch to dark theme",
     "language": "App language",
     "languageEn": "English",
     "languageUk": "Ukrainian",
@@ -87,7 +93,7 @@
     "saved": "Settings saved",
     "saveFailed": "Could not save settings",
     "logout": "Log out",
-    "lead": "Time zone, wake and sleep, reminders, Google Calendar, and account.",
+    "lead": "Theme, time zone, wake and sleep, reminders, Google Calendar, and account.",
     "timeManagement": "Time management",
     "timeManagementHint": "These settings affect how your schedule is built. Wake, sleep, and phases use the time zone you set here.",
     "account": "Account",
@@ -120,7 +126,7 @@
     "appleLinked": "Apple Calendar linked",
     "appleLinkFailed": "Could not link Apple Calendar",
     "appleInstructionsTitle": "How to create an app-specific password",
-    "appleInstructions": "1. Open appleid.apple.com and sign in.\n2. Go to Sign-In and Security → App-Specific Passwords.\n3. Generate a password (name it e.g. “AI Calendar”).\n4. Paste that password here — not your Apple account password.\n5. Two-factor authentication must be on for your Apple ID.",
+    "appleInstructions": "1. Open appleid.apple.com and sign in.\n2. Go to Sign-In and Security → App-Specific Passwords.\n3. Generate a password (name it e.g. “luefy”).\n4. Paste that password here — not your Apple account password.\n5. Two-factor authentication must be on for your Apple ID.",
     "disconnect": "Disconnect",
     "disconnectConfirm": "Disconnect {{provider}} from this account?",
     "disconnectFailed": "Could not disconnect",
@@ -640,6 +646,9 @@
       "date": "Date",
       "dateEmpty": "Choose a date",
       "dateClear": "Clear date",
+      "when": "When",
+      "slotEmpty": "Choose a date and time",
+      "slotClear": "Clear date and time",
       "start": "Start",
       "end": "End",
       "repeat": "Repeat",
@@ -1149,7 +1158,7 @@
     "missingAuthUrl": "Missing Google authorization URL"
   },
   "pwa": {
-    "installPrompt": "Install AI Calendar on this device for quicker voice capture.",
+    "installPrompt": "Install luefy on this device for quicker voice capture.",
     "iosHint": "On iPhone: Share → Add to Home Screen to install the app.",
     "install": "Install",
     "notNow": "Not now",

@@ -14,7 +14,7 @@ async function fireInstallPrompt(page: Page) {
 
 /** Strict Mode remounts drop a prompt that landed on the first mount; retry until the banner sticks. */
 async function showInstallBanner(page: Page) {
-  const copy = page.getByText('Install AI Calendar on this device for quicker voice capture.');
+  const copy = page.getByText('Install luefy on this device for quicker voice capture.');
   await expect(async () => {
     await fireInstallPrompt(page);
     await expect(copy).toBeVisible({ timeout: 500 });
@@ -32,13 +32,13 @@ test.describe('P2 PWA banner', () => {
     await openAs(page, auth.onboarded);
     await showInstallBanner(page);
     await page.getByRole('button', { name: 'Not now' }).click();
-    await expect(page.getByText('Install AI Calendar on this device for quicker voice capture.')).toHaveCount(0);
+    await expect(page.getByText('Install luefy on this device for quicker voice capture.')).toHaveCount(0);
     const dismissed = await page.evaluate(() => window.localStorage.getItem('pwa-install-dismissed'));
     expect(dismissed).toBe('1');
 
     await page.reload();
     await fireInstallPrompt(page);
-    await expect(page.getByText('Install AI Calendar on this device for quicker voice capture.')).toHaveCount(0);
+    await expect(page.getByText('Install luefy on this device for quicker voice capture.')).toHaveCount(0);
   });
 
   test.describe('U-PWA-003 iOS hint', () => {

@@ -226,7 +226,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                 {renderEventMeta?.(event, completed)}
                 {eventPhase && (
                     <span
-                        className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-white/80"
+                        className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-ide-bg"
                         style={{ backgroundColor: eventPhase.color }}
                     />
                 )}

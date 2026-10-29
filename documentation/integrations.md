@@ -105,7 +105,7 @@ Apple is **Settings-only** (not on the login screen). The user pastes an Apple I
 
 1. Open [appleid.apple.com](https://appleid.apple.com) and sign in.
 2. **Sign-In and Security** → **App-Specific Passwords**.
-3. Generate a password (e.g. “AI Calendar”). Two-factor authentication must be on.
+3. Generate a password (e.g. “luefy”). Two-factor authentication must be on.
 4. In the app: Settings → Calendar accounts → Connect Apple Calendar → paste Apple ID + that password (not the Apple account password).
 
 No `APPLE_*` server environment variables are required.

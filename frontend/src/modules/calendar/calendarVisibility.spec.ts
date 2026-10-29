@@ -16,7 +16,7 @@ const items = [
   },
   {
     id: 'app@group.calendar.google.com',
-    summary: 'AI Calendar Assistant',
+    summary: 'luefy',
     selected: true,
     accessRole: 'owner',
     provider: 'google' as const,
@@ -50,7 +50,7 @@ describe('calendarVisibilityRows', () => {
       items,
       hiddenIds: ['holidays@group.v.calendar.google.com'],
       appCalendarId: 'app@group.calendar.google.com',
-      appCalendarName: 'AI Calendar Assistant',
+      appCalendarName: 'luefy',
     });
 
     expect(rows.find((row) => row.id === 'app@group.calendar.google.com')).toMatchObject({

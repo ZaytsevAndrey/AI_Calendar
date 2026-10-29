@@ -185,7 +185,7 @@ export class UserSettingsService {
       minSplitMinutes: 30,
       maxSplitMinutes: 30,
       recurringScheduleHorizonDays: 30,
-      appGoogleCalendarName: 'AI Calendar Assistant',
+      appGoogleCalendarName: 'luefy',
       remindersEnabled: false,
       defaultReminderTime: '09:00',
       syncGoogleDeletions: false,

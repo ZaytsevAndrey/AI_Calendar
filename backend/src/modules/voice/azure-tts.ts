@@ -69,7 +69,7 @@ export class AzureTtsClient {
             'Ocp-Apim-Subscription-Key': auth.key,
             'Content-Type': 'application/ssml+xml',
             'X-Microsoft-OutputFormat': 'riff-24khz-16bit-mono-pcm',
-            'User-Agent': 'ai-calendar-assistant',
+            'User-Agent': 'luefy',
           },
           body: ssml,
           signal: AbortSignal.timeout(AZURE_TTS_TIMEOUT_MS),

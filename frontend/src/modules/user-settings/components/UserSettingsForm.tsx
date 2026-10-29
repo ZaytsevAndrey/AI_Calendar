@@ -8,6 +8,8 @@ import { Spinner } from '../../../ui/Spinner';
 import { Input } from 'ui/Input';
 import { TimeField } from 'ui/TimeField';
 import { Select } from 'ui/Select';
+import { useTheme } from 'theme/ThemeProvider';
+import { isThemeId } from 'theme/themeColors';
 import { timeZoneSelectOptions } from '../ianaTimeZones';
 import { ReminderSettingsSection } from '../../pwa/ReminderSettingsSection';
 import { VoiceSettingsSection } from '../../voice/components/VoiceSettingsSection';
@@ -41,6 +43,7 @@ interface UserSettingsFormData {
 
 const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
     const { t, i18n } = useTranslation();
+    const { theme, setTheme } = useTheme();
     const [isCalendarConnected, setIsCalendarConnected] = useState(false);
     const [isCheckingConnection, setIsCheckingConnection] = useState(true);
     const [updateUserSettings] = useUpdateUserSettingsMutation();
@@ -72,7 +75,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
             language: defaultLanguage,
             googleCalendarLinked: initialData?.googleCalendarLinked || false,
             appGoogleCalendarName:
-                initialData?.appGoogleCalendarName?.trim() || 'AI Calendar Assistant',
+                initialData?.appGoogleCalendarName?.trim() || 'luefy',
             minSplitMinutes:
                 typeof initialData?.minSplitMinutes === 'number'
                     ? initialData.minSplitMinutes
@@ -139,7 +142,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
     }, [setValue]);
 
     const saveAppCalendarName = async () => {
-        const v = (getValues('appGoogleCalendarName') ?? '').trim() || 'AI Calendar Assistant';
+        const v = (getValues('appGoogleCalendarName') ?? '').trim() || 'luefy';
         try {
             await updateUserSettings({
                 appGoogleCalendarName: v,
@@ -361,6 +364,23 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                                 </option>
                             ))}
                         </Select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <label htmlFor="app-theme" className="ui-label">
+                            {t('settings.theme')}
+                        </label>
+                        <Select
+                            id="app-theme"
+                            className="max-w-xs"
+                            value={theme}
+                            onChange={(e) => {
+                                if (isThemeId(e.target.value)) setTheme(e.target.value);
+                            }}
+                        >
+                            <option value="dark">{t('settings.themeDark')}</option>
+                            <option value="light">{t('settings.themeLight')}</option>
+                        </Select>
+                        <p className="max-w-xs text-xs text-ide-muted">{t('settings.themeHint')}</p>
                     </div>
                     <div className="flex flex-col gap-1">
                         <label htmlFor="app-language" className="ui-label">

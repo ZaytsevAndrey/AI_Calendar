@@ -130,7 +130,7 @@ export class UpdateUserSettingsDto {
   googleCalendarLinked?: boolean;
 
   @ApiProperty({
-    example: 'AI Calendar Assistant',
+    example: 'luefy',
     description:
       'Display name of the dedicated Google calendar where this app creates and syncs events',
     required: false,

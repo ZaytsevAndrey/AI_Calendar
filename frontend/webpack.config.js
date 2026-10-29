@@ -131,9 +131,11 @@ export default async (_env, argv) => {
                                     new webpack.sources.RawSource('/*    /index.html   200\n'),
                                 );
                                 const publicFiles = [
-                                    'favicon.svg',
+                                    'favicon.ico',
+                                    'favicon.png',
                                     'manifest.webmanifest',
                                     'sw.js',
+                                    'icon-64.png',
                                     'icon-192.png',
                                     'icon-512.png',
                                     'apple-touch-icon.png',

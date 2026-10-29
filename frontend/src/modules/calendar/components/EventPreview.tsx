@@ -405,7 +405,7 @@ function TextValue({
     return (
       <span className="inline-flex items-center gap-2">
         <span
-          className="h-3.5 w-3.5 rounded-full border border-white/20"
+          className="h-3.5 w-3.5 rounded-full border border-ide-text/20"
           style={{ background: getEventColor({ id: 'color', start: {}, end: {}, colorId: fact.text }) }}
         />
         {node}

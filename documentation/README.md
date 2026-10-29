@@ -1,4 +1,4 @@
-# AI Calendar Assistant documentation
+# luefy documentation
 
 Single source of truth for the project. Keep these files in sync with code changes.
 

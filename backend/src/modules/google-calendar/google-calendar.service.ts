@@ -355,7 +355,7 @@ export class GoogleCalendarService {
         minSplitMinutes: 30,
         maxSplitMinutes: 30,
         recurringScheduleHorizonDays: 30,
-        appGoogleCalendarName: 'AI Calendar Assistant',
+        appGoogleCalendarName: 'luefy',
       }),
     );
   }
@@ -486,7 +486,7 @@ export class GoogleCalendarService {
   ): Promise<string> {
     const settings = await this.userSettingsRepo.findOne({ where: { userId } });
     const name =
-      (settings?.appGoogleCalendarName ?? '').trim() || 'AI Calendar Assistant';
+      (settings?.appGoogleCalendarName ?? '').trim() || 'luefy';
     const existing = settings?.appGoogleCalendarId;
     if (existing) {
       try {
@@ -551,7 +551,7 @@ export class GoogleCalendarService {
       auth: this.oauth2Client,
     });
     const summary =
-      (settings.appGoogleCalendarName ?? '').trim() || 'AI Calendar Assistant';
+      (settings.appGoogleCalendarName ?? '').trim() || 'luefy';
     await calendar.calendars.patch({
       calendarId: settings.appGoogleCalendarId,
       requestBody: { summary },

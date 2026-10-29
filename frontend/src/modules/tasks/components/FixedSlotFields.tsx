@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { UseFormSetValue } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
-import { DatePicker } from 'ui/DatePicker';
-import { TimeRangeField } from 'ui/TimeRangeField';
+import { DateTimeRangeField } from 'ui/DateTimeRangeField';
 import type { TaskFormValues } from '../task-wizard/schema';
 import {
   fixedSlotDraft,
@@ -19,13 +18,19 @@ type Props = {
   setValue: UseFormSetValue<TaskFormValues>;
   startError?: string;
   endError?: string;
+  defaultDurationMinutes: number;
 };
 
-export function FixedSlotFields({ startValue, endValue, setValue, startError, endError }: Props) {
+export function FixedSlotFields({
+  startValue,
+  endValue,
+  setValue,
+  startError,
+  endError,
+  defaultDurationMinutes,
+}: Props) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState<FixedSlotDraft>(() => fixedSlotDraft(startValue, endValue));
-  const draftRef = useRef(draft);
-  draftRef.current = draft;
   const published = useRef<FixedSlotFormFields>({
     scheduledStartTime: startValue ?? '',
     scheduledEndTime: endValue ?? '',
@@ -45,12 +50,11 @@ export function FixedSlotFields({ startValue, endValue, setValue, startError, en
   }, [startValue, endValue]);
 
   const publish = (next: FixedSlotDraft) => {
-    const fields = fixedSlotFields(next.date, next.start, next.end);
+    const fields = fixedSlotFields(next);
     const hadValue = Boolean(
       published.current.scheduledStartTime || published.current.scheduledEndTime,
     );
     const complete = Boolean(fields.scheduledStartTime && fields.scheduledEndTime);
-    draftRef.current = next;
     published.current = fields;
     setDraft(next);
     const options = { shouldDirty: true, shouldValidate: complete || hadValue };
@@ -58,50 +62,35 @@ export function FixedSlotFields({ startValue, endValue, setValue, startError, en
     setValue('scheduledEndTime', fields.scheduledEndTime, options);
   };
 
-  const dateMissing = !draft.date;
-  const timeMessages = [dateMissing ? undefined : startError, endError].filter(
+  const messages = [startError, endError].filter(
     (message, index, all): message is string => Boolean(message) && all.indexOf(message) === index,
   );
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <div className="min-w-0">
-        <span id="task-form-date-label" className={lbl}>
-          {t('tasks.form.date')} <span className="text-ide-error">*</span>
-        </span>
-        <DatePicker
-          id="task-form-date"
-          labelledBy="task-form-date-label"
-          value={draft.date}
-          onChange={(date) => publish({ ...draftRef.current, date })}
-          error={dateMissing && !!startError}
-          emptyLabel={t('tasks.form.dateEmpty')}
-          clearLabel={t('tasks.form.dateClear')}
-        />
-        {dateMissing && startError ? (
-          <p className="mt-0.5 text-xs text-ide-error">{startError}</p>
-        ) : null}
-      </div>
-      <div className="min-w-0">
-        <TimeRangeField
-          startId="task-form-start"
-          endId="task-form-end"
-          start={draft.start}
-          end={draft.end}
-          startLabel={t('tasks.form.start')}
-          endLabel={t('tasks.form.end')}
-          required
-          minuteStep={15}
-          startError={!dateMissing && !!startError}
-          endError={!!endError}
-          onChange={(start, end) => publish({ ...draftRef.current, start, end })}
-        />
-        {timeMessages.map((message) => (
-          <p key={message} className="mt-0.5 text-xs text-ide-error">
-            {message}
-          </p>
-        ))}
-      </div>
+    <div>
+      <span id="task-form-slot-label" className={lbl}>
+        {t('tasks.form.when')} <span className="text-ide-error">*</span>
+      </span>
+      <DateTimeRangeField
+        id="task-form-slot"
+        labelledBy="task-form-slot-label"
+        startDate={draft.startDate}
+        endDate={draft.endDate}
+        start={draft.start}
+        end={draft.end}
+        defaultDurationMinutes={defaultDurationMinutes}
+        startLabel={t('tasks.form.start')}
+        endLabel={t('tasks.form.end')}
+        emptyLabel={t('tasks.form.slotEmpty')}
+        clearLabel={t('tasks.form.slotClear')}
+        error={messages.length > 0}
+        onChange={publish}
+      />
+      {messages.map((message) => (
+        <p key={message} className="mt-0.5 text-xs text-ide-error">
+          {message}
+        </p>
+      ))}
     </div>
   );
 }

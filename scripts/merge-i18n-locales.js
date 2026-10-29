@@ -219,7 +219,7 @@ const enFill = {
   'auth.loggedOut': 'Logged out',
   'auth.loggedOutDetail': 'You have been signed out of this device.',
   'auth.missingAuthUrl': 'Missing Google auth URL',
-  'pwa.installPrompt': 'Install AI Calendar on this device for faster voice input.',
+  'pwa.installPrompt': 'Install luefy on this device for faster voice input.',
   'pwa.iosHint': 'On iPhone: Share → Add to Home Screen to install the app.',
   'pwa.install': 'Install',
   'pwa.notNow': 'Not now',
@@ -379,7 +379,7 @@ const fu2 = flat(nextUk);
 const stillMissingEn = Object.keys(fu2).filter((k) => !(k in fe2));
 const stillMissingUk = Object.keys(fe2).filter((k) => !(k in fu2));
 const sameAsEn = Object.keys(fe2).filter(
-  (k) => fu2[k] === fe2[k] && /[A-Za-z]{5,}/.test(String(fe2[k])) && !['AI Calendar', 'English', 'Google', 'Email', 'RRULE', 'Primary', 'Generate', 'Clear'].some((x) => String(fe2[k]).includes(x)),
+  (k) => fu2[k] === fe2[k] && /[A-Za-z]{5,}/.test(String(fe2[k])) && !['luefy', 'English', 'Google', 'Email', 'RRULE', 'Primary', 'Generate', 'Clear'].some((x) => String(fe2[k]).includes(x)),
 );
 console.log({
   enKeys: Object.keys(fe2).length,

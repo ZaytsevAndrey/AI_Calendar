@@ -236,7 +236,7 @@ export function ProblematicInboxSheet({
                     </span>
                   ) : null}
                   {task.estimatedTimeInMinutes > 0 ? (
-                    <span className={`${pill} border-white/10 bg-white/5 text-ide-text`}>
+                    <span className={`${pill} border-ide-text/10 bg-ide-text/5 text-ide-text`}>
                       {formatMinutes(task.estimatedTimeInMinutes)}
                     </span>
                   ) : null}
@@ -305,7 +305,7 @@ export function ProblematicInboxSheet({
                   </ul>
                 ) : null}
 
-                <div className="flex flex-wrap items-center justify-end gap-2 border-t border-white/10 pt-3">
+                <div className="flex flex-wrap items-center justify-end gap-2 border-t border-ide-text/10 pt-3">
                   {recurring && days.length === 1 ? (
                     <>
                       <Button variant="secondary" size="sm"

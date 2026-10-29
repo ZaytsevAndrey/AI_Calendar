@@ -49,15 +49,15 @@ const statusPill = {
   todo: 'border-ide-keyword/50 bg-ide-keyword/15 text-ide-keyword',
   in_progress: 'border-ide-link/50 bg-ide-link/20 text-ide-link',
   completed: 'border-ide-accent/50 bg-ide-accent/20 text-ide-accent',
-  canceled: 'border-ide-border bg-white/5 text-ide-muted',
+  canceled: 'border-ide-border bg-ide-text/5 text-ide-muted',
 };
 
-const plainPill = 'border-white/10 bg-white/5 text-ide-text';
+const plainPill = 'border-ide-text/10 bg-ide-text/5 text-ide-text';
 
 const pill = 'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium leading-none';
 
 const iconBtn =
-  'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-ide-text hover:bg-white/10 disabled:opacity-50';
+  'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-ide-text/10 bg-ide-text/5 text-ide-text hover:bg-ide-text/10 disabled:opacity-50';
 
 const iconMetaBtn =
   'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border';
@@ -233,9 +233,9 @@ const EventItem: React.FC<EventItemProps> = ({
         ? 'border-ide-error/50 bg-ide-error/20 text-ide-error'
         : memberKind === 'series'
           ? 'border-ide-link/40 bg-ide-link/15 text-ide-link'
-          : 'border-white/10 bg-white/5 text-ide-muted';
+          : 'border-ide-text/10 bg-ide-text/5 text-ide-muted';
     const compactBtn =
-      'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/5 text-ide-text hover:bg-white/10 disabled:opacity-50';
+      'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-ide-text/10 bg-ide-text/5 text-ide-text hover:bg-ide-text/10 disabled:opacity-50';
     const summary =
       formatSeriesSpanSummary({
         seriesSpanStart: event.seriesSpanStart,
@@ -266,7 +266,7 @@ const EventItem: React.FC<EventItemProps> = ({
 
     return (
       <div
-        className="flex items-center gap-2 rounded-lg border border-white/10 px-2.5 py-1.5"
+        className="flex items-center gap-2 rounded-lg border border-ide-text/10 px-2.5 py-1.5"
         style={{
           borderLeftWidth: 3,
           borderLeftColor: color,
@@ -400,7 +400,7 @@ const EventItem: React.FC<EventItemProps> = ({
               {event.phase.name}
             </Pill>
           ) : null}
-          <Pill className="border-white/10 bg-white/5 text-ide-text">
+          <Pill className="border-ide-text/10 bg-ide-text/5 text-ide-text">
             {formatMinutes(event.estimatedTimeInMinutes)}
           </Pill>
           {event.isRecurring ? (
@@ -412,7 +412,7 @@ const EventItem: React.FC<EventItemProps> = ({
       )}
 
       {unscheduled ? null : (
-        <div className="flex items-center justify-end gap-2 border-t border-white/10 pt-3 md:hidden">{actions}</div>
+        <div className="flex items-center justify-end gap-2 border-t border-ide-text/10 pt-3 md:hidden">{actions}</div>
       )}
     </div>
   );

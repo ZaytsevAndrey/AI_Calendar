@@ -145,7 +145,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
                     tabIndex={-1}
                     disabled={disabled}
                     aria-label={type === 'date' ? t('common.openDate') : t('common.openDateTime')}
-                    className="absolute right-1 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-ide-muted transition-colors duration-200 ease-out hover:bg-white/10 hover:text-ide-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link disabled:pointer-events-none motion-reduce:transition-none"
+                    className="absolute right-1 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-ide-muted transition-colors duration-200 ease-out hover:bg-ide-text/10 hover:text-ide-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link disabled:pointer-events-none motion-reduce:transition-none"
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => openNativePicker(innerRef.current)}
                 >
@@ -158,7 +158,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
                     disabled={disabled}
                     aria-label={passwordVisible ? t('common.hidePassword') : t('common.showPassword')}
                     aria-pressed={passwordVisible}
-                    className="absolute right-1 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-ide-muted transition-colors duration-200 ease-out hover:bg-white/10 hover:text-ide-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link disabled:pointer-events-none motion-reduce:transition-none"
+                    className="absolute right-1 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-ide-muted transition-colors duration-200 ease-out hover:bg-ide-text/10 hover:text-ide-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link disabled:pointer-events-none motion-reduce:transition-none"
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => setPasswordVisible((current) => !current)}
                 >

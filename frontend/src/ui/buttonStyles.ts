@@ -9,7 +9,7 @@ export const buttonVariantClass: Record<ButtonVariant, string> = {
     secondary:
         'border border-ide-border bg-ide-surface text-ide-text shadow-ide hover:border-ide-link/70 hover:bg-ide-elevated hover:shadow-ide-md',
     danger: 'bg-ide-error text-white shadow-ide hover:brightness-110 hover:shadow-ide-md active:brightness-95',
-    ghost: 'text-ide-text hover:bg-white/10',
+    ghost: 'text-ide-text hover:bg-ide-text/10',
 };
 
 export const buttonPressedClass = 'border border-ide-link bg-ide-selection text-ide-text shadow-none';

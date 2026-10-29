@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { IsNull } from 'typeorm';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { DayRemindersService } from './day-reminders.service';
@@ -200,6 +201,9 @@ describe('DayRemindersService', () => {
     ]);
 
     await service.retargetDefaultTime('user-1', '08:15');
+    expect(reminders.find).toHaveBeenCalledWith({
+      where: { userId: 'user-1', status: 'open', notificationTime: IsNull() },
+    });
     expect(google.updateEvent).toHaveBeenCalledWith(
       'user-1',
       'g-1',

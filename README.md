@@ -1,4 +1,4 @@
-# AI Calendar Assistant
+# luefy
 
 Web app for time planning: **day phases**, **tasks**, **sleep/wake settings**, **Google Calendar** integration, and an automatic schedule from the **Calendar** page (`/calendar`).
 

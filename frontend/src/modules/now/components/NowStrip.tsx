@@ -34,11 +34,11 @@ const stripIconBtn =
   'inline-flex h-full w-7 shrink-0 items-center justify-center text-ide-muted transition-colors hover:text-ide-text focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ide-link disabled:pointer-events-none disabled:opacity-50';
 const stripIconPrimary = `${stripIconBtn} text-ide-link hover:text-ide-link`;
 
-const cardFill = 'bg-[#363738]';
+const cardFill = 'bg-ide-surface';
 
 function StripActions({ children }: { children: React.ReactNode }) {
   return (
-    <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-stretch bg-[linear-gradient(to_left,#363738_calc(100%-1.75rem),transparent)] pl-7 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 max-md:opacity-100">
+    <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-stretch bg-[linear-gradient(to_left,rgb(var(--ide-surface))_calc(100%-1.75rem),transparent)] pl-7 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 max-md:opacity-100">
       <div
         className="pointer-events-none flex h-full items-stretch group-hover:pointer-events-auto group-focus-within:pointer-events-auto max-md:pointer-events-auto"
         onClick={(e) => e.stopPropagation()}

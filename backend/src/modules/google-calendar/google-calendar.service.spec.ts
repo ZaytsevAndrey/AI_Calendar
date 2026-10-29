@@ -211,7 +211,7 @@ describe('GoogleCalendarService', () => {
     jest.spyOn(userRepo, 'findOne').mockResolvedValue({ id: userId } as User);
     jest.spyOn(userSettingsRepo, 'findOne').mockResolvedValue({
       appGoogleCalendarId: null,
-      appGoogleCalendarName: 'AI Calendar Assistant',
+      appGoogleCalendarName: 'luefy',
     } as UserSettings);
 
     const result = await service.saveToken(code, userId);

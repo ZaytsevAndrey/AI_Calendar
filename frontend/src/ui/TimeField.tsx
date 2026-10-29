@@ -1,11 +1,11 @@
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useTranslation } from 'react-i18next';
-import { Clock, Timer } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { cx } from './cx';
 import { fieldIconSize, fieldTrailingPad, responsiveClasses, type ResponsiveSize } from './controlSize';
 import { controlWidth, fieldClassName } from './fieldChrome';
-import { formatTimeValue, minuteOptions, parseTimeValue } from './timeValue';
+import { formatTimeValue, parseTimeValue } from './timeValue';
+import { TimeColumns } from './TimeColumns';
 
 export type TimeFieldProps = {
     id?: string;
@@ -57,7 +57,6 @@ export const TimeField = React.forwardRef<HTMLButtonElement, TimeFieldProps>(fun
     },
     ref,
 ) {
-    const { t } = useTranslation();
     const autoId = useId();
     const listId = `${id ?? autoId}-time-list`;
     const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -113,21 +112,6 @@ export const TimeField = React.forwardRef<HTMLButtonElement, TimeFieldProps>(fun
         };
     }, [open, onBlur]);
 
-    useEffect(() => {
-        if (!open || !popupRef.current) return;
-        popupRef.current.querySelectorAll<HTMLElement>('[data-time-column]').forEach((column) => {
-            const selected = column.querySelector<HTMLElement>('[data-selected="true"]');
-            if (!selected) return;
-            column.scrollTop = selected.offsetTop - column.clientHeight / 2 + selected.clientHeight / 2;
-        });
-    }, [open, hours, minutes]);
-
-    const commit = (nextHours: number, nextMinutes: number) => {
-        onChange(formatTimeValue(nextHours, nextMinutes));
-    };
-
-    const minutesList = minuteOptions(minuteStep, parsed ? minutes : null);
-
     return (
         <>
             <button
@@ -178,28 +162,7 @@ export const TimeField = React.forwardRef<HTMLButtonElement, TimeFieldProps>(fun
                               place.above ? 'ui-pop-up' : 'ui-pop-down',
                           )}
                       >
-                          <TimeColumn label={t('common.hours')} icon={Clock} bordered>
-                              {Array.from({ length: 24 }, (_, hour) => (
-                                  <TimeOption
-                                      key={hour}
-                                      selected={parsed != null && hour === hours}
-                                      onSelect={() => commit(hour, minutes)}
-                                  >
-                                      {String(hour).padStart(2, '0')}
-                                  </TimeOption>
-                              ))}
-                          </TimeColumn>
-                          <TimeColumn label={t('common.minutes')} icon={Timer}>
-                              {minutesList.map((minute) => (
-                                  <TimeOption
-                                      key={minute}
-                                      selected={parsed != null && minute === minutes}
-                                      onSelect={() => commit(hours, minute)}
-                                  >
-                                      {String(minute).padStart(2, '0')}
-                                  </TimeOption>
-                              ))}
-                          </TimeColumn>
+                          <TimeColumns value={value} minuteStep={minuteStep} onChange={onChange} />
                       </div>,
                       document.body,
                   )
@@ -207,57 +170,3 @@ export const TimeField = React.forwardRef<HTMLButtonElement, TimeFieldProps>(fun
         </>
     );
 });
-
-function TimeColumn({
-    label,
-    icon: Icon,
-    bordered,
-    children,
-}: {
-    label: string;
-    icon: typeof Clock;
-    bordered?: boolean;
-    children: React.ReactNode;
-}) {
-    return (
-        <div className={cx('flex min-h-0 flex-col', bordered && 'border-r border-ide-border')}>
-            <div className="flex h-8 items-center justify-center gap-1 whitespace-nowrap border-b border-ide-border px-1 text-[11px] font-medium text-ide-muted">
-                <Icon aria-hidden className="h-3.5 w-3.5" />
-                {label}
-            </div>
-            <div
-                data-time-column
-                className="max-h-52 overflow-y-auto scroll-smooth py-1 motion-reduce:scroll-auto"
-            >
-                {children}
-            </div>
-        </div>
-    );
-}
-
-function TimeOption({
-    selected,
-    onSelect,
-    children,
-}: {
-    selected: boolean;
-    onSelect: () => void;
-    children: React.ReactNode;
-}) {
-    return (
-        <button
-            type="button"
-            role="option"
-            aria-selected={selected}
-            data-selected={selected ? 'true' : 'false'}
-            onClick={onSelect}
-            className={cx(
-                'flex h-8 w-full items-center justify-center text-sm text-ide-text',
-                'transition-colors duration-150 ease-out motion-reduce:transition-none',
-                selected ? 'bg-ide-selection font-medium text-white' : 'hover:bg-ide-elevated',
-            )}
-        >
-            {children}
-        </button>
-    );
-}

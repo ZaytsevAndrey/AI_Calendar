@@ -18,13 +18,13 @@ Before adding a button, icon button, text field, select, textarea, date picker, 
 | Multiline text | `ui/Textarea` |
 | One civil day (`YYYY-MM-DD`) | `ui/DatePicker` |
 | Inclusive civil-day range | `ui/DateRangeField` |
+| One day plus a clock range | `ui/DateTimeRangeField` — calendar is a date range; clocks sit on the first and last day |
 | Clock time (`HH:mm`) | `ui/TimeField` |
-| Clock range (`HH:mm`–`HH:mm`) | `ui/TimeRangeField` |
 | Dialog | `ui/Modal` |
 | Spinner | `ui/Spinner` |
 
 `size` is `sm` (32px), `md` (44px, default), or `lg` (48px). Per breakpoint: `{ base: 'sm', md: 'md' }`. Dialog footer actions use `dialogButtonSize` from `ui/controlSize`.
 
-`Input` draws the icon for email, search, and a show/hide control for password. `DatePicker` and `DateRangeField` draw a calendar. `TimeField` and `TimeRangeField` draw a clock. `Select` draws a chevron. Do not add a second icon for those. A native `datetime-local` input is not a date or time control.
+`Input` draws the icon for email, search, and a show/hide control for password. `DatePicker` and `DateRangeField` draw a calendar. `DateTimeRangeField` draws a calendar with a clock. `TimeField` draws a clock. `Select` draws a chevron. Do not add a second icon for those. A native `datetime-local` input is not a date or time control.
 
 If a control needs a new variant, extend the shared component. A raw element is for UI that is not in this list: calendar cells, chips, color swatches, menu rows.

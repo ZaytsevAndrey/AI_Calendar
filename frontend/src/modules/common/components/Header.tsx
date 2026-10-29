@@ -1,8 +1,8 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { CalendarDays } from 'lucide-react';
 import { prefetchRoute } from 'routeChunks';
+import { ThemeToggle } from 'theme/ThemeToggle';
 import { mainNavItems, mainNavLabel } from '../mainNav';
 
 const linkBase =
@@ -14,37 +14,43 @@ const Header: React.FC = () => {
     const section = t(mainNavLabel(location.pathname));
 
     const active = (cond: boolean) =>
-        cond ? 'bg-ide-link/15 text-ide-text' : 'hover:bg-white/5';
+        cond ? 'bg-ide-link/15 text-ide-text' : 'hover:bg-ide-text/5';
 
     return (
         <header className="z-[1200] w-full shrink-0 border-b border-ide-border bg-ide-panel/95 pt-[env(safe-area-inset-top)] backdrop-blur-sm">
             <div className="flex h-12 w-full items-center px-4 md:h-16 md:justify-between md:px-5 lg:px-8">
-                <p className="min-w-0 truncate text-base font-semibold text-ide-text md:hidden" aria-hidden>
-                    {section}
+                <p className="flex min-w-0 items-center gap-2 text-base font-medium text-ide-text md:hidden" aria-hidden>
+                    <img src="/icon-64.png" alt="" className="h-6 w-6 shrink-0 rounded-md" />
+                    <span className="truncate leading-none">{section}</span>
                 </p>
-                <div className="hidden min-w-0 shrink-0 text-lg font-semibold text-ide-text md:block">
+                <div className="hidden min-w-0 shrink-0 md:block">
                     <Link
                         to="/"
-                        className="inline-flex items-center gap-2 truncate text-ide-text no-underline hover:text-ide-link"
+                        className="group inline-flex items-center gap-2 no-underline hover:no-underline"
                     >
-                        <CalendarDays className="h-5 w-5 shrink-0 text-ide-link" aria-hidden />
-                        {t('nav.brand')}
+                        <img src="/icon-64.png" alt="" className="h-8 w-8 shrink-0 rounded-[9px]" />
+                        <span className="text-lg font-semibold leading-none text-ide-link group-hover:text-ide-text">
+                            {t('nav.brand')}
+                        </span>
                     </Link>
                 </div>
-                <nav className="hidden gap-1 md:flex" aria-label={t('nav.main')}>
-                    {mainNavItems.map(({ to, labelKey, icon: Icon, match }) => (
-                        <Link
-                            key={to}
-                            to={to}
-                            className={`${linkBase} ${active(match(location.pathname))}`}
-                            onMouseEnter={() => prefetchRoute(to)}
-                            onFocus={() => prefetchRoute(to)}
-                        >
-                            <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
-                            {t(labelKey)}
-                        </Link>
-                    ))}
-                </nav>
+                <div className="ml-auto flex items-center gap-1 md:ml-0">
+                    <nav className="hidden gap-1 md:flex" aria-label={t('nav.main')}>
+                        {mainNavItems.map(({ to, labelKey, icon: Icon, match }) => (
+                            <Link
+                                key={to}
+                                to={to}
+                                className={`${linkBase} ${active(match(location.pathname))}`}
+                                onMouseEnter={() => prefetchRoute(to)}
+                                onFocus={() => prefetchRoute(to)}
+                            >
+                                <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+                                {t(labelKey)}
+                            </Link>
+                        ))}
+                    </nav>
+                    <ThemeToggle />
+                </div>
             </div>
         </header>
     );

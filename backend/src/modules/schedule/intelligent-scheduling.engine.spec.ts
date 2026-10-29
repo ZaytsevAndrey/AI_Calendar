@@ -1636,7 +1636,7 @@ function makeSettings(partial: Partial<UserSettings>): UserSettings {
     preferredLunchTime: '12:00',
     weekendWorkEnabled: false,
     googleCalendarLinked: false,
-    appGoogleCalendarName: 'AI Calendar Assistant',
+    appGoogleCalendarName: 'luefy',
     appGoogleCalendarId: null,
     hiddenGoogleCalendarIds: null,
     allowSplitScheduling: true,

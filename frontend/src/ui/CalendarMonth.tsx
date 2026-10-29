@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
-import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, X, type LucideIcon } from 'lucide-react';
 import { dateFnsLocale } from '../i18n/dateLocale';
 import { IconButton } from './IconButton';
 import { Select } from './Select';
@@ -179,6 +179,7 @@ type DateFieldTriggerProps = {
   buttonRef: React.RefObject<HTMLButtonElement>;
   onToggle: () => void;
   onClear: () => void;
+  icon?: LucideIcon;
 };
 
 export function DateFieldTrigger({
@@ -192,6 +193,7 @@ export function DateFieldTrigger({
   buttonRef,
   onToggle,
   onClear,
+  icon: Icon = CalendarDays,
 }: DateFieldTriggerProps) {
   return (
     <div className="relative">
@@ -209,7 +211,7 @@ export function DateFieldTrigger({
         aria-labelledby={labelledBy}
         onClick={onToggle}
       >
-        <CalendarDays className="h-4 w-4 shrink-0 text-ide-muted" aria-hidden />
+        <Icon className="h-4 w-4 shrink-0 text-ide-muted" aria-hidden />
         <span className={cx('truncate', hasValue ? 'text-ide-text' : 'text-ide-muted')}>{text}</span>
       </button>
       {hasValue && clearLabel ? (

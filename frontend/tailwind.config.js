@@ -1,3 +1,8 @@
+/** Channels come from the active palette in `src/theme/themeColors.ts`. */
+function ide(name) {
+    return `rgb(var(--ide-${name}) / <alpha-value>)`;
+}
+
 /** @type {import('tailwindcss').Config} */
 export default {
     content: ['./public/index.html', './src/**/*.{js,ts,jsx,tsx}'],
@@ -5,23 +10,23 @@ export default {
         extend: {
             colors: {
                 ide: {
-                    bg: '#2B2B2B',
-                    panel: '#3C3F41',
-                    surface: '#323232',
-                    elevated: '#45494A',
-                    border: '#515151',
-                    line: '#313335',
-                    text: '#A9B7C6',
-                    muted: '#808080',
-                    dim: '#6A8759',
-                    link: '#589DF6',
-                    accent: '#4E9F4E',
-                    accentBlue: '#287BDE',
-                    keyword: '#CC7832',
-                    error: '#BC3F3C',
-                    warn: '#BBB529',
-                    selection: '#214283',
-                    input: '#45494A',
+                    bg: ide('bg'),
+                    panel: ide('panel'),
+                    surface: ide('surface'),
+                    elevated: ide('elevated'),
+                    border: ide('border'),
+                    line: ide('line'),
+                    text: ide('text'),
+                    muted: ide('muted'),
+                    dim: ide('dim'),
+                    link: ide('link'),
+                    accent: ide('accent'),
+                    accentBlue: ide('accentBlue'),
+                    keyword: ide('keyword'),
+                    error: ide('error'),
+                    warn: ide('warn'),
+                    selection: ide('selection'),
+                    input: ide('input'),
                 },
             },
             fontFamily: {
@@ -35,8 +40,8 @@ export default {
                 ],
             },
             boxShadow: {
-                ide: '0 1px 3px rgba(0,0,0,0.45)',
-                'ide-md': '0 4px 12px rgba(0,0,0,0.5)',
+                ide: 'var(--ide-shadow)',
+                'ide-md': 'var(--ide-shadow-md)',
             },
         },
     },

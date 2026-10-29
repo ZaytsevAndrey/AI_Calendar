@@ -1,6 +1,6 @@
 {
-  "name": "AI Calendar Assistant",
-  "short_name": "AI Calendar",
+  "name": "luefy",
+  "short_name": "luefy",
   "description": "Plan tasks with phases, voice input, and Google Calendar.",
   "start_url": "/",
   "scope": "/",

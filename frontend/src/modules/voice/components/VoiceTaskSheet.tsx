@@ -37,7 +37,7 @@ function CompanionModeSwitch({ voice }: { voice: VoiceController }) {
             key={option.id}
             type="button"
             className={`min-w-0 flex-1 rounded px-2 py-1 text-xs font-medium ${
-              selected ? 'bg-ide-selection text-ide-text' : 'text-ide-muted hover:bg-white/5'
+              selected ? 'bg-ide-selection text-ide-text' : 'text-ide-muted hover:bg-ide-text/5'
             }`}
             aria-pressed={selected}
             title={option.hint}

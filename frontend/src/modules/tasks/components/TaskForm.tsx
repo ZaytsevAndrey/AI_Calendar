@@ -89,17 +89,9 @@ const TaskForm: React.FC<TaskFormProps> = ({
     [initialData, createDefaults, timeZone, defaultTaskDurationMinutes],
   );
   const [showDescription, setShowDescription] = useState(
-    !!initialData?.description || !!createDefaults?.formPrefill?.description,
+    mode !== 'edit' && (!!initialData?.description || !!createDefaults?.formPrefill?.description),
   );
-  const [showMore, setShowMore] = useState(
-    !!(
-      initialData?.location ||
-      initialData?.googleColorId ||
-      initialData?.googleVisibility ||
-      initialData?.googleTransparency ||
-      initialData?.googleReminders
-    ),
-  );
+  const [showMore, setShowMore] = useState(false);
 
   const {
     control,
@@ -123,8 +115,11 @@ const TaskForm: React.FC<TaskFormProps> = ({
         defaultTaskDurationMinutes,
       ),
     );
-    setShowDescription(!!initialData?.description || !!createDefaults?.formPrefill?.description);
-  }, [initialData, createDefaults, reset, timeZone, defaultTaskDurationMinutes]);
+    setShowDescription(
+      mode !== 'edit' && (!!initialData?.description || !!createDefaults?.formPrefill?.description),
+    );
+    setShowMore(false);
+  }, [initialData, createDefaults, reset, timeZone, defaultTaskDurationMinutes, mode]);
 
   const isFixed = useWatch({ control, name: 'isFixed' });
   const isUnscheduled = useWatch({ control, name: 'isUnscheduled' });
@@ -434,6 +429,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
             setValue={setValue}
             startError={errors.scheduledStartTime?.message}
             endError={errors.scheduledEndTime?.message}
+            defaultDurationMinutes={defaultTaskDurationMinutes}
           />
         ) : (
           <>

@@ -48,7 +48,7 @@ describe('UserSettingsService', () => {
       timeZone: null,
       minSplitMinutes: 30,
       maxSplitMinutes: 30,
-      appGoogleCalendarName: 'AI Calendar Assistant',
+      appGoogleCalendarName: 'luefy',
     };
     repo.findOne.mockResolvedValue(existing);
     repo.save.mockResolvedValue(existing);
@@ -65,7 +65,7 @@ describe('UserSettingsService', () => {
       timeZone: null,
       minSplitMinutes: 30,
       maxSplitMinutes: 30,
-      appGoogleCalendarName: 'AI Calendar Assistant',
+      appGoogleCalendarName: 'luefy',
     };
     repo.findOne.mockResolvedValue(existing);
     repo.save.mockImplementation(async (entity) => entity);
@@ -86,7 +86,7 @@ describe('UserSettingsService', () => {
       timeZone: null,
       minSplitMinutes: 30,
       maxSplitMinutes: 30,
-      appGoogleCalendarName: 'AI Calendar Assistant',
+      appGoogleCalendarName: 'luefy',
       fixedEventBufferMinutes: 0,
     };
     repo.findOne.mockResolvedValue(existing);
@@ -132,7 +132,7 @@ describe('UserSettingsService', () => {
       sleepTime: '22:00',
       minSplitMinutes: 30,
       maxSplitMinutes: 30,
-      appGoogleCalendarName: 'AI Calendar Assistant',
+      appGoogleCalendarName: 'luefy',
       appGoogleCalendarId: 'app@group.calendar.google.com',
     };
     repo.findOne.mockResolvedValue(existing);
@@ -157,7 +157,7 @@ describe('UserSettingsService', () => {
       sleepTime: '22:00',
       minSplitMinutes: 30,
       maxSplitMinutes: 30,
-      appGoogleCalendarName: 'AI Calendar Assistant',
+      appGoogleCalendarName: 'luefy',
     });
 
     await expect(

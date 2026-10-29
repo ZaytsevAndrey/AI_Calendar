@@ -1,5 +1,5 @@
 {
-  "name": "ai_calendar_assistant",
+  "name": "luefy",
   "version": "1.0.0",
   "private": true,
   "workspaces": [
@@ -24,7 +24,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "AI Calendar Assistant Monorepo",
+  "description": "luefy",
   "engines": {
     "node": ">=18.18.0"
   },

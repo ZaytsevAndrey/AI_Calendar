@@ -11,7 +11,7 @@ self.addEventListener('fetch', (event) => {
 });
 
 self.addEventListener('push', (event) => {
-  let payload = { title: 'AI Calendar', body: '', url: '/' };
+  let payload = { title: 'luefy', body: '', url: '/' };
   try {
     if (event.data) {
       payload = { ...payload, ...event.data.json() };
@@ -20,7 +20,7 @@ self.addEventListener('push', (event) => {
     // Non-JSON payloads keep the default title.
   }
   event.waitUntil(
-    self.registration.showNotification(payload.title || 'AI Calendar', {
+    self.registration.showNotification(payload.title || 'luefy', {
       body: payload.body || '',
       icon: '/icon-192.png',
       data: { url: payload.url || '/' },

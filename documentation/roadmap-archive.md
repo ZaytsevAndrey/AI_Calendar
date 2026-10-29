@@ -16,6 +16,8 @@ Quality in CI: API E2E and Playwright waves 0–7 ([e2e-test-coverage](e2e-test-
 
 - [x] **Planner faults stay visible.** An unknown planner decision, a tool request the planner cannot run, or a planner failure other than rate limit and timeout is a refusal. The utterance is not parsed as a task. An open day plan stays on screen. Logs: `planner.decision` and `planner.fault` (`invalid_decision`, `tool_limit_exceeded`, `planner_execution_error`).
 
+- [x] **Light and dark theme.** Header, login, and Settings switch the palette. Colors are constants in `frontend/src/theme/themeColors.ts`; the active list is written to `--ide-*`. Stored in this browser as `luefy.theme` (default dark), not on the account.
+
 - [x] **Day reminders.** A named errand on a civil day, from the task form’s Reminder segment. It is not placed and does not appear on the hour grid or the all-day strip. Today and overdue items stay in a row under Now / Next and get redder with the overdue day count until resolved; later ones stay on the Tasks page. Repeat (daily, weekly, every two weeks, monthly) is under more options; monthly day 31 uses the last day of a shorter month. Notification time defaults from Settings (`defaultReminderTime`, `09:00`) and can be set on the reminder. Google gets one short free popup for the current occurrence; deleting that event deletes the reminder. Voice does not create these yet.
 
 - [x] **Select a time to create a task.** On the day and week grids, a mouse or trackpad drag on empty space highlights a 15-minute range in that column and opens a fixed task for that start and end. Escape cancels. A click without a drag still creates a task for the civil day. Touch scrolling does not start a selection.

@@ -377,7 +377,7 @@ export class MicrosoftAuthService {
         minSplitMinutes: 30,
         maxSplitMinutes: 30,
         recurringScheduleHorizonDays: 30,
-        appGoogleCalendarName: 'AI Calendar Assistant',
+        appGoogleCalendarName: 'luefy',
       }),
     );
   }

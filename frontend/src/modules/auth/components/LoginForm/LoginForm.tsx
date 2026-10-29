@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { ProviderLogo } from 'modules/calendar/components/ProviderLogo';
+import { ThemeToggle } from 'theme/ThemeToggle';
 import { Button } from 'ui/Button';
 
 export interface LoginFormProps {
@@ -22,8 +23,12 @@ const LoginForm: React.FC<LoginFormProps> = ({
     const pending = requestStatus === 'pending';
 
     return (
-        <div className="flex h-full min-h-0 flex-1 items-center justify-center px-4 py-6">
+        <div className="relative flex h-full min-h-0 flex-1 items-center justify-center px-4 py-6">
+        <div className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))]">
+            <ThemeToggle />
+        </div>
         <div className="auth-form-card my-0 w-full">
+            <img src="/icon-192.png" alt="luefy" className="mx-auto mb-4 h-16 w-16 rounded-2xl" />
             <h2 className="auth-form-title">{t('auth.signIn')}</h2>
             <p className="mb-6 text-sm text-ide-muted">
                 {t('auth.signInLead')}

@@ -49,8 +49,8 @@ async function bootstrap() {
   app.useGlobalFilters(new JwtExceptionFilter());
 
   const config = new DocumentBuilder()
-    .setTitle('Calendar Assistant API')
-    .setDescription('API documentation for Calendar Assistant')
+    .setTitle('luefy API')
+    .setDescription('API documentation for luefy')
     .setVersion('1.0')
     .addBearerAuth()
     .addTag('auth', 'Authentication endpoints')

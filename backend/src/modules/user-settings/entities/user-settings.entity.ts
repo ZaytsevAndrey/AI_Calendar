@@ -77,7 +77,7 @@ export class UserSettings {
   dismissWarnUnscheduleExternal: boolean;
 
   /** Display name for the dedicated Google calendar where this app writes events. */
-  @Column({ default: 'AI Calendar Assistant' })
+  @Column({ default: 'luefy' })
   appGoogleCalendarName: string;
 
   /** Google Calendar id (`...@group.calendar.google.com`) for app-managed events; set when first created. */

@@ -549,7 +549,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                   ) : null}
                   <span
                     aria-hidden
-                    className="pointer-events-none absolute inset-0 bg-black/30"
+                    className="pointer-events-none absolute inset-0 bg-ide-bg/40"
                   />
                 </div>
               );

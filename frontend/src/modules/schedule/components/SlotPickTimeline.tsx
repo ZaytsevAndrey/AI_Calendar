@@ -360,7 +360,7 @@ export function SlotPickTimeline({
         </p>
       </div>
 
-      <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#2b2d30]">
+      <div className="relative overflow-hidden rounded-xl border border-ide-border bg-ide-bg">
         {/* Focus hairline + ghost: line is exactly at viewport mid (= slot start). */}
         <div
           className="pointer-events-none absolute inset-x-0 top-1/2 z-30"
@@ -443,10 +443,10 @@ export function SlotPickTimeline({
             {ticks.map((tick) => (
               <div
                 key={tick.min}
-                className="pointer-events-none absolute inset-x-0 border-t border-white/10"
+                className="pointer-events-none absolute inset-x-0 border-t border-ide-border"
                 style={{ top: minToPx(tick.min) }}
               >
-                <span className="-mt-2.5 ml-1 inline-block bg-[#2b2d30] pr-1 text-[10px] tabular-nums text-ide-muted">
+                <span className="-mt-2.5 ml-1 inline-block bg-ide-bg pr-1 text-[10px] tabular-nums text-ide-muted">
                   {tick.label}
                 </span>
               </div>
@@ -503,7 +503,7 @@ export function SlotPickTimeline({
               return (
                 <div
                   key={`busy-${b.start}-${b.end}-${idx}`}
-                  className="pointer-events-none absolute inset-x-10 overflow-hidden rounded-md border border-white/10"
+                  className="pointer-events-none absolute inset-x-10 overflow-hidden rounded-md border border-ide-border"
                   style={{
                     top: minToPx(startMin),
                     height: h,

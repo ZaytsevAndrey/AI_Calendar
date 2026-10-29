@@ -24,7 +24,7 @@ const BottomNav: React.FC = () => {
                             className={`flex min-h-[44px] flex-col items-center justify-center gap-0.5 px-1 text-[10px] font-medium leading-none no-underline ${
                                 active
                                     ? 'bg-ide-link/15 text-ide-text'
-                                    : 'text-ide-muted hover:bg-white/5 hover:text-ide-text'
+                                    : 'text-ide-muted hover:bg-ide-text/5 hover:text-ide-text'
                             }`}
                             onMouseEnter={() => prefetchRoute(to)}
                             onFocus={() => prefetchRoute(to)}

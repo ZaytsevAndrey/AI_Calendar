@@ -1,61 +1,61 @@
-/* Loaded after react-toastify — Darcula toast surfaces with type colors */
+/* Loaded after react-toastify — toast surfaces follow the active theme palette */
 :root {
-    --toastify-color-light: #3c3f41;
-    --toastify-text-color-light: #a9b7c6;
-    --toastify-color-dark: #3c3f41;
-    --toastify-text-color-dark: #a9b7c6;
-    --toastify-toast-background: #3c3f41;
-    --toastify-color-success: #4e9f4e;
-    --toastify-color-error: #bc3f3c;
-    --toastify-color-warning: #bbb529;
-    --toastify-color-info: #589df6;
-    --toastify-icon-color-success: #4e9f4e;
-    --toastify-icon-color-error: #bc3f3c;
-    --toastify-icon-color-warning: #bbb529;
-    --toastify-icon-color-info: #589df6;
-    --toastify-color-progress-success: #4e9f4e;
-    --toastify-color-progress-error: #bc3f3c;
-    --toastify-color-progress-warning: #bbb529;
-    --toastify-color-progress-info: #589df6;
+    --toastify-color-light: rgb(var(--ide-panel));
+    --toastify-text-color-light: rgb(var(--ide-text));
+    --toastify-color-dark: rgb(var(--ide-panel));
+    --toastify-text-color-dark: rgb(var(--ide-text));
+    --toastify-toast-background: rgb(var(--ide-panel));
+    --toastify-color-success: rgb(var(--ide-accent));
+    --toastify-color-error: rgb(var(--ide-error));
+    --toastify-color-warning: rgb(var(--ide-warn));
+    --toastify-color-info: rgb(var(--ide-link));
+    --toastify-icon-color-success: rgb(var(--ide-accent));
+    --toastify-icon-color-error: rgb(var(--ide-error));
+    --toastify-icon-color-warning: rgb(var(--ide-warn));
+    --toastify-icon-color-info: rgb(var(--ide-link));
+    --toastify-color-progress-success: rgb(var(--ide-accent));
+    --toastify-color-progress-error: rgb(var(--ide-error));
+    --toastify-color-progress-warning: rgb(var(--ide-warn));
+    --toastify-color-progress-info: rgb(var(--ide-link));
     --toastify-toast-min-height: 56px;
     --toastify-toast-width: 360px;
     --toastify-font-family: 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    --toastify-spinner-color: #a9b7c6;
-    --toastify-spinner-color-empty-area: #515151;
+    --toastify-spinner-color: rgb(var(--ide-text));
+    --toastify-spinner-color-empty-area: rgb(var(--ide-border));
 }
 
 .Toastify__toast {
-    background: #3c3f41;
-    color: #a9b7c6;
+    background: rgb(var(--ide-panel));
+    color: rgb(var(--ide-text));
     border-radius: 8px;
-    border: 1px solid #515151;
+    border: 1px solid rgb(var(--ide-border));
     border-left-width: 4px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    box-shadow: var(--ide-shadow-md);
     padding: 12px 14px;
 }
 
 .Toastify__toast--success {
-    background: linear-gradient(90deg, rgba(78, 159, 78, 0.16), #3c3f41 32%);
-    border-left-color: #4e9f4e;
+    background: linear-gradient(90deg, rgb(var(--ide-accent) / 0.16), rgb(var(--ide-panel)) 32%);
+    border-left-color: rgb(var(--ide-accent));
 }
 
 .Toastify__toast--error {
-    background: linear-gradient(90deg, rgba(188, 63, 60, 0.18), #3c3f41 32%);
-    border-left-color: #bc3f3c;
+    background: linear-gradient(90deg, rgb(var(--ide-error) / 0.18), rgb(var(--ide-panel)) 32%);
+    border-left-color: rgb(var(--ide-error));
 }
 
 .Toastify__toast--warning {
-    background: linear-gradient(90deg, rgba(187, 181, 41, 0.16), #3c3f41 32%);
-    border-left-color: #bbb529;
+    background: linear-gradient(90deg, rgb(var(--ide-warn) / 0.16), rgb(var(--ide-panel)) 32%);
+    border-left-color: rgb(var(--ide-warn));
 }
 
 .Toastify__toast--info {
-    background: linear-gradient(90deg, rgba(88, 157, 246, 0.16), #3c3f41 32%);
-    border-left-color: #589df6;
+    background: linear-gradient(90deg, rgb(var(--ide-link) / 0.16), rgb(var(--ide-panel)) 32%);
+    border-left-color: rgb(var(--ide-link));
 }
 
 .Toastify__toast-body {
-    color: #a9b7c6;
+    color: rgb(var(--ide-text));
     align-items: flex-start;
     padding: 0;
     margin: 0;
@@ -73,18 +73,18 @@
     font-size: 0.875rem;
     font-weight: 600;
     line-height: 1.3;
-    color: #c5d0db;
+    color: rgb(var(--ide-text));
 }
 
 .app-toast-detail {
     margin: 0;
     font-size: 0.75rem;
     line-height: 1.4;
-    color: #8b98a5;
+    color: rgb(var(--ide-muted));
 }
 
 .Toastify__close-button {
-    color: #a9b7c6;
+    color: rgb(var(--ide-text));
     opacity: 0.55;
 }
 
@@ -98,28 +98,28 @@
 
 /* Task mutation progress stages (save → place → sync → done) */
 .app-toast-stage-saving {
-    background: linear-gradient(90deg, rgba(187, 181, 41, 0.2), #3c3f41 36%) !important;
-    border-left-color: #bbb529 !important;
+    background: linear-gradient(90deg, rgb(var(--ide-warn) / 0.2), rgb(var(--ide-panel)) 36%) !important;
+    border-left-color: rgb(var(--ide-warn)) !important;
 }
 
 .app-toast-stage-placing {
-    background: linear-gradient(90deg, rgba(88, 157, 246, 0.2), #3c3f41 36%) !important;
-    border-left-color: #589df6 !important;
+    background: linear-gradient(90deg, rgb(var(--ide-link) / 0.2), rgb(var(--ide-panel)) 36%) !important;
+    border-left-color: rgb(var(--ide-link)) !important;
 }
 
 .app-toast-stage-syncing {
-    background: linear-gradient(90deg, rgba(167, 139, 250, 0.22), #3c3f41 36%) !important;
+    background: linear-gradient(90deg, rgba(167, 139, 250, 0.22), rgb(var(--ide-panel)) 36%) !important;
     border-left-color: #a78bfa !important;
 }
 
 .app-toast-stage-done {
-    background: linear-gradient(90deg, rgba(78, 159, 78, 0.2), #3c3f41 36%) !important;
-    border-left-color: #4e9f4e !important;
+    background: linear-gradient(90deg, rgb(var(--ide-accent) / 0.2), rgb(var(--ide-panel)) 36%) !important;
+    border-left-color: rgb(var(--ide-accent)) !important;
 }
 
 .app-toast-stage-error {
-    background: linear-gradient(90deg, rgba(188, 63, 60, 0.22), #3c3f41 36%) !important;
-    border-left-color: #bc3f3c !important;
+    background: linear-gradient(90deg, rgb(var(--ide-error) / 0.22), rgb(var(--ide-panel)) 36%) !important;
+    border-left-color: rgb(var(--ide-error)) !important;
 }
 
 /* Timed / month calendar chips — translucent fill + left accent.
@@ -636,9 +636,9 @@
     gap: 0.15rem;
     padding: 0.25rem;
     border-radius: 0.35rem;
-    background: #3c3f41;
-    border: 1px solid #515151;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    background: rgb(var(--ide-panel));
+    border: 1px solid rgb(var(--ide-border));
+    box-shadow: var(--ide-shadow-md);
     z-index: 20;
 }
 
@@ -658,23 +658,23 @@
     border: 0;
     border-radius: 0.25rem;
     background: transparent;
-    color: #a9b7c6;
+    color: rgb(var(--ide-text));
     cursor: pointer;
 }
 
 .calendar-chip__kind-option:hover,
 .calendar-chip__kind-option.is-active {
-    background: #585b5e;
-    color: #fff;
+    background: rgb(var(--ide-elevated));
+    color: rgb(var(--ide-text));
 }
 
 .calendar-event-stage-saving {
-    box-shadow: inset 3px 0 0 0 #bbb529, inset 0 0 0 1px rgba(187, 181, 41, 0.55) !important;
+    box-shadow: inset 3px 0 0 0 rgb(var(--ide-warn)), inset 0 0 0 1px rgb(var(--ide-warn) / 0.55) !important;
     filter: saturate(1.15);
 }
 
 .calendar-event-stage-placing {
-    box-shadow: inset 3px 0 0 0 #589df6, inset 0 0 0 1px rgba(88, 157, 246, 0.55) !important;
+    box-shadow: inset 3px 0 0 0 rgb(var(--ide-link)), inset 0 0 0 1px rgb(var(--ide-link) / 0.55) !important;
     filter: saturate(1.15);
 }
 
@@ -684,9 +684,9 @@
 }
 
 .calendar-event-stage-done {
-    box-shadow: inset 3px 0 0 0 #4e9f4e, inset 0 0 0 1px rgba(78, 159, 78, 0.55) !important;
+    box-shadow: inset 3px 0 0 0 rgb(var(--ide-accent)), inset 0 0 0 1px rgb(var(--ide-accent) / 0.55) !important;
 }
 
 .calendar-event-stage-error {
-    box-shadow: inset 3px 0 0 0 #bc3f3c, inset 0 0 0 1px rgba(188, 63, 60, 0.55) !important;
+    box-shadow: inset 3px 0 0 0 rgb(var(--ide-error)), inset 0 0 0 1px rgb(var(--ide-error) / 0.55) !important;
 }

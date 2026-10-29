@@ -247,7 +247,7 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
             aria-pressed={overdueOnly}
             aria-label={overdueAriaLabel}
             onClick={() => onOverdueOnlyChange(!overdueOnly)}
-            className={`filter-chip max-md:hidden ${overdueOnly ? 'border-ide-error bg-ide-error/15 text-white' : ''}`}
+            className={`filter-chip max-md:hidden ${overdueOnly ? 'border-ide-error bg-ide-error/15 text-ide-error' : ''}`}
           >
             {t('tasks.filters.overdue')}
           </button>
@@ -387,7 +387,7 @@ const TaskSectionFilters: React.FC<TaskSectionFiltersProps> = ({
                 aria-pressed={overdueOnly}
                 aria-label={overdueAriaLabel}
                 onClick={() => onOverdueOnlyChange(!overdueOnly)}
-                className={`filter-chip ${overdueOnly ? 'border-ide-error bg-ide-error/15 text-white' : ''}`}
+                className={`filter-chip ${overdueOnly ? 'border-ide-error bg-ide-error/15 text-ide-error' : ''}`}
               >
                 {t('tasks.filters.overdue')}
               </button>

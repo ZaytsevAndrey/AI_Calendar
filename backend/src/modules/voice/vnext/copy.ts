@@ -1,0 +1,89 @@
+export type VNextLanguage = 'uk' | 'en';
+
+const UK: Record<string, string> = {
+  invalid: 'Не зрозумів команду. Скажіть інакше.',
+  transport: 'Не вдалося звʼязатися з моделлю. Нічого не змінюю. Спробуйте ще раз.',
+  timeout: 'Час очікування моделі вичерпано. Нічого не змінюю. Спробуйте ще раз.',
+  provider_unavailable: 'Модель тимчасово недоступна. Нічого не змінюю. Спробуйте ще раз.',
+  which_task: 'Яку саме задачу маєте на увазі?',
+  need_title: 'Як назвати цю задачу?',
+  which_day: 'На який день?',
+  tool_error: 'Не вдалося перевірити календар. Не вигадую вільний час.',
+  no_pending: 'Немає дії, яку треба підтвердити.',
+  preview: 'Прев’ю, ще не записано в календар:',
+  applied_local: 'Підтверджено локально. Календарний провайдер ще не записав:',
+  preview_suspended: 'Попереднє прев’ю зупинено, бо зміна не розібралась. Скажіть її ще раз. Старе прев’ю не застосовую.',
+  cannot_change: 'Не можу змінити цей обʼєкт.',
+  segment_limit: 'Забагато дій за раз. Скажіть їх меншими групами.',
+  dst_fold: 'Ця година повторюється через переведення годинника. Уточніть, який із двох моментів мається на увазі.',
+  dst_gap: 'Такого місцевого часу немає через переведення годинника.',
+  unsupported: 'Це я зробити не можу.',
+  evidence: 'Немає даних, щоб відповісти. Не вигадую розклад.',
+  canceled: 'Скасував незастосовану дію.',
+  held: 'Частину зрозумів. Спочатку треба уточнити решту.',
+  bulk: 'Не виконую дію над усіма записами, поки набір не показано окремо.',
+  scope: 'Я не бачу повного набору записів для цієї дії. Назвіть кожен або уточніть.',
+  stale: 'Календар змінився після прев’ю. Потрібне нове прев’ю.',
+  calendar: 'У цей календар я не можу записати цю зміну.',
+  already_applied: 'Це прев’ю вже підтверджено. Повторно його не застосовую.',
+  confirm_not_explicit: 'Це не підтвердження. Прев’ю лишається, доки ви скажете «так» або зміните його.',
+  unknown: 'Я не бачу, чи цю зміну збережено, тому не повторюю її.',
+  lost_clock: 'Час у прев’ю не збігається з командою. Прев’ю зупинено.',
+  invented_time: 'Я не підставляю годину замість частини доби.',
+  lost_duration: 'Тривалість у прев’ю не збігається з командою.',
+  lost_reminder: 'Нагадування не вдалося зберегти окремо. Я не замінюю його задачею.',
+  lost_recurrence: 'Повторення не вдалося зберегти. Я не замінюю його разовою подією.',
+  all_day: 'Цілий день я не можу поставити як звичайну задачу. Скажіть годину або залиште без часу.',
+  past_clock: 'Ця година вже минула. Назвіть день.',
+  which_series: 'Це повторювана задача. Сказати про цей день, про цей день і далі, чи про всю серію?',
+  predecessor: 'Спочатку потрібен час іншої задачі. Я не вигадую його.',
+};
+
+const EN: Record<string, string> = {
+  invalid: 'I did not understand that. Please say it again.',
+  transport: 'I could not reach the model. Nothing was changed. Please try again.',
+  timeout: 'The model timed out. Nothing was changed. Please try again.',
+  provider_unavailable: 'The model is temporarily unavailable. Nothing was changed. Please try again.',
+  which_task: 'Which task do you mean?',
+  need_title: 'What should this task be called?',
+  which_day: 'Which day?',
+  tool_error: 'I could not check the calendar. I will not invent a free gap.',
+  no_pending: 'There is nothing waiting to apply.',
+  preview: 'Preview, not written to the calendar:',
+  applied_local: 'Confirmed locally. The calendar provider has not written this:',
+  preview_suspended: 'The previous preview is suspended because the change did not parse. Say it again. I will not apply the old preview.',
+  cannot_change: 'I cannot change that object.',
+  segment_limit: 'That is too many actions at once. Please say them in smaller groups.',
+  dst_fold: 'That clock time happens twice because of daylight saving. Which one do you mean?',
+  dst_gap: 'That local time does not exist because of daylight saving.',
+  unsupported: 'I cannot do that.',
+  evidence: 'I do not have the data to answer. I will not invent a schedule.',
+  canceled: 'Canceled the action that was not applied.',
+  held: 'Part of that is clear. I still need the rest settled.',
+  bulk: 'I will not apply this to every matching item until that set is shown.',
+  scope: 'I cannot see the full set for this action. Name each item or narrow it.',
+  stale: 'The calendar changed after this preview. I need a fresh preview.',
+  calendar: 'That calendar cannot take this change.',
+  already_applied: 'This preview was already confirmed. I will not apply it again.',
+  confirm_not_explicit: 'That is not a confirmation. The preview stays until you confirm it or change it.',
+  unknown: 'I could not confirm whether that change was saved, so I will not try it again.',
+  lost_clock: 'The preview time does not match the command. I stopped the preview.',
+  invented_time: 'I will not invent a clock time for a part of the day.',
+  lost_duration: 'The preview duration does not match the command.',
+  lost_reminder: 'I could not keep the reminder. I will not turn it into a task.',
+  lost_recurrence: 'I could not keep the recurrence. I will not turn it into a one-time event.',
+  all_day: 'I cannot store a whole day as an ordinary timed task. Give a clock time, or leave it unscheduled.',
+  past_clock: 'That time has already passed. Which day do you mean?',
+  which_series: 'This repeats. Do you mean this day, this day and following, or the whole series?',
+  predecessor: 'The other task has no time yet. I will not invent one.',
+};
+
+export function voiceCopy(language: VNextLanguage, code: string): string {
+  const table = language === 'uk' ? UK : EN;
+  return table[code] ?? table.unsupported;
+}
+
+export function preservedLabel(language: VNextLanguage, title: string, label: string): string {
+  if (language === 'uk') return `${title}. Час доби: ${label}. Годину не ставлю.`;
+  return `${title}. Time of day: ${label}. No clock invented.`;
+}

@@ -93,7 +93,7 @@ const toggleBtn = (active: boolean) =>
     }`;
 
 const phoneIcon =
-    'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ide-text hover:bg-white/5';
+    'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ide-text hover:bg-ide-text/5';
 
 const phoneToggle = (active: boolean) =>
     `inline-flex h-7 w-7 items-center justify-center rounded ${
@@ -811,7 +811,7 @@ const CalendarPage: React.FC = () => {
                             </button>
                             <button
                                 type="button"
-                                className="h-7 shrink-0 rounded-md px-1.5 text-xs font-medium text-ide-muted hover:bg-white/5"
+                                className="h-7 shrink-0 rounded-md px-1.5 text-xs font-medium text-ide-muted hover:bg-ide-text/5"
                                 onClick={() => setCurrentDate(new Date())}
                             >
                                 {t('common.today')}
