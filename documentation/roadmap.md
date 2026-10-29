@@ -76,7 +76,7 @@ Decided: phases move into Settings → «Мій день»; font Onest; phase co
 - [ ] Stage 4 — Settings sections + Phases inside Settings.
 - [ ] Stage 5 — Tasks as rows, swipe actions.
 - [ ] Stage 6 — dialogs and onboarding.
-- [ ] Stage 7 — phone shell: full-width tab bar, sheets, tap targets, safe areas, loading states.
+- [ ] Stage 7 — mobile version, steps M0–M8 in [design/mobile-plan.md](design/mobile-plan.md): sheets instead of popovers, TimeWheel / DateStrip pickers, Today bar + sheet, shared slot sheet for Problematic and Later, swipe rows, full-width tab bar.
 
 ---
 

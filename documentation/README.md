@@ -31,6 +31,7 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Design audit](design/design-audit.md) | Oct 2026 UI review: every page, dialog and theme; P0 bugs, structure, consistency |
 | [Design system](design/design-system.md) | Brand, color tokens (both themes), phase palette, type, spacing, components, layout, settings IA, copy rules |
 | [Design fix plan](design/design-fix-plan.md) | Staged fixes: P0, tokens, calendar, settings + phases, tasks, dialogs; files and done criteria |
+| [Mobile plan](design/mobile-plan.md) | Phone components: what is there, what replaces it (Today sheet, slot sheet, pickers, swipe rows), steps M0–M8 |
 | [E2E test coverage plan](e2e-test-coverage.md) | All live API/UI cases and edge cases, layers, P0 smoke, implementation waves |
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
