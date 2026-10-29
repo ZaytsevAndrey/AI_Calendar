@@ -31,6 +31,7 @@ jobs:
         run: cd landing && npm ci && npx tsc --noEmit
 
       - name: Build site
+        id: build
         run: npm run build:site
         env:
           REACT_APP_API_BASE_URL: https://api.luefy.example
@@ -41,8 +42,9 @@ jobs:
 
       - name: Check the assembled site
         run: |
-          set -e
-          test -f site/app.html && test -f site/bundle.js
+          set -ex
+          test -f site/app.html
+          for js in $(grep -o 'src="/[^"]*\.js"' site/app.html | cut -d\" -f2); do test -f "site$js"; done
           for f in site/index.html site/uk/index.html; do
             grep -q '<link rel="canonical"' "$f"
             grep -q 'hrefLang="uk"' "$f"
@@ -58,7 +60,7 @@ jobs:
       # Review aid while this branch is in progress: the assembled site is pushed to an orphan
       # branch so it can be inspected without artifact downloads. Remove before merging.
       - name: Publish preview branch
-        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/seo-landing'
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/feat/seo-landing' }}
         run: |
           set -e
           tmp=$(mktemp -d)
