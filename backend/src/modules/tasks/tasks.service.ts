@@ -8,7 +8,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { isValidIanaTimeZone, resolveIanaTimeZone } from '../../common/iana-time-zone';
 import {
   clearParkMetadata,
@@ -348,19 +348,23 @@ export class TasksService implements OnModuleInit {
     return null;
   }
 
-  /** Seat a resolved copy as a second layer on its original interval. */
-  private async seatResolvedLayer(task: Task): Promise<void> {
+  /**
+   * Seat a resolved copy as a second layer on its original interval, in the
+   * caller's transaction (with the task save and its job).
+   */
+  private async seatResolvedLayer(task: Task, manager: EntityManager): Promise<void> {
     if (!task.scheduledStartTime || !task.scheduledEndTime) return;
+    const slots = manager.getRepository(ScheduledTask);
     const now = Date.now();
-    const rows = await this.scheduledTaskRepository.find({
+    const rows = await slots.find({
       where: { taskId: task.id },
     });
     const open = rows.filter(
       (row) => new Date(row.scheduledEndTime).getTime() > now,
     );
-    if (open.length) await this.scheduledTaskRepository.remove(open);
-    await this.scheduledTaskRepository.save(
-      this.scheduledTaskRepository.create({
+    if (open.length) await slots.remove(open);
+    await slots.save(
+      slots.create({
         taskId: task.id,
         scheduledStartTime: task.scheduledStartTime,
         scheduledEndTime: task.scheduledEndTime,
@@ -931,6 +935,7 @@ export class TasksService implements OnModuleInit {
         );
         if (open.length) await manager.remove(open);
       }
+      if (enteredResolved) await this.seatResolvedLayer(saved, manager);
       const job = await this.scheduleJobService.beginMutationJob(userId, payload, { manager });
       return { saved, job };
     });
@@ -942,7 +947,6 @@ export class TasksService implements OnModuleInit {
     }
 
     if (enteredResolved) {
-      await this.seatResolvedLayer(saved);
       const row = await this.findOne(saved.id, userId);
       return this.finishSaved(userId, row, { jobId: job.id });
     }

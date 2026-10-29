@@ -51,6 +51,26 @@ describe('task create idempotency', () => {
     expect(await count()).toBe(1);
   });
 
+  it('Place on top (resolved) writes its slot with the task and job, or not at all', async () => {
+    const parked = await kit.addTask({
+      name: 'Parked',
+      scheduleState: 'problematic' as never,
+      problematicOriginalStart: kit.at('2026-11-05', '10:00'),
+      problematicOriginalEnd: kit.at('2026-11-05', '11:00'),
+    });
+    kit.jobs.beginMutationJob.mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(
+      kit.tasksService.update(parked.id, kit.user.id, { scheduleState: 'resolved' } as never),
+    ).rejects.toThrow('disk full');
+    expect(await kit.slotsOf(parked.id)).toEqual([]);
+    expect((await kit.reload(parked.id)).scheduleState).toBe('problematic');
+
+    await kit.tasksService.update(parked.id, kit.user.id, { scheduleState: 'resolved' } as never);
+    await kit.jobs.settle();
+    expect(await kit.slotsOf(parked.id)).toEqual(['2026-11-05 10:00-11:00']);
+  });
+
   it('a race the lock cannot see (another instance) is caught by the unique index', async () => {
     // Another instance inserts the same key between our replay check and our insert.
     const runExclusive = kit.service.runExclusive.bind(kit.service);

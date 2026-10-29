@@ -47,7 +47,8 @@ Runtime assumptions found: production runs one Render instance, Neon Postgres, `
 | 10 | Phase 2: Postgres tests in CI; placement on Postgres | done | 6ea350b |
 | 11 | Phase 2: placement edge cases; DST wall-clock fix | done | 794a8f6 |
 | 12 | Phase 2: Google sync edge cases; durable post-placement sync | done | c7206f7 |
-| 13 | Phase 2: deployment rehearsal on a master-shaped database; docs; .env.example | done (Neon blocked) | (stage 13 commit) |
+| 13 | Phase 2: deployment rehearsal on a master-shaped database; docs; .env.example | done (Neon blocked) | 14a7ce0 |
+| 14 | Phase 2: resolved-layer atomicity; docs and cleanup | done | (stage 14 commit) |
 
 ## Stage A — durable placement (done)
 
@@ -133,30 +134,32 @@ Turns: 21, 9 fully correct; **unsafe turns 0, server writes 0**. Failure kinds: 
 - A final failure of a mutation job is now logged at error level (it was silent).
 - Not done: a distinct "retrying" visual state; HTTP idempotency keys.
 
-## Stage I — test matrix (honest)
+## Stage I — test matrix (honest, updated after phase 2)
 
 | Area | Covered by | Real DB | Status |
 |------|-----------|---------|--------|
 | Placement core rules | `placement-step.util.spec`, `placement-engine-regressions.spec`, `scheduling-invariants.spec` (randomized, seeds 20261105, 7, 4242) | pure + SQLite | covered |
 | Placement + persistence | `placement-step.service.spec`, `placement-load.spec` (SQLite kit) | SQLite | covered |
+| Placement rollback, crash recovery, concurrent creates | `placement.pg.spec` | Postgres 16 | covered, in CI |
 | Full workflow (series → conflict → detach → future → restart) | `scheduling-workflows.spec` I1 | SQLite | covered, one scenario |
-| Durable jobs: crash, lease, retry, 4xx final, inline | `mutation-jobs.spec` | SQLite | covered |
-| Concurrent job claims | `mutation-jobs.pg.spec` | Postgres 16 | covered, needs `PG_TEST_URL` (CI does not run it) |
-| Cross-instance user lock | `user-lock.pg.spec` | Postgres 16 | covered, needs `PG_TEST_URL` (not in CI) |
-| Migrations: fresh, upgrade, rerun, no drift | `migrations.pg.spec` | Postgres 16 | covered, needs `PG_TEST_URL` (not in CI) |
+| Durable jobs: crash, lease, retry, 4xx final, inline, retry never re-places | `mutation-jobs.spec`, workflows E2 | SQLite | covered |
+| Concurrent job claims | `mutation-jobs.pg.spec` | Postgres 16 | covered, in CI |
+| Cross-instance user lock | `user-lock.pg.spec` | Postgres 16 | covered, in CI |
+| Migrations: fresh, upgrade, rerun, no drift | `migrations.pg.spec`; manual rehearsal on a `master`-shaped database (stage 13) | Postgres 16 | covered, in CI; **Neon not verified** |
+| Idempotent create (replay, concurrent, race past the lock) | `task-create-idempotency.spec`, `tasks.controller.spec`, e2e A-TSK-030 | SQLite | covered |
 | Historical copy identity | `scheduling-workflows.spec` C1, refactor specs | SQLite | covered |
-| Recurrence: leap day, year end, DST | `scheduling-workflows.spec` C3 | SQLite | covered for Europe/Kyiv only |
-| Full day / no overlap | D2 + invariant specs | SQLite | covered |
-| Chain depth, cross-midnight, very long tasks | — | — | **not covered** by new tests |
-| Google sync failure → retry, no undo | E2, `pending-google-write.service.spec` | SQLite / mocks | covered (Google mocked) |
-| Google queue starvation | E3 | SQLite | covered |
-| Google auth expiry, duplicate webhooks | — | — | **not covered** |
-| Voice structured gate | `test:vnext:structured` | mocks | covered, in CI |
-| Voice live model | F2 run (12 scenarios, Ukrainian) | live model | sampled once; English **not evaluated** |
-| Frontend job polling | `schedule.api.spec`, `settleReplanJob.spec` | — | covered |
+| Recurrence: leap day, year end, DST | workflows C3, `dst-clock.spec`, edge DST case | SQLite | covered (Kyiv, New York) |
+| Chain depth, cross-midnight, very long tasks, full window, repeated placement, preferred conflict, horizon, series edit while queued | `placement-edge-cases.spec` | SQLite | covered |
+| Google queue: lease, backoff, terminal, fairness, revision, revive | `pending-google-write.queue.spec` | SQLite | covered |
+| Google queue across instances | `pending-google-write.pg.spec` | Postgres 16 | covered, in CI |
+| Google: lost insert answer, spent id, two instances one event, partial delete, remote deletion, revoked refresh, restart mid-sync | `pending-google-write.queue.spec`, `google-calendar.service.spec` | SQLite / mocks | covered (Google faked) |
+| Google OAuth credentials per call | `google-calendar.service.spec` | mocks | covered |
+| Google webhooks (duplicate / out-of-order) | — | — | not applicable: no push subscription in the code |
+| Voice structured gate | `test:vnext:structured` | mocks | covered, in CI (unchanged in phase 2) |
+| Voice live model | F2 run (12 scenarios, Ukrainian) | live model | sampled once; English **not evaluated**; out of scope in phase 2 |
+| Frontend job polling, Idempotency-Key header | `schedule.api.spec`, `settleReplanJob.spec`, `customBaseQuery.spec` | — | covered |
 | Real Google API end to end | — | — | **not covered** (manual only) |
-
-Postgres specs in CI would need a Postgres service in `.github/workflows/ci.yml`; not added (new CI infrastructure, needs a decision).
+| CI workflow itself | — | — | **not run** (needs a push); commands pass locally |
 
 ## Phase 2 (2026-10-30): remaining scheduling, persistence and Google work
 
@@ -243,19 +246,32 @@ Not verified against the real Google API (no test account in this environment): 
 - `deploy.md` → Database migrations: all four migrations, what was verified where, the exact Neon branch rehearsal, first deploy, rollback (code first; schema `down()` only if needed; never the baseline).
 - **Blocked: Neon.** No Neon API key, no `neonctl`, and no `DATABASE_URL` in this environment, so no Neon branch could be made; production was not touched. Expected difference: none (Neon is Postgres 16/17 with `uuid-ossp`); the steps to verify are in `deploy.md`.
 
+### Stage 14 — cleanup and documentation (done)
+
+- **Found and fixed:** "Place on top" (`seatResolvedLayer`) wrote its slot after the task + job commit; a crash between them left a resolved task without its slot. The slot write is now in the same transaction (test: a failing job write rolls back task state and slot; the next try seats it).
+- Obsolete code: none removed. `database/migrate-schedule-state.ts` still runs at startup (`app.module.ts`) and is the only path for SQLite dev databases (no versioned migrations there) and for the legacy `isProblematic` flag; `runPendingJob` still fails leftover non-mutation queue rows; the unused undo columns stay (dropping them deletes data).
+- Docs updated: `placement-engine.md` (§7.1 DST, §10 integrity, §11 tests, §12 open), `operations.md` (Google queue lifecycle, durable post-placement sync, API limits, no webhooks), `deploy.md` (four migrations, rehearsal, Neon steps, rollback), `api-reference.md` (Idempotency-Key, job retry fields), `task-scheduling-test-matrix.md` (SD-27…SD-39, known gaps), `.env.example` (`TYPEORM_SYNC`).
+- Roadmap: no open roadmap item matches the scheduling work done here (the "idempotent Apply / unknown outcome" items are under §42 Voice MVP hardening, out of scope for this phase), so `documentation/roadmap.md` — which also holds another chat's uncommitted restructure — was not changed.
+
 ## Final status (2026-10-30)
 
-Verified at the stage 6 commit: backend `npm test` 1038 pass + 9 skipped (Postgres specs, run separately), 0 fail; Postgres 16 specs 9/9; e2e 137/137; structured voice 232/232; frontend 306/306; backend and frontend builds ok; `dist/main.js` present. Nothing pushed or merged.
+Verified at the last code commit of phase 2 (see the stage table for hashes): backend unit 1076 pass + 15 skipped (the `.pg` specs, run by `npm run test:pg`), 0 fail; Postgres 16 `.pg` specs 15/15; e2e 138/138; structured voice 232/232 (unchanged); historical voice suites unchanged (215 pass / 77 fail, off the gate since F1); frontend 308/308; backend and frontend builds ok; `dist/main.js` and four compiled migrations present. Nothing pushed or merged.
 
-Not production-proven: no deploy of this branch was made; migrations were tested on local Postgres 16, not on a copy of the Neon database.
+Not production-proven: no deploy of this branch was made. Migrations were verified on local Postgres 16 (fresh, upgrade from a `master`-shaped schema with data, rerun, interrupted), not on Neon (no access). The CI workflow change was not run on GitHub. Google behavior is tested against a fake, not the real API.
 
-## Continuation
+## Continuation (exact steps before merging)
 
-1. Before merging: run the migrations against a Neon branch copy of production (`deploy.md` → Database migrations), then deploy with `TYPEORM_SYNC=false`.
-2. Fix `backend/.env.example` (`TYPEORM_SYNC=true` advice) once the other chat's edits to it are committed.
-3. `pending_google_writes`: attempt cap + backoff + lease (needs a migration) before running more than one instance.
-4. Add a Postgres service to CI so the `.pg.spec` files run there.
-5. Tests still missing: chain depth, cross-midnight, very long tasks, Google auth expiry, duplicate webhooks.
-6. Voice: port the 13 historical suites and the legacy e2e cases to the 4.1 contract; run §39 (live, real calendar); add an English live set; then §49.
-7. HTTP idempotency keys for create; move `seatResolvedLayer` writes into the transaction.
-8. Roadmap: not updated here — `documentation/roadmap.md` holds another chat's uncommitted restructure.
+1. Push the branch (owner's decision) and confirm the CI job passes, including the new **Backend Postgres tests** step.
+2. Neon rehearsal (`deploy.md` → Database migrations → "Not verified: Neon", steps 1–5) on a branch of the production database; production untouched.
+3. In the Render dashboard, check `TYPEORM_SYNC` is `false` or unset (a dashboard value overrides `render.yaml`).
+4. Back up production (Neon branch), merge, deploy; check `SELECT name FROM migrations` lists four rows and the log has no `Mutation job … failed after` / `Pending Google … failed after` lines in the first hour.
+5. After the other chat commits `backend/.env.example` and `documentation/roadmap.md`, nothing here needs redoing (only one line of `.env.example` was committed from this branch).
+
+Open, documented:
+
+- Post-placement Google sync intent is written right after the commit, not inside it (one-INSERT window).
+- No Google push notifications; Google edits are read on display and when the queue sees a newer remote event.
+- `pending_google_writes` `failed` rows need a manual revive after the user reconnects Google (SQL in `operations.md`).
+- An Idempotency-Key is freed when its task is deleted; reusing a key with a different body returns the original task.
+- Local SQLite shares one connection: any background write while a request transaction is open can interleave (development only).
+- Voice (separate phase): port the 13 historical suites and the legacy e2e cases to the 4.1 contract; §39 live check; English live set; §49; voice confirm idempotency.

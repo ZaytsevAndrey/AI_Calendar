@@ -40,6 +40,8 @@ describe('TasksService', () => {
           save: (entity: Record<string, unknown>) => tasksRepository.save(entity),
           find: (_entity: unknown, opts: unknown) => scheduledTaskRepository.find(opts),
           remove: (rows: unknown) => scheduledTaskRepository.remove(rows),
+          // Slot writes inside the transaction (resolved layer) hit the same fake repo.
+          getRepository: () => scheduledTaskRepository,
         }),
       ),
     },

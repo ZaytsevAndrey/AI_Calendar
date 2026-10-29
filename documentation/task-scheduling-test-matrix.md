@@ -760,9 +760,22 @@ Behavior (`eventType`: fixed / flexible) and recurrence (single / series) are in
 | SD-23 | Voice: "at 18, move it if needed" | Preview | flexible, preferred 18:00 | — | `structured-voice.service.spec.ts` |
 | SD-24 | Voice: one day / all future days of a series | Preview | move with scope occurrence / series | — | `structured-voice.service.spec.ts` |
 | SD-25 | Fixed series in the UI | Chip, preview facts, voice card, task list, filters | Fixed + repeats everywhere; in Fixed and Recurring filters | — | `schedulingTraits.spec.ts`, `schedulingKind.spec.ts`, `eventPreviewFacts.spec.ts`, `changePreviewCards.spec.ts`, `taskListFilters.spec.ts` |
-| SD-26 | Old parked copies | Startup migration | `originalOccurrenceYmd` from `problematicDay`, twice = same | — | `migrate-schedule-state.spec.ts` |
+| SD-26 | Old parked copies | Startup migration / versioned migration | `originalOccurrenceYmd` from `problematicDay`, twice = same | — | `migrate-schedule-state.spec.ts`, `migrations.pg.spec.ts` |
+| SD-27 | Task saved, process dies before placement | Recovery sweep | Placed once; job done | I1 | `mutation-jobs.spec.ts`, `placement.pg.spec.ts` (Postgres) |
+| SD-28 | Placement committed, sync step fails | Job retry | Only the sync is retried; the slot does not move | — | `scheduling-workflows.spec.ts` E2 |
+| SD-29 | Six creates for one user at once | Concurrent placement | All placed, no overlap | I5 | `placement.pg.spec.ts` (Postgres) |
+| SD-30 | Same create sent twice (same Idempotency-Key), concurrently or later | Create | One task; replay returns it and its job; different keys → two tasks | I1 | `task-create-idempotency.spec.ts`, e2e A-TSK-030 |
+| SD-31 | Eight packed 30-min tasks | Fixed claim on the first (chain > 6 pulls) | Fixed wins; nobody overlaps or vanishes | I1, I5 | `placement-edge-cases.spec.ts` |
+| SD-32 | Fixed 23:30–01:30 | Flexible asking 00:30 next day | Fixed stored whole; flexible gets a conflict, never inside | I5 | `placement-edge-cases.spec.ts` |
+| SD-33 | 12 h day | 10 h task / 13 h task | Placed whole / parked (no split, no overlap) | I1, I4 | `placement-edge-cases.spec.ts` |
+| SD-34 | Series create queued (crash) | Series clock edited before it runs | Ends on the new clock only | I2 | `placement-edge-cases.spec.ts` |
+| SD-35 | Daily 02:30, New York, spring-forward day | Horizon | That day at 03:30, still in the series (no copy) | I2 | `placement-edge-cases.spec.ts`, `dst-clock.spec.ts` |
+| SD-36 | Flexible series → fixed conflict → one day dragged → change the future → restart | Whole workflow | One occurrence per civil day; meeting unmoved; no job left | I2, I6 | `scheduling-workflows.spec.ts` I1 |
+| SD-37 | Google insert succeeded but its answer was lost | Retry | Same event id → no second event | — | `pending-google-write.queue.spec.ts` |
+| SD-38 | One user's Google writes keep failing | Queue passes | Others still sent each pass; failing rows back off, end `failed` | — | `pending-google-write.queue.spec.ts`, `pending-google-write.pg.spec.ts` |
+| SD-39 | Process killed during a post-placement Google sync | Next instance | Recorded write sent once | — | `pending-google-write.queue.spec.ts` |
 
-**Known gaps (not covered by an automated test):** concurrent requests across processes (the lock is per process); a crash between a task save and its background placement (`TasksService.create/update`); voice preview vs execution on a live model; frontend drag-and-drop interaction (only the drag helpers are unit-tested); Google partial sync recovery beyond the pending-write retry already covered in `google-calendar` specs.
+**Known gaps (not covered by an automated test):** voice preview vs execution on a live model; frontend drag-and-drop interaction (only the drag helpers are unit-tested); the real Google API (all Google tests use a fake; 409 / `cancelled` follow Google's documented behavior); Neon itself (Postgres specs run on Postgres 16 in Docker / CI).
 
 ---
 
