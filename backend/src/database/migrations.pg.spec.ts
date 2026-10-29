@@ -54,6 +54,7 @@ describePg('versioned migrations (Postgres)', () => {
     expect(first.map((m) => m.name)).toEqual([
       'Baseline1761750000000',
       'SchedulingQueueAndOccurrenceIdentity1761760000000',
+      'GoogleWriteQueueLifecycle1761770000000',
     ]);
     expect(await drift(ds)).toEqual([]);
     expect(await ds.runMigrations()).toEqual([]);
@@ -66,7 +67,11 @@ describePg('versioned migrations (Postgres)', () => {
     const old = await open(dbUrl, { synchronize: true });
     await old.query(`DROP INDEX "IDX_schedule_jobs_status_next_run"`);
     await old.query(`ALTER TABLE "schedule_jobs" DROP COLUMN "attempts", DROP COLUMN "nextRunAt", DROP COLUMN "leaseUntil"`);
-    await old.query(`ALTER TABLE "tasks" DROP COLUMN "originalOccurrenceYmd"`);
+    await old.query(`ALTER TABLE "tasks" DROP COLUMN "originalOccurrenceYmd", DROP COLUMN "googleInsertEventId"`);
+    await old.query(`DROP INDEX "IDX_pending_google_writes_status_next_run"`);
+    await old.query(
+      `ALTER TABLE "pending_google_writes" DROP COLUMN "status", DROP COLUMN "nextRunAt", DROP COLUMN "leaseUntil", DROP COLUMN "revision"`,
+    );
     const [user] = await old.query(
       `INSERT INTO "user" ("email", "password") VALUES ('old@example.com', 'x') RETURNING id`,
     );
@@ -86,11 +91,15 @@ describePg('versioned migrations (Postgres)', () => {
        VALUES ($1, 'running', 'placing', '{"type":"task_mutation","op":"create"}')`,
       [user.id],
     );
+    await old.query(
+      `INSERT INTO "pending_google_writes" ("userId", "operation", "googleEventId", "attempts") VALUES ($1, 'delete', 'g-old', 4)`,
+      [user.id],
+    );
     await old.destroy();
 
     const ds = await open(dbUrl);
     const ran = await ds.runMigrations();
-    expect(ran).toHaveLength(2); // baseline is recorded, not re-run
+    expect(ran).toHaveLength(3); // baseline is recorded, not re-run
     expect(await drift(ds)).toEqual([]);
     const copies = await ds.query(
       `SELECT name, "originalOccurrenceYmd" FROM "tasks" WHERE "isRecurring" IS FALSE ORDER BY name`,
@@ -101,6 +110,11 @@ describePg('versioned migrations (Postgres)', () => {
     ]);
     const [job] = await ds.query(`SELECT status, attempts FROM "schedule_jobs"`);
     expect(job).toEqual({ status: 'failed', attempts: 0 });
+    // A queued Google write survives and is due at once.
+    const [write] = await ds.query(
+      `SELECT "googleEventId", attempts, status, "nextRunAt", revision FROM "pending_google_writes"`,
+    );
+    expect(write).toEqual({ googleEventId: 'g-old', attempts: 4, status: 'pending', nextRunAt: null, revision: 0 });
     expect(await ds.query(`SELECT count(*)::int AS n FROM "tasks"`)).toEqual([{ n: 3 }]);
     await ds.destroy();
   });

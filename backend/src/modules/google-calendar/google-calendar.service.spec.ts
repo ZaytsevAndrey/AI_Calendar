@@ -13,6 +13,7 @@ declare global {
   // eslint-disable-next-line no-var
   var __gcalApiTestMocks: {
     eventsInsert: jest.Mock;
+    eventsGet: jest.Mock;
     eventsUpdate: jest.Mock;
     eventsDelete: jest.Mock;
     eventsList: jest.Mock;
@@ -25,6 +26,7 @@ declare global {
 jest.mock('googleapis', () => {
   const m = {
     eventsInsert: jest.fn(),
+    eventsGet: jest.fn(),
     eventsUpdate: jest.fn(),
     eventsDelete: jest.fn(),
     eventsList: jest.fn(),
@@ -60,7 +62,7 @@ jest.mock('googleapis', () => {
           insert: m.eventsInsert,
           update: m.eventsUpdate,
           delete: m.eventsDelete,
-          get: jest.fn().mockResolvedValue({
+          get: m.eventsGet.mockResolvedValue({
             data: {
               start: { dateTime: '2024-01-01T10:00:00Z', timeZone: 'UTC' },
               end: { dateTime: '2024-01-01T11:00:00Z', timeZone: 'UTC' },
@@ -457,6 +459,40 @@ describe('GoogleCalendarService', () => {
         calendarId: 'app-calendar@test.google.com',
       }),
     );
+  });
+
+  it('returns the event a lost insert created when its own id comes back 409', async () => {
+    jest.spyOn(userRepo, 'findOne').mockResolvedValue({
+      googleAccessToken: 'valid-token',
+      googleTokenExpiry: new Date(Date.now() + 10000),
+    } as User);
+    jest.spyOn(userSettingsRepo, 'findOne').mockResolvedValue({
+      appGoogleCalendarId: 'app-calendar@test.google.com',
+    } as UserSettings);
+    g().eventsInsert.mockRejectedValueOnce(Object.assign(new Error('The requested identifier already exists.'), { code: 409 }));
+    g().eventsGet.mockResolvedValueOnce({ data: { id: 'own0000000000000000000000000000', status: 'confirmed' } });
+
+    const result = await service.createEvent('123', { summary: 'Retry', id: 'own0000000000000000000000000000' });
+
+    expect(result).toMatchObject({ id: 'own0000000000000000000000000000', appCalendarId: 'app-calendar@test.google.com' });
+    expect(g().eventsGet).toHaveBeenCalledWith({
+      calendarId: 'app-calendar@test.google.com',
+      eventId: 'own0000000000000000000000000000',
+    });
+  });
+
+  it('still fails an insert conflict when the client sent no id of its own', async () => {
+    jest.spyOn(userRepo, 'findOne').mockResolvedValue({
+      googleAccessToken: 'valid-token',
+      googleTokenExpiry: new Date(Date.now() + 10000),
+    } as User);
+    jest.spyOn(userSettingsRepo, 'findOne').mockResolvedValue({
+      appGoogleCalendarId: 'app-calendar@test.google.com',
+    } as UserSettings);
+    g().eventsInsert.mockRejectedValueOnce(Object.assign(new Error('conflict'), { code: 409 }));
+
+    await expect(service.createEvent('123', { summary: 'No id' })).rejects.toThrow('could not create');
+    expect(g().eventsGet).not.toHaveBeenCalled();
   });
 
   it('should update event', async () => {

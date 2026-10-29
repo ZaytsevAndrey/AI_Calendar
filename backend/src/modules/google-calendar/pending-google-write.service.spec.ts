@@ -7,11 +7,14 @@ describe('PendingGoogleWriteService', () => {
     save: jest.fn(async (row) => ({ id: 'p1', ...row })),
     create: jest.fn((row) => row),
     remove: jest.fn(),
+    update: jest.fn().mockResolvedValue({ affected: 1 }),
+    delete: jest.fn().mockResolvedValue({ affected: 1 }),
   };
   const taskRepo = {
     findOne: jest.fn(),
     save: jest.fn(async (row) => row),
     remove: jest.fn(),
+    update: jest.fn().mockResolvedValue({ affected: 1 }),
   };
   const scheduledRepo = {
     find: jest.fn().mockResolvedValue([]),
@@ -505,13 +508,15 @@ describe('PendingGoogleWriteService', () => {
         googleCalendarId: 'primary',
         enqueuedAt: new Date('2026-10-08T08:00:00.000Z'),
         attempts: 0,
+        status: 'pending',
+        revision: 0,
       },
     ]);
     taskRepo.findOne.mockResolvedValue(null);
     await service.processQueue();
     expect(google.createEvent).not.toHaveBeenCalled();
     expect(google.deleteEvent).toHaveBeenCalledWith('u1', 'g-stale', 'primary');
-    expect(pendingRepo.remove).toHaveBeenCalled();
+    expect(pendingRepo.delete).toHaveBeenCalledWith({ id: 'p1', revision: 0 });
   });
 
   it('drops a pending upsert and pulls Google when the user edited after enqueue', async () => {
@@ -526,6 +531,8 @@ describe('PendingGoogleWriteService', () => {
         googleCalendarId: 'primary',
         enqueuedAt,
         attempts: 0,
+        status: 'pending',
+        revision: 0,
       },
     ]);
     taskRepo.findOne.mockResolvedValue({
@@ -558,6 +565,6 @@ describe('PendingGoogleWriteService', () => {
       }),
     );
     expect(google.updateEvent).not.toHaveBeenCalled();
-    expect(pendingRepo.remove).toHaveBeenCalled();
+    expect(pendingRepo.delete).toHaveBeenCalledWith({ id: 'p1', revision: 0 });
   });
 });

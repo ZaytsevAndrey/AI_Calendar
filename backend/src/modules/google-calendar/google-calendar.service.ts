@@ -37,6 +37,20 @@ function stubExternalApis(): boolean {
   return process.env.E2E_STUB_EXTERNAL === '1';
 }
 
+/** HTTP status of a googleapis error, wherever the client put it. */
+function googleErrorStatus(err: unknown): number | null {
+  const e = (err ?? {}) as {
+    status?: number | string;
+    code?: number | string;
+    response?: { status?: number | string };
+  };
+  for (const value of [e.response?.status, e.status, e.code]) {
+    const n = Number(value);
+    if (Number.isInteger(n) && n >= 100 && n < 600) return n;
+  }
+  return null;
+}
+
 /** Calendar list changes rarely. Events are reused across the page and voice. */
 const CALENDAR_LIST_TTL_MS = 10 * 60_000;
 const DISPLAY_EVENTS_TTL_MS = 2 * 60_000;
@@ -1294,14 +1308,29 @@ export class GoogleCalendarService {
         requestBody,
       });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Google Calendar insert failed: ${msg}`);
-      throw new ServiceUnavailableException(
-        'Google Calendar could not create the event.',
-      );
+      // Our own id already exists: an earlier insert whose answer was lost
+      // (timeout) did create it. Return that event instead of a second one.
+      const ownId = typeof requestBody.id === 'string' ? requestBody.id : null;
+      if (ownId && googleErrorStatus(err) === 409) {
+        response = await calendar.events.get({
+          calendarId: writableCalendarId,
+          eventId: ownId,
+        });
+      } else {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.error(`Google Calendar insert failed: ${msg}`);
+        throw new ServiceUnavailableException(
+          'Google Calendar could not create the event.',
+        );
+      }
     }
 
-    if (phaseId && typeof response.data.id === 'string') {
+    if (
+      phaseId &&
+      typeof response.data.id === 'string' &&
+      // A recovered insert (409) may already have its phase link.
+      !(await this.eventPhasesService.findByEvent(response.data.id, String(userId)))
+    ) {
       await this.eventPhasesService.create(
         response.data.id,
         phaseId,

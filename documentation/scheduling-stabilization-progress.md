@@ -41,6 +41,8 @@ Runtime assumptions found: production runs one Render instance, Neon Postgres, `
 | 4 | G: versioned migrations instead of `TYPEORM_SYNC=true` | done | fdf5ec3 |
 | 5 | C/D/E: historical identity tests, recurrence/temporal/placement edge tests, Google failure handling | done (partial, see section) | 1c2a18f |
 | 6 | F2 live voice eval, F3/F4, H frontend states, I matrix, J operations doc | done | d8a3b4b |
+| 7 | Phase 2: OAuth client shared across users (found while auditing Google sync) | done | 85188d4 |
+| 8 | Phase 2: Google write queue lifecycle + no duplicate events on retry | done | (stage 8 commit) |
 
 ## Stage A — durable placement (done)
 
@@ -150,6 +152,27 @@ Turns: 21, 9 fully correct; **unsafe turns 0, server writes 0**. Failure kinds: 
 | Real Google API end to end | — | — | **not covered** (manual only) |
 
 Postgres specs in CI would need a Postgres service in `.github/workflows/ci.yml`; not added (new CI infrastructure, needs a decision).
+
+## Phase 2 (2026-10-30): remaining scheduling, persistence and Google work
+
+Voice is out of scope for this phase; no voice code or test expectation was changed.
+
+### Stage 7 — OAuth credentials shared across users (done, 85188d4)
+
+**Found and fixed (cross-user):** `GoogleCalendarService` kept one `OAuth2` client for the whole process. About 14 methods did `setCredentials(<this user's token>)`, then awaited (database, calendar lookup) before the request or token refresh ran; googleapis reads the credentials when the request is sent. Two users syncing at the same moment could therefore send one user's request with the other's token (an event written into the wrong account's calendar, or a read of the wrong calendar), and a concurrent `refreshAccessToken` could store user B's access token on user A's row, so the mix-up persisted. Now every call builds its own client (`newOAuthClient()`); no credentials are shared. Test: `google-calendar.service.spec` "never lets concurrent calls for two users share OAuth credentials" (fails on the old code: one shared instance saw both tokens). Whether it ever happened in production cannot be told from the code; production runs one instance but serves several users concurrently, so it was possible.
+
+### Stage 8 — Google write queue lifecycle (done)
+
+`pending_google_writes` now has `status` (`pending`/`running`/`failed`), `nextRunAt`, `leaseUntil`, `revision` (migration `1761770000000-GoogleWriteQueueLifecycle`, idempotent; existing rows become due `pending`).
+
+- Claim: compare-and-set on `(id, status, attempts, revision)`, 2 min lease; a dead worker's row is taken over after the lease. Safe with several instances.
+- Retry: backoff 1 min · 2^(n−1), cap 60 min, 8 attempts, then `failed` (kept, logged at error, never resent by itself). A later failure for the same task/event revives it.
+- Fairness: per pass ≤ 20 rows and ≤ 5 per user, users interleaved, fewest attempts first.
+- Revision: an enqueue during a send bumps `revision`; the worker deletes the row only for the revision it claimed, else re-queues it (no lost write).
+- **Found and fixed (duplicate events):** a Google insert whose answer was lost (timeout, reset) but which succeeded was retried as a new insert → two events. Now `tasks.googleInsertEventId` is stored before the insert (conditional update, so concurrent instances agree) and sent as the event id; the retry gets 409 and `createEvent` returns the existing event. A `cancelled` result (deleted in Google before linking) drops the id. The phase link is not duplicated on a recovered insert.
+- No transaction is open during Google calls (the queue uses single-row statements).
+- Tests: `pending-google-write.queue.spec` (SQLite: backoff sequence and terminal stop, lease takeover, fairness, write during send, revive, lost insert answer, spent id), `pending-google-write.pg.spec` (Postgres 16: 4 concurrent sweeps on two pools send 12 rows exactly once; crashed-lease takeover), `google-calendar.service.spec` (409 with own id → existing event; 409 without id still fails), `migrations.pg.spec` (third migration; a queued row survives the upgrade).
+- Results: backend unit 1048 pass + 11 skipped, 0 fail; Postgres 11/11; e2e 137/137.
 
 ## Final status (2026-10-30)
 

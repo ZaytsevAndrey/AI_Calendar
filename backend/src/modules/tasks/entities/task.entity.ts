@@ -203,6 +203,14 @@ export class Task {
   @Column({ type: 'varchar', length: 255, nullable: true })
   googleEventCalendarId: string | null;
 
+  /**
+   * Event id sent with a Google insert before Google confirmed it. A retry after
+   * an unknown outcome (timeout) sends the same id, so Google answers 409
+   * instead of creating a second event. Cleared once the event is attached.
+   */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  googleInsertEventId: string | null;
+
   @Column({ default: false })
   isFixedExternal: boolean;
 

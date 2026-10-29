@@ -1,6 +1,7 @@
+import { randomUUID } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, LessThan, LessThanOrEqual, Repository } from 'typeorm';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import { phaseHexToGoogleColorId } from './phase-hex-to-google-color-id.util';
 import { applyTaskGoogleEventFields } from './task-google-event-fields.util';
@@ -22,6 +23,33 @@ import { pickMajorityClockSlot } from '../schedule/series-group.util';
 import { ScheduledTask } from '../schedule/schedule.entity';
 import { localHm, localYmd } from '../voice/voice-local-date.util';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
+
+export const GOOGLE_WRITE_LEASE_MS = 2 * 60_000;
+export const GOOGLE_WRITE_MAX_ATTEMPTS = 8;
+export const GOOGLE_WRITE_BACKOFF_BASE_MS = 60_000;
+export const GOOGLE_WRITE_BACKOFF_MAX_MS = 60 * 60_000;
+export const GOOGLE_WRITE_PER_USER = 5;
+
+/** Up to `perUser` rows per user, users interleaved, in the given order. */
+export function fairBatch<T extends { userId: string }>(
+  rows: T[],
+  limit: number,
+  perUser: number,
+): T[] {
+  const queues = new Map<string, T[]>();
+  for (const row of rows) {
+    const list = queues.get(row.userId) ?? [];
+    if (list.length < perUser) list.push(row);
+    queues.set(row.userId, list);
+  }
+  const out: T[] = [];
+  for (let round = 0; round < perUser && out.length < limit; round += 1) {
+    for (const list of queues.values()) {
+      if (round < list.length && out.length < limit) out.push(list[round]);
+    }
+  }
+  return out;
+}
 
 @Injectable()
 export class PendingGoogleWriteService {
@@ -81,13 +109,22 @@ export class PendingGoogleWriteService {
         !!opts.googleEventId && row.googleEventId === opts.googleEventId
       );
     });
+    const retryAt = new Date(Date.now() + GOOGLE_WRITE_BACKOFF_BASE_MS);
     if (existing) {
-      existing.attempts = (existing.attempts ?? 0) + 1;
-      existing.lastError = opts.error ?? existing.lastError;
-      existing.googleEventId = opts.googleEventId ?? existing.googleEventId;
-      existing.googleCalendarId =
-        opts.googleCalendarId ?? existing.googleCalendarId;
-      await this.pendingRepo.save(existing);
+      // A new failure is new work: a running row is re-run by its worker
+      // (revision), a failed one gets a fresh set of attempts.
+      // Only "changed since the claim" matters, so a plain +1 is enough.
+      const patch: Partial<PendingGoogleWrite> = {
+        revision: (existing.revision ?? 0) + 1,
+        lastError: opts.error ?? existing.lastError,
+        googleEventId: opts.googleEventId ?? existing.googleEventId,
+        googleCalendarId: opts.googleCalendarId ?? existing.googleCalendarId,
+      };
+      if (existing.status !== 'running') {
+        Object.assign(patch, { status: 'pending', nextRunAt: retryAt, leaseUntil: null });
+        if (existing.status === 'failed') patch.attempts = 0;
+      }
+      await this.pendingRepo.update({ id: existing.id }, patch);
       return;
     }
     await this.pendingRepo.save(
@@ -99,6 +136,10 @@ export class PendingGoogleWriteService {
         googleCalendarId: opts.googleCalendarId ?? null,
         attempts: 0,
         lastError: opts.error ?? null,
+        status: 'pending',
+        nextRunAt: retryAt,
+        leaseUntil: null,
+        revision: 0,
       }),
     );
   }
@@ -195,7 +236,7 @@ export class PendingGoogleWriteService {
         }
         await this.stampOpenSlotGoogle(task);
       } else {
-        const ev = await this.google.createEvent(userId, payload, syncOpts);
+        const ev = await this.createTaskEvent(userId, task, payload, syncOpts);
         await this.attachCreatedGoogleEvent(userId, task, ev, calendarId);
       }
     } catch (err) {
@@ -211,34 +252,91 @@ export class PendingGoogleWriteService {
     }
   }
 
+  /**
+   * Send due rows: claimed one at a time (safe with several instances), at
+   * most GOOGLE_WRITE_PER_USER per user per pass so one user's backlog cannot
+   * starve the others. No database transaction is open during a Google call.
+   */
   async processQueue(limit = 20): Promise<number> {
-    // Fewest attempts first: rows that keep failing (revoked access) must not
-    // fill every batch and starve everyone else's writes.
-    const rows = await this.pendingRepo.find({
+    const now = new Date();
+    const due = await this.pendingRepo.find({
+      where: [
+        { status: 'pending', nextRunAt: IsNull() },
+        { status: 'pending', nextRunAt: LessThanOrEqual(now) },
+        { status: 'running', leaseUntil: LessThan(now) },
+      ],
       order: { attempts: 'ASC', enqueuedAt: 'ASC' },
-      take: limit,
+      take: limit * 5,
     });
     let done = 0;
-    for (const row of rows) {
-      try {
-        if (row.operation === 'delete') {
-          await this.processDelete(row);
-        } else {
-          await this.processUpsert(row);
-        }
-        await this.pendingRepo.remove(row);
-        done += 1;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        row.attempts = (row.attempts ?? 0) + 1;
-        row.lastError = message;
-        await this.pendingRepo.save(row);
-        this.logger.warn(
-          `Pending Google ${row.operation} ${row.id} failed again: ${message}`,
-        );
-      }
+    for (const row of fairBatch(due, limit, GOOGLE_WRITE_PER_USER)) {
+      if (!(await this.claim(row))) continue;
+      if (await this.send(row)) done += 1;
     }
     return done;
+  }
+
+  /** Compare-and-set on the row as read: of two workers, one wins. */
+  private async claim(row: PendingGoogleWrite): Promise<boolean> {
+    const result = await this.pendingRepo.update(
+      { id: row.id, status: row.status, attempts: row.attempts, revision: row.revision },
+      {
+        status: 'running',
+        attempts: row.attempts + 1,
+        leaseUntil: new Date(Date.now() + GOOGLE_WRITE_LEASE_MS),
+      },
+    );
+    if (!result.affected) return false;
+    row.attempts += 1;
+    return true;
+  }
+
+  private async send(row: PendingGoogleWrite): Promise<boolean> {
+    try {
+      if (row.operation === 'delete') {
+        await this.processDelete(row);
+      } else {
+        await this.processUpsert(row);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const final = row.attempts >= GOOGLE_WRITE_MAX_ATTEMPTS;
+      const delay = Math.min(
+        GOOGLE_WRITE_BACKOFF_MAX_MS,
+        GOOGLE_WRITE_BACKOFF_BASE_MS * 2 ** (row.attempts - 1),
+      );
+      await this.pendingRepo.update(
+        { id: row.id },
+        final
+          ? { status: 'failed', leaseUntil: null, nextRunAt: null, lastError: message.slice(0, 2000) }
+          : {
+              status: 'pending',
+              leaseUntil: null,
+              nextRunAt: new Date(Date.now() + delay),
+              lastError: message.slice(0, 2000),
+            },
+      );
+      if (final) {
+        this.logger.error(
+          `Pending Google ${row.operation} ${row.id} failed after ${row.attempts} attempts: ${message}`,
+        );
+      } else {
+        this.logger.warn(
+          `Pending Google ${row.operation} ${row.id} attempt ${row.attempts} failed (${message}); retry in ${delay} ms`,
+        );
+      }
+      return false;
+    }
+    // Sent. A failure queued meanwhile (newer revision) is work this pass did
+    // not see: put the row back instead of deleting it.
+    const removed = await this.pendingRepo.delete({ id: row.id, revision: row.revision });
+    if (!removed.affected) {
+      await this.pendingRepo.update(
+        { id: row.id },
+        { status: 'pending', leaseUntil: null, nextRunAt: null },
+      );
+    }
+    return true;
   }
 
   private async processUpsert(row: PendingGoogleWrite): Promise<void> {
@@ -316,8 +414,9 @@ export class PendingGoogleWriteService {
       await this.writeRecurringSeries(row.userId, task, calendarId);
       return;
     }
-    const ev = await this.google.createEvent(
+    const ev = await this.createTaskEvent(
       row.userId,
+      task,
       await this.buildPayload(task),
       {
         skipSleepWindowCheck: true,
@@ -325,6 +424,44 @@ export class PendingGoogleWriteService {
       },
     );
     await this.attachCreatedGoogleEvent(row.userId, task, ev, calendarId);
+  }
+
+  /**
+   * Insert the task's Google event under an id stored before the call, so a
+   * retry after an unknown outcome finds the first event (409) instead of
+   * creating a second one — also across instances.
+   */
+  private async createTaskEvent(
+    userId: string,
+    task: Task,
+    payload: Record<string, unknown>,
+    opts: { skipSleepWindowCheck: true; calendarId: string },
+  ): Promise<{ id?: string | null; appCalendarId?: string; status?: string | null }> {
+    if (!task.googleInsertEventId) {
+      // Google event ids: base32hex (0-9, a-v), 5–1024 chars. Hex qualifies.
+      const fresh = randomUUID().replace(/-/g, '');
+      await this.taskRepo.update(
+        { id: task.id, googleInsertEventId: IsNull() },
+        { googleInsertEventId: fresh },
+      );
+      const stored = await this.taskRepo.findOne({
+        where: { id: task.id },
+        select: ['id', 'googleInsertEventId'],
+      });
+      task.googleInsertEventId = stored?.googleInsertEventId ?? fresh;
+    }
+    const ev = await this.google.createEvent(
+      userId,
+      { ...payload, id: task.googleInsertEventId },
+      opts,
+    );
+    if (ev?.status === 'cancelled') {
+      // Our event was created and then deleted in Google: that id is spent.
+      await this.taskRepo.update({ id: task.id }, { googleInsertEventId: null });
+      task.googleInsertEventId = null;
+      throw new Error('Google event was deleted before it was linked; will create a new one');
+    }
+    return ev;
   }
 
   private async taskStillExists(
@@ -345,7 +482,7 @@ export class PendingGoogleWriteService {
   private async attachCreatedGoogleEvent(
     userId: string,
     task: Task,
-    ev: { id?: string; appCalendarId?: string } | null | undefined,
+    ev: { id?: string | null; appCalendarId?: string } | null | undefined,
     calendarId: string,
   ): Promise<void> {
     if (typeof ev?.id !== 'string') return;
@@ -354,6 +491,7 @@ export class PendingGoogleWriteService {
       return;
     }
     task.googleEventId = ev.id;
+    task.googleInsertEventId = null;
     if (ev.appCalendarId) task.googleEventCalendarId = ev.appCalendarId;
     await this.taskRepo.save(task);
     await this.stampOpenSlotGoogle(task);
@@ -574,7 +712,7 @@ export class PendingGoogleWriteService {
       await this.stampOpenSlotGoogle(task);
       return;
     }
-    const ev = await this.google.createEvent(userId, payload, syncOpts);
+    const ev = await this.createTaskEvent(userId, task, payload, syncOpts);
     await this.attachCreatedGoogleEvent(userId, task, ev, calendarId);
   }
 

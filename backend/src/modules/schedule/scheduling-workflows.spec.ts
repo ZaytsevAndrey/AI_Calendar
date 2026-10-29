@@ -6,7 +6,10 @@
 import { TaskEventType } from '../scheduling/event-type.enum';
 import { ScheduleState, Task } from '../tasks/entities/task.entity';
 import { PendingGoogleWrite } from '../google-calendar/entities/pending-google-write.entity';
-import { PendingGoogleWriteService } from '../google-calendar/pending-google-write.service';
+import {
+  GOOGLE_WRITE_PER_USER,
+  PendingGoogleWriteService,
+} from '../google-calendar/pending-google-write.service';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { ScheduleJob } from './entities/schedule-job.entity';
 import { seriesHorizonYmds } from './placement-step.util';
@@ -190,10 +193,11 @@ describe('scheduling workflows', () => {
 
     expect(await writes.processQueue(20)).toBe(1);
     expect(await repo.findOneBy({ googleEventId: 'live-1' })).toBeNull();
-    // The failing rows are kept (not silently dropped) with their error.
+    // The failing rows are kept (not silently dropped) with their error; at
+    // most GOOGLE_WRITE_PER_USER of one user's rows are tried per pass.
     const dead = await repo.findBy({ userId: 'revoked' });
     expect(dead).toHaveLength(20);
-    expect(dead.filter((row) => row.lastError === 'invalid_grant').length).toBe(19);
+    expect(dead.filter((row) => row.lastError === 'invalid_grant').length).toBe(GOOGLE_WRITE_PER_USER);
   });
 
   it('C1: a historical copy without originalOccurrenceYmd never re-merges and series edits leave it alone', async () => {
