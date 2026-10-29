@@ -16,7 +16,6 @@
    - **Non-blocking** — can default sensibly and document the default.
 6. **Present questions to the user** in a compact list. Wait for answers on **blocking** items before Phase 2.
 7. **Record decisions** (even “we defer X to v2”) so later phases do not re-litigate.
-8. **Write the feature doc** once blocking questions are answered (or explicitly waived). Follow [feature-docs.md](feature-docs.md): `documentation/features/<slug>.md`, status `planned`. Do not start Phase 2 without that file.
 
 ## Question prompts (examples)
 
@@ -31,4 +30,3 @@
 - Short **plan summary**
 - **Decision log** (bullet list)
 - **Open questions** with status: answered / deferred / assumed-with-default
-- **Feature doc** path under `documentation/features/`

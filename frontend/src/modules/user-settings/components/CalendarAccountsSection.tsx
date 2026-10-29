@@ -7,6 +7,7 @@ import {
   getAuthProvidersStatus,
   getMicrosoftAuthUrl,
   listLinkedIdentities,
+  listProviderCalendars,
   type LinkedIdentityDTO,
 } from 'api/calendarOverlays.api';
 import {
@@ -20,11 +21,7 @@ import { Check, Link2, Unlink, X } from 'lucide-react';
 import { Button } from 'ui/Button';
 import { Input } from 'ui/Input';
 
-type WriteProvider = 'google' | 'microsoft' | 'apple';
-
-const DEFAULT_NAME = 'AI Calendar Assistant';
-
-/** Connected accounts + app calendar name + which account receives new tasks. */
+/** Connect Microsoft/Apple + choose outbound sync targets. */
 export function CalendarAccountsSection() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -36,14 +33,16 @@ export function CalendarAccountsSection() {
     apple: boolean;
   } | null>(null);
   const [identities, setIdentities] = useState<LinkedIdentityDTO[]>([]);
-  const [calendarName, setCalendarName] = useState(DEFAULT_NAME);
-  const [writeProvider, setWriteProvider] = useState<WriteProvider | null>(null);
+  const [calendars, setCalendars] = useState<
+    Array<{ id: string; summary: string; provider: 'google' | 'microsoft' | 'apple' }>
+  >([]);
+  const [syncNowhere, setSyncNowhere] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
   const [appleFormOpen, setAppleFormOpen] = useState(false);
   const [appleId, setAppleId] = useState('');
   const [applePassword, setApplePassword] = useState('');
   const [appleBusy, setAppleBusy] = useState(false);
   const [showAppleHelp, setShowAppleHelp] = useState(false);
-  const [saving, setSaving] = useState(false);
 
   const refreshIdentities = useCallback(() => {
     void listLinkedIdentities()
@@ -51,12 +50,19 @@ export function CalendarAccountsSection() {
       .catch(() => setIdentities([]));
   }, []);
 
+  const refreshCalendars = useCallback(() => {
+    void listProviderCalendars()
+      .then((res) => setCalendars(res.calendars ?? []))
+      .catch(() => setCalendars([]));
+  }, []);
+
   useEffect(() => {
     void getAuthProvidersStatus()
       .then(setStatus)
       .catch(() => setStatus({ google: true, microsoft: false, apple: true }));
     refreshIdentities();
-  }, [refreshIdentities]);
+    refreshCalendars();
+  }, [refreshIdentities, refreshCalendars]);
 
   useEffect(() => {
     const ms = searchParams.get('microsoft');
@@ -64,6 +70,7 @@ export function CalendarAccountsSection() {
     if (ms === 'linked') {
       showSuccessToast(t('settings.microsoftLinked'));
       refreshIdentities();
+      refreshCalendars();
     } else if (ms === 'error') {
       showErrorToast({
         title: t('settings.microsoftLinkFailed'),
@@ -74,7 +81,19 @@ export function CalendarAccountsSection() {
     next.delete('microsoft');
     next.delete('detail');
     setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams, t, refreshIdentities]);
+  }, [searchParams, setSearchParams, t, refreshIdentities, refreshCalendars]);
+
+  useEffect(() => {
+    if (!settings) return;
+    const targets = settings.syncTargetCalendars;
+    if (targets === null || targets === undefined) {
+      setSyncNowhere(false);
+      setSelected([]);
+      return;
+    }
+    setSyncNowhere(targets.length === 0);
+    setSelected(targets.map((row) => `${row.provider}:${row.calendarId}`));
+  }, [settings]);
 
   const microsoftLinked = identities.some(
     (i) => i.provider === 'microsoft' && i.connected,
@@ -83,30 +102,6 @@ export function CalendarAccountsSection() {
     (i) => i.provider === 'apple' && i.connected,
   );
   const googleLinked = !!settings?.googleCalendarLinked;
-
-  useEffect(() => {
-    if (!settings) return;
-    setCalendarName(
-      settings.appGoogleCalendarName?.trim() || DEFAULT_NAME,
-    );
-    const stored = settings.appCalendarProvider;
-    if (stored === 'google' && googleLinked) {
-      setWriteProvider('google');
-      return;
-    }
-    if (stored === 'microsoft' && microsoftLinked) {
-      setWriteProvider('microsoft');
-      return;
-    }
-    if (stored === 'apple' && appleLinked) {
-      setWriteProvider('apple');
-      return;
-    }
-    if (googleLinked) setWriteProvider('google');
-    else if (microsoftLinked) setWriteProvider('microsoft');
-    else if (appleLinked) setWriteProvider('apple');
-    else setWriteProvider(null);
-  }, [settings, googleLinked, microsoftLinked, appleLinked]);
 
   const connectMicrosoft = async () => {
     try {
@@ -131,10 +126,7 @@ export function CalendarAccountsSection() {
       setAppleFormOpen(false);
       setApplePassword('');
       refreshIdentities();
-      if (!writeProvider) {
-        await updateSettings({ appCalendarProvider: 'apple' }).unwrap();
-        setWriteProvider('apple');
-      }
+      refreshCalendars();
     } catch (e) {
       showErrorToast({
         title: t('settings.appleLinkFailed'),
@@ -152,6 +144,7 @@ export function CalendarAccountsSection() {
       await disconnectIdentity(provider, { confirm: true });
       showSuccessToast(t('settings.disconnected'));
       refreshIdentities();
+      refreshCalendars();
     } catch (e) {
       showErrorToast({
         title: t('settings.disconnectFailed'),
@@ -160,54 +153,35 @@ export function CalendarAccountsSection() {
     }
   };
 
-  const saveAppCalendar = async () => {
-    const name = calendarName.trim() || DEFAULT_NAME;
-    if (!writeProvider) {
-      showErrorToast({ title: t('settings.writeAccountRequired') });
-      return;
-    }
-    setSaving(true);
+  const saveTargets = async () => {
     try {
-      await updateSettings({
-        appGoogleCalendarName: name,
-        appCalendarProvider: writeProvider,
-      }).unwrap();
-      setCalendarName(name);
-      showSuccessToast(t('settings.appCalendarSaved'));
+      const syncTargetCalendars = syncNowhere
+        ? []
+        : selected.map((key) => {
+            const [provider, ...rest] = key.split(':');
+            return { provider, calendarId: rest.join(':') };
+          });
+      await updateSettings({ syncTargetCalendars }).unwrap();
+      showSuccessToast(t('settings.syncTargetsSaved'));
     } catch (e) {
       showErrorToast({
         title: t('settings.saveFailed'),
         detail: extractApiErrorMessage(e),
       });
-    } finally {
-      setSaving(false);
     }
   };
 
-  const identityEmail = (provider: WriteProvider) =>
+  const identityEmail = (provider: 'google' | 'microsoft' | 'apple') =>
     identities.find((i) => i.provider === provider)?.email;
-
-  const writeOptions = (
-    [
-      { id: 'google' as const, label: 'Google', ready: googleLinked },
-      { id: 'microsoft' as const, label: 'Microsoft', ready: microsoftLinked },
-      { id: 'apple' as const, label: 'Apple', ready: appleLinked },
-    ] satisfies Array<{ id: WriteProvider; label: string; ready: boolean }>
-  ).filter((row) => row.ready);
 
   return (
     <section className="border-t border-ide-border pt-10">
       <h2 className="mb-2 text-lg font-semibold text-ide-text">
-        {t('settings.calendars')}
+        {t('settings.calendarAccounts')}
       </h2>
-      <p className="mb-6 text-sm text-ide-muted">{t('settings.calendarsHint')}</p>
+      <p className="mb-4 text-sm text-ide-muted">{t('settings.calendarAccountsHint')}</p>
 
-      <h3 className="mb-2 text-sm font-semibold text-ide-text">
-        {t('settings.linkedAccounts')}
-      </h3>
-      <p className="mb-3 text-xs text-ide-muted">{t('settings.linkedAccountsHint')}</p>
-
-      <ul className="mb-8 space-y-3">
+      <ul className="mb-6 space-y-3">
         <li className="flex flex-wrap items-center gap-3 rounded-lg border border-ide-border px-3 py-2">
           <ProviderLogo provider="google" className="h-4 w-4" />
           <span className="min-w-0 flex-1 text-sm text-ide-text">
@@ -373,58 +347,46 @@ export function CalendarAccountsSection() {
         </li>
       </ul>
 
-      <h3 className="mb-2 text-sm font-semibold text-ide-text">
-        {t('settings.appCalendar')}
-      </h3>
-      <p className="mb-3 text-xs text-ide-muted">{t('settings.appCalendarHint')}</p>
-
-      <div className="mb-4 flex max-w-md flex-col gap-1">
-        <label htmlFor="app-calendar-name" className="ui-label">
-          {t('settings.appCalendarName')}
-        </label>
+      <h3 className="mb-2 text-sm font-semibold text-ide-text">{t('settings.syncTargets')}</h3>
+      <p className="mb-3 text-xs text-ide-muted">{t('settings.syncTargetsHint')}</p>
+      <label className="mb-2 flex items-center gap-2 text-sm text-ide-text">
         <Input
-          id="app-calendar-name"
-          type="text"
-          className="w-full"
-          maxLength={200}
-          value={calendarName}
-          onChange={(e) => setCalendarName(e.target.value)}
+          type="checkbox"
+          checked={syncNowhere}
+          onChange={(e) => {
+            setSyncNowhere(e.target.checked);
+            if (e.target.checked) setSelected([]);
+          }}
         />
-      </div>
-
-      {writeOptions.length > 0 ? (
-        <fieldset className="mb-4">
-          <legend className="mb-2 text-sm text-ide-text">
-            {t('settings.writeAccount')}
-          </legend>
-          <p className="mb-2 text-xs text-ide-muted">{t('settings.writeAccountHint')}</p>
-          <ul className="space-y-2">
-            {writeOptions.map((opt) => (
-              <li key={opt.id}>
+        {t('settings.syncNowhere')}
+      </label>
+      {!syncNowhere && calendars.length > 0 ? (
+        <ul className="mb-3 max-h-48 space-y-1 overflow-y-auto rounded border border-ide-border p-2">
+          {calendars.map((cal) => {
+            const key = `${cal.provider}:${cal.id}`;
+            return (
+              <li key={key}>
                 <label className="flex items-center gap-2 text-sm text-ide-text">
-                  <input
-                    type="radio"
-                    name="app-calendar-provider"
-                    checked={writeProvider === opt.id}
-                    onChange={() => setWriteProvider(opt.id)}
+                  <Input
+                    type="checkbox"
+                    checked={selected.includes(key)}
+                    onChange={(e) => {
+                      setSelected((prev) =>
+                        e.target.checked
+                          ? [...prev, key]
+                          : prev.filter((k) => k !== key),
+                      );
+                    }}
                   />
-                  <ProviderLogo provider={opt.id} className="h-3 w-3" />
-                  <span>{opt.label}</span>
+                  <ProviderLogo provider={cal.provider} className="h-3 w-3" />
+                  <span className="truncate">{cal.summary}</span>
                 </label>
               </li>
-            ))}
-          </ul>
-        </fieldset>
-      ) : (
-        <p className="mb-4 text-sm text-ide-muted">{t('settings.noWriteAccount')}</p>
-      )}
-
-      <Button
-        type="button"
-        disabled={saving || writeOptions.length === 0}
-        onClick={() => void saveAppCalendar()}
-        icon={Check}
-      >
+            );
+          })}
+        </ul>
+      ) : null}
+      <Button type="button" onClick={() => void saveTargets()} icon={Check}>
         {t('common.save')}
       </Button>
     </section>

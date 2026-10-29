@@ -2,7 +2,7 @@
 
 Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Product behavior: [overview](overview.md).
 
-**How we work:** one chat = **one feature** below (top open item, or name it). Say *«давай наступну фічу»* / *«next feature»*. Finish → **delete that item from this file**, add a short done note to the archive, and correct `documentation/features/<slug>.md` (create it if missing). This file stays open work only. Do not leave `[x]` lines here.
+**How we work:** one chat = **one feature** below (top open item, or name it). Say *«давай наступну фічу»* / *«next feature»*. Finish → **delete that item from this file** and add a short done note to the archive. This file stays open work only. Do not leave `[x]` lines here.
 
 **Product pillars (Oct 2026 rebuild):** the two features that define the product are **auto-scheduling** and the **voice agent**. Auto-scheduling is the base; the agent is the differentiator. Do not polish TTS / deploy variants until both pillars are trustworthy. Specs: [spec-incremental-placement.md](spec-incremental-placement.md), [spec-conflict-rules.md](spec-conflict-rules.md), [spec-voice-agent.md](spec-voice-agent.md), [voice-prompt-next.md](voice-prompt-next.md).
 
@@ -74,6 +74,7 @@ Do not start these. The shape is still open.
 - **STT language: auto vs settings.** Today `speechLanguage` (`en` | `uk`) is a hint to Whisper on `/voice/transcribe`, and the Azure Speech test path sends the same setting as `uk-UA` or `en-US`. Investigate whether Whisper already detects the spoken language well enough without that setting, whether a wrong hint hurts accuracy, and whether Settings still needs an explicit speech language (or auto / follow-UI is enough). Decide before changing Settings or the STT call.
 - **Admin.** Owner-only. Contents are not chosen. Do not open an empty admin.
 - **Hide app calendar.** Visibility toggle for the app-owned calendar — product nuances still open.
+- **Outbound sync beyond Google.** Settings stores `syncTargetCalendars`, but app-task create/update/delete still writes Google only. Do not start until that write path is the task.
 - **Invite to an event (large).** Add someone to an event. Likely **per calendar provider** (Google / Microsoft / Apple differ on attendees, contact pickers, and OAuth scopes). Before any build: investigate whether we can read contacts at all; design the flow when contacts permission is denied (manual email? paste? skip?); decide where invite lives (preview, editor, voice); agree RSVP / attendees UI. Needs a dedicated product discussion — do not start from a thin ticket.
 - **Learned preference profile (large).** Beyond §40: infer durable facts from the schedule itself and feed Suggestions too. Examples: avoid heavy work on days packed with meetings; commute home is ~40 minutes unless they stop somewhere. Before build: what is stored, who can see/edit/delete it, how often it updates, privacy vs quality. Do not start until that shape is agreed.
 
@@ -118,4 +119,4 @@ Third parties and publishing. Leave these until the Now list is done.
 
 1. Next: **§39** — check voice P0 on a live model and a real calendar, then §40–§43 in order. **§37** fetches and **§38** past placement are independent web items. (§32 full mobile version is after the web. §31 backup and §24 Piper are in Later.)
 2. Old planner prompt work ([voice-prompt-next.md](voice-prompt-next.md), Planner C2 / C3) stays with the legacy engine. Do not put it back in this queue.
-3. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update the feature file under [features/](features/README.md), and update [overview.md](overview.md) / API docs if behavior changed.
+3. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

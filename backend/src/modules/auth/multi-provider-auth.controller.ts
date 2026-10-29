@@ -12,7 +12,6 @@ import {
   BadRequestException,
   Logger,
   Inject,
-  Optional,
   forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -27,7 +26,6 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UserIdentitiesService } from './user-identities.service';
 import { MicrosoftAuthService } from './microsoft-auth.service';
 import { AppleCalendarProvider } from '../calendar-providers/apple-calendar.provider';
-import { AppCalendarWriteService } from '../calendar-providers/app-calendar-write.service';
 import type { CalendarProviderId } from '../calendar-providers/calendar-provider.types';
 
 @ApiTags('auth-providers')
@@ -41,9 +39,6 @@ export class MultiProviderAuthController {
     private readonly microsoftAuth: MicrosoftAuthService,
     @Inject(forwardRef(() => AppleCalendarProvider))
     private readonly appleCalendar: AppleCalendarProvider,
-    @Optional()
-    @Inject(forwardRef(() => AppCalendarWriteService))
-    private readonly appWrites?: AppCalendarWriteService,
   ) {}
 
   @Get('microsoft')
@@ -201,7 +196,6 @@ export class MultiProviderAuthController {
       throw new BadRequestException('Unknown provider');
     }
     await this.identities.disconnect(req.user.userId, id);
-    await this.appWrites?.retargetIfDisconnected(req.user.userId, id);
     return { ok: true, deleteOverlays: !!body.deleteOverlays };
   }
 

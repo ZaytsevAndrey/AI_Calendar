@@ -71,6 +71,4 @@ For HTTP details see [api-reference](api-reference.md). Placement/conflict contr
 
 ## Documentation location
 
-Older paths like `backend/docs/*` and duplicate root-level write-ups were removed in favor of **`documentation/`**.
-
-**Per-feature behavior and logic** (preview, multi-calendar, Now/Next, habits, voice quota, reminders, …) live as full write-ups in [features/](features/README.md) — not only the short bullets in **Features** above. Placement / conflict / voice agent contracts stay in the `spec-*.md` files. When you add a section, update [this directory’s README](README.md).
+Older paths like `backend/docs/*` and duplicate root-level write-ups were removed in favor of **`documentation/`**. When you add a section, update [this directory’s README](README.md).

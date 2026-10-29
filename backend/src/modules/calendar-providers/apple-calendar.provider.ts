@@ -2,13 +2,10 @@ import {
   BadRequestException,
   Injectable,
   Logger,
-  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { randomBytes, randomUUID } from 'crypto';
 import { createDAVClient, type DAVCalendar } from 'tsdav';
 import { UserIdentitiesService } from '../auth/user-identities.service';
-import { appEventBodyFromGoogle, buildVEventIcs } from './app-event-body';
 import type {
   CalendarProvider,
   ProviderCalendar,
@@ -56,14 +53,6 @@ function isVeventCalendar(cal: DAVCalendar): boolean {
 function isIncompleteResponse(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   return /incomplete response/i.test(msg);
-}
-
-function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 const LIST_EVENTS_CACHE_TTL_MS = 20_000;
@@ -528,107 +517,6 @@ export class AppleCalendarProvider implements CalendarProvider {
       },
     });
     this.invalidateUserCaches(userId);
-  }
-
-  /** Create the named app calendar, or reuse `existingUrl` when iCloud still has it. */
-  async ensureNamedCalendar(
-    userId: string,
-    name: string,
-    existingUrl: string | null,
-  ): Promise<string> {
-    const client = await this.clientForUser(userId);
-    if (!client) {
-      throw new ServiceUnavailableException('Apple Calendar is not connected.');
-    }
-    const calendars = await client.fetchCalendars();
-    if (existingUrl) {
-      const found = (calendars ?? []).find(
-        (cal) =>
-          cal.url === existingUrl || cal.url === decodeURIComponent(existingUrl),
-      );
-      if (found?.url) return found.url;
-      this.logger.warn(
-        'Stored Apple app calendar is missing; creating a new one.',
-      );
-    }
-    const sample = (calendars ?? []).find((cal) => cal.url)?.url;
-    if (!sample) {
-      throw new ServiceUnavailableException(
-        'Apple Calendar did not return a calendar home.',
-      );
-    }
-    const home = sample.replace(/[^/]+\/?$/, '');
-    const url = `${home}${randomBytes(8).toString('hex')}/`;
-    const writer = client as DavClient & {
-      makeCalendar(params: {
-        url: string;
-        props?: { displayname?: string };
-      }): Promise<unknown>;
-    };
-    await writer.makeCalendar({ url, props: { displayname: name } });
-    return url;
-  }
-
-  async renameCalendar(
-    userId: string,
-    calendarUrl: string,
-    name: string,
-  ): Promise<void> {
-    const rows = await this.identities.listForUser(userId);
-    const identity = rows.find(
-      (row) => row.provider === 'apple' && row.accessToken,
-    );
-    if (!identity?.email || !identity.accessToken) return;
-    const password = identity.accessToken.replace(/[\s-]+/g, '');
-    const xml =
-      `<?xml version="1.0" encoding="utf-8" ?>` +
-      `<d:propertyupdate xmlns:d="DAV:"><d:set><d:prop>` +
-      `<d:displayname>${escapeXml(name)}</d:displayname>` +
-      `</d:prop></d:set></d:propertyupdate>`;
-    const res = await fetch(calendarUrl, {
-      method: 'PROPPATCH',
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${identity.email}:${password}`).toString('base64')}`,
-        'Content-Type': 'application/xml; charset=utf-8',
-      },
-      body: xml,
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new ServiceUnavailableException(
-        `Apple Calendar could not rename the calendar (${res.status} ${text.slice(0, 180)})`,
-      );
-    }
-  }
-
-  async createAppEvent(
-    userId: string,
-    calendarUrl: string,
-    event: Record<string, unknown>,
-  ): Promise<string> {
-    const client = await this.clientForUser(userId);
-    if (!client) {
-      throw new ServiceUnavailableException('Apple Calendar is not connected.');
-    }
-    const uid = randomUUID();
-    const filename = `${uid}.ics`;
-    const iCalString = buildVEventIcs(appEventBodyFromGoogle(event), uid);
-    const writer = client as DavClient & {
-      createCalendarObject(params: {
-        calendar: DAVCalendar;
-        filename: string;
-        iCalString: string;
-      }): Promise<unknown>;
-    };
-    await writer.createCalendarObject({
-      calendar: { url: calendarUrl },
-      filename,
-      iCalString,
-    });
-    const objectUrl = calendarUrl.endsWith('/')
-      ? `${calendarUrl}${filename}`
-      : `${calendarUrl}/${filename}`;
-    return encodeAppleObjectId(objectUrl);
   }
 
   private async createClient(

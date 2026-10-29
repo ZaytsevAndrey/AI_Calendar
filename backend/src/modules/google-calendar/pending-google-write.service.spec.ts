@@ -42,10 +42,7 @@ describe('PendingGoogleWriteService', () => {
     jest.clearAllMocks();
     pendingRepo.find.mockResolvedValue([]);
     scheduledRepo.find.mockResolvedValue([]);
-    settingsRepo.findOne.mockResolvedValue({
-      syncGoogleDeletions: false,
-      googleCalendarLinked: true,
-    });
+    settingsRepo.findOne.mockResolvedValue({ syncGoogleDeletions: false });
     google.checkConnection.mockResolvedValue({ connected: true });
     google.getEvent.mockReset();
     google.createEvent.mockResolvedValue({ id: 'g-new' });
@@ -67,7 +64,7 @@ describe('PendingGoogleWriteService', () => {
     });
     await service.syncTask('u1', 't1');
     expect(google.createEvent).not.toHaveBeenCalled();
-    expect(google.deleteEvent).toHaveBeenCalledWith('u1', 'g-1', 'primary', undefined);
+    expect(google.deleteEvent).toHaveBeenCalledWith('u1', 'g-1', 'primary');
   });
 
   it('creates a Google series with RRULE from open slots', async () => {
@@ -125,43 +122,6 @@ describe('PendingGoogleWriteService', () => {
       expect.objectContaining({ skipSleepWindowCheck: true }),
     );
     expect(scheduledRepo.save).toHaveBeenCalledTimes(3);
-  });
-
-  it('routes a recurring task to Microsoft instead of the Google series rewrite', async () => {
-    const start = new Date(Date.now() + 86_400_000);
-    start.setUTCHours(9, 0, 0, 0);
-    const end = new Date(start.getTime() + 15 * 60_000);
-    settingsRepo.findOne.mockResolvedValue({
-      syncGoogleDeletions: false,
-      googleCalendarLinked: false,
-      appCalendarProvider: 'microsoft',
-    });
-    taskRepo.findOne.mockResolvedValue({
-      id: 't1',
-      userId: 'u1',
-      name: 'Standup',
-      isUnscheduled: false,
-      scheduleState: 'none',
-      isRecurring: true,
-      recurrencePattern: 'DAILY',
-      recurrenceWeekDays: null,
-      skippedOccurrenceYmds: null,
-      scheduledStartTime: start,
-      scheduledEndTime: end,
-      googleEventId: null,
-      status: 'todo',
-      scheduleTimeZone: 'UTC',
-    });
-    scheduledRepo.find.mockResolvedValue([
-      { taskId: 't1', scheduledStartTime: start, scheduledEndTime: end },
-    ]);
-    await service.syncTask('u1', 't1');
-    expect(google.checkConnection).not.toHaveBeenCalled();
-    expect(google.createEvent).toHaveBeenCalledWith(
-      'u1',
-      expect.objectContaining({ summary: 'Standup' }),
-      expect.objectContaining({ provider: 'microsoft' }),
-    );
   });
 
   it('keeps a recurring series start on the first seated day, including the past', async () => {
@@ -456,7 +416,7 @@ describe('PendingGoogleWriteService', () => {
     await service.syncTask('u1', 't1');
     expect(google.createEvent).not.toHaveBeenCalled();
     expect(google.updateEvent).not.toHaveBeenCalled();
-    expect(google.deleteEvent).toHaveBeenCalledWith('u1', 'g-series', 'primary', undefined);
+    expect(google.deleteEvent).toHaveBeenCalledWith('u1', 'g-series', 'primary');
   });
 
   it('keeps Google when an active recurring task briefly has no open seats', async () => {
@@ -530,7 +490,7 @@ describe('PendingGoogleWriteService', () => {
     });
     google.createEvent.mockResolvedValueOnce({ id: 'g-orphan' });
     await service.syncTask('u1', 't1');
-    expect(google.deleteEvent).toHaveBeenCalledWith('u1', 'g-orphan', 'primary', 'google');
+    expect(google.deleteEvent).toHaveBeenCalledWith('u1', 'g-orphan', 'primary');
     expect(taskRepo.save).not.toHaveBeenCalled();
   });
 
@@ -550,7 +510,7 @@ describe('PendingGoogleWriteService', () => {
     taskRepo.findOne.mockResolvedValue(null);
     await service.processQueue();
     expect(google.createEvent).not.toHaveBeenCalled();
-    expect(google.deleteEvent).toHaveBeenCalledWith('u1', 'g-stale', 'primary', undefined);
+    expect(google.deleteEvent).toHaveBeenCalledWith('u1', 'g-stale', 'primary');
     expect(pendingRepo.remove).toHaveBeenCalled();
   });
 

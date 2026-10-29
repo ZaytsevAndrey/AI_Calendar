@@ -68,7 +68,6 @@ export class PendingGoogleWriteService {
       taskId?: string | null;
       googleEventId?: string | null;
       googleCalendarId?: string | null;
-      externalCalendarProvider?: 'google' | 'microsoft' | 'apple' | null;
       error?: string | null;
     },
   ): Promise<void> {
@@ -88,8 +87,6 @@ export class PendingGoogleWriteService {
       existing.googleEventId = opts.googleEventId ?? existing.googleEventId;
       existing.googleCalendarId =
         opts.googleCalendarId ?? existing.googleCalendarId;
-      existing.externalCalendarProvider =
-        opts.externalCalendarProvider ?? existing.externalCalendarProvider;
       await this.pendingRepo.save(existing);
       return;
     }
@@ -100,7 +97,6 @@ export class PendingGoogleWriteService {
         taskId: opts.taskId ?? null,
         googleEventId: opts.googleEventId ?? null,
         googleCalendarId: opts.googleCalendarId ?? null,
-        externalCalendarProvider: opts.externalCalendarProvider ?? null,
         attempts: 0,
         lastError: opts.error ?? null,
       }),
@@ -171,26 +167,13 @@ export class PendingGoogleWriteService {
       return;
     }
 
-    const settings = await this.settingsRepo.findOne({ where: { userId } });
-    const provider =
-      task.externalCalendarProvider ??
-      settings?.appCalendarProvider ??
-      (settings?.googleCalendarLinked ? 'google' : null);
-    if (!provider) return;
-    if (provider === 'google') {
-      const conn = await this.google.checkConnection(userId);
-      if (!conn.connected) return;
-    }
+    const conn = await this.google.checkConnection(userId);
+    if (!conn.connected) return;
 
     const calendarId = task.googleEventCalendarId ?? 'primary';
-    const syncOpts = {
-      skipSleepWindowCheck: true as const,
-      calendarId,
-      provider,
-    };
+    const syncOpts = { skipSleepWindowCheck: true as const, calendarId };
     try {
-      // The RRULE series rewrite is Google-only; other providers take the plain event path.
-      if (task.isRecurring && provider === 'google') {
+      if (task.isRecurring) {
         await this.writeRecurringSeries(userId, task, calendarId);
         return;
       }
@@ -207,7 +190,6 @@ export class PendingGoogleWriteService {
             userId,
             task.googleEventId,
             calendarId,
-            provider,
           );
           return;
         }
@@ -219,12 +201,11 @@ export class PendingGoogleWriteService {
     } catch (err) {
       if (!(await this.taskStillExists(userId, taskId))) return;
       const message = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Calendar sync failed for task ${taskId}: ${message}`);
+      this.logger.warn(`Google sync failed for task ${taskId}: ${message}`);
       await this.enqueue(userId, 'upsert', {
         taskId,
         googleEventId: task.googleEventId,
         googleCalendarId: task.googleEventCalendarId,
-        externalCalendarProvider: task.externalCalendarProvider ?? provider,
         error: message,
       });
     }
@@ -284,27 +265,6 @@ export class PendingGoogleWriteService {
 
     const calendarId =
       row.googleCalendarId || task.googleEventCalendarId || 'primary';
-    const provider =
-      task.externalCalendarProvider ?? row.externalCalendarProvider ?? 'google';
-    if (provider === 'microsoft' || provider === 'apple') {
-      if (task.googleEventId || row.googleEventId) {
-        await this.google.updateEvent(
-          row.userId,
-          task.googleEventId || row.googleEventId!,
-          await this.buildPayload(task),
-          { skipSleepWindowCheck: true, calendarId, provider },
-        );
-        await this.stampOpenSlotGoogle(task);
-        return;
-      }
-      const created = await this.google.createEvent(
-        row.userId,
-        await this.buildPayload(task),
-        { skipSleepWindowCheck: true, calendarId },
-      );
-      await this.attachCreatedGoogleEvent(row.userId, task, created, calendarId);
-      return;
-    }
     const local = {
       summary: task.name,
       description: task.description ?? '',
@@ -336,7 +296,7 @@ export class PendingGoogleWriteService {
           row.userId,
           eventId,
           await this.buildPayload(task),
-          { skipSleepWindowCheck: true, calendarId, provider },
+          { skipSleepWindowCheck: true, calendarId },
         );
         await this.stampOpenSlotGoogle(task);
         return;
@@ -383,30 +343,16 @@ export class PendingGoogleWriteService {
   private async attachCreatedGoogleEvent(
     userId: string,
     task: Task,
-    ev:
-      | {
-          id?: string;
-          appCalendarId?: string;
-          calendarProvider?: string;
-        }
-      | null
-      | undefined,
+    ev: { id?: string; appCalendarId?: string } | null | undefined,
     calendarId: string,
   ): Promise<void> {
     if (typeof ev?.id !== 'string') return;
-    const createdOn =
-      ev.calendarProvider === 'microsoft' ||
-      ev.calendarProvider === 'apple' ||
-      ev.calendarProvider === 'google'
-        ? ev.calendarProvider
-        : 'google';
     if (!(await this.taskStillExists(userId, task.id))) {
-      await this.deleteGoogleEventQuietly(userId, ev.id, calendarId, createdOn);
+      await this.deleteGoogleEventQuietly(userId, ev.id, calendarId);
       return;
     }
     task.googleEventId = ev.id;
     if (ev.appCalendarId) task.googleEventCalendarId = ev.appCalendarId;
-    task.externalCalendarProvider = createdOn;
     await this.taskRepo.save(task);
     await this.stampOpenSlotGoogle(task);
   }
@@ -415,22 +361,15 @@ export class PendingGoogleWriteService {
     userId: string,
     eventId: string,
     calendarId: string,
-    provider?: string | null,
   ): Promise<void> {
     try {
-      await this.google.deleteEvent(userId, eventId, calendarId, provider);
+      await this.google.deleteEvent(userId, eventId, calendarId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (/404|not found|Gone/i.test(message)) return;
       await this.enqueue(userId, 'delete', {
         googleEventId: eventId,
         googleCalendarId: calendarId,
-        externalCalendarProvider:
-          provider === 'microsoft' ||
-          provider === 'apple' ||
-          provider === 'google'
-            ? provider
-            : null,
         error: message,
       });
     }
@@ -443,7 +382,6 @@ export class PendingGoogleWriteService {
         row.userId,
         row.googleEventId,
         row.googleCalendarId ?? undefined,
-        row.externalCalendarProvider,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -466,7 +404,6 @@ export class PendingGoogleWriteService {
     if (task.googleEventId === eventId) {
       task.googleEventId = null;
       task.googleEventCalendarId = null;
-      task.externalCalendarProvider = null;
       await this.taskRepo.save(task);
     }
   }
@@ -504,12 +441,7 @@ export class PendingGoogleWriteService {
     const calendarId = task.googleEventCalendarId ?? 'primary';
     for (const eventId of ids) {
       try {
-        await this.google.deleteEvent(
-          userId,
-          eventId,
-          calendarId,
-          task.externalCalendarProvider,
-        );
+        await this.google.deleteEvent(userId, eventId, calendarId);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (/404|not found|Gone/i.test(message)) continue;
@@ -517,7 +449,6 @@ export class PendingGoogleWriteService {
           taskId: task.id,
           googleEventId: eventId,
           googleCalendarId: calendarId,
-          externalCalendarProvider: task.externalCalendarProvider,
           error: message,
         });
       }
@@ -525,14 +456,12 @@ export class PendingGoogleWriteService {
     if (task.googleEventId || task.googleEventCalendarId) {
       task.googleEventId = null;
       task.googleEventCalendarId = null;
-      task.externalCalendarProvider = null;
       await this.taskRepo.save(task);
     }
     for (const row of rows) {
       if (row.googleEventId) {
         row.googleEventId = null;
         row.googleEventCalendarId = null;
-        row.externalCalendarProvider = null;
         await this.scheduledRepo.save(row);
       }
     }
@@ -549,14 +478,12 @@ export class PendingGoogleWriteService {
       if (open.length !== 1) return;
       open[0].googleEventId = task.googleEventId;
       open[0].googleEventCalendarId = task.googleEventCalendarId;
-      open[0].externalCalendarProvider = task.externalCalendarProvider;
       await this.scheduledRepo.save(open[0]);
       return;
     }
     for (const row of open) {
       row.googleEventId = task.googleEventId;
       row.googleEventCalendarId = task.googleEventCalendarId;
-      row.externalCalendarProvider = task.externalCalendarProvider;
       await this.scheduledRepo.save(row);
     }
   }

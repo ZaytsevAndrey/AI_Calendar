@@ -58,23 +58,8 @@ export class UserSettings {
   syncGoogleDeletions: boolean;
 
   /**
-   * Account that hosts the app calendar for new writes: google, microsoft, or apple.
-   * Null until resolved from the sign-in account.
-   */
-  @Column({ type: 'varchar', length: 16, nullable: true })
-  appCalendarProvider: 'google' | 'microsoft' | 'apple' | null;
-
-  /** Outlook calendar id when the write account is Microsoft. */
-  @Column({ type: 'varchar', length: 512, nullable: true })
-  appMicrosoftCalendarId: string | null;
-
-  /** CalDAV calendar URL when the write account is Apple. */
-  @Column({ type: 'varchar', length: 1024, nullable: true })
-  appAppleCalendarId: string | null;
-
-  /**
-   * Legacy multi-calendar target list. Writers use `appCalendarProvider` instead.
-   * Kept for older clients; the Settings UI no longer edits this field.
+   * Outbound sync targets: `{ provider, calendarId }[]`.
+   * `null` = default (registration provider calendar). Empty array = sync nowhere.
    */
   @Column({ type: 'simple-json', nullable: true })
   syncTargetCalendars: Array<{ provider: string; calendarId: string }> | null;

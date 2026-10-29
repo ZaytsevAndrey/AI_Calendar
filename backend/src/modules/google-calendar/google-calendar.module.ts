@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { GoogleCalendarController } from './google-calendar.controller';
 import { GoogleCalendarService } from './google-calendar.service';
 import { UsersModule } from '../users/users.module';
@@ -13,7 +13,6 @@ import { PendingGoogleWriteService } from './pending-google-write.service';
 import { PendingGoogleWriteProcessor } from './pending-google-write.processor';
 import { Task } from '../tasks/entities/task.entity';
 import { ScheduledTask } from '../schedule/schedule.entity';
-import { CalendarProvidersModule } from '../calendar-providers/calendar-providers.module';
 
 @Module({
   imports: [
@@ -26,7 +25,6 @@ import { CalendarProvidersModule } from '../calendar-providers/calendar-provider
     ]),
     EventPhasesModule,
     PhasesModule,
-    forwardRef(() => CalendarProvidersModule),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

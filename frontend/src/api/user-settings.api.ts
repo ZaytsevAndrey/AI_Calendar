@@ -13,13 +13,9 @@ export interface UserSettingsDTO {
   preferredLunchTime: string;
   weekendWorkEnabled: boolean;
   googleCalendarLinked: boolean;
-  /** Display name of the dedicated app calendar on the write account */
+  /** Name of the dedicated Google calendar used for app-created events */
   appGoogleCalendarName?: string;
   appGoogleCalendarId?: string | null;
-  /** Connected account that hosts the app calendar for new writes */
-  appCalendarProvider?: 'google' | 'microsoft' | 'apple' | null;
-  appMicrosoftCalendarId?: string | null;
-  appAppleCalendarId?: string | null;
   /** Google calendar ids hidden on the Calendar page. */
   hiddenGoogleCalendarIds?: string[] | null;
   /** Minutes kept free around fixed tasks and external Google events. 0 is off. */
@@ -65,7 +61,6 @@ export interface UpdateUserSettingsDTO {
   weekendWorkEnabled?: boolean;
   googleCalendarLinked?: boolean;
   appGoogleCalendarName?: string;
-  appCalendarProvider?: 'google' | 'microsoft' | 'apple';
   hiddenGoogleCalendarIds?: string[];
   fixedEventBufferMinutes?: number;
   minSplitMinutes?: number;

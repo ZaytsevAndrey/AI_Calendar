@@ -1638,10 +1638,6 @@ function makeSettings(partial: Partial<UserSettings>): UserSettings {
     googleCalendarLinked: false,
     appGoogleCalendarName: 'luefy',
     appGoogleCalendarId: null,
-    appCalendarProvider: null,
-    appMicrosoftCalendarId: null,
-    appAppleCalendarId: null,
-    syncTargetCalendars: null,
     hiddenGoogleCalendarIds: null,
     allowSplitScheduling: true,
     minSplitMinutes: 30,
@@ -1683,7 +1679,6 @@ function makeTask(partial: Partial<Task>): Task {
     googleEventId: partial.googleEventId ?? null,
     googleEventCalendarId: (partial as { googleEventCalendarId?: string | null })
       .googleEventCalendarId ?? null,
-    externalCalendarProvider: partial.externalCalendarProvider ?? null,
     isFixedExternal: false,
     isUnscheduled: partial.isUnscheduled ?? false,
     scheduleState: partial.scheduleState ?? ScheduleState.NONE,

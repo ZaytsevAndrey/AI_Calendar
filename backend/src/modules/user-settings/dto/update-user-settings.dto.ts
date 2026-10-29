@@ -141,17 +141,6 @@ export class UpdateUserSettingsDto {
   appGoogleCalendarName?: string;
 
   @ApiProperty({
-    example: 'google',
-    description:
-      'Connected account that hosts the named app calendar. New tasks are written there.',
-    required: false,
-    enum: ['google', 'microsoft', 'apple'],
-  })
-  @IsIn(['google', 'microsoft', 'apple'])
-  @IsOptional()
-  appCalendarProvider?: 'google' | 'microsoft' | 'apple';
-
-  @ApiProperty({
     example: ['en.usa#holiday@group.v.calendar.google.com'],
     description:
       'Google calendar ids to hide on the Calendar page. The app calendar cannot be hidden. Empty shows primary, the app calendar, and calendars selected in Google.',

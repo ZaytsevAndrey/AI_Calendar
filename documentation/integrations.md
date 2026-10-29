@@ -2,9 +2,7 @@
 
 ## Purpose
 
-The app is the scheduling source of truth. Users **sign in** with **Google** (or **Microsoft** when configured). **Apple is not a sign-in provider** — iCloud Calendar is linked only from Settings via CalDAV. One account can link several calendar providers. Connected calendars appear in the Calendar visibility filter (provider sections → calendars).
-
-Settings **Calendars** stores `appCalendarProvider` (`google` | `microsoft` | `apple`) and `appGoogleCalendarName` (the dedicated app calendar title). New app-task and habit-block writes create or reuse that named calendar on the chosen account. Microsoft sign-in defaults `appCalendarProvider` to `microsoft`. Existing synced events stay on the account that created them when the write target changes. Legacy `syncTargetCalendars` is unused by the writer.
+The app is the scheduling source of truth. Users **sign in** with **Google** (or **Microsoft** when configured). **Apple is not a sign-in provider** — iCloud Calendar is linked only from Settings via CalDAV. One account can link several calendar providers. Connected calendars appear in the Calendar visibility filter (provider sections → calendars). Settings stores `syncTargetCalendars` (default unset, or sync nowhere). App-task create/update/delete still writes Google only; that stored list is not read by the writer yet.
 
 Inbound events that the user has not touched stay on the provider. Placement, the scheduling engine, the Problematic slot picker, reminders, schedule suggestions, and voice now/agenda/gaps treat timed events on every **visible** connected calendar as busy (hidden calendars are skipped; cancelled and “show as free” events are not). A thin **calendar event overlay** stores scheduling mode (`fixed` | `flexible`) only after the user changes type. Moving a flexible event writes time back to the provider (with a dismissible warning). Automatic placement does not move those external events; it schedules around them. Unscheduled removes the external event and creates a local Unscheduled task.
 

@@ -3,7 +3,6 @@
 ## Preconditions
 
 - Blocking questions from Phase 1 are **answered**, or the user **explicitly** waived them in writing.
-- The feature doc exists (`documentation/features/<slug>.md`, or the older file that already documents this feature). Leave it alone during implementation; Phase 6 corrects it.
 
 ## Principles
 

@@ -1,9 +1,7 @@
 import {
   BadRequestException,
-  Inject,
   Injectable,
   Logger,
-  Optional,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -28,10 +26,6 @@ import { displayCalendarIds } from './display-calendar-ids.util';
 import { phaseHexToGoogleColorId } from './phase-hex-to-google-color-id.util';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import { setRruleUntil } from '../schedule/google-recurrence.util';
-import {
-  APP_CALENDAR_WRITES,
-  type AppCalendarWrites,
-} from '../calendar-providers/app-calendar-writes.token';
 
 type LoginTicket = {
   access_token: string;
@@ -131,9 +125,6 @@ export class GoogleCalendarService {
     private eventPhasesService: EventPhasesService,
     private readonly phasesService: PhasesService,
     private readonly jwtService: JwtService,
-    @Optional()
-    @Inject(APP_CALENDAR_WRITES)
-    private readonly appWrites?: AppCalendarWrites,
   ) {
     const clientId = this.configService.get('GOOGLE_CLIENT_ID');
     const clientSecret = this.configService.get('GOOGLE_CLIENT_SECRET');
@@ -483,45 +474,6 @@ export class GoogleCalendarService {
       select: { appGoogleCalendarId: true },
     });
     return s?.appGoogleCalendarId ?? null;
-  }
-
-  /** Creates the Google app calendar when missing and returns its id. */
-  async ensureStoredAppCalendar(userId: string): Promise<string> {
-    const user = await this.userRepo.findOne({
-      where: { id: userId },
-      select: {
-        googleAccessToken: true,
-        googleRefreshToken: true,
-        googleTokenExpiry: true,
-      },
-    });
-    if (!user?.googleAccessToken) {
-      throw new ServiceUnavailableException('Google Calendar is not connected.');
-    }
-    if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
-      if (!user.googleRefreshToken) {
-        throw new ServiceUnavailableException('Google Calendar token expired.');
-      }
-      this.oauth2Client.setCredentials({
-        refresh_token: user.googleRefreshToken,
-      });
-      const { credentials } = await this.oauth2Client.refreshAccessToken();
-      await this.userRepo.update(userId, {
-        googleAccessToken: credentials.access_token,
-        googleTokenExpiry: new Date(
-          credentials.expiry_date ?? Date.now() + 3_600_000,
-        ),
-      });
-      user.googleAccessToken = credentials.access_token;
-    }
-    this.oauth2Client.setCredentials({
-      access_token: user.googleAccessToken,
-    });
-    const calendar = google.calendar({
-      version: 'v3',
-      auth: this.oauth2Client,
-    });
-    return this.ensureAppCalendarIdWithClient(calendar, userId);
   }
 
   /**
@@ -1266,12 +1218,6 @@ export class GoogleCalendarService {
       event,
       opts,
     );
-    if (this.appWrites) {
-      const provider = await this.appWrites.resolve(userId);
-      if (provider === 'microsoft' || provider === 'apple') {
-        return this.appWrites.createEvent(userId, event);
-      }
-    }
     const requestBody = stripAppManagedEventProperties(event);
     await this.applyPhaseColorToRequestBody(userId, phaseId, requestBody);
 
@@ -1345,7 +1291,6 @@ export class GoogleCalendarService {
     return {
       ...response.data,
       appCalendarId: writableCalendarId,
-      calendarProvider: 'google' as const,
     };
   }
 
@@ -1353,36 +1298,13 @@ export class GoogleCalendarService {
     userId: string,
     eventId: string,
     event: Record<string, unknown>,
-    opts?: {
-      skipSleepWindowCheck?: boolean;
-      calendarId?: string;
-      provider?: string | null;
-    },
+    opts?: { skipSleepWindowCheck?: boolean; calendarId?: string },
   ) {
     const { phaseId } = await this.assertCalendarWritePayload(
       userId,
       event,
       opts,
     );
-    if (opts?.provider === 'microsoft' || opts?.provider === 'apple') {
-      if (!this.appWrites) {
-        throw new ServiceUnavailableException(
-          'Calendar write service is not available.',
-        );
-      }
-      await this.appWrites.updateEvent(
-        userId,
-        opts.provider,
-        eventId,
-        event,
-        opts.calendarId,
-      );
-      return {
-        id: eventId,
-        appCalendarId: opts.calendarId,
-        calendarProvider: opts.provider,
-      };
-    }
     const requestBody = stripAppManagedEventProperties(event);
     await this.applyPhaseColorToRequestBody(userId, phaseId, requestBody);
 
@@ -1483,28 +1405,11 @@ export class GoogleCalendarService {
     startIso: string,
     endIso: string,
     calendarId?: string,
-    provider?: string | null,
   ): Promise<void> {
     const body = {
       start: { dateTime: startIso },
       end: { dateTime: endIso },
     };
-    if (provider === 'microsoft' || provider === 'apple') {
-      if (!this.appWrites) {
-        throw new ServiceUnavailableException(
-          'Calendar write service is not available.',
-        );
-      }
-      await this.appWrites.patchTimes(
-        userId,
-        provider,
-        eventId,
-        startIso,
-        endIso,
-        calendarId,
-      );
-      return;
-    }
     await this.assertCalendarWritePayload(userId, body, {
       skipSleepWindowCheck: true,
     });
@@ -1672,21 +1577,7 @@ export class GoogleCalendarService {
     this.forgetGoogleDisplayCache(userId);
   }
 
-  async deleteEvent(
-    userId: string,
-    eventId: string,
-    calendarId?: string,
-    provider?: string | null,
-  ) {
-    if (provider === 'microsoft' || provider === 'apple') {
-      if (!this.appWrites) {
-        throw new ServiceUnavailableException(
-          'Calendar write service is not available.',
-        );
-      }
-      await this.appWrites.deleteEvent(userId, provider, eventId, calendarId);
-      return;
-    }
+  async deleteEvent(userId: string, eventId: string, calendarId?: string) {
     if (stubExternalApis()) {
       return { success: true };
     }

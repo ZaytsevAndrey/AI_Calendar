@@ -4,10 +4,9 @@ description: >-
   Guides end-to-end development of a new product feature: plan, surface open
   questions and get answers before coding, implement with minimal scope creep,
   remove obsolete code after behavior changes, simplify using best practices,
-  cover the feature with tests, then correct its documentation/features file
-  (and any other feature docs the change touched) before commit. Use when the
-  user starts or discusses a new feature, greenfield work, or asks for a
-  structured feature delivery flow.
+  cover the feature with tests, then update documentation/ when the feature
+  ships. Use when the user starts or discusses a new feature, greenfield work,
+  or asks for a structured feature delivery flow.
 ---
 
 # New feature workflow
@@ -26,8 +25,8 @@ Act as a **workflow orchestrator**. Follow the phases in order. Do not skip **Pl
 
 | Phase | Read when |
 |------|-----------|
-| 1. Planning & questions | Starting the feature. Feature doc is written at the end of this phase |
-| 2. Implementation | After all blocking questions are answered and the feature doc exists |
+| 1. Planning & questions | Starting the feature |
+| 2. Implementation | After all blocking questions are answered |
 | 3. Dead code & leftovers | After implementation compiles and behavior matches intent |
 | 4. Simplify & best practices | After cleanup |
 | 5. Tests | After simplification; before handoff |
@@ -35,23 +34,23 @@ Act as a **workflow orchestrator**. Follow the phases in order. Do not skip **Pl
 
 Detailed steps:
 
-1. **Planning & questions** — [planning.md](planning.md). Feature doc rules: [feature-docs.md](feature-docs.md)
+1. **Planning & questions** — [planning.md](planning.md)
 2. **Implementation** — [implementation.md](implementation.md)
 3. **Dead code & leftovers** — [dead-code-cleanup.md](dead-code-cleanup.md)
 4. **Simplify & best practices** — [simplification.md](simplification.md)
 5. **Tests** — [testing.md](testing.md)
-6. **Wrap-up** — [wrap-up.md](wrap-up.md). Correct the feature doc, and docs of features this change touched, before the commit ([feature-docs.md](feature-docs.md))
+6. **Wrap-up** — [wrap-up.md](wrap-up.md)
 
 ## Master checklist (copy into chat when starting)
 
 ```text
 New feature — progress
-- [ ] Phase 1: Plan + open questions; blocking items answered (or explicitly waived); feature doc created in documentation/features/
+- [ ] Phase 1: Plan + open questions; blocking items answered (or explicitly waived)
 - [ ] Phase 2: Implemented minimal change set; English in code; root build passes
 - [ ] Phase 3: Removed unused / obsolete code paths
 - [ ] Phase 4: Simplified; aligned with project conventions
 - [ ] Phase 5: Tests covering new/changed behavior; relevant test commands pass
-- [ ] Phase 6: Wrap-up. Feature doc matches what shipped; docs of touched features updated; roadmap/overview/API/spec files updated where the change actually applied. If the build, all tests, and end-to-end passed, commit and push immediately
+- [ ] Phase 6: Wrap-up (risk notes, summary; documentation/ updated for shipped behavior; build re-checked if needed). If the build, all tests, and end-to-end passed, commit and push immediately
 ```
 
 ## Reuse in other projects

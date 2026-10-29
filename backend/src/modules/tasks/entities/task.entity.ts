@@ -187,16 +187,9 @@ export class Task {
   @Column({ type: 'varchar', nullable: true })
   googleEventId: string | null;
 
-  /** Calendar id where `googleEventId` lives; null = legacy Google events on `primary`. */
-  @Column({ type: 'varchar', length: 1024, nullable: true })
+  /** Google calendar id where `googleEventId` lives; null = legacy events on `primary`. */
+  @Column({ type: 'varchar', length: 255, nullable: true })
   googleEventCalendarId: string | null;
-
-  /**
-   * Account that owns `googleEventId`. Null means Google (events written before
-   * multi-account sync). Later edits stay on this account.
-   */
-  @Column({ type: 'varchar', length: 16, nullable: true })
-  externalCalendarProvider: 'google' | 'microsoft' | 'apple' | null;
 
   @Column({ default: false })
   isFixedExternal: boolean;
