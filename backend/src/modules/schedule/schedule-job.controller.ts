@@ -65,6 +65,9 @@ export class ScheduleJobController {
       progressStage: job.progressStage,
       progressCurrent: job.progressCurrent,
       progressTotal: job.progressTotal,
+      // A retry is `pending` with progressStage `retrying` until nextRunAt.
+      attempts: job.attempts,
+      nextRunAt: job.nextRunAt,
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
     };

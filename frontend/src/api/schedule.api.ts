@@ -42,8 +42,21 @@ export interface ScheduleJobStatusResponse {
   progressStage?: string | null;
   progressCurrent?: number | null;
   progressTotal?: number | null;
+  /** Set while a failed attempt waits for its retry (`progressStage: retrying`). */
+  attempts?: number;
+  nextRunAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
+}
+
+/** A job waiting for a scheduled retry is still alive: wait past its retry time. */
+export function jobPollDeadline(
+  deadline: number,
+  job: Pick<ScheduleJobStatusResponse, 'status' | 'nextRunAt'>,
+): number {
+  if (job.status !== 'pending' || !job.nextRunAt) return deadline;
+  const retryAt = new Date(job.nextRunAt).getTime();
+  return Number.isFinite(retryAt) ? Math.max(deadline, retryAt + 30_000) : deadline;
 }
 
 async function pollJobUntilDone(
@@ -51,7 +64,7 @@ async function pollJobUntilDone(
   timeoutMs = 120_000,
   onProgress?: (job: ScheduleJobStatusResponse) => void,
 ): Promise<ScheduleJobStatusResponse> {
-  const deadline = Date.now() + timeoutMs;
+  let deadline = Date.now() + timeoutMs;
   let status = 'pending';
   let last: ScheduleJobStatusResponse | null = null;
   let first = true;
@@ -61,12 +74,15 @@ async function pollJobUntilDone(
       throw new Error('Schedule job timed out');
     }
     if (!first) {
-      await new Promise((r) => setTimeout(r, 350));
+      // Waiting for a retry (seconds to minutes away): poll slower.
+      const waiting = last?.progressStage === 'retrying';
+      await new Promise((r) => setTimeout(r, waiting ? 2_000 : 350));
     }
     first = false;
     const { data } = await axios.get<ScheduleJobStatusResponse>(`/schedule-jobs/${jobId}`);
     last = data;
     status = data.status;
+    deadline = jobPollDeadline(deadline, data);
     onProgress?.(data);
     if (status === 'failed') {
       throw new Error(data.errorMessage || 'Schedule job failed');

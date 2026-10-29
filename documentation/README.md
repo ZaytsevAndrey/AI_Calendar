@@ -9,6 +9,7 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [API reference](api-reference.md) | Main HTTP routes (aligned with Nest controllers) |
 | [Integrations](integrations.md) | Google OAuth / Calendar, Groq voice, common errors (`redirect_uri_mismatch`) |
 | [Deploy](deploy.md) | Free hosting on Render + Neon, GitHub Actions CI, `master` auto-deploy |
+| [Operations](operations.md) | Background job queue, retries, failed jobs, per-user lock, Google sync failures, logs |
 | [Task creation rules](task-creation-rules.md) | Presets vs settings, validation, phase, recurrence weekdays, Google sync |
 | [Roadmap](roadmap.md) | Live queue |
 | [Roadmap archive](roadmap-archive.md) | Shipped work |

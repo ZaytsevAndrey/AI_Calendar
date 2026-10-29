@@ -218,7 +218,7 @@ Legacy read-only status for old jobs. Nothing new is enqueued.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/schedule-jobs/latest/done` | Latest completed job + parsed `result` when present |
-| GET | `/schedule-jobs/:id` | Job status (leftover queue rows fail without writing slots) |
+| GET | `/schedule-jobs/:id` | Job status: `status` (`pending`, `running`, `done`, `failed`), `progressStage`, `errorMessage`, `result`, `attempts`, `nextRunAt`. A failed attempt that will be retried is `pending` with `progressStage: retrying` until `nextRunAt`; the SPA keeps polling past its usual timeout for it. Leftover non-mutation queue rows fail without writing slots. |
 
 Create and geometric edit seat through the placement step after the HTTP response (poll `jobId`). Conflicts may arrive on the job `result` when placement finishes.
 

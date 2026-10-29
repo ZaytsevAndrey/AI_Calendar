@@ -205,6 +205,9 @@ export class ScheduleJobService {
     const refused = err instanceof HttpException && err.getStatus() < 500;
     const attempts = job.attempts ?? 1;
     if (refused || attempts >= MUTATION_MAX_ATTEMPTS) {
+      if (!refused) {
+        this.logger.error(`Mutation job ${job.id} failed after ${attempts} attempts: ${message}`);
+      }
       await this.failMutationJob(job.id, message);
       return;
     }

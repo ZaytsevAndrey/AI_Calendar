@@ -39,8 +39,8 @@ Runtime assumptions found: production runs one Render instance, Neon Postgres, `
 | 2 | B: cross-instance user lock (Postgres advisory lock), transaction audit fixes | done | a78aebf |
 | 3 | F1: root causes of the 5 voice e2e failures and the 13 historical suites | done | 5b50f11 |
 | 4 | G: versioned migrations instead of `TYPEORM_SYNC=true` | done | fdf5ec3 |
-| 5 | C/D/E: historical identity tests, recurrence/temporal/placement edge tests, Google failure handling | done (partial, see section) | (stage C/D/E commit) |
-| 6 | F2 live voice eval, H frontend states, I/J docs and operations | todo | |
+| 5 | C/D/E: historical identity tests, recurrence/temporal/placement edge tests, Google failure handling | done (partial, see section) | 1c2a18f |
+| 6 | F2 live voice eval, F3/F4, H frontend states, I matrix, J operations doc | done | (stage 6 commit) |
 
 ## Stage A — durable placement (done)
 
@@ -114,6 +114,56 @@ One live run on 2026-10-29, production structured pipeline, real model calls (no
 
 Turns: 21, 9 fully correct; **unsafe turns 0, server writes 0**. Failure kinds: 7 unnecessary clarifications (e.g. "в суботу зранку" asks for an exact hour), 4 intent errors (e.g. a rename turn "назва хай буде чистовик договору" during a preview is refused as invalid model output, and the next turn loses the target). So the run shows the pipeline stays safe; it does not show good multi-turn completion. No earlier result for this suite is recorded in the repo to compare against. All scenarios are Ukrainian; there is no English live set — English was not evaluated live. Raw output was kept out of the repo (scratchpad); rerun with the command above.
 
-## Current work
+## Stage F3/F4 — voice safety, legacy engine
 
-H, I/J docs.
+- **F3 safety:** the active gate (`test:vnext:structured`, 232/232, now in CI) covers confirm-once, cancel without apply, stale revision, duplicate refs (see F1). The live run had 0 unsafe turns and 0 server writes. Not verified: a live run against a real Google calendar (roadmap §39).
+- **F4 legacy retirement (§49): not done, on purpose.** Blockers: (1) `VOICE_TURN_ENGINE=legacy` is the only rollback if the structured pipeline misbehaves in production, and the live run shows weak multi-turn completion (B/C 0/5); (2) `voice-agent.e2e-spec.ts` (5 cases) and `voice-turn-trace.spec.ts` exercise the legacy orchestrator and would need porting; (3) the roadmap orders §49 after the §39 live check. Remove it after §39 passes and the e2e cases are ported to the structured contract.
+
+## Stage H — API and frontend job states (done)
+
+- `GET /schedule-jobs/:id` now also returns `attempts` and `nextRunAt` (additive).
+- **Found and fixed:** the SPA poller gave up after 120 s and showed an error, while a job being retried (backoff 15 + 30 + 60 + 120 s) could still succeed afterwards. `jobPollDeadline` extends the deadline to `nextRunAt + 30 s` while a retry is scheduled, and the poller slows to 2 s while `progressStage = retrying`. The stage pill keeps its last stage during a retry (unknown stages are ignored). Test: `frontend/src/api/schedule.api.spec.ts`.
+- A final failure of a mutation job is now logged at error level (it was silent).
+- Not done: a distinct "retrying" visual state; HTTP idempotency keys.
+
+## Stage I — test matrix (honest)
+
+| Area | Covered by | Real DB | Status |
+|------|-----------|---------|--------|
+| Placement core rules | `placement-step.util.spec`, `placement-engine-regressions.spec`, `scheduling-invariants.spec` (randomized, seeds 20261105, 7, 4242) | pure + SQLite | covered |
+| Placement + persistence | `placement-step.service.spec`, `placement-load.spec` (SQLite kit) | SQLite | covered |
+| Full workflow (series → conflict → detach → future → restart) | `scheduling-workflows.spec` I1 | SQLite | covered, one scenario |
+| Durable jobs: crash, lease, retry, 4xx final, inline | `mutation-jobs.spec` | SQLite | covered |
+| Concurrent job claims | `mutation-jobs.pg.spec` | Postgres 16 | covered, needs `PG_TEST_URL` (CI does not run it) |
+| Cross-instance user lock | `user-lock.pg.spec` | Postgres 16 | covered, needs `PG_TEST_URL` (not in CI) |
+| Migrations: fresh, upgrade, rerun, no drift | `migrations.pg.spec` | Postgres 16 | covered, needs `PG_TEST_URL` (not in CI) |
+| Historical copy identity | `scheduling-workflows.spec` C1, refactor specs | SQLite | covered |
+| Recurrence: leap day, year end, DST | `scheduling-workflows.spec` C3 | SQLite | covered for Europe/Kyiv only |
+| Full day / no overlap | D2 + invariant specs | SQLite | covered |
+| Chain depth, cross-midnight, very long tasks | — | — | **not covered** by new tests |
+| Google sync failure → retry, no undo | E2, `pending-google-write.service.spec` | SQLite / mocks | covered (Google mocked) |
+| Google queue starvation | E3 | SQLite | covered |
+| Google auth expiry, duplicate webhooks | — | — | **not covered** |
+| Voice structured gate | `test:vnext:structured` | mocks | covered, in CI |
+| Voice live model | F2 run (12 scenarios, Ukrainian) | live model | sampled once; English **not evaluated** |
+| Frontend job polling | `schedule.api.spec`, `settleReplanJob.spec` | — | covered |
+| Real Google API end to end | — | — | **not covered** (manual only) |
+
+Postgres specs in CI would need a Postgres service in `.github/workflows/ci.yml`; not added (new CI infrastructure, needs a decision).
+
+## Final status (2026-10-30)
+
+Verified at the stage 6 commit: backend `npm test` 1038 pass + 9 skipped (Postgres specs, run separately), 0 fail; Postgres 16 specs 9/9; e2e 137/137; structured voice 232/232; frontend 306/306; backend and frontend builds ok; `dist/main.js` present. Nothing pushed or merged.
+
+Not production-proven: no deploy of this branch was made; migrations were tested on local Postgres 16, not on a copy of the Neon database.
+
+## Continuation
+
+1. Before merging: run the migrations against a Neon branch copy of production (`deploy.md` → Database migrations), then deploy with `TYPEORM_SYNC=false`.
+2. Fix `backend/.env.example` (`TYPEORM_SYNC=true` advice) once the other chat's edits to it are committed.
+3. `pending_google_writes`: attempt cap + backoff + lease (needs a migration) before running more than one instance.
+4. Add a Postgres service to CI so the `.pg.spec` files run there.
+5. Tests still missing: chain depth, cross-midnight, very long tasks, Google auth expiry, duplicate webhooks.
+6. Voice: port the 13 historical suites and the legacy e2e cases to the 4.1 contract; run §39 (live, real calendar); add an English live set; then §49.
+7. HTTP idempotency keys for create; move `seatResolvedLayer` writes into the transaction.
+8. Roadmap: not updated here — `documentation/roadmap.md` holds another chat's uncommitted restructure.
