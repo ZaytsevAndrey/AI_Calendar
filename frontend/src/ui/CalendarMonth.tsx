@@ -56,7 +56,6 @@ function monthCells(cursor: Date): Date[] {
 export type CalendarDayMark = {
   selected?: boolean;
   inRange?: boolean;
-  disabled?: boolean;
 };
 
 type CalendarMonthProps = {
@@ -145,13 +144,9 @@ export function CalendarMonth({
             <button
               key={ymd}
               type="button"
-              data-ymd={ymd}
-              disabled={mark.disabled}
               className={cx(
                 'min-h-[36px] rounded-md text-sm',
-                mark.disabled
-                  ? 'cursor-not-allowed text-ide-muted/40'
-                  : mark.selected
+                mark.selected
                   ? 'bg-ide-selection text-ide-text'
                   : mark.inRange
                     ? 'bg-ide-selection/35 text-ide-text'

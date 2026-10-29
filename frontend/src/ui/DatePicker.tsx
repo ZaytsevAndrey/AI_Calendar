@@ -21,8 +21,6 @@ type Props = {
   error?: boolean;
   emptyLabel: string;
   clearLabel?: string;
-  /** Earliest selectable civil day, `YYYY-MM-DD`. */
-  minYmd?: string;
 };
 
 export function DatePicker({
@@ -33,7 +31,6 @@ export function DatePicker({
   error,
   emptyLabel,
   clearLabel,
-  minYmd,
 }: Props) {
   const { t } = useTranslation();
   const dateLocale = dateFnsLocale();
@@ -102,10 +99,7 @@ export function DatePicker({
               <CalendarMonth
                 cursor={cursor}
                 onCursorChange={setCursor}
-                markDay={(ymd) => ({
-                  selected: ymd === selected,
-                  disabled: !!minYmd && ymd < minYmd,
-                })}
+                markDay={(ymd) => ({ selected: ymd === selected })}
                 onDayClick={(ymd) => {
                   onChange(ymd);
                   setOpen(false);
