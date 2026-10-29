@@ -46,6 +46,9 @@ services:
         sync: false
       - key: REMINDER_CRON_SECRET
         sync: false
+      # Shared with ai-calendar-admin-api, which calls /internal/* with it.
+      - key: INTERNAL_API_TOKEN
+        generateValue: true
       - key: FRONTEND_URL
         fromService:
           name: ai-calendar-web
@@ -120,3 +123,71 @@ services:
         value: 18.18.0
       - key: REACT_APP_API_BASE_URL
         sync: false
+
+  # Admin API: a separate process with its own port, signing key and CORS origin.
+  # Shares only the database with ai-calendar-api and never changes the schema.
+  - type: web
+    name: ai-calendar-admin-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: master
+    autoDeployTrigger: commit
+    buildCommand: npm ci --workspace=backend --include-workspace-root --include=dev && npm run build:backend
+    startCommand: npm run start:admin-api:prod --workspace=backend
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 18.18.0
+      - key: ADMIN_JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromService:
+          name: ai-calendar-api
+          type: web
+          envVarKey: DATABASE_URL
+      - key: INTERNAL_API_TOKEN
+        fromService:
+          name: ai-calendar-api
+          type: web
+          envVarKey: INTERNAL_API_TOKEN
+      - key: CLIENT_API_URL
+        fromService:
+          name: ai-calendar-api
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: ADMIN_URL
+        fromService:
+          name: ai-calendar-admin
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+
+  # Admin web app (admin/). Talks only to ai-calendar-admin-api.
+  - type: web
+    name: ai-calendar-admin
+    runtime: static
+    branch: master
+    autoDeployTrigger: commit
+    buildCommand: npm ci --workspace=admin --include-workspace-root --include=dev && npm run build:admin
+    staticPublishPath: admin/dist
+    headers:
+      - path: /*
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: NODE_VERSION
+        value: 18.18.0
+      - key: REACT_APP_API_BASE_URL
+        fromService:
+          name: ai-calendar-admin-api
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL

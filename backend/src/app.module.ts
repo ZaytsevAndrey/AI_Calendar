@@ -15,6 +15,8 @@ import { RemindersModule } from './modules/reminders/reminders.module';
 import { DayRemindersModule } from './modules/day-reminders/day-reminders.module';
 import { CalendarOverlaysModule } from './modules/calendar-overlays/calendar-overlays.module';
 import { CalendarProvidersModule } from './modules/calendar-providers/calendar-providers.module';
+import { AdminDataModule } from './modules/admin-data/admin-data.module';
+import { InternalModule } from './modules/internal/internal.module';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { migrateLegacyScheduleState } from './database/migrate-schedule-state';
 import { createTypeOrmOptions } from './database/typeorm.config';
@@ -52,6 +54,8 @@ import { createTypeOrmOptions } from './database/typeorm.config';
     HabitsModule,
     RemindersModule,
     DayRemindersModule,
+    AdminDataModule,
+    InternalModule,
   ],
 })
 export class AppModule implements NestModule {

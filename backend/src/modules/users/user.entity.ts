@@ -45,6 +45,21 @@ export class User {
   @Column({ default: false })
   isEmailVerified: boolean;
 
+  /** Set by the owner in the admin console. A blocked user cannot call the API. */
+  @Column({ default: false })
+  isBlocked: boolean;
+
+  /**
+   * "Sign out everywhere" from the admin console. Tokens issued before this
+   * second are refused, including 7-day refresh JWTs used as bearer tokens.
+   */
+  @Column({ nullable: true, type: timestampColumnType() })
+  sessionsRevokedAt: Date | null;
+
+  /** Last authenticated API call, written at most every few minutes. */
+  @Column({ nullable: true, type: timestampColumnType() })
+  lastActiveAt: Date | null;
+
   @OneToMany(() => Task, (task) => task.user)
   tasks: Task[];
 

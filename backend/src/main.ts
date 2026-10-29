@@ -10,6 +10,9 @@ import { getFrontendBaseUrl } from './common/public-url';
 import { Logger } from '@nestjs/common';
 import { VoiceFileLogger } from './common/voice-file-logger';
 import { registerVoiceHttpTiming } from './common/voice-http-timing';
+import { VoiceTurnLogService } from './modules/admin-data/voice-turn-log.service';
+import { ApiErrorLogService } from './modules/admin-data/api-error-log.service';
+import { setApiErrorSink } from './common/api-error-sink';
 
 function isAllowedOrigin(origin: string | undefined): boolean {
   if (!origin) {
@@ -74,7 +77,11 @@ async function bootstrap() {
   });
 
   const fastify = app.getHttpAdapter().getInstance();
-  registerVoiceHttpTiming(fastify, new Logger('HTTP'));
+  // The separate admin API reads these two logs from the database.
+  const voiceTurnLog = app.get(VoiceTurnLogService);
+  const apiErrorLog = app.get(ApiErrorLogService);
+  setApiErrorSink((entry) => apiErrorLog.record(entry));
+  registerVoiceHttpTiming(fastify, new Logger('HTTP'), (turn) => voiceTurnLog.record(turn));
   fastify.get('/health', async () => ({ status: 'ok' }));
 
   if (process.env.E2E_BOOTSTRAP === '1') {

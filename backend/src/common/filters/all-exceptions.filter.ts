@@ -9,6 +9,7 @@ import {
 import { Request } from 'express';
 import { ApiError } from '../../modules/common/types/errors';
 import { resolveAppLanguage, t, type MessageKey } from '../../i18n';
+import { reportApiError } from '../api-error-sink';
 
 const API_ERROR_KEYS: Record<string, MessageKey> = {
   INVALID_CREDENTIALS: 'errors.INVALID_CREDENTIALS',
@@ -164,6 +165,15 @@ Params: ${JSON.stringify(request.params)}
 Headers: ${JSON.stringify(request.headers)}
 -----------------
 `);
+
+    reportApiError({
+      method: request.method,
+      url: request.url,
+      status,
+      code: typeof body.code === 'string' ? body.code : null,
+      message: status >= 500 ? logMessage : body.message,
+      userId: (request as Request & { user?: { userId?: string } }).user?.userId,
+    });
 
     sendJson(response, status, body);
   }

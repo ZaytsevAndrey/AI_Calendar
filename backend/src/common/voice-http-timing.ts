@@ -28,6 +28,22 @@ export type VoiceTimingServer = {
   ): void;
 };
 
+/** One finished /voice request, handed to an optional sink (the admin turn log). */
+export type VoiceTurnRecord = {
+  traceId: string;
+  userId: string | null;
+  method: string;
+  url: string;
+  statusCode: number;
+  totalMs: number;
+  steps: VoiceStep[];
+};
+
+function requestUserId(request: object): string | null {
+  const user = (request as { user?: { userId?: unknown } }).user;
+  return typeof user?.userId === 'string' ? user.userId : null;
+}
+
 function isVoicePath(url: string): boolean {
   return /^\/voice(?:\/|$)/.test((url || '').split('?')[0]);
 }
@@ -40,6 +56,7 @@ function isVoicePath(url: string): boolean {
 export function registerVoiceHttpTiming(
   server: VoiceTimingServer,
   logger: Pick<Logger, 'log'>,
+  onTurn?: (record: VoiceTurnRecord) => void | Promise<void>,
 ): void {
   server.addHook('onRequest', async (request) => {
     if (isVoicePath(request.url)) bindVoiceTrace(request);
@@ -56,5 +73,21 @@ export function registerVoiceHttpTiming(
       steps,
     });
     if (line) logger.log(line);
+    if (line && onTurn) {
+      // Do not hold the response hook on the database write.
+      void Promise.resolve()
+        .then(() =>
+          onTurn({
+            traceId: trace?.traceId ?? 'none',
+            userId: requestUserId(request),
+            method: request.method,
+            url: request.url,
+            statusCode: reply.statusCode,
+            totalMs: reply.elapsedTime,
+            steps: steps.map((step) => ({ ...step })),
+          }),
+        )
+        .catch(() => undefined);
+    }
   });
 }

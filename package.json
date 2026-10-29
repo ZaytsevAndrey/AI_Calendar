@@ -4,18 +4,22 @@
   "private": true,
   "workspaces": [
     "frontend",
-    "backend"
+    "backend",
+    "admin"
   ],
   "scripts": {
     "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\" \"npm run start:landing\"",
     "start:frontend": "npm run start --workspace=frontend",
     "start:backend": "npm run start:dev --workspace=backend",
+    "start:admin": "npm run start --workspace=admin",
+    "start:admin-api": "npm run start:admin-api --workspace=backend",
     "start:piper": "node tools/piper-http.mjs",
     "voice:eval:dialogue": "npm run voice:eval:dialogue --workspace=backend",
     "start:landing": "npm run dev --prefix landing",
     "build": "npm run build --workspaces",
     "build:frontend": "npm run build --workspace=frontend",
     "build:backend": "npm run build --workspace=backend",
+    "build:admin": "npm run build --workspace=admin",
     "build:landing": "npm ci --prefix landing && npm run build --prefix landing",
     "build:site": "npm run build:frontend && npm run build:landing && node scripts/assemble-site.mjs",
     "preview:site": "node scripts/preview-site.mjs",

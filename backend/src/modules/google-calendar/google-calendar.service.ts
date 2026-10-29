@@ -205,6 +205,9 @@ export class GoogleCalendarService {
     }
 
     const user = await this.findOrLinkGoogleUser(googleId, email);
+    if (user.isBlocked) {
+      throw new BadRequestException('This account is blocked.');
+    }
     await this.persistGoogleTokens(user.id, tokens);
     await this.ensureSettingsLinked(user.id);
 
