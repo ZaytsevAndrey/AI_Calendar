@@ -272,6 +272,23 @@ describe('GoogleCalendarService', () => {
     expect(result).toEqual({ connected: false });
   });
 
+  it('reports not connected when the refresh token is rejected, and keeps the stored tokens', async () => {
+    const { google } = jest.requireMock('googleapis');
+    (google.auth.OAuth2 as jest.Mock).mockImplementationOnce(() => ({
+      setCredentials: jest.fn(),
+      refreshAccessToken: jest.fn().mockRejectedValue(new Error('invalid_grant')),
+    }));
+    jest.spyOn(userRepo, 'findOne').mockResolvedValue({
+      googleAccessToken: 'old',
+      googleRefreshToken: 'revoked',
+      googleTokenExpiry: new Date(Date.now() - 1000),
+    } as User);
+    const update = jest.spyOn(userRepo, 'update').mockResolvedValue({ affected: 1, raw: [], generatedMaps: [] });
+
+    expect(await service.checkConnection('u1')).toEqual({ connected: false });
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('should get events', async () => {
     const userId = '123';
     const timeMin = '2024-01-01T00:00:00Z';

@@ -163,6 +163,149 @@ describe('Google write queue', () => {
     expect(await repo().count()).toBe(0);
   });
 
+  describe('sync after a placement (syncTaskSoon) survives a restart', () => {
+    const seated = async () => {
+      const task = await kit.addTask({
+        name: 'Shifted',
+        scheduledStartTime: kit.at('2026-11-05', '10:00'),
+        scheduledEndTime: kit.at('2026-11-05', '11:00'),
+      });
+      await kit.addSlot(task.id, kit.at('2026-11-05', '10:00'), kit.at('2026-11-05', '11:00'));
+      return task;
+    };
+    const durably = (service: PendingGoogleWriteService, taskId: string) =>
+      (service as unknown as { syncTaskDurably: (u: string, t: string) => Promise<void> }).syncTaskDurably(
+        kit.user.id,
+        taskId,
+      );
+
+    it('leaves nothing queued when the sync succeeds', async () => {
+      const task = await seated();
+      google.createEvent.mockImplementation(async (_u: string, body: { id: string }) => ({ id: body.id }));
+      await durably(writes, task.id);
+      expect(await repo().count()).toBe(0);
+      expect((await kit.taskRepo.findOneByOrFail({ id: task.id })).googleEventId).toMatch(/^[0-9a-v]{32}$/);
+    });
+
+    it('keeps the write queued when the sync fails', async () => {
+      const task = await seated();
+      google.createEvent.mockRejectedValue(new Error('Google 503'));
+      await durably(writes, task.id);
+      const row = await repo().findOneByOrFail({ taskId: task.id });
+      expect(row).toMatchObject({ status: 'pending', operation: 'upsert', lastError: 'Google 503' });
+    });
+
+    it('a process that dies mid-call leaves a record the next instance sends', async () => {
+      const task = await seated();
+      // This instance's Google call never returns (the process is killed).
+      google.createEvent.mockReturnValue(new Promise(() => undefined));
+      void durably(writes, task.id);
+      for (let i = 0; i < 50 && !(await repo().count()); i += 1) await new Promise((r) => setTimeout(r, 5));
+      const row = await repo().findOneByOrFail({ taskId: task.id });
+      // Not sent by the queue while the first attempt may still be running.
+      expect(row.nextRunAt!.getTime()).toBeGreaterThan(Date.now());
+
+      const restarted = {
+        ...google,
+        createEvent: jest.fn(async (_u: string, body: { id: string }) => ({ id: body.id })),
+      };
+      const next = new PendingGoogleWriteService(
+        repo(),
+        kit.taskRepo,
+        kit.slotRepo,
+        kit.ds.getRepository(UserSettings),
+        restarted as never,
+      );
+      jest.setSystemTime(row.nextRunAt!);
+      expect(await next.processQueue()).toBe(1);
+      expect(restarted.createEvent).toHaveBeenCalledTimes(1);
+      expect((await kit.taskRepo.findOneByOrFail({ id: task.id })).googleEventId).toBeTruthy();
+      expect(await repo().count()).toBe(0);
+    });
+  });
+
+  describe('Google-side failures never corrupt the local schedule', () => {
+    const seatedTask = async (extra: Record<string, unknown> = {}) => {
+      const task = await kit.addTask({
+        name: 'Report',
+        scheduledStartTime: kit.at('2026-11-05', '10:00'),
+        scheduledEndTime: kit.at('2026-11-05', '11:00'),
+        ...extra,
+      });
+      await kit.addSlot(task.id, kit.at('2026-11-05', '10:00'), kit.at('2026-11-05', '11:00'));
+      return task;
+    };
+
+    it('a refresh token Google rejects (revoked access) changes nothing and queues nothing', async () => {
+      const task = await seatedTask();
+      // checkConnection turns a failed refresh (invalid_grant) into "not connected".
+      google.checkConnection.mockResolvedValue({ connected: false });
+      await writes.syncTask(kit.user.id, task.id);
+      expect(google.createEvent).not.toHaveBeenCalled();
+      expect(await repo().count()).toBe(0);
+      expect(await kit.slotsOf(task.id)).toEqual(['2026-11-05 10:00-11:00']);
+    });
+
+    it('an event deleted in Google while its update was queued is unlinked, the task and slot stay', async () => {
+      const task = await seatedTask({ googleEventId: 'gone-1', googleEventCalendarId: 'app-cal' });
+      await writes.enqueue(kit.user.id, 'upsert', { taskId: task.id, googleEventId: 'gone-1', error: 'timeout' });
+      google.getEvent.mockRejectedValue(new Error('Google 404 Not Found'));
+      jest.setSystemTime(Date.now() + 2 * 60_000);
+
+      await writes.processQueue();
+
+      const after = await kit.taskRepo.findOneByOrFail({ id: task.id });
+      expect(after.googleEventId).toBeNull();
+      expect(await kit.slotsOf(task.id)).toEqual(['2026-11-05 10:00-11:00']);
+      expect(await repo().count()).toBe(0);
+    });
+
+    it('two instances syncing one new task at once create one Google event', async () => {
+      const task = await seatedTask();
+      const remote = new Map<string, number>();
+      google.createEvent.mockImplementation(async (_u: string, body: { id: string }) => {
+        remote.set(body.id, (remote.get(body.id) ?? 0) + 1);
+        await new Promise((r) => setTimeout(r, 10));
+        // The second insert with the same id is Google's 409 → createEvent returns the event.
+        return { id: body.id };
+      });
+      const other = new PendingGoogleWriteService(
+        repo(),
+        kit.taskRepo,
+        kit.slotRepo,
+        kit.ds.getRepository(UserSettings),
+        google as never,
+      );
+
+      await Promise.all([writes.syncTask(kit.user.id, task.id), other.syncTask(kit.user.id, task.id)]);
+
+      expect(remote.size).toBe(1);
+      const [eventId] = [...remote.keys()];
+      expect((await kit.taskRepo.findOneByOrFail({ id: task.id })).googleEventId).toBe(eventId);
+    });
+
+    it('a delete of several events that partly fails queues only the failed one', async () => {
+      const task = await kit.addTask({
+        name: 'Parked',
+        scheduleState: 'problematic' as never,
+        googleEventId: 'g-main',
+        googleEventCalendarId: 'app-cal',
+      });
+      const slot = await kit.addSlot(task.id, kit.at('2026-11-05', '10:00'), kit.at('2026-11-05', '11:00'));
+      await kit.slotRepo.update({ id: slot.id }, { googleEventId: 'g-slot' });
+      google.deleteEvent.mockImplementation(async (_u: string, eventId: string) => {
+        if (eventId === 'g-slot') throw new Error('Google 500');
+      });
+
+      await writes.syncTask(kit.user.id, task.id);
+
+      expect(google.deleteEvent).toHaveBeenCalledTimes(2);
+      const queued = await repo().find();
+      expect(queued.map((row) => [row.operation, row.googleEventId])).toEqual([['delete', 'g-slot']]);
+      expect((await kit.taskRepo.findOneByOrFail({ id: task.id })).googleEventId).toBeNull();
+    });
+  });
+
   it('a spent insert id (event deleted in Google before linking) is replaced', async () => {
     const task = await kit.addTask({
       name: 'Report',

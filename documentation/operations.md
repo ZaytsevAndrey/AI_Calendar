@@ -97,6 +97,17 @@ SET status = 'pending', attempts = 0, "nextRunAt" = NULL, "leaseUntil" = NULL
 WHERE id = '<row id>' AND status = 'failed';
 ```
 
+- **Sync after a placement survives a restart:** `syncTaskSoon` (used after every placement for the task and the neighbours it moved) first records an `upsert` row due in 2 minutes, then sends now and removes the row on success. A process killed mid-call leaves the row; any instance sends it later.
+
+**What the app does not do (by design, today):** it does not subscribe to Google push notifications (no `events.watch` / channels, no webhook endpoint), so duplicate or out-of-order notifications cannot occur. Google-side edits are read when the calendar is displayed and when a queued upsert finds the remote event newer than the queued write (the remote edit wins and is copied onto the task). An event deleted in Google is unlinked from its task on the next write (the task and its slot stay); with the "sync Google deletions" setting on, the task is deleted instead.
+
+Google Calendar API limits that shape this:
+
+- Client-chosen event ids must be base32hex (`0-9 a-v`), 5–1024 characters, unique per calendar; a deleted event keeps its id (status `cancelled`), so an id is never reused after a deletion.
+- An insert with an existing id answers 409; that is how a lost insert answer is recognized.
+- Rate limits (403 `rateLimitExceeded` / 429) and 5xx are ordinary failures here: retried with backoff, then `failed`.
+- A recurring series is one Google event with RRULE; skipped days are `EXDATE`s, detached days are separate events. The DST rule matches Google's: a series clock that does not exist on a switch day is shown an hour later that day (see placement-engine.md §7.1).
+
 Deleting a `failed` row is also safe: the local task is unaffected; the next edit of that task syncs it again.
 
 An expired or revoked Google token shows up as an auth error in `lastError` (Google's text, typically `invalid_grant`). Upserts stop being queued while the user is disconnected (the sync checks the connection first); deletes are still queued and end `failed` after their attempts. The user must reconnect Google in Settings; then revive their rows with the SQL above.

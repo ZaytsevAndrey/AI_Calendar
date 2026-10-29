@@ -97,8 +97,10 @@ export class PendingGoogleWriteService {
       googleEventId?: string | null;
       googleCalendarId?: string | null;
       error?: string | null;
+      /** When the queue may send it (default: one backoff step from now). */
+      dueAt?: Date;
     },
-  ): Promise<void> {
+  ): Promise<{ id: string; revision: number }> {
     const candidates = await this.pendingRepo.find({
       where: { userId, operation },
       take: 50,
@@ -109,7 +111,7 @@ export class PendingGoogleWriteService {
         !!opts.googleEventId && row.googleEventId === opts.googleEventId
       );
     });
-    const retryAt = new Date(Date.now() + GOOGLE_WRITE_BACKOFF_BASE_MS);
+    const retryAt = opts.dueAt ?? new Date(Date.now() + GOOGLE_WRITE_BACKOFF_BASE_MS);
     if (existing) {
       // A new failure is new work: a running row is re-run by its worker
       // (revision), a failed one gets a fresh set of attempts.
@@ -125,10 +127,14 @@ export class PendingGoogleWriteService {
         if (existing.status === 'failed') patch.attempts = 0;
       }
       await this.pendingRepo.update({ id: existing.id }, patch);
-      return;
+      return { id: existing.id, revision: patch.revision! };
     }
-    await this.pendingRepo.save(
+    // insert, not save: no implicit transaction (SQLite shares one connection
+    // with the request that triggered this background write).
+    const id = randomUUID();
+    await this.pendingRepo.insert(
       this.pendingRepo.create({
+        id,
         userId,
         operation,
         taskId: opts.taskId ?? null,
@@ -142,6 +148,7 @@ export class PendingGoogleWriteService {
         revision: 0,
       }),
     );
+    return { id, revision: 0 };
   }
 
   /**
@@ -149,12 +156,29 @@ export class PendingGoogleWriteService {
    * Failures still enqueue retries inside `syncTask`.
    */
   syncTaskSoon(userId: string, taskId: string): void {
-    void this.syncTask(userId, taskId).catch((err) => {
+    void this.syncTaskDurably(userId, taskId).catch((err) => {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.warn(
         `Background Google sync failed for task ${taskId}: ${message}`,
       );
     });
+  }
+
+  /**
+   * Record the write in the queue first (due after a lease), then send it now.
+   * If this process dies before Google answers, the queue sends it later. On
+   * success the record is removed — unless a failure re-queued it meanwhile
+   * (newer revision).
+   */
+  private async syncTaskDurably(userId: string, taskId: string): Promise<void> {
+    // Nothing to send without a Google connection (and no write to record).
+    if (!(await this.google.checkConnection(userId)).connected) return;
+    const intent = await this.enqueue(userId, 'upsert', {
+      taskId,
+      dueAt: new Date(Date.now() + GOOGLE_WRITE_LEASE_MS),
+    });
+    await this.syncTask(userId, taskId);
+    await this.pendingRepo.delete({ id: intent.id, revision: intent.revision });
   }
 
   /**

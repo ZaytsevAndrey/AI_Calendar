@@ -45,7 +45,8 @@ Runtime assumptions found: production runs one Render instance, Neon Postgres, `
 | 8 | Phase 2: Google write queue lifecycle + no duplicate events on retry | done | 0c34220 |
 | 9 | Phase 2: idempotent task create (Idempotency-Key) | done | 3e90e3f |
 | 10 | Phase 2: Postgres tests in CI; placement on Postgres | done | 6ea350b |
-| 11 | Phase 2: placement edge cases; DST wall-clock fix | done | (stage 11 commit) |
+| 11 | Phase 2: placement edge cases; DST wall-clock fix | done | 794a8f6 |
+| 12 | Phase 2: Google sync edge cases; durable post-placement sync | done | (stage 12 commit) |
 
 ## Stage A — durable placement (done)
 
@@ -211,6 +212,24 @@ Plus Postgres: concurrent creates, crash recovery (stage 10); Kyiv DST and leap/
 **Found and fixed (DST wall clock):** `localDateTimeIso` used the UTC offset at 12:00 UTC of the date for every clock that day. On a switch day the hours before the switch were off by one hour (New York 14 Mar 01:30 → stored 00:30; Kyiv 25 Oct 02:00–03:59 → one hour late), and a clock skipped by the switch came out an hour early. It now uses the offset in effect at that clock; a skipped clock moves forward by the gap and a repeated clock is its first occurrence (RFC 5545, as Google renders an RRULE). Second part: the series compared clocks as `HH:mm`, so the shifted 03:30 day of a 02:30 series was detached into a copy (out of the series). `seriesDayClockHm` treats that shifted start as the series clock (horizon expansion, append, sibling split). Tests: `dst-clock.spec`, edge DST case. The helper lives in `voice/voice-local-date.util.ts` but is shared date code; no transcript parsing or voice expectation changed — structured voice 232/232, historical suites unchanged at 215/77.
 
 Results: backend unit 1067 pass + 15 skipped, 0 fail; e2e 138/138; Postgres 15/15.
+
+### Stage 12 — Google sync edge cases (done)
+
+**Found and fixed (lost sync on restart):** after a placement commits, the task and every neighbour it moved are sent to Google by `syncTaskSoon`, an unawaited promise (17 call sites). A process that died before Google answered left Google stale with nothing queued, until the next edit of that task. `syncTaskSoon` now records an `upsert` queue row first (due after the 2 min lease), sends, and removes the row on success only for the revision it wrote (a failure meanwhile re-queues it). Not fully atomic with the placement commit (the record is written right after it), but the window shrinks from the whole Google call to one insert. Nothing is recorded for a user without a Google connection. The first version wrote the record with `save` even then; on SQLite (one shared connection) that background write's implicit transaction interleaved with request transactions and broke 5 e2e cases (foreign-key failures, 404/500). Fixed by checking the connection first and writing the row with `insert` (no implicit transaction); e2e back to 138/138. The same interleaving risk exists for any background write on SQLite with a connected Google account (local development only; Postgres uses a pool).
+
+Investigated, with evidence:
+- **Webhooks (duplicate / out-of-order notifications):** not applicable — the code has no push subscription (`events.watch`, channels) and no notification endpoint (searched `x-goog-`, `watch`, `channels`, `syncToken`, `webhook`). Google edits are read on display and when a queued upsert finds the remote event edited after the queued write.
+- **Expired access token:** every call refreshes when the stored expiry passed (now on a per-call client, stage 7). **Refresh rejected / revoked:** `checkConnection` reports not connected and stores nothing; syncs do nothing, local schedule untouched (tests). Queued deletes still retry and end `failed`.
+- **Remote deletion:** a queued upsert whose event is gone (404) unlinks it; task and slot stay (test).
+- **Concurrent sync across instances:** same insert id → one Google event (test). In-process concurrency was already serialized per task.
+- **Partial failure:** deleting several events of a task where one fails queues only that one; the task is unlinked locally (test). Queue rows are independent (fairness test).
+- **Ambiguous network outcome:** insert covered by the insert id (stage 8); update and delete are idempotent; delete treats 404/410 as done.
+- **Recovery after restart:** queue rows persist and leases expire (stages 8, 10); post-placement syncs are now recorded (above).
+- **Recurring exceptions:** skipped days are EXDATEs, detached days separate events (existing RRULE tests); DST rendering now matches Google (stage 11).
+
+Tests: `pending-google-write.queue.spec` (14: + durable sync success / failure / killed mid-call then sent by the next instance; revoked refresh; remote deletion; two instances one event; partial delete), `google-calendar.service.spec` (refresh rejected → not connected, tokens kept).
+
+Not verified against the real Google API (no test account in this environment): the 409 answer for a duplicate client id and the `cancelled` status of a deleted event are taken from Google's documented behavior and mocked in tests.
 
 ## Final status (2026-10-30)
 

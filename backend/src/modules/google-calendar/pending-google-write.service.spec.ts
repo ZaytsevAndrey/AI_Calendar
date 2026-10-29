@@ -8,6 +8,7 @@ describe('PendingGoogleWriteService', () => {
     create: jest.fn((row) => row),
     remove: jest.fn(),
     update: jest.fn().mockResolvedValue({ affected: 1 }),
+    insert: jest.fn().mockResolvedValue({ identifiers: [] }),
     delete: jest.fn().mockResolvedValue({ affected: 1 }),
   };
   const taskRepo = {
@@ -460,7 +461,7 @@ describe('PendingGoogleWriteService', () => {
     });
     google.createEvent.mockRejectedValueOnce(new Error('rate limit'));
     await service.syncTask('u1', 't1');
-    expect(pendingRepo.save).toHaveBeenCalledWith(
+    expect(pendingRepo.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'u1',
         taskId: 't1',
