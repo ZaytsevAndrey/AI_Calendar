@@ -10,6 +10,8 @@ import { User } from '../../src/modules/users/user.entity';
 import { localDateTimeIso, localYmd } from '../../src/modules/voice/voice-local-date.util';
 import { PlacementStepService } from '../../src/modules/schedule/placement-step.service';
 import { ScheduledTask } from '../../src/modules/schedule/schedule.entity';
+import { DisplayedEventMoveService } from '../../src/modules/schedule/displayed-event-move.service';
+import { ProblematicPlaceService } from '../../src/modules/schedule/problematic-place.service';
 
 /**
  * In-memory SQLite with the real entities and a real PlacementStepService.
@@ -179,9 +181,38 @@ export async function createPlacementKit(opts: {
     jest.useRealTimers();
   }
 
+  const settingsStub = { getSettings: async () => settings };
+  const phasesStub = {
+    findAllForScheduling: (userId: string) =>
+      phaseRepo.find({ where: { userId }, order: { name: 'ASC' } }),
+  };
+  /** Real calendar drag service (Google patch is a stub that always fails → sync). */
+  const moveService = new DisplayedEventMoveService(
+    slotRepo,
+    taskRepo,
+    tasksService,
+    { patchEventTimes: jest.fn().mockRejectedValue(new Error('no google')) } as never,
+    {} as never,
+    pendingGoogleWrites as never,
+    service,
+    settingsStub as never,
+    phasesStub as never,
+    jobs as never,
+  );
+  /** Real Problematic Move service. */
+  const problematicPlace = new ProblematicPlaceService(
+    taskRepo,
+    service,
+    phasesStub as never,
+    settingsStub as never,
+    pendingGoogleWrites as never,
+  );
+
   return {
     ds,
     service,
+    moveService,
+    problematicPlace,
     tasksService,
     jobs,
     taskRepo,

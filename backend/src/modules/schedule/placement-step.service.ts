@@ -117,6 +117,16 @@ import { ScheduledTask } from './schedule.entity';
 
 const locks = new Map<string, Promise<unknown>>();
 
+/** Thrown inside `writeAndPlace` to roll the transaction back on an unwanted plan. */
+class RejectedPlacement extends Error {
+  constructor(
+    readonly plan: PlacementPlan,
+    readonly taskId: string,
+  ) {
+    super('placement rejected');
+  }
+}
+
 function withUserLock<T>(userId: string, run: () => Promise<T>): Promise<T> {
   const previous = locks.get(userId) ?? Promise.resolve();
   const next = previous.then(run, run);
@@ -348,6 +358,61 @@ export class PlacementStepService {
    */
   runExclusive<T>(userId: string, run: () => Promise<T>): Promise<T> {
     return withUserLock(userId, run);
+  }
+
+  /**
+   * PE-18: a multi-row change and the placement it leads to, as one unit.
+   * Under the user lock and in one transaction: `write` makes its rows (a day
+   * copy, a skip, a truncated series, …) on the transaction repositories and
+   * names the task to place; that task is placed in the same transaction.
+   * When `accept(plan)` is false everything rolls back, so callers need no
+   * compensation. External calendars are read before the transaction and
+   * Google syncs run only after the commit.
+   */
+  async writeAndPlace(
+    userId: string,
+    write: (repos: {
+      tasks: Repository<Task>;
+      slots: Repository<ScheduledTask>;
+    }) => Promise<{ taskId: string; opts: PlaceOptions }>,
+    accept: (plan: PlacementPlan) => boolean = () => true,
+  ): Promise<{ plan: PlacementPlan; taskId: string; committed: boolean }> {
+    return withUserLock(userId, async () => {
+      const settings = await this.userSettingsService.getSettings(userId);
+      const now = new Date();
+      const horizon = planningHorizonRange(settings, now);
+      const slots = await this.scheduledRepo
+        .createQueryBuilder('st')
+        .innerJoinAndSelect('st.task', 't')
+        .where('t.userId = :userId', { userId })
+        .andWhere('st.scheduledEndTime > :now', { now })
+        .getMany();
+      const cachedExternalSeats = await this.externalAnchors(
+        userId,
+        now,
+        horizon.end,
+        slots,
+      );
+      try {
+        return await this.inOneTransaction(async (tx) => {
+          const { taskId, opts } = await write({
+            tasks: tx.taskRepo,
+            slots: tx.scheduledRepo,
+          });
+          const plan = await tx.placeUnlocked(userId, taskId, {
+            ...opts,
+            cachedExternalSeats: opts.cachedExternalSeats ?? cachedExternalSeats,
+          });
+          if (!accept(plan)) throw new RejectedPlacement(plan, taskId);
+          return { plan, taskId, committed: true };
+        });
+      } catch (err) {
+        if (err instanceof RejectedPlacement) {
+          return { plan: err.plan, taskId: err.taskId, committed: false };
+        }
+        throw err;
+      }
+    });
   }
 
   /**
@@ -1351,19 +1416,21 @@ export class PlacementStepService {
           )
         : null;
 
-    // One Google fetch for the whole horizon — not once per civil day.
-    const slotsForGoogle = await this.scheduledRepo
-      .createQueryBuilder('st')
-      .innerJoinAndSelect('st.task', 't')
-      .where('t.userId = :userId', { userId })
-      .andWhere('st.scheduledEndTime > :now', { now })
-      .getMany();
-    const cachedExternalSeats = await this.externalAnchors(
-      userId,
-      now,
-      horizon.end,
-      slotsForGoogle,
-    );
+    // One external-calendar fetch for the whole horizon — not once per civil
+    // day. A caller inside a transaction passes it in (no network in the tx).
+    const cachedExternalSeats =
+      opts?.cachedExternalSeats ??
+      (await this.externalAnchors(
+        userId,
+        now,
+        horizon.end,
+        await this.scheduledRepo
+          .createQueryBuilder('st')
+          .innerJoinAndSelect('st.task', 't')
+          .where('t.userId = :userId', { userId })
+          .andWhere('st.scheduledEndTime > :now', { now })
+          .getMany(),
+      ));
     this.logger.log(
       `[series-horizon] start task=${task.id.slice(0, 8)} name="${task.name}" ` +
         `tz=${timeZone} duration=${durationMinutes}m preferredHint=${preferredHmHint ?? 'none'} ` +

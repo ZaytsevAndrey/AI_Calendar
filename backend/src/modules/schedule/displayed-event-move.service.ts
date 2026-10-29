@@ -32,6 +32,7 @@ import { PlacementStepService } from './placement-step.service';
 import type { PlacementPlan } from './placement-step.util';
 import { ScheduleJobService } from './schedule-job.service';
 import { ScheduledTask } from './schedule.entity';
+import { findOrCreateDayCopy, skipSeriesDay } from './series-exception.util';
 
 export type MoveDisplayedEventResult = {
   kind: 'fixed' | 'slot' | 'google' | 'series-choice';
@@ -389,35 +390,59 @@ export class DisplayedEventMoveService {
     phaseIds: string[],
     occurrenceYmd: string,
   ): Promise<string | null> {
-    await this.tasksService.skipOccurrence(series.id, userId, {
-      occurrenceStart: dto.originalStart,
-      googleEventId: dto.googleEventId,
-      googleEventCalendarId: dto.calendarId,
+    const settings = await this.userSettingsService.getSettings(userId);
+    const timeZone = resolveIanaTimeZone(settings.timeZone || series.scheduleTimeZone);
+    const start = new Date(dto.start);
+    const end = new Date(dto.end);
+    const phases = phaseIds.length
+      ? (await this.phasesService.findAllForScheduling(userId)).filter((p) =>
+          phaseIds.includes(p.id),
+        )
+      : [];
+    const job = await this.scheduleJobs.beginMutationJob(userId, {
+      op: 'move-series',
+      taskId: series.id,
+      seriesScope: 'occurrence',
     });
-    const created = await this.tasksService.create(userId, {
-      name: series.name,
-      description: series.description ?? undefined,
-      ...(phaseIds.length
-        ? { phaseIds, phaseId: phaseIds[0] }
-        : { phaseIds: [] }),
-      eventType: series.eventType,
-      estimatedTimeInMinutes: minutes,
-      isRecurring: false,
-      allowSplit: series.allowSplit,
-      priority: series.priority,
-      scheduledStartTime: dto.start,
-      scheduledEndTime: dto.end,
-      location: series.location ?? undefined,
-      googleColorId: series.googleColorId ?? undefined,
-      googleVisibility: series.googleVisibility ?? undefined,
-      googleTransparency: series.googleTransparency ?? undefined,
-      googleReminders: series.googleReminders ?? undefined,
-      parentSeriesId: series.id,
-      seriesGroupId: series.seriesGroupId ?? series.id,
-      originalOccurrenceYmd: occurrenceYmd,
-      timeZone: series.scheduleTimeZone ?? undefined,
-    });
-    return created.jobId ?? null;
+    // PE-18: skip the day, make (or reuse) its copy and seat the copy in one
+    // transaction. A conflict rolls everything back; a full day parks the copy.
+    const out = await this.placementStep.writeAndPlace(
+      userId,
+      async (repos) => {
+        const fresh = await repos.tasks.findOneOrFail({
+          where: { id: series.id, userId },
+        });
+        if (!fresh.seriesGroupId) fresh.seriesGroupId = fresh.id;
+        await skipSeriesDay(repos, fresh, occurrenceYmd, timeZone, new Date());
+        const copy = await findOrCreateDayCopy(repos, fresh, occurrenceYmd, {
+          start,
+          end,
+          minutes,
+          phases,
+        });
+        return {
+          taskId: copy.id,
+          opts: { preferredStart: start, durationMinutes: minutes, drag: true },
+        };
+      },
+      (plan) => plan.outcome !== 'conflict',
+    );
+    if (!out.committed) {
+      await this.scheduleJobs.completeMutationJob(
+        job.id,
+        out.plan.outcome === 'conflict' ? { conflicts: [out.plan.conflict] } : undefined,
+      );
+      return job.id;
+    }
+    await this.scheduleJobs.setMutationStage(job.id, 'syncing');
+    await this.pendingGoogleWrites.syncTask(userId, series.id);
+    await this.pendingGoogleWrites.syncTask(
+      userId,
+      out.plan.outcome === 'seated' ? out.plan.mergedIntoTaskId ?? out.taskId : out.taskId,
+    );
+    await this.placementStep.seatOpenHoles(userId);
+    await this.scheduleJobs.completeMutationJob(job.id);
+    return job.id;
   }
 
   /**
@@ -437,76 +462,94 @@ export class DisplayedEventMoveService {
     const timeZone = resolveIanaTimeZone(settings.timeZone || series.scheduleTimeZone);
     const splitYmd = localYmd(new Date(dto.originalStart).toISOString(), timeZone);
     const splitStart = new Date(startOfLocalDayIso(splitYmd, timeZone));
-    const previousDeadline = series.deadline ? new Date(series.deadline) : null;
-    if (!previousDeadline || previousDeadline.getTime() > splitStart.getTime()) {
-      series.deadline = splitStart;
-      await this.taskRepo.save(series);
-    }
-
-    const rows = await this.scheduledRepo.find({ where: { taskId: series.id } });
-    const now = Date.now();
-    const tail = rows.filter((row) => {
-      if (new Date(row.scheduledEndTime).getTime() <= now) return false;
-      const ymd = localYmd(new Date(row.scheduledStartTime).toISOString(), timeZone);
-      return ymd >= splitYmd;
-    });
-    if (tail.length) await this.scheduledRepo.remove(tail);
-
-    const keptDeadline =
-      previousDeadline && previousDeadline.getTime() > splitStart.getTime()
-        ? previousDeadline
-        : null;
     const nextPhases = phaseIds.length
       ? (await this.phasesService.findAllForScheduling(userId)).filter((p) =>
           phaseIds.includes(p.id),
         )
       : [];
-    const created = await this.taskRepo.save(
-      this.taskRepo.create({
-        userId,
-        name: series.name,
-        description: series.description,
-        phaseId: nextPhases[0]?.id ?? null,
-        phases: nextPhases,
-        eventType: series.eventType,
-        estimatedTimeInMinutes: minutes,
-        isRecurring: true,
-        recurrencePattern: series.recurrencePattern,
-        recurrenceWeekDays: series.recurrenceWeekDays,
-        allowSplit: series.allowSplit,
-        priority: series.priority,
-        deadline: keptDeadline,
-        // The tail starts on the split day; earlier days stay with the old series.
-        earliestStartTime: splitStart,
-        scheduledStartTime: start,
-        scheduledEndTime: end,
-        scheduleTimeZone: timeZone,
-        location: series.location,
-        googleColorId: series.googleColorId,
-        googleVisibility: series.googleVisibility,
-        googleTransparency: series.googleTransparency,
-        googleReminders: series.googleReminders,
-        status: TaskStatus.TODO,
-        scheduleState: ScheduleState.NONE,
-        isUnscheduled: false,
-        seriesGroupId: series.seriesGroupId ?? series.id,
-        parentSeriesId: series.id,
-      }),
-    );
-    if (!series.seriesGroupId) {
-      series.seriesGroupId = series.id;
-      await this.taskRepo.save(series);
-    }
-    await this.placementStep.place(userId, created.id, {
-      preferredStart: start,
-      durationMinutes: minutes,
-      commit: 'always',
-      expandSeries: true,
+
+    // PE-18: end the old series, drop its tail, create (or reuse) the new
+    // series and seat it — one transaction. Google runs after the commit.
+    const out = await this.placementStep.writeAndPlace(userId, async ({ tasks, slots }) => {
+      const old = await tasks.findOneOrFail({ where: { id: series.id, userId } });
+      const groupId = old.seriesGroupId ?? old.id;
+      const previousDeadline = old.deadline ? new Date(old.deadline) : null;
+      if (!previousDeadline || previousDeadline.getTime() > splitStart.getTime()) {
+        old.deadline = splitStart;
+      }
+      old.seriesGroupId = groupId;
+      await tasks.save(old);
+
+      const rows = await slots.find({ where: { taskId: old.id } });
+      const now = Date.now();
+      const tail = rows.filter((row) => {
+        if (new Date(row.scheduledEndTime).getTime() <= now) return false;
+        const ymd = localYmd(new Date(row.scheduledStartTime).toISOString(), timeZone);
+        return ymd >= splitYmd;
+      });
+      if (tail.length) await slots.remove(tail);
+
+      // A retry finds the tail it already made: same group, starts on the split day.
+      const siblings = await tasks.find({
+        where: { userId, seriesGroupId: groupId, isRecurring: true },
+      });
+      const existing = siblings.find(
+        (row) =>
+          row.id !== old.id &&
+          !!row.earliestStartTime &&
+          localYmd(new Date(row.earliestStartTime).toISOString(), timeZone) === splitYmd,
+      );
+      const keptDeadline =
+        previousDeadline && previousDeadline.getTime() > splitStart.getTime()
+          ? previousDeadline
+          : null;
+      const next =
+        existing ??
+        tasks.create({
+          userId,
+          name: old.name,
+          description: old.description,
+          eventType: old.eventType,
+          isRecurring: true,
+          recurrencePattern: old.recurrencePattern,
+          recurrenceWeekDays: old.recurrenceWeekDays,
+          allowSplit: old.allowSplit,
+          priority: old.priority,
+          deadline: keptDeadline,
+          // The tail starts on the split day; earlier days stay with the old series.
+          earliestStartTime: splitStart,
+          scheduleTimeZone: timeZone,
+          location: old.location,
+          googleColorId: old.googleColorId,
+          googleVisibility: old.googleVisibility,
+          googleTransparency: old.googleTransparency,
+          googleReminders: old.googleReminders,
+          status: TaskStatus.TODO,
+          scheduleState: ScheduleState.NONE,
+          isUnscheduled: false,
+          seriesGroupId: groupId,
+          parentSeriesId: old.id,
+        });
+      next.phaseId = nextPhases[0]?.id ?? null;
+      next.phases = nextPhases;
+      next.estimatedTimeInMinutes = minutes;
+      next.scheduledStartTime = start;
+      next.scheduledEndTime = end;
+      const saved = await tasks.save(next);
+      return {
+        taskId: saved.id,
+        opts: {
+          preferredStart: start,
+          durationMinutes: minutes,
+          commit: 'always',
+          expandSeries: true,
+        },
+      };
     });
     // Old series may have no open seats left; sync deletes its Google master.
     // New series must land on Google before the calendar refetch.
     await this.pendingGoogleWrites.syncTask(userId, series.id);
-    await this.pendingGoogleWrites.syncTask(userId, created.id);
+    await this.pendingGoogleWrites.syncTask(userId, out.taskId);
     await this.placementStep.seatOpenHoles(userId);
   }
 

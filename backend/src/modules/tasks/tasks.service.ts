@@ -959,7 +959,11 @@ export class TasksService {
     if (task.isUnscheduled) {
       throw new BadRequestException('Unscheduled tasks have no occurrence to skip');
     }
-    if (task.isFixedExternal || task.eventType === TaskEventType.FIXED) {
+    // A fixed one-off has no day to skip; a day of a fixed series does.
+    if (
+      task.isFixedExternal ||
+      (task.eventType === TaskEventType.FIXED && !task.isRecurring)
+    ) {
       throw new BadRequestException('Fixed events cannot be skipped');
     }
     if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.CANCELED) {
