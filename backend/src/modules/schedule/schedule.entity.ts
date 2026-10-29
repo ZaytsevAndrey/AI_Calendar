@@ -34,12 +34,16 @@ export class ScheduledTask {
   @Column({ type: 'varchar', length: 128, nullable: true })
   generationRun: string | null;
 
-  /** Google event for this segment, or shared RRULE master id for recurring tasks. */
+  /** External event for this segment, or shared series id for recurring tasks. */
   @Column({ type: 'varchar', nullable: true })
   googleEventId: string | null;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Column({ type: 'varchar', length: 1024, nullable: true })
   googleEventCalendarId: string | null;
+
+  /** Account that owns `googleEventId`. Null means Google. */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  externalCalendarProvider: 'google' | 'microsoft' | 'apple' | null;
 
   @CreateDateColumn()
   createdAt: Date;

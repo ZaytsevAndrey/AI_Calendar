@@ -8,6 +8,7 @@ import {
   minToPx,
   msToMinOfDay,
   nearestCandidateIndex,
+  preferredMsOnDay,
   pxToMin,
   resolvePlaceableStartIso,
   snapMsToStep,
@@ -227,14 +228,11 @@ export function SlotPickTimeline({
     userScrolledRef.current = false;
 
     if (candidatesMs.length) {
-      const preferredMs = preferredStartIso
-        ? Date.parse(preferredStartIso)
-        : null;
       const idx = initialCandidateIndex(
         candidatesMs,
         dayStartMs,
         dayEndMs,
-        Number.isFinite(preferredMs as number) ? (preferredMs as number) : null,
+        preferredMsOnDay(preferredStartIso, data.ymd, data.timeZone),
       );
       if (idx >= 0) {
         centerIndex(idx, false, { syncPhase: true });

@@ -1,5 +1,7 @@
 /** Pure helpers for the Problematic Move slot-pick timeline. */
 
+import { isoToHm, localDateTimeIso } from '../../utils/ianaDateTime';
+
 /** Tall enough that a 30-min block is readable; also slows wheel→time mapping. */
 export const SLOT_PX_PER_HOUR = 180;
 export const SLOT_STEP_MIN = 15;
@@ -110,6 +112,18 @@ export function snapMsToStep(
   const min = msToMinOfDay(ms, dayStartMs);
   const snapped = Math.round(min / stepMin) * stepMin;
   return dayStartMs + snapped * 60_000;
+}
+
+/** The preferred wall clock moved onto `ymd`, so another day keeps the old time of day. */
+export function preferredMsOnDay(
+  preferredIso: string | null | undefined,
+  ymd: string,
+  timeZone: string,
+): number | null {
+  const hm = isoToHm(preferredIso ?? undefined, timeZone);
+  if (!hm) return null;
+  const ms = Date.parse(localDateTimeIso(ymd, hm, timeZone));
+  return Number.isFinite(ms) ? ms : null;
 }
 
 /** Prefer first candidate at/after preferred, else first at/after now, else mid-day, else first. */

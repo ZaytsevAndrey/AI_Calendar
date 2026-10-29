@@ -3,8 +3,6 @@ import { useForm, useController } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { UserSettingsDTO } from '../../../api/user-settings.api';
 import { useUpdateUserSettingsMutation } from '../../../api/userSettingsApi';
-import { googleCalendarAPI } from '../../../api/google-calendar.api';
-import { Spinner } from '../../../ui/Spinner';
 import { Input } from 'ui/Input';
 import { TimeField } from 'ui/TimeField';
 import { Select } from 'ui/Select';
@@ -31,8 +29,6 @@ interface UserSettingsFormData {
     wakeTime: string;
     timeZone: string;
     language: AppLanguage;
-    googleCalendarLinked: boolean;
-    appGoogleCalendarName: string;
     minSplitMinutes: number;
     maxSplitMinutes: number;
     recurringScheduleHorizonDays: number;
@@ -44,8 +40,6 @@ interface UserSettingsFormData {
 const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
     const { t, i18n } = useTranslation();
     const { theme, setTheme } = useTheme();
-    const [isCalendarConnected, setIsCalendarConnected] = useState(false);
-    const [isCheckingConnection, setIsCheckingConnection] = useState(true);
     const [updateUserSettings] = useUpdateUserSettingsMutation();
     const [initialValues, setInitialValues] = useState<{
         sleepTime: string;
@@ -65,7 +59,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
           ? i18n.language
           : 'en';
 
-    const { control, setValue, watch, getValues } = useForm<UserSettingsFormData>({
+    const { control, setValue, watch } = useForm<UserSettingsFormData>({
         defaultValues: {
             sleepTime:
                 initialData?.sleepTime && initialData.sleepTime !== '' ? initialData.sleepTime : '22:00',
@@ -73,9 +67,6 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                 initialData?.wakeTime && initialData.wakeTime !== '' ? initialData.wakeTime : '07:00',
             timeZone: initialData?.timeZone?.trim() || '',
             language: defaultLanguage,
-            googleCalendarLinked: initialData?.googleCalendarLinked || false,
-            appGoogleCalendarName:
-                initialData?.appGoogleCalendarName?.trim() || 'luefy',
             minSplitMinutes:
                 typeof initialData?.minSplitMinutes === 'number'
                     ? initialData.minSplitMinutes
@@ -109,7 +100,6 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
     const recurringScheduleHorizonDays = watch('recurringScheduleHorizonDays');
     const fixedEventBufferMinutes = watch('fixedEventBufferMinutes');
     const defaultTaskDurationMinutes = watch('defaultTaskDurationMinutes');
-    const appGoogleCalendarName = watch('appGoogleCalendarName');
 
     const sleepTimeController = useController({
         name: 'sleepTime',
@@ -122,42 +112,6 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
         control,
         rules: { required: t('settings.wakeRequired') },
     });
-
-    useEffect(() => {
-        const checkCalendarConnection = async () => {
-            try {
-                setIsCheckingConnection(true);
-                const response = await googleCalendarAPI.checkConnection();
-                const data = response.data as { connected: boolean };
-                setIsCalendarConnected(data.connected);
-                setValue('googleCalendarLinked', data.connected);
-            } catch (error) {
-                console.error('Error checking Google Calendar connection:', error);
-            } finally {
-                setIsCheckingConnection(false);
-            }
-        };
-
-        checkCalendarConnection();
-    }, [setValue]);
-
-    const saveAppCalendarName = async () => {
-        const v = (getValues('appGoogleCalendarName') ?? '').trim() || 'luefy';
-        try {
-            await updateUserSettings({
-                appGoogleCalendarName: v,
-                googleCalendarLinked: isCalendarConnected,
-            }).unwrap();
-            showSuccessToast({ title: t('settings.calendarNameSaved'), detail: v });
-        } catch (error: any) {
-            if (error?.response?.status === 401) return;
-            showErrorToast({
-                title: t('settings.calendarNameSaveFailed'),
-                detail: t('settings.calendarNameSaveFailedDetail'),
-            });
-            console.error(error);
-        }
-    };
 
     const autoSaveTimeSettings = useCallback(
         async (
@@ -220,7 +174,6 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                     wakeTime: wt,
                     ...(trimmedZone ? { timeZone: trimmedZone } : {}),
                     language: lang,
-                    googleCalendarLinked: isCalendarConnected,
                     minSplitMinutes: minSplit,
                     maxSplitMinutes: Math.max(minSplit, maxSplit),
                     recurringScheduleHorizonDays: horizonDays,
@@ -240,7 +193,7 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                 console.error('Error auto-saving settings:', error);
             }
         },
-        [isCalendarConnected, t, updateUserSettings]
+        [t, updateUserSettings]
     );
 
     useEffect(() => {
@@ -557,46 +510,6 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                         <p className="text-xs text-ide-muted">{t('settings.horizonHint')}</p>
                     </div>
                 </div>
-            </section>
-
-            <section className="border-t border-ide-border pt-10">
-                <h2 className="mb-4 text-lg font-semibold text-ide-text">{t('settings.googleCalendar')}</h2>
-
-                <div className="mb-6 flex max-w-md flex-col gap-1">
-                    <label htmlFor="app-google-calendar-name" className="ui-label">
-                        {t('settings.appCalendarName')}
-                    </label>
-                    <Input
-                        id="app-google-calendar-name"
-                        type="text"
-                        className="max-w-xs"
-                        maxLength={200}
-                        value={appGoogleCalendarName ?? ''}
-                        onChange={(e) => setValue('appGoogleCalendarName', e.target.value, { shouldDirty: true })}
-                        onBlur={() => void saveAppCalendarName()}
-                    />
-                    <p className="text-xs text-ide-muted">
-                        {t('settings.appCalendarNameHint')}
-                    </p>
-                </div>
-
-                {isCheckingConnection ? (
-                    <div className="flex items-center gap-3">
-                        <Spinner className="h-5 w-5" />
-                        <span className="text-sm text-ide-muted">{t('settings.checkingConnection')}</span>
-                    </div>
-                ) : isCalendarConnected ? (
-                    <div className="flex items-center gap-3">
-                        <span className="flex h-3 w-3 items-center justify-center rounded-full bg-ide-dim text-[0.65rem] text-ide-bg">
-                            ✓
-                        </span>
-                        <span className="font-medium text-ide-dim">{t('settings.linked')}</span>
-                    </div>
-                ) : (
-                    <p className="text-sm text-ide-muted">
-                        {t('settings.notLinkedHint')}
-                    </p>
-                )}
             </section>
 
             <CalendarAccountsSection />

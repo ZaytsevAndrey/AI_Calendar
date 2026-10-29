@@ -450,7 +450,12 @@ export class HabitsService {
     previous: GoogleBlockSnapshot,
   ): Promise<Habit> {
     const settings = await this.userSettingsRepository.findOne({ where: { userId } });
-    if (!settings?.googleCalendarLinked) return habit;
+    const provider =
+      habit.externalCalendarProvider ??
+      settings?.appCalendarProvider ??
+      (settings?.googleCalendarLinked ? 'google' : null);
+    if (!provider) return habit;
+    if (provider === 'google' && !settings?.googleCalendarLinked) return habit;
 
     const hasBlock = Boolean(habit.blockStartTime && habit.blockMinutes);
     try {
@@ -459,6 +464,7 @@ export class HabitsService {
         await this.deleteGoogleBlock(userId, habit);
         habit.googleEventId = null;
         habit.googleEventCalendarId = null;
+        habit.externalCalendarProvider = null;
         return this.habitsRepository.save(habit);
       }
 
@@ -470,9 +476,10 @@ export class HabitsService {
         await this.deleteGoogleBlock(userId, habit);
         habit.googleEventId = null;
         habit.googleEventCalendarId = null;
+        habit.externalCalendarProvider = null;
       }
 
-      const timeZone = resolveIanaTimeZone(settings.timeZone);
+      const timeZone = resolveIanaTimeZone(settings?.timeZone);
       const today = localYmd(new Date().toISOString(), timeZone);
       const created = await this.googleCalendar.createEvent(
         userId,
@@ -482,6 +489,13 @@ export class HabitsService {
       habit.googleEventId = typeof created.id === 'string' ? created.id : null;
       habit.googleEventCalendarId =
         typeof created.appCalendarId === 'string' ? created.appCalendarId : null;
+      const createdOn = (created as { calendarProvider?: string }).calendarProvider;
+      habit.externalCalendarProvider =
+        createdOn === 'microsoft' ||
+        createdOn === 'apple' ||
+        createdOn === 'google'
+          ? createdOn
+          : provider;
       return this.habitsRepository.save(habit);
     } catch (err) {
       if (this.isGoogleDisconnected(err)) {
@@ -523,6 +537,7 @@ export class HabitsService {
       userId,
       habit.googleEventId,
       habit.googleEventCalendarId ?? undefined,
+      habit.externalCalendarProvider,
     );
   }
 

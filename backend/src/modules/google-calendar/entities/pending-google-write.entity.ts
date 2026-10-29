@@ -22,8 +22,12 @@ export class PendingGoogleWrite {
   @Column({ type: 'varchar', length: 255, nullable: true })
   googleEventId: string | null;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Column({ type: 'varchar', length: 1024, nullable: true })
   googleCalendarId: string | null;
+
+  /** Account for this queued write. Null means Google. */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  externalCalendarProvider: 'google' | 'microsoft' | 'apple' | null;
 
   @Column({ type: 'varchar', length: 16 })
   operation: PendingGoogleWriteOperation;

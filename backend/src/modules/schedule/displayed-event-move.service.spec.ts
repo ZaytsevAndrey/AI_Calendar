@@ -294,6 +294,7 @@ describe('DisplayedEventMoveService', () => {
       '2026-09-22T11:00:00.000Z',
       '2026-09-22T12:00:00.000Z',
       'primary',
+      undefined,
     );
     expect(seatOpenHoles).toHaveBeenCalledWith(userId);
   });

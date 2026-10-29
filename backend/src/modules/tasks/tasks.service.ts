@@ -988,6 +988,7 @@ export class TasksService {
         dto.googleEventCalendarId ||
           slot?.googleEventCalendarId ||
           task.googleEventCalendarId,
+        task.externalCalendarProvider,
       );
       if (!task.isRecurring && googleEventId === task.googleEventId) {
         const leftover = remaining.find((row) => row.googleEventId);
@@ -1081,14 +1082,18 @@ export class TasksService {
     userId: string,
     eventId: string,
     calendarId?: string | null,
+    provider?: string | null,
   ): Promise<void> {
     try {
-      const conn = await this.googleCalendarService.checkConnection(userId);
-      if (!conn.connected) return;
+      if (provider === 'google' || !provider) {
+        const conn = await this.googleCalendarService.checkConnection(userId);
+        if (!conn.connected) return;
+      }
       await this.googleCalendarService.deleteEvent(
         userId,
         eventId,
         calendarId ?? undefined,
+        provider,
       );
     } catch (e: any) {
       const message = e?.message ?? String(e);
@@ -1096,6 +1101,12 @@ export class TasksService {
       await this.pendingGoogleWrites.enqueue(userId, 'delete', {
         googleEventId: eventId,
         googleCalendarId: calendarId ?? null,
+        externalCalendarProvider:
+          provider === 'microsoft' ||
+          provider === 'apple' ||
+          provider === 'google'
+            ? provider
+            : null,
         error: message,
       });
     }

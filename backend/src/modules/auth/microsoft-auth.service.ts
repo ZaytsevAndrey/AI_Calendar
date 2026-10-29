@@ -1,8 +1,11 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
+  Optional,
   UnauthorizedException,
+  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -12,6 +15,7 @@ import { randomBytes } from 'crypto';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
+import { AppCalendarWriteService } from '../calendar-providers/app-calendar-write.service';
 import { UserIdentitiesService } from './user-identities.service';
 
 type TokenResponse = {
@@ -48,6 +52,9 @@ export class MicrosoftAuthService {
     @InjectRepository(User) private readonly userRepo: Repository<User>,
     @InjectRepository(UserSettings)
     private readonly settingsRepo: Repository<UserSettings>,
+    @Optional()
+    @Inject(forwardRef(() => AppCalendarWriteService))
+    private readonly appWrites?: AppCalendarWriteService,
   ) {}
 
   isConfigured(): boolean {
@@ -123,11 +130,13 @@ export class MicrosoftAuthService {
     if (linkUserId) {
       await this.linkToUser(linkUserId, providerUserId, email, tokens);
       await this.ensureSettings(linkUserId);
+      await this.ensureAppCalendar(linkUserId);
       return { mode: 'link' };
     }
 
     const user = await this.findOrCreateUser(providerUserId, email, tokens);
     await this.ensureSettings(user.id);
+    await this.ensureAppCalendar(user.id);
     const pair = this.createAppTokenPair(user.id);
     await this.userRepo.update(
       { id: user.id },
@@ -358,9 +367,29 @@ export class MicrosoftAuthService {
     return ticket;
   }
 
+  private async ensureAppCalendar(userId: string): Promise<void> {
+    if (!this.appWrites) return;
+    try {
+      await this.appWrites.syncHome(userId);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger.warn(
+        `Could not create the Microsoft app calendar for ${userId}: ${msg}`,
+      );
+    }
+  }
+
   private async ensureSettings(userId: string): Promise<void> {
     const settings = await this.settingsRepo.findOne({ where: { userId } });
-    if (settings) return;
+    if (settings) {
+      if (!settings.appCalendarProvider && !settings.googleCalendarLinked) {
+        await this.settingsRepo.update(
+          { userId },
+          { appCalendarProvider: 'microsoft' },
+        );
+      }
+      return;
+    }
     await this.settingsRepo.save(
       this.settingsRepo.create({
         userId,
@@ -378,6 +407,7 @@ export class MicrosoftAuthService {
         maxSplitMinutes: 30,
         recurringScheduleHorizonDays: 30,
         appGoogleCalendarName: 'luefy',
+        appCalendarProvider: 'microsoft',
       }),
     );
   }

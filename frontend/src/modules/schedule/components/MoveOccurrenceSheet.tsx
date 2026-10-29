@@ -13,7 +13,7 @@ import { Modal } from '../../../ui/Modal';
 import { Spinner } from '../../../ui/Spinner';
 import { Button } from 'ui/Button';
 import { dialogButtonSize } from 'ui/controlSize';
-import { Input } from 'ui/Input';
+import { DatePicker } from 'ui/DatePicker';
 import { Select } from 'ui/Select';
 import { TimeField } from 'ui/TimeField';
 import { formatCivilYmd } from '../../../utils/formatDate';
@@ -32,7 +32,11 @@ import {
 } from '../buildOneOffFromSeries';
 import { SlotPickTimeline, seekIsoForPhase } from './SlotPickTimeline';
 import { formatHmFromIso } from '../slotPickMath';
-import { phaseIdAtFocus, phaseWindowsForDay } from '../slotPickPhases';
+import {
+  phaseIdAtFocus,
+  phaseIdForMovedSlot,
+  phaseWindowsForDay,
+} from '../slotPickPhases';
 
 type Target = { task: TaskDTO; occurrenceYmd: string } | null;
 
@@ -156,6 +160,24 @@ export function MoveOccurrenceSheet({
   const duration = Math.max(1, task.estimatedTimeInMinutes || 30);
   const recurring = !!task.isRecurring;
   const canPlace = !!selectedStartIso && !busy && !loading;
+  // The Phase select only navigates the timeline. The saved phase follows the
+  // chosen slot: the task's own phase while the slot fits it, else the phase there.
+  const taskPhaseId = defaultPhaseId(task) || null;
+  const dayWindows = placeYmd
+    ? phaseWindowsForDay(schedulablePhases, placeYmd, zone)
+    : [];
+  const selectedStartMs = selectedStartIso ? Date.parse(selectedStartIso) : NaN;
+  const savedPhaseId = Number.isFinite(selectedStartMs)
+    ? phaseIdForMovedSlot(
+        dayWindows,
+        taskPhaseId,
+        selectedStartMs,
+        selectedStartMs + duration * 60_000,
+      )
+    : taskPhaseId;
+  const savedPhaseName =
+    schedulablePhases.find((p) => p.id === savedPhaseId)?.name ?? null;
+  const phaseWillChange = !!selectedStartIso && savedPhaseId !== taskPhaseId;
 
   const requestSeek = (iso: string) => {
     setSeekIso(iso);
@@ -196,7 +218,7 @@ export function MoveOccurrenceSheet({
         isoToHm(selectedStartIso, zone) ||
         formatHmFromIso(selectedStartIso, zone).slice(0, 5) ||
         '09:00';
-      const chosenPhase = phaseId || null;
+      const chosenPhase = savedPhaseId;
 
       if (recurring) {
         const payload = buildOneOffFromSeries(
@@ -229,8 +251,7 @@ export function MoveOccurrenceSheet({
             eventType: 'fixed',
             scheduledStartTime: start,
             scheduledEndTime: end,
-            phaseId: chosenPhase || undefined,
-            phaseIds: chosenPhase ? [chosenPhase] : undefined,
+            phaseIds: chosenPhase ? [chosenPhase] : [],
             scheduleState: 'none',
             isUnscheduled: false,
             problematicOccurrenceYmds: null,
@@ -272,8 +293,6 @@ export function MoveOccurrenceSheet({
   };
 
   const todayYmd = localYmd(new Date().toISOString(), timeZone);
-  const minYmd =
-    occurrenceYmd && occurrenceYmd < todayYmd ? occurrenceYmd : todayYmd;
   const showTimeline =
     !loading && !loadError && slots && (slots.candidates.length > 0 || slots.free.length > 0);
   const showEmpty =
@@ -332,18 +351,20 @@ export function MoveOccurrenceSheet({
       </p>
 
       <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <label className="block text-sm text-ide-text">
-          <span className="mb-1 block text-ide-muted">
+        <div className="block text-sm text-ide-text">
+          <span id="move-slot-day" className="mb-1 block text-ide-muted">
             {t('schedule.problematicSlotDay')}
           </span>
-          <Input
-            type="date"
+          <DatePicker
+            labelledBy="move-slot-day"
             value={placeYmd}
-            min={minYmd}
-            disabled={busy}
-            onChange={(e) => setPlaceYmd(e.target.value)}
+            minYmd={todayYmd}
+            emptyLabel={t('schedule.problematicSlotDay')}
+            onChange={(ymd) => {
+              if (ymd && !busy) setPlaceYmd(ymd);
+            }}
           />
-        </label>
+        </div>
         <label className="block text-sm text-ide-text">
           <span className="mb-1 block text-ide-muted">
             {t('schedule.problematicSlotPhase')}
@@ -412,6 +433,14 @@ export function MoveOccurrenceSheet({
           onFocusIso={setFocusIso}
           onPhaseChange={setPhaseId}
         />
+      ) : null}
+
+      {showTimeline && phaseWillChange ? (
+        <p className="mt-2 text-sm text-ide-muted" data-testid="move-phase-change">
+          {savedPhaseName
+            ? t('schedule.problematicMovePhaseChange', { phase: savedPhaseName })
+            : t('schedule.problematicMovePhaseClear')}
+        </p>
       ) : null}
     </Modal>
   );

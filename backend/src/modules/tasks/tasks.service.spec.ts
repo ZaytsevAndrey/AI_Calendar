@@ -1053,6 +1053,7 @@ describe('TasksService', () => {
         'user-1',
         'g-1',
         'cal-1',
+        undefined,
       );
     });
 
@@ -1137,6 +1138,7 @@ describe('TasksService', () => {
       expect(googleCalendarService.deleteEvent).toHaveBeenCalledWith(
         'user-1',
         'g-old',
+        undefined,
         undefined,
       );
       expect(result.jobId).toBeNull();

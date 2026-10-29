@@ -15,11 +15,14 @@ export function buildOneOffFromSeries(
 ): CreateTaskDTO {
   const zone = resolveIanaTimeZone(timeZone || task.scheduleTimeZone || 'UTC');
   const duration = Math.max(1, task.estimatedTimeInMinutes || 30);
+  // `null` means the chosen slot sits outside every phase: no phase.
   const phaseId =
-    phaseIdOverride ||
-    task.phaseId ||
-    task.phases?.[0]?.id ||
-    task.phase?.id;
+    phaseIdOverride === null
+      ? undefined
+      : phaseIdOverride ||
+        task.phaseId ||
+        task.phases?.[0]?.id ||
+        task.phase?.id;
   const clock = /^\d{2}:\d{2}$/.test(startHm) ? startHm : '12:00';
   const start = localDateTimeIso(placeYmd, clock, zone);
   const end = new Date(
