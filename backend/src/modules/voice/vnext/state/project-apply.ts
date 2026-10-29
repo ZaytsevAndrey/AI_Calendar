@@ -119,8 +119,9 @@ export function projectApply(input: {
     const timedBy = orderingRefs(operation);
     for (const prerequisite of dependencies[operation.pendingId] ?? []) {
       const prior = byId.get(prerequisite);
-      // A command that only needs the new object's time is projected now; one that needs its id is not.
-      if (prior?.action === 'create' && operation.action !== 'create' && !timedBy.has(prerequisite)) {
+      // A stored target or the new object's time is known now, and the preview order runs it after the create.
+      // Only a command that needs the new object's id cannot be projected before Apply.
+      if (prior?.action === 'create' && operation.action !== 'create' && operation.target.kind !== 'entity' && !timedBy.has(prerequisite)) {
         return { ok: false, code: 'unsupported_dependency_execution', detail: operation.pendingId };
       }
     }

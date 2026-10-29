@@ -784,6 +784,27 @@ describe('structured dependent actions in one request', () => {
     slots: [slot('s1', 'meet', '2026-10-19T07:00:00.000Z', '2026-10-19T08:00:00.000Z')],
     ...extra,
   });
+  it('folds a command on the new task into its create, and runs a command on a stored task after the create', async () => {
+    const folded = 'add report and mark it done';
+    const done = await build(world({
+      model: [ops(folded, [
+        createReport,
+        { opId: 'op-2', action: 'complete', target: { kind: 'operation_result', opId: 'op-1' }, dependsOn: ['op-1'], changes: {}, constraints: [], source: { text: '' } },
+      ])],
+    })).service.turn(USER, dto({ transcript: folded }));
+    expect(done.intents).toEqual([expect.objectContaining({ type: 'create', task: expect.objectContaining({ name: 'Report', status: 'completed' }) })]);
+
+    const transcript = 'add report, then delete the meeting';
+    const waits = await build(meetingWorld({
+      model: [ops(transcript, [
+        createReport,
+        { opId: 'op-2', action: 'delete', target: { kind: 'existing', proposedId: 'meet' }, dependsOn: ['op-1'], changes: {}, constraints: [], source: { text: '' } },
+      ])],
+    })).service.turn(USER, dto({ transcript }));
+    expect(waits.outcome).toBe('confirm');
+    expect(waits.intents.map((intent) => (intent.type === 'create' ? 'create' : (intent.command as { kind: string }).kind))).toEqual(['create', 'delete']);
+  });
+
   const ordered = (transcript: string, relation: 'before' | 'after') => ops(transcript, [{
     ...createReport,
     constraints: [{ kind: 'ordering', relation, target: { kind: 'existing', proposedId: 'meet' } }],

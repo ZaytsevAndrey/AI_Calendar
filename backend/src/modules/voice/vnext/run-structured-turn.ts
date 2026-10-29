@@ -94,6 +94,7 @@ function blockedCopy(code: string): Parameters<typeof voiceCopy>[1] {
   if (code === 'fold') return 'dst_fold';
   if (code === 'event_no_done') return 'event_no_done';
   if (code === 'missing_predecessor_time') return 'predecessor';
+  if (code === 'unsupported_dependency_execution') return 'dependency';
   if (code === 'unsupported_action') return 'unsupported';
   return 'which_task';
 }
