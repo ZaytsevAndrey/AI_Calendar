@@ -134,6 +134,8 @@ export type ResolvedEntityReference = {
   /** Recurring rows: placed occurrences and the series event id. */
   occurrences?: EntityOccurrence[];
   seriesEventId?: string | null;
+  /** Stored title of the row, for preview copy. Never a match key. */
+  name?: string;
 };
 
 export type PendingOperation = {

@@ -51,6 +51,8 @@ const SHARED = [
   'For seriesScope occurrence or from_day, and for any move of a series, set occurrence to the current YYYY-MM-DD date of the occurrence the user means. Do not pick a date the user did not give or imply.',
   'A deadline uses clock role deadline. A scheduled start uses clock role start. A named day without a clock is a date or weekday constraint, not an invented clock. A whole day is {"kind":"all_day"} and still needs the date. A time window uses earliest and deadline roles.',
   'Day plan edit: {"version":"1","kind":"day_plan","operations":[],"dayPlan":{"phase":"edit","edits":[{"op":"add_task","name":"...","qualitative":"evening"}]}}. Cancel is {"version":"1","kind":"day_plan","operations":[],"dayPlan":{"phase":"cancel"}}. While a draft is active, a change to that day edits the draft.',
+  'A plan item is changed by its item id from the day plan line: remove_item with itemId, set_preferred_start with itemId and hm HH:MM, set_window with itemId, earliestHm, and deadlineHm, set_duration with itemId and minutes. An activity already in the plan is never added again. When the user removes or moves an item, return that edit; do not say nothing changed.',
+  'A clock the user already agreed in this dialogue stays a clock. Use time_of_day only when the user gave nothing more exact than a part of day.',
   'Several operations stay in one envelope. dependsOn lists earlier opIds. A correction of a pending preview revises that operation. It does not create a second object.',
   'A correction inside the same utterance replaces the earlier constraint. Return the final operation, not a create plus an update of something that does not exist yet.',
   'Do not return client write commands.',
@@ -93,7 +95,7 @@ export function buildTurnUser(input: {
   history?: Array<{ role: 'user' | 'assistant'; text: string }>;
   pendingSummary?: string | null;
   referents?: Array<{ phrase: string; id: string }>;
-  draft?: { day: string; revision: number; items: string[] } | null;
+  draft?: { day: string; revision: number; items: string[]; later?: string[] } | null;
   canceledOpIds?: string[];
   appliedCount?: number;
   pendingOperations?: Array<{ opId: string; action: string; constraints: unknown[] }>;
@@ -121,7 +123,10 @@ export function buildTurnUser(input: {
     (input.history ?? []).slice(-6).map((turn) => `${turn.role}: ${turn.text}`).join('\n') || '(none)',
     'Referents from this session:',
     (input.referents ?? []).map((row) => `${row.phrase} ${row.id}`).join('\n') || '(none)',
-    `Draft: ${input.draft ? `${input.draft.day} revision ${input.draft.revision} ${input.draft.items.join(', ') || '(empty)'}. An activity with no date of its own is a day_plan edit on this draft. Do not ask a question when the activity name is already here. A create that names a different date stays a separate task.` : '(none)'}`,
+    `Day plan in progress: ${input.draft ? `${input.draft.day} revision ${input.draft.revision} ${input.draft.items.join('; ') || '(empty)'}. An activity with no date of its own is a day_plan edit on this plan. Do not ask a question when the activity name is already here. A create that names a different date stays a separate task.` : '(none)'}`,
+    ...(input.draft?.later
+      ? [`Later tasks, not in the plan: ${input.draft.later.join('; ') || '(none)'}. Do not add one on your own. You may offer one in your question. Add it with include_task and its id only after the user agrees or names it.`]
+      : []),
     `Canceled operation ids: ${(input.canceledOpIds ?? []).join(', ') || '(none)'}`,
     `Applied previews this session: ${input.appliedCount ?? 0}`,
     'Pending operations. To change one, target kind operation_result and its opId. Do not create a second object for a correction. To cancel one, use action cancel with that opId.',

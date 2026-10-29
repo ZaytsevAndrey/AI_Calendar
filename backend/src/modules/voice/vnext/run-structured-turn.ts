@@ -79,6 +79,7 @@ export function entitiesToKnown(entities: EntityRecord[], userId: string): Known
       ...(entity.provider ? { provider: entity.provider } : {}),
       ...(entity.occurrences ? { occurrences: entity.occurrences } : {}),
       ...(entity.seriesEventId != null ? { seriesEventId: entity.seriesEventId } : {}),
+      ...(entity.name ? { name: entity.name } : {}),
     }));
 }
 

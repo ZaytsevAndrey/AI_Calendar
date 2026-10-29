@@ -123,6 +123,27 @@ function draftView(draft: PlanDraft): DayPlanProposal {
   };
 }
 
+/** What an edit turn did to the plan, and what is in it now, when the interpreter asked nothing. */
+export function planStatusCopy(language: 'uk' | 'en', before: PlanDraft | null, after: PlanDraft): string {
+  const beforeIds = new Set((before?.items ?? []).map((item) => item.id));
+  const afterIds = new Set(after.items.map((item) => item.id));
+  const added = after.items.filter((item) => !beforeIds.has(item.id)).map((item) => item.name);
+  const removed = (before?.items ?? []).filter((item) => !afterIds.has(item.id)).map((item) => item.name);
+  const listed = after.items.map((item) => {
+    const clock = item.preferredHm ?? (item.earliestHm && item.deadlineHm ? `${item.earliestHm}–${item.deadlineHm}` : item.deadlineHm ?? item.earliestHm);
+    return clock ? `${item.name} (${clock})` : item.name;
+  });
+  const uk = language === 'uk';
+  const parts: string[] = [];
+  if (added.length) parts.push(`${uk ? 'Додав' : 'Added'}: ${added.join(', ')}.`);
+  if (removed.length) parts.push(`${uk ? 'Прибрав' : 'Removed'}: ${removed.join(', ')}.`);
+  parts.push(listed.length
+    ? `${uk ? 'У плані' : 'In the plan'}: ${listed.join(', ')}.`
+    : uk ? 'План поки порожній.' : 'The plan is empty so far.');
+  parts.push(uk ? 'Додати ще щось чи складати план?' : 'Add anything else, or build the plan?');
+  return parts.join(' ');
+}
+
 function proposalProblems(draft: PlanDraft, proposal: DayPlanProposal): string[] {
   const problems: string[] = [];
   if (proposal.day !== draft.day) problems.push('proposal_day');
@@ -304,6 +325,7 @@ export async function handleStructuredDayPlan(
     });
   }
   const day = command.day || input.session.planDraft?.day;
+  const priorDraft = command.phase === 'start' ? null : input.session.planDraft;
   if (command.phase === 'start') {
     if (!day) {
       return done(input, reply(input.session.sessionId, { outcome: 'refuse', assistantMessage: voiceCopy(input.language, 'invalid') }), {
@@ -319,7 +341,9 @@ export async function handleStructuredDayPlan(
         blocked: ['day_context_missing'],
       });
     }
-    input.session.planDraft = { ...initialPlanDraft(day, input.planContext), stage: 'interview' };
+    // Later tasks are not seeded: the interpreter may offer one, and include_task adds it after a yes.
+    const seeded = initialPlanDraft(day, input.planContext);
+    input.session.planDraft = { ...seeded, items: seeded.items.filter((item) => item.source !== 'unscheduled'), stage: 'interview' };
   }
   if (!input.session.planDraft) {
     return done(input, reply(input.session.sessionId, { outcome: 'refuse', assistantMessage: voiceCopy(input.language, 'invalid') }), {
@@ -330,7 +354,19 @@ export async function handleStructuredDayPlan(
   }
   const qualitative: string[] = [];
   const edits: PlanEdit[] = [];
+  const blocked: string[] = [];
+  const keptAdds: Array<Extract<DayPlanEditV1, { op: 'add_task' }>> = [];
+  const planned = new Set(input.session.planDraft.items.map((item) => item.name.trim().toLocaleLowerCase()));
   for (const edit of command.edits ?? []) {
+    // An activity already in the plan is edited by its item id, never added a second time.
+    if (edit.op === 'add_task' && planned.has(edit.name.trim().toLocaleLowerCase())) {
+      blocked.push('duplicate_item');
+      continue;
+    }
+    if (edit.op === 'add_task') {
+      planned.add(edit.name.trim().toLocaleLowerCase());
+      keptAdds.push(edit);
+    }
     const mapped = toPlanEdit(edit, input);
     edits.push(mapped.edit);
     if (mapped.qualitative) qualitative.push(mapped.qualitative);
@@ -358,7 +394,6 @@ export async function handleStructuredDayPlan(
       preservedLabels: qualitative,
     });
   }
-  const blocked: string[] = [];
   if (edits.length) {
     const beforeIds = new Set(input.session.planDraft.items.map((item) => item.id));
     const applied = applyPlanEdits(input.session.planDraft, edits, input.planContext ?? {
@@ -369,8 +404,7 @@ export async function handleStructuredDayPlan(
       defaultDurationMinutes: input.defaultDurationMinutes,
     });
     const created = applied.draft.items.filter((item) => item.source === 'new' && !beforeIds.has(item.id));
-    const adds = (command.edits ?? []).filter((edit) => edit.op === 'add_task');
-    adds.forEach((edit, index) => {
+    keptAdds.forEach((edit, index) => {
       const item = created[index];
       if (item && edit.qualitative) input.session.qualitativeByItemId[item.id] = edit.qualitative;
     });
@@ -485,7 +519,7 @@ export async function handleStructuredDayPlan(
     input,
     reply(input.session.sessionId, {
       outcome: draft.stage === 'review' ? 'confirm' : 'clarify',
-      assistantMessage: command.question || voiceCopy(input.language, 'held'),
+      assistantMessage: command.question || planStatusCopy(input.language, priorDraft, draft),
       actions: draft.stage === 'review' ? ['confirm', 'cancel'] : ['build_plan', 'cancel'],
       plan: draftView(draft),
     }),

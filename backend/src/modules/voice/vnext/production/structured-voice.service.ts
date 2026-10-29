@@ -14,13 +14,13 @@ import { overdueDays } from '../../../day-reminders/day-reminder.dates';
 import { DayRemindersService } from '../../../day-reminders/day-reminders.service';
 import { Phase } from '../../../phases/entities/phase.entity';
 import { ScheduledTask } from '../../../schedule/schedule.entity';
-import { Task } from '../../../tasks/entities/task.entity';
+import { Task, TaskStatus } from '../../../tasks/entities/task.entity';
 import { UserSettingsService } from '../../../user-settings/user-settings.service';
 import type { VoiceTurnDto } from '../../dto/voice-turn.dto';
 import { GroqClient } from '../../groq.client';
 import { VoiceDayPlanner } from '../../voice-agent.day-plan';
 import { VoiceAgentTools, type VoiceToolContext } from '../../voice-agent.tools';
-import type { VoiceExecutionClaim, VoiceTurnResponse } from '../../voice-agent.types';
+import type { PlanItem, VoiceExecutionClaim, VoiceTurnResponse } from '../../voice-agent.types';
 import {
   addDaysToYmd,
   endOfLocalDayIso,
@@ -80,6 +80,16 @@ function voiceErrorCode(err: unknown): string | undefined {
   return typeof response === 'object' && response !== null && typeof (response as { code?: unknown }).code === 'string'
     ? (response as { code: string }).code
     : undefined;
+}
+
+/** One plan item for the prompt: its id, so an edit can name it, and the clocks it already has. */
+export function planItemLine(item: PlanItem): string {
+  return [
+    `item ${item.id} ${item.name} ${item.durationMinutes}m`,
+    item.preferredHm ? `at ${item.preferredHm}` : '',
+    item.earliestHm ? `from ${item.earliestHm}` : '',
+    item.deadlineHm ? `until ${item.deadlineHm}` : '',
+  ].filter(Boolean).join(' ');
 }
 
 /** A UI action is not interpreted. It becomes the matching control, with no model call. */
@@ -424,7 +434,16 @@ export class StructuredVoiceService {
       // Built before the turn appends this utterance, so every stored turn is history.
       history: session.turns,
       draft: session.planDraft
-        ? { day: session.planDraft.day, revision: session.planDraft.revision, items: session.planDraft.items.map((item) => item.name) }
+        ? {
+            day: session.planDraft.day,
+            revision: session.planDraft.revision,
+            items: session.planDraft.items.map(planItemLine),
+            later: ctx.tasks
+              .filter((task) => task.isUnscheduled && !task.isRecurring && task.status !== TaskStatus.COMPLETED && task.status !== TaskStatus.CANCELED)
+              .filter((task) => !session.planDraft!.items.some((item) => item.taskId === task.id))
+              .slice(0, 10)
+              .map((task) => `${task.id} ${task.name}`),
+          }
         : null,
       appliedCount: entry.dispatched.size,
     });

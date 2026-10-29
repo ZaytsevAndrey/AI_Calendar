@@ -34,6 +34,7 @@ export type KnownEntity = {
   provider?: 'google' | 'microsoft' | 'apple';
   occurrences?: EntityOccurrence[];
   seriesEventId?: string | null;
+  name?: string;
 };
 
 export type EntityFingerprint = {
@@ -642,6 +643,7 @@ function entityReference(entity: KnownEntity): Extract<PendingOperation['target'
     ...(entity.provider ? { provider: entity.provider } : {}),
     ...(entity.occurrences ? { occurrences: entity.occurrences } : {}),
     ...(entity.seriesEventId != null ? { seriesEventId: entity.seriesEventId } : {}),
+    ...(entity.name ? { name: entity.name } : {}),
   };
 }
 

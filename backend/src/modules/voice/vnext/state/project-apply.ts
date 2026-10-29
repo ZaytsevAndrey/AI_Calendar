@@ -103,7 +103,7 @@ export function projectApply(input: {
       ? projectCreate(resolved.operation, clock, labels.labels, input.language ?? 'uk')
       : operation.action === 'remind'
         ? projectRemind(resolved.operation, clock)
-        : projectCommand(resolved.operation, clock);
+        : projectCommand(resolved.operation, clock, input.language ?? 'uk');
     if (!projected.ok) return projected;
     if (exposesDraftId(projected.intent, draftIds)) return { ok: false, code: 'draft_identifier', detail: operation.pendingId };
     keys.set(operation.pendingId, intentKey(projected.intent));
@@ -456,11 +456,65 @@ function projectRemind(operation: PendingOperation, clock: Clock): { ok: true; i
   };
 }
 
-function projectCommand(operation: PendingOperation, clock: Clock): { ok: true; intent: VoiceWriteIntent } | ProjectError {
+const COMMAND_VERBS: Record<VNextLanguage, Record<string, string>> = {
+  uk: {
+    delete: 'Видалити',
+    complete: 'Позначити виконаною',
+    cancel: 'Скасувати',
+    skip: 'Пропустити',
+    move: 'Перенести',
+    update: 'Змінити',
+    end_series: 'Завершити серію',
+  },
+  en: {
+    delete: 'Delete',
+    complete: 'Mark done',
+    cancel: 'Cancel',
+    skip: 'Skip',
+    move: 'Move',
+    update: 'Change',
+    end_series: 'End the series',
+  },
+};
+
+/**
+ * Preview copy for a command on a stored row: the verb and the stored title, never the transcript.
+ * A rename names both titles. `at` is the occurrence or the new start, when the command has one.
+ */
+export function commandSummary(
+  language: VNextLanguage,
+  kind: string,
+  operation: PendingOperation,
+  clock: Pick<Clock, 'timeZone'>,
+  at?: { occurrence?: string; start?: string },
+): string {
+  const stored = operation.target.kind === 'entity' ? operation.target.name : undefined;
+  const title = stored || operation.changes.title || operation.sourceText || kind;
+  const verb = COMMAND_VERBS[language][kind] ?? COMMAND_VERBS[language].update;
+  const renamed = kind === 'update' && stored && operation.changes.title && operation.changes.title !== stored;
+  if (renamed) {
+    return language === 'uk' ? `Перейменувати «${stored}» на «${operation.changes.title}»` : `Rename “${stored}” to “${operation.changes.title}”`;
+  }
+  const quoted = language === 'uk' ? `«${title}»` : `“${title}”`;
+  const when = (iso: string, withClock: boolean) => {
+    const ymd = localYmd(iso, clock.timeZone);
+    return withClock ? `${ymd} ${localHm(iso, clock.timeZone)}` : ymd;
+  };
+  if (at?.start) return `${verb} ${quoted} ${language === 'uk' ? 'на' : 'to'} ${when(at.start, true)}`;
+  if (at?.occurrence) {
+    const day = when(at.occurrence, false);
+    if (kind === 'end_series') return `${verb} ${quoted} ${language === 'uk' ? 'з' : 'from'} ${day}`;
+    return `${verb} ${quoted} ${language === 'uk' ? 'за' : 'on'} ${day}`;
+  }
+  return `${verb} ${quoted}`;
+}
+
+function projectCommand(operation: PendingOperation, clock: Clock, language: VNextLanguage): { ok: true; intent: VoiceWriteIntent } | ProjectError {
   if (operation.target.kind !== 'entity') return { ok: false, code: 'draft_command', detail: operation.action };
   const taskId = operation.target.entityId;
-  const summary = operation.changes.title || operation.sourceText || operation.action;
-  if (operation.target.recurring && operation.target.entityType === 'task') return projectSeriesCommand(operation, clock);
+  const summary = commandSummary(language, operation.action, operation, clock);
+  const taskName = operation.target.name || operation.changes.title || operation.sourceText || operation.action;
+  if (operation.target.recurring && operation.target.entityType === 'task') return projectSeriesCommand(operation, clock, language);
   if (operation.target.recurring && operation.target.entityType === 'external_event') {
     // A provider row is already one instance. Only that instance can be moved or deleted.
     if (operation.seriesScope !== 'occurrence') return { ok: false, code: 'unsupported_series_scope', detail: `${operation.seriesScope}:external_event` };
@@ -481,7 +535,7 @@ function projectCommand(operation: PendingOperation, clock: Clock): { ok: true; 
         intent: {
           type: 'command',
           summary,
-          command: { kind: 'delete_event', taskId, taskName: summary, summary, eventId: target.googleEventId, calendarId: target.calendarId, provider: target.provider },
+          command: { kind: 'delete_event', taskId, taskName, summary, eventId: target.googleEventId, calendarId: target.calendarId, provider: target.provider },
         },
       };
     }
@@ -495,7 +549,7 @@ function projectCommand(operation: PendingOperation, clock: Clock): { ok: true; 
       intent: {
         type: 'command',
         summary,
-        command: { kind: 'update', taskId, taskName: summary, summary, patch: patch.patch },
+        command: { kind: 'update', taskId, taskName, summary, patch: patch.patch },
       },
     };
   }
@@ -511,7 +565,7 @@ function projectCommand(operation: PendingOperation, clock: Clock): { ok: true; 
       intent: {
         type: 'command',
         summary,
-        command: { kind: operation.action, taskId, taskName: summary, summary },
+        command: { kind: operation.action, taskId, taskName, summary },
       },
     };
   }
@@ -526,16 +580,17 @@ function projectCommand(operation: PendingOperation, clock: Clock): { ok: true; 
     if (!start.ok) return start;
     const end = resolveEnd(operation, start.iso, target.scheduledStart, target.scheduledEnd, clock.defaultDuration, clock.timeZone);
     if (!end.ok) return end;
+    const moved = commandSummary(language, 'move', operation, clock, { start: start.iso });
     return {
       ok: true,
       intent: {
         type: 'command',
-        summary,
+        summary: moved,
         command: {
           kind: 'move',
           taskId,
-          taskName: summary,
-          summary,
+          taskName,
+          summary: moved,
           googleEventId: target.googleEventId,
           calendarId: target.calendarId,
           ...(target.provider ? { provider: target.provider } : {}),
@@ -569,28 +624,30 @@ const CLIENT_SERIES_SCOPE: Record<SeriesScope, 'occurrence' | 'series' | 'all'> 
  * skip: occurrence only. move: any scope, anchored on a named occurrence.
  * complete, cancel, update: the whole series only.
  */
-function projectSeriesCommand(operation: PendingOperation, clock: Clock): { ok: true; intent: VoiceWriteIntent } | ProjectError {
+function projectSeriesCommand(operation: PendingOperation, clock: Clock, language: VNextLanguage): { ok: true; intent: VoiceWriteIntent } | ProjectError {
   if (operation.target.kind !== 'entity') return { ok: false, code: 'draft_command', detail: operation.action };
   const target = operation.target;
   const scope = operation.seriesScope;
   if (!scope) return { ok: false, code: 'missing_series_scope', detail: target.entityId };
   const taskId = target.entityId;
-  const summary = operation.changes.title || operation.sourceText || operation.action;
+  const summary = commandSummary(language, operation.action, operation, clock);
+  const taskName = target.name || operation.changes.title || operation.sourceText || operation.action;
   const occurrenceCommand = (kind: 'skip' | 'end_series'): { ok: true; intent: VoiceWriteIntent } | ProjectError => {
     const rejected = onlyKinds(operation, []) ?? onlyChanges(operation, []);
     if (rejected) return rejected;
     const picked = pickOccurrence(operation, clock.timeZone);
     if (!picked.ok) return picked;
+    const text = commandSummary(language, kind, operation, clock, { occurrence: picked.occurrence.start });
     return {
       ok: true,
       intent: {
         type: 'command',
-        summary,
+        summary: text,
         command: {
           kind,
           taskId,
-          taskName: summary,
-          summary,
+          taskName,
+          summary: text,
           occurrenceStart: picked.occurrence.start,
           googleEventId: picked.occurrence.googleEventId,
           googleEventCalendarId: target.calendarId,
@@ -615,16 +672,17 @@ function projectSeriesCommand(operation: PendingOperation, clock: Clock): { ok: 
     if (!start.ok) return start;
     const end = resolveEnd(operation, start.iso, picked.occurrence.start, picked.occurrence.end, clock.defaultDuration, clock.timeZone);
     if (!end.ok) return end;
+    const moved = commandSummary(language, 'move', operation, clock, { start: start.iso });
     return {
       ok: true,
       intent: {
         type: 'command',
-        summary,
+        summary: moved,
         command: {
           kind: 'move',
           taskId,
-          taskName: summary,
-          summary,
+          taskName,
+          summary: moved,
           googleEventId: picked.occurrence.googleEventId,
           calendarId: target.calendarId,
           recurringEventId: target.seriesEventId,
@@ -643,7 +701,7 @@ function projectSeriesCommand(operation: PendingOperation, clock: Clock): { ok: 
     const implied = (operation.action === 'complete' && status === 'completed') || (operation.action === 'cancel' && status === 'canceled');
     const rejected = onlyKinds(operation, []) ?? onlyChanges(operation, implied ? ['status'] : []);
     if (rejected) return rejected;
-    return { ok: true, intent: { type: 'command', summary, command: { kind: operation.action, taskId, taskName: summary, summary } } };
+    return { ok: true, intent: { type: 'command', summary, command: { kind: operation.action, taskId, taskName, summary } } };
   }
   if (operation.action === 'update') {
     // A series patch keeps its own schedule; a new time for every occurrence is a series move.
@@ -651,7 +709,7 @@ function projectSeriesCommand(operation: PendingOperation, clock: Clock): { ok: 
     if (rejected) return rejected;
     const patch = updatePatch(operation, clock);
     if (!patch.ok) return patch;
-    return { ok: true, intent: { type: 'command', summary, command: { kind: 'update', taskId, taskName: summary, summary, patch: patch.patch } } };
+    return { ok: true, intent: { type: 'command', summary, command: { kind: 'update', taskId, taskName, summary, patch: patch.patch } } };
   }
   return { ok: false, code: 'unsupported_action', detail: `${operation.action}:series` };
 }

@@ -607,11 +607,21 @@ describe('stage 4.1 structured day plan', () => {
     changedItemIds: draft.items.map((item) => item.id),
   });
 
+  const include: SemanticEnvelopeV1 = {
+    version: '1',
+    kind: 'day_plan',
+    operations: [],
+    dayPlan: { phase: 'edit', edits: [{ op: 'include_task', taskId: 'task-write' }] },
+  };
+
   async function plan(proposeDay: TurnInput['proposeDay'], entities: EntityRecord[] = [WRITE]) {
     const session = createSession(USER, 'plan');
     const started = await runVNextTurn(base(session, entities, { planContext: CONTEXT }), interpreter(dayPlan('start')));
     expect(started.response.outcome).toBe('clarify');
     expect(started.response.intents).toEqual([]);
+    // The Later task joins only when the user agrees to it.
+    const included = await runVNextTurn(base(session, entities, { planContext: CONTEXT }), interpreter(include));
+    expect(included.response.assistantMessage).toContain('Write');
     const applied = await runVNextTurn(base(session, entities, { planContext: CONTEXT, proposeDay }), interpreter(dayPlan('apply')));
     return { session, applied };
   }
@@ -620,6 +630,28 @@ describe('stage 4.1 structured day plan', () => {
     const result = await runVNextTurn(base(createSession(USER, 'no-agenda')), interpreter(dayPlan('start')));
     expect(result.blocked).toContain('day_context_missing');
     expect(result.response.intents).toEqual([]);
+  });
+
+  it('does not seed Later tasks into a new plan', async () => {
+    const session = createSession(USER, 'no-seed');
+    const started = await runVNextTurn(base(session, [WRITE], { planContext: CONTEXT }), interpreter(dayPlan('start')));
+    expect(session.planDraft?.items).toEqual([]);
+    expect(started.response.plan?.items).toEqual([]);
+  });
+
+  it('drops a second add of an activity already in the plan', async () => {
+    const session = createSession(USER, 'dup');
+    await runVNextTurn(base(session, [WRITE], { planContext: CONTEXT }), interpreter(dayPlan('start')));
+    const add = (name: string): SemanticEnvelopeV1 => ({
+      version: '1',
+      kind: 'day_plan',
+      operations: [],
+      dayPlan: { phase: 'edit', edits: [{ op: 'add_task', name, durationMinutes: null, preferredHm: null, earliestHm: null, deadlineHm: null }] },
+    });
+    await runVNextTurn(base(session, [WRITE], { planContext: CONTEXT }), interpreter(add('Walk')));
+    const again = await runVNextTurn(base(session, [WRITE], { planContext: CONTEXT }), interpreter(add('walk')));
+    expect(session.planDraft?.items.map((item) => item.name)).toEqual(['Walk']);
+    expect(again.blocked).toContain('duplicate_item');
   });
 
   it('seats an authorized unscheduled task in a real gap and dispatches only on an explicit claim', async () => {

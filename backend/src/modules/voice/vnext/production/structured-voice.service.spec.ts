@@ -187,6 +187,15 @@ describe('structured /voice/turn integration', () => {
     expect(result.intents).toEqual([]);
   });
 
+  it('names the stored task in a command preview, not the transcript', async () => {
+    const report = task('report', 'Quarterly report');
+    const w = world({ tasks: [report], model: [envelope('drop that report thing', [{ opId: 'op-1', action: 'delete', target: { kind: 'existing', proposedId: 'report' } }])] });
+    const { service } = build(w);
+    const preview = await service.turn(USER, dto({ transcript: 'drop that report thing' }));
+    expect(preview.intents[0]).toMatchObject({ summary: 'Delete “Quarterly report”', command: { kind: 'delete', taskName: 'Quarterly report' } });
+    expect(preview.assistantMessage).not.toContain('drop that report thing');
+  });
+
   it('blocks confirm when the task changed or was deleted after preview', async () => {
     const report = task('report', 'Report');
     const w = world({ tasks: [report], model: [envelope('delete report', [{ opId: 'op-1', action: 'delete', target: { kind: 'existing', proposedId: 'report' } }])] });
@@ -333,10 +342,11 @@ describe('structured /voice/turn integration', () => {
   it('plans a day through build_plan and re-reads the planned task at confirm', async () => {
     const write = task('write', 'Write');
     const start = JSON.stringify({ version: '1', kind: 'day_plan', operations: [], dayPlan: { phase: 'start', day: '2026-10-19' } });
+    const include = JSON.stringify({ version: '1', kind: 'day_plan', operations: [], dayPlan: { phase: 'edit', edits: [{ op: 'include_task', taskId: 'write' }] } });
     const w = world({
       tasks: [write],
       // The interpreter asks once more when a start has no edits; the model keeps the empty start.
-      model: [start, start],
+      model: [start, start, include],
       propose: async (_userId, draft) => ({
         day: draft.day,
         stage: 'review',
@@ -349,6 +359,11 @@ describe('structured /voice/turn integration', () => {
     const { service } = build(w);
     const started = await service.turn(USER, dto({ transcript: 'plan my monday' }));
     expect(started.outcome).toBe('clarify');
+    expect(started.plan?.items).toEqual([]);
+    // Later tasks are offered by id, not seeded into the plan.
+    const added = await service.turn(USER, dto({ transcript: 'yes, add write' }));
+    expect(w.prompts[w.prompts.length - 1]).toContain('Later tasks, not in the plan: write Write');
+    expect(added.assistantMessage).toContain('Write');
     const planned = await service.turn(USER, dto({ actionId: 'build_plan' }));
     expect(planned.outcome).toBe('confirm');
     expect(planned.intents[0]).toMatchObject({ type: 'command', command: { kind: 'window', taskId: 'write' } });
