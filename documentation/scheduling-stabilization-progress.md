@@ -40,7 +40,7 @@ Runtime assumptions found: production runs one Render instance, Neon Postgres, `
 | 3 | F1: root causes of the 5 voice e2e failures and the 13 historical suites | done | 5b50f11 |
 | 4 | G: versioned migrations instead of `TYPEORM_SYNC=true` | done | fdf5ec3 |
 | 5 | C/D/E: historical identity tests, recurrence/temporal/placement edge tests, Google failure handling | done (partial, see section) | 1c2a18f |
-| 6 | F2 live voice eval, F3/F4, H frontend states, I matrix, J operations doc | done | (stage 6 commit) |
+| 6 | F2 live voice eval, F3/F4, H frontend states, I matrix, J operations doc | done | d8a3b4b |
 
 ## Stage A — durable placement (done)
 
