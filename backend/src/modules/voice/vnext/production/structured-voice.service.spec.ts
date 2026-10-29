@@ -817,6 +817,27 @@ describe('structured dependent actions in one request', () => {
       ])],
     })).service.turn(USER, dto({ transcript }));
     expect(sameRequest.intents).toEqual([]);
+    expect(sameRequest.assistantMessage).toBe('The other task has no time yet. I will not invent one.');
+  });
+
+  it('bounds a task by a timed task created in the same request, and runs it after that create', async () => {
+    const transcript = 'call tomorrow at 10 for half an hour, then report after it';
+    const call: SemanticOperationV1 = {
+      ...createReport,
+      changes: { title: 'Call' },
+      constraints: [{ kind: 'date', value: '2026-10-19', precision: 'day' }, { kind: 'clock', value: '10:00', role: 'start' }, { kind: 'duration', minutes: 30 }],
+    };
+    const report: SemanticOperationV1 = {
+      ...createReport,
+      opId: 'op-2',
+      target: { kind: 'new', localId: 'r' },
+      constraints: [{ kind: 'ordering', relation: 'after', target: { kind: 'operation_result', opId: 'op-1' } }],
+    };
+    const result = await build(world({ model: [ops(transcript, [call, report])] })).service.turn(USER, dto({ transcript }));
+    expect(result.outcome).toBe('confirm');
+    expect(result.intents).toHaveLength(2);
+    expect(result.intents[0]).toMatchObject({ type: 'create', task: { name: 'Call', scheduledStartTime: '2026-10-19T07:00:00.000Z' } });
+    expect(result.intents[1]).toMatchObject({ type: 'create', task: { name: 'Report', earliestStartTime: '2026-10-19T07:30:00.000Z', isUnscheduled: false } });
   });
 });
 

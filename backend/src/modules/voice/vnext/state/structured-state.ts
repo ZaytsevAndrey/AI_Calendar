@@ -163,7 +163,7 @@ export function applyProposalGroup(input: {
   for (const proposal of drafted.proposals) pendingIds.set(proposal.localRef, takeId(ids.pendingId, forbidden));
   const operations: PendingOperation[] = [
     ...patched.operations.map((operation) => sealOperation(operation, ids, forbidden)),
-    ...drafted.proposals.map((proposal) => sealProposal(proposal, pendingIds.get(proposal.localRef)!, ids, forbidden)),
+    ...drafted.proposals.map((proposal) => sealProposal(proposal, pendingIds.get(proposal.localRef)!, ids, forbidden, pendingIds)),
   ];
   const dependencies = sealDependencies(linked.edges, pendingIds);
   return commitPreview(current, operations, dependencies, ids);
@@ -491,7 +491,24 @@ function sealOperation(planned: PlannedOperation, ids: IdAllocator, forbidden: S
   };
 }
 
-function sealProposal(proposal: PlannedProposal, pendingId: string, ids: IdAllocator, forbidden: Set<string>): PendingOperation {
+/**
+ * An ordering on an operation of the same group names it as `op:<localRef>`. Once that operation has a
+ * pending id it becomes `pending:<pendingId>`. A reference to no operation of the group stays `op:`,
+ * which projection refuses.
+ */
+function sealOrdering(temporal: TemporalProposal, pendingIds: ReadonlyMap<string, string>): TemporalProposal {
+  if (temporal.kind !== 'ordering' || !temporal.entityId.startsWith('op:')) return temporal;
+  const pendingId = pendingIds.get(temporal.entityId.slice(3));
+  return pendingId ? { ...temporal, entityId: `pending:${pendingId}` } : temporal;
+}
+
+function sealProposal(
+  proposal: PlannedProposal,
+  pendingId: string,
+  ids: IdAllocator,
+  forbidden: Set<string>,
+  pendingIds: ReadonlyMap<string, string>,
+): PendingOperation {
   const localId = proposal.target.kind === 'new' ? (proposal.target.localId || takeId(ids.pendingId, forbidden)) : '';
   return {
     pendingId,
@@ -502,7 +519,7 @@ function sealProposal(proposal: PlannedProposal, pendingId: string, ids: IdAlloc
     scheduling: proposal.scheduling,
     changes: proposal.changes,
     constraints: proposal.constraints.map((constraint) => ({
-      ...constraint.temporal,
+      ...sealOrdering(constraint.temporal, pendingIds),
       constraintId: takeId(ids.constraintId, forbidden),
     })),
     known: proposal.known,

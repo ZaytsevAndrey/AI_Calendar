@@ -33,7 +33,41 @@ type Clock = {
   defaultReminderTime: string;
   nowIso?: string;
   references: ReadonlyMap<string, { scheduledStart?: string | null; scheduledEnd?: string | null }>;
+  /** Fixed spans of creates already projected in this preview, by pending id. */
+  created: Map<string, { scheduledStart: string; scheduledEnd: string }>;
 };
+
+const PENDING_REF = 'pending:';
+
+/** Pending ids this operation is ordered against. */
+function orderingRefs(operation: PendingOperation): Set<string> {
+  const refs = new Set<string>();
+  for (const constraint of operation.constraints) {
+    if (constraint.kind === 'ordering' && constraint.entityId.startsWith(PENDING_REF)) refs.add(constraint.entityId.slice(PENDING_REF.length));
+  }
+  return refs;
+}
+
+/** An ordering on another operation of the preview runs after it, so its span is known and a failure skips it. */
+function withOrderingEdges(operations: PendingOperation[], dependencies: StructuredState['dependencies']): StructuredState['dependencies'] {
+  const out: Record<string, readonly string[]> = { ...dependencies };
+  for (const operation of operations) {
+    const refs = [...orderingRefs(operation)].filter((ref) => ref !== operation.pendingId);
+    const existing = out[operation.pendingId] ?? [];
+    const added = refs.filter((ref) => !existing.includes(ref));
+    if (added.length) out[operation.pendingId] = [...existing, ...added];
+  }
+  return out;
+}
+
+/** The fixed span of a one-off create, or null when the engine will place it. */
+function createdSpan(task: Record<string, unknown>, defaultDuration: number): { scheduledStart: string; scheduledEnd: string } | null {
+  if (task.isRecurring || typeof task.scheduledStartTime !== 'string') return null;
+  const start = task.scheduledStartTime;
+  if (typeof task.scheduledEndTime === 'string') return { scheduledStart: start, scheduledEnd: task.scheduledEndTime };
+  const minutes = typeof task.estimatedTimeInMinutes === 'number' ? task.estimatedTimeInMinutes : defaultDuration;
+  return { scheduledStart: start, scheduledEnd: new Date(Date.parse(start) + minutes * 60_000).toISOString() };
+}
 
 type Constraint = PendingOperation['constraints'][number];
 
@@ -54,7 +88,8 @@ export function projectApply(input: {
     draftIds.add(operation.pendingId);
     if (operation.target.kind === 'new') draftIds.add(operation.target.localId);
   }
-  const ordered = order(input.state.operations, input.state.dependencies);
+  const dependencies = withOrderingEdges(input.state.operations, input.state.dependencies);
+  const ordered = order(input.state.operations, dependencies);
   if (!ordered.ok) return { ok: false, code: ordered.code, detail: ordered.detail };
   const clock: Clock = {
     timeZone: input.timeZone,
@@ -64,6 +99,7 @@ export function projectApply(input: {
     defaultReminderTime: input.defaultReminderTime ?? '09:00',
     nowIso: input.nowIso,
     references: new Map((input.references ?? []).map((row) => [row.entityId, row])),
+    created: new Map(),
   };
   const intents: VoiceWriteIntent[] = [];
   const preservedLabels: string[] = [];
@@ -80,9 +116,11 @@ export function projectApply(input: {
         return { ok: false, code: 'unauthorized_entity', detail: operation.target.entityId };
       }
     }
-    for (const prerequisite of input.state.dependencies[operation.pendingId] ?? []) {
+    const timedBy = orderingRefs(operation);
+    for (const prerequisite of dependencies[operation.pendingId] ?? []) {
       const prior = byId.get(prerequisite);
-      if (prior?.action === 'create' && operation.action !== 'create') {
+      // A command that only needs the new object's time is projected now; one that needs its id is not.
+      if (prior?.action === 'create' && operation.action !== 'create' && !timedBy.has(prerequisite)) {
         return { ok: false, code: 'unsupported_dependency_execution', detail: operation.pendingId };
       }
     }
@@ -109,9 +147,11 @@ export function projectApply(input: {
     keys.set(operation.pendingId, intentKey(projected.intent));
     intents.push(projected.intent);
     preservedLabels.push(...labels.labels);
+    const placed = projected.intent.type === 'create' ? createdSpan(projected.intent.task, clock.defaultDuration) : null;
+    if (placed) clock.created.set(operation.pendingId, placed);
   }
   const items: ApplyItem[] = ordered.operations.map((operation, index) => {
-    const prerequisites = (input.state.dependencies[operation.pendingId] ?? []).map((id) => keys.get(id)).filter((key): key is string => Boolean(key));
+    const prerequisites = (dependencies[operation.pendingId] ?? []).map((id) => keys.get(id)).filter((key): key is string => Boolean(key));
     return { intent: intents[index], ...(prerequisites.length ? { dependsOn: prerequisites } : {}) };
   });
   return { ok: true, intents, items, preservedLabels };
@@ -201,7 +241,10 @@ function orderingBounds(operation: PendingOperation, clock: Clock): { ok: true; 
   const out: { earliest?: string; deadline?: string } = {};
   for (const constraint of operation.constraints) {
     if (constraint.kind !== 'ordering') continue;
-    const row = clock.references.get(constraint.entityId);
+    // A create of this preview gives its span only when it has a fixed time; otherwise there is no bound yet.
+    const row = constraint.entityId.startsWith(PENDING_REF)
+      ? clock.created.get(constraint.entityId.slice(PENDING_REF.length)) ?? {}
+      : clock.references.get(constraint.entityId);
     if (!row) return { ok: false, code: 'unauthorized_entity', detail: constraint.entityId };
     const role = constraint.relation === 'after' ? 'earliest' : 'deadline';
     const at = constraint.relation === 'after' ? row.scheduledEnd : row.scheduledStart;

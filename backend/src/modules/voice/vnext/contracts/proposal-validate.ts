@@ -202,7 +202,8 @@ function parseProposal(value: unknown, path: string, context: ProposalContext, e
       seen.add(item.localRef);
       const temporal = parseTemporal(item, `${path}.constraints.${index}`, errors);
       if (!temporal) return;
-      if (temporal.kind === 'ordering' && !context.entityIds.includes(temporal.entityId)) {
+      // An `op:` reference names an operation of this group; state sealing resolves it or projection refuses it.
+      if (temporal.kind === 'ordering' && !temporal.entityId.startsWith('op:') && !context.entityIds.includes(temporal.entityId)) {
         issue(errors, 'unauthorized_entity', `${path}.constraints.${index}`, temporal.entityId);
       }
       constraints.push({ ...temporal, localRef: item.localRef.trim() });

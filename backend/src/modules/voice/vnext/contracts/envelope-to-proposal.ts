@@ -160,6 +160,10 @@ function mapConstraint(constraint: SemanticConstraintV1): TemporalProposal {
   if (constraint.kind === 'ordering' && constraint.target.kind === 'existing' && constraint.target.proposedId) {
     return { kind: 'ordering', relation: constraint.relation, entityId: constraint.target.proposedId };
   }
+  // Before or after an object this utterance creates: `op:` names that operation until it has a pending id.
+  if (constraint.kind === 'ordering' && constraint.target.kind === 'operation_result' && constraint.target.opId) {
+    return { kind: 'ordering', relation: constraint.relation, entityId: `op:${constraint.target.opId}` };
+  }
   if (constraint.kind === 'weekday' && typeof constraint.weekday === 'number') {
     return {
       kind: 'weekday',
