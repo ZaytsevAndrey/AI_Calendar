@@ -27,7 +27,7 @@ const GoogleCallbackPage: React.FC = () => {
                 title: i18n.t('auth.signInFailed'),
                 detail: i18n.t('auth.didNotComplete'),
             });
-            navigate('/login', { replace: true });
+            navigate('/login?error=signin', { replace: true });
             return;
         }
 
@@ -70,7 +70,7 @@ const GoogleCallbackPage: React.FC = () => {
                     title: i18n.t('auth.signInFailed'),
                     detail: i18n.t('auth.googleFailed'),
                 });
-                navigate('/login', { replace: true });
+                navigate('/login?error=signin', { replace: true });
             }
         };
 

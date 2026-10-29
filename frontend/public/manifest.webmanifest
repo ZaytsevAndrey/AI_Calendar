@@ -2,7 +2,7 @@
   "name": "luefy",
   "short_name": "luefy",
   "description": "Plan tasks with phases, voice input, and Google Calendar.",
-  "start_url": "/",
+  "start_url": "/calendar",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",

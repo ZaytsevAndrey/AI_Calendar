@@ -1,0 +1,26 @@
+{
+  "name": "luefy-landing",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Public, SEO-first landing page for Luefy with Google sign-in. Static export (Next.js App Router).",
+  "scripts": {
+    "dev": "next dev -p 3002",
+    "build": "next build",
+    "start": "npx serve out -l 3002",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "^15.5.7",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  }
+}

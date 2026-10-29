@@ -69,7 +69,7 @@ test.describe('P1 auth and phases UI', () => {
     await expect(page).toHaveURL(/\/settings/);
     await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
     await nav.getByRole('link', { name: 'Calendar' }).click();
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/calendar$/);
     await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible();
   });
 });

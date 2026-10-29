@@ -14,6 +14,8 @@ playwright/.cache/
 # production
 dist/
 build/
+# assembled landing + app (scripts/assemble-site.mjs)
+site/
 
 # misc
 .DS_Store

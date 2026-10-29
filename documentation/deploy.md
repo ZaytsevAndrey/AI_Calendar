@@ -91,6 +91,25 @@ Frontend **build-time** variable:
 |----------|---------|
 | `REACT_APP_API_BASE_URL` | Axios base URL. On `ai-calendar-web` this is the Render API. On `ai-calendar-web-home` set it to the home API origin |
 
+## Landing + app on one domain
+
+The static service `ai-calendar-web` serves two independent builds: the Next.js landing (`landing/`) owns `/` and
+`/uk/`, the React app owns every other path. `npm run build:site` builds both and `scripts/assemble-site.mjs` merges
+them into `site/` (the app's `index.html` becomes `app.html`). Render serves existing files first, then
+`/uk` → `/uk/`, then rewrites everything else to `/app.html`.
+
+Visitors with `access_token` in `localStorage` are sent from `/` to `/calendar` before the landing paints; the app's
+`/login` clears tokens and sends signed-out visitors to `/`. Details and a routing table: [landing/README.md](../landing/README.md).
+
+| Variable (static site build) | Value |
+|------------------------------|-------|
+| `REACT_APP_LANDING_URL` | `/` (empty keeps the old in-app sign-in form) |
+| `NEXT_PUBLIC_API_BASE_URL` | API URL |
+| `NEXT_PUBLIC_SITE_URL` | Public origin of the site; switch to the custom domain when attached |
+
+The API, CORS and Google OAuth settings do not change: everything the browser loads still comes from `FRONTEND_URL`.
+Check the combined site locally with `npm run build:site && npm run preview:site` (http://localhost:4000).
+
 ## Custom domain (optional, later)
 
 On Render: each service → **Custom Domains** → add e.g. `calendar.yourdomain.com` (static) and `api.yourdomain.com` (API). At your DNS host, CNAME those names to the `onrender.com` hostnames Render shows. Then update Google OAuth URIs and trigger a frontend rebuild so `REACT_APP_API_BASE_URL` stays correct (or set it explicitly).

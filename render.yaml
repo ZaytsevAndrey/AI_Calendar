@@ -1,4 +1,6 @@
-# Render Blueprint: API (Node web service) + static frontend.
+# Render Blueprint: API (Node web service) + one static site on one domain.
+# The static site is two independent builds served together (see scripts/assemble-site.mjs):
+#   landing/ (Next.js static export) owns "/" and "/uk/"; the React app (frontend/) owns every other path.
 # Database is Neon Postgres — set DATABASE_URL in the dashboard (sync: false).
 # Auto-deploys from the `master` branch. See documentation/deploy.md.
 
@@ -60,18 +62,43 @@ services:
     runtime: static
     branch: master
     autoDeployTrigger: commit
-    buildCommand: npm ci --workspace=frontend --include-workspace-root --include=dev && npm run build:frontend
-    staticPublishPath: frontend/dist
+    buildCommand: npm ci --workspace=frontend --include-workspace-root --include=dev && npm run build:site
+    staticPublishPath: site
+    # Existing files are served first (landing pages, app bundle). Rules apply only to the rest.
     routes:
+      - type: redirect
+        source: /uk
+        destination: /uk/
       - type: rewrite
         source: /*
-        destination: /index.html
+        destination: /app.html
+    headers:
+      - path: /_next/static/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
     envVars:
       - key: NODE_VERSION
         value: 18.18.0
       - key: REACT_APP_API_BASE_URL
         fromService:
           name: ai-calendar-api
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      # Signed-out visitors of the app go to the landing at "/".
+      - key: REACT_APP_LANDING_URL
+        value: /
+      - key: NEXT_PUBLIC_API_BASE_URL
+        fromService:
+          name: ai-calendar-api
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      # Sign-in buttons on the landing; providers without server credentials are hidden at runtime.
+      - key: NEXT_PUBLIC_AUTH_PROVIDERS
+        value: google,microsoft
+      # Canonical origin for the landing (sitemap, canonical, Open Graph). Set to the custom domain later.
+      - key: NEXT_PUBLIC_SITE_URL
+        fromService:
+          name: ai-calendar-web
           type: web
           envVarKey: RENDER_EXTERNAL_URL
 

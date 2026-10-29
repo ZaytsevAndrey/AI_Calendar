@@ -71,6 +71,7 @@ export const routeChunks = {
 
 const chunksByPath: Record<string, RouteChunk> = {
     '/': routeChunks.calendar,
+    '/calendar': routeChunks.calendar,
     '/tasks': routeChunks.tasks,
     '/phases': routeChunks.phases,
     '/settings': routeChunks.settings,
