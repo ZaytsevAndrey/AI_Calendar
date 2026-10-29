@@ -143,8 +143,9 @@ function mapTarget(operation: SemanticOperationV1): ProposalTarget | null {
 /** Field-for-field. Anything without a proposal equivalent is `unresolved`, which projection refuses to preview. */
 function mapConstraint(constraint: SemanticConstraintV1): TemporalProposal {
   if (constraint.kind === 'date') return { kind: 'date', value: constraint.value };
-  // preferred is a wish, not a placement or a bound; it stays unresolved.
-  if (constraint.kind === 'clock' && constraint.role !== 'preferred') {
+  // `preferred` is carried: a create projects it as a flexible preferred start;
+  // every other action refuses it (projectApply).
+  if (constraint.kind === 'clock') {
     return { kind: 'clock', value: constraint.value, role: constraint.role };
   }
   if (constraint.kind === 'all_day') return { kind: 'all_day' };
