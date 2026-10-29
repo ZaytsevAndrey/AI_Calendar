@@ -21,40 +21,35 @@ export class ReadBroker {
     if (round > this.limits.maxRounds) {
       return requests.map((request) => this.fail(request, 'tool_limit'));
     }
-    const produced: ReadRecord[] = [];
-    for (const request of requests) {
-      if (this.callsThisRound >= this.limits.maxCallsPerRound) {
-        produced.push(this.fail(request, 'tool_limit'));
-        continue;
-      }
+    // Reads of one round are independent: they run together, and records keep request order.
+    const settled = await Promise.all(requests.map((request) => {
+      if (this.callsThisRound >= this.limits.maxCallsPerRound) return { request, error: 'tool_limit' };
       this.callsThisRound += 1;
-      if (!ALLOWED.has(request.name)) {
-        produced.push(this.fail(request, 'unknown_tool'));
-        continue;
-      }
-      try {
-        const value = await this.execute(request.name, request.args);
-        const error = isRecord(value) && typeof value.error === 'string' ? value.error : undefined;
-        const day = isRecord(value) && typeof value.day === 'string' ? value.day : argDay(request.args);
-        const record: ReadRecord = {
-          requestId: request.requestId,
-          name: request.name,
-          args: request.args,
-          ok: !error,
-          ...(error ? { error } : {}),
-          ...(day ? { day } : {}),
-          scope: readScope(value, request.name),
-          ...(!error && value === undefined ? { withheld: 'missing_result' as const } : {}),
-          ...(!error && value !== undefined ? { result: value } : {}),
-        };
-        this.records.push(record);
-        produced.push(record);
-      } catch (err) {
-        const record = this.fail(request, err instanceof Error && err.message === 'timeout' ? 'timeout' : 'tool_error');
-        produced.push(record);
-      }
-    }
-    return produced;
+      if (!ALLOWED.has(request.name)) return { request, error: 'unknown_tool' };
+      return this.execute(request.name, request.args).then(
+        (value) => ({ request, value }),
+        (err: unknown) => ({ request, error: err instanceof Error && err.message === 'timeout' ? 'timeout' : 'tool_error' }),
+      );
+    }));
+    return settled.map((row) => ('error' in row ? this.fail(row.request, row.error) : this.record(row.request, row.value)));
+  }
+
+  private record(request: ReadRequestV1, value: unknown): ReadRecord {
+    const error = isRecord(value) && typeof value.error === 'string' ? value.error : undefined;
+    const day = isRecord(value) && typeof value.day === 'string' ? value.day : argDay(request.args);
+    const record: ReadRecord = {
+      requestId: request.requestId,
+      name: request.name,
+      args: request.args,
+      ok: !error,
+      ...(error ? { error } : {}),
+      ...(day ? { day } : {}),
+      scope: readScope(value, request.name),
+      ...(!error && value === undefined ? { withheld: 'missing_result' as const } : {}),
+      ...(!error && value !== undefined ? { result: value } : {}),
+    };
+    this.records.push(record);
+    return record;
   }
 
   nextRound(): void {

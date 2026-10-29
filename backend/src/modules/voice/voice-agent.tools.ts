@@ -60,6 +60,8 @@ export type VoiceReadToolName = (typeof VOICE_READ_TOOL_NAMES)[number];
 
 @Injectable()
 export class VoiceAgentTools {
+  private readonly dayEventCache = new WeakMap<VoiceToolContext, Map<string, ReturnType<ExternalCalendarBusyService['listVisibleEvents']>>>();
+
   constructor(private readonly externalBusy: ExternalCalendarBusyService) {}
 
   async execute(
@@ -112,17 +114,35 @@ export class VoiceAgentTools {
     return ids;
   }
 
+  /**
+   * One provider read per day per turn: the context is built per turn, so agenda and gap reads of the
+   * same day share it. A failed read is not kept, so a later call tries again.
+   */
+  dayEvents(ctx: VoiceToolContext, ymd: string) {
+    let byDay = this.dayEventCache.get(ctx);
+    if (!byDay) {
+      byDay = new Map();
+      this.dayEventCache.set(ctx, byDay);
+    }
+    const cached = byDay.get(ymd);
+    if (cached) return cached;
+    const read = this.externalBusy.listVisibleEvents(
+      ctx.userId,
+      startOfLocalDayIso(ymd, ctx.timeZone),
+      endOfLocalDayIso(ymd, ctx.timeZone),
+    );
+    byDay.set(ymd, read);
+    read.catch(() => byDay!.delete(ymd));
+    return read;
+  }
+
   /** Timed events from connected calendars that are not already local slots. */
   private async externalBlocksForDay(
     ctx: VoiceToolContext,
     ymd: string,
   ): Promise<Array<{ name: string; startMs: number; endMs: number }>> {
     try {
-      const events = await this.externalBusy.listVisibleEvents(
-        ctx.userId,
-        startOfLocalDayIso(ymd, ctx.timeZone),
-        endOfLocalDayIso(ymd, ctx.timeZone),
-      );
+      const events = await this.dayEvents(ctx, ymd);
       return providerEventsToBusyIntervals(events, {
         excludeIds: this.syncedEventIds(ctx),
         timeZone: ctx.timeZone,

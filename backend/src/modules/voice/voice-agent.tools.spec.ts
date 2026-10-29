@@ -65,3 +65,39 @@ describe('VoiceAgentTools day args', () => {
     });
   });
 });
+
+describe('VoiceAgentTools provider reads', () => {
+  function build(listVisibleEvents: jest.Mock) {
+    const agent = new VoiceAgentTools({ listVisibleEvents } as never);
+    const ctx = {
+      userId: 'u',
+      timeZone: TZ,
+      nowIso: NOW,
+      settings: { wakeTime: '08:00', sleepTime: '23:00' },
+      tasks: [],
+      slots: [],
+      phases: [],
+      reminders: [],
+    } as unknown as VoiceToolContext;
+    return { agent, ctx };
+  }
+
+  it('reads one day from the provider once per turn context', async () => {
+    const listVisibleEvents = jest.fn(async () => []);
+    const { agent, ctx } = build(listVisibleEvents);
+    await Promise.all([
+      agent.execute({ name: 'get_day_agenda', args: { day: '2026-10-19' } }, ctx),
+      agent.execute({ name: 'find_free_gaps', args: { day: '2026-10-19' } }, ctx),
+    ]);
+    expect(listVisibleEvents).toHaveBeenCalledTimes(1);
+    await agent.execute({ name: 'get_day_agenda', args: { day: '2026-10-19' } }, { ...ctx });
+    expect(listVisibleEvents).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not keep a failed provider read', async () => {
+    const listVisibleEvents = jest.fn().mockRejectedValueOnce(new Error('down')).mockResolvedValue([]);
+    const { agent, ctx } = build(listVisibleEvents);
+    await expect(agent.dayEvents(ctx, '2026-10-19')).rejects.toThrow('down');
+    await expect(agent.dayEvents(ctx, '2026-10-19')).resolves.toEqual([]);
+  });
+});

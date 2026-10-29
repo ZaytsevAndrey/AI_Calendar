@@ -19,6 +19,7 @@ module.exports = {
     // Production /voice/turn wiring.
     `${VNEXT}/production/**/*.spec.ts`,
     `${VNEXT}/search/**/*.spec.ts`,
+    `${VNEXT}/broker/**/*.spec.ts`,
     // Historical suites that pass in full on the structured path. Kept as behavioral coverage.
     `${VNEXT}/phase46.spec.ts`,
     `${VNEXT}/phase472.spec.ts`,

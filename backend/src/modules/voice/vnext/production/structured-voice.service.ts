@@ -333,7 +333,7 @@ export class StructuredVoiceService {
       // Log only: the probe runs inside a tool step, which already counts its time.
       probe ??= log.timed(
         'provider.probe',
-        () => this.externalBusy.listVisibleEvents(ctx.userId, startOfLocalDayIso(day, ctx.timeZone), endOfLocalDayIso(day, ctx.timeZone)),
+        () => this.tools.dayEvents(ctx.tools, day),
         (events) => ({ fields: { events: events.length } }),
       );
       await probe;
