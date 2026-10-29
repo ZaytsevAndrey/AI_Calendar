@@ -16,7 +16,8 @@ import { ScheduleJob } from '../schedule/entities/schedule-job.entity';
 import { PendingGoogleWrite } from '../google-calendar/entities/pending-google-write.entity';
 import { CalendarEventOverlay } from '../calendar-overlays/entities/calendar-event-overlay.entity';
 import { VoiceDailyUsage } from '../voice/entities/voice-daily-usage.entity';
-import { VoiceTurnLog } from '../admin/entities/voice-turn-log.entity';
+import { VoiceTurnLog } from '../admin-data/entities/voice-turn-log.entity';
+import { ApiErrorLog } from '../admin-data/entities/api-error-log.entity';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { uniqueGoogleEventRefs } from '../schedule/google-segment-sync.util';
 import { ApiError } from '../common/types/errors';
@@ -171,6 +172,7 @@ export class AccountDeletionService {
         await manager.delete(PushSubscription, { userId });
         await manager.delete(VoiceDailyUsage, { userId });
         await manager.delete(VoiceTurnLog, { userId });
+        await manager.delete(ApiErrorLog, { userId });
         await manager.delete(CalendarEventOverlay, { userId });
         await manager.delete(EventPhase, { userId });
 

@@ -12,44 +12,23 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminGuard, AdminRequest } from './admin.guard';
 import { AdminStatsService } from './admin-stats.service';
 import { AdminHealthService } from './admin-health.service';
 import { AdminActionsService } from './admin-actions.service';
-import { adminDevLoginEnabled } from './admin-config';
-import { listAdminErrors } from '../../common/admin-error-log';
-import { clampInt } from './admin-time';
 
-@ApiTags('admin')
-@Controller('admin')
+@Controller('admin/auth')
 export class AdminAuthController {
   constructor(private readonly auth: AdminAuthService) {}
 
-  @Get('auth/options')
-  @ApiOperation({ summary: 'Which admin sign-in methods this server offers' })
-  options() {
-    return { google: true, devLogin: adminDevLoginEnabled() };
-  }
-
-  @Post('auth/session')
+  @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Exchange a one-time Google admin ticket for an admin token' })
-  session(@Body('ticket') ticket: string) {
-    return this.auth.redeemTicket(ticket);
-  }
-
-  @Post('auth/dev')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Development only: admin token by email (ADMIN_DEV_LOGIN=1)' })
-  dev(@Body('email') email: string) {
-    return this.auth.devLogin(email);
+  login(@Req() req: AdminRequest, @Body('login') login: string, @Body('password') password: string) {
+    return this.auth.login(login, password, req.ip || 'unknown');
   }
 }
 
-@ApiTags('admin')
-@ApiBearerAuth()
 @UseGuards(AdminGuard)
 @Controller('admin')
 export class AdminController {
@@ -65,7 +44,6 @@ export class AdminController {
   }
 
   @Get('overview')
-  @ApiOperation({ summary: 'Users, tasks, voice and ops totals plus 30-day series' })
   overview() {
     return this.stats.overview();
   }
@@ -111,11 +89,7 @@ export class AdminController {
 
   @Delete('users/:id')
   @HttpCode(HttpStatus.OK)
-  remove(
-    @Req() req: AdminRequest,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body('confirmation') confirmation: string,
-  ) {
+  remove(@Req() req: AdminRequest, @Param('id', ParseUUIDPipe) id: string, @Body('confirmation') confirmation: string) {
     return this.actions.deleteUser(req.admin!, id, confirmation);
   }
 
@@ -155,11 +129,7 @@ export class AdminController {
   }
 
   @Get('errors')
-  @ApiOperation({ summary: 'Latest API errors since this process started (in memory)' })
   errors(@Query('minStatus') minStatus?: string, @Query('limit') limit?: string) {
-    return listAdminErrors({
-      minStatus: clampInt(minStatus, 0, 599, 500),
-      limit: clampInt(limit, 1, 500, 200),
-    });
+    return this.health.errors({ minStatus, limit });
   }
 }

@@ -32,7 +32,7 @@ const GROUPS: Record<string, string> = {
 };
 
 const STATUS_TEXT: Record<Health['status'], string> = {
-  ok: 'Система працює штатно',
+  ok: 'Усе працює штатно',
   degraded: 'Система працює, але є проблеми',
   down: 'База даних недоступна',
 };
@@ -74,18 +74,29 @@ export function SystemPage() {
       {data ? (
         <div className="space-y-5">
           <div className="grid gap-5 lg:grid-cols-2">
-            <Section title="Сервер API">
-              <FigureRow>
-                <Figure label="Працює" value={fmtUptime(data.app.uptimeSec)} hint={`з ${fmtDateTime(data.app.startedAt)}`} />
-                <Figure label="Пам'ять (RSS)" value={`${data.app.memoryMb.rss} МБ`} hint={`heap ${data.app.memoryMb.heapUsed} / ${data.app.memoryMb.heapTotal} МБ`} />
-                <Figure label="Збірка" value={data.app.commit ?? '—'} hint={`${data.app.nodeEnv}, Node ${data.app.node}`} />
-              </FigureRow>
+            <Section title="Клієнтський API" note="Сервіс, з яким працюють користувачі">
+              {data.clientApi.reachable ? (
+                <FigureRow>
+                  <Figure label="Працює" value={fmtUptime(data.clientApi.uptimeSec)} hint={`з ${fmtDateTime(data.clientApi.startedAt)}`} />
+                  <Figure label="Пам'ять (RSS)" value={`${data.clientApi.memoryMb.rss} МБ`} hint={`heap ${data.clientApi.memoryMb.heapUsed} / ${data.clientApi.memoryMb.heapTotal} МБ`} />
+                  <Figure label="Збірка" value={data.clientApi.commit ?? '—'} hint={`${data.clientApi.nodeEnv}, Node ${data.clientApi.node}`} />
+                  <Figure label="Відповідь" value={fmtMs(data.clientApi.latencyMs)} />
+                </FigureRow>
+              ) : (
+                <div className="text-sm">
+                  <StatusMark ok={false} label="Немає зв'язку з клієнтським API" />
+                  <p className="mt-1 text-muted">{data.clientApi.error}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    Перевірте CLIENT_API_URL та однаковий INTERNAL_API_TOKEN в обох сервісах. Без цього не працюють видалення акаунта та інтеграції нижче.
+                  </p>
+                </div>
+              )}
             </Section>
-            <Section title="База даних">
+            <Section title="База даних та адмін-API">
               <FigureRow>
-                <Figure label="Стан" value={data.database.ok ? 'доступна' : 'недоступна'} tone={data.database.ok ? undefined : 'bad'} hint={data.database.error ?? undefined} />
+                <Figure label="База" value={data.database.ok ? 'доступна' : 'недоступна'} tone={data.database.ok ? undefined : 'bad'} hint={data.database.error ?? data.database.type} />
                 <Figure label="Відповідь на SELECT 1" value={fmtMs(data.database.latencyMs)} tone={data.database.latencyMs > 500 ? 'warn' : undefined} />
-                <Figure label="Тип" value={data.database.type} hint={data.database.typeormSync ? 'схема синхронізується автоматично' : 'синхронізацію схеми вимкнено'} />
+                <Figure label="Адмін-API працює" value={fmtUptime(data.adminApi.uptimeSec)} hint={`${data.adminApi.memoryMb.rss} МБ, ${data.adminApi.commit ?? data.adminApi.nodeEnv}`} />
               </FigureRow>
             </Section>
           </div>
@@ -100,10 +111,11 @@ export function SystemPage() {
             </FigureRow>
           </Section>
 
-          <Section title="Інтеграції" note="Показано лише, чи задано ключі. Значення не передаються.">
+          {data.clientApi.reachable ? (
+          <Section title="Інтеграції клієнтського API" note="Показано лише, чи задано ключі. Значення не передаються.">
             <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
               {Object.entries(GROUPS).map(([group, title]) => {
-                const items = data.integrations.filter((i) => i.group === group);
+                const items = data.clientApi.reachable ? data.clientApi.integrations.filter((i) => i.group === group) : [];
                 if (!items.length) return null;
                 return (
                   <div key={group}>
@@ -122,6 +134,7 @@ export function SystemPage() {
               })}
             </div>
           </Section>
+          ) : null}
         </div>
       ) : null}
 

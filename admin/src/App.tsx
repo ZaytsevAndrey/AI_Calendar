@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { clearSession, getAdminEmail, getToken, onSessionLost } from './api';
+import { clearSession, getAdminLogin, getToken, onSessionLost } from './api';
 import { Link, match, useRouter } from './router';
-import { LoginPage, AuthCallbackPage } from './pages/Login';
+import { LoginPage } from './pages/Login';
 import { OverviewPage } from './pages/Overview';
 import { UsersPage } from './pages/Users';
 import { UserPage } from './pages/User';
@@ -33,8 +33,7 @@ export function App() {
   );
 
   const path = location.path;
-  if (path === '/auth/callback') return <AuthCallbackPage onSignedIn={() => setSignedIn(true)} />;
-  if (path === '/login' || !signedIn) return <LoginPage />;
+  if (path === '/login' || !signedIn) return <LoginPage onSignedIn={() => setSignedIn(true)} />;
 
   let page: React.ReactNode;
   let params: Record<string, string> | null;
@@ -81,8 +80,8 @@ export function App() {
           })}
         </nav>
         <div className="hidden px-5 py-6 text-xs text-muted md:absolute md:bottom-0 md:block">
-          <div className="truncate" title={getAdminEmail() ?? ''}>
-            {getAdminEmail()}
+          <div className="truncate" title={getAdminLogin() ?? ''}>
+            {getAdminLogin()}
           </div>
           <button
             type="button"

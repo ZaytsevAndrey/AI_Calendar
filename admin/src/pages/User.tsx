@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api, getAdminEmail } from '../api';
+import { api } from '../api';
 import { Link, useRouter } from '../router';
 import type { TurnRow, UserDetail } from '../types';
 import {
@@ -159,7 +159,6 @@ export function UserPage({ id }: { id: string }) {
   if (loading && !data) return <Loading />;
   if (!data) return null;
   const u = data.user;
-  const isSelf = getAdminEmail()?.toLowerCase() === u.email.toLowerCase();
 
   return (
     <>
@@ -173,7 +172,6 @@ export function UserPage({ id }: { id: string }) {
         aside={
           <>
             {u.isBlocked ? <Badge tone="bad">заблоковано</Badge> : null}
-            {isSelf ? <Badge tone="accent">це ви</Badge> : null}
           </>
         }
       >
@@ -231,14 +229,13 @@ export function UserPage({ id }: { id: string }) {
                       label="Заблокувати"
                       confirmLabel="Так, заблокувати"
                       tone="danger"
-                      disabled={isSelf}
-                      onConfirm={() => act(`/admin/users/${id}/block`, 'Користувача заблоковано. Його запити до API відхиляються.')}
+                      onConfirm={() => act(`/admin/users/${id}/block`, 'Користувача заблоковано: старі сесії недійсні, нові запити відхиляються.')}
                     />
                   )}
                   <ConfirmButton
                     label="Вийти на всіх пристроях"
                     confirmLabel="Так, завершити сесії"
-                    onConfirm={() => act(`/admin/users/${id}/revoke-sessions`, 'Сесії завершено. Протягом 15 хв поточний токен ще діятиме.')}
+                    onConfirm={() => act(`/admin/users/${id}/revoke-sessions`, 'Сесії завершено: усі видані раніше токени недійсні.')}
                   />
                 </div>
                 <p className="mt-1.5 text-xs text-muted">Блокування одразу відхиляє запити до API й забирає можливість оновити сесію.</p>
@@ -254,11 +251,9 @@ export function UserPage({ id }: { id: string }) {
                   />
                 </div>
               </div>
-              {!isSelf ? (
-                <div className="border-t border-line pt-4">
-                  <DeleteAccount email={u.email} id={id} onDeleted={() => navigate('/users', true)} />
-                </div>
-              ) : null}
+              <div className="border-t border-line pt-4">
+                <DeleteAccount email={u.email} id={id} onDeleted={() => navigate('/users', true)} />
+              </div>
             </div>
           </Section>
         </div>

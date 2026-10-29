@@ -12,6 +12,7 @@
     "start:frontend": "npm run start --workspace=frontend",
     "start:backend": "npm run start:dev --workspace=backend",
     "start:admin": "npm run start --workspace=admin",
+    "start:admin-api": "npm run start:admin-api --workspace=backend",
     "start:piper": "node tools/piper-http.mjs",
     "voice:eval:dialogue": "npm run voice:eval:dialogue --workspace=backend",
     "build": "npm run build --workspaces",

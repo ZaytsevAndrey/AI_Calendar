@@ -1,7 +1,7 @@
-export const API_BASE = (process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001').replace(/\/+$/, '');
+export const API_BASE = (process.env.REACT_APP_API_BASE_URL || 'http://localhost:3005').replace(/\/+$/, '');
 
 const TOKEN_KEY = 'luefy.admin.token';
-const EMAIL_KEY = 'luefy.admin.email';
+const LOGIN_KEY = 'luefy.admin.login';
 
 let memoryToken: string | null = null;
 
@@ -13,19 +13,19 @@ export function getToken(): string | null {
   }
 }
 
-export function getAdminEmail(): string | null {
+export function getAdminLogin(): string | null {
   try {
-    return localStorage.getItem(EMAIL_KEY);
+    return localStorage.getItem(LOGIN_KEY);
   } catch {
     return null;
   }
 }
 
-export function saveSession(token: string, email: string): void {
+export function saveSession(token: string, login: string): void {
   memoryToken = token;
   try {
     localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(EMAIL_KEY, email);
+    localStorage.setItem(LOGIN_KEY, login);
   } catch {
     /* private mode: keep it in memory for this tab */
   }
@@ -35,7 +35,7 @@ export function clearSession(): void {
   memoryToken = null;
   try {
     localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(EMAIL_KEY);
+    localStorage.removeItem(LOGIN_KEY);
   } catch {
     /* ignore */
   }

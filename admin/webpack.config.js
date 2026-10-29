@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default (_env, argv) => {
   const isProd = argv?.mode === 'production';
-  const apiBaseUrl = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
+  const apiBaseUrl = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3005';
   return {
     mode: isProd ? 'production' : 'development',
     entry: './src/index.tsx',

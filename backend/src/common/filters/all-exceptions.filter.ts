@@ -9,7 +9,7 @@ import {
 import { Request } from 'express';
 import { ApiError } from '../../modules/common/types/errors';
 import { resolveAppLanguage, t, type MessageKey } from '../../i18n';
-import { recordAdminError } from '../admin-error-log';
+import { reportApiError } from '../api-error-sink';
 
 const API_ERROR_KEYS: Record<string, MessageKey> = {
   INVALID_CREDENTIALS: 'errors.INVALID_CREDENTIALS',
@@ -166,7 +166,7 @@ Headers: ${JSON.stringify(request.headers)}
 -----------------
 `);
 
-    recordAdminError({
+    reportApiError({
       method: request.method,
       url: request.url,
       status,

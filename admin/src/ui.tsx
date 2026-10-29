@@ -503,18 +503,21 @@ export function Meter({ value, max, label }: { value: number; max: number; label
 // ---------------------------------------------------------------- health text
 
 type HealthLike = {
-  checks: Array<{ key: string; ok: boolean; detail: string | null }>;
-  database: { latencyMs: number; error: string | null };
+  checks: Array<{ key: string; ok: boolean }>;
+  database: { latencyMs: number; ok: boolean };
+  clientApi: { reachable: boolean; latencyMs?: number };
   queues: { pendingGoogleWrites: number; scheduleJobsStuck: number };
   errors24h: { server: number };
 };
 
-/** Check rows in plain Ukrainian, built from numbers rather than the server's English detail. */
+/** Check rows in plain Ukrainian, built from the numbers in the health payload. */
 export function healthChecks(h: HealthLike): Array<{ key: string; ok: boolean; label: string }> {
   return h.checks.map((c) => {
     switch (c.key) {
       case 'database':
         return { key: c.key, ok: c.ok, label: c.ok ? `База даних: ${fmtMs(h.database.latencyMs)}` : 'База даних недоступна' };
+      case 'clientApi':
+        return { key: c.key, ok: c.ok, label: c.ok ? 'Клієнтський API на зв\'язку' : 'Клієнтський API не відповідає' };
       case 'googleQueue':
         return { key: c.key, ok: c.ok, label: `Черга запису в Google: ${fmtNum(h.queues.pendingGoogleWrites)}` };
       case 'stuckJobs':
@@ -522,7 +525,7 @@ export function healthChecks(h: HealthLike): Array<{ key: string; ok: boolean; l
       case 'serverErrors24h':
         return { key: c.key, ok: c.ok, label: `Помилки 5xx за добу: ${fmtNum(h.errors24h.server)}` };
       default:
-        return { key: c.key, ok: c.ok, label: `${c.key}: ${c.detail ?? ''}` };
+        return { key: c.key, ok: c.ok, label: c.key };
     }
   });
 }

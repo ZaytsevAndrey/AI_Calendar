@@ -40,7 +40,8 @@ Production (free): [Deploy on Render + Neon](documentation/deploy.md).
 | Command | Action |
 |---------|--------|
 | `npm start` | Frontend + backend |
-| `npm run start:admin` | Admin console on http://localhost:3002 (needs `ADMIN_EMAILS`) |
+| `npm run start:admin-api` | Admin API on :3005 (separate process; see [admin console](documentation/admin-console.md)) |
+| `npm run start:admin` | Admin web app on http://localhost:3002 |
 | `npm run build` | Build both packages |
 | `npm run build:frontend` | Frontend only |
 | `npm run build:backend` | Backend only |

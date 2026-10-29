@@ -50,6 +50,6 @@ import { StructuredVoiceService } from './vnext/production/structured-voice.serv
     StructuredVoiceService,
     VoiceTraceInterceptor,
   ],
-  exports: [GroqClient, VoiceQuotaService],
+  exports: [GroqClient],
 })
 export class VoiceModule {}

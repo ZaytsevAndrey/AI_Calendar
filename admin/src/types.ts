@@ -94,18 +94,27 @@ export type VoiceSummary = {
   errorCodes: Array<{ code: string; count: number }>;
 };
 
+export type Integration = { key: string; label: string; group: string; configured: boolean; detail?: string };
+
 export type Health = {
   status: 'ok' | 'degraded' | 'down';
-  checks: Array<{ key: string; ok: boolean; detail: string | null }>;
-  app: {
-    nodeEnv: string;
-    node: string;
-    commit: string | null;
-    startedAt: string;
-    uptimeSec: number;
-    memoryMb: { rss: number; heapUsed: number; heapTotal: number };
-  };
-  database: { type: string; ok: boolean; latencyMs: number; error: string | null; typeormSync: boolean };
+  checks: Array<{ key: string; ok: boolean }>;
+  clientApi:
+    | {
+        reachable: true;
+        latencyMs: number;
+        nodeEnv: string;
+        node: string;
+        commit: string | null;
+        startedAt: string;
+        uptimeSec: number;
+        memoryMb: { rss: number; heapUsed: number; heapTotal: number };
+        integrations: Integration[];
+        error: null;
+      }
+    | { reachable: false; error: string };
+  adminApi: { nodeEnv: string; node: string; commit: string | null; uptimeSec: number; memoryMb: { rss: number; heapUsed: number } };
+  database: { type: string; ok: boolean; latencyMs: number; error: string | null };
   queues: {
     pendingGoogleWrites: number;
     oldestGoogleWriteAt: string | null;
@@ -115,7 +124,6 @@ export type Health = {
     scheduleJobsFailed24h: number;
   };
   errors24h: { server: number; client: number };
-  integrations: Array<{ key: string; label: string; group: string; configured: boolean; detail?: string }>;
 };
 
 export type ScheduleJobRow = {

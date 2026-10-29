@@ -7,9 +7,7 @@ import {
   HttpStatus,
   Post,
   Logger,
-  Query,
   Req,
-  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
@@ -39,17 +37,14 @@ export class AuthController {
     }
     const token = authHeader.split(' ')[1];
     const payload = this.jwtService.verify(token);
-    if (payload?.scope === 'admin') {
-      throw new UnauthorizedException('Admin token is not an app session');
-    }
     return payload.sub;
   }
 
   @Get('google')
   @ApiOperation({ summary: 'Start Google sign-in (login or register)' })
   @ApiResponse({ status: 200, description: 'Authorization URL' })
-  getGoogleAuthUrl(@Query('target') target?: string) {
-    return { url: this.googleCalendarService.getLoginAuthUrl(target) };
+  getGoogleAuthUrl() {
+    return { url: this.googleCalendarService.getLoginAuthUrl() };
   }
 
   @Post('google/session')

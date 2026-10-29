@@ -1,9 +1,8 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { AdminAuthService, AdminPrincipal } from './admin-auth.service';
 
-export type AdminRequest = { headers: Record<string, unknown>; admin?: AdminPrincipal };
+export type AdminRequest = { headers: Record<string, unknown>; admin?: AdminPrincipal; ip?: string };
 
-/** Admin routes take only an admin-scoped token, never an app session token. */
 @Injectable()
 export class AdminGuard implements CanActivate {
   constructor(private readonly auth: AdminAuthService) {}

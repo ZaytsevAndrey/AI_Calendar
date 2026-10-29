@@ -19,10 +19,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    // Admin-console tokens are only for /admin. They never act as an app session.
-    if (payload?.scope === 'admin') {
-      throw new UnauthorizedException('Admin token is not an app session');
-    }
     const allowed = await this.activity.touch(payload?.sub, Date.now(), payload?.iat);
     if (!allowed) {
       throw new UnauthorizedException({

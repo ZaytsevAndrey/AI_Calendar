@@ -8,7 +8,7 @@ type Level = '500' | '400';
 
 export function ErrorsPage() {
   const [level, setLevel] = useState<Level>('500');
-  const { data, error, loading, reload } = useApi<{ since: string; capacity: number; items: ErrorEntry[] }>(
+  const { data, error, loading, reload } = useApi<{ retentionDays: number; items: ErrorEntry[] }>(
     `/admin/errors${qs({ minStatus: level, limit: 300 })}`,
   );
 
@@ -32,7 +32,7 @@ export function ErrorsPage() {
         }
       >
         {data
-          ? `Останні ${data.capacity} помилок з моменту запуску сервера (${fmtDateTime(data.since)}). Після перезапуску список очищається. Лише шлях, без тіл запитів і заголовків.`
+          ? `Помилки клієнтського API за ${data.retentionDays} днів. Лише шлях і повідомлення, без тіл запитів, заголовків і токенів. 401 і 404 не зберігаються.`
           : null}
       </PageHeader>
       {error ? <ErrorNote message={error} onRetry={reload} /> : null}
@@ -40,7 +40,7 @@ export function ErrorsPage() {
         <Table<ErrorEntry>
           rows={data?.items ?? []}
           rowKey={(e) => `${e.at}-${e.path}-${e.status}-${e.message.slice(0, 20)}`}
-          empty={loading ? 'Завантаження…' : level === '500' ? 'Жодної помилки 5xx з моменту запуску.' : 'Помилок немає.'}
+          empty={loading ? 'Завантаження…' : level === '500' ? 'Помилок 5xx немає.' : 'Помилок немає.'}
           columns={[
             { key: 'at', label: 'Коли', render: (e) => <span className="whitespace-nowrap">{fmtDateTime(e.at)}</span> },
             { key: 'status', label: 'Код', render: (e) => <Badge tone={e.status >= 500 ? 'bad' : 'warn'}>{e.status}</Badge> },

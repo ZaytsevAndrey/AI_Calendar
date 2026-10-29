@@ -1,18 +1,20 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, In, MoreThanOrEqual, Repository } from 'typeorm';
-import { User } from '../users/user.entity';
-import { Task } from '../tasks/entities/task.entity';
-import { VoiceDailyUsage } from '../voice/entities/voice-daily-usage.entity';
-import { UserIdentity } from '../auth/entities/user-identity.entity';
-import { UserSettings } from '../user-settings/entities/user-settings.entity';
-import { ScheduleJob } from '../schedule/entities/schedule-job.entity';
-import { PendingGoogleWrite } from '../google-calendar/entities/pending-google-write.entity';
-import { PushSubscription } from '../reminders/entities/push-subscription.entity';
-import { ReminderDelivery } from '../reminders/entities/reminder-delivery.entity';
-import { VoiceTurnLog } from './entities/voice-turn-log.entity';
-import { VoiceQuotaService } from '../voice/voice-quota.service';
-import { countAdminErrors } from '../../common/admin-error-log';
+import { User } from '../modules/users/user.entity';
+import { Task } from '../modules/tasks/entities/task.entity';
+import { VoiceDailyUsage } from '../modules/voice/entities/voice-daily-usage.entity';
+import { UserIdentity } from '../modules/auth/entities/user-identity.entity';
+import { UserSettings } from '../modules/user-settings/entities/user-settings.entity';
+import { ScheduleJob } from '../modules/schedule/entities/schedule-job.entity';
+import { PendingGoogleWrite } from '../modules/google-calendar/entities/pending-google-write.entity';
+import { PushSubscription } from '../modules/reminders/entities/push-subscription.entity';
+import { ReminderDelivery } from '../modules/reminders/entities/reminder-delivery.entity';
+import { VoiceTurnLog } from '../modules/admin-data/entities/voice-turn-log.entity';
+import { ApiErrorLog } from '../modules/admin-data/entities/api-error-log.entity';
+import { localYmd } from '../modules/voice/voice-local-date.util';
+import { resolveIanaTimeZone } from '../common/iana-time-zone';
+import { ClientApiService } from './client-api.service';
 import { DAY_MS, clampInt, lastUtcDays, percentile, utcYmd } from './admin-time';
 
 export type AdminUserRow = {
@@ -68,12 +70,25 @@ export class AdminStatsService {
     @InjectRepository(PendingGoogleWrite) private readonly writes: Repository<PendingGoogleWrite>,
     @InjectRepository(PushSubscription) private readonly pushSubs: Repository<PushSubscription>,
     @InjectRepository(ReminderDelivery) private readonly deliveries: Repository<ReminderDelivery>,
-    private readonly quota: VoiceQuotaService,
+    @InjectRepository(ApiErrorLog) private readonly apiErrors: Repository<ApiErrorLog>,
+    private readonly client: ClientApiService,
   ) {}
 
   // ---------------------------------------------------------------- overview
 
+  /** Server (5xx) and client (4xx, minus 401/404 which are not stored) errors in a window. */
+  async errorCounts(windowMs: number, now = Date.now()): Promise<{ server: number; client: number }> {
+    const since = new Date(now - windowMs);
+    const [server, all] = await Promise.all([
+      this.apiErrors.count({ where: { status: MoreThanOrEqual(500), createdAt: MoreThanOrEqual(since) } }),
+      this.apiErrors.count({ where: { createdAt: MoreThanOrEqual(since) } }),
+    ]);
+    return { server, client: all - server };
+  }
+
   async overview(now = Date.now()) {
+    const dailyTokenLimit = await this.client.voiceDailyLimit();
+    const errors24h = await this.errorCounts(DAY_MS, now);
     const since = (ms: number) => new Date(now - ms);
     const days = lastUtcDays(30, now);
     const firstDay = days[0];
@@ -172,7 +187,7 @@ export class AdminStatsService {
         byStatus: Object.fromEntries(statusRows.map((r) => [r.status, Number(r.n)])),
       },
       voice: {
-        dailyTokenLimit: this.quota.dailyLimit(),
+        dailyTokenLimit,
         tokensToday: usageRows.filter((u) => u.dayYmd === today).reduce((t, u) => t + u.tokensUsed, 0),
         tokens7d: usageRows.filter((u) => last7.has(u.dayYmd)).reduce((t, u) => t + u.tokensUsed, 0),
         users7d: voiceUsers7d,
@@ -186,7 +201,7 @@ export class AdminStatsService {
       ops: {
         pendingGoogleWrites: pendingWrites,
         failedScheduleJobs24h: failedJobs24h,
-        errors24h: countAdminErrors(DAY_MS, now),
+        errors24h,
         pushSubscribers,
         remindersSent24h,
       },
@@ -339,12 +354,10 @@ export class AdminStatsService {
         this.deliveries.count({ where: { userId, sentAt: MoreThanOrEqual(new Date(now - 7 * DAY_MS)) } }),
       ]);
     const usageBy = new Map(usageRows.map((u) => [u.dayYmd, u.tokensUsed]));
-    let tokensToday = 0;
-    try {
-      tokensToday = await this.quota.tokensUsedToday(userId);
-    } catch {
-      tokensToday = 0;
-    }
+    // Same civil day the client uses for the daily limit: the user's settings zone.
+    const todayLocal = localYmd(new Date(now).toISOString(), resolveIanaTimeZone(settings?.timeZone || 'UTC'));
+    const tokensToday = usageRows.find((u) => u.dayYmd === todayLocal)?.tokensUsed ?? 0;
+    const dailyTokenLimit = await this.client.voiceDailyLimit();
     return {
       user: {
         ...row,
@@ -370,7 +383,7 @@ export class AdminStatsService {
         scheduled,
       },
       voice: {
-        dailyTokenLimit: this.quota.dailyLimit(),
+        dailyTokenLimit,
         tokensToday,
         series: days.map((day) => ({ day, tokens: usageBy.get(day) ?? 0 })),
         recentTurns: turns.map((t) => ({ ...t, createdAt: iso(t.createdAt) })),
@@ -447,7 +460,7 @@ export class AdminStatsService {
 
     return {
       days: daysCount,
-      dailyTokenLimit: this.quota.dailyLimit(),
+      dailyTokenLimit: await this.client.voiceDailyLimit(),
       totals: {
         tokens: usageRows.reduce((t, u) => t + u.tokensUsed, 0),
         turns: turnRows.length,
