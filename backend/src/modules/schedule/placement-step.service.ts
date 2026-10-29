@@ -49,6 +49,7 @@ import {
 import {
   groupYmdsByClockHm,
   pickPrimaryClockHm,
+  seriesDayClockHm,
   weekDaysFromYmds,
 } from './series-group.util';
 
@@ -1415,11 +1416,9 @@ export class PlacementStepService {
       plan: PlacementPlan;
       hm: string | null;
     };
-    const hmOf = (plan: PlacementPlan): string | null =>
+    const hmOf = (plan: PlacementPlan, clock?: string | null): string | null =>
       plan.outcome === 'seated'
-        ? normalizeClockHm(
-            localHm(new Date(plan.start).toISOString(), timeZone),
-          )
+        ? seriesDayClockHm(plan.start, timeZone, clock ?? preferredHmHint)
         : null;
 
     // One external-calendar fetch for the whole horizon — not once per civil
@@ -1522,7 +1521,7 @@ export class PlacementStepService {
           durationMinutes,
           exactClock,
         );
-        const retryHm = hmOf(retry);
+        const retryHm = hmOf(retry, primaryHm);
         if (retryHm === primaryHm) {
           dayPlans[i] = { ymd: day.ymd, plan: retry, hm: primaryHm };
           this.logger.log(
@@ -1935,9 +1934,7 @@ export class PlacementStepService {
             await this.applyMove(userId, tasks, slots, move, nowDate);
           }
         });
-        const hm = normalizeClockHm(
-          localHm(new Date(plan.start).toISOString(), timeZone),
-        );
+        const hm = seriesDayClockHm(plan.start, timeZone, preferredHm);
         if (hm === preferredHm) {
           await this.scheduledRepo.save(
             this.scheduledRepo.create({
@@ -2017,23 +2014,21 @@ export class PlacementStepService {
     );
     if (open.length < 2) return;
 
+    const preferredHm = task.scheduledStartTime
+      ? normalizeClockHm(
+          localHm(new Date(task.scheduledStartTime).toISOString(), timeZone),
+        )
+      : null;
     const slotMeta = open.map((row) => ({
       row,
       ymd: localYmd(new Date(row.scheduledStartTime).toISOString(), timeZone),
-      hm: normalizeClockHm(
-        localHm(new Date(row.scheduledStartTime).toISOString(), timeZone),
-      ),
+      hm: seriesDayClockHm(new Date(row.scheduledStartTime).getTime(), timeZone, preferredHm),
     }));
     const byHm = groupYmdsByClockHm(
       slotMeta.map(({ ymd, hm }) => ({ ymd, hm })),
     );
     if (byHm.size <= 1) return;
 
-    const preferredHm = task.scheduledStartTime
-      ? normalizeClockHm(
-          localHm(new Date(task.scheduledStartTime).toISOString(), timeZone),
-        )
-      : null;
     const primaryHm = pickPrimaryClockHm(byHm, preferredHm);
     const durationMs =
       Math.max(1, task.estimatedTimeInMinutes || 30) * 60_000;

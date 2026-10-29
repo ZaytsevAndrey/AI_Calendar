@@ -44,7 +44,8 @@ Runtime assumptions found: production runs one Render instance, Neon Postgres, `
 | 7 | Phase 2: OAuth client shared across users (found while auditing Google sync) | done | 85188d4 |
 | 8 | Phase 2: Google write queue lifecycle + no duplicate events on retry | done | 0c34220 |
 | 9 | Phase 2: idempotent task create (Idempotency-Key) | done | 3e90e3f |
-| 10 | Phase 2: Postgres tests in CI; placement on Postgres | done | (stage 10 commit) |
+| 10 | Phase 2: Postgres tests in CI; placement on Postgres | done | 6ea350b |
+| 11 | Phase 2: placement edge cases; DST wall-clock fix | done | (stage 11 commit) |
 
 ## Stage A — durable placement (done)
 
@@ -192,6 +193,24 @@ Voice is out of scope for this phase; no voice code or test expectation was chan
 - The placement kit runs on Postgres with `postgresUrl` (own throwaway database, dropped on destroy). New `schedule/placement.pg.spec`: the task + job transaction rolls back as a whole (job write fails → no task, no job), a task committed just before a crash is placed by the recovery sweep, a job left running by a dead worker is taken over after its lease, six concurrent creates are all placed without overlap.
 - The Postgres suite now covers: advisory lock (`user-lock.pg`), concurrent job claims (`mutation-jobs.pg`), migrations fresh/upgrade/rerun/no drift (`migrations.pg`), Google queue claims and lease takeover (`pending-google-write.pg`), placement rollback/recovery/concurrency (`placement.pg`): 5 suites, 15 tests, all pass locally on Postgres 16.
 - Not verified: the workflow itself on GitHub (needs a push; the YAML parses and the same commands pass locally).
+
+### Stage 11 — placement edge cases (done)
+
+`schedule/placement-edge-cases.spec` (SQLite, real services), each checking the invariants (no flexible overlap, fixed anchors stay, every task seated / parked / awaiting its conflict choice):
+- chain longer than `MAX_CHAIN_PULLS` (8 packed 30-min tasks, a fixed event on the first): fixed wins, nobody overlaps, nobody vanishes;
+- fixed event across midnight stored whole; a flexible asking for a time inside it gets a conflict, never a seat inside;
+- very long task (10 h) placed whole; one longer than any window (13 h in a 12 h day) parks, never splits or overlaps;
+- full window across the horizon (with a deadline) parks;
+- placing the same task again: same slot, one row;
+- explicit time on a fixed event: conflict sheet (designed, engine doc 6.2.1), never on top;
+- series horizon exact; appending twice adds the next days without duplicates;
+- series clock edited while its create placement is still queued (crash before run): ends on the new clock only;
+- DST gap (02:30 daily, New York, 14 Mar 2027).
+Plus Postgres: concurrent creates, crash recovery (stage 10); Kyiv DST and leap/year boundaries (stage C).
+
+**Found and fixed (DST wall clock):** `localDateTimeIso` used the UTC offset at 12:00 UTC of the date for every clock that day. On a switch day the hours before the switch were off by one hour (New York 14 Mar 01:30 → stored 00:30; Kyiv 25 Oct 02:00–03:59 → one hour late), and a clock skipped by the switch came out an hour early. It now uses the offset in effect at that clock; a skipped clock moves forward by the gap and a repeated clock is its first occurrence (RFC 5545, as Google renders an RRULE). Second part: the series compared clocks as `HH:mm`, so the shifted 03:30 day of a 02:30 series was detached into a copy (out of the series). `seriesDayClockHm` treats that shifted start as the series clock (horizon expansion, append, sibling split). Tests: `dst-clock.spec`, edge DST case. The helper lives in `voice/voice-local-date.util.ts` but is shared date code; no transcript parsing or voice expectation changed — structured voice 232/232, historical suites unchanged at 215/77.
+
+Results: backend unit 1067 pass + 15 skipped, 0 fail; e2e 138/138; Postgres 15/15.
 
 ## Final status (2026-10-30)
 

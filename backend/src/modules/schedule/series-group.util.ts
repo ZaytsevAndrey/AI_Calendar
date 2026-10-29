@@ -1,8 +1,27 @@
 import {
+  localDateTimeIso,
   localHm,
   localYmd,
+  normalizeClockHm,
   weekdayIndex,
 } from '../voice/voice-local-date.util';
+
+/**
+ * Wall clock (HH:mm) of a series day. A start that is the DST-shifted
+ * instant of `clock` on its civil day (02:30 on a spring-forward day starts
+ * at 03:30) still counts as `clock`, so that day stays in the series.
+ */
+export function seriesDayClockHm(
+  startMs: number,
+  timeZone: string,
+  clock: string | null | undefined,
+): string {
+  const iso = new Date(startMs).toISOString();
+  const hm = normalizeClockHm(localHm(iso, timeZone));
+  if (!clock || hm === clock) return hm;
+  const ymd = localYmd(iso, timeZone);
+  return Date.parse(localDateTimeIso(ymd, clock, timeZone)) === startMs ? clock : hm;
+}
 
 /**
  * User-facing fields other than time / phase. Touching any of these drops

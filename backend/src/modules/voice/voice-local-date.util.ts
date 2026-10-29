@@ -146,12 +146,46 @@ export function endOfLocalDayIso(ymd: string, timeZone: string): string {
   return `${ymd}T23:59:00${offsetForTimeZone(timeZone, ymd)}`;
 }
 
+/** Minutes east of UTC in `timeZone` at one instant. */
+function offsetMinutesAt(timeZone: string, instantMs: number): number {
+  const raw =
+    new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset', year: 'numeric' })
+      .formatToParts(new Date(instantMs))
+      .find((part) => part.type === 'timeZoneName')?.value ?? 'GMT';
+  const match = raw.match(/([+-])(\d{1,2})(?::(\d{2}))?/);
+  if (!match) return 0;
+  const minutes = Number(match[2]) * 60 + Number(match[3] ?? 0);
+  return match[1] === '-' ? -minutes : minutes;
+}
+
+function formatOffset(minutes: number): string {
+  const abs = Math.abs(minutes);
+  return `${minutes < 0 ? '-' : '+'}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`;
+}
+
+/**
+ * The instant of a wall clock on a civil day, with the offset in effect at
+ * that clock (not at noon: on a DST switch day the hours before the switch
+ * have the other offset). A clock skipped by the switch moves forward by the
+ * gap (02:30 → 03:30); a repeated clock is its first occurrence (RFC 5545).
+ */
 export function localDateTimeIso(
   ymd: string,
   hm: string,
   timeZone: string,
 ): string {
-  return `${ymd}T${normalizeClockHm(hm)}:00${offsetForTimeZone(timeZone, ymd)}`;
+  const clock = normalizeClockHm(hm);
+  const wallMs = Date.parse(`${ymd}T${clock}:00.000Z`);
+  if (Number.isNaN(wallMs)) {
+    return `${ymd}T${clock}:00${offsetForTimeZone(timeZone, ymd)}`;
+  }
+  const before = offsetMinutesAt(timeZone, wallMs - 86_400_000);
+  const after = offsetMinutesAt(timeZone, wallMs + 86_400_000);
+  // Larger offset first = earlier instant = first occurrence of a repeated clock.
+  const valid = [...new Set([before, after])]
+    .sort((a, b) => b - a)
+    .find((offset) => offsetMinutesAt(timeZone, wallMs - offset * 60_000) === offset);
+  return `${ymd}T${clock}:00${formatOffset(valid ?? before)}`;
 }
 
 export function localHm(nowIso: string, timeZone: string): string {
