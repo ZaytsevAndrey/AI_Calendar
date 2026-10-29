@@ -38,6 +38,7 @@ const UK: Record<string, string> = {
   which_series: 'Це повторювана задача. Сказати про цей день, про цей день і далі, чи про всю серію?',
   predecessor: 'Спочатку потрібен час іншої задачі. Я не вигадую його.',
   no_room: 'На цей день не знайшлося вільного часу для цих задач. Нічого не змінюю.',
+  event_no_done: 'Це подія календаря, а не задача. Її не можна позначити виконаною. Можу перенести, перейменувати або видалити.',
 };
 
 const EN: Record<string, string> = {
@@ -78,6 +79,7 @@ const EN: Record<string, string> = {
   which_series: 'This repeats. Do you mean this day, this day and following, or the whole series?',
   predecessor: 'The other task has no time yet. I will not invent one.',
   no_room: 'There is no free time that day for these tasks. Nothing was changed.',
+  event_no_done: 'That is a calendar event, not a task, so it cannot be marked done. I can move, rename, or delete it.',
 };
 
 export function voiceCopy(language: VNextLanguage, code: string): string {

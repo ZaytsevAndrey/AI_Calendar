@@ -61,6 +61,20 @@ export async function executeVoiceCommand(
     return;
   }
 
+  if (command.kind === 'rename_event') {
+    const request = deps.dispatch(
+      eventsApi.endpoints.updateEvent.initiate({
+        eventId: command.eventId,
+        eventData: { summary: command.title },
+        calendarId: command.calendarId ?? undefined,
+        provider: command.provider,
+      }),
+    ) as unknown as { unwrap: () => Promise<unknown> };
+    await request.unwrap();
+    refreshCalendar(deps.dispatch);
+    return;
+  }
+
   if (
     command.kind === 'remind_create' ||
     command.kind === 'remind_update' ||

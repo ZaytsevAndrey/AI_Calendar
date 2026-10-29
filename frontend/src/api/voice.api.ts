@@ -88,6 +88,17 @@ export type VoiceCommand =
       provider: 'google' | 'microsoft' | 'apple';
     }
   | {
+      /** Rename a provider calendar event that is not a Luefy task. Only the title changes. */
+      kind: 'rename_event';
+      taskId: string;
+      taskName: string;
+      summary: string;
+      eventId: string;
+      calendarId: string | null;
+      provider: 'google' | 'microsoft' | 'apple';
+      title: string;
+    }
+  | {
       kind: 'shift';
       taskId: string;
       taskName: string;

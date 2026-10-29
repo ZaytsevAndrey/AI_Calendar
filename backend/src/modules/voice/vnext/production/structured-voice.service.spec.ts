@@ -547,6 +547,36 @@ describe('structured operations on provider calendar events', () => {
     });
     const result = await build(complete).service.turn(USER, dto({ transcript }));
     expect(result.intents).toEqual([]);
+    expect(result.assistantMessage).toBe('That is a calendar event, not a task, so it cannot be marked done. I can move, rename, or delete it.');
+  });
+
+  it('renames an organizer-owned provider event and nothing else', async () => {
+    const transcript = 'rename the dentist to dentist checkup';
+    const w = world({
+      events: [event('ev-dentist', 'Dentist')],
+      model: [reads('find_events', { day: '2026-10-19' }), envelope(transcript, [{ opId: 'op-1', action: 'update', target: { kind: 'existing', proposedId: 'ext:google:ev-dentist' }, changes: { title: 'Dentist checkup' } }])],
+    });
+    const preview = await build(w).service.turn(USER, dto({ transcript }));
+    expect(preview.intents[0]).toMatchObject({
+      summary: 'Rename “Dentist” to “Dentist checkup”',
+      command: { kind: 'rename_event', eventId: 'ev-dentist', provider: 'google', title: 'Dentist checkup' },
+    });
+
+    const notes = world({
+      events: [event('ev-dentist', 'Dentist')],
+      model: [reads('find_events', { day: '2026-10-19' }), envelope(transcript, [{ opId: 'op-1', action: 'update', target: { kind: 'existing', proposedId: 'ext:google:ev-dentist' }, changes: { title: 'Dentist checkup', notes: 'bring card' } }])],
+    });
+    expect((await build(notes).service.turn(USER, dto({ transcript }))).intents).toEqual([]);
+  });
+
+  it('previews a cancel of a provider event as its delete', async () => {
+    const transcript = 'cancel the dentist';
+    const w = world({
+      events: [event('ev-dentist', 'Dentist')],
+      model: [reads('find_events', { day: '2026-10-19' }), envelope(transcript, [{ opId: 'op-1', action: 'cancel', target: { kind: 'existing', proposedId: 'ext:google:ev-dentist' } }])],
+    });
+    const preview = await build(w).service.turn(USER, dto({ transcript }));
+    expect(preview.intents[0]).toMatchObject({ summary: 'Delete “Dentist”', command: { kind: 'delete_event', eventId: 'ev-dentist' } });
   });
 
   it('does not offer a Luefy task\'s own calendar event as a second object', async () => {

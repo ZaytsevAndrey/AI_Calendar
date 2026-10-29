@@ -92,6 +92,8 @@ function blockedCopy(code: string): Parameters<typeof voiceCopy>[1] {
   if (code === 'missing_title') return 'need_title';
   if (code === 'gap') return 'dst_gap';
   if (code === 'fold') return 'dst_fold';
+  if (code === 'event_no_done') return 'event_no_done';
+  if (code === 'unsupported_action') return 'unsupported';
   return 'which_task';
 }
 

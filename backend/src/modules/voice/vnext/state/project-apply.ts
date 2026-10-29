@@ -140,6 +140,10 @@ function keptLabels(operation: PendingOperation): { ok: true; labels: TimeOfDayL
 function eligibleTarget(operation: PendingOperation): { ok: true } | ProjectError {
   if (operation.target.kind !== 'entity') return { ok: true };
   const target = operation.target;
+  // A provider event has no done state. Say so, whatever its access, instead of asking which task.
+  if (target.entityType === 'external_event' && operation.action === 'complete') {
+    return { ok: false, code: 'event_no_done', detail: target.entityId };
+  }
   if (!target.writable) return { ok: false, code: 'unauthorized_entity', detail: target.entityId };
   if (target.status && target.status !== 'open') return { ok: false, code: 'ineligible', detail: target.entityId };
   if (target.recurring && target.entityType !== 'reminder' && !operation.seriesScope) {
@@ -524,18 +528,37 @@ function projectCommand(operation: PendingOperation, clock: Clock, language: VNe
     }
   }
   if (operation.target.entityType === 'external_event') {
-    // A provider event has no Luefy task behind it: only a move or a delete reaches its provider.
-    if (operation.action === 'delete') {
-      const rejected = onlyKinds(operation, []) ?? onlyChanges(operation, []);
+    // A provider event has no Luefy task behind it: a move, a rename, or a delete reaches its provider.
+    // Cancel of an event is its delete; the preview says delete, so the user confirms that.
+    if (operation.action === 'delete' || operation.action === 'cancel') {
+      const implied = operation.action === 'cancel' && operation.changes.status === 'canceled';
+      const rejected = onlyKinds(operation, []) ?? onlyChanges(operation, implied ? ['status'] : []);
       if (rejected) return rejected;
       const target = operation.target;
       if (!target.googleEventId || !target.provider) return { ok: false, code: 'unrepresentable_delete', detail: taskId };
+      const text = commandSummary(language, 'delete', operation, clock);
+      return {
+        ok: true,
+        intent: {
+          type: 'command',
+          summary: text,
+          command: { kind: 'delete_event', taskId, taskName, summary: text, eventId: target.googleEventId, calendarId: target.calendarId, provider: target.provider },
+        },
+      };
+    }
+    if (operation.action === 'update') {
+      const rejected = onlyKinds(operation, []) ?? onlyChanges(operation, []);
+      if (rejected) return rejected;
+      const target = operation.target;
+      const title = operation.changes.title?.trim();
+      if (!title) return { ok: false, code: 'unsupported_action', detail: 'update:external_event' };
+      if (!target.googleEventId || !target.provider) return { ok: false, code: 'unrepresentable_update', detail: taskId };
       return {
         ok: true,
         intent: {
           type: 'command',
           summary,
-          command: { kind: 'delete_event', taskId, taskName, summary, eventId: target.googleEventId, calendarId: target.calendarId, provider: target.provider },
+          command: { kind: 'rename_event', taskId, taskName, summary, eventId: target.googleEventId, calendarId: target.calendarId, provider: target.provider, title },
         },
       };
     }
