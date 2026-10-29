@@ -56,8 +56,8 @@ jobs:
           test -f site/sitemap.xml && test -f site/robots.txt && test -f site/manifest.webmanifest
           echo "Site checks passed"
 
-  # The landing moved the app's calendar to /calendar and changed /login. Cover those routes even
-  # while the main CI job stops earlier (backend tests).
+  # The landing moved the app's calendar to /calendar and changed /login. The Playwright auth/nav
+  # specs (e2e/tests/p0.auth, p1.auth) cover that too, in the main CI job.
   app-routes:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -74,12 +74,3 @@ jobs:
 
       - name: Frontend unit tests
         run: npm test --workspace=frontend
-
-      - name: Install Playwright Chromium
-        run: npm run playwright:install
-
-      - name: Playwright auth, navigation and smoke
-        run: npm run test:e2e:ui -- p0.auth p0.smoke p1.auth
-        env:
-          JWT_SECRET: e2e-ci-secret
-          JWT_EXPIRES_IN: 1h
