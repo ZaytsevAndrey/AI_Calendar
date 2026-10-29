@@ -21,6 +21,8 @@ export type EntityRecord = {
   /** Recurring rows: each placed occurrence with its calendar event id, and the series event id. */
   occurrences?: Array<{ start: string; end: string; googleEventId: string | null }>;
   seriesEventId?: string | null;
+  /** A fixed Luefy task keeps its slot until a clock moves it; a window does not reseat it. */
+  fixed?: boolean;
 };
 
 export type ReferentBinding = { entityId?: string; localId?: string; phrase: string };

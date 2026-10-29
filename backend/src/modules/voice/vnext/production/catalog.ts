@@ -6,6 +6,7 @@
 import type { DayReminder } from '../../../day-reminders/entities/day-reminder.entity';
 import type { ScheduledTask } from '../../../schedule/schedule.entity';
 import { googleRecurringInstanceId } from '../../../tasks/skipped-occurrence.util';
+import { TaskEventType } from '../../../scheduling/event-type.enum';
 import { TaskStatus, type Task } from '../../../tasks/entities/task.entity';
 import type { EntityRecord } from '../reference/reference-resolver';
 import type { EntityReadResult } from '../state/revalidate-preview';
@@ -87,6 +88,7 @@ export function taskRecord(task: Task, allSlots: readonly ScheduledTask[]): Enti
     scheduledStart: single ? iso(single.scheduledStartTime) : null,
     scheduledEnd: single ? iso(single.scheduledEndTime) : null,
     googleEventId,
+    ...(task.eventType === TaskEventType.FIXED ? { fixed: true } : {}),
     writable: true,
   };
 }

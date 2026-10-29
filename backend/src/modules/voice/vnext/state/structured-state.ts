@@ -35,6 +35,7 @@ export type KnownEntity = {
   occurrences?: EntityOccurrence[];
   seriesEventId?: string | null;
   name?: string;
+  fixed?: boolean;
 };
 
 export type EntityFingerprint = {
@@ -661,6 +662,7 @@ function entityReference(entity: KnownEntity): Extract<PendingOperation['target'
     ...(entity.occurrences ? { occurrences: entity.occurrences } : {}),
     ...(entity.seriesEventId != null ? { seriesEventId: entity.seriesEventId } : {}),
     ...(entity.name ? { name: entity.name } : {}),
+    ...(entity.fixed ? { fixed: true } : {}),
   };
 }
 

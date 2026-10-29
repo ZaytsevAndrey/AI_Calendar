@@ -536,7 +536,7 @@ export function commandSummary(
   kind: string,
   operation: PendingOperation,
   clock: Pick<Clock, 'timeZone'>,
-  at?: { occurrence?: string; start?: string },
+  at?: { occurrence?: string; start?: string; day?: string },
 ): string {
   const stored = operation.target.kind === 'entity' ? operation.target.name : undefined;
   const title = stored || operation.changes.title || operation.sourceText || kind;
@@ -551,6 +551,7 @@ export function commandSummary(
     return withClock ? `${ymd} ${localHm(iso, clock.timeZone)}` : ymd;
   };
   if (at?.start) return `${verb} ${quoted} ${language === 'uk' ? 'на' : 'to'} ${when(at.start, true)}`;
+  if (at?.day) return `${verb} ${quoted} ${language === 'uk' ? 'на' : 'to'} ${at.day}`;
   if (at?.occurrence) {
     const day = when(at.occurrence, false);
     if (kind === 'end_series') return `${verb} ${quoted} ${language === 'uk' ? 'з' : 'from'} ${day}`;
@@ -637,6 +638,21 @@ function projectCommand(operation: PendingOperation, clock: Clock, language: VNe
         command: { kind: operation.action, taskId, taskName, summary },
       },
     };
+  }
+  // A move of a Luefy task with no clock (a day, a window, or after another task) sets its window and the
+  // engine seats it, the same as an update. Only a clock start is a direct move of the slot.
+  const placedWithoutClock = operation.constraints.some((constraint) =>
+    constraint.kind === 'date' || constraint.kind === 'ordering' || constraint.kind === 'day_bound' || constraint.kind === 'interval'
+    || (constraint.kind === 'clock' && (constraint.role === 'earliest' || constraint.role === 'deadline')));
+  if (operation.action === 'move' && operation.target.entityType === 'task' && placedWithoutClock && !findClock(operation, 'start') && !findClock(operation, 'end')) {
+    if (operation.target.fixed) return { ok: false, code: 'missing_clock', detail: taskId };
+    const rejected = onlyChanges(operation, []);
+    if (rejected) return rejected;
+    const patch = updatePatch(operation, clock);
+    if (!patch.ok) return patch;
+    const day = find(operation, 'date')?.value;
+    const text = commandSummary(language, 'move', operation, clock, day ? { day } : undefined);
+    return { ok: true, intent: { type: 'command', summary: text, command: { kind: 'update', taskId, taskName, summary: text, patch: patch.patch } } };
   }
   if (operation.action === 'move') {
     const rejected = onlyKinds(operation, ['date', 'clock', 'duration']) ?? placementOnly(operation) ?? onlyChanges(operation, []);

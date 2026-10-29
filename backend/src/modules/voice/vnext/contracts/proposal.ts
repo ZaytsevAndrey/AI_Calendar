@@ -136,6 +136,7 @@ export type ResolvedEntityReference = {
   seriesEventId?: string | null;
   /** Stored title of the row, for preview copy. Never a match key. */
   name?: string;
+  fixed?: boolean;
 };
 
 export type PendingOperation = {

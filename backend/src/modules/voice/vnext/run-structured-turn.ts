@@ -80,6 +80,7 @@ export function entitiesToKnown(entities: EntityRecord[], userId: string): Known
       ...(entity.occurrences ? { occurrences: entity.occurrences } : {}),
       ...(entity.seriesEventId != null ? { seriesEventId: entity.seriesEventId } : {}),
       ...(entity.name ? { name: entity.name } : {}),
+      ...(entity.fixed ? { fixed: true } : {}),
     }));
 }
 
@@ -95,6 +96,7 @@ function blockedCopy(code: string): Parameters<typeof voiceCopy>[1] {
   if (code === 'event_no_done') return 'event_no_done';
   if (code === 'missing_predecessor_time') return 'predecessor';
   if (code === 'unsupported_dependency_execution') return 'dependency';
+  if (code === 'missing_clock') return 'which_clock';
   if (code === 'unsupported_action') return 'unsupported';
   return 'which_task';
 }

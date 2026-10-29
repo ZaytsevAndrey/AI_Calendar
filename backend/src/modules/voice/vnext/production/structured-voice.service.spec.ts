@@ -4,6 +4,7 @@
  */
 import { Logger, ServiceUnavailableException } from '@nestjs/common';
 import { runWithVoiceTrace, VoiceTrace } from '../../../../common/voice-trace';
+import { TaskEventType } from '../../../scheduling/event-type.enum';
 import { TaskStatus, type Task } from '../../../tasks/entities/task.entity';
 import type { ScheduledTask } from '../../../schedule/schedule.entity';
 import type { DayReminder } from '../../../day-reminders/entities/day-reminder.entity';
@@ -725,7 +726,7 @@ describe('structured all-day, bounds, and relative time', () => {
     expect((await create('report an hour after the meeting', [{ kind: 'relative_time', anchor: 'referenced_task', direction: 'after', amount: 1, unit: 'hour' }])).intents).toEqual([]);
   });
 
-  it('updates a deadline, and refuses a bound on a move', async () => {
+  it('updates a deadline, sets a window for a move with a bound, and asks a fixed task for a clock', async () => {
     const transcript = 'report due tomorrow at 18';
     const update = await build(world({
       tasks: [task('report', 'Report')],
@@ -734,12 +735,16 @@ describe('structured all-day, bounds, and relative time', () => {
     expect(update.intents[0]).toMatchObject({ type: 'command', command: { kind: 'update', patch: { deadline: '2026-10-19T15:00:00.000Z' } } });
     expect(update.intents[0]).not.toMatchObject({ command: { patch: { earliestStartTime: expect.anything() } } });
 
-    const move = await build(world({
-      tasks: [task('meet', 'Meeting', { isUnscheduled: false })],
+    const moveBefore = (extra: Partial<Task>) => build(world({
+      tasks: [task('meet', 'Meeting', { isUnscheduled: false, ...extra })],
       slots: [slot('s1', 'meet', '2026-10-19T07:00:00.000Z', '2026-10-19T08:00:00.000Z')],
       model: [envelope('move meeting before 18', [{ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'meet' }, constraints: [tomorrow, { kind: 'clock', value: '18:00', role: 'deadline' }] }])],
     })).service.turn(USER, dto({ transcript: 'move meeting before 18' }));
-    expect(move.intents).toEqual([]);
+    const flexible = await moveBefore({});
+    expect(flexible.intents[0]).toMatchObject({ type: 'command', summary: 'Move “Meeting” to 2026-10-19', command: { kind: 'update', patch: { deadline: '2026-10-19T15:00:00.000Z' } } });
+    const fixed = await moveBefore({ eventType: TaskEventType.FIXED });
+    expect(fixed.intents).toEqual([]);
+    expect(fixed.assistantMessage).toBe('That is a fixed event. What time should it move to?');
   });
 });
 
@@ -809,6 +814,15 @@ describe('structured dependent actions in one request', () => {
     ...createReport,
     constraints: [{ kind: 'ordering', relation, target: { kind: 'existing', proposedId: 'meet' } }],
   }]);
+
+  it('moves a stored task after another task by setting its window', async () => {
+    const transcript = 'move the report after the meeting';
+    const result = await build(meetingWorld({
+      tasks: [task('meet', 'Meeting', { isUnscheduled: false }), task('report', 'Report')],
+      model: [envelope(transcript, [{ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'report' }, constraints: [{ kind: 'ordering', relation: 'after', target: { kind: 'existing', proposedId: 'meet' } }] }])],
+    })).service.turn(USER, dto({ transcript }));
+    expect(result.intents[0]).toMatchObject({ type: 'command', summary: 'Move “Report”', command: { kind: 'update', taskId: 'report', patch: { earliestStartTime: '2026-10-19T08:00:00.000Z' } } });
+  });
 
   it('bounds a new task by an existing task, and re-checks that task at confirm', async () => {
     const after = await build(meetingWorld({ model: [ordered('report after the meeting', 'after')] })).service.turn(USER, dto({ transcript: 'report after the meeting' }));
