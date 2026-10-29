@@ -1197,7 +1197,8 @@ export class PlacementStepService {
       description: fresh.description,
       userId: fresh.userId,
       phaseId: fresh.phaseId,
-      eventType: TaskEventType.ADMIN,
+      // A fixed series day stays fixed: its copy keeps the clock (PE-24).
+      eventType: fresh.eventType,
       estimatedTimeInMinutes: fresh.estimatedTimeInMinutes,
       isRecurring: false,
       recurrencePattern: null,
@@ -2427,7 +2428,7 @@ export class PlacementStepService {
       description: series.description,
       userId: series.userId,
       phaseId: series.phaseId,
-      eventType: TaskEventType.ADMIN,
+      eventType: series.eventType,
       estimatedTimeInMinutes: series.estimatedTimeInMinutes,
       isRecurring: false,
       recurrencePattern: null,
@@ -2779,6 +2780,7 @@ export function autoSeatOptions(
   task: Pick<
     Task,
     | 'isRecurring'
+    | 'eventType'
     | 'problematicReason'
     | 'problematicDay'
     | 'problematicOriginalStart'
@@ -2794,11 +2796,18 @@ export function autoSeatOptions(
     /^\d{4}-\d{2}-\d{2}$/.test(task.problematicDay)
       ? task.problematicDay
       : null;
-  if (!day) return { searchHole: true, rawHole: true };
-  if (day < todayYmd) return null;
   const original = task.problematicOriginalStart
     ? new Date(task.problematicOriginalStart)
     : null;
+  if (task.eventType === TaskEventType.FIXED) {
+    // A fixed copy only takes its own clock back, never another hole.
+    if (!day || day < todayYmd || !original || !Number.isFinite(original.getTime())) {
+      return null;
+    }
+    return { preferredStart: original, commit: 'preferred', windowYmd: day };
+  }
+  if (!day) return { searchHole: true, rawHole: true };
+  if (day < todayYmd) return null;
   return {
     searchHole: true,
     rawHole: true,
@@ -2936,7 +2945,11 @@ function claimInterval(
 ): MsInterval | null {
   const durationMs = durationMinutes * 60_000;
   if (task.eventType === TaskEventType.FIXED) {
-    if (!task.scheduledStartTime || !task.scheduledEndTime) return null;
+    if (!task.scheduledStartTime || !task.scheduledEndTime) {
+      // A parked fixed copy has no times: its clock is the chosen / original start.
+      if (!preferredStart || !Number.isFinite(preferredStart.getTime())) return null;
+      return { start: preferredStart.getTime(), end: preferredStart.getTime() + durationMs };
+    }
     const start = new Date(task.scheduledStartTime).getTime();
     const end = new Date(task.scheduledEndTime).getTime();
     // A fixed series day is the same clock on another civil day.

@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { TaskEventType } from '../scheduling/event-type.enum';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import { PhasesService } from '../phases/phases.service';
 import type { Phase } from '../phases/entities/phase.entity';
@@ -148,11 +147,8 @@ export class ProblematicPlaceService {
         description: series.description,
         phaseId: slot.phases[0]?.id ?? null,
         phases: slot.phases,
-        // A series is never fixed; keep its own movable type for the copy.
-        eventType:
-          series.eventType === TaskEventType.FIXED
-            ? TaskEventType.ADMIN
-            : series.eventType,
+        // The copy keeps the series type: a fixed series day stays fixed (PE-24).
+        eventType: series.eventType,
         estimatedTimeInMinutes: slot.minutes,
         isRecurring: false,
         recurrencePattern: null,

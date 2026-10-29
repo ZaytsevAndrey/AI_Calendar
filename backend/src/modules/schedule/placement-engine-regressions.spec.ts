@@ -560,4 +560,36 @@ describe('placement engine review regressions (SQLite)', () => {
     expect(await kit.slotsOf(done.id)).toHaveLength(1);
     expect(await kit.slotsOf(free.id)).toEqual(['2026-11-06 14:00-15:00']);
   });
+
+  it('PE-24 a blocked day of a fixed series parks as a fixed copy on its own clock', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T08:00:00.000Z', horizonDays: 3 });
+    await fixedAt('2026-11-06', '10:00', '11:00', 'Wall');
+    const series = await kit.addTask({
+      name: 'Standup',
+      eventType: TaskEventType.FIXED,
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      scheduledStartTime: kit.at('2026-11-05', '10:00'),
+      scheduledEndTime: kit.at('2026-11-05', '11:00'),
+    });
+
+    await kit.service.place(kit.user.id, series.id, { expandSeries: true });
+
+    expect(await kit.slotsOf(series.id)).toEqual([
+      '2026-11-05 10:00-11:00',
+      '2026-11-07 10:00-11:00',
+    ]);
+    const [copy] = await kit.taskRepo.find({ where: { parentSeriesId: series.id } });
+    expect(copy).toMatchObject({
+      eventType: TaskEventType.FIXED,
+      scheduleState: ScheduleState.PROBLEMATIC,
+      problematicDay: '2026-11-06',
+      originalOccurrenceYmd: '2026-11-06',
+    });
+    expect(kit.hmOf(copy.problematicOriginalStart!)).toBe('10:00');
+
+    // Auto-seat never puts the fixed copy in another hole.
+    await kit.service.seatOpenHoles(kit.user.id);
+    expect(await kit.slotsOf(copy.id)).toEqual([]);
+  });
 });

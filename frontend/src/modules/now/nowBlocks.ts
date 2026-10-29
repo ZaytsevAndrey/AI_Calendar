@@ -48,7 +48,8 @@ export function canSkipNowBlock(block: NowBlock): boolean {
   if (!task) return false;
   if (block.allDay) return false;
   if (task.isFixedExternal || task.isUnscheduled) return false;
-  if (task.eventType === 'fixed') return false;
+  // A fixed one-off has no "day" to skip; a day of a fixed series does.
+  if (task.eventType === 'fixed' && !task.isRecurring) return false;
   if (task.status === 'completed' || task.status === 'canceled') return false;
   return true;
 }

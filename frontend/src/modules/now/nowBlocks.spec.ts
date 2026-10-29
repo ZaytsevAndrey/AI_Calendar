@@ -119,6 +119,29 @@ describe('pickNowAndNext', () => {
     expect(canSkipNowBlock(now!)).toBe(true);
   });
 
+  it('lets a day of a fixed series be skipped, not a fixed one-off', () => {
+    const standup = task({
+      id: 'f1',
+      name: 'Standup',
+      eventType: 'fixed',
+      isRecurring: true,
+      scheduledStartTime: '2026-09-10T10:00:00+03:00',
+      scheduledEndTime: '2026-09-10T10:45:00+03:00',
+    });
+    const series = pickNowAndNext(
+      buildNowBlocks([], [standup], TODAY, TZ),
+      nowMs,
+      todayEndMs,
+      yesterdayStartMs,
+    ).now;
+    expect(series?.title).toBe('Standup');
+    expect(canSkipNowBlock(series!)).toBe(true);
+
+    expect(
+      canSkipNowBlock({ ...series!, task: { ...standup, isRecurring: false } }),
+    ).toBe(false);
+  });
+
   it('hides a recurring task fallback when that civil day was skipped', () => {
     const gym = task({
       id: 'r1',

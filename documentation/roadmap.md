@@ -20,7 +20,6 @@ Most of the 29 Oct review is fixed (see the archive). Open: [placement-engine-re
 
 - [ ] Remove the dead full-replan engine (PE-30): keep `captureAutoSegmentsSnapshot` and the shared helpers in a small module, delete `IntelligentSchedulingEngine.run` and its 1743-line spec. Drop the `POST/PATCH/DELETE /schedule` slot writes; the API e2e (`schedule.e2e-spec.ts`, `google-iso.e2e-spec.ts`) seeds slots through them today, so move those fixtures first.
 - [ ] One transaction for the remaining multi-step writes (rest of PE-18): `moveSeriesDay` (skip, then create), `moveSeriesTail`, `ProblematicPlaceService.placeSeriesDay`.
-- [ ] Decide PE-24: a day copy of a fixed series is created as `admin` on purpose today ("a series is never fixed"), but fixed series now exist. Keep fixed, or keep the rule.
 - [ ] PE-27 load: `seatOpenHoles` runs a full `place` (with the external calendar fetch) per parked task; a drag loads every task and slot of the user.
 
 ### 39. Voice MVP: check P0 on a live model and a real calendar

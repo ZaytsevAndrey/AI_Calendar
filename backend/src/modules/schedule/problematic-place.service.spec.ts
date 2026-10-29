@@ -140,6 +140,15 @@ describe('ProblematicPlaceService', () => {
     expect(tasksService.update).not.toHaveBeenCalled();
   });
 
+  it('PE-24 a day of a fixed series moves as a fixed copy', async () => {
+    rows.set(
+      'task-1',
+      parkedTask({ isRecurring: true, eventType: TaskEventType.FIXED }),
+    );
+    await service.place('user-1', 'task-1', { start, end, occurrenceYmd: FUTURE });
+    expect(rows.get('copy-1')!.eventType).toBe(TaskEventType.FIXED);
+  });
+
   it('deletes the copy and skips nothing when the series day does not seat', async () => {
     rows.set('task-1', parkedTask({ isRecurring: true }));
     placementStep.place.mockResolvedValue({
@@ -203,6 +212,22 @@ describe('ProblematicPlaceService', () => {
 
 describe('autoSeatOptions', () => {
   const today = '2099-01-10';
+
+  it('PE-24 a fixed copy only takes its own clock back, never another hole', () => {
+    expect(
+      autoSeatOptions(parkedTask({ eventType: TaskEventType.FIXED }), today),
+    ).toEqual({
+      preferredStart: new Date(`${FUTURE}T18:00:00.000Z`),
+      commit: 'preferred',
+      windowYmd: FUTURE,
+    });
+    expect(
+      autoSeatOptions(
+        parkedTask({ eventType: TaskEventType.FIXED, problematicOriginalStart: null }),
+        today,
+      ),
+    ).toBeNull();
+  });
 
   it('keeps a parked day on that day, nearest its old clock', () => {
     expect(autoSeatOptions(parkedTask(), today)).toEqual({

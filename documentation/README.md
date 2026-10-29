@@ -23,6 +23,7 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Voice fix flow](voice-fix-flow.md) | Prompt, spec, and dialogue tests stay one sentence: list the disagreement, you choose, then spec, tests, prompt |
 | [Local TTS](tts-local.md) | Azure Speech when configured; otherwise Piper on the home API (`npm run start:piper`); browser voice when both are down |
 | [Spec: Intelligent scheduling](spec-intelligent-scheduling.md) | Unified items, settings, phases, queue, diff/undo, Google anchors (defers placement to conflict rules) |
+| [Placement engine](placement-engine.md) | How placement works: rules, one placement step, the `planPlacement` core, series, inboxes, transactions, tests (Ukrainian) |
 | [Placement engine review](placement-engine-review.md) | Oct 2026 review: 30 defects (PE-01…PE-30), test gaps, fix order. Roadmap §50 |
 | [Task scheduling test matrix](task-scheduling-test-matrix.md) | Given/When/Then cases mapped to unit tests |
 | [E2E test coverage plan](e2e-test-coverage.md) | All live API/UI cases and edge cases, layers, P0 smoke, implementation waves |
