@@ -720,6 +720,14 @@ describe('structured all-day, bounds, and relative time', () => {
     expect(days).toMatchObject({ earliestStartTime: expect.stringContaining('2026-10-21') });
   });
 
+  it('says what is wrong instead of asking which task', async () => {
+    const backwards = await create('report tomorrow from 10 to 9', [tomorrow, { kind: 'clock', value: '10:00', role: 'start' }, { kind: 'clock', value: '09:00', role: 'end' }]);
+    expect(backwards.intents).toEqual([]);
+    expect(backwards.assistantMessage).toBe('The times in that command contradict each other. Say how it should be.');
+    const noDay = await create('report at 10', [{ kind: 'clock', value: '10:00', role: 'start' }]);
+    expect(noDay.assistantMessage).toBe('Which day?');
+  });
+
   it('asks instead of guessing for a wish clock, a delay with a date, or a delay from another task', async () => {
     expect((await create('report around 15', [tomorrow, { kind: 'clock', value: '15:00', role: 'preferred' }])).intents).toEqual([]);
     expect((await create('report tomorrow in two hours', [tomorrow, { kind: 'relative_time', anchor: 'now', direction: 'after', amount: 2, unit: 'hour' }])).intents).toEqual([]);

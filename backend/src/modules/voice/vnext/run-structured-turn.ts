@@ -98,6 +98,14 @@ function blockedCopy(code: string): Parameters<typeof voiceCopy>[1] {
   if (code === 'unsupported_dependency_execution') return 'dependency';
   if (code === 'missing_clock') return 'which_clock';
   if (code === 'unsupported_action') return 'unsupported';
+  if (code === 'contradictory_constraints') return 'contradictory';
+  if (code === 'unrepresentable_schedule') return 'which_day';
+  if (code === 'unmapped_time') return 'need_clock';
+  if (code === 'missing_occurrence' || code === 'occurrence_not_found' || code === 'ambiguous_occurrence') return 'which_occurrence';
+  if (code === 'empty_patch') return 'what_change';
+  if (code === 'unrepresented_constraint' || code === 'unsupported_series_scope' || code === 'unrepresentable_move' || code === 'unrepresentable_delete' || code === 'unrepresentable_update') {
+    return 'unrepresented';
+  }
   return 'which_task';
 }
 
