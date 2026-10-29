@@ -47,6 +47,10 @@ jobs:
         env:
           REACT_APP_API_BASE_URL: http://localhost:3001
 
+      # start:prod runs node dist/main; a file outside src in the build moves it to dist/src/main.js.
+      - name: Backend entry point exists
+        run: test -f backend/dist/main.js && test -f backend/dist/database/migrations/1761750000000-Baseline.js
+
       - name: Install Playwright Chromium
         run: npm run playwright:install
 

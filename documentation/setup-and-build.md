@@ -39,7 +39,8 @@ Create `backend/.env` from `backend/.env.example`.
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth |
 | `GOOGLE_REDIRECT_URI` | Must **exactly** match an **Authorized redirect URI** in Google Cloud Console; local dev is usually `http://localhost:3001/google-calendar/callback` |
 | `DATABASE_URL` | If this is a `postgres://` / `postgresql://` URL, TypeORM uses **Postgres** (production / Neon). Otherwise the backend uses **SQLite** (`SQLITE_PATH` or `db.sqlite`) |
-| `TYPEORM_SYNC` | Set to `false` to disable `synchronize`. Default is on so an empty Neon database gets a schema on first boot |
+| `TYPEORM_SYNC` | Postgres: `synchronize` only when set to `true` (throwaway databases). Production uses versioned migrations (see [deploy](deploy.md#database-migrations)). SQLite always synchronizes |
+| `TYPEORM_MIGRATIONS` | Postgres: set to `false` to skip running pending migrations on boot (default: run them) |
 | `DATABASE_SSL` | Postgres SSL is on by default (`rejectUnauthorized: false` for Neon). Set `false` only for local Postgres without SSL |
 | `GROQ_API_KEY` | Free Groq API key for voice STT + task parse ([console.groq.com/keys](https://console.groq.com/keys)). Voice buttons fail with 503 if unset |
 | `GROQ_API_KEY_2` … | Optional extra Groq orgs (`_2`, `_3`, … any count). Live API rotates on TPM/TPD when two or more are set; one voice session stays on one key until a hop |
@@ -121,7 +122,7 @@ The SQLite file is created when the backend runs **without** a Postgres `DATABAS
 
 Production uses **Neon Postgres**; see [deploy](deploy.md). Do not expect a SQLite file to survive on Render’s free web service (ephemeral disk).
 
-With `synchronize` enabled (default; disable with `TYPEORM_SYNC=false`), schema changes apply automatically; if you hit odd TypeORM/SQLite metadata errors after pulling, deleting `backend/db.sqlite` and restarting forces a clean schema (dev data loss).
+On SQLite `synchronize` is always on, so schema changes apply automatically (Postgres uses migrations, see [deploy](deploy.md#database-migrations)); if you hit odd TypeORM/SQLite metadata errors after pulling, deleting `backend/db.sqlite` and restarting forces a clean schema (dev data loss).
 
 ## Phases API and login
 

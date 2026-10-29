@@ -37,8 +37,8 @@ Runtime assumptions found: production runs one Render instance, Neon Postgres, `
 | 0 | Baseline, branch, findings, this file | done | — |
 | 1 | A: durable mutation jobs (atomic with the state change, lease + claim, bounded retry with backoff, terminal failures, recovery sweep, idempotent handlers) | done | ead5ac6 |
 | 2 | B: cross-instance user lock (Postgres advisory lock), transaction audit fixes | done | a78aebf |
-| 3 | F1: root causes of the 5 voice e2e failures and the 13 historical suites | done | (stage F1 commit) |
-| 4 | G: versioned migrations instead of `TYPEORM_SYNC=true` | todo | |
+| 3 | F1: root causes of the 5 voice e2e failures and the 13 historical suites | done | 5b50f11 |
+| 4 | G: versioned migrations instead of `TYPEORM_SYNC=true` | done | (stage G commit) |
 | 5 | C/D/E: historical identity tests, recurrence/temporal/placement edge tests, Google failure handling | todo | |
 | 6 | F2 live voice eval, H frontend states, I/J docs and operations | todo | |
 
@@ -74,6 +74,16 @@ Disposition: not deleted, not weakened. They are excluded by name from `npm test
 
 Results: backend `npm test` 1030 pass + 6 skipped, **0 fail**; structured voice 232/232; e2e **137/137**.
 
+## Stage G — versioned migrations (done)
+
+- Postgres: `createTypeOrmOptions` now loads `src/database/migrations/*` and runs them on boot (`migrationsRun`, `migrationsTransactionMode: 'each'`); `synchronize` only with `TYPEORM_SYNC=true`. `render.yaml` sets `TYPEORM_SYNC=false`. SQLite (dev, tests) unchanged.
+- `1761750000000-Baseline` generated from the entities on an empty Postgres (`src/scripts/generate-baseline-migration.ts`, `schemaBuilder.log()`); skipped (recorded) when `tasks` already exists. `1761760000000-SchedulingQueueAndOccurrenceIdentity`: idempotent columns + index for the refactor/stabilization, backfill of parked copies' `originalOccurrenceYmd`, fails pre-queue `running` jobs without a lease.
+- Found and fixed: `user_settings` `time` columns had defaults `'08:00'` etc.; Postgres stores `'08:00:00'`, so `synchronize` re-ran three `ALTER … SET DEFAULT` on every boot and a schema check could never be clean. Defaults are now `'08:00:00'`, `'23:00:00'`, `'12:00:00'` (values the code already normalizes — production Postgres always returned `HH:mm:ss`).
+- **Found and fixed (production entry point):** `src/modules/voice/vnext/eval/*` and `vnext/cli.ts` import from `backend/benchmark/`, which pulls `benchmark` into `nest build`; the compiler root moves up and the build writes `dist/src/main.js`, while `start:prod` (Render) runs `node dist/main`. Observed locally on this branch and the same files are on `master` (since `542b4f9`). `tsconfig.build.json` now excludes `benchmark`, `vnext/eval`, `vnext/cli.ts` (dev tools run with ts-node); the build writes `dist/main.js` again. CI checks that `backend/dist/main.js` and the baseline migration exist after the build.
+- Tests on real Postgres 16 (`src/database/migrations.pg.spec.ts`): empty DB → both migrations → **no schema drift** vs entities, second run applies nothing; upgrade from an old-`TYPEORM_SYNC` schema without the new columns, with data → baseline recorded, columns added, parked copy backfilled, seated copy null, pre-queue job failed, rows kept, no drift; half-applied upgrade reruns cleanly. Boot check: the built app (`node dist/main.js`) on an empty Postgres runs both migrations, starts the advisory lock, serves Swagger 200 and 401 on `/tasks`.
+- Docs: `deploy.md` (Database migrations: first deploy, backup, rerun, every entity change needs a migration, local Postgres, rollback), `setup-and-build.md` env table.
+- Not changed: `backend/.env.example` still says to keep `TYPEORM_SYNC=true` — that file holds another chat's uncommitted edits; fix it when that work is committed.
+
 ## Current work
 
-Stage G (versioned migrations).
+Stage C/D/E.

@@ -83,13 +83,41 @@ Set on the **API** service (Blueprint prompts the secrets):
 | `DEEPSEEK_API_KEY` / `QWEN_API_KEY` | Optional earlier planner steps. `VOICE_LLM_PROVIDER=deepseek` also sends parse there |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push. Generate once with `npx web-push generate-vapid-keys`. Subject is a `mailto:` URL |
 | `REMINDER_CRON_SECRET` | Shared secret for `POST /reminders/tick` (`x-reminder-cron-secret`). Point a free external cron at that URL about every 30 minutes. Each wake keeps the free instance up for ~15 minutes, then it sleeps. Render Cron Jobs stay unused (paid) |
-| `TYPEORM_SYNC` | `true` on first empty database; schema is applied automatically |
+| `TYPEORM_SYNC` | `false`. The schema comes from migrations run on boot ([below](#database-migrations)) |
 
 Frontend **build-time** variable:
 
 | Variable | Purpose |
 |----------|---------|
 | `REACT_APP_API_BASE_URL` | Axios base URL. On `ai-calendar-web` this is the Render API. On `ai-calendar-web-home` set it to the home API origin |
+
+## Database migrations
+
+Postgres schema comes from versioned TypeORM migrations in `backend/src/database/migrations/`, run on every boot (`migrationsRun`; each migration in its own transaction). `TYPEORM_SYNC` is `false` in `render.yaml`; `synchronize` runs on Postgres only when `TYPEORM_SYNC=true` is set explicitly (throwaway databases). Local SQLite still synchronizes.
+
+| Migration | What it does |
+|-----------|--------------|
+| `1761750000000-Baseline` | Full schema, generated from the entities on an empty Postgres (`src/scripts/generate-baseline-migration.ts`). On a database that already has `tasks` (made by the old `TYPEORM_SYNC`) it is recorded without running. |
+| `1761760000000-SchedulingQueueAndOccurrenceIdentity` | Idempotent `ADD COLUMN IF NOT EXISTS`: `tasks.originalOccurrenceYmd`, `schedule_jobs.attempts / nextRunAt / leaseUntil` + index. Backfills the day of parked series copies from `problematicDay` (seated copies stay null: ambiguous). Fails jobs left `running` without a lease by the old in-process runner. |
+
+**First deploy of this change (existing Neon database):**
+
+1. Back up the database (Neon branch or `pg_dump`).
+2. Deploy with `TYPEORM_SYNC=false` (already in `render.yaml`; check the dashboard value too — a dashboard value overrides the Blueprint).
+3. On boot the backend runs the two migrations; the log shows the TypeORM migration lines, and `SELECT name FROM migrations` lists both.
+4. If a deploy is interrupted, simply redeploy: both migrations are safe to rerun (the second is all `IF NOT EXISTS`).
+
+**Every later entity change needs a migration.** Generate the SQL on an empty local Postgres (the same way as the baseline) or write it by hand, keep it idempotent where possible, and run `npm test` with `PG_TEST_URL` set: `src/database/migrations.pg.spec.ts` fails when migrations no longer produce exactly the entity schema (fresh database and upgrade from the pre-migration schema).
+
+Local Postgres for these checks:
+
+```bash
+docker run -d --name luefy-pg-test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=luefy -p 55432:5432 postgres:16-alpine
+cd backend
+PG_TEST_URL=postgres://postgres:test@localhost:55432/luefy DATABASE_URL=postgres://postgres:test@localhost:55432/luefy npx jest "\.pg\.spec"
+```
+
+**Rollback:** each migration has `down()`. The baseline `down()` drops every table — never run it on production. To undo only the second migration, `down()` drops the new columns (their data is lost: copy identity, job retry state).
 
 ## Custom domain (optional, later)
 
