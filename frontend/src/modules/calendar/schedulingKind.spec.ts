@@ -1,6 +1,7 @@
 import {
   kindIsEditable,
   overlayForEvent,
+  schedulingBadgeForEvent,
   schedulingKindForEvent,
 } from './schedulingKind';
 import type { GoogleCalendarEvent } from 'api/google-calendar.api';
@@ -65,12 +66,37 @@ describe('schedulingKindForEvent', () => {
     expect(schedulingKindForEvent({ event: event(), isHabit: true })).toBe(
       'habit',
     );
+    // Recurrence is not a kind: a series shows its behavior plus a repeat marker.
     expect(
       schedulingKindForEvent({
         event: event(),
         task: task({ isRecurring: true }),
       }),
-    ).toBe('recurring');
+    ).toBe('flexible');
+  });
+
+  it('shows a fixed series as fixed + repeats, read-only from the chip', () => {
+    expect(
+      schedulingBadgeForEvent({
+        event: event(),
+        task: task({ isRecurring: true, eventType: 'fixed' }),
+      }),
+    ).toEqual({ kind: 'fixed', repeats: true, editable: false });
+    expect(
+      schedulingBadgeForEvent({
+        event: event(),
+        task: task({ isRecurring: false, eventType: 'fixed', seriesGroupId: 's1' }),
+      }),
+    ).toEqual({ kind: 'fixed', repeats: true, editable: false });
+    expect(
+      schedulingBadgeForEvent({
+        event: event(),
+        task: task({ isRecurring: true, eventType: 'admin' }),
+      }),
+    ).toEqual({ kind: 'flexible', repeats: true, editable: false });
+    expect(
+      schedulingBadgeForEvent({ event: event(), task: task({ eventType: 'fixed' }) }),
+    ).toEqual({ kind: 'fixed', repeats: false, editable: true });
   });
 });
 

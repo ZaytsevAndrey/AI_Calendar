@@ -18,6 +18,7 @@ export async function migrateLegacyScheduleState(
   await ds.initialize();
   try {
     await copyIsProblematicFlag(ds, options.type === 'postgres');
+    await backfillOccurrenceIdentity(ds, options.type === 'postgres');
   } finally {
     await ds.destroy();
   }
@@ -66,6 +67,42 @@ async function copyIsProblematicFlag(
       `[migrate] copied isProblematic into scheduleState for ${changed} task(s)`,
     );
   }
+}
+
+/**
+ * A detached series day copy remembers which occurrence it stands for in
+ * `originalOccurrenceYmd`. Copies made before that column existed still carry
+ * the day in `problematicDay` while they are parked with `parentSeriesId`:
+ * copy it over. Seated copies lost both fields when they were seated; their
+ * day is ambiguous and stays null (they simply never re-merge). Idempotent.
+ */
+async function backfillOccurrenceIdentity(
+  ds: DataSource,
+  postgres: boolean,
+): Promise<void> {
+  const columns = await taskColumnNames(ds, postgres);
+  if (!columns.size || !columns.has('problematicDay') || !columns.has('parentSeriesId')) {
+    return;
+  }
+  if (!columns.has('originalOccurrenceYmd')) {
+    await ds.query(
+      postgres
+        ? `ALTER TABLE tasks ADD COLUMN "originalOccurrenceYmd" character varying(10)`
+        : `ALTER TABLE tasks ADD COLUMN originalOccurrenceYmd varchar(10)`,
+    );
+  }
+  const where = postgres
+    ? `"originalOccurrenceYmd" IS NULL AND "isRecurring" IS FALSE AND "parentSeriesId" IS NOT NULL AND "problematicDay" IS NOT NULL`
+    : `originalOccurrenceYmd IS NULL AND isRecurring = 0 AND parentSeriesId IS NOT NULL AND problematicDay IS NOT NULL`;
+  const due = await ds.query(`SELECT COUNT(*) AS n FROM tasks WHERE ${where}`);
+  const changed = Number(due[0]?.n ?? 0);
+  if (!changed) return;
+  await ds.query(
+    postgres
+      ? `UPDATE tasks SET "originalOccurrenceYmd" = "problematicDay" WHERE ${where}`
+      : `UPDATE tasks SET originalOccurrenceYmd = problematicDay WHERE ${where}`,
+  );
+  console.log(`[migrate] set originalOccurrenceYmd on ${changed} parked series copy(ies)`);
 }
 
 async function taskColumnNames(

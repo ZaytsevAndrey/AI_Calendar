@@ -3,6 +3,38 @@ import type { VoiceWriteIntent } from 'api/voice.api';
 import i18n from 'i18n';
 
 describe('buildChangePreviewCards', () => {
+  it('shows behavior and repeating independently (all four combinations)', () => {
+    const create = (eventType: 'fixed' | 'admin', isRecurring: boolean): VoiceWriteIntent => ({
+      type: 'create',
+      summary: 'Created',
+      task: {
+        name: `${eventType}-${isRecurring}`,
+        eventType,
+        estimatedTimeInMinutes: 60,
+        isRecurring,
+        ...(isRecurring ? { recurrencePattern: 'WEEKLY' } : {}),
+        allowSplit: false,
+        priority: 'medium',
+        scheduledStartTime: '2026-10-19T07:00:00.000Z',
+        scheduledEndTime: '2026-10-19T08:00:00.000Z',
+      },
+    });
+    const cards = buildChangePreviewCards({
+      intents: [
+        create('fixed', false),
+        create('fixed', true),
+        create('admin', false),
+        create('admin', true),
+      ],
+    });
+    expect(cards.map((card) => [card.taskType, !!card.repeats])).toEqual([
+      ['fixed', false],
+      ['fixed', true],
+      ['flexible', false],
+      ['flexible', true],
+    ]);
+  });
+
   it('maps create intent to a create card with duration', () => {
     const intents: VoiceWriteIntent[] = [
       {

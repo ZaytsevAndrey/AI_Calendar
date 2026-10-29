@@ -43,6 +43,9 @@ describe('buildEventPreviewFacts', () => {
         'allowSplit',
       ]),
     );
+    // The sample task is a fixed series: type is the behavior, repeating its own row.
+    expect(googleFacts.find((fact) => fact.id === 'type')).toMatchObject({ text: 'fixed' });
+    expect(googleFacts.some((fact) => fact.id === 'recurrence')).toBe(true);
     const outlookFacts = buildEventPreviewFacts(outlook, null);
     expect(outlookFacts.find((fact) => fact.id === 'importance')).toMatchObject({ text: 'high' });
     expect(outlookFacts.find((fact) => fact.id === 'attachments')).toMatchObject({ text: 'yes' });

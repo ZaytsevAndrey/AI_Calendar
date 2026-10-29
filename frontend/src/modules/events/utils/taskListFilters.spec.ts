@@ -100,8 +100,10 @@ describe('filterScheduledTasks', () => {
     expect(filterScheduledTasks(tasks, { ...open, mode: 'recurring' }, now).map((item) => item.id)).toEqual([
       'series',
     ]);
+    // Behavior and recurrence are independent: a flexible series is in Flexible too.
     expect(filterScheduledTasks(tasks, { ...open, mode: 'flexible' }, now).map((item) => item.id)).toEqual([
       'flex',
+      'series',
       'late',
     ]);
     expect(filterScheduledTasks(tasks, { ...open, overdueOnly: true }, now).map((item) => item.id)).toEqual(['late']);
@@ -120,7 +122,18 @@ describe('filterScheduledTasks', () => {
     ).toEqual(['series', 'det']);
     expect(
       filterScheduledTasks([...tasks, detached], { ...open, mode: 'flexible' }, now).map((item) => item.id),
-    ).toEqual(['flex', 'late']);
+    ).toEqual(['flex', 'series', 'late', 'det']);
+  });
+
+  it('puts a fixed series and its day copy in both Fixed and Recurring', () => {
+    const standup = task({ id: 'standup', name: 'Standup', eventType: 'fixed', isRecurring: true });
+    const copy = task({ id: 'copy', name: 'Standup', eventType: 'fixed', seriesGroupId: 'standup' });
+    const all = [...tasks, standup, copy];
+    const ids = (mode: 'fixed' | 'flexible' | 'recurring') =>
+      filterScheduledTasks(all, { ...open, mode }, now).map((item) => item.id);
+    expect(ids('fixed')).toEqual(['fixed', 'standup', 'copy']);
+    expect(ids('recurring')).toEqual(['series', 'standup', 'copy']);
+    expect(ids('flexible')).not.toContain('standup');
   });
 
   it('does not treat a completed task with a past deadline as overdue', () => {

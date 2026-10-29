@@ -79,7 +79,16 @@ export function ChangePreviewCards({
                 </span>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ide-muted">
-                {card.taskType ? <span>{t(`tasks.preset.${card.taskType}`)}</span> : null}
+                {card.taskType || card.repeats ? (
+                  <span>
+                    {[
+                      card.taskType ? t(`tasks.preset.${card.taskType}`) : null,
+                      card.repeats ? t('tasks.preset.recurring') : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                ) : null}
                 <span>{formatTimeRange(card, timeZone, t('voice.previewUnscheduled'))}</span>
                 {card.durationMinutes != null ? (
                   <span>{t('voice.previewDuration', { count: card.durationMinutes })}</span>

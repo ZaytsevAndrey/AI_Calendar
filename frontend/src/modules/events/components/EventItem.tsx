@@ -8,12 +8,14 @@ import {
   ExternalLink,
   Inbox,
   Pencil,
+  Pin,
   Repeat,
   SkipForward,
   Trash2,
   Zap,
 } from 'lucide-react';
 import { TaskDTO } from '../../../api/tasks.api';
+import { taskTraits } from '../../tasks/schedulingTraits';
 import {
   formatDateTime,
   formatDateTimeRange,
@@ -372,6 +374,15 @@ const EventItem: React.FC<EventItemProps> = ({
               </span>
             );
           })}
+          {taskTraits(event).behavior === 'fixed' ? (
+            <span
+              className={`${iconMetaBtn} border-ide-muted/40 bg-ide-muted/10 text-ide-muted`}
+              title={t('tasks.preset.fixed')}
+              aria-label={t('tasks.preset.fixed')}
+            >
+              <Pin className="h-4 w-4" aria-hidden />
+            </span>
+          ) : null}
           {event.isRecurring ? (
             <span
               className={`${iconMetaBtn} border-ide-link/40 bg-ide-link/15 text-ide-link`}
@@ -403,6 +414,9 @@ const EventItem: React.FC<EventItemProps> = ({
           <Pill className="border-ide-text/10 bg-ide-text/5 text-ide-text">
             {formatMinutes(event.estimatedTimeInMinutes)}
           </Pill>
+          {taskTraits(event).behavior === 'fixed' ? (
+            <Pill className="border-ide-muted/40 bg-ide-muted/10 text-ide-muted">{t('tasks.preset.fixed')}</Pill>
+          ) : null}
           {event.isRecurring ? (
             <Pill className="border-ide-link/40 bg-ide-link/15 text-ide-link">{t('tasks.item.repeats')}</Pill>
           ) : null}

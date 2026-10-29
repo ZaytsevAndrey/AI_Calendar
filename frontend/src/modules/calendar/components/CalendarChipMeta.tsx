@@ -19,8 +19,7 @@ import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
 import { KindIcon, KIND_I18N_KEY } from '../kindIcons';
 import { ProviderLogo, providerLabel } from './ProviderLogo';
 import {
-  kindIsEditable,
-  schedulingKindForEvent,
+  schedulingBadgeForEvent,
   type CalendarEventOverlayDTO,
   type CalendarProviderId,
   type SchedulingKind,
@@ -75,8 +74,15 @@ export function CalendarChipMeta({
   const kindBtnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLSpanElement>(null);
 
-  const kind = schedulingKindForEvent({ event, task, overlay, isHabit });
-  const editable = kindIsEditable(kind) && !isHabit && !task?.isRecurring;
+  const { kind, repeats, editable } = schedulingBadgeForEvent({
+    event,
+    task,
+    overlay,
+    isHabit,
+  });
+  const kindTitle = repeats
+    ? `${t(KIND_I18N_KEY[kind])} · ${t(KIND_I18N_KEY.recurring)}`
+    : t(KIND_I18N_KEY[kind]);
   const eventProvider = event.provider ?? provider;
   const calMeta = event.calendarId
     ? calendarNameById?.[`${eventProvider}:${event.calendarId}`] ??
@@ -281,9 +287,11 @@ export function CalendarChipMeta({
         ) : (
           <span
             className="calendar-chip__icon-btn calendar-chip__icon-btn--static"
-            title={t(KIND_I18N_KEY[kind])}
+            title={kindTitle}
+            aria-label={kindTitle}
           >
             <KindIcon kind={kind} className="h-2.5 w-2.5" />
+            {repeats ? <KindIcon kind="recurring" className="h-2.5 w-2.5" /> : null}
           </span>
         )}
         <span
