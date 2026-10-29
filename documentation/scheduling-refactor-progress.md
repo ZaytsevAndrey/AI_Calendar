@@ -27,9 +27,9 @@ Recurrence and scheduling behavior are independent everywhere (fixed/flexible ×
 | 1 | Domain semantics: frontend `taskTraits`, occurrence-identity backfill migration, UI classification (chips, Now, preview facts, voice cards, task list, filters) | done | 2148694 |
 | 2 | PE-30: engine class, undo-of-Generate and dead Google replan code removed; live helpers in `planning-horizon.util.ts` / `scheduling-conflict.types.ts`; `POST/PATCH/DELETE /schedule` removed; e2e seed slots via `test/helpers/slots.ts` | done | 12b68ea |
 | 3 | PE-18: `PlacementStepService.writeAndPlace`; atomic `moveSeriesDay`, `moveSeriesTail`, Problematic Move (series day + one-off); retry/idempotency by occurrence identity; fixed series day skippable; failure-injection tests (`series-exception.spec.ts`) | done | 4522ac2 |
-| 4 | PE-27: one external-calendar fetch per `seatOpenHoles` pass (cached seats copied per call); drag loads only candidate slots/tasks (`placement-load.spec.ts`) | done | (stage 4 commit, see git log) |
-| 5 | Voice (structured pipeline): fixed vs flexible recurring, preferred time, occurrence/future scope — spec → goldens → code/prompt | todo | |
-| 6 | Docs and test scenarios: engine doc, specs, test matrix scenarios, invariant tests | todo | |
+| 4 | PE-27: one external-calendar fetch per `seatOpenHoles` pass (cached seats copied per call); drag loads only candidate slots/tasks (`placement-load.spec.ts`) | done | e6a4432 |
+| 5 | Voice (structured pipeline): spec EN+UK → goldens → `project-apply.ts` / contract / prompt A. Fixed = promised clock (one-off) or a span event (also recurring); preferred clock carried as flexible; date-less repeat with a clock starts on its first matching day; future-series move scope golden | done | 5b6bf7d |
+| 6 | Docs and test scenarios: `placement-engine.md` rewritten to the final code, `overview.md` scheduling section, incremental spec rule 8, test matrix SD-01…SD-26 + coverage notes moved off the deleted engine spec, roadmap §50 closed + archive, README; invariant tests (`scheduling-invariants.spec.ts`, 3 seeds) | done | (stage 6 commit, see git log) |
 
 ## Test baseline (before stage 1, commit 453770f)
 
@@ -79,10 +79,22 @@ Script used: scratchpad `baseline.sh` (runs all of the above); rerun after each 
 3. **PE-30 scope** — besides `run`, `ScheduleJobService` lost every member only reachable from it (undo of Generate, warnings → Problematic/Unscheduled, Google replan reconcile, wipe range). Remaining job service: mutation-job lifecycle, `processNextPending` (marks leftovers failed), `deleteSyncedGoogleEventsForTask`.
 4. **Found in stage 2 for stage 3:** `TasksService.skipOccurrence` refuses every fixed task, so a day of a fixed series cannot be skipped or dragged alone (`moveSeriesDay` skips first). Fix: refuse only fixed one-offs.
 
+## Decisions (stages 5–6)
+
+9. **Voice semantics** (spec rules 1–3, structured path `vnext/state/project-apply.ts`): clock role `start` = promised (fixed for a one-off; end = start + duration when not given); a span that is the event (`start` + `end`, not `spanRole: window`) = fixed, also for a series; a repeat with only a clock = flexible series with that clock; role `preferred` = flexible preferred start (before: refused). Every create now sets `eventType` explicitly, so the preview card and the written task agree. A preferred clock on a non-create action is refused (`unrepresented_constraint`) instead of being dropped. The legacy parser (`voice-parse.util.ts`, roadmap §49) is unchanged: it still forces fixed → non-recurring; it only runs with `VOICE_TURN_ENGINE=legacy`.
+10. **Lost-task invariant** counts a task whose placement returned a conflict sheet as "waiting for the user", not lost (spec: no answer → Problematic).
+
+## Final status
+
+All stages done. Branch `refactor/scheduling-domain`: 2148694 → 12b68ea → 4522ac2 → e6a4432 → 5b6bf7d → stage 6 commit. Nothing pushed; nothing merged into master.
+
+Remaining risks / not done (also in `placement-engine.md` §12):
+- Background placement after `TasksService.create/update` is an in-memory promise; a crash in between leaves a saved task without a slot.
+- The user lock is per process.
+- Slot row ids of a series day are not stable across horizon rewrites (identity = series + day).
+- Voice behavior changes need a live-model run (roadmap §39): the prompt got two concept rules; offline goldens pass.
+- Pre-existing failures unchanged: 13 historical `voice/vnext` suites (77 tests), 5 `voice-agent.e2e-spec.ts` cases.
+
 ## Current work
 
-Stage 5 (voice).
-
-## Next steps
-
-Stage 3 design: `PlacementStepService.writeAndPlace(userId, write, accept)` — user lock + one transaction: prefetch external seats before the transaction, run `write` (copy / skip / truncate) on the transaction repos, place inside it, roll back when `accept(plan)` is false; Google after commit. Idempotency by occurrence identity (existing copy for `seriesGroupId` + `originalOccurrenceYmd`; existing tail series for `parentSeriesId` + split day).
+None — refactor complete. Next session: push the branch and open a PR after review, or continue with the risks above.

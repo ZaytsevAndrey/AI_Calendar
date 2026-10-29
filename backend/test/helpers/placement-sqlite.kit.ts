@@ -73,6 +73,9 @@ export async function createPlacementKit(opts: {
   const pendingGoogleWrites = {
     syncTask: jest.fn(),
     syncTaskSoon: jest.fn(),
+    enqueue: jest.fn(async () => undefined),
+    discardPendingUpserts: jest.fn(async () => undefined),
+    waitForInflight: jest.fn(async () => undefined),
   };
 
   /** External calendars (Google / Microsoft) seen by placement. */
@@ -105,6 +108,7 @@ export async function createPlacementKit(opts: {
     setMutationStage: jest.fn(async () => undefined),
     completeMutationJob: jest.fn(async (id: string) => jobDone.get(id)?.()),
     failMutationJob: jest.fn(async (id: string) => jobDone.get(id)?.()),
+    deleteSyncedGoogleEventsForTask: jest.fn(async () => undefined),
     settle: () => Promise.all(pendingJobs),
   };
   const tasksService = new TasksService(
