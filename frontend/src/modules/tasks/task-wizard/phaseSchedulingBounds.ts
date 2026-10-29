@@ -28,7 +28,7 @@ function toMinutes(hhmm: string): number {
 }
 
 export function getPhaseSchedulingTimeBounds(
-  phase: PhaseDTO | undefined,
+  phase: Pick<PhaseDTO, 'startTime' | 'endTime'> | undefined,
 ): PhaseSchedulingTimeBounds | null {
   if (!phase?.startTime?.trim() || !phase?.endTime?.trim()) return null;
   const startHHMM = padHHMM(phase.startTime);

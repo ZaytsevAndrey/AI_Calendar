@@ -819,6 +819,7 @@ export class PlacementStepService {
     if (
       !opts?.seriesDay &&
       task.isRecurring &&
+      task.eventType !== TaskEventType.FIXED &&
       opts?.expandSeries &&
       plan.outcome === 'problematic' &&
       !opts.searchHole &&
@@ -1202,9 +1203,10 @@ export class PlacementStepService {
     const horizon = planningHorizonRange(settings, now);
     const durationMinutes = Math.max(
       1,
-      opts?.durationMinutes ?? task.estimatedTimeInMinutes ?? 30,
+      fixedSlotMinutes(task) ?? opts?.durationMinutes ?? task.estimatedTimeInMinutes ?? 30,
     );
     const durationMs = durationMinutes * 60_000;
+    const exactClock = task.eventType === TaskEventType.FIXED;
     const preferredHmHint = opts?.preferredStart
       ? normalizeClockHm(
           localHm(opts.preferredStart.toISOString(), timeZone),
@@ -1215,7 +1217,8 @@ export class PlacementStepService {
           )
         : null;
 
-    const anchorYmd = localYmd(now.toISOString(), timeZone);
+    // The series starts on its From day when that is still ahead.
+    const anchorYmd = seriesStartYmd(task, now, timeZone);
     const horizonEndYmd = localYmd(horizon.end.toISOString(), timeZone);
     const untilMs = task.deadline
       ? new Date(task.deadline).getTime()
@@ -1277,6 +1280,7 @@ export class PlacementStepService {
         'pass1',
         cachedExternalSeats,
         durationMinutes,
+        exactClock,
       );
       const hm = hmOf(plan);
       dayPlans.push({ ymd, plan, hm });
@@ -1341,6 +1345,7 @@ export class PlacementStepService {
           'unify',
           cachedExternalSeats,
           durationMinutes,
+          exactClock,
         );
         const retryHm = hmOf(retry);
         if (retryHm === primaryHm) {
@@ -1584,6 +1589,7 @@ export class PlacementStepService {
     phase: 'pass1' | 'unify' = 'pass1',
     cachedExternalSeats?: PlacementSeat[],
     durationMinutes?: number,
+    exactClock = false,
   ): Promise<PlacementPlan> {
     const googleOpts =
       cachedExternalSeats != null ? { cachedExternalSeats } : {};
@@ -1611,6 +1617,15 @@ export class PlacementStepService {
           `[series-horizon] ${phase} path=preferred_exact ymd=${ymd} want=${preferredHm}`,
         );
         return preferredPlan;
+      }
+      if (exactClock) {
+        // Fixed series: that day keeps its clock or parks; no nearby hole.
+        this.logger.log(
+          `[series-horizon] ${phase} path=fixed_miss ymd=${ymd} want=${preferredHm}`,
+        );
+        return preferredPlan.outcome === 'seated'
+          ? { outcome: 'problematic', reason: 'preferred_on_fixed' }
+          : preferredPlan;
       }
       this.logger.log(
         `[series-horizon] ${phase} path=preferred_miss→hole ymd=${ymd} want=${preferredHm} ` +
@@ -1681,8 +1696,11 @@ export class PlacementStepService {
         )
       : localYmd(new Date(task.scheduledStartTime).toISOString(), timeZone);
     const horizonEndYmd = localYmd(horizon.end.toISOString(), timeZone);
-    const durationMs = Math.max(1, task.estimatedTimeInMinutes || 30) * 60_000;
+    const durationMs =
+      Math.max(1, fixedSlotMinutes(task) ?? (task.estimatedTimeInMinutes || 30)) * 60_000;
     const durationMinutes = durationMs / 60_000;
+    const exactClock = task.eventType === TaskEventType.FIXED;
+    const startYmd = seriesStartYmd(task, new Date(), timeZone);
     const untilMs = task.deadline
       ? new Date(task.deadline).getTime()
       : Number.POSITIVE_INFINITY;
@@ -1693,7 +1711,7 @@ export class PlacementStepService {
       weekDays: task.recurrenceWeekDays,
       skippedYmds: task.skippedOccurrenceYmds,
     }).filter((ymd) => {
-      if (seatedYmds.has(ymd)) return false;
+      if (seatedYmds.has(ymd) || ymd < startYmd) return false;
       const startMs = new Date(
         localDateTimeIso(ymd, preferredHm, timeZone),
       ).getTime();
@@ -1728,6 +1746,8 @@ export class PlacementStepService {
         timeZone,
         'pass1',
         cachedExternalSeats,
+        durationMinutes,
+        exactClock,
       );
       this.logger.log(
         `[series-horizon] expand day ymd=${ymd} ${JSON.stringify(summarizePlan(plan, timeZone))}`,
@@ -2779,6 +2799,29 @@ function overlapsMs(a: MsInterval, b: MsInterval): boolean {
   return a.start < b.end && b.start < a.end;
 }
 
+/** A fixed task's length is its slot, not the estimate field. */
+function fixedSlotMinutes(task: Task): number | null {
+  if (task.eventType !== TaskEventType.FIXED) return null;
+  if (!task.scheduledStartTime || !task.scheduledEndTime) return null;
+  const minutes = Math.round(
+    (new Date(task.scheduledEndTime).getTime() - new Date(task.scheduledStartTime).getTime()) /
+      60_000,
+  );
+  return minutes > 0 ? minutes : null;
+}
+
+/** First civil day a series may use: today, or its From day when that is later. */
+export function seriesStartYmd(
+  task: Pick<Task, 'earliestStartTime'>,
+  now: Date,
+  timeZone: string,
+): string {
+  const today = localYmd(now.toISOString(), timeZone);
+  if (!task.earliestStartTime) return today;
+  const from = localYmd(new Date(task.earliestStartTime).toISOString(), timeZone);
+  return from > today ? from : today;
+}
+
 function claimInterval(
   task: Task,
   durationMinutes: number,
@@ -2787,10 +2830,14 @@ function claimInterval(
   const durationMs = durationMinutes * 60_000;
   if (task.eventType === TaskEventType.FIXED) {
     if (!task.scheduledStartTime || !task.scheduledEndTime) return null;
-    return {
-      start: new Date(task.scheduledStartTime).getTime(),
-      end: new Date(task.scheduledEndTime).getTime(),
-    };
+    const start = new Date(task.scheduledStartTime).getTime();
+    const end = new Date(task.scheduledEndTime).getTime();
+    // A fixed series day is the same clock on another civil day.
+    if (task.isRecurring && preferredStart && Number.isFinite(preferredStart.getTime())) {
+      const dayStart = preferredStart.getTime();
+      return { start: dayStart, end: dayStart + (end - start) };
+    }
+    return { start, end };
   }
   const start = preferredStart
     ? preferredStart.getTime()

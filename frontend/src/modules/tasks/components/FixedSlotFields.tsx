@@ -10,7 +10,7 @@ import {
   type FixedSlotFields as FixedSlotFormFields,
 } from '../task-wizard/fixedSlot';
 
-const lbl = 'mb-0.5 block text-xs font-medium text-ide-text';
+const labelText = 'block text-xs font-medium text-ide-text';
 
 type Props = {
   startValue?: string;
@@ -19,6 +19,9 @@ type Props = {
   startError?: string;
   endError?: string;
   defaultDurationMinutes: number;
+  /** Civil day to preselect while no slot is set (carried over from another tab). */
+  suggestedDay?: string;
+  help?: React.ReactNode;
 };
 
 export function FixedSlotFields({
@@ -28,9 +31,15 @@ export function FixedSlotFields({
   startError,
   endError,
   defaultDurationMinutes,
+  suggestedDay,
+  help,
 }: Props) {
   const { t } = useTranslation();
-  const [draft, setDraft] = useState<FixedSlotDraft>(() => fixedSlotDraft(startValue, endValue));
+  const [draft, setDraft] = useState<FixedSlotDraft>(() =>
+    !startValue && !endValue && suggestedDay
+      ? { startDate: suggestedDay, endDate: suggestedDay, start: '', end: '' }
+      : fixedSlotDraft(startValue, endValue),
+  );
   const published = useRef<FixedSlotFormFields>({
     scheduledStartTime: startValue ?? '',
     scheduledEndTime: endValue ?? '',
@@ -68,9 +77,12 @@ export function FixedSlotFields({
 
   return (
     <div>
-      <span id="task-form-slot-label" className={lbl}>
-        {t('tasks.form.when')} <span className="text-ide-error">*</span>
-      </span>
+      <div className="mb-0.5 flex items-center gap-1">
+        <span id="task-form-slot-label" className={labelText}>
+          {t('tasks.form.when')} <span className="text-ide-error">*</span>
+        </span>
+        {help}
+      </div>
       <DateTimeRangeField
         id="task-form-slot"
         labelledBy="task-form-slot-label"

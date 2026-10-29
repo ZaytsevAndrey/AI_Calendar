@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   useCreateEventMutation,
@@ -87,8 +87,16 @@ export function useEventEditor() {
     updateReminderState.isLoading;
   const isReminderDeleting = deleteReminderState.isLoading;
 
+  const formDirtyRef = useRef(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const handleDirtyChange = useCallback((dirty: boolean) => {
+    formDirtyRef.current = dirty;
+  }, []);
+
   const close = () => {
     if (isSubmitting || isDeleting || isReminderDeleting) return;
+    formDirtyRef.current = false;
+    setDiscardOpen(false);
     setOpen(false);
     setEditingEvent(null);
     setEditingReminder(null);
@@ -217,7 +225,7 @@ export function useEventEditor() {
   const canSkipOccurrence = ((): boolean => {
     if (!editingEvent || !occurrence?.startIso) return false;
     if (editingEvent.isFixedExternal || editingEvent.isUnscheduled) return false;
-    if (editingEvent.eventType === 'fixed') return false;
+    if (editingEvent.eventType === 'fixed' && !editingEvent.isRecurring) return false;
     if (editingEvent.status === 'completed' || editingEvent.status === 'canceled') {
       return false;
     }
@@ -387,6 +395,16 @@ export function useEventEditor() {
     : undefined;
   const showingReminder = creatingReminder || !!editingReminder;
 
+  /** Backdrop and Cancel ask first when the task form holds unsaved input. */
+  const requestClose = () => {
+    if (isSubmitting || isDeleting || isReminderDeleting) return;
+    if (!showingReminder && formDirtyRef.current) {
+      setDiscardOpen(true);
+      return;
+    }
+    close();
+  };
+
   const editorTitle = showingReminder
     ? editingReminder
       ? t('dayReminders.edit')
@@ -403,7 +421,7 @@ export function useEventEditor() {
     <>
       <Modal
         open={open}
-        onClose={close}
+        onClose={requestClose}
         title={editorTitle}
         maxWidthClass="max-w-xl"
         footer={null}
@@ -440,7 +458,8 @@ export function useEventEditor() {
             phases={phases}
             onSubmit={submit}
             isSubmitting={isSubmitting}
-            onCancel={close}
+            onCancel={requestClose}
+            onDirtyChange={handleDirtyChange}
             onSkipOccurrence={
               actionsMode === 'full' && canSkipOccurrence
                 ? handleSkipOccurrence
@@ -502,6 +521,36 @@ export function useEventEditor() {
                 name: editingEvent?.name ?? t('tasks.thisTask'),
               })}
         </p>
+      </Modal>
+      <Modal
+        open={discardOpen}
+        onClose={() => setDiscardOpen(false)}
+        title={t('tasks.form.discardTitle')}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size={dialogButtonSize}
+              onClick={() => setDiscardOpen(false)}
+              className="w-full sm:w-auto"
+            >
+              {t('tasks.form.keepEditing')}
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              size={dialogButtonSize}
+              onClick={close}
+              className="w-full sm:w-auto"
+              icon={X}
+            >
+              {t('tasks.form.discard')}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-ide-text">{t('tasks.form.discardBody')}</p>
       </Modal>
       <SeriesDeleteHost />
     </>

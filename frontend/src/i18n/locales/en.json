@@ -608,6 +608,11 @@
     "habits": "Habits",
     "allHabits": "All habits"
   },
+  "places": {
+    "placeholder": "Address or place",
+    "openMap": "Open on map",
+    "searching": "Searching…"
+  },
   "tasks": {
     "title": "Tasks",
     "unscheduled": "Later",
@@ -646,8 +651,6 @@
       "anyTime": "Any time",
       "fixedTime": "Fixed time",
       "recurring": "Recurring",
-      "allowSplit": "Allow split",
-      "allowSplitHint": "Not available yet",
       "date": "Date",
       "dateEmpty": "Choose a date",
       "dateClear": "Clear date",
@@ -676,7 +679,79 @@
       "moreOptions": "+ More options",
       "skipOccurrence": "Skip this occurrence",
       "createTask": "Create task",
-      "saveChanges": "Save changes"
+      "saveChanges": "Save changes",
+      "seriesDates": "Series dates",
+      "seriesUntil": "Repeat until",
+      "seriesNoEnd": "No end date",
+      "seriesEditNotice": "Changes apply to the whole series. To change one day only, drag it in the calendar or skip it.",
+      "quickWindow": {
+        "today": "Today",
+        "tomorrow": "Tomorrow",
+        "thisWeek": "This week"
+      },
+      "discardTitle": "Discard changes?",
+      "discardBody": "What you entered in this form will be lost.",
+      "keepEditing": "Keep editing",
+      "discard": "Discard",
+      "helpAbout": "About {{field}}",
+      "help": {
+        "name": "Shown in your calendar and, once it has a time, in Google Calendar.",
+        "status": "Completed and canceled tasks are not placed again. Events already in Google Calendar stay there.",
+        "phase": "A part of your day from Settings. The task is placed only inside that phase's hours and days. Any time = between wake-up and sleep.",
+        "when": "Pick the first day, then the last (or the same day again). The start clock is on the first day, the end clock on the last. Times use {{timeZone}}.",
+        "repeat": "Every week: on the days below (none = every day). Bi-weekly: those days every other week. Monthly: once a month, on the date of the first occurrence.",
+        "duration": "How long it takes. The planner looks for a free gap at least this long.",
+        "preferredStart": "Optional. The task takes this time and shifts only a flexible task it overlaps. If a fixed event is there, you are asked. Empty = the nearest free gap, nobody is moved.",
+        "seriesDates": "When the series starts and ends. Empty = from now, with no end date. Days use {{timeZone}}.",
+        "priority": "For your own sorting. The planner does not use it to decide which task gets a slot.",
+        "repeatFixed": "Every occurrence keeps this exact time and length; the planner never moves it. A day where another fixed item already sits goes to Problematic.",
+        "seriesUntil": "Last day of the series. Empty = no end date. Days use {{timeZone}}."
+      }
+    },
+    "typeInfo": {
+      "dontShowAgain": "Don't show again",
+      "hide": "Hide",
+      "show": "About this task type",
+      "fixed": {
+        "title": "Fixed: exact time",
+        "body": "An appointment with a set start and end: a meeting, a doctor's visit, a flight.",
+        "points": [
+          "The planner never moves it. Other tasks are placed around it.",
+          "No phase and no date window: the time you pick is the time.",
+          "Can repeat: each occurrence keeps the same time.",
+          "Syncs to Google Calendar as a regular event.",
+          "If it overlaps another fixed item, you are asked what to do."
+        ]
+      },
+      "flexible": {
+        "title": "Flexible: the planner finds the time",
+        "body": "Something that needs time, but not at a precise hour.",
+        "points": [
+          "Placed in a free gap inside the phase and the dates you allow.",
+          "A preferred start is a wish: it takes that time and shifts only the flexible task it overlaps.",
+          "If nothing fits in the dates, it goes to Later with a warning.",
+          "Syncs to Google Calendar once it has a slot."
+        ]
+      },
+      "recurring": {
+        "title": "Recurring: a habit or routine",
+        "body": "Something that repeats on a pattern.",
+        "points": [
+          "Every occurrence up to the planning horizon is placed when you save.",
+          "Runs only on the days you pick and the phase's days.",
+          "A day that doesn't fit is skipped. The rest of the series stays.",
+          "Syncs to Google Calendar as one repeating series."
+        ]
+      },
+      "unscheduled": {
+        "title": "Later: no time yet",
+        "body": "An idea or to-do you'll get to when you have time.",
+        "points": [
+          "Not placed in the calendar and not synced to Google Calendar.",
+          "Waits in Later on the Tasks page until you press Schedule.",
+          "Only a name is needed."
+        ]
+      }
     },
     "preset": {
       "flexible": "Flexible",
@@ -700,7 +775,14 @@
       "daily": "Daily",
       "weekly": "Weekly",
       "biweekly": "Bi-weekly",
-      "monthly": "Monthly"
+      "monthly": "Monthly",
+      "onDays": "Every week on chosen days",
+      "onceAWeek": "Once a week",
+      "workdays": "Weekdays",
+      "everyDay": "Every day",
+      "monthlyOnDay": "On day {{day}} of each month.",
+      "monthlyFirstDay": "On the date of the first occurrence, each month.",
+      "none": "Does not repeat"
     },
     "weekday": {
       "mon": "Mon",

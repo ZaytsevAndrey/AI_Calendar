@@ -543,9 +543,20 @@ export class TasksService {
       }
     }
 
+    // A fixed slot is its own length; a stale estimate would shorten series days.
+    const fixedMinutes =
+      eventType === TaskEventType.FIXED
+        ? Math.round(
+            (new Date(createTaskDto.scheduledEndTime!).getTime() -
+              new Date(createTaskDto.scheduledStartTime!).getTime()) /
+              60_000,
+          )
+        : 0;
     const estimatedTimeInMinutes =
-      createTaskDto.estimatedTimeInMinutes ??
-      (await this.defaultTaskDurationMinutes(userId));
+      fixedMinutes > 0
+        ? fixedMinutes
+        : createTaskDto.estimatedTimeInMinutes ??
+          (await this.defaultTaskDurationMinutes(userId));
 
     const {
       phaseIds,

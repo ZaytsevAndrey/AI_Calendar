@@ -8,6 +8,7 @@ import {
 } from '../googleEventSettings';
 import { Input } from 'ui/Input';
 import { Select } from 'ui/Select';
+import { LocationField } from './LocationField';
 
 const lbl = 'mb-0.5 block text-xs font-medium text-ide-text';
 
@@ -24,12 +25,15 @@ type GoogleEventSettingsFieldsProps = {
   value: GoogleEventSettingsValue;
   onChange: (next: GoogleEventSettingsValue) => void;
   allowEmptyColor?: boolean;
+  /** The host form shows location itself. */
+  hideLocation?: boolean;
 };
 
 export function GoogleEventSettingsFields({
   value,
   onChange,
   allowEmptyColor = false,
+  hideLocation = false,
 }: GoogleEventSettingsFieldsProps) {
   const { t } = useTranslation();
   const patch = (partial: Partial<GoogleEventSettingsValue>) => onChange({ ...value, ...partial });
@@ -50,17 +54,18 @@ export function GoogleEventSettingsFields({
 
   return (
     <div className="space-y-3">
-      <div>
-        <label htmlFor="google-event-location" className={lbl}>
-          {t('calendar.eventSettings.location')}
-        </label>
-        <Input
-          id="google-event-location"
-          size="sm"
-          value={value.location}
-          onChange={(e) => patch({ location: e.target.value })}
-        />
-      </div>
+      {hideLocation ? null : (
+        <div>
+          <label htmlFor="google-event-location" className={lbl}>
+            {t('calendar.eventSettings.location')}
+          </label>
+          <LocationField
+            id="google-event-location"
+            value={value.location}
+            onChange={(location) => patch({ location })}
+          />
+        </div>
+      )}
       <div>
         <span className={lbl}>{t('calendar.eventSettings.color')}</span>
         <div className="flex flex-wrap gap-1.5">

@@ -4,7 +4,7 @@ import {
   initialFormValues,
   windowSpansMultipleDays,
 } from './buildPayload';
-import { presetPatch } from './constants';
+import { matchPreset, presetPatch } from './constants';
 import type { TaskFormValues } from './schema';
 
 const NICOSIA = 'Asia/Nicosia';
@@ -306,5 +306,126 @@ describe('formValuesFromCreatePayload', () => {
     expect(values.scheduledStartTime).toBe('2026-10-24T07:00');
     expect(values.scheduledEndTime).toBe('2026-10-24T08:30');
     expect(values.estimatedTimeInMinutes).toBe(90);
+  });
+});
+
+describe('edit keeps the seated slot', () => {
+  const seated = {
+    id: 't2',
+    name: 'Wash the car',
+    eventType: 'admin' as const,
+    estimatedTimeInMinutes: 30,
+    isRecurring: false,
+    allowSplit: true,
+    priority: 'medium' as const,
+    status: 'todo' as const,
+    // Fri 16 Oct 2026, 14:00 in Nicosia.
+    scheduledStartTime: '2026-10-16T11:00:00.000Z',
+    scheduledEndTime: '2026-10-16T11:30:00.000Z',
+    createdAt: '',
+    updatedAt: '',
+  };
+
+  it('a rename sends the same start, not today at that clock', () => {
+    const values = initialFormValues(seated, undefined, NICOSIA);
+    const payload = buildTaskPayload({ ...values, name: 'Wash the bike' }, NICOSIA);
+    expect(new Date(payload.scheduledStartTime!).toISOString()).toBe('2026-10-16T11:00:00.000Z');
+    expect(new Date(payload.scheduledEndTime!).toISOString()).toBe('2026-10-16T11:30:00.000Z');
+  });
+
+  it('a new clock stays on the seated day', () => {
+    const values = initialFormValues(seated, undefined, NICOSIA);
+    const payload = buildTaskPayload({ ...values, preferredStartTime: '16:00' }, NICOSIA);
+    expect(payload.scheduledStartTime).toBe('2026-10-16T16:00:00+03:00');
+  });
+
+  it('a window that no longer holds the seat moves the clock to the window', () => {
+    const values = initialFormValues(seated, undefined, NICOSIA);
+    const payload = buildTaskPayload(
+      {
+        ...values,
+        earliestStartTime: '2026-10-20T00:00',
+        deadline: '2026-10-21T23:59',
+      },
+      NICOSIA,
+    );
+    expect(payload.scheduledStartTime).toBe('2026-10-20T14:00:00+03:00');
+  });
+});
+
+describe('fixed duration', () => {
+  it('comes from the slot, not the stale form number', () => {
+    const payload = buildTaskPayload(
+      flexible({
+        isFixed: true,
+        estimatedTimeInMinutes: 30,
+        scheduledStartTime: '2026-10-24T10:00',
+        scheduledEndTime: '2026-10-24T12:00',
+      }),
+      NICOSIA,
+    );
+    expect(payload.estimatedTimeInMinutes).toBe(120);
+  });
+});
+
+describe('fixed series', () => {
+  const series = () =>
+    flexible({
+      isFixed: true,
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      recurrenceWeekDays: [1],
+      scheduledStartTime: '2026-11-02T10:00',
+      scheduledEndTime: '2026-11-02T11:00',
+      deadline: '2026-11-30T23:59',
+    });
+
+  it('keeps fixed, repeats, starts on the slot day and ends on Until', () => {
+    const payload = buildTaskPayload(series(), NICOSIA);
+    expect(payload).toMatchObject({
+      eventType: 'fixed',
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      recurrenceWeekDays: [1],
+      earliestStartTime: '2026-11-02T00:00:00+02:00',
+      deadline: '2026-11-30T23:59:00+02:00',
+      estimatedTimeInMinutes: 60,
+      phaseIds: [],
+    });
+    expect(payload.scheduledStartTime).toBe('2026-11-02T10:00:00+02:00');
+  });
+
+  it('a one-off fixed still drops the window', () => {
+    const payload = buildTaskPayload({ ...series(), isRecurring: false }, NICOSIA);
+    expect(payload.isRecurring).toBe(false);
+    expect(payload.deadline).toBeNull();
+    expect(payload.earliestStartTime).toBeNull();
+  });
+
+  it('opens on the Fixed tab with Repeat and Until', () => {
+    const values = initialFormValues(
+      {
+        id: 's1',
+        name: 'Standup',
+        status: 'todo',
+        eventType: 'fixed',
+        estimatedTimeInMinutes: 60,
+        isRecurring: true,
+        recurrencePattern: 'DAILY',
+        recurrenceWeekDays: [1],
+        allowSplit: false,
+        priority: 'medium',
+        scheduledStartTime: '2026-11-02T08:00:00.000Z',
+        scheduledEndTime: '2026-11-02T09:00:00.000Z',
+        deadline: '2026-11-30T21:59:00.000Z',
+        createdAt: '',
+        updatedAt: '',
+      },
+      undefined,
+      NICOSIA,
+    );
+    expect(matchPreset(values as never)).toBe('fixed');
+    expect(values.isRecurring).toBe(true);
+    expect(values.deadline).toBe('2026-11-30T23:59');
   });
 });

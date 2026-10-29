@@ -13,6 +13,7 @@ import { VoiceModule } from './modules/voice/voice.module';
 import { HabitsModule } from './modules/habits/habits.module';
 import { RemindersModule } from './modules/reminders/reminders.module';
 import { DayRemindersModule } from './modules/day-reminders/day-reminders.module';
+import { PlacesModule } from './modules/places/places.module';
 import { CalendarOverlaysModule } from './modules/calendar-overlays/calendar-overlays.module';
 import { CalendarProvidersModule } from './modules/calendar-providers/calendar-providers.module';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
@@ -52,6 +53,7 @@ import { createTypeOrmOptions } from './database/typeorm.config';
     HabitsModule,
     RemindersModule,
     DayRemindersModule,
+    PlacesModule,
   ],
 })
 export class AppModule implements NestModule {

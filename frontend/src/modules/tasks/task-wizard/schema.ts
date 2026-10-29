@@ -26,6 +26,8 @@ export const taskFormSchema = z
     scheduledStartTime: z.string().optional(),
     scheduledEndTime: z.string().optional(),
     preferredStartTime: z.string().optional(),
+    /** ISO start of the slot the task already holds (edit only). Not shown. */
+    seatedStartTime: z.string().optional(),
     location: z.string().optional(),
     googleColorId: z.string().optional(),
     googleVisibility: z.string().optional(),
@@ -70,6 +72,26 @@ export const taskFormSchema = z
           code: z.ZodIssueCode.custom,
           message: i18n.t('tasks.validation.endAfterStart'),
           path: ['scheduledEndTime'],
+        });
+      }
+      if (data.isRecurring && !data.recurrencePattern?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: i18n.t('tasks.validation.recurrenceRequired'),
+          path: ['recurrencePattern'],
+        });
+      }
+      // A fixed series may not end before its first slot ends.
+      if (
+        data.isRecurring &&
+        data.deadline?.trim() &&
+        data.scheduledEndTime?.trim() &&
+        data.deadline.trim() < data.scheduledEndTime.trim()
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: i18n.t('tasks.validation.untilAfterFrom'),
+          path: ['deadline'],
         });
       }
       return;

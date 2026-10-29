@@ -121,32 +121,27 @@ const FLEXIBLE_DEFAULTS: Pick<
   recurrenceWeekDays: [],
 };
 
-export const RECURRENCE_PATTERN_OPTIONS = [
-  {
-    value: 'DAILY' as const,
-    get label() {
-      return i18n.t('tasks.recurrence.daily');
-    },
-  },
-  {
-    value: 'WEEKLY' as const,
-    get label() {
-      return i18n.t('tasks.recurrence.weekly');
-    },
-  },
-  {
-    value: 'BIWEEKLY' as const,
-    get label() {
-      return i18n.t('tasks.recurrence.biweekly');
-    },
-  },
-  {
-    value: 'MONTHLY' as const,
-    get label() {
-      return i18n.t('tasks.recurrence.monthly');
-    },
-  },
-];
+type RecurrenceOption = { value: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'; label: string };
+
+/**
+ * DAILY with days and WEEKLY with days expand to the same days, so a new task
+ * gets one "on chosen days" choice. WEEKLY stays listed only for a task that
+ * already has it: rewriting the pattern would count as a schedule change.
+ */
+export function recurrenceOptionsFor(current?: string): RecurrenceOption[] {
+  const options: RecurrenceOption[] = [
+    { value: 'DAILY', label: i18n.t('tasks.recurrence.onDays') },
+    { value: 'BIWEEKLY', label: i18n.t('tasks.recurrence.biweekly') },
+    { value: 'MONTHLY', label: i18n.t('tasks.recurrence.monthly') },
+  ];
+  if (current === 'WEEKLY') {
+    options.splice(1, 0, { value: 'WEEKLY', label: i18n.t('tasks.recurrence.onceAWeek') });
+  }
+  return options;
+}
+
+export const WORKDAYS = [1, 2, 3, 4, 5];
+export const ALL_DAYS = [1, 2, 3, 4, 5, 6, 0];
 
 export const WEEKDAY_OPTIONS = [
   {
@@ -234,7 +229,7 @@ export function presetPatch(
       allowSplit: true,
       estimatedTimeInMinutes: minutes,
       recurrencePattern: 'DAILY',
-      recurrenceWeekDays: [1, 2, 3, 4, 5],
+      recurrenceWeekDays: [...WORKDAYS],
       scheduledStartTime: '',
       scheduledEndTime: '',
     };
@@ -255,8 +250,7 @@ export function matchPreset(
   >,
 ): TaskPresetId | null {
   if (values.isUnscheduled) return 'unscheduled';
-  if (values.isFixed && !values.isRecurring) return 'fixed';
-  if (!values.isFixed && values.isRecurring) return 'recurring';
-  if (!values.isFixed && !values.isRecurring) return 'flexible';
-  return null;
+  // A repeating fixed slot is still the Fixed tab with Repeat on.
+  if (values.isFixed) return 'fixed';
+  return values.isRecurring ? 'recurring' : 'flexible';
 }

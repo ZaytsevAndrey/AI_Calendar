@@ -18,6 +18,7 @@ import { phasesApi } from '../api/phasesApi';
 import { eventsApi } from '../api/eventsApi';
 import { userSettingsApi } from '../api/userSettingsApi';
 import { dayRemindersApi } from '../api/dayReminders.api';
+import { placesApi } from '../api/places.api';
 
 import logger from './middlewares/logger';
 
@@ -34,6 +35,7 @@ const rootReducer = combineReducers({
     [eventsApi.reducerPath]: eventsApi.reducer,
     [userSettingsApi.reducerPath]: userSettingsApi.reducer,
     [dayRemindersApi.reducerPath]: dayRemindersApi.reducer,
+    [placesApi.reducerPath]: placesApi.reducer,
 });
 
 const persistedReducer = persistReducer(persistConfig, rootReducer);
@@ -53,6 +55,7 @@ export const store = configureStore({
             eventsApi.middleware,
             userSettingsApi.middleware,
             dayRemindersApi.middleware,
+            placesApi.middleware,
         ),
 });
 

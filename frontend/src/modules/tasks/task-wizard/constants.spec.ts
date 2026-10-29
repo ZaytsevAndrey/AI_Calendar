@@ -1,4 +1,4 @@
-import { matchPreset, presetPatch } from './constants';
+import { matchPreset, presetPatch, recurrenceOptionsFor } from './constants';
 
 describe('presetPatch', () => {
   it('turns on the unscheduled inbox flags and clears slot fields', () => {
@@ -55,5 +55,15 @@ describe('matchPreset', () => {
         recurrencePattern: undefined,
       }),
     ).toBe('flexible');
+  });
+});
+
+describe('recurrenceOptionsFor', () => {
+  it('offers one weekly choice to a new task', () => {
+    expect(recurrenceOptionsFor().map((o) => o.value)).toEqual(['DAILY', 'BIWEEKLY', 'MONTHLY']);
+  });
+
+  it('keeps WEEKLY for a task that already has it', () => {
+    expect(recurrenceOptionsFor('WEEKLY').map((o) => o.value)).toContain('WEEKLY');
   });
 });
