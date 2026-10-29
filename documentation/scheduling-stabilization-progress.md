@@ -46,7 +46,8 @@ Runtime assumptions found: production runs one Render instance, Neon Postgres, `
 | 9 | Phase 2: idempotent task create (Idempotency-Key) | done | 3e90e3f |
 | 10 | Phase 2: Postgres tests in CI; placement on Postgres | done | 6ea350b |
 | 11 | Phase 2: placement edge cases; DST wall-clock fix | done | 794a8f6 |
-| 12 | Phase 2: Google sync edge cases; durable post-placement sync | done | (stage 12 commit) |
+| 12 | Phase 2: Google sync edge cases; durable post-placement sync | done | c7206f7 |
+| 13 | Phase 2: deployment rehearsal on a master-shaped database; docs; .env.example | done (Neon blocked) | (stage 13 commit) |
 
 ## Stage A — durable placement (done)
 
@@ -230,6 +231,17 @@ Investigated, with evidence:
 Tests: `pending-google-write.queue.spec` (14: + durable sync success / failure / killed mid-call then sent by the next instance; revoked refresh; remote deletion; two instances one event; partial delete), `google-calendar.service.spec` (refresh rejected → not connected, tokens kept).
 
 Not verified against the real Google API (no test account in this environment): the 409 answer for a duplicate client id and the `cancelled` status of a deleted event are taken from Google's documented behavior and mocked in tests.
+
+### Stage 13 — migration and deployment readiness (done; Neon blocked)
+
+- **Upgrade from the real production shape:** a Postgres 16 database was built by `TYPEORM_SYNC` from `master`'s entities (`git archive master`, 17 tables) with sample rows (series, parked copy, slot, a pre-queue running job, a queued Google write). The production build of this branch (`npm run build:backend`, `node dist/main.js`, as Render runs it) booted on it: baseline recorded, three migrations ran, **no drift** against this branch's entities, every row kept, copy day backfilled, stale job failed, Google write due; Swagger 200, `/tasks` 401, advisory lock on. A second boot ran nothing. Temporary files and database removed.
+- Fresh database, idempotency and an interrupted upgrade: `migrations.pg.spec` (in CI now).
+- Ordering: timestamps 1761750000000 < …760… < …770… < …780…; each later migration only adds (IF NOT EXISTS) to tables the baseline creates; none depends on data from another.
+- Constraints and indexes added in this program: `IDX_schedule_jobs_status_next_run`, `IDX_pending_google_writes_status_next_run`, unique `IDX_tasks_user_create_request_key`; all compared by the drift check.
+- Render path: build `npm run build:backend` → `dist/main.js` + `dist/database/migrations/*.js` (CI asserts the entry point); start `node dist/main` runs pending migrations before serving.
+- `backend/.env.example`: the `TYPEORM_SYNC` advice now says migrations run on boot and synchronize is for throwaway databases only. Only that line was committed; the other chat's uncommitted line in the same file stays in the working tree.
+- `deploy.md` → Database migrations: all four migrations, what was verified where, the exact Neon branch rehearsal, first deploy, rollback (code first; schema `down()` only if needed; never the baseline).
+- **Blocked: Neon.** No Neon API key, no `neonctl`, and no `DATABASE_URL` in this environment, so no Neon branch could be made; production was not touched. Expected difference: none (Neon is Postgres 16/17 with `uuid-ossp`); the steps to verify are in `deploy.md`.
 
 ## Final status (2026-10-30)
 
