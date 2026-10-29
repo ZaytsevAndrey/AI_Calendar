@@ -169,6 +169,29 @@ describe('GoogleCalendarService', () => {
     expect(service).toBeDefined();
   });
 
+  it('never lets concurrent calls for two users share OAuth credentials', async () => {
+    const { google } = jest.requireMock('googleapis');
+    const tokens: Record<string, string> = { a: 'token-a', b: 'token-b' };
+    jest.spyOn(userRepo, 'findOne').mockImplementation(async (opts: any) => {
+      // B answers first so the two calls interleave.
+      if (opts.where.id === 'a') await new Promise((r) => setTimeout(r, 5));
+      return { googleAccessToken: tokens[opts.where.id] } as User;
+    });
+    (google.calendar as jest.Mock).mockClear();
+
+    await Promise.all([service.getCalendars('a'), service.getCalendars('b')]);
+
+    const auths = (google.calendar as jest.Mock).mock.calls.map(([opts]) => opts.auth);
+    expect(auths).toHaveLength(2);
+    expect(auths[0]).not.toBe(auths[1]);
+    for (const auth of auths) {
+      const seen = new Set(
+        (auth.setCredentials as jest.Mock).mock.calls.map(([c]) => c.access_token ?? c.refresh_token),
+      );
+      expect(seen.size).toBe(1);
+    }
+  });
+
   it('should generate auth url', () => {
     expect(service.getAuthUrl()).toBe('mock-auth-url');
     expect(service.getLoginAuthUrl()).toBe('mock-auth-url');

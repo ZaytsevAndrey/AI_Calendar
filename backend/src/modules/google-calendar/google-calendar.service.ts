@@ -100,7 +100,8 @@ function eventOverlapsWindow(event: DisplayGoogleEvent, startMs: number, endMs: 
 
 @Injectable()
 export class GoogleCalendarService {
-  private oauth2Client;
+  /** OAuth app config. Each call builds its own client: credentials are per user. */
+  private readonly oauthConfig: [string | undefined, string | undefined, string];
   private readonly logger = new Logger(GoogleCalendarService.name);
   private readonly loginTickets = new Map<string, LoginTicket>();
   private readonly calendarListCache = new Map<
@@ -137,14 +138,25 @@ export class GoogleCalendarService {
     this.logger.log(`Client Secret: ${clientSecret ? 'SET' : 'NOT SET'}`);
     this.logger.log(`Redirect URI: ${redirectUri}`);
 
-    this.oauth2Client = new google.auth.OAuth2(
+    this.oauthConfig = [
       clientId,
       clientSecret,
       redirectUri,
-    );
+    ];
+  }
+
+  /**
+   * A fresh client per call. One shared client let a concurrent call for
+   * another user swap its credentials before the request (or token refresh)
+   * ran. Loosely typed like the old shared field.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private newOAuthClient(): any {
+    return new google.auth.OAuth2(...this.oauthConfig);
   }
 
   getLoginAuthUrl() {
+    const oauth = this.newOAuthClient();
     if (stubExternalApis()) {
       return 'https://accounts.google.com/o/oauth2/v2/auth?e2e=1';
     }
@@ -156,7 +168,7 @@ export class GoogleCalendarService {
       'https://www.googleapis.com/auth/calendar.events',
     ];
 
-    const authUrl = this.oauth2Client.generateAuthUrl({
+    const authUrl = oauth.generateAuthUrl({
       access_type: 'offline',
       include_granted_scopes: true,
       prompt: 'select_account',
@@ -173,15 +185,16 @@ export class GoogleCalendarService {
   }
 
   async completeGoogleSignIn(code: string): Promise<string> {
-    const { tokens } = await this.oauth2Client.getToken(code);
-    this.oauth2Client.setCredentials(tokens);
+    const oauth = this.newOAuthClient();
+    const { tokens } = await oauth.getToken(code);
+    oauth.setCredentials(tokens);
 
     let googleId: string | undefined;
     let email: string | undefined;
     try {
       const oauth2 = google.oauth2({
         version: 'v2',
-        auth: this.oauth2Client,
+        auth: oauth,
       });
       const { data: profile } = await oauth2.userinfo.get();
       googleId = profile.id ?? undefined;
@@ -211,7 +224,7 @@ export class GoogleCalendarService {
     try {
       const cal = google.calendar({
         version: 'v3',
-        auth: this.oauth2Client,
+        auth: oauth,
       });
       await this.ensureAppCalendarIdWithClient(cal, user.id);
     } catch (e: unknown) {
@@ -361,6 +374,7 @@ export class GoogleCalendarService {
   }
 
   async saveToken(code: string, userId?: string) {
+    const oauth = this.newOAuthClient();
     this.logger.log(
       `Attempting to save token with code: ${code.substring(0, 10)}...`,
     );
@@ -370,7 +384,7 @@ export class GoogleCalendarService {
     }
 
     try {
-      const { tokens } = await this.oauth2Client.getToken(code);
+      const { tokens } = await oauth.getToken(code);
       this.logger.log(`Successfully obtained tokens from Google`);
 
       const user = await this.userRepo.findOne({
@@ -398,12 +412,12 @@ export class GoogleCalendarService {
       this.logger.log(`Successfully saved Google tokens for user ${user.id}`);
 
       try {
-        this.oauth2Client.setCredentials({
+        oauth.setCredentials({
           access_token: tokens.access_token,
         });
         const cal = google.calendar({
           version: 'v3',
-          auth: this.oauth2Client,
+          auth: oauth,
         });
         await this.ensureAppCalendarIdWithClient(cal, user.id);
       } catch (e: unknown) {
@@ -420,6 +434,7 @@ export class GoogleCalendarService {
   }
 
   async checkConnection(userId: string) {
+    const oauth = this.newOAuthClient();
     if (stubExternalApis()) {
       return { connected: false };
     }
@@ -447,10 +462,10 @@ export class GoogleCalendarService {
     if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
       if (user.googleRefreshToken) {
         try {
-          this.oauth2Client.setCredentials({
+          oauth.setCredentials({
             refresh_token: user.googleRefreshToken,
           });
-          const { credentials } = await this.oauth2Client.refreshAccessToken();
+          const { credentials } = await oauth.refreshAccessToken();
           await this.userRepo.update(userId, {
             googleAccessToken: credentials.access_token,
             googleTokenExpiry: new Date(credentials.expiry_date),
@@ -478,7 +493,7 @@ export class GoogleCalendarService {
 
   /**
    * Creates the user's app-managed secondary calendar if missing, updates settings, and returns its id.
-   * Caller must have set OAuth credentials on `this.oauth2Client`.
+   * Caller must have set OAuth credentials on `oauth`.
    */
   private async ensureAppCalendarIdWithClient(
     calendar: ReturnType<typeof google.calendar>,
@@ -515,6 +530,7 @@ export class GoogleCalendarService {
 
   /** Updates the Google calendar title when the user renames it in settings (calendar must already exist). */
   async updateAppCalendarSummaryIfLinked(userId: string): Promise<void> {
+    const oauth = this.newOAuthClient();
     const settings = await this.userSettingsRepo.findOne({ where: { userId } });
     if (!settings?.appGoogleCalendarId) return;
 
@@ -530,10 +546,10 @@ export class GoogleCalendarService {
 
     if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
       if (!user.googleRefreshToken) return;
-      this.oauth2Client.setCredentials({
+      oauth.setCredentials({
         refresh_token: user.googleRefreshToken,
       });
-      const { credentials } = await this.oauth2Client.refreshAccessToken();
+      const { credentials } = await oauth.refreshAccessToken();
       await this.userRepo.update(userId, {
         googleAccessToken: credentials.access_token,
         googleTokenExpiry: new Date(
@@ -543,12 +559,12 @@ export class GoogleCalendarService {
       user.googleAccessToken = credentials.access_token;
     }
 
-    this.oauth2Client.setCredentials({
+    oauth.setCredentials({
       access_token: user.googleAccessToken,
     });
     const calendar = google.calendar({
       version: 'v3',
-      auth: this.oauth2Client,
+      auth: oauth,
     });
     const summary =
       (settings.appGoogleCalendarName ?? '').trim() || 'luefy';
@@ -638,6 +654,7 @@ export class GoogleCalendarService {
     pageToken?: string,
     calendarId?: string,
   ) {
+    const oauth = this.newOAuthClient();
     if (stubExternalApis()) {
       return { events: [], totalEvents: 0 };
     }
@@ -661,10 +678,10 @@ export class GoogleCalendarService {
     // Refresh token when needed
     if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
       if (user.googleRefreshToken) {
-        this.oauth2Client.setCredentials({
+        oauth.setCredentials({
           refresh_token: user.googleRefreshToken,
         });
-        const { credentials } = await this.oauth2Client.refreshAccessToken();
+        const { credentials } = await oauth.refreshAccessToken();
         await this.userRepo.update(userId, {
           googleAccessToken: credentials.access_token,
           googleTokenExpiry: new Date(credentials.expiry_date),
@@ -676,13 +693,13 @@ export class GoogleCalendarService {
       }
     }
 
-    this.oauth2Client.setCredentials({
+    oauth.setCredentials({
       access_token: user.googleAccessToken,
     });
 
     const calendar = google.calendar({
       version: 'v3',
-      auth: this.oauth2Client,
+      auth: oauth,
     });
 
     let calId = calendarId;
@@ -878,6 +895,7 @@ export class GoogleCalendarService {
 
   /** One auth setup, then every visible calendar is listed at once. */
   private async authorizedCalendar(userId: string) {
+    const oauth = this.newOAuthClient();
     const user = await this.userRepo.findOne({
       where: { id: userId },
       select: {
@@ -893,22 +911,22 @@ export class GoogleCalendarService {
       if (!user.googleRefreshToken) {
         throw new Error('Google Calendar token expired');
       }
-      this.oauth2Client.setCredentials({
+      oauth.setCredentials({
         refresh_token: user.googleRefreshToken,
       });
-      const { credentials } = await this.oauth2Client.refreshAccessToken();
+      const { credentials } = await oauth.refreshAccessToken();
       await this.userRepo.update(userId, {
         googleAccessToken: credentials.access_token,
         googleTokenExpiry: new Date(credentials.expiry_date),
       });
       user.googleAccessToken = credentials.access_token;
     }
-    this.oauth2Client.setCredentials({
+    oauth.setCredentials({
       access_token: user.googleAccessToken,
     });
     return google.calendar({
       version: 'v3',
-      auth: this.oauth2Client,
+      auth: oauth,
     });
   }
 
@@ -960,6 +978,7 @@ export class GoogleCalendarService {
     eventId: string,
     calendarId?: string,
   ) {
+    const oauth = this.newOAuthClient();
     this.logger.log(`Fetching event ${eventId} for user ${userId}`);
 
     const user = await this.userRepo.findOne({
@@ -978,10 +997,10 @@ export class GoogleCalendarService {
     // Refresh token when needed
     if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
       if (user.googleRefreshToken) {
-        this.oauth2Client.setCredentials({
+        oauth.setCredentials({
           refresh_token: user.googleRefreshToken,
         });
-        const { credentials } = await this.oauth2Client.refreshAccessToken();
+        const { credentials } = await oauth.refreshAccessToken();
         await this.userRepo.update(userId, {
           googleAccessToken: credentials.access_token,
           googleTokenExpiry: new Date(credentials.expiry_date),
@@ -992,13 +1011,13 @@ export class GoogleCalendarService {
       }
     }
 
-    this.oauth2Client.setCredentials({
+    oauth.setCredentials({
       access_token: user.googleAccessToken,
     });
 
     const calendar = google.calendar({
       version: 'v3',
-      auth: this.oauth2Client,
+      auth: oauth,
     });
 
     let calId = calendarId;
@@ -1042,6 +1061,7 @@ export class GoogleCalendarService {
     until: Date,
     calendarId?: string,
   ): Promise<void> {
+    const oauth = this.newOAuthClient();
     const existing = await this.getEvent(userId, eventId, calendarId);
     const recurrence = Array.isArray(existing?.recurrence)
       ? [...existing.recurrence]
@@ -1072,22 +1092,22 @@ export class GoogleCalendarService {
       if (!user.googleRefreshToken) {
         throw new Error('Google Calendar token expired');
       }
-      this.oauth2Client.setCredentials({
+      oauth.setCredentials({
         refresh_token: user.googleRefreshToken,
       });
-      const { credentials } = await this.oauth2Client.refreshAccessToken();
+      const { credentials } = await oauth.refreshAccessToken();
       await this.userRepo.update(userId, {
         googleAccessToken: credentials.access_token,
         googleTokenExpiry: new Date(credentials.expiry_date),
       });
       user.googleAccessToken = credentials.access_token;
     }
-    this.oauth2Client.setCredentials({
+    oauth.setCredentials({
       access_token: user.googleAccessToken,
     });
     const calendar = google.calendar({
       version: 'v3',
-      auth: this.oauth2Client,
+      auth: oauth,
     });
     const calId =
       calendarId && calendarId !== ''
@@ -1101,6 +1121,7 @@ export class GoogleCalendarService {
   }
 
   async getCalendars(userId: string) {
+    const oauth = this.newOAuthClient();
     this.logger.log(`Fetching calendars for user ${userId}`);
 
     const user = await this.userRepo.findOne({
@@ -1119,10 +1140,10 @@ export class GoogleCalendarService {
     // Refresh token when needed
     if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
       if (user.googleRefreshToken) {
-        this.oauth2Client.setCredentials({
+        oauth.setCredentials({
           refresh_token: user.googleRefreshToken,
         });
-        const { credentials } = await this.oauth2Client.refreshAccessToken();
+        const { credentials } = await oauth.refreshAccessToken();
         await this.userRepo.update(userId, {
           googleAccessToken: credentials.access_token,
           googleTokenExpiry: new Date(credentials.expiry_date),
@@ -1133,13 +1154,13 @@ export class GoogleCalendarService {
       }
     }
 
-    this.oauth2Client.setCredentials({
+    oauth.setCredentials({
       access_token: user.googleAccessToken,
     });
 
     const calendar = google.calendar({
       version: 'v3',
-      auth: this.oauth2Client,
+      auth: oauth,
     });
 
     try {
@@ -1213,6 +1234,7 @@ export class GoogleCalendarService {
     event: Record<string, unknown>,
     opts?: { skipSleepWindowCheck?: boolean; calendarId?: string },
   ) {
+    const oauth = this.newOAuthClient();
     const { phaseId } = await this.assertCalendarWritePayload(
       userId,
       event,
@@ -1237,10 +1259,10 @@ export class GoogleCalendarService {
     // Refresh token when needed
     if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
       if (user.googleRefreshToken) {
-        this.oauth2Client.setCredentials({
+        oauth.setCredentials({
           refresh_token: user.googleRefreshToken,
         });
-        const { credentials } = await this.oauth2Client.refreshAccessToken();
+        const { credentials } = await oauth.refreshAccessToken();
         await this.userRepo.update(userId, {
           googleAccessToken: credentials.access_token,
           googleTokenExpiry: new Date(credentials.expiry_date),
@@ -1251,13 +1273,13 @@ export class GoogleCalendarService {
       }
     }
 
-    this.oauth2Client.setCredentials({
+    oauth.setCredentials({
       access_token: user.googleAccessToken,
     });
 
     const calendar = google.calendar({
       version: 'v3',
-      auth: this.oauth2Client,
+      auth: oauth,
     });
 
     const writableCalendarId = await this.ensureAppCalendarIdWithClient(
@@ -1300,6 +1322,7 @@ export class GoogleCalendarService {
     event: Record<string, unknown>,
     opts?: { skipSleepWindowCheck?: boolean; calendarId?: string },
   ) {
+    const oauth = this.newOAuthClient();
     const { phaseId } = await this.assertCalendarWritePayload(
       userId,
       event,
@@ -1324,10 +1347,10 @@ export class GoogleCalendarService {
     // Refresh token when needed
     if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
       if (user.googleRefreshToken) {
-        this.oauth2Client.setCredentials({
+        oauth.setCredentials({
           refresh_token: user.googleRefreshToken,
         });
-        const { credentials } = await this.oauth2Client.refreshAccessToken();
+        const { credentials } = await oauth.refreshAccessToken();
         await this.userRepo.update(userId, {
           googleAccessToken: credentials.access_token,
           googleTokenExpiry: new Date(credentials.expiry_date),
@@ -1338,13 +1361,13 @@ export class GoogleCalendarService {
       }
     }
 
-    this.oauth2Client.setCredentials({
+    oauth.setCredentials({
       access_token: user.googleAccessToken,
     });
 
     const calendar = google.calendar({
       version: 'v3',
-      auth: this.oauth2Client,
+      auth: oauth,
     });
 
     const writableCalendarId =
@@ -1406,6 +1429,7 @@ export class GoogleCalendarService {
     endIso: string,
     calendarId?: string,
   ): Promise<void> {
+    const oauth = this.newOAuthClient();
     const body = {
       start: { dateTime: startIso },
       end: { dateTime: endIso },
@@ -1429,10 +1453,10 @@ export class GoogleCalendarService {
 
     if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
       if (user.googleRefreshToken) {
-        this.oauth2Client.setCredentials({
+        oauth.setCredentials({
           refresh_token: user.googleRefreshToken,
         });
-        const { credentials } = await this.oauth2Client.refreshAccessToken();
+        const { credentials } = await oauth.refreshAccessToken();
         await this.userRepo.update(userId, {
           googleAccessToken: credentials.access_token,
           googleTokenExpiry: new Date(credentials.expiry_date),
@@ -1443,13 +1467,13 @@ export class GoogleCalendarService {
       }
     }
 
-    this.oauth2Client.setCredentials({
+    oauth.setCredentials({
       access_token: user.googleAccessToken,
     });
 
     const calendar = google.calendar({
       version: 'v3',
-      auth: this.oauth2Client,
+      auth: oauth,
     });
     const writableCalendarId =
       calendarId != null && calendarId !== ''
@@ -1520,6 +1544,7 @@ export class GoogleCalendarService {
    * No-op when disconnected or the calendar id is missing. Not-found is success.
    */
   async deleteAppCalendar(userId: string): Promise<void> {
+    const oauth = this.newOAuthClient();
     if (stubExternalApis()) return;
 
     const settings = await this.userSettingsRepo.findOne({ where: { userId } });
@@ -1542,10 +1567,10 @@ export class GoogleCalendarService {
       if (!user.googleRefreshToken) {
         throw new Error('Google Calendar token expired');
       }
-      this.oauth2Client.setCredentials({
+      oauth.setCredentials({
         refresh_token: user.googleRefreshToken,
       });
-      const { credentials } = await this.oauth2Client.refreshAccessToken();
+      const { credentials } = await oauth.refreshAccessToken();
       await this.userRepo.update(userId, {
         googleAccessToken: credentials.access_token,
         googleTokenExpiry: new Date(credentials.expiry_date),
@@ -1553,12 +1578,12 @@ export class GoogleCalendarService {
       user.googleAccessToken = credentials.access_token;
     }
 
-    this.oauth2Client.setCredentials({
+    oauth.setCredentials({
       access_token: user.googleAccessToken,
     });
     const calendar = google.calendar({
       version: 'v3',
-      auth: this.oauth2Client,
+      auth: oauth,
     });
 
     try {
@@ -1578,6 +1603,7 @@ export class GoogleCalendarService {
   }
 
   async deleteEvent(userId: string, eventId: string, calendarId?: string) {
+    const oauth = this.newOAuthClient();
     if (stubExternalApis()) {
       return { success: true };
     }
@@ -1598,10 +1624,10 @@ export class GoogleCalendarService {
     // Refresh token when needed
     if (user.googleTokenExpiry && user.googleTokenExpiry < new Date()) {
       if (user.googleRefreshToken) {
-        this.oauth2Client.setCredentials({
+        oauth.setCredentials({
           refresh_token: user.googleRefreshToken,
         });
-        const { credentials } = await this.oauth2Client.refreshAccessToken();
+        const { credentials } = await oauth.refreshAccessToken();
         await this.userRepo.update(userId, {
           googleAccessToken: credentials.access_token,
           googleTokenExpiry: new Date(credentials.expiry_date),
@@ -1612,13 +1638,13 @@ export class GoogleCalendarService {
       }
     }
 
-    this.oauth2Client.setCredentials({
+    oauth.setCredentials({
       access_token: user.googleAccessToken,
     });
 
     const calendar = google.calendar({
       version: 'v3',
-      auth: this.oauth2Client,
+      auth: oauth,
     });
 
     const storedApp = await this.getStoredAppCalendarId(userId);
