@@ -19,6 +19,8 @@ import {
   type SchedulingConflictDTO,
 } from '../conflictChoiceBus';
 import { formatCivilYmd } from '../../../utils/formatDate';
+import { useGetUserSettingsQuery } from 'api/userSettingsApi';
+import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 
 type Phrase = { id: ConflictOptionId; title: string; detail: string };
 
@@ -58,6 +60,8 @@ export function ConflictOptionsSheet({ conflict, onClose }: Props) {
   const { t } = useTranslation();
   const [updateEvent] = useUpdateEventMutation();
   const [skipOccurrence] = useSkipOccurrenceMutation();
+  const { data: userSettings } = useGetUserSettingsQuery();
+  const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
   const [phrases, setPhrases] = useState<Phrase[]>([]);
   const [busyId, setBusyId] = useState<ConflictOptionId | null>(null);
 
@@ -101,6 +105,7 @@ export function ConflictOptionsSheet({ conflict, onClose }: Props) {
           updateEvent({ id, body }).unwrap(),
         skipOccurrence: (id: string, body: SkipOccurrenceDTO) =>
           skipOccurrence({ id, body }).unwrap(),
+        timeZone,
       });
       onClose(true);
     } catch (e) {
@@ -121,6 +126,7 @@ export function ConflictOptionsSheet({ conflict, onClose }: Props) {
           updateEvent({ id, body }).unwrap(),
         skipOccurrence: (id: string, body: SkipOccurrenceDTO) =>
           skipOccurrence({ id, body }).unwrap(),
+        timeZone,
       });
       onClose(true);
     } catch (e) {

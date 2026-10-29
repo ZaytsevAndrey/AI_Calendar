@@ -1,5 +1,7 @@
 /** Pure helpers for the Problematic Move slot-pick timeline. */
 
+import { isoToHm, localDateTimeIso } from '../../utils/ianaDateTime';
+
 /** Tall enough that a 30-min block is readable; also slows wheel→time mapping. */
 export const SLOT_PX_PER_HOUR = 180;
 export const SLOT_STEP_MIN = 15;
@@ -18,22 +20,6 @@ export function minToPx(min: number): number {
 
 export function pxToMin(px: number): number {
   return (px / SLOT_PX_PER_HOUR) * 60;
-}
-
-export function hourLabels(
-  dayStartMs: number,
-  dayEndMs: number,
-): { min: number; label: string }[] {
-  const span = Math.max(0, (dayEndMs - dayStartMs) / 60_000);
-  const out: { min: number; label: string }[] = [];
-  for (let m = 0; m <= span; m += 60) {
-    const d = new Date(dayStartMs + m * 60_000);
-    const hh = String(d.getUTCHours()).padStart(2, '0');
-    // Labels use the wall clock of the ISO instants as already localized by the API;
-    // callers should prefer formatHm from the zone. Fallback UTC hour for tests.
-    out.push({ min: m, label: `${hh}:00` });
-  }
-  return out;
 }
 
 /** Index of candidate whose start is nearest to `targetMs`. */
@@ -112,6 +98,18 @@ export function snapMsToStep(
   return dayStartMs + snapped * 60_000;
 }
 
+/** The preferred wall clock moved onto `ymd`, so another day keeps the old time of day. */
+export function preferredMsOnDay(
+  preferredIso: string | null | undefined,
+  ymd: string,
+  timeZone: string,
+): number | null {
+  const hm = isoToHm(preferredIso ?? undefined, timeZone);
+  if (!hm) return null;
+  const ms = Date.parse(localDateTimeIso(ymd, hm, timeZone));
+  return Number.isFinite(ms) ? ms : null;
+}
+
 /** Prefer first candidate at/after preferred, else first at/after now, else mid-day, else first. */
 export function initialCandidateIndex(
   candidatesMs: number[],
@@ -129,6 +127,77 @@ export function initialCandidateIndex(
   if (future >= 0) return future;
   const mid = dayStartMs + (dayEndMs - dayStartMs) / 2;
   return nearestCandidateIndex(candidatesMs, mid);
+}
+
+/**
+ * Up to `count` distinct starts to offer as one-tap chips: the candidate
+ * nearest the old clock (or the first one), then the next nearest that do
+ * not overlap an already picked start. Sorted by time.
+ */
+export function suggestedStarts(
+  candidatesMs: number[],
+  preferredMs: number | null,
+  durationMin: number,
+  count = 3,
+): number[] {
+  if (!candidatesMs.length) return [];
+  const anchor = preferredMs ?? candidatesMs[0];
+  const gapMs = Math.max(SLOT_STEP_MIN, durationMin) * 60_000;
+  const byDistance = [...candidatesMs].sort(
+    (a, b) => Math.abs(a - anchor) - Math.abs(b - anchor) || a - b,
+  );
+  const picked: number[] = [];
+  for (const ms of byDistance) {
+    if (picked.length >= count) break;
+    if (picked.every((p) => Math.abs(p - ms) >= gapMs)) picked.push(ms);
+  }
+  return picked.sort((a, b) => a - b);
+}
+
+/** Where the timeline opens: the best suggestion, else the first free gap, else mid-day. */
+export function initialFocusMs(
+  candidatesMs: number[],
+  free: { start: number; end: number }[],
+  dayStartMs: number,
+  dayEndMs: number,
+  preferredMs: number | null,
+  nowMs: number = Date.now(),
+): number {
+  const idx = initialCandidateIndex(
+    candidatesMs,
+    dayStartMs,
+    dayEndMs,
+    preferredMs,
+    nowMs,
+  );
+  if (idx >= 0) return candidatesMs[idx];
+  if (free.length) return snapMsToStep(free[0].start, dayStartMs);
+  return snapMsToStep(dayStartMs + (dayEndMs - dayStartMs) / 2, dayStartMs);
+}
+
+/** Next (dir 1) or previous (dir -1) candidate strictly past `focusMs`, or null. */
+export function adjacentCandidateMs(
+  candidatesMs: number[],
+  focusMs: number,
+  dir: 1 | -1,
+): number | null {
+  const sorted = [...candidatesMs].sort((a, b) => a - b);
+  if (dir > 0) return sorted.find((ms) => ms > focusMs + 1000) ?? null;
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    if (sorted[i] < focusMs - 1000) return sorted[i];
+  }
+  return null;
+}
+
+/** Keep a focus instant inside [dayStart, dayEnd − duration]. */
+export function clampFocusMs(
+  ms: number,
+  dayStartMs: number,
+  dayEndMs: number,
+  durationMin: number,
+): number {
+  const last = Math.max(dayStartMs, dayEndMs - durationMin * 60_000);
+  return Math.min(Math.max(ms, dayStartMs), last);
 }
 
 export function formatHmFromIso(iso: string, timeZone: string): string {

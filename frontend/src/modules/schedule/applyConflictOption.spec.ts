@@ -16,6 +16,7 @@ describe('applyConflictOption', () => {
     await applyConflictOption(conflict, 'leave_problematic', {
       updateTask,
       skipOccurrence,
+      timeZone: 'UTC',
     });
     expect(updateTask).toHaveBeenCalledWith('t1', {
       scheduleState: 'problematic',
@@ -31,6 +32,7 @@ describe('applyConflictOption', () => {
     await applyConflictOption(conflict, 'move_new', {
       updateTask,
       skipOccurrence: jest.fn(),
+      timeZone: 'UTC',
     });
     expect(updateTask).toHaveBeenCalledWith('t1', {
       scheduleState: 'none',
@@ -45,6 +47,7 @@ describe('applyConflictOption', () => {
     await applyConflictOption(conflict, 'skip_occurrence', {
       updateTask,
       skipOccurrence,
+      timeZone: 'UTC',
     });
     expect(skipOccurrence).toHaveBeenCalledWith('t1', {
       occurrenceStart: '2026-04-20T09:00:00.000Z',
@@ -64,6 +67,7 @@ describe('applyConflictOption', () => {
     await applyConflictOption(withEnd, 'place_on_top', {
       updateTask,
       skipOccurrence: jest.fn(),
+      timeZone: 'UTC',
     });
     expect(updateTask).toHaveBeenCalledWith('t1', {
       scheduleState: 'resolved',
@@ -73,6 +77,18 @@ describe('applyConflictOption', () => {
       problematicOriginalEnd: '2026-04-20T10:00:00.000Z',
       scheduledStartTime: '2026-04-20T09:00:00.000Z',
       scheduledEndTime: '2026-04-20T10:00:00.000Z',
+    });
+  });
+
+  it('skips a bare day at local noon in the settings zone', async () => {
+    const skipOccurrence = jest.fn().mockResolvedValue({});
+    await applyConflictOption(
+      { ...conflict, meta: { occurrenceYmd: '2026-04-20' } },
+      'skip_occurrence',
+      { updateTask: jest.fn(), skipOccurrence, timeZone: 'Pacific/Kiritimati' },
+    );
+    expect(skipOccurrence).toHaveBeenCalledWith('t1', {
+      occurrenceStart: '2026-04-20T12:00:00+14:00',
     });
   });
 });

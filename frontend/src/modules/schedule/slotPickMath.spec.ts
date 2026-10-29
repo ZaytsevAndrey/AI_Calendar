@@ -1,10 +1,15 @@
 import {
+  adjacentCandidateMs,
+  clampFocusMs,
+  initialFocusMs,
+  suggestedStarts,
   formatHmFromIso,
   initialCandidateIndex,
   minToPx,
   msToMinOfDay,
   nearestCandidateIndex,
   placeableCandidateIndex,
+  preferredMsOnDay,
   pxToMin,
   resolvePlaceableStartIso,
   snapMsToStep,
@@ -160,5 +165,61 @@ describe('slotPickMath', () => {
   it('uses a taller hour scale for readable 30-min blocks', () => {
     expect(SLOT_PX_PER_HOUR).toBeGreaterThanOrEqual(144);
     expect(minToPx(30)).toBeGreaterThanOrEqual(64);
+  });
+
+  it('suggests distinct starts nearest the old clock', () => {
+    const at = (hm: string) => Date.parse(`2026-04-21T${hm}:00.000Z`);
+    const free = ['09:00', '09:15', '09:30', '13:00', '13:15', '17:30', '18:00'].map(at);
+    expect(suggestedStarts(free, at('17:45'), 30)).toEqual([
+      at('13:15'),
+      at('17:30'),
+      at('18:00'),
+    ]);
+    expect(suggestedStarts(free, null, 60, 2)).toEqual([at('09:00'), at('13:00')]);
+    expect(suggestedStarts([], at('10:00'), 30)).toEqual([]);
+  });
+
+  it('opens on the best candidate, else the first free gap', () => {
+    expect(initialFocusMs(candidates, [], dayStart, dayEnd, null, dayStart)).toBe(
+      candidates[0],
+    );
+    const gap = {
+      start: Date.parse('2026-04-21T11:05:00.000Z'),
+      end: Date.parse('2026-04-21T11:20:00.000Z'),
+    };
+    expect(initialFocusMs([], [gap], dayStart, dayEnd, null, dayStart)).toBe(
+      Date.parse('2026-04-21T11:00:00.000Z'),
+    );
+  });
+
+  it('steps between free starts and clamps to the day', () => {
+    expect(adjacentCandidateMs(candidates, candidates[1], 1)).toBe(candidates[2]);
+    expect(adjacentCandidateMs(candidates, candidates[1], -1)).toBe(candidates[0]);
+    expect(adjacentCandidateMs(candidates, candidates[2], 1)).toBeNull();
+    expect(clampFocusMs(dayEnd, dayStart, dayEnd, 30)).toBe(dayEnd - 30 * 60_000);
+    expect(clampFocusMs(dayStart - 1, dayStart, dayEnd, 30)).toBe(dayStart);
+  });
+
+  it("moves the preferred clock onto another day", () => {
+    const ms = preferredMsOnDay("2026-04-21T18:00:00.000Z", "2026-04-24", "UTC");
+    expect(ms).toBe(Date.parse("2026-04-24T18:00:00.000Z"));
+    expect(preferredMsOnDay(null, "2026-04-24", "UTC")).toBeNull();
+  });
+
+  it("initial index keeps the old clock on a later day", () => {
+    const later = [
+      Date.parse("2026-04-24T09:00:00.000Z"),
+      Date.parse("2026-04-24T18:00:00.000Z"),
+    ];
+    const preferred = preferredMsOnDay("2026-04-21T18:00:00.000Z", "2026-04-24", "UTC");
+    expect(
+      initialCandidateIndex(
+        later,
+        Date.parse("2026-04-24T07:00:00.000Z"),
+        Date.parse("2026-04-24T22:00:00.000Z"),
+        preferred,
+        Date.parse("2026-04-21T08:00:00.000Z"),
+      ),
+    ).toBe(1);
   });
 });

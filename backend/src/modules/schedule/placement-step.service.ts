@@ -442,9 +442,16 @@ export class PlacementStepService {
       },
       order: { createdAt: 'ASC' },
     });
+    if (!parked.length) return;
+    const settings = await this.userSettingsService.getSettings(userId);
+    const today = localYmd(
+      new Date().toISOString(),
+      resolveIanaTimeZone(settings.timeZone),
+    );
     for (const task of parked) {
       if (task.id === exceptTaskId) continue;
-      await this.placeUnlocked(userId, task.id, { searchHole: true });
+      const opts = autoSeatOptions(task, today);
+      if (opts) await this.placeUnlocked(userId, task.id, opts);
     }
   }
 
@@ -2641,6 +2648,46 @@ function seatFrom(
     windows,
     notBefore: nowMs,
     buffered,
+  };
+}
+
+/** Park reasons the user chose or must answer; a free hole does not seat them. */
+const ASKED_PARK_REASONS = new Set(['conflict', 'preferred_on_fixed']);
+
+/**
+ * How a freed hole may seat one Problematic task, or null to leave it parked.
+ * A parked day stays that day, nearest its old clock. Series masters and
+ * conflict parks wait for the user.
+ */
+export function autoSeatOptions(
+  task: Pick<
+    Task,
+    | 'isRecurring'
+    | 'problematicReason'
+    | 'problematicDay'
+    | 'problematicOriginalStart'
+  >,
+  todayYmd: string,
+): PlaceOptions | null {
+  if (task.isRecurring) return null;
+  if (task.problematicReason && ASKED_PARK_REASONS.has(task.problematicReason)) {
+    return null;
+  }
+  const day =
+    typeof task.problematicDay === 'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(task.problematicDay)
+      ? task.problematicDay
+      : null;
+  if (!day) return { searchHole: true };
+  if (day < todayYmd) return null;
+  const original = task.problematicOriginalStart
+    ? new Date(task.problematicOriginalStart)
+    : null;
+  return {
+    searchHole: true,
+    windowYmd: day,
+    preferredStart:
+      original && Number.isFinite(original.getTime()) ? original : null,
   };
 }
 

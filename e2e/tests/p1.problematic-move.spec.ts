@@ -1,4 +1,4 @@
-import type { Locator, Page } from '@playwright/test';
+import type { Locator, Page, Route } from '@playwright/test';
 import { test, expect, openAs, apiJson, expectOk, uniqueName, completeOpenTasks } from '../helpers/fixtures';
 
 /** The move sheet start time is a shared TimeField, not a native time input. */
@@ -40,7 +40,11 @@ const Y = {
   d12: futureYmd(12),
   d13: futureYmd(13),
   d14: futureYmd(14),
+  d15: futureYmd(15),
 };
+
+const BUSY_TEXT = /Busy, cannot place here/i;
+const range = (start: string, end: string) => new RegExp(`${start}\\s*[–-]\\s*${end}`);
 
 async function seedProblematic(
   request: Parameters<typeof apiJson>[0],
@@ -61,11 +65,54 @@ async function seedProblematic(
   return { name, placeYmd, taskId: created.body.id as string };
 }
 
-async function openMoveSheet(
-  page: import('@playwright/test').Page,
-  auth: { onboarded: { access_token: string } },
-  name: string,
+async function readTask(
+  request: Parameters<typeof apiJson>[0],
+  token: string,
+  taskId: string,
 ) {
+  const listed = await apiJson(request, token, 'get', '/tasks');
+  return (Array.isArray(listed.body) ? listed.body : []).find(
+    (row: { id?: string }) => row.id === taskId,
+  );
+}
+
+/** Serve one fixed free-slots day (UTC) so the timeline is deterministic. */
+async function mockFreeSlots(
+  page: Page,
+  ymd: string,
+  day: {
+    start: string;
+    end: string;
+    busy?: [string, string][];
+    free: [string, string][];
+    candidates: string[];
+  },
+) {
+  const at = (hm: string) => `${ymd}T${hm}:00.000Z`;
+  await page.route('**/schedule/free-slots**', async (route: Route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ymd,
+        timeZone: 'UTC',
+        durationMinutes: 30,
+        dayStart: at(day.start),
+        dayEnd: at(day.end),
+        phase: null,
+        busy: (day.busy ?? []).map(([s, e]) => ({ start: at(s), end: at(e) })),
+        free: day.free.map(([s, e]) => ({ start: at(s), end: at(e) })),
+        candidates: day.candidates.map(at),
+      }),
+    });
+  });
+}
+
+async function openInbox(page: Page, auth: { onboarded: { access_token: string } }, name: string) {
   await openAs(page, auth.onboarded);
   const banner = page.getByRole('region', { name: 'Tasks that fell out of the schedule' });
   await expect(banner).toBeVisible();
@@ -73,47 +120,53 @@ async function openMoveSheet(
   const inbox = page.getByRole('dialog', { name: 'Problematic' });
   await expect(inbox).toBeVisible();
   await expect(inbox.getByText(name)).toBeVisible();
-  await inbox.getByRole('button', { name: 'Move', exact: true }).click();
-  const move = page.getByRole('dialog', { name: 'Move' });
+  return inbox;
+}
+
+async function openMoveSheet(
+  page: Page,
+  auth: { onboarded: { access_token: string } },
+  name: string,
+) {
+  const inbox = await openInbox(page, auth, name);
+  await inbox.getByRole('button', { name: 'Other time' }).click();
+  const move = page.getByRole('dialog', { name: 'Pick a time' });
   await expect(move).toBeVisible();
   return { inbox, move };
 }
 
+const timeline = (move: Locator) =>
+  move.getByRole('slider', { name: 'Start time on the day timeline' });
+const placeButton = (move: Locator) => move.getByRole('button', { name: /^Place( |$)/ });
+
 test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
-  test('U-CAL-025a banner Review opens the problematic inbox', async ({
+  test('U-CAL-025a banner Review opens the problematic inbox grouped by day', async ({
     page,
     auth,
     request,
   }) => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const { name } = await seedProblematic(request, auth.onboarded.access_token);
-    await openAs(page, auth.onboarded);
-    const banner = page.getByRole('region', { name: 'Tasks that fell out of the schedule' });
-    await expect(banner).toBeVisible();
-    await banner.getByRole('button', { name: 'Review' }).click();
-    const inbox = page.getByRole('dialog', { name: 'Problematic' });
-    await expect(inbox).toBeVisible();
-    await expect(inbox.getByText(name)).toBeVisible();
+    const inbox = await openInbox(page, auth, name);
+    await expect(inbox.getByRole('button', { name: 'More actions' }).first()).toBeVisible();
   });
 
-  test('U-CAL-025b Move has day, phase, and start-time fields', async ({
+  test('U-CAL-025b Move has a day stepper and a start time, no phase select', async ({
     page,
     auth,
     request,
   }) => {
     await completeOpenTasks(request, auth.onboarded.access_token);
-    const { name, placeYmd } = await seedProblematic(
-      request,
-      auth.onboarded.access_token,
-    );
+    const { name } = await seedProblematic(request, auth.onboarded.access_token);
     const { move } = await openMoveSheet(page, auth, name);
-    await expect(move.getByRole('textbox', { name: 'Day' })).toHaveValue(placeYmd);
-    await expect(move.getByLabel('Phase')).toBeVisible();
-    await expect(move.getByRole('button', { name: 'Start time' })).toBeVisible();
+    await expect(move.getByRole('button', { name: 'Day', exact: true })).toBeVisible();
+    await expect(move.getByRole('button', { name: 'Previous day', exact: true })).toBeVisible();
+    await expect(move.getByRole('button', { name: 'Next day', exact: true })).toBeVisible();
     await expect(move.getByRole('button', { name: 'Start time' })).toHaveCount(1);
+    await expect(move.getByLabel('Phase')).toHaveCount(0);
   });
 
-  test('U-CAL-025c snap timeline listbox appears with slot options', async ({
+  test('U-CAL-025c timeline and suggestions appear; Place is ready', async ({
     page,
     auth,
     request,
@@ -121,54 +174,35 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const { name } = await seedProblematic(request, auth.onboarded.access_token);
     const { move } = await openMoveSheet(page, auth, name);
-    const slotList = move.getByRole('listbox', { name: /Available slots/i });
-    await expect(slotList).toBeVisible({ timeout: 30_000 });
-    await expect(slotList.getByRole('option').first()).toBeAttached();
-    await expect(move.getByRole('button', { name: 'Place' })).toBeEnabled({
-      timeout: 15_000,
-    });
+    await expect(timeline(move)).toBeVisible({ timeout: 30_000 });
+    await expect(move.getByText('Free near the old time')).toBeVisible();
+    await expect(placeButton(move)).toBeEnabled({ timeout: 15_000 });
   });
 
-  test('U-CAL-025d Place clears problematic and sets fixed times', async ({
+  test('U-CAL-025d Place seats the task and keeps it flexible', async ({
     page,
     auth,
     request,
   }) => {
-    await completeOpenTasks(request, auth.onboarded.access_token);
-    const { name, placeYmd, taskId } = await seedProblematic(
-      request,
-      auth.onboarded.access_token,
-      { ymd: Y.d2 },
-    );
-    const { move } = await openMoveSheet(page, auth, name);
-    await expect(move.getByRole('listbox')).toBeVisible({ timeout: 30_000 });
-    await move.getByRole('button', { name: 'Place' }).click();
+    const token = auth.onboarded.access_token;
+    await completeOpenTasks(request, token);
+    const { name, placeYmd, taskId } = await seedProblematic(request, token, { ymd: Y.d2 });
+    const { inbox, move } = await openMoveSheet(page, auth, name);
+    await expect(timeline(move)).toBeVisible({ timeout: 30_000 });
+    await placeButton(move).click();
     await expect(move).toBeHidden({ timeout: 30_000 });
+    // The inbox stays open for the next item.
+    await expect(inbox).toBeVisible();
     await expect
       .poll(async () => {
-        const listed = await apiJson(request, auth.onboarded.access_token, 'get', '/tasks');
-        const task = (Array.isArray(listed.body) ? listed.body : []).find(
-          (row: { id?: string }) => row.id === taskId,
-        );
+        const task = await readTask(request, token, taskId);
         return {
           scheduleState: task?.scheduleState,
           eventType: task?.eventType,
-          start: String(task?.scheduledStartTime || ''),
+          day: String(task?.scheduledStartTime || '').slice(0, 10),
         };
       })
-      .toMatchObject({
-        scheduleState: 'none',
-        eventType: 'fixed',
-      });
-    await expect
-      .poll(async () => {
-        const listed = await apiJson(request, auth.onboarded.access_token, 'get', '/tasks');
-        const task = (Array.isArray(listed.body) ? listed.body : []).find(
-          (row: { id?: string }) => row.id === taskId,
-        );
-        return String(task?.scheduledStartTime || '');
-      })
-      .toMatch(new RegExp(`^${placeYmd}T`));
+      .toMatchObject({ scheduleState: 'none', eventType: 'admin', day: placeYmd });
   });
 
   test('U-CAL-025e Cancel closes the Move sheet without placing', async ({
@@ -176,34 +210,22 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     auth,
     request,
   }) => {
-    await completeOpenTasks(request, auth.onboarded.access_token);
-    const { name, taskId } = await seedProblematic(
-      request,
-      auth.onboarded.access_token,
-      { ymd: Y.d3 },
-    );
+    const token = auth.onboarded.access_token;
+    await completeOpenTasks(request, token);
+    const { name, taskId } = await seedProblematic(request, token, { ymd: Y.d3 });
     const { move } = await openMoveSheet(page, auth, name);
     await move.getByRole('button', { name: 'Cancel' }).click();
     await expect(move).toBeHidden();
-    const listed = await apiJson(request, auth.onboarded.access_token, 'get', '/tasks');
-    const task = (Array.isArray(listed.body) ? listed.body : []).find(
-      (row: { id?: string }) => row.id === taskId,
-    );
+    const task = await readTask(request, token, taskId);
     expect(task?.scheduleState).toBe('problematic');
-    expect(task?.scheduledStartTime == null || task?.eventType !== 'fixed').toBe(true);
+    expect(task?.eventType).toBe('admin');
   });
 
-  test('U-CAL-025f changing day refetches free-slots', async ({
-    page,
-    auth,
-    request,
-  }) => {
+  test('U-CAL-025f changing day refetches free-slots', async ({ page, auth, request }) => {
     await completeOpenTasks(request, auth.onboarded.access_token);
-    const { name, placeYmd } = await seedProblematic(
-      request,
-      auth.onboarded.access_token,
-      { ymd: Y.d4 },
-    );
+    const { name, placeYmd } = await seedProblematic(request, auth.onboarded.access_token, {
+      ymd: Y.d4,
+    });
     const ymds: string[] = [];
     await page.route('**/schedule/free-slots**', async (route) => {
       const url = new URL(route.request().url());
@@ -211,13 +233,23 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
       await route.continue();
     });
     const { move } = await openMoveSheet(page, auth, name);
-    await expect(move.getByRole('listbox')).toBeVisible({ timeout: 30_000 });
-    await move.getByRole('textbox', { name: 'Day' }).fill(Y.d5);
+    await expect(timeline(move)).toBeVisible({ timeout: 30_000 });
+    expect(ymds).toContain(placeYmd);
+
+    await move.getByRole('button', { name: 'Next day', exact: true }).click();
     await expect.poll(() => ymds.includes(Y.d5)).toBe(true);
-    expect(ymds[0]).toBe(placeYmd);
+
+    await move.getByRole('button', { name: 'Day', exact: true }).click();
+    const picker = page.getByRole('dialog', { name: 'Choose date' });
+    const day = picker.locator(`[data-ymd="${Y.d6}"]`);
+    if (!(await day.isVisible())) {
+      await picker.getByRole('button', { name: 'Next month' }).click();
+    }
+    await day.click();
+    await expect.poll(() => ymds.includes(Y.d6)).toBe(true);
   });
 
-  test('U-CAL-025g empty candidates shows empty-state copy', async ({
+  test('U-CAL-025g an empty day offers the next day with room', async ({
     page,
     auth,
     request,
@@ -225,34 +257,14 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const { name } = await seedProblematic(request, auth.onboarded.access_token, {
       ymd: Y.d6,
-      minutes: 30,
     });
-    await page.route('**/schedule/free-slots**', async (route) => {
-      if (route.request().method() !== 'GET') {
-        await route.continue();
-        return;
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          ymd: Y.d6,
-          timeZone: 'Europe/Kyiv',
-          durationMinutes: 30,
-          dayStart: `${Y.d6}T04:00:00.000Z`,
-          dayEnd: `${Y.d6}T19:00:00.000Z`,
-          phase: null,
-          busy: [],
-          free: [],
-          candidates: [],
-        }),
-      });
-    });
+    await mockFreeSlots(page, Y.d6, { start: '04:00', end: '19:00', free: [], candidates: [] });
     const { move } = await openMoveSheet(page, auth, name);
-    await expect(
-      move.getByText(/No free slot big enough on this day and phase/i),
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(move.getByRole('button', { name: 'Place' })).toBeDisabled();
+    await expect(move.getByText(/No free time long enough on this day/i)).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(move.getByRole('button', { name: 'Next day with room' })).toBeVisible();
+    await expect(placeButton(move)).toBeDisabled();
   });
 
   test('U-CAL-025h free-slots load error surfaces in the sheet', async ({
@@ -281,40 +293,41 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     });
   });
 
-  test('U-CAL-025i free-slots loads without phaseId; phase select seeks timeline', async ({
+  test('U-CAL-025i a slot in another phase says the task moves to it', async ({
     page,
     auth,
     request,
   }) => {
-    await completeOpenTasks(request, auth.onboarded.access_token);
-    const phase = await apiJson(request, auth.onboarded.access_token, 'post', '/phases', {
-      name: uniqueName('Move phase'),
+    const token = auth.onboarded.access_token;
+    await completeOpenTasks(request, token);
+    const phaseName = uniqueName('Move phase');
+    const phase = await apiJson(request, token, 'post', '/phases', {
+      name: phaseName,
       color: '#2266aa',
       startTime: '10:00',
       endTime: '16:00',
       type: 'time_phase',
     });
     expectOk(phase);
-    const phaseId = phase.body.id as string;
-    const { name } = await seedProblematic(request, auth.onboarded.access_token, {
-      ymd: Y.d8,
+    const { name } = await seedProblematic(request, token, { ymd: Y.d8 });
+    await mockFreeSlots(page, Y.d8, {
+      start: '08:00',
+      end: '18:00',
+      free: [['08:00', '18:00']],
+      candidates: ['08:00', '11:00'],
     });
+    // Registered last, so it sees each request first, then falls back to the mock.
     const phaseIds: string[] = [];
     await page.route('**/schedule/free-slots**', async (route) => {
-      const url = new URL(route.request().url());
-      phaseIds.push(url.searchParams.get('phaseId') || '');
-      await route.continue();
+      phaseIds.push(new URL(route.request().url()).searchParams.get('phaseId') || '');
+      await route.fallback();
     });
     const { move } = await openMoveSheet(page, auth, name);
-    await expect(move.getByRole('listbox')).toBeVisible({ timeout: 30_000 });
-    // Full-day fetch — no phase filter on the API.
+    await expect(timeline(move)).toBeVisible({ timeout: 30_000 });
+    // Full-day fetch: the phase is not an API filter.
     expect(phaseIds.every((id) => id === '')).toBe(true);
-    const before = phaseIds.length;
-    await move.getByLabel('Phase').selectOption(phaseId);
-    await expect(move.getByLabel('Phase')).toHaveValue(phaseId);
-    // Selecting a phase must not refetch free-slots with that phaseId.
-    await page.waitForTimeout(300);
-    expect(phaseIds.slice(before).every((id) => id === '')).toBe(true);
+    await setStartTime(page, move, '11:00');
+    await expect(move.getByTestId('move-phase-change')).toContainText(phaseName);
   });
 
   test('U-CAL-025j wheel-scrolling the timeline does not snap back to the start', async ({
@@ -327,25 +340,23 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
       ymd: Y.d9,
     });
     const { move } = await openMoveSheet(page, auth, name);
-    const slotList = move.getByRole('listbox', { name: /Available slots/i });
-    await expect(slotList).toBeVisible({ timeout: 30_000 });
-    await expect(slotList.getByRole('option').first()).toBeAttached();
+    const slider = timeline(move);
+    await expect(slider).toBeVisible({ timeout: 30_000 });
 
-    const box = await slotList.boundingBox();
+    const box = await slider.boundingBox();
     expect(box).toBeTruthy();
     await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    const scrollTopBefore = await slider.evaluate((el) => el.scrollTop);
     for (let i = 0; i < 8; i++) {
       await page.mouse.wheel(0, 180);
       await page.waitForTimeout(40);
     }
 
-    const scrollTopAfterWheel = await slotList.evaluate((el) => el.scrollTop);
-    expect(scrollTopAfterWheel).toBeGreaterThan(80);
+    const scrollTopAfterWheel = await slider.evaluate((el) => el.scrollTop);
+    expect(scrollTopAfterWheel - scrollTopBefore).toBeGreaterThan(80);
 
     await page.waitForTimeout(600);
-    const scrollTopLater = await slotList.evaluate((el) => el.scrollTop);
-    // Must not yank back near 0 (the old auto-snap / scrollIntoView bug).
-    expect(scrollTopLater).toBeGreaterThan(80);
+    const scrollTopLater = await slider.evaluate((el) => el.scrollTop);
     expect(Math.abs(scrollTopLater - scrollTopAfterWheel)).toBeLessThan(60);
 
     const modalBodyScroll = await move.evaluate((el) => {
@@ -369,71 +380,31 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const { name } = await seedProblematic(request, auth.onboarded.access_token, {
       ymd: Y.d10,
-      minutes: 30,
     });
-    await page.route('**/schedule/free-slots**', async (route) => {
-      if (route.request().method() !== 'GET') {
-        await route.continue();
-        return;
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          ymd: Y.d10,
-          timeZone: 'UTC',
-          durationMinutes: 30,
-          dayStart: `${Y.d10}T06:00:00.000Z`,
-          dayEnd: `${Y.d10}T18:00:00.000Z`,
-          phase: null,
-          busy: [
-            {
-              start: `${Y.d10}T10:00:00.000Z`,
-              end: `${Y.d10}T16:00:00.000Z`,
-            },
-          ],
-          free: [
-            {
-              start: `${Y.d10}T06:00:00.000Z`,
-              end: `${Y.d10}T10:00:00.000Z`,
-            },
-            {
-              start: `${Y.d10}T16:00:00.000Z`,
-              end: `${Y.d10}T18:00:00.000Z`,
-            },
-          ],
-          candidates: [
-            `${Y.d10}T06:00:00.000Z`,
-            `${Y.d10}T07:00:00.000Z`,
-            `${Y.d10}T08:00:00.000Z`,
-            `${Y.d10}T09:00:00.000Z`,
-            `${Y.d10}T16:00:00.000Z`,
-            `${Y.d10}T16:30:00.000Z`,
-          ],
-        }),
-      });
+    await mockFreeSlots(page, Y.d10, {
+      start: '06:00',
+      end: '18:00',
+      busy: [['10:00', '16:00']],
+      free: [
+        ['06:00', '10:00'],
+        ['16:00', '18:00'],
+      ],
+      candidates: ['06:00', '07:00', '08:00', '09:00', '16:00', '16:30'],
     });
     const { move } = await openMoveSheet(page, auth, name);
-    await expect(move.getByRole('listbox', { name: /Available slots/i })).toBeVisible({
-      timeout: 30_000,
-    });
-    await expect(move.getByText(/\d{2}:\d{2}\s*[–-]\s*\d{2}:\d{2}/).first()).toBeVisible();
-    await expect(move.getByRole('button', { name: 'Place' })).toBeEnabled({
-      timeout: 15_000,
-    });
+    await expect(timeline(move)).toBeVisible({ timeout: 30_000 });
+    await expect(placeButton(move)).toBeEnabled({ timeout: 15_000 });
 
-    // Manual seek into the busy band — must not soft-snap back onto a free slot.
+    // Seek into the busy band: it must not soft-snap back onto a free slot.
     await setStartTime(page, move, '12:00');
-    await expect(move.getByText(/12:00\s*[–-]\s*12:30/).first()).toBeVisible({
+    await expect(move.getByText(range('12:00', '12:30')).first()).toBeVisible({
       timeout: 10_000,
     });
-    await expect(move.getByText(/Busy — can't place here/i)).toBeVisible({
-      timeout: 10_000,
-    });
-    await expect(move.getByRole('button', { name: 'Place' })).toBeDisabled();
+    await expect(move.getByText(BUSY_TEXT)).toBeVisible({ timeout: 10_000 });
+    await expect(placeButton(move)).toBeDisabled();
   });
 
-  test('U-CAL-025l Place stays enabled on a later free candidate', async ({
+  test('U-CAL-025l PgUp/PgDn and End jump between free starts', async ({
     page,
     auth,
     request,
@@ -441,54 +412,27 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const { name } = await seedProblematic(request, auth.onboarded.access_token, {
       ymd: Y.d11,
-      minutes: 30,
     });
-    await page.route('**/schedule/free-slots**', async (route) => {
-      if (route.request().method() !== 'GET') {
-        await route.continue();
-        return;
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          ymd: Y.d11,
-          timeZone: 'UTC',
-          durationMinutes: 30,
-          dayStart: `${Y.d11}T09:00:00.000Z`,
-          dayEnd: `${Y.d11}T17:00:00.000Z`,
-          phase: null,
-          busy: [],
-          free: [
-            {
-              start: `${Y.d11}T09:00:00.000Z`,
-              end: `${Y.d11}T17:00:00.000Z`,
-            },
-          ],
-          candidates: [
-            `${Y.d11}T09:00:00.000Z`,
-            `${Y.d11}T09:15:00.000Z`,
-            `${Y.d11}T10:00:00.000Z`,
-            `${Y.d11}T11:00:00.000Z`,
-            `${Y.d11}T12:00:00.000Z`,
-            `${Y.d11}T14:00:00.000Z`,
-            `${Y.d11}T15:00:00.000Z`,
-          ],
-        }),
-      });
+    await mockFreeSlots(page, Y.d11, {
+      start: '09:00',
+      end: '17:00',
+      free: [['09:00', '17:00']],
+      candidates: ['09:00', '10:00', '11:00', '12:00', '14:00', '15:00'],
     });
     const { move } = await openMoveSheet(page, auth, name);
-    const slotList = move.getByRole('listbox', { name: /Available slots/i });
-    await expect(slotList).toBeVisible({ timeout: 30_000 });
-    await expect(move.getByRole('button', { name: 'Place' })).toBeEnabled();
-
-    // Jump to a later candidate (14:00), not the initial morning slot.
-    await slotList.getByRole('option').nth(5).click();
-    await expect(move.getByText(/14:00\s*[–-]\s*14:30/).first()).toBeVisible({
+    const slider = timeline(move);
+    await expect(slider).toBeVisible({ timeout: 30_000 });
+    await slider.focus();
+    await page.keyboard.press('End');
+    await expect(move.getByText(range('15:00', '15:30')).first()).toBeVisible({
       timeout: 10_000,
     });
-    await expect(move.getByRole('button', { name: 'Place' })).toBeEnabled();
-    await expect(move.getByText(/Busy — can't place here/i)).toHaveCount(0);
+    await page.keyboard.press('PageUp');
+    await expect(move.getByText(range('14:00', '14:30')).first()).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(placeButton(move)).toHaveText(/14:00/);
+    await expect(move.getByText(BUSY_TEXT)).toHaveCount(0);
   });
 
   test('U-CAL-025m manual start time seeks and can enable Place', async ({
@@ -499,132 +443,47 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const { name } = await seedProblematic(request, auth.onboarded.access_token, {
       ymd: Y.d12,
-      minutes: 30,
     });
-    await page.route('**/schedule/free-slots**', async (route) => {
-      if (route.request().method() !== 'GET') {
-        await route.continue();
-        return;
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          ymd: Y.d12,
-          timeZone: 'UTC',
-          durationMinutes: 30,
-          dayStart: `${Y.d12}T09:00:00.000Z`,
-          dayEnd: `${Y.d12}T17:00:00.000Z`,
-          phase: null,
-          busy: [],
-          free: [
-            {
-              start: `${Y.d12}T09:00:00.000Z`,
-              end: `${Y.d12}T17:00:00.000Z`,
-            },
-          ],
-          candidates: [
-            `${Y.d12}T09:00:00.000Z`,
-            `${Y.d12}T11:00:00.000Z`,
-            `${Y.d12}T14:00:00.000Z`,
-            `${Y.d12}T15:30:00.000Z`,
-          ],
-        }),
-      });
+    await mockFreeSlots(page, Y.d12, {
+      start: '09:00',
+      end: '17:00',
+      free: [['09:00', '17:00']],
+      candidates: ['09:00', '11:00', '14:00', '15:30'],
     });
     const { move } = await openMoveSheet(page, auth, name);
-    await expect(move.getByRole('listbox')).toBeVisible({ timeout: 30_000 });
+    await expect(timeline(move)).toBeVisible({ timeout: 30_000 });
     await setStartTime(page, move, '14:00');
-    await expect(move.getByText(/14:00\s*[–-]\s*14:30/).first()).toBeVisible({
+    await expect(move.getByText(range('14:00', '14:30')).first()).toBeVisible({
       timeout: 10_000,
     });
-    await expect(move.getByRole('button', { name: 'Place' })).toBeEnabled();
+    await expect(placeButton(move)).toBeEnabled();
   });
 
-  test('U-CAL-025n scrolling into another phase updates the Phase select', async ({
+  test('U-CAL-025n arrow keys move the start by 15 minutes', async ({
     page,
     auth,
     request,
   }) => {
     await completeOpenTasks(request, auth.onboarded.access_token);
-    const token = auth.onboarded.access_token;
-    // Isolate from lifestyle defaults / leftover phases so focus→phase is deterministic.
-    const existing = await apiJson(request, token, 'get', '/phases');
-    expectOk(existing);
-    for (const row of Array.isArray(existing.body) ? existing.body : []) {
-      if (row?.type === 'sleep_time' || !row?.id) continue;
-      await apiJson(request, token, 'delete', `/phases/${row.id}`);
-    }
-    const morning = await apiJson(request, token, 'post', '/phases', {
-      name: uniqueName('Morning'),
-      color: '#11aa55',
-      startTime: '09:00',
-      endTime: '12:00',
-      type: 'time_phase',
-    });
-    expectOk(morning);
-    const afternoon = await apiJson(request, token, 'post', '/phases', {
-      name: uniqueName('Afternoon'),
-      color: '#aa5511',
-      startTime: '14:00',
-      endTime: '15:00',
-      type: 'time_phase',
-    });
-    expectOk(afternoon);
-    const afternoonId = afternoon.body.id as string;    const { name } = await seedProblematic(request, auth.onboarded.access_token, {
+    const { name } = await seedProblematic(request, auth.onboarded.access_token, {
       ymd: Y.d13,
-      minutes: 30,
     });
-    await page.route('**/schedule/free-slots**', async (route) => {
-      if (route.request().method() !== 'GET') {
-        await route.continue();
-        return;
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          ymd: Y.d13,
-          timeZone: 'UTC',
-          durationMinutes: 30,
-          dayStart: `${Y.d13}T09:00:00.000Z`,
-          dayEnd: `${Y.d13}T17:00:00.000Z`,
-          phase: null,
-          busy: [],
-          free: [
-            {
-              start: `${Y.d13}T09:00:00.000Z`,
-              end: `${Y.d13}T17:00:00.000Z`,
-            },
-          ],
-          candidates: [
-            `${Y.d13}T09:00:00.000Z`,
-            `${Y.d13}T10:00:00.000Z`,
-            `${Y.d13}T14:00:00.000Z`,
-            `${Y.d13}T15:00:00.000Z`,
-          ],
-        }),
-      });
+    await mockFreeSlots(page, Y.d13, {
+      start: '09:00',
+      end: '17:00',
+      free: [['09:00', '17:00']],
+      candidates: ['09:00', '10:00'],
     });
-    // Drop RTK phase cache so the new phases appear in the Phase select.
-    await openAs(page, auth.onboarded);
-    await page.reload();
-    await expect(
-      page.getByRole('region', { name: 'Tasks that fell out of the schedule' }),
-    ).toBeVisible();
-    await page.getByRole('button', { name: 'Review' }).click();
-    const inbox = page.getByRole('dialog', { name: 'Problematic' });
-    await inbox.getByRole('button', { name: 'Move', exact: true }).click();
-    const move = page.getByRole('dialog', { name: 'Move' });
-    await expect(move).toBeVisible();
-    await expect(move.getByRole('listbox')).toBeVisible({ timeout: 30_000 });
-    await expect(
-      move.getByLabel('Phase').locator(`option[value="${afternoonId}"]`),
-    ).toBeAttached({ timeout: 15_000 });
-    await setStartTime(page, move, '14:00');
-    await expect
-      .poll(async () => move.getByLabel('Phase').inputValue(), { timeout: 10_000 })
-      .toBe(afternoonId);
+    const { move } = await openMoveSheet(page, auth, name);
+    const slider = timeline(move);
+    await expect(slider).toBeVisible({ timeout: 30_000 });
+    await expect(move.getByText(range('09:00', '09:30')).first()).toBeVisible();
+    await slider.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(move.getByText(range('09:15', '09:45')).first()).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(placeButton(move)).toBeEnabled();
   });
 
   test('U-CAL-025o Place toggles with manual time between free and busy', async ({
@@ -635,71 +494,63 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const { name } = await seedProblematic(request, auth.onboarded.access_token, {
       ymd: Y.d14,
-      minutes: 30,
     });
-    await page.route('**/schedule/free-slots**', async (route) => {
-      if (route.request().method() !== 'GET') {
-        await route.continue();
-        return;
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          ymd: Y.d14,
-          timeZone: 'UTC',
-          durationMinutes: 30,
-          dayStart: `${Y.d14}T09:00:00.000Z`,
-          dayEnd: `${Y.d14}T17:00:00.000Z`,
-          phase: null,
-          busy: [
-            {
-              start: `${Y.d14}T12:00:00.000Z`,
-              end: `${Y.d14}T15:00:00.000Z`,
-            },
-          ],
-          free: [
-            {
-              start: `${Y.d14}T09:00:00.000Z`,
-              end: `${Y.d14}T12:00:00.000Z`,
-            },
-            {
-              start: `${Y.d14}T15:00:00.000Z`,
-              end: `${Y.d14}T17:00:00.000Z`,
-            },
-          ],
-          candidates: [
-            `${Y.d14}T09:00:00.000Z`,
-            `${Y.d14}T10:00:00.000Z`,
-            `${Y.d14}T11:00:00.000Z`,
-            `${Y.d14}T15:00:00.000Z`,
-            `${Y.d14}T16:00:00.000Z`,
-          ],
-        }),
-      });
+    await mockFreeSlots(page, Y.d14, {
+      start: '09:00',
+      end: '17:00',
+      busy: [['12:00', '15:00']],
+      free: [
+        ['09:00', '12:00'],
+        ['15:00', '17:00'],
+      ],
+      candidates: ['09:00', '10:00', '11:00', '15:00', '16:00'],
     });
     const { move } = await openMoveSheet(page, auth, name);
-    await expect(move.getByRole('listbox')).toBeVisible({ timeout: 30_000 });
-    const place = move.getByRole('button', { name: 'Place' });
+    await expect(timeline(move)).toBeVisible({ timeout: 30_000 });
+    const place = placeButton(move);
     await setStartTime(page, move, '10:00');
-    await expect(move.getByText(/10:00\s*[–-]\s*10:30/).first()).toBeVisible({
+    await expect(move.getByText(range('10:00', '10:30')).first()).toBeVisible({
       timeout: 10_000,
     });
     await expect(place).toBeEnabled();
-    await expect(move.getByText(/Busy — can't place here/i)).toHaveCount(0);
+    await expect(move.getByText(BUSY_TEXT)).toHaveCount(0);
 
     await setStartTime(page, move, '13:00');
-    await expect(move.getByText(/13:00\s*[–-]\s*13:30/).first()).toBeVisible({
+    await expect(move.getByText(range('13:00', '13:30')).first()).toBeVisible({
       timeout: 10_000,
     });
-    await expect(move.getByText(/Busy — can't place here/i)).toBeVisible();
+    await expect(move.getByText(BUSY_TEXT)).toBeVisible();
     await expect(place).toBeDisabled();
 
     await setStartTime(page, move, '15:30');
-    await expect(move.getByText(/15:30\s*[–-]\s*16:00/).first()).toBeVisible({
+    await expect(move.getByText(range('15:30', '16:00')).first()).toBeVisible({
       timeout: 10_000,
     });
     await expect(place).toBeEnabled();
-    await expect(move.getByText(/Busy — can't place here/i)).toHaveCount(0);
+    await expect(move.getByText(BUSY_TEXT)).toHaveCount(0);
+  });
+
+  test('U-CAL-025p the inbox one-tap suggestion seats the task', async ({
+    page,
+    auth,
+    request,
+  }) => {
+    const token = auth.onboarded.access_token;
+    await completeOpenTasks(request, token);
+    const { name, placeYmd, taskId } = await seedProblematic(request, token, { ymd: Y.d15 });
+    const inbox = await openInbox(page, auth, name);
+    const suggestion = inbox.getByRole('button', { name: /^Place at \d{2}:\d{2}$/ });
+    await expect(suggestion).toBeVisible({ timeout: 30_000 });
+    await suggestion.click();
+    await expect
+      .poll(async () => {
+        const task = await readTask(request, token, taskId);
+        return {
+          scheduleState: task?.scheduleState,
+          day: String(task?.scheduledStartTime || '').slice(0, 10),
+        };
+      })
+      .toMatchObject({ scheduleState: 'none', day: placeYmd });
+    await expect(inbox.getByText(name)).toHaveCount(0, { timeout: 15_000 });
   });
 });

@@ -20,6 +20,11 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ScheduleService } from './schedule.service';
 import { DisplayedEventMoveService } from './displayed-event-move.service';
+import { ProblematicPlaceService } from './problematic-place.service';
+import {
+  PlaceProblematicDto,
+  type PlaceProblematicResult,
+} from './dto/place-problematic.dto';
 import { ConflictOptionPhrasesService } from './conflict-option-phrases.service';
 import {
   FreeSlotsResponse,
@@ -46,6 +51,7 @@ export class ScheduleController {
     private readonly displayedEventMoveService: DisplayedEventMoveService,
     private readonly conflictOptionPhrasesService: ConflictOptionPhrasesService,
     private readonly freeSlotsService: FreeSlotsService,
+    private readonly problematicPlaceService: ProblematicPlaceService,
   ) {}
 
   @Post()
@@ -133,6 +139,22 @@ export class ScheduleController {
   @ApiResponse({ status: 404, description: 'Not found' })
   async remove(@Request() req, @Param('id') id: string): Promise<void> {
     return this.scheduleService.remove(id, req.user.userId);
+  }
+
+  @Post('problematic/:taskId/place')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Problematic Move: seat a parked task, or one parked series day as a copy, on a chosen free slot',
+  })
+  @ApiResponse({ status: 200, description: 'Seated; taskId owns the slot' })
+  @ApiResponse({ status: 400, description: 'Slot taken or in the past; nothing changed' })
+  async placeProblematic(
+    @Request() req,
+    @Param('taskId') taskId: string,
+    @Body() dto: PlaceProblematicDto,
+  ): Promise<PlaceProblematicResult> {
+    return this.problematicPlaceService.place(req.user.userId, taskId, dto);
   }
 
   @Post('move-event')

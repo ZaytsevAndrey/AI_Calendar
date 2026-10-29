@@ -1,9 +1,12 @@
 import type { ConflictOptionId, SchedulingConflictDTO } from './conflictChoiceBus';
 import type { SkipOccurrenceDTO, UpdateTaskDTO } from 'api/tasks.api';
+import { occurrenceStartIsoForYmd } from './occurrenceStart';
 
 type ApplyDeps = {
   updateTask: (id: string, body: UpdateTaskDTO) => Promise<unknown>;
   skipOccurrence: (id: string, body: SkipOccurrenceDTO) => Promise<unknown>;
+  /** Settings zone: a bare day is skipped at its local noon. */
+  timeZone: string;
 };
 
 function parkPayload(conflict: SchedulingConflictDTO): UpdateTaskDTO {
@@ -94,7 +97,7 @@ export async function applyConflictOption(
         typeof conflict.meta?.preferredStart === 'string'
           ? conflict.meta.preferredStart
           : typeof conflict.meta?.occurrenceYmd === 'string'
-            ? `${conflict.meta.occurrenceYmd}T12:00:00.000Z`
+            ? occurrenceStartIsoForYmd(conflict.meta.occurrenceYmd, deps.timeZone)
             : new Date().toISOString();
       await deps.skipOccurrence(conflict.taskId, {
         occurrenceStart: preferredStart,

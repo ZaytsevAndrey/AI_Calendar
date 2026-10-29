@@ -74,6 +74,18 @@ export function clearParkMetadata(task: {
   Object.assign(task, clearedParkColumns());
 }
 
+/** Parked civil days of a task: the list, else the single day. */
+export function parkedDays(task: {
+  problematicOccurrenceYmds: string[] | null;
+  problematicDay: string | null;
+}): string[] {
+  const list = (task.problematicOccurrenceYmds ?? []).filter(
+    (ymd) => typeof ymd === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ymd),
+  );
+  if (list.length) return [...new Set(list)].sort();
+  return task.problematicDay ? [task.problematicDay] : [];
+}
+
 /** One parked day is the copy's civil day. Multi-day legacy rows keep the list only. */
 export function rememberSingleProblematicDay(task: {
   problematicDay: string | null;

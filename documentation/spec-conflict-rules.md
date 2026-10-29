@@ -119,7 +119,7 @@ Further ids may be added later; these are the baseline contract.
 | Flag / model | Existing `isUnscheduled` | `scheduleState` `problematic` (enum `none` \| `problematic` \| `resolved`; Calendar banner/sheet). `resolved` is stored and not shown as the inbox |
 
 | Typical entry | User creates without scheduling; deadline window with no fit | Overflow; dismiss conflict; recurring won’t fit |
-| Actions (product) | Done / Skip (cancel) / Do now / Open (§7) | Open task; move / skip / resolve (roadmap §3–4) |
+| Actions (product) | Done / Skip (cancel) / Do now / Open (§7) | One card per parked day: suggested free slot that day (one tap), Other time (Move), Skip day (series day or copy), Place on top (one day only), Edit, Delete (plain task) |
 | UI default | Tasks page inbox | Calendar banner/chip + sheet (placement flexible until §3) |
 
 ---

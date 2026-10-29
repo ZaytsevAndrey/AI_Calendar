@@ -9,6 +9,7 @@ import { ScheduleJobService } from './schedule-job.service';
 import { RecurringExtendProcessor } from './recurring-extend.processor';
 import { ScheduleJobController } from './schedule-job.controller';
 import { DisplayedEventMoveService } from './displayed-event-move.service';
+import { ProblematicPlaceService } from './problematic-place.service';
 import { ConflictOptionPhrasesService } from './conflict-option-phrases.service';
 import { FreeSlotsService } from './free-slots.service';
 import { PlacementStepService } from './placement-step.service';
@@ -40,6 +41,7 @@ import { VoiceModule } from '../voice/voice.module';
     ConflictOptionPhrasesService,
     FreeSlotsService,
     PlacementStepService,
+    ProblematicPlaceService,
   ],
   exports: [ScheduleService, ScheduleJobService, PlacementStepService],
 })

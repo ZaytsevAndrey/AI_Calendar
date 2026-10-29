@@ -397,6 +397,74 @@ describe('TasksService', () => {
     );
   });
 
+  it('refuses place on top for a whole series', async () => {
+    lastSaved = {
+      id: 'task-1',
+      name: 'Gym',
+      userId: 'user-1',
+      eventType: TaskEventType.ADMIN,
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      scheduleState: 'problematic',
+      problematicOccurrenceYmds: ['2026-10-06'],
+      estimatedTimeInMinutes: 60,
+      status: TaskStatus.TODO,
+    };
+    await expect(
+      service.update('task-1', 'user-1', { scheduleState: 'resolved' } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(scheduledTaskRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('a new clock on a parked task seats it there', async () => {
+    await service.create('user-1', {
+      name: 'Call',
+      scheduleState: 'problematic',
+      problematicOccurrenceYmds: ['2026-10-06'],
+      estimatedTimeInMinutes: 30,
+    } as any);
+    placementStep.place.mockClear();
+
+    const saved = await service.update('task-1', 'user-1', {
+      scheduledStartTime: '2026-10-06T14:00:00.000Z',
+      scheduledEndTime: '2026-10-06T14:30:00.000Z',
+    } as any);
+    await flushMutationFollowUp();
+
+    expect(saved.scheduleState).toBe('none');
+    expect(placementStep.place).toHaveBeenCalledWith(
+      'user-1',
+      'task-1',
+      expect.objectContaining({
+        commit: 'preferred',
+        preferredStart: new Date('2026-10-06T14:00:00.000Z'),
+      }),
+    );
+  });
+
+  it('a new clock that does not seat goes back to Problematic', async () => {
+    await service.create('user-1', {
+      name: 'Call',
+      scheduleState: 'problematic',
+      problematicOccurrenceYmds: ['2026-10-06'],
+      estimatedTimeInMinutes: 30,
+    } as any);
+    placementStep.place.mockResolvedValue({
+      outcome: 'problematic',
+      reason: 'no_slot',
+    });
+
+    await service.update('task-1', 'user-1', {
+      scheduledStartTime: '2026-10-06T14:00:00.000Z',
+      scheduledEndTime: '2026-10-06T14:30:00.000Z',
+    } as any);
+    await flushMutationFollowUp();
+
+    expect(lastSaved?.scheduleState).toBe('problematic');
+    expect(lastSaved?.scheduledStartTime).toBeNull();
+    expect(lastSaved?.problematicDay).toBe('2026-10-06');
+  });
+
   it('rejects unscheduled + fixed', async () => {
     await expect(
       service.create('user-1', {
@@ -1103,6 +1171,58 @@ describe('TasksService', () => {
       expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
       expect(placementStep.seatOpenHoles).toHaveBeenCalledWith('user-1');
       expect(googleCalendarService.deleteEvent).not.toHaveBeenCalled();
+    });
+
+    it('skipping a parked series day drops only that day from the inbox', async () => {
+      lastSaved = {
+        id: 'task-1',
+        userId: 'user-1',
+        name: 'Gym',
+        isUnscheduled: false,
+        isRecurring: true,
+        isFixedExternal: false,
+        eventType: TaskEventType.ADMIN,
+        status: TaskStatus.TODO,
+        scheduleState: 'problematic',
+        problematicDay: '2026-09-22',
+        problematicOccurrenceYmds: ['2026-09-22', '2026-09-24'],
+        skippedOccurrenceYmds: null,
+      };
+      scheduledTaskRepository.find.mockResolvedValue([]);
+
+      const result = await service.skipOccurrence('task-1', 'user-1', {
+        occurrenceStart: futureStart.toISOString(),
+      });
+
+      expect(result.skippedOccurrenceYmds).toEqual(['2026-09-22']);
+      expect(result.scheduleState).toBe('problematic');
+      expect(result.problematicOccurrenceYmds).toEqual(['2026-09-24']);
+      expect(result.problematicDay).toBe('2026-09-24');
+    });
+
+    it('skipping the last parked series day leaves the inbox', async () => {
+      lastSaved = {
+        id: 'task-1',
+        userId: 'user-1',
+        name: 'Gym',
+        isUnscheduled: false,
+        isRecurring: true,
+        isFixedExternal: false,
+        eventType: TaskEventType.ADMIN,
+        status: TaskStatus.TODO,
+        scheduleState: 'problematic',
+        problematicDay: '2026-09-22',
+        problematicOccurrenceYmds: ['2026-09-22'],
+        skippedOccurrenceYmds: null,
+      };
+      scheduledTaskRepository.find.mockResolvedValue([]);
+
+      const result = await service.skipOccurrence('task-1', 'user-1', {
+        occurrenceStart: futureStart.toISOString(),
+      });
+
+      expect(result.scheduleState).toBe('none');
+      expect(result.problematicOccurrenceYmds).toBeNull();
     });
 
     it('does not delete an already ended local slot but still removes the Google instance', async () => {

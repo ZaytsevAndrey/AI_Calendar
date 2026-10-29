@@ -29,6 +29,7 @@ import {
     type SeriesDragScope,
 } from 'modules/schedule/seriesDragChoice';
 import { isActiveProblematicTask, todayYmdInZone } from 'modules/schedule/problematicDays';
+import { autoSeatedFromPark } from 'modules/schedule/problematicSeatWatch';
 import { NowStrip } from 'modules/now/components/NowStrip';
 import { useGetDayRemindersQuery } from 'api/dayReminders.api';
 import { ReminderList, reminderGoogleEventIds } from 'modules/day-reminders/ReminderList';
@@ -64,10 +65,10 @@ import { Modal } from '../../ui/Modal';
 import { Button } from 'ui/Button';
 import { dialogButtonSize } from 'ui/controlSize';
 import { Spinner } from '../../ui/Spinner';
-import { showErrorToast, showSuccessToast } from '../../utils/toast';
+import { showErrorToast, showInfoToast, showSuccessToast } from '../../utils/toast';
 import { extractApiErrorMessage } from '../../utils/extractApiErrorMessage';
-import { formatDateTimeRange, joinToastDetail } from '../../utils/formatDate';
-import { civilDayStartEndIso, ymdFromLocalDate } from '../../utils/ianaDateTime';
+import { formatCivilYmd, formatDateTimeRange, joinToastDetail } from '../../utils/formatDate';
+import { civilDayStartEndIso, isoToHm, localYmd, ymdFromLocalDate } from '../../utils/ianaDateTime';
 import {
     CalendarView,
     compactPeriodLabel,
@@ -216,6 +217,24 @@ const CalendarPage: React.FC = () => {
     const problematicTasks = tasks.filter((task) =>
         isActiveProblematicTask(task, todayYmd, parkDayHints[task.id]),
     );
+    // A freed hole seats parked tasks on the server; say so instead of the
+    // banner count silently dropping.
+    const parkedIdsRef = React.useRef<Set<string> | null>(null);
+    useEffect(() => {
+        const previous = parkedIdsRef.current;
+        parkedIdsRef.current = new Set(
+            tasks.filter((task) => task.scheduleState === 'problematic').map((task) => task.id),
+        );
+        if (!previous) return;
+        for (const task of autoSeatedFromPark(previous, tasks)) {
+            const start = task.scheduledStartTime!;
+            const day = localYmd(start, timeZone);
+            showInfoToast({
+                title: t('schedule.problematicAutoSeated', { name: task.name }),
+                detail: `${formatCivilYmd(day) ?? day}, ${isoToHm(start, timeZone)}`,
+            });
+        }
+    }, [tasks, timeZone, t]);
     const [overlays, setOverlays] = useState<CalendarEventOverlayDTO[]>([]);
     const [calendarNameById, setCalendarNameById] = useState<CalendarNameById>({});
     const refreshOverlays = React.useCallback(() => {

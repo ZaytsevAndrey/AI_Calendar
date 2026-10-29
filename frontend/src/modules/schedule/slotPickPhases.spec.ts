@@ -1,5 +1,6 @@
 import {
   phaseIdAtFocus,
+  phaseIdForMovedSlot,
   phaseWindowsForDay,
 } from './slotPickPhases';
 import type { PhaseDTO } from '../../api/phases.api';
@@ -57,5 +58,21 @@ describe('slotPickPhases', () => {
       tz,
     );
     expect(windows.map((w) => w.id)).toEqual(['work']);
+  });
+
+  it("keeps the task phase while the moved slot fits it", () => {
+    const windows = phaseWindowsForDay(
+      [
+        phase({ id: "a", name: "Morning", startTime: "09:00", endTime: "12:00" }),
+        phase({ id: "b", name: "Evening", startTime: "17:00", endTime: "21:00" }),
+      ],
+      ymd,
+      tz,
+    );
+    const at = (hm: string) => Date.parse(`${ymd}T${hm}:00.000Z`);
+    expect(phaseIdForMovedSlot(windows, "a", at("10:00"), at("11:00"))).toBe("a");
+    expect(phaseIdForMovedSlot(windows, "a", at("18:00"), at("19:00"))).toBe("b");
+    expect(phaseIdForMovedSlot(windows, "a", at("14:00"), at("15:00"))).toBeNull();
+    expect(phaseIdForMovedSlot(windows, null, at("10:00"), at("11:00"))).toBe("a");
   });
 });

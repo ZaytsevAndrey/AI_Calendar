@@ -379,6 +379,7 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
         await applyConflictOption(conflict, optionId, {
           updateTask: (id, body) => updateTask({ id, body }).unwrap(),
           skipOccurrence: (id, body) => skipOccurrence({ id, body }).unwrap(),
+          timeZone,
         });
         notifyConflictChoiceConsumed(conflict.taskId);
         const title = i18n.t('schedule.conflictApplied');

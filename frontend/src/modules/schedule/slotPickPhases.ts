@@ -74,9 +74,19 @@ export function phaseIdAtFocus(
   return hits[0]?.id ?? null;
 }
 
-export function phaseWindowById(
+/**
+ * Phase a moved task keeps for [startMs, endMs). Its own phase while the slot
+ * sits inside it; otherwise the phase under the slot start; null outside phases.
+ */
+export function phaseIdForMovedSlot(
   windows: PhaseWindow[],
-  phaseId: string,
-): PhaseWindow | null {
-  return windows.find((w) => w.id === phaseId) ?? null;
+  taskPhaseId: string | null,
+  startMs: number,
+  endMs: number,
+): string | null {
+  const own = taskPhaseId
+    ? windows.find((w) => w.id === taskPhaseId)
+    : undefined;
+  if (own && startMs >= own.startMs && endMs <= own.endMs) return own.id;
+  return phaseIdAtFocus(windows, startMs);
 }

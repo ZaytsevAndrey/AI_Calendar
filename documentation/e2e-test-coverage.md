@@ -566,21 +566,22 @@ Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day,
 | U-CAL-022 | U | P1 | Calendars menu | Uncheck a selected Google calendar | `hiddenGoogleCalendarIds` stores that id |
 | U-CAL-023 | U | P1 | Viewports 1024×700, 1100×800, 1279×768, then 1280×720 | Week, day, month | Hour grid stays on screen, including 08:00 and 20:00. Month grid has height. Desktop hour grid still has height |
 | U-CAL-027 | U | P1 | Event with location, people, and an HTML note | Click the chip | Preview groups filled fields only. A link opens with `target=_blank`. HTML is sanitized. Covered by `eventPreviewFacts.spec.ts` and `eventPreviewText.spec.ts` |
-| U-CAL-025a | U | P1 | Problematic parked task | Banner Review | Problematic inbox opens with the task |
-| U-CAL-025b | U | P1 | Move sheet open | Inspect | Day + Phase + Start time fields visible |
-| U-CAL-025c | U | P1 | Move sheet open | Load free-slots | Listbox “Available start times” has options |
-| U-CAL-025d | U | P1 | Slot selected | Place | Toast; task leaves problematic; becomes `fixed` on that day |
+| U-CAL-025a | U | P1 | Problematic parked task | Banner Review | Problematic inbox opens; card grouped under its day |
+| U-CAL-025b | U | P1 | Move sheet open (Other time) | Inspect | Day stepper (Previous / Next day) + Start time; no Phase select |
+| U-CAL-025c | U | P1 | Move sheet open | Load free-slots | Timeline slider + suggestion chips; Place enabled |
+| U-CAL-025d | U | P1 | Slot chosen | Place | `POST /schedule/problematic/:id/place`; task leaves problematic; stays flexible (`admin`); inbox stays open |
 | U-CAL-025e | U | P1 | Move sheet open | Cancel | Sheet closes; task still problematic |
-| U-CAL-025f | U | P1 | Move sheet open | Change Day | New `GET /schedule/free-slots` with updated `ymd` |
-| U-CAL-025g | U | P1 | API returns empty candidates | Move | Empty-state copy; Place disabled |
+| U-CAL-025f | U | P1 | Move sheet open | Next day | New `GET /schedule/free-slots` with updated `ymd` |
+| U-CAL-025g | U | P1 | API returns empty candidates | Move | Empty-state copy; Place disabled; **Next day with room** offered |
 | U-CAL-025h | U | P1 | free-slots request fails | Move | Error copy in sheet; Place disabled |
-| U-CAL-025i | U | P1 | Phase select changed | free-slots / UI | free-slots stays without `phaseId`; Phase select value updates (seek, no refetch filter) |
+| U-CAL-025i | U | P1 | Focus on a slot in another phase | Seek | Phase-change hint shown; free-slots not refetched with `phaseId` |
 | U-CAL-025j | U | P1 | Move timeline open | Wheel-scroll down; wait | Timeline `scrollTop` stays down; modal body does not jump to top |
-| U-CAL-025k | U | P1 | Free morning + busy midday | Fill Start time `12:00` | Range 12:00–12:30; “can't place”; Place disabled (no soft-snap back) |
-| U-CAL-025l | U | P1 | Full-day free candidates | Click a later option (14:00) | Range shows 14:00–14:30; Place stays enabled |
+| U-CAL-025k | U | P1 | Free morning + busy midday | Fill Start time `12:00` | Range 12:00–12:30; busy copy; Place disabled (no soft-snap back) |
+| U-CAL-025l | U | P1 | Free candidates | Timeline PgUp / PgDn / End | Focus jumps between free starts; Place stays enabled |
 | U-CAL-025m | U | P1 | Move timeline open | Fill Start time `14:00` | Range 14:00–14:30; Place enabled |
-| U-CAL-025n | U | P1 | Morning + afternoon phases | Seek to 14:00 | Phase select auto-switches to afternoon |
+| U-CAL-025n | U | P1 | Move timeline focused | Arrow Up / Down | Start moves by 15 minutes |
 | U-CAL-025o | U | P1 | Free / busy / free bands | Fill 10:00 → 13:00 → 15:30 | Place enabled → disabled + busy copy → enabled again |
+| U-CAL-025p | U | P1 | Parked task, free day | Inbox **Place at HH:MM** | Task seats in one tap; leaves problematic |
 | U-SCH-001 | U | P0 | Fixed wall + UI create preferred on it | Real placement job (JWT `openAs`, no Google OAuth) | Conflict sheet; dismiss / Park → Problematic banner (`p1.scheduling-conflict.spec.ts`) |
 | U-SCH-002 | U | P0 | Same setup | Conflict → Place elsewhere | Task seats off the wall; not problematic |
 | U-SCH-003 | U | P0 | Fixed in Now window | Done on Now strip | Progress toast; strip drops the card |

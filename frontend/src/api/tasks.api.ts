@@ -131,6 +131,21 @@ export interface SkipOccurrenceDTO {
   googleEventCalendarId?: string;
 }
 
+export interface PlaceProblematicDTO {
+  start: string;
+  end: string;
+  /** Phase of the chosen slot; `[]` clears it, omitted keeps it. */
+  phaseIds?: string[];
+  /** Parked series day; required for a recurring task. */
+  occurrenceYmd?: string;
+}
+
+export interface PlaceProblematicResult {
+  taskId: string;
+  start: string;
+  end: string;
+}
+
 export const TasksApi = {
   getAllTasks: async (): Promise<TaskDTO[]> => {
     const response = await apiCall({ method: 'GET', url: '/tasks' });

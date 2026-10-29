@@ -1,38 +1,37 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { CalendarCheck, ChevronLeft, ChevronRight, SkipForward, X } from 'lucide-react';
 import type { TaskDTO } from 'api/tasks.api';
 import { ScheduleApi, type FreeSlotsResponse } from 'api/schedule.api';
-import {
-  useCreateEventMutation,
-  useSkipOccurrenceMutation,
-  useUpdateEventMutation,
-} from 'api/eventTasksApi';
+import { usePlaceProblematicMutation } from 'api/eventTasksApi';
 import { useGetAllPhasesQuery } from 'api/phasesApi';
-import { CalendarCheck, X } from 'lucide-react';
 import { Modal } from '../../../ui/Modal';
 import { Spinner } from '../../../ui/Spinner';
 import { Button } from 'ui/Button';
+import { IconButton } from 'ui/IconButton';
 import { dialogButtonSize } from 'ui/controlSize';
-import { Input } from 'ui/Input';
-import { Select } from 'ui/Select';
+import { DatePicker } from 'ui/DatePicker';
 import { TimeField } from 'ui/TimeField';
-import { formatCivilYmd } from '../../../utils/formatDate';
+import { formatCivilYmd, formatMinutes } from '../../../utils/formatDate';
 import {
   addDaysToYmd,
   isoToHm,
   localDateTimeIso,
   localYmd,
-  normalizeClockHm,
 } from '../../../utils/ianaDateTime';
-import { showErrorToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
+import { SlotPickTimeline } from './SlotPickTimeline';
+import { markProblematicHandled } from '../problematicSeatWatch';
 import {
-  buildOneOffFromSeries,
-  occurrenceStartIsoForYmd,
-} from '../buildOneOffFromSeries';
-import { SlotPickTimeline, seekIsoForPhase } from './SlotPickTimeline';
-import { formatHmFromIso } from '../slotPickMath';
-import { phaseIdAtFocus, phaseWindowsForDay } from '../slotPickPhases';
+  clampFocusMs,
+  formatHmFromIso,
+  initialFocusMs,
+  preferredMsOnDay,
+  resolvePlaceableStartIso,
+  snapMsToStep,
+  suggestedStarts,
+} from '../slotPickMath';
+import { phaseIdForMovedSlot, phaseWindowsForDay } from '../slotPickPhases';
 
 type Target = { task: TaskDTO; occurrenceYmd: string } | null;
 
@@ -40,98 +39,76 @@ type Props = {
   target: Target;
   timeZone: string;
   onClose: () => void;
+  /** The slot was written; the inbox stays open for the next item. */
   onDone: () => void;
 };
 
-function defaultPhaseId(task: TaskDTO): string {
-  return task.phaseId ?? task.phases?.[0]?.id ?? task.phase?.id ?? '';
+/** How far "Next day with room" looks ahead. */
+const NEXT_DAY_SEARCH_DAYS = 14;
+
+function taskPhaseId(task: TaskDTO): string | null {
+  return task.phaseId ?? task.phases?.[0]?.id ?? task.phase?.id ?? null;
 }
 
-export function MoveOccurrenceSheet({
-  target,
-  timeZone,
-  onClose,
-  onDone,
-}: Props) {
+export function MoveOccurrenceSheet({ target, timeZone, onClose, onDone }: Props) {
   const { t } = useTranslation();
   const { data: allPhases = [] } = useGetAllPhasesQuery();
-  const [createEvent] = useCreateEventMutation();
-  const [skipOccurrence] = useSkipOccurrenceMutation();
-  const [updateEvent] = useUpdateEventMutation();
-  const [placeYmd, setPlaceYmd] = useState('');
-  const [phaseId, setPhaseId] = useState('');
+  const [placeProblematic, { isLoading: busy }] = usePlaceProblematicMutation();
+  const [ymd, setYmd] = useState('');
   const [slots, setSlots] = useState<FreeSlotsResponse | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [selectedStartIso, setSelectedStartIso] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  /** The one piece of chosen state: the start the hairline points at. */
   const [focusIso, setFocusIso] = useState<string | null>(null);
-  const [seekIso, setSeekIso] = useState<string | null>(null);
-  const [seekNonce, setSeekNonce] = useState(0);
-  const [timeDraft, setTimeDraft] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [settling, setSettling] = useState(false);
-  const autoAdvancedDay = useRef(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchMiss, setSearchMiss] = useState(false);
 
+  const todayYmd = localYmd(new Date().toISOString(), timeZone);
   const schedulablePhases = useMemo(
     () => allPhases.filter((p) => p.type !== 'sleep_time' && !!p.id),
     [allPhases],
   );
-
   const zone = slots?.timeZone || timeZone;
+  const task = target?.task ?? null;
+  const originalIso = task?.problematicOriginalStart ?? task?.scheduledStartTime ?? null;
 
   useEffect(() => {
+    setSlots(null);
+    setFocusIso(null);
+    setSubmitError(null);
+    setSearchMiss(false);
     if (!target) {
-      setPlaceYmd('');
-      setPhaseId('');
-      setSlots(null);
-      setLoadError(null);
-      setSelectedStartIso(null);
-      setFocusIso(null);
-      setSeekIso(null);
-      setSeekNonce(0);
-      setTimeDraft('');
-      setLoading(false);
-      autoAdvancedDay.current = false;
+      setYmd('');
       return;
     }
-    setPlaceYmd(target.occurrenceYmd);
-    autoAdvancedDay.current = false;
-    const def = defaultPhaseId(target.task);
-    setPhaseId(def);
+    setYmd(target.occurrenceYmd > todayYmd ? target.occurrenceYmd : todayYmd);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target]);
 
-  // Full-day slots (all eligible phases) — phase filter is UI-only + auto from scroll.
   useEffect(() => {
-    if (!target || !placeYmd) {
-      return;
-    }
+    if (!target || !ymd) return;
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
     setSlots(null);
-    setSelectedStartIso(null);
     setFocusIso(null);
-    setSeekIso(null);
-    setSeekNonce(0);
-    void ScheduleApi.getFreeSlots(target.task.id, placeYmd, null)
+    void ScheduleApi.getFreeSlots(target.task.id, ymd, null)
       .then((data) => {
         if (cancelled) return;
-        const today = localYmd(new Date().toISOString(), timeZone);
-        if (
-          data.candidates.length === 0 &&
-          data.free.length === 0 &&
-          placeYmd === today &&
-          !autoAdvancedDay.current
-        ) {
-          autoAdvancedDay.current = true;
-          setPlaceYmd(addDaysToYmd(placeYmd, 1));
-          return;
-        }
         setSlots(data);
+        const focus = initialFocusMs(
+          data.candidates.map((iso) => Date.parse(iso)),
+          data.free.map((g) => ({ start: Date.parse(g.start), end: Date.parse(g.end) })),
+          Date.parse(data.dayStart),
+          Date.parse(data.dayEnd),
+          preferredMsOnDay(originalIso, data.ymd, data.timeZone),
+        );
+        setFocusIso(new Date(focus).toISOString());
       })
       .catch((e) => {
-        if (cancelled) return;
-        setLoadError(extractApiErrorMessage(e));
+        if (!cancelled) setLoadError(extractApiErrorMessage(e));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -139,154 +116,133 @@ export function MoveOccurrenceSheet({
     return () => {
       cancelled = true;
     };
-  }, [target, placeYmd, timeZone]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target, ymd, reloadKey]);
 
-  // Keep the time field in sync with timeline focus / selection.
-  useEffect(() => {
-    const iso = selectedStartIso || focusIso;
-    if (!iso) return;
-    const hm = isoToHm(iso, zone) || formatHmFromIso(iso, zone).slice(0, 5);
-    if (hm) setTimeDraft(hm);
-  }, [selectedStartIso, focusIso, zone]);
+  const view = useMemo(() => {
+    if (!slots) return null;
+    const candidatesMs = slots.candidates.map((iso) => Date.parse(iso));
+    const free = slots.free.map((g) => ({ start: Date.parse(g.start), end: Date.parse(g.end) }));
+    return {
+      candidatesMs,
+      free,
+      dayStartMs: Date.parse(slots.dayStart),
+      dayEndMs: Date.parse(slots.dayEnd),
+      hasRoom: candidatesMs.length > 0 || free.length > 0,
+      suggestions: suggestedStarts(
+        candidatesMs,
+        preferredMsOnDay(originalIso, slots.ymd, slots.timeZone),
+        slots.durationMinutes,
+      ),
+    };
+  }, [slots, originalIso]);
 
-  if (!target) return null;
+  if (!target || !task) return null;
 
-  const { task, occurrenceYmd } = target;
-  const placeLabel = formatCivilYmd(placeYmd) ?? placeYmd;
-  const duration = Math.max(1, task.estimatedTimeInMinutes || 30);
+  const { occurrenceYmd } = target;
   const recurring = !!task.isRecurring;
-  const canPlace = !!selectedStartIso && !busy && !loading;
+  const duration = slots?.durationMinutes ?? Math.max(1, task.estimatedTimeInMinutes || 30);
+  const hm = (iso: string) => isoToHm(iso, zone) || formatHmFromIso(iso, zone);
+  const dayLabel = (day: string) => formatCivilYmd(day) ?? day;
 
-  const requestSeek = (iso: string) => {
-    setSeekIso(iso);
-    setSeekNonce((n) => n + 1);
-  };
+  const placeIso =
+    view && focusIso
+      ? resolvePlaceableStartIso(
+          Date.parse(focusIso),
+          duration,
+          slots!.candidates,
+          view.candidatesMs,
+          view.free,
+        )
+      : null;
+  const placeMs = placeIso ? Date.parse(placeIso) : NaN;
 
-  const clearParkedDay = async () => {
-    const remaining = (task.problematicOccurrenceYmds ?? []).filter(
-      (ymd) => ymd !== occurrenceYmd,
+  // Saved phase follows the slot: own phase while it fits, else the phase there.
+  const ownPhaseId = taskPhaseId(task);
+  const savedPhaseId = Number.isFinite(placeMs)
+    ? phaseIdForMovedSlot(
+        phaseWindowsForDay(schedulablePhases, ymd, zone),
+        ownPhaseId,
+        placeMs,
+        placeMs + duration * 60_000,
+      )
+    : ownPhaseId;
+  const savedPhaseName = schedulablePhases.find((p) => p.id === savedPhaseId)?.name ?? null;
+  const phaseWillChange = !!placeIso && savedPhaseId !== ownPhaseId;
+
+  const setFocusMs = (ms: number) => {
+    if (!view) return;
+    const snapped = clampFocusMs(
+      snapMsToStep(ms, view.dayStartMs),
+      view.dayStartMs,
+      view.dayEndMs,
+      duration,
     );
-    if (remaining.length === 0) {
-      await updateEvent({
-        id: task.id,
-        body: { scheduleState: 'none' },
-      }).unwrap();
-      return;
-    }
-    await updateEvent({
-      id: task.id,
-      body: {
-        scheduleState: 'problematic',
-        problematicOccurrenceYmds: remaining,
-        problematicReason: task.problematicReason ?? null,
-      },
-    }).unwrap();
+    setSubmitError(null);
+    setFocusIso(new Date(snapped).toISOString());
   };
 
-  const confirm = async () => {
-    if (!selectedStartIso || !placeYmd) {
-      showErrorToast({ title: t('schedule.problematicMoveNoSlot') });
-      return;
-    }
-    setBusy(true);
-    setSettling(true);
-    await new Promise((r) => setTimeout(r, 280));
-    try {
-      const hm =
-        isoToHm(selectedStartIso, zone) ||
-        formatHmFromIso(selectedStartIso, zone).slice(0, 5) ||
-        '09:00';
-      const chosenPhase = phaseId || null;
+  const changeDay = (next: string) => {
+    if (!next || next < todayYmd || busy) return;
+    setSearchMiss(false);
+    setSubmitError(null);
+    setYmd(next);
+  };
 
-      if (recurring) {
-        const payload = buildOneOffFromSeries(
-          task,
-          placeYmd,
-          zone,
-          hm,
-          chosenPhase,
-        );
-        const created = await createEvent(payload).unwrap();
-        if (created.conflicts?.length) {
-          // Conflict sheet opens via mutation side-effect; keep Move open.
-          return;
-        }
-        await skipOccurrence({
-          id: task.id,
-          body: {
-            occurrenceStart: occurrenceStartIsoForYmd(occurrenceYmd, zone),
-          },
-        }).unwrap();
-        await clearParkedDay();
-      } else {
-        const start = selectedStartIso;
-        const end = new Date(
-          Date.parse(start) + duration * 60_000,
-        ).toISOString();
-        const updated = await updateEvent({
-          id: task.id,
-          body: {
-            eventType: 'fixed',
-            scheduledStartTime: start,
-            scheduledEndTime: end,
-            phaseId: chosenPhase || undefined,
-            phaseIds: chosenPhase ? [chosenPhase] : undefined,
-            scheduleState: 'none',
-            isUnscheduled: false,
-            problematicOccurrenceYmds: null,
-            problematicReason: null,
-          },
-        }).unwrap();
-        if (updated.conflicts?.length) {
+  const findNextDayWithRoom = async () => {
+    setSearching(true);
+    setSearchMiss(false);
+    try {
+      for (let i = 1; i <= NEXT_DAY_SEARCH_DAYS; i++) {
+        const day = addDaysToYmd(ymd, i);
+        const data = await ScheduleApi.getFreeSlots(task.id, day, null);
+        if (data.candidates.length > 0) {
+          changeDay(day);
           return;
         }
       }
-      onDone();
+      setSearchMiss(true);
     } catch (e) {
-      showErrorToast({
-        title: t('schedule.problematicActionFailed'),
-        detail: extractApiErrorMessage(e),
-      });
+      setLoadError(extractApiErrorMessage(e));
     } finally {
-      setSettling(false);
-      setBusy(false);
+      setSearching(false);
     }
   };
 
-  const onPhaseSelect = (next: string) => {
-    setPhaseId(next);
-    if (!next || !placeYmd) return;
-    const iso = seekIsoForPhase(schedulablePhases, next, placeYmd, zone);
-    if (iso) requestSeek(iso);
+  const confirm = async () => {
+    if (!placeIso || busy) return;
+    setSubmitError(null);
+    markProblematicHandled(task.id);
+    try {
+      await placeProblematic({
+        id: task.id,
+        body: {
+          start: placeIso,
+          end: new Date(placeMs + duration * 60_000).toISOString(),
+          phaseIds: savedPhaseId ? [savedPhaseId] : [],
+          ...(recurring ? { occurrenceYmd } : {}),
+        },
+      }).unwrap();
+      onDone();
+    } catch (e) {
+      // The slot may have been taken meanwhile: show why and refresh the day.
+      setSubmitError(extractApiErrorMessage(e));
+      setReloadKey((k) => k + 1);
+    }
   };
 
-  const onTimeCommit = (raw: string) => {
-    const hm = normalizeClockHm(raw);
-    setTimeDraft(hm);
-    if (!placeYmd) return;
-    const iso = localDateTimeIso(placeYmd, hm, zone);
-    const windows = phaseWindowsForDay(schedulablePhases, placeYmd, zone);
-    const at = phaseIdAtFocus(windows, Date.parse(iso));
-    setPhaseId(at ?? '');
-    requestSeek(iso);
-  };
-
-  const todayYmd = localYmd(new Date().toISOString(), timeZone);
-  const minYmd =
-    occurrenceYmd && occurrenceYmd < todayYmd ? occurrenceYmd : todayYmd;
-  const showTimeline =
-    !loading && !loadError && slots && (slots.candidates.length > 0 || slots.free.length > 0);
-  const showEmpty =
-    !loading &&
-    !loadError &&
-    slots &&
-    slots.candidates.length === 0 &&
-    slots.free.length === 0;
+  const originalLabel = task.problematicOriginalStart
+    ? t('schedule.problematicMoveWas', {
+        day: dayLabel(localYmd(task.problematicOriginalStart, zone)),
+        start: hm(task.problematicOriginalStart),
+        end: task.problematicOriginalEnd ? hm(task.problematicOriginalEnd) : '',
+      })
+    : null;
 
   return (
     <Modal
-      open={!!target}
-      onClose={onClose}
+      open
+      onClose={busy ? () => undefined : onClose}
       title={t('schedule.problematicMoveDayTitle')}
       maxWidthClass="max-w-md"
       zIndexClass="z-[1400]"
@@ -308,72 +264,102 @@ export function MoveOccurrenceSheet({
             type="button"
             size={dialogButtonSize}
             className="w-full sm:w-auto"
-            disabled={!canPlace}
+            disabled={!placeIso || busy || loading}
             onClick={() => void confirm()}
-            icon={CalendarCheck}
+            icon={busy ? undefined : CalendarCheck}
           >
             {busy ? <Spinner className="h-4 w-4" /> : null}
-            {t('schedule.problematicMoveDayConfirm')}
+            {placeIso
+              ? t('schedule.problematicMoveConfirmAt', {
+                  day: dayLabel(ymd),
+                  start: hm(placeIso),
+                })
+              : t('schedule.problematicMoveDayConfirm')}
           </Button>
         </>
       }
     >
-      <p className="mb-1 text-sm font-medium text-ide-text">{task.name}</p>
-      <p className="mb-3 text-sm text-ide-muted">
-        {recurring
-          ? t('schedule.problematicMoveDayIntro', {
-              date: placeLabel,
-              minutes: duration,
-            })
-          : t('schedule.problematicMoveOneOffIntro', {
-              date: placeLabel,
-              minutes: duration,
-            })}
+      <p className="text-sm font-semibold text-ide-text">
+        {task.name}
+        <span className="font-normal text-ide-muted"> · {formatMinutes(duration)}</span>
       </p>
+      {originalLabel ? <p className="mb-1 text-sm text-ide-muted">{originalLabel}</p> : null}
+      {recurring ? (
+        <p className="mb-3 text-xs text-ide-muted">{t('schedule.problematicMoveSeriesNote')}</p>
+      ) : (
+        <div className="mb-3" />
+      )}
 
-      <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <label className="block text-sm text-ide-text">
-          <span className="mb-1 block text-ide-muted">
+      <div className="mb-3 flex items-end gap-2">
+        <IconButton
+          label={t('schedule.problematicMovePrevDay')}
+          size="md"
+          variant="secondary"
+          disabled={busy || ymd <= todayYmd}
+          onClick={() => changeDay(addDaysToYmd(ymd, -1))}
+        >
+          <ChevronLeft className="h-4 w-4" aria-hidden />
+        </IconButton>
+        <div className="min-w-0 flex-1 text-sm">
+          <span id="move-slot-day" className="mb-1 block text-ide-muted">
             {t('schedule.problematicSlotDay')}
           </span>
-          <Input
-            type="date"
-            value={placeYmd}
-            min={minYmd}
-            disabled={busy}
-            onChange={(e) => setPlaceYmd(e.target.value)}
+          <DatePicker
+            labelledBy="move-slot-day"
+            value={ymd}
+            minYmd={todayYmd}
+            emptyLabel={t('schedule.problematicSlotDay')}
+            onChange={changeDay}
           />
-        </label>
-        <label className="block text-sm text-ide-text">
-          <span className="mb-1 block text-ide-muted">
-            {t('schedule.problematicSlotPhase')}
-          </span>
-          <Select
-            value={phaseId}
-            disabled={busy}
-            onChange={(e) => onPhaseSelect(e.target.value)}
-          >
-            <option value="">{t('schedule.problematicSlotPhaseAny')}</option>
-            {schedulablePhases.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label className="block text-sm text-ide-text">
-          <span className="mb-1 block text-ide-muted">
-            {t('schedule.problematicSlotTime')}
-          </span>
+        </div>
+        <IconButton
+          label={t('schedule.problematicMoveNextDay')}
+          size="md"
+          variant="secondary"
+          disabled={busy}
+          onClick={() => changeDay(addDaysToYmd(ymd, 1))}
+        >
+          <ChevronRight className="h-4 w-4" aria-hidden />
+        </IconButton>
+        <div className="w-28 shrink-0 text-sm">
+          <span className="mb-1 block text-ide-muted">{t('schedule.problematicSlotTime')}</span>
           <TimeField
-            value={timeDraft}
+            value={focusIso ? hm(focusIso) : ''}
             minuteStep={15}
-            disabled={busy || loading}
+            disabled={busy || !view}
             aria-label={t('schedule.problematicSlotTime')}
-            onChange={onTimeCommit}
+            onChange={(next) => {
+              if (next) setFocusMs(Date.parse(localDateTimeIso(ymd, next, zone)));
+            }}
           />
-        </label>
+        </div>
       </div>
+
+      {view && view.suggestions.length > 0 ? (
+        <div className="mb-3">
+          <p className="mb-1.5 text-xs font-medium text-ide-muted">
+            {t('schedule.problematicMoveSuggest')}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {view.suggestions.map((ms) => {
+              const iso = new Date(ms).toISOString();
+              return (
+                <Button
+                  key={ms}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  pressed={placeIso != null && Math.abs(placeMs - ms) < 1000}
+                  disabled={busy}
+                  onClick={() => setFocusMs(ms)}
+                >
+                  {hm(iso)}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       {loading ? (
         <div className="flex items-center justify-center gap-2 py-16 text-sm text-ide-muted">
@@ -389,29 +375,55 @@ export function MoveOccurrenceSheet({
         </p>
       ) : null}
 
-      {showEmpty ? (
-        <p className="rounded-lg border border-ide-warn/40 bg-ide-warn/10 px-3 py-4 text-sm text-ide-warn">
-          {t('schedule.problematicSlotEmpty')}
-        </p>
+      {!loading && !loadError && view && !view.hasRoom ? (
+        <div className="flex flex-col items-start gap-3 rounded-lg border border-ide-warn/40 bg-ide-warn/10 px-3 py-4 text-sm text-ide-warn">
+          <p>{t('schedule.problematicSlotEmpty')}</p>
+          {searchMiss ? (
+            <p className="text-ide-muted">
+              {t('schedule.problematicMoveNoDayFound', { days: NEXT_DAY_SEARCH_DAYS })}
+            </p>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              icon={searching ? undefined : SkipForward}
+              disabled={searching}
+              onClick={() => void findNextDayWithRoom()}
+            >
+              {searching ? <Spinner className="h-4 w-4" /> : null}
+              {t('schedule.problematicMoveFindDay')}
+            </Button>
+          )}
+        </div>
       ) : null}
 
-      {showTimeline && slots ? (
+      {!loading && !loadError && slots && view?.hasRoom ? (
         <SlotPickTimeline
           data={slots}
           taskName={task.name}
           phases={schedulablePhases}
-          phaseId={phaseId}
-          preferredStartIso={
-            task.scheduledStartTime ?? task.problematicOriginalStart
-          }
-          settling={settling}
-          selectedStartIso={selectedStartIso}
-          seekIso={seekIso}
-          seekNonce={seekNonce}
-          onSelect={setSelectedStartIso}
-          onFocusIso={setFocusIso}
-          onPhaseChange={setPhaseId}
+          focusIso={focusIso}
+          onFocusChange={(iso) => {
+            setSubmitError(null);
+            setFocusIso(iso);
+          }}
+          onConfirm={() => void confirm()}
         />
+      ) : null}
+
+      {phaseWillChange ? (
+        <p className="mt-2 text-sm text-ide-muted" data-testid="move-phase-change">
+          {savedPhaseName
+            ? t('schedule.problematicMovePhaseChange', { phase: savedPhaseName })
+            : t('schedule.problematicMovePhaseClear')}
+        </p>
+      ) : null}
+
+      {submitError ? (
+        <p className="mt-2 rounded-lg border border-ide-error/40 bg-ide-error/10 px-3 py-2 text-sm text-ide-error" role="alert">
+          {submitError}
+        </p>
       ) : null}
     </Modal>
   );

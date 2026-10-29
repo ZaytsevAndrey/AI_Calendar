@@ -12,6 +12,7 @@ import { isValidIanaTimeZone, resolveIanaTimeZone } from '../../common/iana-time
 import {
   clearParkMetadata,
   isProblematicSchedule,
+  parkedDays,
   rememberSingleProblematicDay,
   ScheduleState,
   Task,
@@ -195,11 +196,6 @@ export class TasksService {
     const after = this.snapshot(task);
     if (before && !this.geometryChanged(before, after)) return null;
 
-    const patternChanged =
-      !!before &&
-      (before.isRecurring !== after.isRecurring ||
-        before.recurrencePattern !== after.recurrencePattern ||
-        before.recurrenceWeekDays !== after.recurrenceWeekDays);
     const startChanged =
       !!before && before.scheduledStartTime !== after.scheduledStartTime;
     const leftInbox =
@@ -261,7 +257,9 @@ export class TasksService {
       }
       return {};
     }
-    if (task.isRecurring && patternChanged) {
+    if (task.isRecurring) {
+      // Phase / window edits on a series: a day that no longer fits parks
+      // alone. Without expandSeries the miss parked the whole series.
       return { commit: 'keep', expandSeries: true };
     }
     return { commit: 'keep' };
@@ -312,6 +310,14 @@ export class TasksService {
           ? new Date(before.scheduledEndTime)
           : null;
         task.estimatedTimeInMinutes = before.estimatedTimeInMinutes;
+        if (
+          before.scheduleState === ScheduleState.PROBLEMATIC &&
+          task.scheduleState === ScheduleState.NONE &&
+          !task.scheduledStartTime
+        ) {
+          // The new clock did not seat: back to the inbox, not a task with no slot.
+          task.scheduleState = ScheduleState.PROBLEMATIC;
+        }
         await this.tasksRepository.save(task);
       }
       return plan.outcome === 'conflict' ? plan.conflict : null;
@@ -775,6 +781,28 @@ export class TasksService {
     this.applyUnscheduledConstraints(task);
     this.applyProblematicConstraints(task);
 
+    if (
+      task.isRecurring &&
+      task.scheduleState === ScheduleState.RESOLVED &&
+      wasScheduleState !== ScheduleState.RESOLVED
+    ) {
+      // A second layer is one day. On a series it replaced every open day.
+      throw new BadRequestException(
+        'Place on top works on one day. Move or skip that day instead.',
+      );
+    }
+    if (
+      wasScheduleState === ScheduleState.PROBLEMATIC &&
+      dto.scheduleState === undefined &&
+      !task.isRecurring &&
+      task.scheduledStartTime &&
+      isoInstant(task.scheduledStartTime) !== before.scheduledStartTime
+    ) {
+      // A new clock on a parked task is a request to seat it there. Park
+      // metadata stays until the seat is written, so a miss can re-park.
+      task.scheduleState = ScheduleState.NONE;
+    }
+
     if (task.eventType === TaskEventType.FIXED) {
       if (!task.scheduledStartTime || !task.scheduledEndTime) {
         throw new BadRequestException(
@@ -961,6 +989,17 @@ export class TasksService {
         occurrenceYmd,
       );
     }
+    // Skipping a parked series day also answers that day in the inbox.
+    let leavesInbox = false;
+    if (task.isRecurring && isProblematicSchedule(task)) {
+      const left = parkedDays(task).filter((ymd) => ymd !== occurrenceYmd);
+      if (left.length) {
+        task.problematicOccurrenceYmds = left;
+        task.problematicDay = left[0];
+      } else {
+        leavesInbox = true;
+      }
+    }
 
     if (openSlot) {
       await this.scheduledTaskRepository.remove(openSlot);
@@ -1003,6 +1042,9 @@ export class TasksService {
       await this.pendingGoogleWrites.syncTask(userId, saved.id);
     }
     if (openSlot) await this.placementStep.seatOpenHoles(userId);
+    if (leavesInbox) {
+      return this.update(saved.id, userId, { scheduleState: ScheduleState.NONE });
+    }
     const row = await this.findOne(saved.id, userId);
     return Object.assign(row, { jobId: null });
   }

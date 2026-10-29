@@ -1,6 +1,13 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { customBaseQuery } from './customBaseQuery';
-import { TaskDTO, CreateTaskDTO, UpdateTaskDTO, SkipOccurrenceDTO } from './tasks.api';
+import {
+  TaskDTO,
+  CreateTaskDTO,
+  UpdateTaskDTO,
+  SkipOccurrenceDTO,
+  PlaceProblematicDTO,
+  PlaceProblematicResult,
+} from './tasks.api';
 import { eventsApi } from './eventsApi';
 import { emitScheduleConflicts } from 'modules/schedule/conflictChoiceBus';
 import { settleReplanJob } from 'modules/schedule/settleReplanJob';
@@ -281,6 +288,41 @@ export const eventTasksApi = createApi({
         }
       },
     }),
+    /** Problematic Move: seat a parked task (or one parked series day) on a free slot. */
+    placeProblematic: builder.mutation<
+      PlaceProblematicResult,
+      { id: string; body: PlaceProblematicDTO }
+    >({
+      query: ({ id, body }) => ({
+        url: `/schedule/problematic/${id}/place`,
+        method: 'POST',
+        data: body,
+      }),
+      invalidatesTags: (_r, _e, { id }) => [
+        { type: 'EventTask', id: 'LIST' },
+        { type: 'EventTask', id },
+      ],
+      async onQueryStarted({ id }, { dispatch, queryFulfilled, getState }) {
+        const existing = eventTasksApi.endpoints.getEvents
+          .select()(getState() as never)
+          ?.data?.find((row) => row.id === id);
+        const title = existing?.name ?? i18n.t('tasks.thisTask');
+        try {
+          await runTaskMutationProgress({
+            taskKey: id,
+            title,
+            run: async (progress) => {
+              await queryFulfilled;
+              progress.setStage('syncing');
+              await settleReplanJob(null);
+              dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+            },
+          });
+        } catch {
+          return;
+        }
+      },
+    }),
     endSeriesFrom: builder.mutation<
       TaskDTO,
       { id: string; body: SkipOccurrenceDTO }
@@ -335,5 +377,6 @@ export const {
   useUpdateEventMutation,
   useDeleteEventMutation,
   useSkipOccurrenceMutation,
+  usePlaceProblematicMutation,
   useEndSeriesFromMutation,
 } = eventTasksApi;
