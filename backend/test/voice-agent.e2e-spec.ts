@@ -31,15 +31,24 @@ function namedCommand(intent: string, taskName: string) {
   };
 }
 
-describe('Voice agent /voice/turn e2e', () => {
+// These cases script the legacy orchestrator (planner steps, parse turns).
+// /voice/turn runs the structured pipeline by default; the legacy one is the
+// VOICE_TURN_ENGINE=legacy rollback (roadmap §49), as in voice-turn-trace.spec.ts.
+// Without the switch the structured interpreter got legacy-shaped model output
+// and refused — that was the cause of A-VOI-020…024 failing.
+describe('Voice agent /voice/turn e2e (legacy rollback engine)', () => {
   let ctx: E2eApp;
+  const engine = process.env.VOICE_TURN_ENGINE;
 
   beforeAll(async () => {
+    process.env.VOICE_TURN_ENGINE = 'legacy';
     ctx = await createTestApp();
   });
 
   afterAll(async () => {
     await closeTestApp(ctx);
+    if (engine === undefined) delete process.env.VOICE_TURN_ENGINE;
+    else process.env.VOICE_TURN_ENGINE = engine;
   });
 
   function queuePlanner(decision: Record<string, unknown>): void {

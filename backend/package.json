@@ -20,7 +20,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand --forceExit",
     "test:vnext:structured": "jest --config ./jest.vnext-structured.config.js --runInBand",
-    "test:vnext:historical": "jest --runInBand src/modules/voice/vnext",
+    "test:vnext:historical": "jest --config ./jest.vnext-historical.config.js --runInBand",
     "copy-db:prod": "ts-node src/scripts/copy-sqlite-to-postgres.ts",
     "purge:orphan-google": "ts-node src/scripts/purge-orphan-app-calendar-events.ts",
     "voice:eval:dialogue": "ts-node src/scripts/eval-voice-dialogue.ts"
@@ -94,6 +94,22 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
-    "maxWorkers": 1
+    "maxWorkers": 1,
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/modules/voice/vnext/phase42.spec.ts$",
+      "/modules/voice/vnext/phase43.spec.ts$",
+      "/modules/voice/vnext/phase47.spec.ts$",
+      "/modules/voice/vnext/phase471.spec.ts$",
+      "/modules/voice/vnext/phase4710.spec.ts$",
+      "/modules/voice/vnext/phase4711.spec.ts$",
+      "/modules/voice/vnext/phase474.spec.ts$",
+      "/modules/voice/vnext/phase475.spec.ts$",
+      "/modules/voice/vnext/phase476.spec.ts$",
+      "/modules/voice/vnext/phase478.spec.ts$",
+      "/modules/voice/vnext/phase479.spec.ts$",
+      "/modules/voice/vnext/vnext.integrity.spec.ts$",
+      "/modules/voice/vnext/vnext.spec.ts$"
+    ]
   }
 }

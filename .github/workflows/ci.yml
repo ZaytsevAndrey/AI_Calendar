@@ -31,6 +31,11 @@ jobs:
       - name: Backend tests
         run: npm test --workspace=backend
 
+      # Active voice gate (structured pipeline). The 13 historical vnext suites
+      # are excluded from `npm test`; see documentation/scheduling-stabilization-progress.md.
+      - name: Voice structured tests
+        run: npm run test:vnext:structured --workspace=backend
+
       - name: Backend e2e
         run: npm run test:e2e --workspace=backend
         env:
