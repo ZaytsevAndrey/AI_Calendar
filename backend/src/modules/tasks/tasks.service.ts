@@ -5,6 +5,7 @@ import {
   Inject,
   forwardRef,
   Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -49,7 +50,7 @@ import {
 import { breaksSeriesMembership } from '../schedule/series-group.util';
 
 @Injectable()
-export class TasksService {
+export class TasksService implements OnModuleInit {
   private readonly logger = new Logger(TasksService.name);
 
   constructor(
@@ -452,53 +453,65 @@ export class TasksService {
    * After the HTTP save returns, place + Google sync continue on a polled job
    * so the client can show real progress stages.
    */
-  private queuePlaceAndSync(
-    userId: string,
-    taskId: string,
-    jobId: string,
-    before: ScheduleSnapshot | null,
-  ): void {
-    void this.runPlaceAndSyncJob(userId, taskId, jobId, before).catch(
-      (err: unknown) => {
-        this.logger.error(
-          `Mutation job ${jobId} failed for task ${taskId}`,
-          err instanceof Error ? err.stack : undefined,
-        );
-      },
+  /**
+   * Durable follow-ups of task writes (stabilization A). Each runs from its
+   * schedule_jobs row — now in this process, or later from the recovery sweep
+   * after a crash or a retry — so every handler is idempotent.
+   */
+  onModuleInit(): void {
+    this.scheduleJobService.registerHandler('create', (job) =>
+      this.placeAndSync(job.id, job.userId, String(job.payload.taskId), null),
     );
+    this.scheduleJobService.registerHandler('update', (job) =>
+      this.placeAndSync(
+        job.id,
+        job.userId,
+        String(job.payload.taskId),
+        (job.payload.before as ScheduleSnapshot | undefined) ?? null,
+      ),
+    );
+    this.scheduleJobService.registerHandler('park', async (job) => {
+      await this.scheduleJobService.setMutationStage(job.id, 'syncing');
+      await this.pendingGoogleWrites.syncTask(job.userId, String(job.payload.taskId));
+      await this.placementStep.seatOpenHoles(
+        job.userId,
+        typeof job.payload.exceptTaskId === 'string' ? job.payload.exceptTaskId : undefined,
+      );
+    });
+    this.scheduleJobService.registerHandler('sync', async (job) => {
+      await this.scheduleJobService.setMutationStage(job.id, 'syncing');
+      await this.pendingGoogleWrites.syncTask(job.userId, String(job.payload.taskId));
+    });
   }
 
-  private async runPlaceAndSyncJob(
+  /** Place a saved task (create: `before` null) and sync it. Safe to repeat. */
+  private async placeAndSync(
+    jobId: string,
     userId: string,
     taskId: string,
-    jobId: string,
     before: ScheduleSnapshot | null,
-  ): Promise<void> {
-    try {
-      await this.scheduleJobService.setMutationStage(jobId, 'placing');
-      const row = await this.findOne(taskId, userId);
-      let conflicts: SchedulingConflict[] | undefined;
-      if (before) {
-        const conflict = await this.placeSavedTask(userId, before, row);
-        if (conflict) conflicts = [conflict];
-      } else {
-        const opts = this.placeOptions(null, row);
-        if (opts) {
-          const plan = await this.placementStep.place(userId, row.id, opts);
-          if (plan.outcome === 'conflict') conflicts = [plan.conflict];
-        }
+  ): Promise<Record<string, unknown> | void> {
+    const row = await this.tasksRepository.findOne({
+      where: { id: taskId, userId },
+      relations: ['phase', 'phases'],
+    });
+    // Deleted meanwhile: nothing left to place.
+    if (!row) return { gone: true };
+    await this.scheduleJobService.setMutationStage(jobId, 'placing');
+    let conflicts: SchedulingConflict[] | undefined;
+    if (before) {
+      const conflict = await this.placeSavedTask(userId, before, row);
+      if (conflict) conflicts = [conflict];
+    } else {
+      const opts = this.placeOptions(null, row);
+      if (opts) {
+        const plan = await this.placementStep.place(userId, row.id, opts);
+        if (plan.outcome === 'conflict') conflicts = [plan.conflict];
       }
-      await this.scheduleJobService.setMutationStage(jobId, 'syncing');
-      await this.pendingGoogleWrites.syncTask(userId, taskId);
-      await this.scheduleJobService.completeMutationJob(
-        jobId,
-        conflicts?.length ? { conflicts } : undefined,
-      );
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'Task mutation follow-up failed';
-      await this.scheduleJobService.failMutationJob(jobId, message);
     }
+    await this.scheduleJobService.setMutationStage(jobId, 'syncing');
+    await this.pendingGoogleWrites.syncTask(userId, taskId);
+    return conflicts?.length ? { conflicts } : undefined;
   }
 
   private async releaseOpenSlots(taskId: string): Promise<void> {
@@ -520,17 +533,8 @@ export class TasksService {
     // second concurrent createEvent (duplicate Google series on recurring create).
     if (opts?.syncGoogle !== false) {
       if (jobId) {
-        void (async () => {
-          try {
-            await this.scheduleJobService.setMutationStage(jobId, 'syncing');
-            await this.pendingGoogleWrites.syncTask(userId, task.id);
-            await this.scheduleJobService.completeMutationJob(jobId);
-          } catch (err: unknown) {
-            const message =
-              err instanceof Error ? err.message : 'Google sync failed';
-            await this.scheduleJobService.failMutationJob(jobId, message);
-          }
-        })();
+        // The job row (op create / sync) does the Google sync durably.
+        void this.scheduleJobService.runNow(jobId);
       } else {
         this.pendingGoogleWrites.syncTaskSoon(userId, task.id);
       }
@@ -643,24 +647,22 @@ export class TasksService {
       }
     }
 
-    const saved = await this.placementStep.runExclusive(userId, () =>
-      this.tasksRepository.save(task),
+    // The task and the job that places it commit together: a crash after
+    // this point leaves durable work for the recovery sweep, not a lost task.
+    const { saved, job } = await this.placementStep.runExclusive(userId, () =>
+      this.tasksRepository.manager.transaction(async (manager) => {
+        const saved = await manager.save(task);
+        const job = await this.scheduleJobService.beginMutationJob(
+          userId,
+          { taskId: saved.id, op: 'create' },
+          { manager },
+        );
+        return { saved, job };
+      }),
     );
+    void this.scheduleJobService.runNow(job.id);
     const row = await this.findOne(saved.id, userId);
-    const job = await this.scheduleJobService.beginMutationJob(userId, {
-      taskId: row.id,
-      op: 'create',
-    });
-    const opts = this.placeOptions(null, row);
-    if (opts) {
-      this.queuePlaceAndSync(userId, row.id, job.id, null);
-      return this.withConflicts(row, undefined, job.id);
-    }
-    const finished = await this.finishSaved(userId, row, {
-      syncGoogle: true,
-      jobId: job.id,
-    });
-    return this.withConflicts(finished, undefined, job.id);
+    return this.withConflicts(row, undefined, job.id);
   }
 
   async findAll(userId: string): Promise<Task[]> {
@@ -851,39 +853,38 @@ export class TasksService {
     if (enteredResolved) {
       await this.ensureResolvedInterval(task, userId);
     }
-    const saved = await this.tasksRepository.save(task);
-    const job = await this.scheduleJobService.beginMutationJob(userId, {
-      taskId: saved.id,
-      op: 'update',
-    });
-    if (enteredUnscheduled || enteredProblematic) {
-      await this.releaseOpenSlots(saved.id);
-      if (enteredProblematic) {
-        if (!saved.problematicOriginalStart && before.scheduledStartTime) {
-          saved.problematicOriginalStart = new Date(before.scheduledStartTime);
-          saved.problematicOriginalEnd = before.scheduledEndTime
-            ? new Date(before.scheduledEndTime)
-            : null;
-        }
-        saved.scheduledStartTime = null;
-        saved.scheduledEndTime = null;
-        await this.tasksRepository.save(saved);
+    const parks = enteredUnscheduled || enteredProblematic;
+    if (enteredProblematic) {
+      if (!task.problematicOriginalStart && before.scheduledStartTime) {
+        task.problematicOriginalStart = new Date(before.scheduledStartTime);
+        task.problematicOriginalEnd = before.scheduledEndTime
+          ? new Date(before.scheduledEndTime)
+          : null;
       }
-      void (async () => {
-        try {
-          await this.scheduleJobService.setMutationStage(job.id, 'syncing');
-          await this.pendingGoogleWrites.syncTask(userId, saved.id);
-          await this.placementStep.seatOpenHoles(
-            userId,
-            enteredProblematic ? saved.id : undefined,
-          );
-          await this.scheduleJobService.completeMutationJob(job.id);
-        } catch (err: unknown) {
-          const message =
-            err instanceof Error ? err.message : 'Park sync failed';
-          await this.scheduleJobService.failMutationJob(job.id, message);
-        }
-      })();
+      task.scheduledStartTime = null;
+      task.scheduledEndTime = null;
+    }
+    // The task, the slots a park drops, and the follow-up job commit together.
+    const payload = parks
+      ? { taskId: task.id, op: 'park', ...(enteredProblematic ? { exceptTaskId: task.id } : {}) }
+      : enteredResolved
+        ? { taskId: task.id, op: 'sync' }
+        : { taskId: task.id, op: 'update', before };
+    const { saved, job } = await this.tasksRepository.manager.transaction(async (manager) => {
+      const saved = await manager.save(task);
+      if (parks) {
+        const now = Date.now();
+        const open = (await manager.find(ScheduledTask, { where: { taskId: saved.id } })).filter(
+          (row) => new Date(row.scheduledEndTime).getTime() > now,
+        );
+        if (open.length) await manager.remove(open);
+      }
+      const job = await this.scheduleJobService.beginMutationJob(userId, payload, { manager });
+      return { saved, job };
+    });
+
+    if (parks) {
+      void this.scheduleJobService.runNow(job.id);
       const parked = await this.findOne(saved.id, userId);
       return this.withConflicts(parked, undefined, job.id);
     }
@@ -894,8 +895,8 @@ export class TasksService {
       return this.finishSaved(userId, row, { jobId: job.id });
     }
 
-    // Place + Google sync continue on the job so the client can poll stages.
-    this.queuePlaceAndSync(userId, saved.id, job.id, before);
+    // Place + Google sync continue on the durable job so the client can poll stages.
+    void this.scheduleJobService.runNow(job.id);
     const row = await this.findOne(saved.id, userId);
     return this.withConflicts(row, undefined, job.id);
   }

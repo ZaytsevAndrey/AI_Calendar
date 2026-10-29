@@ -33,6 +33,16 @@ describe('TasksService', () => {
     findOne: jest.fn(async () => lastSaved),
     merge: jest.fn((entity, dto) => Object.assign(entity, dto)),
     remove: jest.fn(),
+    // Task + job writes run in one transaction; the fake manager reuses the repo mocks.
+    manager: {
+      transaction: jest.fn(async (run: (manager: unknown) => Promise<unknown>) =>
+        run({
+          save: (entity: Record<string, unknown>) => tasksRepository.save(entity),
+          find: (_entity: unknown, opts: unknown) => scheduledTaskRepository.find(opts),
+          remove: (rows: unknown) => scheduledTaskRepository.remove(rows),
+        }),
+      ),
+    },
   };
   const phasesRepository = {
     findBy: jest.fn(),
@@ -47,11 +57,30 @@ describe('TasksService', () => {
     create: jest.fn((value) => value),
     save: jest.fn(async (entity) => entity),
   };
+  const jobHandlers = new Map<string, (job: unknown) => Promise<unknown>>();
+  const jobPayloads = new Map<string, Record<string, unknown>>();
   const scheduleJobService = {
     enqueueReplan: jest.fn().mockResolvedValue({ id: 'job-1' }),
     processNextPendingForUser: jest.fn(),
     deleteSyncedGoogleEventsForTask: jest.fn().mockResolvedValue(undefined),
-    beginMutationJob: jest.fn().mockResolvedValue({ id: 'job-mut-1' }),
+    beginMutationJob: jest.fn(async (_userId: string, payload: Record<string, unknown>) => {
+      jobPayloads.set('job-mut-1', JSON.parse(JSON.stringify(payload)));
+      return { id: 'job-mut-1' };
+    }),
+    // Durable queue fake: runNow calls the registered handler with the stored
+    // payload and completes the job like ScheduleJobService.execute.
+    registerHandler: jest.fn((op: string, handler: (job: unknown) => Promise<unknown>) => {
+      jobHandlers.set(op, handler);
+    }),
+    runNow: jest.fn(async (id: string) => {
+      const payload = jobPayloads.get(id)!;
+      try {
+        const result = await jobHandlers.get(String(payload.op))!({ id, userId: 'user-1', payload });
+        await scheduleJobService.completeMutationJob(id, result ?? undefined);
+      } catch (err) {
+        await scheduleJobService.failMutationJob(id, (err as Error).message);
+      }
+    }),
     setMutationStage: jest.fn().mockResolvedValue(undefined),
     completeMutationJob: jest.fn().mockResolvedValue(undefined),
     failMutationJob: jest.fn().mockResolvedValue(undefined),
@@ -141,6 +170,7 @@ describe('TasksService', () => {
     }).compile();
 
     service = module.get<TasksService>(TasksService);
+    service.onModuleInit();
   });
 
   it('should be defined', () => {

@@ -1,7 +1,9 @@
 import {
   BadRequestException,
+  HttpException,
   Injectable,
   Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -41,8 +43,19 @@ export type MoveDisplayedEventResult = {
   taskName?: string;
 };
 
+/** What a durable move job stores (dates as ISO strings). */
+type MovePayload = {
+  taskId: string;
+  dto: MoveDisplayedEventDto;
+  start: string;
+  end: string;
+  minutes: number;
+  phaseIds?: string[];
+  timeZone?: string;
+};
+
 @Injectable()
-export class DisplayedEventMoveService {
+export class DisplayedEventMoveService implements OnModuleInit {
   private readonly logger = new Logger(DisplayedEventMoveService.name);
 
   constructor(
@@ -219,50 +232,69 @@ export class DisplayedEventMoveService {
         // Client must poll the one-off create job before refetching Google.
         return { kind: 'slot', jobId };
       }
+      // Durable: the job row carries everything the move needs (stabilization A).
       const job = await this.scheduleJobs.beginMutationJob(userId, {
-        op: 'move-series',
+        op: 'move_series',
         taskId: owner.id,
         seriesScope: dto.seriesScope,
-      });
-      void this.runSeriesMoveJob(
-        job.id,
-        userId,
-        owner,
         dto,
-        start,
-        end,
+        start: start.toISOString(),
+        end: end.toISOString(),
         minutes,
         phaseIds,
         timeZone,
-      ).catch((err: unknown) => {
-        this.logger.error(
-          `Series move job ${job.id} failed`,
-          err instanceof Error ? err.stack : undefined,
-        );
       });
+      void this.scheduleJobs.runNow(job.id);
       return { kind: 'slot', jobId: job.id };
     }
 
     const job = await this.scheduleJobs.beginMutationJob(userId, {
-      op: 'move-slot',
+      op: 'move_slot',
       taskId: plan.taskId,
-    });
-    void this.runFlexibleMoveJob(
-      job.id,
-      userId,
-      plan.taskId,
       dto,
-      start,
-      end,
+      start: start.toISOString(),
+      end: end.toISOString(),
       minutes,
       phaseIds,
-    ).catch((err: unknown) => {
-      this.logger.error(
-        `Move job ${job.id} failed`,
-        err instanceof Error ? err.stack : undefined,
+    });
+    void this.scheduleJobs.runNow(job.id);
+    return { kind: 'slot', jobId: job.id };
+  }
+
+  /** Move jobs run from their schedule_jobs row; a retry repeats the same drop. */
+  onModuleInit(): void {
+    this.scheduleJobs.registerHandler('move_slot', async (job) => {
+      const p = job.payload as MovePayload;
+      await this.runFlexibleMoveJob(
+        job.id,
+        job.userId,
+        String(p.taskId),
+        p.dto,
+        new Date(p.start),
+        new Date(p.end),
+        p.minutes,
+        p.phaseIds ?? [],
       );
     });
-    return { kind: 'slot', jobId: job.id };
+    this.scheduleJobs.registerHandler('move_series', async (job) => {
+      const p = job.payload as MovePayload;
+      const owner = await this.taskRepo.findOne({
+        where: { id: String(p.taskId), userId: job.userId },
+        relations: ['phase', 'phases'],
+      });
+      if (!owner) return { gone: true };
+      await this.runSeriesMoveJob(
+        job.id,
+        job.userId,
+        owner,
+        p.dto,
+        new Date(p.start),
+        new Date(p.end),
+        p.minutes,
+        p.phaseIds ?? [],
+        String(p.timeZone),
+      );
+    });
   }
 
   private async runSeriesMoveJob(
@@ -297,8 +329,9 @@ export class DisplayedEventMoveService {
       // Series helpers already awaited syncTask; mark complete.
       await this.scheduleJobs.completeMutationJob(jobId);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Series move failed';
-      await this.scheduleJobs.failMutationJob(jobId, message);
+      // A refusal is final; anything else goes back to the queue for a retry.
+      if (!(err instanceof HttpException)) throw err;
+      await this.scheduleJobs.failMutationJob(jobId, err.message);
     }
   }
 
@@ -409,8 +442,9 @@ export class DisplayedEventMoveService {
       await this.placementStep.seatOpenHoles(userId);
       await this.scheduleJobs.completeMutationJob(jobId);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Move failed';
-      await this.scheduleJobs.failMutationJob(jobId, message);
+      // A refusal ("time is taken") is final; anything else is retried by the queue.
+      if (!(err instanceof HttpException)) throw err;
+      await this.scheduleJobs.failMutationJob(jobId, err.message);
     }
   }
 
@@ -432,11 +466,12 @@ export class DisplayedEventMoveService {
           phaseIds.includes(p.id),
         )
       : [];
-    const job = await this.scheduleJobs.beginMutationJob(userId, {
-      op: 'move-series',
-      taskId: series.id,
-      seriesScope: 'occurrence',
-    });
+    // Finished inside this request (one transaction below), so no handler.
+    const job = await this.scheduleJobs.beginMutationJob(
+      userId,
+      { op: 'move_series_day', taskId: series.id, seriesScope: 'occurrence' },
+      { inline: true },
+    );
     // PE-18: skip the day, make (or reuse) its copy and seat the copy in one
     // transaction. A conflict rolls everything back; a full day parks the copy.
     const out = await this.placementStep.writeAndPlace(

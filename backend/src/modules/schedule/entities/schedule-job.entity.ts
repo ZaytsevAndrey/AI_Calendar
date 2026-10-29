@@ -4,12 +4,14 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { timestampColumnType } from '../../../database/column-types';
 
 export type ScheduleJobStatus = 'pending' | 'running' | 'done' | 'failed';
 
 @Entity('schedule_jobs')
+@Index('IDX_schedule_jobs_status_next_run', ['status', 'nextRunAt'])
 export class ScheduleJob {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -44,6 +46,21 @@ export class ScheduleJob {
 
   @Column({ type: timestampColumnType(), nullable: true })
   undoConsumedAt: Date | null;
+
+  /**
+   * Durable mutation queue (stabilization A). A `pending` row is work to do;
+   * `running` with `leaseUntil` in the past is work a dead process held.
+   */
+  @Column({ type: 'int', default: 0 })
+  attempts: number;
+
+  /** Earliest time a `pending` row may run (retry backoff). Null = now. */
+  @Column({ type: timestampColumnType(), nullable: true })
+  nextRunAt: Date | null;
+
+  /** A `running` row belongs to its claimer until this time. */
+  @Column({ type: timestampColumnType(), nullable: true })
+  leaseUntil: Date | null;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -80,6 +80,35 @@ describe('DisplayedEventMoveService', () => {
         return tasks.find((row) => row.id === id) ?? null;
       }),
     };
+    // Durable job queue fake: the payload goes through JSON like a stored row,
+    // runNow calls the registered handler, and the runner completes the job
+    // unless the handler already finished it (ScheduleJobService.execute).
+    const handlers = new Map<string, (job: unknown) => Promise<unknown>>();
+    const payloads = new Map<string, Record<string, unknown>>();
+    const finished = (id: string) =>
+      completeMutationJob.mock.calls.some((call: unknown[]) => call[0] === id) ||
+      failMutationJob.mock.calls.some((call: unknown[]) => call[0] === id);
+    const jobs = {
+      beginMutationJob: jest.fn(async (_userId: string, payload: Record<string, unknown>) => {
+        payloads.set('job-1', JSON.parse(JSON.stringify(payload)));
+        return { id: 'job-1' };
+      }),
+      registerHandler: jest.fn((op: string, handler: (job: unknown) => Promise<unknown>) => {
+        handlers.set(op, handler);
+      }),
+      runNow: jest.fn(async (id: string) => {
+        const payload = payloads.get(id)!;
+        try {
+          const result = await handlers.get(String(payload.op))!({ id, userId, payload });
+          if (!finished(id)) await completeMutationJob(id, result ?? undefined);
+        } catch (err) {
+          await failMutationJob(id, (err as Error).message);
+        }
+      }),
+      setMutationStage: jest.fn().mockResolvedValue(undefined),
+      completeMutationJob,
+      failMutationJob,
+    };
     const move = new DisplayedEventMoveService(
       {
         createQueryBuilder: () => ({
@@ -114,13 +143,9 @@ describe('DisplayedEventMoveService', () => {
           .fn()
           .mockResolvedValue(opts.phases ?? []),
       } as never,
-      {
-        beginMutationJob: jest.fn().mockResolvedValue({ id: 'job-1' }),
-        setMutationStage: jest.fn().mockResolvedValue(undefined),
-        completeMutationJob,
-        failMutationJob,
-      } as never,
+      jobs as never,
     );
+    move.onModuleInit();
     return {
       move,
       patch,

@@ -15,7 +15,8 @@ export class ScheduleJobProcessor implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     this.interval = setInterval(() => {
-      void this.scheduleJobService.processNextPending().catch((err) => {
+      // Recovery sweep: due and retried mutation jobs, and jobs a dead process held.
+      void this.scheduleJobService.processDue().catch((err) => {
         this.logger.error(`Schedule job processor error: ${err}`);
       });
     }, 2000);

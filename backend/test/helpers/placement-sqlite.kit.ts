@@ -9,6 +9,8 @@ import { UserSettings } from '../../src/modules/user-settings/entities/user-sett
 import { User } from '../../src/modules/users/user.entity';
 import { localDateTimeIso, localYmd } from '../../src/modules/voice/voice-local-date.util';
 import { PlacementStepService } from '../../src/modules/schedule/placement-step.service';
+import { ScheduleJobService } from '../../src/modules/schedule/schedule-job.service';
+import { ScheduleJob } from '../../src/modules/schedule/entities/schedule-job.entity';
 import { ScheduledTask } from '../../src/modules/schedule/schedule.entity';
 import { DisplayedEventMoveService } from '../../src/modules/schedule/displayed-event-move.service';
 import { ProblematicPlaceService } from '../../src/modules/schedule/problematic-place.service';
@@ -95,21 +97,26 @@ export async function createPlacementKit(opts: {
 
   await ds.getRepository(UserSettings).save({ ...settings } as never);
 
-  // Mutation jobs run in the background; `jobs.settle()` waits for all of them.
-  const pendingJobs: Promise<void>[] = [];
-  const jobDone = new Map<string, () => void>();
-  let jobSeq = 0;
-  const jobs = {
-    beginMutationJob: jest.fn(async () => {
-      const id = `job-${++jobSeq}`;
-      pendingJobs.push(new Promise<void>((resolve) => jobDone.set(id, resolve)));
-      return { id };
-    }),
-    setMutationStage: jest.fn(async () => undefined),
-    completeMutationJob: jest.fn(async (id: string) => jobDone.get(id)?.()),
-    failMutationJob: jest.fn(async (id: string) => jobDone.get(id)?.()),
-    deleteSyncedGoogleEventsForTask: jest.fn(async () => undefined),
-    settle: () => Promise.all(pendingJobs),
+  // Real durable job queue on the real schedule_jobs table (stabilization A).
+  // Methods are spied so tests can read the calls; `jobs.settle()` waits for
+  // every job this process started.
+  const jobService = new ScheduleJobService(
+    ds.getRepository(ScheduleJob),
+    taskRepo,
+    slotRepo,
+    {} as never,
+  );
+  jest.spyOn(jobService, 'beginMutationJob');
+  jest.spyOn(jobService, 'completeMutationJob');
+  jest.spyOn(jobService, 'failMutationJob');
+  jest.spyOn(jobService, 'deleteSyncedGoogleEventsForTask').mockResolvedValue(undefined);
+  const jobs = Object.assign(jobService, {
+    settle: () => jobService.drain(),
+  }) as ScheduleJobService & {
+    settle: () => Promise<void>;
+    completeMutationJob: jest.Mock;
+    failMutationJob: jest.Mock;
+    beginMutationJob: jest.Mock;
   };
   const tasksService = new TasksService(
     taskRepo,
@@ -213,6 +220,10 @@ export async function createPlacementKit(opts: {
     settingsStub as never,
     pendingGoogleWrites as never,
   );
+
+  // Nest calls these on boot; the kit builds services by hand.
+  tasksService.onModuleInit();
+  moveService.onModuleInit();
 
   return {
     ds,
