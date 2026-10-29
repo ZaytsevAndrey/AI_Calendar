@@ -222,6 +222,19 @@ export class ScheduleJobService {
     );
   }
 
+  /** Record that a step committed, so a retry of this job skips it. */
+  async mergeMutationPayload(
+    jobId: string,
+    patch: Record<string, unknown>,
+  ): Promise<void> {
+    const job = await this.jobRepo.findOne({ where: { id: jobId } });
+    if (!job) return;
+    await this.jobRepo.update(
+      { id: jobId },
+      { payloadJson: JSON.stringify({ ...parsePayload(job.payloadJson), ...patch }) },
+    );
+  }
+
   async setMutationStage(jobId: string, stage: string): Promise<void> {
     await this.jobRepo.update(
       { id: jobId },

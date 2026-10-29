@@ -212,8 +212,10 @@ export class PendingGoogleWriteService {
   }
 
   async processQueue(limit = 20): Promise<number> {
+    // Fewest attempts first: rows that keep failing (revoked access) must not
+    // fill every batch and starve everyone else's writes.
     const rows = await this.pendingRepo.find({
-      order: { enqueuedAt: 'ASC' },
+      order: { attempts: 'ASC', enqueuedAt: 'ASC' },
       take: limit,
     });
     let done = 0;

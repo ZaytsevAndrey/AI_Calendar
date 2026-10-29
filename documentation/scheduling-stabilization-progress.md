@@ -38,8 +38,8 @@ Runtime assumptions found: production runs one Render instance, Neon Postgres, `
 | 1 | A: durable mutation jobs (atomic with the state change, lease + claim, bounded retry with backoff, terminal failures, recovery sweep, idempotent handlers) | done | ead5ac6 |
 | 2 | B: cross-instance user lock (Postgres advisory lock), transaction audit fixes | done | a78aebf |
 | 3 | F1: root causes of the 5 voice e2e failures and the 13 historical suites | done | 5b50f11 |
-| 4 | G: versioned migrations instead of `TYPEORM_SYNC=true` | done | (stage G commit) |
-| 5 | C/D/E: historical identity tests, recurrence/temporal/placement edge tests, Google failure handling | todo | |
+| 4 | G: versioned migrations instead of `TYPEORM_SYNC=true` | done | fdf5ec3 |
+| 5 | C/D/E: historical identity tests, recurrence/temporal/placement edge tests, Google failure handling | done (partial, see section) | (stage C/D/E commit) |
 | 6 | F2 live voice eval, H frontend states, I/J docs and operations | todo | |
 
 ## Stage A — durable placement (done)
@@ -84,6 +84,36 @@ Results: backend `npm test` 1030 pass + 6 skipped, **0 fail**; structured voice 
 - Docs: `deploy.md` (Database migrations: first deploy, backup, rerun, every entity change needs a migration, local Postgres, rollback), `setup-and-build.md` env table.
 - Not changed: `backend/.env.example` still says to keep `TYPEORM_SYNC=true` — that file holds another chat's uncommitted edits; fix it when that work is committed.
 
+## Stage C/D/E — workflows, boundaries, Google failure (done, partial)
+
+`src/modules/schedule/scheduling-workflows.spec.ts` drives the real services (TasksService → queue → PlacementStepService, DisplayedEventMoveService) on SQLite:
+
+- **I1 full workflow:** flexible daily series → a fixed meeting displaces one day into a copy → one day dragged (detached) → "change the future" from a later day → queue swept again as after a restart. Asserts: no pending/running job left, exactly one Gym occurrence per civil day across the old series, the copies and the new tail, old series skips the two detached days, the meeting never moved.
+- **C1 historical copy without `originalOccurrenceYmd`** (made before the column): a drag onto the series clock does not re-merge it (identity unproven), and a series clock edit leaves it alone and does not add a duplicate day.
+- **C3 boundaries:** monthly from 31 Jan in a leap year clamps to 29 Feb; weekly across the year end; biweekly across the October DST switch steps by civil days; a daily series in Europe/Kyiv keeps 18:00 local across the switch (15:00Z → 16:00Z).
+- **D2 full day:** a flexible task on a day fully held by a fixed event parks (problematic) and never overlaps.
+- **E2 sync step throws:** the local placement stays, the job goes `pending` with `attempts: 1` and a backoff; the retry finishes `done`. (Google API errors themselves do not throw out of `syncTask`: it catches them and queues a `pending_google_writes` row. The job retries when the sync step itself fails — database, connection check.)
+- **E3 Google queue starvation:** 20 rows that fail on every pass (a user who revoked access) plus one fresh write.
+
+**Found and fixed (E2):** the retry re-ran placement from the new "now", so a task placed at 08:00 whose sync step failed moved to 08:15 when the job retried 15 s later. A retry exists to redo the sync, not to re-plan. `placeAndSync` now records `placed: true` (and any conflict) in the job payload after placement commits (`ScheduleJobService.mergeMutationPayload`); a retry only syncs. Move jobs (`move_slot` / `move_series`) target explicit times and stay idempotent on retry.
+
+**Found and fixed (E3):** `PendingGoogleWriteService.processQueue` took the 20 oldest rows every minute, with no backoff and no attempt limit. 20 permanently failing rows (deletes are not gated on the connection check) filled every batch forever and no other user's Google write was retried again. Now it orders by `attempts` then `enqueuedAt`, so new rows go first (verified: the test fails with the old order). Failing rows are kept with `lastError`, still retried every minute, never dropped. Remaining: no attempt cap or backoff on this table (a column change); not cross-instance safe (no claim) — fine on one Render instance, needs a lease like `schedule_jobs` before scaling out.
+
+Not covered by new tests: chain depth limits, cross-midnight and very long tasks, concurrent drags beyond the existing lock tests, auth expiry / duplicate webhooks (the Google pending-write table already retries per task; webhook dedupe is untested here).
+
+## Stage F2 — live voice check (run, small)
+
+One live run on 2026-10-29, production structured pipeline, real model calls (not mocked): `phase47-generalization-cli.ts --allow-paid-calls --budget-usd 0.3 --max-calls 80`, 12 of the 100 frozen scenarios (`g-a-01…07`, `g-b-01/02/04`, `g-c-02/03`). Model `deepseek-flash` (temperature 0.1, no thinking); interpreter live, planner `fixture-echo`. **Cost: 24 calls, 61 283 input + 2 033 output tokens, $0.0028.** Latency p50 1.0 s, p95 1.3 s.
+
+| | Scenarios | Passed |
+|---|---|---|
+| A single-turn | 7 | 5 |
+| B multi-turn | 3 | 0 |
+| C confirm words | 2 | 0 |
+| **Total** | 12 | 5 |
+
+Turns: 21, 9 fully correct; **unsafe turns 0, server writes 0**. Failure kinds: 7 unnecessary clarifications (e.g. "в суботу зранку" asks for an exact hour), 4 intent errors (e.g. a rename turn "назва хай буде чистовик договору" during a preview is refused as invalid model output, and the next turn loses the target). So the run shows the pipeline stays safe; it does not show good multi-turn completion. No earlier result for this suite is recorded in the repo to compare against. All scenarios are Ukrainian; there is no English live set — English was not evaluated live. Raw output was kept out of the repo (scratchpad); rerun with the command above.
+
 ## Current work
 
-Stage C/D/E.
+H, I/J docs.

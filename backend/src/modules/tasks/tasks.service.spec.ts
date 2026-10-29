@@ -82,6 +82,7 @@ describe('TasksService', () => {
       }
     }),
     setMutationStage: jest.fn().mockResolvedValue(undefined),
+    mergeMutationPayload: jest.fn().mockResolvedValue(undefined),
     completeMutationJob: jest.fn().mockResolvedValue(undefined),
     failMutationJob: jest.fn().mockResolvedValue(undefined),
   };

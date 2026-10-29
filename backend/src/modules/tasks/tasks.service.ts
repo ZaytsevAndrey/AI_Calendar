@@ -460,13 +460,11 @@ export class TasksService implements OnModuleInit {
    */
   onModuleInit(): void {
     this.scheduleJobService.registerHandler('create', (job) =>
-      this.placeAndSync(job.id, job.userId, String(job.payload.taskId), null),
+      this.placeAndSync(job, null),
     );
     this.scheduleJobService.registerHandler('update', (job) =>
       this.placeAndSync(
-        job.id,
-        job.userId,
-        String(job.payload.taskId),
+        job,
         (job.payload.before as ScheduleSnapshot | undefined) ?? null,
       ),
     );
@@ -484,30 +482,39 @@ export class TasksService implements OnModuleInit {
     });
   }
 
-  /** Place a saved task (create: `before` null) and sync it. Safe to repeat. */
+  /**
+   * Place a saved task (create: `before` null) and sync it. A retry after a
+   * failed sync only syncs: placing again later would move the task.
+   */
   private async placeAndSync(
-    jobId: string,
-    userId: string,
-    taskId: string,
+    job: { id: string; userId: string; payload: Record<string, unknown> },
     before: ScheduleSnapshot | null,
   ): Promise<Record<string, unknown> | void> {
+    const { id: jobId, userId } = job;
+    const taskId = String(job.payload.taskId);
     const row = await this.tasksRepository.findOne({
       where: { id: taskId, userId },
       relations: ['phase', 'phases'],
     });
     // Deleted meanwhile: nothing left to place.
     if (!row) return { gone: true };
-    await this.scheduleJobService.setMutationStage(jobId, 'placing');
-    let conflicts: SchedulingConflict[] | undefined;
-    if (before) {
-      const conflict = await this.placeSavedTask(userId, before, row);
-      if (conflict) conflicts = [conflict];
-    } else {
-      const opts = this.placeOptions(null, row);
-      if (opts) {
-        const plan = await this.placementStep.place(userId, row.id, opts);
-        if (plan.outcome === 'conflict') conflicts = [plan.conflict];
+    let conflicts = job.payload.conflicts as SchedulingConflict[] | undefined;
+    if (job.payload.placed !== true) {
+      await this.scheduleJobService.setMutationStage(jobId, 'placing');
+      if (before) {
+        const conflict = await this.placeSavedTask(userId, before, row);
+        if (conflict) conflicts = [conflict];
+      } else {
+        const opts = this.placeOptions(null, row);
+        if (opts) {
+          const plan = await this.placementStep.place(userId, row.id, opts);
+          if (plan.outcome === 'conflict') conflicts = [plan.conflict];
+        }
       }
+      await this.scheduleJobService.mergeMutationPayload(jobId, {
+        placed: true,
+        ...(conflicts ? { conflicts } : {}),
+      });
     }
     await this.scheduleJobService.setMutationStage(jobId, 'syncing');
     await this.pendingGoogleWrites.syncTask(userId, taskId);
