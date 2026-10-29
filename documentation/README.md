@@ -12,7 +12,7 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Task creation rules](task-creation-rules.md) | Presets vs settings, validation, phase, recurrence weekdays, Google sync |
 | [Roadmap](roadmap.md) | Live queue |
 | [Roadmap archive](roadmap-archive.md) | Shipped work |
-| [Spec: Incremental placement](spec-incremental-placement.md) | Who is read and written per calendar edit. No Generate button. A displaced day becomes a new task; a chain runs only when everyone still fits (target; engine still full-replans) |
+| [Spec: Incremental placement](spec-incremental-placement.md) | Who is read and written per calendar edit. No Generate button. A displaced day becomes a new task; a chain runs only when everyone still fits. This is the live engine |
 | [Spec: Conflict rules](spec-conflict-rules.md) | Unscheduled vs Problematic, conflict option ids; who moves defers to incremental placement |
 | [Spec: Voice Commander](spec-voice-commander.md) | Superseded one-shot commander. Live contract is the Voice Agent spec |
 | [Spec: Voice Agent](spec-voice-agent.md) | The only Companion product contract. Ukrainian: [spec-voice-agent.uk.md](spec-voice-agent.uk.md) |

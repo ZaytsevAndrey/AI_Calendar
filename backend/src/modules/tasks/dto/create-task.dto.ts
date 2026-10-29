@@ -256,6 +256,16 @@ export class CreateTaskDto {
   seriesGroupId?: string | null;
 
   @ApiProperty({
+    description: 'Detached series day: the occurrence (YYYY-MM-DD) this copy stands for.',
+    required: false,
+    nullable: true,
+  })
+  @ValidateIf((_, value) => value !== null && value !== undefined)
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsOptional()
+  originalOccurrenceYmd?: string | null;
+
+  @ApiProperty({
     description:
       'Civil days (YYYY-MM-DD) that failed to place when parked as problematic.',
     required: false,

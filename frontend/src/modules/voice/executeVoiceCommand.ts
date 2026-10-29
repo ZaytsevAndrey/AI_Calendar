@@ -218,8 +218,11 @@ export async function executeVoiceCommand(
       title: command.taskName,
     });
     try {
-      await ScheduleApi.rescheduleTask(command.slotId, command.start, command.end);
-      progress.setStage('syncing');
+      // Same engine path as a calendar drag (spec: voice move = drag).
+      const moved = await ScheduleApi.moveSlot(command.slotId, command.start, command.end);
+      await settleReplanJob(moved.jobId, (stage) => {
+        progress.setStage(stage);
+      });
       refreshCalendar(deps.dispatch);
       progress.finish();
     } catch (err) {

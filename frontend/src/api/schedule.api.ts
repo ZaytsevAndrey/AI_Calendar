@@ -127,6 +127,13 @@ export type ScheduleRecommendations = {
   suggestions: ScheduleRecommendation[];
 };
 
+export type MoveEventOptions = {
+  /** Called after the user picks a series scope, before the write request. */
+  onSeriesScopeChosen?: (scope: 'occurrence' | 'series' | 'all') => void;
+  /** Called right before the POST that actually mutates (not the series-choice probe). */
+  onMutationStart?: () => void;
+};
+
 export const ScheduleApi = {
   getFreeSlots: async (
     taskId: string,
@@ -175,6 +182,8 @@ export const ScheduleApi = {
 
   moveDisplayedEvent: async (
     body: {
+      /** App slot (voice); the server then ignores the event id and original interval. */
+      slotId?: string;
       googleEventId: string;
       calendarId?: string;
       /** google | microsoft | apple — required for external events */
@@ -186,12 +195,7 @@ export const ScheduleApi = {
       end: string;
       seriesScope?: 'occurrence' | 'series' | 'all';
     },
-    opts?: {
-      /** Called after the user picks a series scope, before the write request. */
-      onSeriesScopeChosen?: (scope: 'occurrence' | 'series' | 'all') => void;
-      /** Called right before the POST that actually mutates (not the series-choice probe). */
-      onMutationStart?: () => void;
-    },
+    opts?: MoveEventOptions,
   ): Promise<{ kind: 'fixed' | 'slot' | 'google'; jobId: string | null }> => {
     const post = async (payload: typeof body) => {
       const response = await axios.post('/schedule/move-event', payload);
@@ -219,13 +223,21 @@ export const ScheduleApi = {
     return { kind: second.kind === 'series-choice' ? 'slot' : second.kind, jobId: second.jobId };
   },
 
-  rescheduleTask: async (id: string, startTime: string, endTime: string): Promise<ScheduledTaskDTO> => {
-    const response = await axios.patch(`/schedule/${id}`, {
-      scheduledStartTime: startTime,
-      scheduledEndTime: endTime,
-    });
-    return response.data as ScheduledTaskDTO;
-  },
+  /**
+   * Voice move of one app slot: the same engine path as a calendar drag
+   * (displace peers, conflicts, series scope, Google sync). The server reads
+   * the slot's event id and original interval from `slotId`.
+   */
+  moveSlot: (
+    slotId: string,
+    start: string,
+    end: string,
+    opts?: MoveEventOptions,
+  ) =>
+    ScheduleApi.moveDisplayedEvent(
+      { slotId, googleEventId: '', originalStart: start, originalEnd: end, start, end },
+      opts,
+    ),
 
   getLatestDoneJob: async (): Promise<{
     job: ScheduleJobStatusResponse | null;

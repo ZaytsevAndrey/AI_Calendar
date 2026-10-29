@@ -740,6 +740,8 @@ export class ScheduleJobService {
       ),
       recurrence: buildGoogleRecurrenceRules({
         pattern: task.recurrencePattern,
+        timeZone,
+        anchorStart: task.earliestStartTime,
         firstStart: first.scheduledStartTime,
         lastStart: last.scheduledStartTime,
         weekDays: effectiveRecurrenceWeekDays(task.recurrenceWeekDays, phases),

@@ -10,6 +10,7 @@ import { PendingGoogleWriteService } from '../google-calendar/pending-google-wri
 import { CalendarProvidersRegistry } from '../calendar-providers/calendar-providers.registry';
 import type { CalendarProviderId } from '../calendar-providers/calendar-provider.types';
 import { PhasesService } from '../phases/phases.service';
+import { TaskEventType } from '../scheduling/event-type.enum';
 import { ScheduleState, Task, TaskStatus } from '../tasks/entities/task.entity';
 import { TasksService } from '../tasks/tasks.service';
 import { UserSettingsService } from '../user-settings/user-settings.service';
@@ -23,7 +24,10 @@ import {
 } from '../voice/voice-local-date.util';
 import { MoveDisplayedEventDto } from './dto/move-displayed-event.dto';
 import { phaseIdAtFocus, phaseWindowsForDay } from './free-slots.util';
-import { planDisplayedEventMove } from './move-displayed-event.util';
+import {
+  planDisplayedEventMove,
+  type DisplayedMovePlan,
+} from './move-displayed-event.util';
 import { PlacementStepService } from './placement-step.service';
 import type { PlacementPlan } from './placement-step.util';
 import { ScheduleJobService } from './schedule-job.service';
@@ -71,24 +75,45 @@ export class DisplayedEventMoveService {
       .where('task.userId = :userId', { userId })
       .getMany();
 
-    const plan = planDisplayedEventMove({
-      googleEventId: dto.googleEventId,
-      recurringEventId: dto.recurringEventId,
-      originalStartIso: dto.originalStart,
-      isHabit: false,
-      tasks: tasks.map((task) => ({
-        id: task.id,
-        eventType: task.eventType,
-        isRecurring: task.isRecurring,
-        googleEventId: task.googleEventId,
-      })),
-      slots: slots.map((slot) => ({
-        id: slot.id,
-        taskId: slot.taskId,
-        googleEventId: slot.googleEventId,
-        scheduledStartTime: new Date(slot.scheduledStartTime).toISOString(),
-      })),
-    });
+    // Voice names the app slot: same path as a drag of that block.
+    const named = dto.slotId ? slots.find((row) => row.id === dto.slotId) : null;
+    if (dto.slotId && !named) {
+      throw new BadRequestException('Task slot not found');
+    }
+    const namedTask = named ? tasks.find((task) => task.id === named.taskId) : null;
+    if (named && namedTask) {
+      dto.googleEventId =
+        named.googleEventId ?? namedTask.googleEventId ?? dto.googleEventId ?? '';
+      dto.originalStart = new Date(named.scheduledStartTime).toISOString();
+      dto.originalEnd = new Date(named.scheduledEndTime).toISOString();
+    }
+    const plan: DisplayedMovePlan = named && namedTask
+      ? namedTask.eventType === TaskEventType.FIXED && !namedTask.isRecurring
+        ? { kind: 'fixed', taskId: namedTask.id }
+        : {
+            kind: 'slot',
+            slotId: named.id,
+            taskId: namedTask.id,
+            updateTaskWindow: !namedTask.isRecurring,
+          }
+      : planDisplayedEventMove({
+          googleEventId: dto.googleEventId,
+          recurringEventId: dto.recurringEventId,
+          originalStartIso: dto.originalStart,
+          isHabit: false,
+          tasks: tasks.map((task) => ({
+            id: task.id,
+            eventType: task.eventType,
+            isRecurring: task.isRecurring,
+            googleEventId: task.googleEventId,
+          })),
+          slots: slots.map((slot) => ({
+            id: slot.id,
+            taskId: slot.taskId,
+            googleEventId: slot.googleEventId,
+            scheduledStartTime: new Date(slot.scheduledStartTime).toISOString(),
+          })),
+        });
 
     if (plan.kind === 'rejected') {
       throw new BadRequestException('Habit blocks cannot be moved from the calendar.');
@@ -155,6 +180,7 @@ export class DisplayedEventMoveService {
           dto,
           minutes,
           phaseIds,
+          fromYmd,
         );
         // Client must poll the one-off create job before refetching Google.
         return { kind: 'slot', jobId };
@@ -266,9 +292,22 @@ export class DisplayedEventMoveService {
             phaseIds.includes(p.id),
           )
         : [];
+      const previousPhaseId = task.phaseId;
+      const previousPhases = task.phases ?? [];
       task.phaseId = nextPhases[0]?.id ?? null;
       task.phases = nextPhases;
       await this.taskRepo.save(task);
+      // The task stays on its old slot: give it back its old phase too.
+      const restorePhase = async () => {
+        const fresh = await this.taskRepo.findOne({
+          where: { id: taskId, userId },
+          relations: ['phases'],
+        });
+        if (!fresh) return;
+        fresh.phaseId = previousPhaseId;
+        fresh.phases = previousPhases;
+        await this.taskRepo.save(fresh);
+      };
 
       const placed = await this.placementStep.place(userId, taskId, {
         preferredStart: start,
@@ -278,6 +317,7 @@ export class DisplayedEventMoveService {
       });
       if (!seatedAt(placed, start)) {
         if (placed.outcome === 'conflict') {
+          await restorePhase();
           await this.scheduleJobs.completeMutationJob(jobId, {
             conflicts: [placed.conflict],
           });
@@ -303,6 +343,7 @@ export class DisplayedEventMoveService {
             `plan=${JSON.stringify(summarizeMovePlan(placed))} ` +
             `detail=preferred-miss`,
         );
+        await restorePhase();
         throw new BadRequestException('That time is already taken.');
       }
       await this.scheduleJobs.setMutationStage(jobId, 'syncing');
@@ -311,6 +352,9 @@ export class DisplayedEventMoveService {
       if (mergedIntoTaskId) {
         // One-off was deleted and re-merged; do not patch its Google event.
         await this.pendingGoogleWrites.syncTask(userId, mergedIntoTaskId);
+      } else if (!dto.googleEventId) {
+        // A voice move of a slot with no Google event yet: create it via sync.
+        await this.pendingGoogleWrites.syncTask(userId, taskId);
       } else {
         try {
           await this.googleCalendarService.patchEventTimes(
@@ -343,6 +387,7 @@ export class DisplayedEventMoveService {
     dto: MoveDisplayedEventDto,
     minutes: number,
     phaseIds: string[],
+    occurrenceYmd: string,
   ): Promise<string | null> {
     await this.tasksService.skipOccurrence(series.id, userId, {
       occurrenceStart: dto.originalStart,
@@ -369,6 +414,7 @@ export class DisplayedEventMoveService {
       googleReminders: series.googleReminders ?? undefined,
       parentSeriesId: series.id,
       seriesGroupId: series.seriesGroupId ?? series.id,
+      originalOccurrenceYmd: occurrenceYmd,
       timeZone: series.scheduleTimeZone ?? undefined,
     });
     return created.jobId ?? null;
@@ -430,6 +476,8 @@ export class DisplayedEventMoveService {
         allowSplit: series.allowSplit,
         priority: series.priority,
         deadline: keptDeadline,
+        // The tail starts on the split day; earlier days stay with the old series.
+        earliestStartTime: splitStart,
         scheduledStartTime: start,
         scheduledEndTime: end,
         scheduleTimeZone: timeZone,

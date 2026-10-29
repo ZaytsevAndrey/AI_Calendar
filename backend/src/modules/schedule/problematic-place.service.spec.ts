@@ -207,6 +207,7 @@ describe('autoSeatOptions', () => {
   it('keeps a parked day on that day, nearest its old clock', () => {
     expect(autoSeatOptions(parkedTask(), today)).toEqual({
       searchHole: true,
+      rawHole: true,
       windowYmd: FUTURE,
       preferredStart: new Date(`${FUTURE}T18:00:00.000Z`),
     });
@@ -226,7 +227,7 @@ describe('autoSeatOptions', () => {
   it('a park with no day searches the whole horizon', () => {
     expect(
       autoSeatOptions(parkedTask({ problematicDay: null }), today),
-    ).toEqual({ searchHole: true });
+    ).toEqual({ searchHole: true, rawHole: true });
   });
 });
 

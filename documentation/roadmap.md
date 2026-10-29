@@ -14,6 +14,15 @@ Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Produ
 
 Do in order unless you explicitly skip ahead. These items need no outside service and no open product decision. Web only. The full mobile version is **§32**, after this web queue is done.
 
+### 50. Placement engine: what is left from the review
+
+Most of the 29 Oct review is fixed (see the archive). Open: [placement-engine-review.md](placement-engine-review.md).
+
+- [ ] Remove the dead full-replan engine (PE-30): keep `captureAutoSegmentsSnapshot` and the shared helpers in a small module, delete `IntelligentSchedulingEngine.run` and its 1743-line spec. Drop the `POST/PATCH/DELETE /schedule` slot writes; the API e2e (`schedule.e2e-spec.ts`, `google-iso.e2e-spec.ts`) seeds slots through them today, so move those fixtures first.
+- [ ] One transaction for the remaining multi-step writes (rest of PE-18): `moveSeriesDay` (skip, then create), `moveSeriesTail`, `ProblematicPlaceService.placeSeriesDay`.
+- [ ] Decide PE-24: a day copy of a fixed series is created as `admin` on purpose today ("a series is never fixed"), but fixed series now exist. Keep fixed, or keep the rule.
+- [ ] PE-27 load: `seatOpenHoles` runs a full `place` (with the external calendar fetch) per parked task; a drag loads every task and slot of the user.
+
 ### 39. Voice MVP: check P0 on a live model and a real calendar
 
 P0 (bulk selection, provider events, recurrence scope, time semantics, same-request dependencies) is in on branch `voice-mvp-p0`, covered by offline tests only.
@@ -117,6 +126,6 @@ Third parties and publishing. Leave these until the Now list is done.
 
 ## Recommended next steps
 
-1. Next: **§39** — check voice P0 on a live model and a real calendar, then §40–§43 in order. **§37** fetches and **§38** past placement are independent web items. (§32 full mobile version is after the web. §31 backup and §24 Piper are in Later.)
+1. Next: **§50** what is left of the placement engine review ([review](placement-engine-review.md)). Then **§39** — check voice P0 on a live model and a real calendar, then §40–§43 in order. **§37** fetches and **§38** past placement are independent web items. (§32 full mobile version is after the web. §31 backup and §24 Piper are in Later.)
 2. Old planner prompt work ([voice-prompt-next.md](voice-prompt-next.md), Planner C2 / C3) stays with the legacy engine. Do not put it back in this queue.
 3. After each feature ships: delete that item from this file, add a one-liner in [roadmap-archive.md](roadmap-archive.md), update [overview.md](overview.md) / API docs if behavior changed.

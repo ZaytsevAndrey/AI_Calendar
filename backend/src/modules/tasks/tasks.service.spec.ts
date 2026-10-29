@@ -26,6 +26,9 @@ describe('TasksService', () => {
       lastSaved = { ...entity, id: entity.id ?? 'task-1' };
       return lastSaved;
     }),
+    update: jest.fn(async (_where, patch) => {
+      lastSaved = { ...lastSaved, ...patch };
+    }),
     find: jest.fn(),
     findOne: jest.fn(async () => lastSaved),
     merge: jest.fn((entity, dto) => Object.assign(entity, dto)),

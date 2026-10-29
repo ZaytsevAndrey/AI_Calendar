@@ -68,7 +68,37 @@ describe('google-recurrence.util', () => {
         firstStart: first,
         lastStart: last,
       }),
-    ).toEqual([`RRULE:FREQ=MONTHLY;UNTIL=${toRruleUntilUtc(last)}`]);
+    ).toEqual([`RRULE:FREQ=MONTHLY;BYMONTHDAY=7;UNTIL=${toRruleUntilUtc(last)}`]);
+  });
+
+  it('PE-09 MONTHLY from the 31st falls back to the month end like the local days', () => {
+    const first = new Date('2027-02-28T09:00:00.000Z');
+    const last = new Date('2027-05-31T09:00:00.000Z');
+    expect(
+      buildGoogleRecurrenceRules({
+        pattern: 'MONTHLY',
+        firstStart: first,
+        lastStart: last,
+        anchorStart: new Date('2027-01-31T09:00:00.000Z'),
+        timeZone: 'UTC',
+      }),
+    ).toEqual([
+      `RRULE:FREQ=MONTHLY;BYMONTHDAY=28,29,30,31;BYSETPOS=-1;UNTIL=${toRruleUntilUtc(last)}`,
+    ]);
+  });
+
+  it('PE-25 reads the fallback weekday in the user zone, not the server zone', () => {
+    // Mon 00:30 in Kyiv is still Sunday in UTC.
+    const first = new Date('2026-11-01T22:30:00.000Z');
+    const last = new Date('2026-11-22T22:30:00.000Z');
+    expect(
+      buildGoogleRecurrenceRules({
+        pattern: 'WEEKLY',
+        firstStart: first,
+        lastStart: last,
+        timeZone: 'Europe/Kyiv',
+      }),
+    ).toEqual([`RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=${toRruleUntilUtc(last)}`]);
   });
 
   it('replaces or appends UNTIL on an existing RRULE', () => {

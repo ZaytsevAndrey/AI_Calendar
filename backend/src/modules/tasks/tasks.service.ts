@@ -11,6 +11,7 @@ import { In, Repository } from 'typeorm';
 import { isValidIanaTimeZone, resolveIanaTimeZone } from '../../common/iana-time-zone';
 import {
   clearParkMetadata,
+  clearedParkColumns,
   isProblematicSchedule,
   parkedDays,
   rememberSingleProblematicDay,
@@ -223,6 +224,8 @@ export class TasksService {
       return {
         searchHole:
           !task.scheduledStartTime && task.eventType !== TaskEventType.FIXED,
+        // Schedule / Do now from an inbox: a free gap, seated tasks stay put.
+        rawHole: leftInbox,
         expandSeries: !!task.isRecurring,
       };
     }
@@ -283,16 +286,26 @@ export class TasksService {
         this.logger.log(
           `Resolved "${task.name}" rescheduled to ${new Date(task.scheduledStartTime).toISOString()}–${new Date(task.scheduledEndTime).toISOString()}; clearing resolved`,
         );
-        task.scheduleState = ScheduleState.NONE;
-        clearParkMetadata(task);
-        await this.tasksRepository.save(task);
+        // Columns only: `task` was loaded before place and is stale now.
+        await this.tasksRepository.update(
+          { id: task.id },
+          { ...clearedParkColumns(), scheduleState: ScheduleState.NONE },
+        );
       }
       return null;
     }
     const opts = this.placeOptions(before, task);
     if (!opts) return null;
     const plan = await this.placementStep.place(userId, task.id, opts);
-    if (opts.commit === 'preferred' && !preferredHonored(plan, opts)) {
+    // A series horizon rewrite commits every open day and the master itself.
+    const seriesRewrite =
+      !!task.isRecurring && !!opts.expandSeries && opts.commit !== 'keep';
+    const missed =
+      plan.outcome === 'conflict' ||
+      (opts.commit === 'preferred' &&
+        !seriesRewrite &&
+        !preferredHonored(plan, opts));
+    if (missed) {
       // Keep an explicit FIXED clock when the previous snapshot had no seat
       // (Problematic / Unscheduled → Place). Reverting to null left FIXED
       // without times and the Move sheet looked stuck.
@@ -303,29 +316,34 @@ export class TasksService {
           !before.scheduledStartTime
         )
       ) {
-        task.scheduledStartTime = before.scheduledStartTime
-          ? new Date(before.scheduledStartTime)
-          : null;
-        task.scheduledEndTime = before.scheduledEndTime
-          ? new Date(before.scheduledEndTime)
-          : null;
-        task.estimatedTimeInMinutes = before.estimatedTimeInMinutes;
+        const revert: Partial<Task> = {
+          scheduledStartTime: before.scheduledStartTime
+            ? new Date(before.scheduledStartTime)
+            : null,
+          scheduledEndTime: before.scheduledEndTime
+            ? new Date(before.scheduledEndTime)
+            : null,
+          estimatedTimeInMinutes: before.estimatedTimeInMinutes,
+        };
         if (
           before.scheduleState === ScheduleState.PROBLEMATIC &&
           task.scheduleState === ScheduleState.NONE &&
-          !task.scheduledStartTime
+          !revert.scheduledStartTime
         ) {
           // The new clock did not seat: back to the inbox, not a task with no slot.
-          task.scheduleState = ScheduleState.PROBLEMATIC;
+          revert.scheduleState = ScheduleState.PROBLEMATIC;
         }
-        await this.tasksRepository.save(task);
+        // Columns only: a full save of the stale `task` would overwrite what
+        // place wrote (skipped days, park state).
+        Object.assign(task, revert);
+        await this.tasksRepository.update({ id: task.id }, revert);
       }
       return plan.outcome === 'conflict' ? plan.conflict : null;
     }
     if (freedAHole(before, plan, opts)) {
       await this.placementStep.seatOpenHoles(userId);
     }
-    return plan.outcome === 'conflict' ? plan.conflict : null;
+    return null;
   }
 
   /** Seat a resolved copy as a second layer on its original interval. */
@@ -741,6 +759,7 @@ export class TasksService {
     ) {
       task.seriesGroupId = null;
       task.parentSeriesId = null;
+      task.originalOccurrenceYmd = null;
     }
 
     const {
@@ -1160,8 +1179,26 @@ export class TasksService {
     status: TaskStatus,
   ): Promise<Task> {
     const task = await this.findOne(id, userId);
+    const wasDone =
+      task.status === TaskStatus.COMPLETED || task.status === TaskStatus.CANCELED;
     task.status = status;
     const saved = await this.tasksRepository.save(task);
+    // Back from done / canceled: its time was free meanwhile. Keep the slot
+    // when it is still valid, else seat only this task in a free hole (§40).
+    if (
+      wasDone &&
+      !saved.isRecurring &&
+      saved.scheduledStartTime &&
+      this.canPlace(saved)
+    ) {
+      await this.placementStep.place(userId, saved.id, {
+        commit: 'keep',
+        revalidate: true,
+        rawHole: true,
+      });
+      this.pendingGoogleWrites.syncTaskSoon(userId, saved.id);
+      return this.findOne(saved.id, userId);
+    }
     this.pendingGoogleWrites.syncTaskSoon(userId, saved.id);
     return saved;
   }

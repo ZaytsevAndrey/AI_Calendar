@@ -259,6 +259,13 @@ export class Task {
   seriesGroupId: string | null;
 
   /**
+   * Detached series day only: the occurrence (YYYY-MM-DD) this copy stands for.
+   * Survives seating and park clear; re-merge needs the copy back on this day.
+   */
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  originalOccurrenceYmd: string | null;
+
+  /**
    * Recurring only: civil days (YYYY-MM-DD in settings IANA) the user skipped.
    * Generate/replan must not place those occurrences again.
    */

@@ -1,8 +1,26 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  ValidateIf,
+} from 'class-validator';
 
 export class MoveDisplayedEventDto {
+  @ApiProperty({
+    required: false,
+    description:
+      'App slot to move (voice). The server reads its event id and original interval.',
+  })
+  @IsOptional()
+  @IsUUID()
+  slotId?: string;
+
   @ApiProperty({ description: 'Google event id shown on the calendar, including a recurring instance id' })
+  @ValidateIf((dto: MoveDisplayedEventDto) => !dto.slotId)
   @IsString()
   @IsNotEmpty()
   googleEventId: string;
@@ -24,10 +42,12 @@ export class MoveDisplayedEventDto {
   recurringEventId?: string;
 
   @ApiProperty({ description: 'Start of the block before the drag' })
+  @ValidateIf((dto: MoveDisplayedEventDto) => !dto.slotId)
   @IsDateString()
   originalStart: string;
 
   @ApiProperty({ description: 'End of the block before the drag' })
+  @ValidateIf((dto: MoveDisplayedEventDto) => !dto.slotId)
   @IsDateString()
   originalEnd: string;
 

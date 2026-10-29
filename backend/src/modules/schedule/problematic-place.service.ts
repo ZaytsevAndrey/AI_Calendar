@@ -172,6 +172,7 @@ export class ProblematicPlaceService {
         isUnscheduled: false,
         parentSeriesId: series.id,
         seriesGroupId: series.seriesGroupId ?? series.id,
+        originalOccurrenceYmd: occurrenceYmd,
       }),
     );
 

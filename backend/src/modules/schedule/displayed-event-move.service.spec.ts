@@ -219,6 +219,40 @@ describe('DisplayedEventMoveService', () => {
     });
   });
 
+  it('PE-20 gives the old phase back when a flexible drag cannot take the time', async () => {
+    const place = jest.fn().mockResolvedValue({
+      outcome: 'conflict',
+      conflict: { reason: 'preferred_on_fixed', options: ['leave_problematic'] },
+    });
+    const task = {
+      id: 'task-flex',
+      eventType: 'admin',
+      isRecurring: false,
+      googleEventId: 'evt-1',
+      phaseId: 'phase-old',
+      phases: [{ id: 'phase-old' }],
+    };
+    const { move, taskRepo } = service({
+      tasks: [task],
+      slots: [
+        {
+          id: 'slot-1',
+          taskId: 'task-flex',
+          googleEventId: 'evt-1',
+          scheduledStartTime: new Date('2026-09-22T09:00:00.000Z'),
+        },
+      ],
+      place,
+    });
+
+    await move.move(userId, dto);
+    await flushAsyncWork();
+
+    expect(taskRepo.save).toHaveBeenCalledTimes(2);
+    expect(task.phaseId).toBe('phase-old');
+    expect(task.phases).toEqual([{ id: 'phase-old' }]);
+  });
+
   it('skips Google patch when a flexible drag re-merges into a series', async () => {
     const place = jest.fn().mockResolvedValue({
       outcome: 'seated',
@@ -256,6 +290,49 @@ describe('DisplayedEventMoveService', () => {
     expect(patch).not.toHaveBeenCalled();
     expect(syncTask).toHaveBeenCalledWith(userId, 'series-1');
     expect(seatOpenHoles).toHaveBeenCalledWith(userId);
+  });
+
+  it('PE-21 a voice move by slot id runs the drag path, not a raw slot write', async () => {
+    const { move, place, patch, syncTask } = service({
+      tasks: [
+        {
+          id: 'task-flex',
+          eventType: 'admin',
+          isRecurring: false,
+          googleEventId: null,
+        },
+      ],
+      slots: [
+        {
+          id: 'slot-9',
+          taskId: 'task-flex',
+          googleEventId: null,
+          scheduledStartTime: new Date('2026-09-22T09:00:00.000Z'),
+          scheduledEndTime: new Date('2026-09-22T10:00:00.000Z'),
+        },
+      ],
+    });
+
+    await expect(
+      move.move(userId, {
+        slotId: 'slot-9',
+        start: '2026-09-22T11:00:00.000Z',
+        end: '2026-09-22T12:00:00.000Z',
+      } as never),
+    ).resolves.toEqual({ kind: 'slot', jobId: 'job-1' });
+    await flushAsyncWork();
+
+    expect(place).toHaveBeenCalledWith(
+      userId,
+      'task-flex',
+      expect.objectContaining({
+        preferredStart: new Date('2026-09-22T11:00:00.000Z'),
+        commit: 'preferred',
+        drag: true,
+      }),
+    );
+    expect(patch).not.toHaveBeenCalled();
+    expect(syncTask).toHaveBeenCalledWith(userId, 'task-flex');
   });
 
   it('seats a flexible drag through the placement step and does not replan', async () => {

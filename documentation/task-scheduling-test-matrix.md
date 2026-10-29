@@ -699,6 +699,36 @@ Generate / full replan write path removed. Ended-slot keep semantics no longer a
 - Options use ids: `place_on_top`, `move_other`, `move_new`, `skip_occurrence`, `leave_problematic` (subset allowed; fixed blockers omit `move_other`).
 - Groq/copy only phrases labels; apply uses existing APIs.
 
+## PE — Placement engine review regressions (**Covered**)
+
+From [placement-engine-review.md](placement-engine-review.md). Tests: `placement-engine-regressions.spec.ts` (pure `planPlacement` and SQLite with the real `PlacementStepService` / `TasksService`, kit in `backend/test/helpers/placement-sqlite.kit.ts`); PE-20 / PE-21 in `displayed-event-move.service.spec.ts`; PE-09 / PE-25 RRULE in `google-recurrence.util.spec.ts`.
+
+| ID | Given | When | Then |
+|----|-------|------|------|
+| PE-01 | Daily series at 10:00, open days seated | Clock edited to 11:00 with an earlier form date | Master and every open day on 11:00; skipped days kept |
+| PE-02 | Daily series, days 5–9 Nov at 10:00 | Drag 8 Nov to 15:00, "this and following" | One slot per day; old series keeps 5–7 Nov |
+| PE-03 | Resolved layer 10:00–11:00 | Fixed claim 10:00–11:00 | Fixed seats on 10:00 on top; nobody moves |
+| PE-04 | Another series day 10:00 | Fixed series day claims 10:00 | Keeps 10:00 (that day is displaced) or conflict; never another hole |
+| PE-05 | Weekly Monday series; 9 Nov detached into a copy | Copy dragged to Wednesday 10:00 | Copy stays on Wednesday; series not changed; 9 Nov still skipped |
+| PE-06 | Fixed A 10:00, fixed B 14:00 | B edited onto 10:00 (conflict) | B's task clock equals its slot (14:00) |
+| PE-07 | Daily series 10:00 | A fixed claim displaces one day | That day becomes a copy; new horizon days stay at 10:00 |
+| PE-08 | Mon/Fri every 2 weeks from Fri 30 Oct | Horizon days | 30 Oct, 9, 13, 23, 27 Nov (weeks from Monday) |
+| PE-09 | Monthly from 31 Jan | Horizon days / Google RRULE | 31 Jan, 28 Feb, 31 Mar, 30 Apr, 31 May; `BYMONTHDAY=28,29,30,31;BYSETPOS=-1` |
+| PE-10 | Weekly series from Monday 2 Nov | Clock edited on Thursday | Days stay on Mondays |
+| PE-11 | No free hour, flexibles packable | Auto-seat / Schedule / Do now (`rawHole`) | Problematic; seated tasks not packed |
+| PE-12 | Canceled task on 10:00 | Fixed claim 10:00 | Claim seats; canceled slot and state untouched |
+| PE-13 | Peer From 10:00, holes at 09:00 and 13:00 | Peer displaced | Peer to 13:00, never before its From |
+| PE-15 | Unphased peer; the only phase is full | Peer displaced | Peer searches wake/sleep (11:00), not the phase union |
+| PE-17 | 14:00, new daily series without a clock | Create | Today gets a hole after now (clock sibling if needed); nothing in the past |
+| PE-18 | Series rewrite shifts a peer, then fails | Write throws part-way | Peer and old series rows unchanged; no Google sync |
+| PE-19 | No free day in the horizon | New series | One Problematic copy per day; master not parked |
+| PE-20 | Flexible drag with a new phase | Drop is a conflict | Old slot and old phase kept |
+| PE-21 | Voice `shift` of a slot | Apply | Goes through `move-event` with `slotId` (drag path) |
+| PE-23 | Flexible at 15:00 in 09–17 | Claim takes 15:00 | Flexible to 14:00 (nearest), not 09:00 |
+| PE-25 | Weekly at 00:30 Kyiv (Sunday in UTC) | Google RRULE | `BYDAY=MO` |
+| PE-26 | Done task's hour taken meanwhile; canceled task's hour free | Back to `todo` | First moves to a free hole; second keeps its slot |
+| PE-29 | Many future parks, one past copy | Purge with a small batch | Past copy removed |
+
 ---
 
 ## Minimal smoke set for CI (fast)

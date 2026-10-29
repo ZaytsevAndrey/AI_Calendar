@@ -3,6 +3,7 @@
  * `it.failing` marks a known defect: flip it to `it` in the diff that fixes it.
  */
 import { TaskEventType } from '../scheduling/event-type.enum';
+import { ScheduleState, TaskStatus } from '../tasks/entities/task.entity';
 import { DisplayedEventMoveService } from './displayed-event-move.service';
 import { createPlacementKit, type PlacementKit } from '../../../test/helpers/placement-sqlite.kit';
 import {
@@ -41,7 +42,42 @@ function fixedClaim(start: number, recurring = false) {
 }
 
 describe('placement engine review regressions', () => {
-  it.failing('PE-03 a fixed claim sits on top of a resolved layer and nobody moves', () => {
+  it('PE-23 a displaced flexible takes the hole nearest its old time', () => {
+    // Window 09:00–17:00; claim takes 15:00 where the flexible sat.
+    const plan = planPlacement({
+      claim: fixedClaim(DAY + 6 * HOUR),
+      seats: [seat({ id: 'flex', role: 'flexible', start: DAY + 6 * HOUR, end: DAY + 7 * HOUR })],
+    });
+    expect(plan).toMatchObject({
+      outcome: 'seated',
+      moves: [{ kind: 'shift', seatId: 'flex', start: DAY + 5 * HOUR }],
+    });
+  });
+
+  it('PE-11 a raw-hole search parks instead of packing seated peers', () => {
+    // 08:00–16:00 window; flexibles 08–09:30, 10–12, 12:30–16. No free hour.
+    const seats = [
+      seat({ id: 'a', role: 'flexible', start: DAY - HOUR, end: DAY + HOUR / 2 }),
+      seat({ id: 'b', role: 'flexible', start: DAY + HOUR, end: DAY + 3 * HOUR }),
+      seat({ id: 'c', role: 'flexible', start: DAY + 3.5 * HOUR, end: DAY + 8 * HOUR }),
+    ];
+    const base = {
+      taskId: 'parked',
+      taskName: 'Parked',
+      recurring: false,
+      durationMinutes: 60,
+      notBefore: DAY - HOUR,
+      windows: [{ start: DAY - HOUR, end: DAY + 8 * HOUR }],
+      interval: null,
+    };
+    expect(planPlacement({ claim: base, seats })).toMatchObject({ outcome: 'seated' });
+    expect(planPlacement({ claim: { ...base, allowPack: false }, seats })).toEqual({
+      outcome: 'problematic',
+      reason: 'no_slot',
+    });
+  });
+
+  it('PE-03 a fixed claim sits on top of a resolved layer and nobody moves', () => {
     const plan = planPlacement({
       claim: fixedClaim(DAY + HOUR),
       seats: [
@@ -56,7 +92,7 @@ describe('placement engine review regressions', () => {
     });
   });
 
-  it.failing('PE-04 a fixed series day over another series keeps its clock', () => {
+  it('PE-04 a fixed series day over another series keeps its clock', () => {
     const plan = planPlacement({
       claim: fixedClaim(DAY + HOUR, true),
       seats: [
@@ -71,7 +107,7 @@ describe('placement engine review regressions', () => {
     }
   });
 
-  it.failing('PE-08 BIWEEKLY Mon/Fri counts weeks from the week start (WKST=MO)', () => {
+  it('PE-08 BIWEEKLY Mon/Fri counts weeks from the week start (WKST=MO)', () => {
     // Anchor Fri 30 Oct: on weeks are 26 Oct, 9 Nov, 23 Nov.
     expect(
       seriesHorizonYmds({
@@ -83,7 +119,7 @@ describe('placement engine review regressions', () => {
     ).toEqual(['2026-10-30', '2026-11-09', '2026-11-13', '2026-11-23', '2026-11-27']);
   });
 
-  it.failing('PE-09 MONTHLY from the 31st steps from the anchor and clamps to the month end', () => {
+  it('PE-09 MONTHLY from the 31st steps from the anchor and clamps to the month end', () => {
     expect(
       seriesHorizonYmds({
         anchorYmd: '2027-01-31',
@@ -112,7 +148,7 @@ describe('placement engine review regressions (SQLite)', () => {
     expect(await kit.slotsOf(task.id)).toEqual(['2026-11-05 08:00-09:00']);
   });
 
-  it.failing('PE-10 re-seating a weekly series keeps its weekday, not today', async () => {
+  it('PE-10 re-seating a weekly series keeps its weekday, not today', async () => {
     // Monday weekly series, clock edited on Thursday 5 Nov.
     kit = await createPlacementKit({ now: '2026-11-05T08:00:00.000Z' });
     const task = await kit.addTask({
@@ -136,7 +172,7 @@ describe('placement engine review regressions (SQLite)', () => {
     ]);
   });
 
-  it.failing('PE-05 re-merge does not absorb a copy dropped on another day', async () => {
+  it('PE-05 re-merge does not absorb a copy dropped on another day', async () => {
     // Monday weekly series; the 9 Nov day was detached into a copy at 14:00.
     kit = await createPlacementKit({ now: '2026-11-05T08:00:00.000Z' });
     const group = '11111111-1111-4111-8111-111111111111';
@@ -171,7 +207,7 @@ describe('placement engine review regressions (SQLite)', () => {
     expect((await kit.reload(series.id)).skippedOccurrenceYmds).toContain('2026-11-09');
   });
 
-  it.failing('PE-07 shifting one series day does not change the clock of new days', async () => {
+  it('PE-07 shifting one series day does not change the clock of new days', async () => {
     kit = await createPlacementKit({ now: '2026-11-05T08:00:00.000Z' });
     const series = await kit.addTask({
       name: 'Daily',
@@ -200,7 +236,7 @@ describe('placement engine review regressions (SQLite)', () => {
     expect(days.filter((row) => row >= '2026-11-08' && !row.endsWith('10:00-11:00'))).toEqual([]);
   });
 
-  it.failing('PE-02 dragging "this and following" leaves one slot per day before the split', async () => {
+  it('PE-02 dragging "this and following" leaves one slot per day before the split', async () => {
     kit = await createPlacementKit({ now: '2026-11-05T08:00:00.000Z', horizonDays: 7 });
     const series = await kit.addTask({
       name: 'Daily',
@@ -264,7 +300,7 @@ describe('placement engine review regressions (SQLite)', () => {
     ]);
   });
 
-  it.failing('PE-01 a new series clock keeps the master and its open days on one clock', async () => {
+  it('PE-01 a new series clock keeps the master and its open days on one clock', async () => {
     kit = await createPlacementKit({ now: '2026-11-05T08:00:00.000Z', horizonDays: 4 });
     const series = await kit.addTask({
       name: 'Daily',
@@ -292,7 +328,7 @@ describe('placement engine review regressions (SQLite)', () => {
     );
   });
 
-  it.failing('PE-06 a fixed drag onto another fixed keeps the task clock equal to its slot', async () => {
+  it('PE-06 a fixed drag onto another fixed keeps the task clock equal to its slot', async () => {
     kit = await createPlacementKit({ now: '2026-11-05T08:00:00.000Z' });
     const first = await kit.addTask({
       name: 'First',
@@ -320,5 +356,208 @@ describe('placement engine review regressions (SQLite)', () => {
     expect(slots).toEqual([
       `2026-11-06 ${kit.hmOf(task.scheduledStartTime!)}-${kit.hmOf(task.scheduledEndTime!)}`,
     ]);
+  });
+
+  it('PE-17 a new daily series at 14:00 with no clock still seats today', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T14:00:00.000Z', horizonDays: 2 });
+    const series = await kit.addTask({
+      name: 'Daily',
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+    });
+
+    await kit.service.place(kit.user.id, series.id, { expandSeries: true, searchHole: true });
+
+    // Today keeps its own hole after now (a clock sibling when the series
+    // clock is the earlier one tomorrow); no day is lost or seated in the past.
+    const rows = (await kit.slotRepo.find()).map(
+      (row) => `${kit.ymdOf(row.scheduledStartTime)} ${kit.hmOf(row.scheduledStartTime)}`,
+    );
+    expect(rows.sort()).toEqual(['2026-11-05 14:00', '2026-11-06 08:00']);
+  });
+
+  async function fixedAt(ymd: string, from: string, to: string, name = 'Fixed') {
+    const task = await kit.addTask({
+      name,
+      eventType: TaskEventType.FIXED,
+      scheduledStartTime: kit.at(ymd, from),
+      scheduledEndTime: kit.at(ymd, to),
+    });
+    await kit.addSlot(task.id, kit.at(ymd, from), kit.at(ymd, to));
+    return task;
+  }
+
+  it('PE-12 a canceled task frees its time and is never moved', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T08:00:00.000Z' });
+    const canceled = await kit.addTask({
+      name: 'Canceled',
+      status: TaskStatus.CANCELED,
+      scheduledStartTime: kit.at('2026-11-06', '10:00'),
+      scheduledEndTime: kit.at('2026-11-06', '11:00'),
+    });
+    await kit.addSlot(canceled.id, kit.at('2026-11-06', '10:00'), kit.at('2026-11-06', '11:00'));
+    const fixed = await fixedAt('2026-11-06', '10:00', '11:00');
+
+    await kit.service.place(kit.user.id, fixed.id, {
+      preferredStart: kit.at('2026-11-06', '10:00'),
+    });
+
+    expect(await kit.slotsOf(canceled.id)).toEqual(['2026-11-06 10:00-11:00']);
+    expect((await kit.reload(canceled.id)).scheduleState).toBe(ScheduleState.NONE);
+  });
+
+  it('PE-13 a displaced task never moves before its own From', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T08:00:00.000Z' });
+    const peer = await kit.addTask({
+      name: 'Peer',
+      earliestStartTime: kit.at('2026-11-06', '10:00'),
+      scheduledStartTime: kit.at('2026-11-06', '10:00'),
+      scheduledEndTime: kit.at('2026-11-06', '11:00'),
+    });
+    await kit.addSlot(peer.id, kit.at('2026-11-06', '10:00'), kit.at('2026-11-06', '11:00'));
+    await fixedAt('2026-11-06', '12:00', '13:00', 'Wall');
+    const fixed = await fixedAt('2026-11-06', '10:00', '12:00');
+
+    await kit.service.place(kit.user.id, fixed.id, {
+      preferredStart: kit.at('2026-11-06', '10:00'),
+    });
+
+    // 09:00 is nearer but before its From; 13:00 is the first legal hole.
+    expect(await kit.slotsOf(peer.id)).toEqual(['2026-11-06 13:00-14:00']);
+  });
+
+  it('PE-15 an unphased peer searches wake/sleep, not the union of all phases', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T08:00:00.000Z' });
+    await kit.addPhase({ name: 'Morning', startTime: '08:00', endTime: '10:00' });
+    await fixedAt('2026-11-06', '08:00', '10:00', 'Wall');
+    const peer = await kit.addTask({
+      name: 'Peer',
+      scheduledStartTime: kit.at('2026-11-06', '10:00'),
+      scheduledEndTime: kit.at('2026-11-06', '11:00'),
+    });
+    await kit.addSlot(peer.id, kit.at('2026-11-06', '10:00'), kit.at('2026-11-06', '11:00'));
+    const fixed = await fixedAt('2026-11-06', '10:00', '11:00');
+
+    await kit.service.place(kit.user.id, fixed.id, {
+      preferredStart: kit.at('2026-11-06', '10:00'),
+    });
+
+    expect(await kit.slotsOf(peer.id)).toEqual(['2026-11-06 11:00-12:00']);
+    expect((await kit.reload(peer.id)).scheduleState).toBe(ScheduleState.NONE);
+  });
+
+  it('PE-19 a series with no free day parks one copy per day, not the master too', async () => {
+    kit = await createPlacementKit({
+      now: '2026-11-05T07:00:00.000Z',
+      wakeTime: '08:00',
+      sleepTime: '09:00',
+      horizonDays: 2,
+    });
+    await fixedAt('2026-11-05', '08:00', '09:00', 'Wall 1');
+    await fixedAt('2026-11-06', '08:00', '09:00', 'Wall 2');
+    const series = await kit.addTask({
+      name: 'Daily',
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+    });
+
+    await kit.service.place(kit.user.id, series.id, { expandSeries: true, searchHole: true });
+
+    const parked = await kit.taskRepo.find({ where: { scheduleState: ScheduleState.PROBLEMATIC } });
+    expect(parked.map((task) => task.problematicDay).sort()).toEqual([
+      '2026-11-05',
+      '2026-11-06',
+    ]);
+    expect(parked.every((task) => task.parentSeriesId === series.id)).toBe(true);
+    expect((await kit.reload(series.id)).scheduleState).toBe(ScheduleState.NONE);
+  });
+
+  it('PE-18 a failure part-way through a series rewrite leaves nothing half-written', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T08:00:00.000Z', horizonDays: 2 });
+    const series = await kit.addTask({
+      name: 'Daily',
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      scheduledStartTime: kit.at('2026-11-05', '10:00'),
+      scheduledEndTime: kit.at('2026-11-05', '11:00'),
+    });
+    await kit.addSlot(series.id, kit.at('2026-11-05', '10:00'), kit.at('2026-11-05', '11:00'));
+    await kit.addSlot(series.id, kit.at('2026-11-06', '10:00'), kit.at('2026-11-06', '11:00'));
+    const peer = await kit.addTask({
+      name: 'Peer',
+      scheduledStartTime: kit.at('2026-11-05', '11:00'),
+      scheduledEndTime: kit.at('2026-11-05', '12:00'),
+    });
+    await kit.addSlot(peer.id, kit.at('2026-11-05', '11:00'), kit.at('2026-11-05', '12:00'));
+
+    // Peer moves are written first; then the old series rows go and the write dies.
+    const service = kit.service as unknown as {
+      deleteOpenSlots: (...args: unknown[]) => Promise<void>;
+    };
+    const realDelete = service.deleteOpenSlots.bind(kit.service);
+    jest.spyOn(service, 'deleteOpenSlots').mockImplementation(async (...args) => {
+      await realDelete(...args);
+      throw new Error('disk full');
+    });
+
+    await expect(
+      kit.service.place(kit.user.id, series.id, {
+        preferredStart: kit.at('2026-11-05', '11:00'),
+        expandSeries: true,
+      }),
+    ).rejects.toThrow('disk full');
+
+    expect(await kit.slotsOf(peer.id)).toEqual(['2026-11-05 11:00-12:00']);
+    expect(await kit.slotsOf(series.id)).toEqual([
+      '2026-11-05 10:00-11:00',
+      '2026-11-06 10:00-11:00',
+    ]);
+    expect(kit.pendingGoogleWrites.syncTaskSoon).not.toHaveBeenCalled();
+  });
+
+  it('PE-29 purge reaches a past copy behind many future parks', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T08:00:00.000Z' });
+    for (let i = 0; i < 10; i += 1) {
+      await kit.addTask({
+        name: `Future ${i}`,
+        scheduleState: ScheduleState.PROBLEMATIC,
+        problematicDay: '2026-11-20',
+      });
+    }
+    const past = await kit.addTask({
+      name: 'Past copy',
+      scheduleState: ScheduleState.PROBLEMATIC,
+      problematicDay: '2026-11-03',
+    });
+
+    expect(await kit.service.purgePastProblematicCopies(1)).toBe(1);
+    expect(await kit.taskRepo.findOneBy({ id: past.id })).toBeNull();
+  });
+
+  it('PE-26 a task back to todo keeps a free slot and moves off a taken one', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T08:00:00.000Z' });
+    const done = await kit.addTask({
+      name: 'Done',
+      status: TaskStatus.COMPLETED,
+      scheduledStartTime: kit.at('2026-11-06', '10:00'),
+      scheduledEndTime: kit.at('2026-11-06', '11:00'),
+    });
+    await kit.addSlot(done.id, kit.at('2026-11-06', '10:00'), kit.at('2026-11-06', '11:00'));
+    const free = await kit.addTask({
+      name: 'Free',
+      status: TaskStatus.CANCELED,
+      scheduledStartTime: kit.at('2026-11-06', '14:00'),
+      scheduledEndTime: kit.at('2026-11-06', '15:00'),
+    });
+    await kit.addSlot(free.id, kit.at('2026-11-06', '14:00'), kit.at('2026-11-06', '15:00'));
+    // Took the done task's hour while it was done.
+    await fixedAt('2026-11-06', '10:00', '11:00', 'Newcomer');
+
+    await kit.tasksService.updateStatus(done.id, kit.user.id, TaskStatus.TODO);
+    await kit.tasksService.updateStatus(free.id, kit.user.id, TaskStatus.TODO);
+
+    expect(await kit.slotsOf(done.id)).not.toContain('2026-11-06 10:00-11:00');
+    expect(await kit.slotsOf(done.id)).toHaveLength(1);
+    expect(await kit.slotsOf(free.id)).toEqual(['2026-11-06 14:00-15:00']);
   });
 });

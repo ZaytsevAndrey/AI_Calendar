@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, In, LessThan, Not, IsNull, Repository } from 'typeorm';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import { ExternalCalendarBusyService } from '../calendar-providers/external-calendar-busy.service';
 import { PendingGoogleWriteService } from '../google-calendar/pending-google-write.service';
@@ -42,7 +42,6 @@ import { placementNotBefore } from './placement-bounds.util';
 import {
   planPlacement,
   seriesHorizonYmds,
-  seriesOccurrenceYmds,
   type PlacementMove,
   type PlacementPlan,
   type PlacementSeat,
@@ -64,6 +63,13 @@ export type PlaceOptions = {
   commit?: 'always' | 'preferred' | 'keep';
   /** Ignore the stored clock and take the nearest hole. */
   searchHole?: boolean;
+  /** Auto-seat and inbox Schedule / Do now: a free gap only, never pack seated tasks. */
+  rawHole?: boolean;
+  /**
+   * With `keep`: the current slot also has to be free of seated tasks (a task
+   * back from done / canceled). A miss searches a new hole.
+   */
+  revalidate?: boolean;
   /** After the first day, write the rest of a series inside the horizon. */
   expandSeries?: boolean;
   /** This call is a later day of a series already being expanded. */
@@ -114,13 +120,15 @@ const locks = new Map<string, Promise<unknown>>();
 function withUserLock<T>(userId: string, run: () => Promise<T>): Promise<T> {
   const previous = locks.get(userId) ?? Promise.resolve();
   const next = previous.then(run, run);
-  locks.set(
-    userId,
-    next.then(
-      () => undefined,
-      () => undefined,
-    ),
+  const tail = next.then(
+    () => undefined,
+    () => undefined,
   );
+  locks.set(userId, tail);
+  // Drop the entry once this user's queue is idle so the map does not grow.
+  void tail.then(() => {
+    if (locks.get(userId) === tail) locks.delete(userId);
+  });
   return next;
 }
 
@@ -362,8 +370,21 @@ export class PlacementStepService {
    * Settings TZ defines "today".
    */
   async purgePastProblematicCopies(limit = 50): Promise<number> {
+    // Only rows that can be past somewhere: a parked day before tomorrow (UTC,
+    // so every zone's today is covered) or a multi-day park. Future parks would
+    // otherwise fill the batch and past copies would never be reached.
+    const tomorrowUtc = addDaysToYmd(new Date().toISOString().slice(0, 10), 1);
     const parked = await this.taskRepo.find({
-      where: { scheduleState: ScheduleState.PROBLEMATIC },
+      where: [
+        {
+          scheduleState: ScheduleState.PROBLEMATIC,
+          problematicDay: LessThan(tomorrowUtc),
+        },
+        {
+          scheduleState: ScheduleState.PROBLEMATIC,
+          problematicOccurrenceYmds: Not(IsNull()),
+        },
+      ],
       take: limit * 4,
       order: { createdAt: 'ASC' },
     });
@@ -526,7 +547,6 @@ export class PlacementStepService {
     const now = new Date();
     const nowMs = now.getTime();
     const horizon = planningHorizonRange(settings, now);
-    const phases = await this.phasesService.findAllForScheduling(userId);
     const wake = normalizeClockHm(settings.wakeTime);
     const sleep = normalizeClockHm(settings.sleepTime);
     const weekendOk = settings.weekendWorkEnabled !== false;
@@ -550,6 +570,12 @@ export class PlacementStepService {
       .andWhere('st.scheduledEndTime > :now', { now })
       .getMany();
 
+    const peerWindows = (owner: Task, windows: MsInterval[]): MsInterval[] => {
+      if (owner.isRecurring || owner.eventType === TaskEventType.FIXED) return windows;
+      const from = placementNotBefore(owner, now, timeZone, settings.wakeTime).getTime();
+      const until = owner.deadline ? new Date(owner.deadline).getTime() : Number.POSITIVE_INFINITY;
+      return clipWindowsToSpan(windows, from, Number.isFinite(until) ? until : Number.POSITIVE_INFINITY);
+    };
     const seats: PlacementSeat[] = [];
     const seenFixed = new Set<string>();
     for (const slot of slots) {
@@ -557,11 +583,19 @@ export class PlacementStepService {
       const owner = slot.task;
       if (!owner || owner.isUnscheduled) continue;
       if (owner.scheduleState === ScheduleState.PROBLEMATIC) continue;
+      // Done and canceled tasks free their time: never a seat, never moved.
+      if (
+        owner.status === TaskStatus.COMPLETED ||
+        owner.status === TaskStatus.CANCELED
+      ) {
+        continue;
+      }
       const start = new Date(slot.scheduledStartTime).getTime();
       const end = new Date(slot.scheduledEndTime).getTime();
       if (end <= nowMs) continue;
-      const linked = linkedPhases(owner);
-      const windows = windowsFor(linked.length ? linked : phases);
+      // A peer searches by the same rules as a claimant: its own phases (or
+      // wake/sleep), not before its From, not after its deadline.
+      const windows = peerWindows(owner, windowsFor(linkedPhases(owner)));
       if (owner.scheduleState === ScheduleState.RESOLVED) {
         seenFixed.add(owner.id);
         seats.push(seatFrom(slot, owner, 'resolved', start, end, windows, nowMs, timeZone));
@@ -679,7 +713,7 @@ export class PlacementStepService {
       // Same-day displace only: do not "find a hole" on another civil day.
       // Peers already seated that day must keep a move window even if their
       // phase filter clipped to empty — otherwise preferred never shifts them.
-      const dayBounds = civilDayBounds(dayYmd, timeZone);
+      const dayBounds = dayWakeSleepMs(dayYmd, wake, sleep, timeZone);
       for (const seat of seats) {
         const clipped = windowsOnCivilDay(seat.windows, dayYmd, timeZone);
         seat.windows =
@@ -692,12 +726,18 @@ export class PlacementStepService {
     }
 
     if (opts?.commit === 'keep' && !windowExpired && interval) {
+      const free =
+        !opts.revalidate ||
+        !seats.some(
+          (seat) => seat.role !== 'resolved' && overlapsMs(seat, interval!),
+        );
       const fits =
         task.eventType === TaskEventType.FIXED ||
-        claimWindows.some(
-          (window) =>
-            interval!.start >= window.start && interval!.end <= window.end,
-        );
+        (free &&
+          claimWindows.some(
+            (window) =>
+              interval!.start >= window.start && interval!.end <= window.end,
+          ));
       if (fits) {
         if (opts.expandSeries && task.isRecurring) {
           await this.expandSeriesDays(userId, task.id);
@@ -712,6 +752,11 @@ export class PlacementStepService {
       interval = null;
     }
 
+    // A series day never takes a clock that has already started today;
+    // the day plan falls back to a hole after now.
+    if (interval && opts?.seriesDay && interval.start < nowMs) {
+      return { outcome: 'problematic', reason: 'no_slot' };
+    }
     if (interval && interval.end <= nowMs) {
       if (opts?.expandSeries && !opts.seriesDay && task.isRecurring) {
         await this.expandSeriesDays(userId, task.id);
@@ -788,6 +833,7 @@ export class PlacementStepService {
         windowExpired: opts?.drag ? false : windowExpired,
         mustFitWindow: task.eventType !== TaskEventType.FIXED,
         allowResolvedOverlap: opts?.commit === 'preferred',
+        allowPack: !opts?.rawHole,
       },
       seats,
       bufferMinutes: normalizeFixedEventBufferMinutes(
@@ -1175,10 +1221,45 @@ export class PlacementStepService {
       problematicOriginalEnd: originalEnd,
       parentSeriesId: fresh.id,
       seriesGroupId: fresh.seriesGroupId ?? fresh.id,
+      originalOccurrenceYmd: ymd,
       isUnscheduled: false,
     });
     if (fresh.phases?.length) copy.phases = fresh.phases;
     await this.taskRepo.save(copy);
+  }
+
+  /**
+   * Run `write` as one transaction. Inside, `tx` is this service with its
+   * repositories (and nested `dataSource.transaction`) bound to that
+   * transaction; Google syncs are held until the commit.
+   */
+  private async inOneTransaction<T>(write: (tx: this) => Promise<T>): Promise<T> {
+    const deferred = new Map<string, string>();
+    const hold = (userId: string, taskId: string) => {
+      deferred.set(taskId, userId);
+    };
+    const result = await this.dataSource.transaction(async (manager) => {
+      const tx = Object.create(this, {
+        dataSource: {
+          value: {
+            transaction: <R>(fn: (m: typeof manager) => Promise<R>) => fn(manager),
+          },
+        },
+        taskRepo: { value: manager.getRepository(Task) },
+        scheduledRepo: { value: manager.getRepository(ScheduledTask) },
+        pendingGoogleWrites: {
+          value: {
+            syncTask: async (userId: string, taskId: string) => hold(userId, taskId),
+            syncTaskSoon: hold,
+          },
+        },
+      }) as this;
+      return write(tx);
+    });
+    for (const [taskId, userId] of deferred) {
+      this.pendingGoogleWrites.syncTaskSoon(userId, taskId);
+    }
+    return result;
   }
 
   /**
@@ -1217,24 +1298,44 @@ export class PlacementStepService {
           )
         : null;
 
-    // The series starts on its From day when that is still ahead.
-    const anchorYmd = seriesStartYmd(task, now, timeZone);
+    // Days count from the series start (DTSTART); today or a later From day
+    // only drops what is before it.
+    const anchorYmd = seriesAnchorYmd(task, timeZone);
+    const fromYmd = seriesStartYmd(task, now, timeZone);
     const horizonEndYmd = localYmd(horizon.end.toISOString(), timeZone);
     const untilMs = task.deadline
       ? new Date(task.deadline).getTime()
       : Number.POSITIVE_INFINITY;
+    const taskWindows = horizonWindows(
+      linkedPhases(task),
+      timeZone,
+      normalizeClockHm(settings.wakeTime),
+      normalizeClockHm(settings.sleepTime),
+      settings.weekendWorkEnabled !== false,
+      horizon.horizonDays,
+      now,
+    );
     const ymds = seriesHorizonYmds({
       anchorYmd,
+      fromYmd,
       horizonEndYmd,
       pattern: task.recurrencePattern,
       weekDays: task.recurrenceWeekDays,
       skippedYmds: task.skippedOccurrenceYmds,
     }).filter((ymd) => {
-      const probeHm = preferredHmHint ?? '09:00';
-      const startMs = new Date(
-        localDateTimeIso(ymd, probeHm, timeZone),
-      ).getTime();
-      return startMs + durationMs > nowMs && startMs + durationMs <= untilMs;
+      if (preferredHmHint) {
+        const startMs = new Date(
+          localDateTimeIso(ymd, preferredHmHint, timeZone),
+        ).getTime();
+        return startMs + durationMs > nowMs && startMs + durationMs <= untilMs;
+      }
+      // No clock yet: the day counts while its own window (phase ∩ wake/sleep)
+      // still has room after now; the day plan finds the hole.
+      return windowsOnCivilDay(taskWindows, ymd, timeZone).some(
+        (window) =>
+          window.end - Math.max(window.start, nowMs) >= durationMs &&
+          window.start + durationMs <= untilMs,
+      );
     });
 
     type DayPlan = {
@@ -1369,61 +1470,196 @@ export class PlacementStepService {
       }
     }
 
-    // Peer moves from final day plans (still against the pre-write landscape).
-    for (const { ymd, plan } of dayPlans) {
-      if (plan.outcome !== 'seated' || !plan.moves.length) continue;
-      this.logger.log(
-        `[series-horizon] applyMoves ymd=${ymd} ${summarizeMoves(plan.moves)}`,
-      );
-      await this.dataSource.transaction(async (manager) => {
-        const tasks = manager.getRepository(Task);
-        const slots = manager.getRepository(ScheduledTask);
-        for (const move of plan.moves) {
-          await this.applyMove(userId, tasks, slots, move, now);
-        }
-      });
-    }
-
-    if (!task.seriesGroupId) {
-      task.seriesGroupId = task.id;
-      await this.taskRepo.save(task);
-    }
-    const groupId = task.seriesGroupId;
-
-    const seated = dayPlans.filter(
-      (d): d is DayPlan & { hm: string } =>
-        d.plan.outcome === 'seated' && !!d.hm,
-    );
-    if (!seated.length) {
-      // Spec wave 4 §28–§29: never wipe open seats before a successful rewrite.
-      // If this series already has future seats, keep them — do not clear the
-      // master clock / Google series. Dry-run often fails against own seats.
-      const existingOpen = await this.scheduledRepo
-        .createQueryBuilder('st')
-        .where('st.taskId = :taskId', { taskId: task.id })
-        .andWhere('st.scheduledEndTime > :now', { now })
-        .getCount();
-      if (existingOpen > 0 && task.scheduledStartTime && task.scheduledEndTime) {
-        this.logger.warn(
-          `[series-horizon] keep existing seats task=${task.id.slice(0, 8)} ` +
-            `open=${existingOpen} (horizon rewrite seated 0 days)`,
+    // Everything below writes. One transaction (PE-18): a failure part-way
+    // leaves no peers shifted, no half-written series, no day skipped without
+    // its copy. Google syncs run after the commit.
+    return this.inOneTransaction(async (tx) => {
+      // Peer moves from final day plans (still against the pre-write landscape).
+      for (const { ymd, plan } of dayPlans) {
+        if (plan.outcome !== 'seated' || !plan.moves.length) continue;
+        tx.logger.log(
+          `[series-horizon] applyMoves ymd=${ymd} ${summarizeMoves(plan.moves)}`,
         );
-        this.pendingGoogleWrites.syncTaskSoon(userId, task.id);
-        return {
-          outcome: 'seated',
-          start: new Date(task.scheduledStartTime).getTime(),
-          end: new Date(task.scheduledEndTime).getTime(),
-          moves: [],
-        };
+        await tx.dataSource.transaction(async (manager) => {
+          const tasks = manager.getRepository(Task);
+          const slots = manager.getRepository(ScheduledTask);
+          for (const move of plan.moves) {
+            await tx.applyMove(userId, tasks, slots, move, now);
+          }
+        });
       }
-      let reason = 'no_slot';
+
+      if (!task.seriesGroupId) {
+        task.seriesGroupId = task.id;
+        await tx.taskRepo.save(task);
+      }
+      const groupId = task.seriesGroupId;
+
+      const seated = dayPlans.filter(
+        (d): d is DayPlan & { hm: string } =>
+          d.plan.outcome === 'seated' && !!d.hm,
+      );
+      if (!seated.length) {
+        // Spec wave 4 §28–§29: never wipe open seats before a successful rewrite.
+        // If this series already has future seats, keep them — do not clear the
+        // master clock / Google series. Dry-run often fails against own seats.
+        const existingOpen = await tx.scheduledRepo
+          .createQueryBuilder('st')
+          .where('st.taskId = :taskId', { taskId: task.id })
+          .andWhere('st.scheduledEndTime > :now', { now })
+          .getCount();
+        if (existingOpen > 0 && task.scheduledStartTime && task.scheduledEndTime) {
+          tx.logger.warn(
+            `[series-horizon] keep existing seats task=${task.id.slice(0, 8)} ` +
+              `open=${existingOpen} (horizon rewrite seated 0 days)`,
+          );
+          tx.pendingGoogleWrites.syncTaskSoon(userId, task.id);
+          return {
+            outcome: 'seated',
+            start: new Date(task.scheduledStartTime).getTime(),
+            end: new Date(task.scheduledEndTime).getTime(),
+            moves: [],
+          };
+        }
+        let reason = 'no_slot';
+        for (const day of dayPlans) {
+          if (day.plan.outcome === 'problematic') reason = day.plan.reason;
+          await tx.parkFailedSeriesDay(
+            userId,
+            task,
+            day.ymd,
+            day.plan.outcome === 'problematic' ? day.plan.reason : 'no_slot',
+            timeZone,
+            preferredHmHint
+              ? new Date(localDateTimeIso(day.ymd, preferredHmHint, timeZone))
+              : null,
+            durationMinutes,
+          );
+        }
+        // Each failed day already has its own Problematic copy; parking the
+        // master too would show the same event N+1 times in the inbox.
+        if (!dayPlans.length) {
+          await tx.persist(
+            task,
+            { outcome: 'problematic', reason },
+            now,
+            timeZone,
+            durationMinutes,
+          );
+        }
+        tx.pendingGoogleWrites.syncTaskSoon(userId, task.id);
+        return { outcome: 'problematic', reason };
+      }
+
+      // Only clear open seats once we know the rewrite has days to write.
+      await tx.deleteOpenSlots(tx.scheduledRepo, task.id, now);
+
+      const byHm = groupYmdsByClockHm(
+        seated.map((d) => ({ ymd: d.ymd, hm: d.hm })),
+      );
+      primaryHm = pickPrimaryClockHm(byHm, preferredHmHint ?? primaryHm);
+      const planByYmd = new Map(dayPlans.map((d) => [d.ymd, d]));
+      const finalGroups = [...byHm.entries()]
+        .map(([hm, days]) => `${hm}→[${days.join(',')}]`)
+        .join(' ');
+      const failedYmds = dayPlans
+        .filter((d) => d.plan.outcome !== 'seated')
+        .map((d) => d.ymd);
+      tx.logger.log(
+        `[series-horizon] finalGroups primary=${primaryHm} groups={${finalGroups}} ` +
+          `failed=[${failedYmds.join(',') || 'none'}] ` +
+          `dayClock=[${dayPlans.map((d) => `${d.ymd}:${d.hm ?? d.plan.outcome}`).join(' ')}]`,
+      );
+
+      const primaryYmds = byHm.get(primaryHm) ?? [];
+      for (const ymd of primaryYmds) {
+        const day = planByYmd.get(ymd)!;
+        if (day.plan.outcome !== 'seated') continue;
+        await tx.scheduledRepo.save(
+          tx.scheduledRepo.create({
+            taskId: task.id,
+            scheduledStartTime: new Date(day.plan.start),
+            scheduledEndTime: new Date(day.plan.end),
+            isAutoGenerated: true,
+          }),
+        );
+      }
+
+      const firstPrimary = planByYmd.get(primaryYmds[0])!;
+      const fresh = await tx.taskRepo.findOne({
+        where: { id: task.id, userId },
+        relations: ['phase', 'phases'],
+      });
+      if (fresh && firstPrimary.plan.outcome === 'seated') {
+        fresh.scheduledStartTime = new Date(firstPrimary.plan.start);
+        fresh.scheduledEndTime = new Date(firstPrimary.plan.end);
+        fresh.estimatedTimeInMinutes = durationMinutes;
+        fresh.scheduleState = ScheduleState.NONE;
+        fresh.isUnscheduled = false;
+        fresh.seriesGroupId = groupId;
+        clearParkMetadata(fresh);
+        // Days that could not seat are skipped on the master.
+        for (const day of dayPlans) {
+          if (day.plan.outcome === 'seated') continue;
+          fresh.skippedOccurrenceYmds = addSkippedOccurrenceYmd(
+            fresh.skippedOccurrenceYmds,
+            day.ymd,
+          );
+        }
+        // Non-primary clocks leave the master via sibling split below.
+        for (const [hm, ymdsForHm] of byHm) {
+          if (hm === primaryHm) continue;
+          for (const ymd of ymdsForHm) {
+            fresh.skippedOccurrenceYmds = addSkippedOccurrenceYmd(
+              fresh.skippedOccurrenceYmds,
+              ymd,
+            );
+          }
+        }
+        await tx.taskRepo.save(fresh);
+      }
+
+      const affectedIds = new Set<string>([task.id]);
+      for (const [hm, ymdsForHm] of byHm) {
+        if (hm === primaryHm) continue;
+        const rows: ScheduledTask[] = [];
+        for (const ymd of ymdsForHm) {
+          const day = planByYmd.get(ymd)!;
+          if (day.plan.outcome !== 'seated') continue;
+          const row = tx.scheduledRepo.create({
+            taskId: task.id,
+            scheduledStartTime: new Date(day.plan.start),
+            scheduledEndTime: new Date(day.plan.end),
+            isAutoGenerated: true,
+          });
+          const saved = await tx.scheduledRepo.save(row);
+          rows.push(saved);
+        }
+        if (!rows.length) continue;
+        const sibling = await tx.createSeriesClockSibling(
+          (await tx.taskRepo.findOne({
+            where: { id: task.id, userId },
+            relations: ['phase', 'phases'],
+          }))!,
+          groupId,
+          hm,
+          ymdsForHm,
+          rows,
+          timeZone,
+          durationMs,
+        );
+        affectedIds.add(sibling.id);
+      }
+
       for (const day of dayPlans) {
-        if (day.plan.outcome === 'problematic') reason = day.plan.reason;
-        await this.parkFailedSeriesDay(
+        if (day.plan.outcome === 'seated') continue;
+        const reason =
+          day.plan.outcome === 'problematic' ? day.plan.reason : 'no_slot';
+        await tx.parkFailedSeriesDay(
           userId,
           task,
           day.ymd,
-          day.plan.outcome === 'problematic' ? day.plan.reason : 'no_slot',
+          reason,
           timeZone,
           preferredHmHint
             ? new Date(localDateTimeIso(day.ymd, preferredHmHint, timeZone))
@@ -1431,153 +1667,27 @@ export class PlacementStepService {
           durationMinutes,
         );
       }
-      await this.persist(
-        task,
-        { outcome: 'problematic', reason },
-        now,
-        timeZone,
-        durationMinutes,
-      );
-      this.pendingGoogleWrites.syncTaskSoon(userId, task.id);
-      return { outcome: 'problematic', reason };
-    }
 
-    // Only clear open seats once we know the rewrite has days to write.
-    await this.deleteOpenSlots(this.scheduledRepo, task.id, now);
-
-    const byHm = groupYmdsByClockHm(
-      seated.map((d) => ({ ymd: d.ymd, hm: d.hm })),
-    );
-    primaryHm = pickPrimaryClockHm(byHm, preferredHmHint ?? primaryHm);
-    const planByYmd = new Map(dayPlans.map((d) => [d.ymd, d]));
-    const finalGroups = [...byHm.entries()]
-      .map(([hm, days]) => `${hm}→[${days.join(',')}]`)
-      .join(' ');
-    const failedYmds = dayPlans
-      .filter((d) => d.plan.outcome !== 'seated')
-      .map((d) => d.ymd);
-    this.logger.log(
-      `[series-horizon] finalGroups primary=${primaryHm} groups={${finalGroups}} ` +
-        `failed=[${failedYmds.join(',') || 'none'}] ` +
-        `dayClock=[${dayPlans.map((d) => `${d.ymd}:${d.hm ?? d.plan.outcome}`).join(' ')}]`,
-    );
-
-    const primaryYmds = byHm.get(primaryHm) ?? [];
-    for (const ymd of primaryYmds) {
-      const day = planByYmd.get(ymd)!;
-      if (day.plan.outcome !== 'seated') continue;
-      await this.scheduledRepo.save(
-        this.scheduledRepo.create({
-          taskId: task.id,
-          scheduledStartTime: new Date(day.plan.start),
-          scheduledEndTime: new Date(day.plan.end),
-          isAutoGenerated: true,
-        }),
-      );
-    }
-
-    const firstPrimary = planByYmd.get(primaryYmds[0])!;
-    const fresh = await this.taskRepo.findOne({
-      where: { id: task.id, userId },
-      relations: ['phase', 'phases'],
-    });
-    if (fresh && firstPrimary.plan.outcome === 'seated') {
-      fresh.scheduledStartTime = new Date(firstPrimary.plan.start);
-      fresh.scheduledEndTime = new Date(firstPrimary.plan.end);
-      fresh.estimatedTimeInMinutes = durationMinutes;
-      fresh.scheduleState = ScheduleState.NONE;
-      fresh.isUnscheduled = false;
-      fresh.seriesGroupId = groupId;
-      clearParkMetadata(fresh);
-      // Days that could not seat are skipped on the master.
-      for (const day of dayPlans) {
-        if (day.plan.outcome === 'seated') continue;
-        fresh.skippedOccurrenceYmds = addSkippedOccurrenceYmd(
-          fresh.skippedOccurrenceYmds,
-          day.ymd,
-        );
+      for (const id of affectedIds) {
+        tx.pendingGoogleWrites.syncTaskSoon(userId, id);
       }
-      // Non-primary clocks leave the master via sibling split below.
-      for (const [hm, ymdsForHm] of byHm) {
-        if (hm === primaryHm) continue;
-        for (const ymd of ymdsForHm) {
-          fresh.skippedOccurrenceYmds = addSkippedOccurrenceYmd(
-            fresh.skippedOccurrenceYmds,
-            ymd,
-          );
+      for (const { plan } of dayPlans) {
+        if (plan.outcome !== 'seated') continue;
+        for (const move of plan.moves) {
+          tx.pendingGoogleWrites.syncTaskSoon(userId, move.taskId);
         }
       }
-      await this.taskRepo.save(fresh);
-    }
 
-    const affectedIds = new Set<string>([task.id]);
-    for (const [hm, ymdsForHm] of byHm) {
-      if (hm === primaryHm) continue;
-      const rows: ScheduledTask[] = [];
-      for (const ymd of ymdsForHm) {
-        const day = planByYmd.get(ymd)!;
-        if (day.plan.outcome !== 'seated') continue;
-        const row = this.scheduledRepo.create({
-          taskId: task.id,
-          scheduledStartTime: new Date(day.plan.start),
-          scheduledEndTime: new Date(day.plan.end),
-          isAutoGenerated: true,
-        });
-        const saved = await this.scheduledRepo.save(row);
-        rows.push(saved);
+      if (firstPrimary.plan.outcome !== 'seated') {
+        return { outcome: 'problematic', reason: 'no_slot' };
       }
-      if (!rows.length) continue;
-      const sibling = await this.createSeriesClockSibling(
-        (await this.taskRepo.findOne({
-          where: { id: task.id, userId },
-          relations: ['phase', 'phases'],
-        }))!,
-        groupId,
-        hm,
-        ymdsForHm,
-        rows,
-        timeZone,
-        durationMs,
-      );
-      affectedIds.add(sibling.id);
-    }
-
-    for (const day of dayPlans) {
-      if (day.plan.outcome === 'seated') continue;
-      const reason =
-        day.plan.outcome === 'problematic' ? day.plan.reason : 'no_slot';
-      await this.parkFailedSeriesDay(
-        userId,
-        task,
-        day.ymd,
-        reason,
-        timeZone,
-        preferredHmHint
-          ? new Date(localDateTimeIso(day.ymd, preferredHmHint, timeZone))
-          : null,
-        durationMinutes,
-      );
-    }
-
-    for (const id of affectedIds) {
-      this.pendingGoogleWrites.syncTaskSoon(userId, id);
-    }
-    for (const { plan } of dayPlans) {
-      if (plan.outcome !== 'seated') continue;
-      for (const move of plan.moves) {
-        this.pendingGoogleWrites.syncTaskSoon(userId, move.taskId);
-      }
-    }
-
-    if (firstPrimary.plan.outcome !== 'seated') {
-      return { outcome: 'problematic', reason: 'no_slot' };
-    }
-    return {
-      outcome: 'seated',
-      start: firstPrimary.plan.start,
-      end: firstPrimary.plan.end,
-      moves: [],
-    };
+      return {
+        outcome: 'seated',
+        start: firstPrimary.plan.start,
+        end: firstPrimary.plan.end,
+        moves: [],
+      };
+    });
   }
 
   private async planOneSeriesDayDry(
@@ -1683,18 +1793,8 @@ export class PlacementStepService {
         localYmd(new Date(row.scheduledStartTime).toISOString(), timeZone),
       ),
     );
-    const anchorYmd = openFuture.length
-      ? localYmd(
-          new Date(
-            openFuture.sort(
-              (a, b) =>
-                new Date(a.scheduledStartTime).getTime() -
-                new Date(b.scheduledStartTime).getTime(),
-            )[0].scheduledStartTime,
-          ).toISOString(),
-          timeZone,
-        )
-      : localYmd(new Date(task.scheduledStartTime).toISOString(), timeZone);
+    // Count days from the series start (DTSTART); today only drops the past.
+    const anchorYmd = seriesAnchorYmd(task, timeZone);
     const horizonEndYmd = localYmd(horizon.end.toISOString(), timeZone);
     const durationMs =
       Math.max(1, fixedSlotMinutes(task) ?? (task.estimatedTimeInMinutes || 30)) * 60_000;
@@ -1704,8 +1804,9 @@ export class PlacementStepService {
     const untilMs = task.deadline
       ? new Date(task.deadline).getTime()
       : Number.POSITIVE_INFINITY;
-    const ymds = seriesOccurrenceYmds({
+    const ymds = seriesHorizonYmds({
       anchorYmd,
+      fromYmd: startYmd,
       horizonEndYmd,
       pattern: task.recurrencePattern,
       weekDays: task.recurrenceWeekDays,
@@ -1936,6 +2037,7 @@ export class PlacementStepService {
       scheduleState: ScheduleState.NONE,
       parentSeriesId: series.id,
       seriesGroupId: groupId,
+      originalOccurrenceYmd: multi ? null : firstYmd,
       isUnscheduled: false,
     });
     if (series.phases?.length) sibling.phases = series.phases;
@@ -1972,6 +2074,9 @@ export class PlacementStepService {
       new Date(task.scheduledStartTime).toISOString(),
       timeZone,
     );
+    // Only the day this copy stands for may rejoin; a copy moved to another
+    // day would replace that day's own occurrence.
+    if (task.originalOccurrenceYmd !== ymd) return null;
 
     const siblings = await this.taskRepo.find({
       where: {
@@ -2245,26 +2350,16 @@ export class PlacementStepService {
         );
         return;
       }
-      const previousStart = started;
       row.scheduledStartTime = new Date(move.start);
       row.scheduledEndTime = new Date(move.end);
       await slots.save(row);
       const owner = await tasks.findOne({ where: { id: move.taskId, userId } });
-      if (owner) {
-        const ownerStart = owner.scheduledStartTime
-          ? new Date(owner.scheduledStartTime).getTime()
-          : NaN;
-        // One-offs always mirror the slot; series masters only when this row
-        // was the displayed anchor (otherwise leave reconcile / other days).
-        if (
-          !owner.isRecurring ||
-          (Number.isFinite(ownerStart) &&
-            Math.abs(ownerStart - previousStart) < 1000)
-        ) {
-          owner.scheduledStartTime = new Date(move.start);
-          owner.scheduledEndTime = new Date(move.end);
-          await tasks.save(owner);
-        }
+      // One-offs mirror the slot. A series master keeps its clock: one shifted
+      // day must not move every later day (displaced series days detach).
+      if (owner && !owner.isRecurring) {
+        owner.scheduledStartTime = new Date(move.start);
+        owner.scheduledEndTime = new Date(move.end);
+        await tasks.save(owner);
       }
       return;
     }
@@ -2357,6 +2452,7 @@ export class PlacementStepService {
       problematicOriginalEnd: new Date(move.originalEnd),
       parentSeriesId: series.id,
       seriesGroupId: series.seriesGroupId ?? series.id,
+      originalOccurrenceYmd: move.occurrenceYmd,
       isUnscheduled: false,
     });
     if (series.phases?.length) copy.phases = series.phases;
@@ -2698,13 +2794,14 @@ export function autoSeatOptions(
     /^\d{4}-\d{2}-\d{2}$/.test(task.problematicDay)
       ? task.problematicDay
       : null;
-  if (!day) return { searchHole: true };
+  if (!day) return { searchHole: true, rawHole: true };
   if (day < todayYmd) return null;
   const original = task.problematicOriginalStart
     ? new Date(task.problematicOriginalStart)
     : null;
   return {
     searchHole: true,
+    rawHole: true,
     windowYmd: day,
     preferredStart:
       original && Number.isFinite(original.getTime()) ? original : null,
@@ -2811,6 +2908,16 @@ function fixedSlotMinutes(task: Task): number | null {
 }
 
 /** First civil day a series may use: today, or its From day when that is later. */
+/** Series start day (DTSTART): the From day, else the master clock day. */
+export function seriesAnchorYmd(
+  task: Pick<Task, 'earliestStartTime' | 'scheduledStartTime'>,
+  timeZone: string,
+  now = new Date(),
+): string {
+  const source = task.earliestStartTime ?? task.scheduledStartTime ?? now;
+  return localYmd(new Date(source).toISOString(), timeZone);
+}
+
 export function seriesStartYmd(
   task: Pick<Task, 'earliestStartTime'>,
   now: Date,
