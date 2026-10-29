@@ -3,10 +3,10 @@ name: Site (landing + app)
 # Builds the public site exactly as Render does: React app + Next.js landing, assembled into site/.
 on:
   pull_request:
-    paths: ['landing/**', 'frontend/**', 'scripts/*site*.mjs', 'render.yaml', '.github/workflows/landing.yml']
+    paths: ['landing/**', 'frontend/**', 'e2e/**', 'scripts/*site*.mjs', 'render.yaml', '.github/workflows/landing.yml']
   push:
     branches: [develop, master]
-    paths: ['landing/**', 'frontend/**', 'scripts/*site*.mjs', 'render.yaml', '.github/workflows/landing.yml']
+    paths: ['landing/**', 'frontend/**', 'e2e/**', 'scripts/*site*.mjs', 'render.yaml', '.github/workflows/landing.yml']
 
 concurrency:
   group: site-${{ github.ref }}
@@ -55,3 +55,31 @@ jobs:
           grep -q 'noindex' site/app.html
           test -f site/sitemap.xml && test -f site/robots.txt && test -f site/manifest.webmanifest
           echo "Site checks passed"
+
+  # The landing moved the app's calendar to /calendar and changed /login. Cover those routes even
+  # while the main CI job stops earlier (backend tests).
+  app-routes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Frontend unit tests
+        run: npm test --workspace=frontend
+
+      - name: Install Playwright Chromium
+        run: npm run playwright:install
+
+      - name: Playwright auth, navigation and smoke
+        run: npm run test:e2e:ui -- p0.auth p0.smoke p1.auth
+        env:
+          JWT_SECRET: e2e-ci-secret
+          JWT_EXPIRES_IN: 1h

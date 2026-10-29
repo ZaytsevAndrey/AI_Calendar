@@ -25,7 +25,7 @@ const Header: React.FC = () => {
                 </p>
                 <div className="hidden min-w-0 shrink-0 md:block">
                     <Link
-                        to="/"
+                        to="/calendar"
                         className="group inline-flex items-center gap-2 no-underline hover:no-underline"
                     >
                         <img src="/icon-64.png" alt="" className="h-8 w-8 shrink-0 rounded-[9px]" />

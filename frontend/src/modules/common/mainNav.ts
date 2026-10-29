@@ -15,7 +15,7 @@ export type MainNavItem = {
 
 export const mainNavItems: readonly MainNavItem[] = [
     {
-        to: '/',
+        to: '/calendar',
         labelKey: 'nav.calendar',
         icon: CalendarDays,
         match: (path) => path === '/' || path === '/calendar',
