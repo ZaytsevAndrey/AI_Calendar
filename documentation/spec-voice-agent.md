@@ -2,11 +2,13 @@
 
 **Status:** the only product contract for Companion.  
 **Language:** English  
-**Last updated:** 27 October 2026
+**Last updated:** 29 October 2026
 
 Companion (Ukrainian: Помічник) talks with the user and returns write intents. The server does not change the calendar. The client applies intents through the existing task, habit, and placement APIs. Placement and conflict stay in [spec-conflict-rules.md](spec-conflict-rules.md) and [spec-incremental-placement.md](spec-incremental-placement.md). The screen is [features/companion-panel.md](features/companion-panel.md). HTTP fields are in [api-reference.md](api-reference.md).
 
 Other voice files do not add product rules. [spec-voice-commander.md](spec-voice-commander.md) is the old one-shot commander. [voice-agent-dialogue-test-plan.md](voice-agent-dialogue-test-plan.md) is how the dialogue eval runs. [voice-fix-flow.md](voice-fix-flow.md) is how a rule change is edited. [voice-prompt-next.md](voice-prompt-next.md) is a work queue.
+
+`/voice/turn` runs the structured engine (`StructuredVoiceService`). The model returns a structured proposal, the server resolves it against the user's authorized records, and only the server builds the preview. §3 describes the older planner split, used when `VOICE_TURN_ENGINE=legacy`. Where the structured engine differs, the section says so.
 
 ---
 
@@ -24,6 +26,8 @@ Other voice files do not add product rules. [spec-voice-commander.md](spec-voice
 
 Every write waits for Apply or a spoken yes. Spoken yes and `confirm` are the same. Spoken no and `cancel` are the same. After a successful write the panel stays open.
 
+The preview names a stored task or event by its stored title, not by the words of the transcript: `Delete «Report»`, `Rename «A» to «B»`, `Move «Report» to 2026-10-30 18:00`. After a spoken yes the reply starts with `Applying:` and repeats those lines.
+
 The agent states only what the user said or a tool returned. It does not invent a task, a gap, a clock, a duration, or a travel time.
 
 ---
@@ -37,6 +41,8 @@ A default fills the hole. A task that is not an event and has no time is Unsched
 The question proposes the likelier reading. When the readings are equal, it asks which and does not pick. A proposal is not a write.
 
 A placement that needs another task's time is not created when that task has none.
+
+A question or a refusal says what is missing or wrong: a time that contradicts itself, no day, no clock for a fixed event, which day of a series, nothing to change. `Which task?` is only for a target that is not settled.
 
 An event with no time is a question when. A meal with other people is an event.
 
@@ -123,7 +129,7 @@ One existing task. Fields, where it sits in time, and whether it is done are one
 
 Rename keeps the old title as the target and stores the new title beside it. A length is the duration only when they said how long the task takes. A window is not a length. Priority is set only when they said it. Clearing the time clears start, end, earliest, and deadline.
 
-Do now is the start at the current clock. A start and an end are that window. A day and no clock is Wake to Sleep that day. A clock that is already past, with no day, is a question when. A clock and no end keeps the current duration. Morning is wake plus three hours. No day and no clock, when they asked to place the task: ask when.
+Do now is the start at the current clock. A start and an end are that window. A day and no clock is Wake to Sleep that day. A clock that is already past, with no day, is a question when. A clock and no end keeps the current duration. Morning is wake plus three hours. No day and no clock, when they asked to place the task: ask when. A move to a day, a window, or after another task, with no clock, sets that window on a flexible task, and placement re-seats it. A fixed task needs a clock: ask which.
 
 Done on a one-off sets status completed. Done on a series uses the scope above: one occurrence, from this day on, or the whole series. A name that is not an open task, said as close or finish, is a new errand. A time change with no other field still seats the task. A time change together with another field is the same update.
 
@@ -134,6 +140,10 @@ Removes the task. It does not ask "are you sure". The app asks before it writes.
 ### Skip
 
 Drops the next open occurrence, or the one happening now. Another day is a question: skip only drops the next open time. The whole series is a question: skip is this occurrence only. An Unscheduled task is cancelled, not deleted. A fixed event cannot be skipped: the app refuses.
+
+### Calendar events
+
+An event from a connected calendar that is not a Luefy task keeps its provider, calendar, and event id through preview and Apply. No Luefy task stands in for it. It can be moved, renamed when the user is the organizer, or deleted. Cancel on an event is a delete. Done is refused with a short explanation: an event has no done state. Nothing is written.
 
 ---
 
@@ -157,6 +167,13 @@ Apply calls `/day-reminders`. There is no placement and no conflict sheet.
 
 Covered by the split in §3. Writes about another day, while a day plan is open, are normal intents beside the plan. The following execution report re-seats the plan. The client runs intents one by one and stops on a conflict or an error. After a batch with no conflict sheet, the client sends `report` with each status. That call does not use the model.
 
+In the structured engine, one request may depend on a task it creates:
+
+- A change to the task this utterance creates folds into that create.
+- A command on a stored task runs after the create, in spoken order.
+- After a new task that has a clock, the next task gets its earliest start at that task's end, before Apply.
+- After a new task with no clock, the agent asks for the predecessor's time. It does not guess.
+
 ---
 
 ## 8. Fast create
@@ -177,13 +194,13 @@ The preview card and Apply stay.
 
 `plan_start` only when the user asks to plan, arrange, or organize a whole day. A list of errands for a day is §3, not a plan. One event that fills a whole day is a create, not a plan.
 
-The draft holds the open Unscheduled tasks for that day and the flexible one-offs already on it. Fixed tasks, series, and external events are never moved. The planner receives this unapplied draft on every turn: day, stage, each item, and whether a proposal has seated it. `plan_edits` changes that draft. Nothing is written until Apply.
+The draft holds the flexible one-offs already on that day. Open Later (Unscheduled) tasks are not put into it. The model sees them as a separate list and may offer one. That task is included only after the user agrees. Fixed tasks, series, and external events are never moved. The planner receives this unapplied draft on every turn: day, stage, each item with its id, length, and time, and whether a proposal has seated it. `plan_edits` changes that draft. Nothing is written until Apply.
 
 The opening says what a tool just returned: a free gap, the tasks already there, or that the day has no gap. It does not invent a gap, a clock, or a task.
 
 While the plan is open, a write about that day is a plan edit, not a segment. A question is answered and the plan stays open. The agent never ends the dialogue.
 
-Edits are: add a task that does not exist yet, include an existing open task, remove an item, set a preferred start, set a window, set a duration, set the order. Earlier items get the better slots. A bare hour in a window uses the place still ahead. A named morning or night locks that half. Midday as a deadline is 12:00.
+Edits are: add a task that does not exist yet, include an existing open task, remove an item, set a preferred start, set a window, set a duration, set the order. An edit of an item in the draft names that item by its id and does not add it again. An add with a name already in the draft is left out. A clock the user agreed to stays a clock, not a part of the day. After an edit the reply lists what was added and removed, then the plan, and asks whether to add more or build the plan. Earlier items get the better slots. A bare hour in a window uses the place still ahead. A named morning or night locks that half. Midday as a deadline is 12:00.
 
 A missing clock stays as it is. An explicit null clears a preferred start or one side of a window, and on a new task it means no clock. A length left out uses the default. A clock that is not a real time, or a length that was given but is not usable, is not applied and does not replace what was there. A new task with such a clock or length is not added. The other edits in that list still apply, and the reply says the unusable ones were left out. A row that is not an applicable edit is left out too, and the reply counts those rows in a separate sentence. The draft does not grow past 16 tasks. An add or include that does not fit is left out and counted on its own. A task already in the draft is not that case. A blank plan day is today. A plan day that is not a real calendar date does not open a plan and is not moved onto today. A read of a day that is not a real date returns `{ error: "invalid_day" }` with no schedule. The planner receives that result unchanged.
 
@@ -215,9 +232,9 @@ Phone is a bottom sheet. Desktop is a floating panel. The thread shows the user 
 
 `POST /voice/transcribe` is speech to text. `POST /voice/parse-task` remains for tests and for each write segment the planner already split out. A planner fault does not call it. Neither does a plan edit with no open draft, an answer with no open question, empty steps, or a segment list past the limit. It is not the Companion path for those turns.
 
-Read tools used to ground an answer: `get_now_next`, `get_day_agenda`, `list_unscheduled`, `list_problematic`, `find_free_gaps`, `match_task`, `match_habit`, `get_habit_status`, `get_task`, `list_reminders`.
+Read tools used to ground an answer: `get_now_next`, `get_day_agenda`, `list_unscheduled`, `list_problematic`, `find_free_gaps`, `match_task`, `match_habit`, `get_habit_status`, `get_task`, `list_reminders`. Reads of one round run in parallel. A day's calendar events are read once per turn.
 
-Write intents the client runs: create, update, delete, complete, skip, cancel, move, window. A done-only update becomes complete. A time-only update seats the task. No phases and no settings.
+Write intents the client runs: create, update, delete, complete, skip, cancel, move, window, and `delete_event` / `rename_event` for a calendar event. A done-only update becomes complete. A time-only update seats the task. No phases and no settings.
 
 ---
 
