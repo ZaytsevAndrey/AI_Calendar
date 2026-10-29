@@ -114,8 +114,7 @@ export type PlacementPreviewInput = {
 };
 import { providerEventsToBusyIntervals } from './external-calendar-busy.util';
 import { ScheduledTask } from './schedule.entity';
-
-const locks = new Map<string, Promise<unknown>>();
+import { withUserLock } from './user-lock';
 
 /** Thrown inside `writeAndPlace` to roll the transaction back on an unwanted plan. */
 class RejectedPlacement extends Error {
@@ -127,20 +126,6 @@ class RejectedPlacement extends Error {
   }
 }
 
-function withUserLock<T>(userId: string, run: () => Promise<T>): Promise<T> {
-  const previous = locks.get(userId) ?? Promise.resolve();
-  const next = previous.then(run, run);
-  const tail = next.then(
-    () => undefined,
-    () => undefined,
-  );
-  locks.set(userId, tail);
-  // Drop the entry once this user's queue is idle so the map does not grow.
-  void tail.then(() => {
-    if (locks.get(userId) === tail) locks.delete(userId);
-  });
-  return next;
-}
 
 function summarizeMoves(moves: PlacementMove[]): string {
   if (!moves.length) return 'none';

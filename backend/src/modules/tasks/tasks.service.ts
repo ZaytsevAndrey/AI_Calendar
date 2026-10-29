@@ -1036,17 +1036,13 @@ export class TasksService implements OnModuleInit {
       }
     }
 
-    if (openSlot) {
-      await this.scheduledTaskRepository.remove(openSlot);
-    }
-
-    const remaining = (await this.scheduledTaskRepository.find({
-      where: { taskId: task.id },
-    })).sort(
-      (a, b) =>
-        new Date(a.scheduledStartTime).getTime() -
-        new Date(b.scheduledStartTime).getTime(),
-    );
+    const remaining = rows
+      .filter((row) => row !== openSlot)
+      .sort(
+        (a, b) =>
+          new Date(a.scheduledStartTime).getTime() -
+          new Date(b.scheduledStartTime).getTime(),
+      );
     this.refreshTaskScheduleAfterSkip(task, remaining);
 
     const googleEventId = this.googleEventIdToSkip(
@@ -1055,23 +1051,25 @@ export class TasksService implements OnModuleInit {
       openSlot ?? slot,
       occurrenceStart,
     );
-    if (googleEventId) {
-      await this.deleteSkippedGoogleEvent(
-        userId,
-        googleEventId,
-        dto.googleEventCalendarId ||
-          slot?.googleEventCalendarId ||
-          task.googleEventCalendarId,
-      );
-      if (!task.isRecurring && googleEventId === task.googleEventId) {
-        const leftover = remaining.find((row) => row.googleEventId);
-        task.googleEventId = leftover?.googleEventId ?? null;
-        task.googleEventCalendarId =
-          leftover?.googleEventCalendarId ?? null;
-      }
+    const googleCalendarId =
+      dto.googleEventCalendarId ||
+      slot?.googleEventCalendarId ||
+      task.googleEventCalendarId;
+    if (googleEventId && !task.isRecurring && googleEventId === task.googleEventId) {
+      const leftover = remaining.find((row) => row.googleEventId);
+      task.googleEventId = leftover?.googleEventId ?? null;
+      task.googleEventCalendarId = leftover?.googleEventCalendarId ?? null;
     }
 
-    const saved = await this.tasksRepository.save(task);
+    // Stabilization B2: the dropped slot and the recorded skip commit together;
+    // Google is told only after the commit (a failure there is queued for retry).
+    const saved = await this.tasksRepository.manager.transaction(async (manager) => {
+      if (openSlot) await manager.remove(openSlot);
+      return manager.save(task);
+    });
+    if (googleEventId) {
+      await this.deleteSkippedGoogleEvent(userId, googleEventId, googleCalendarId);
+    }
     // Rewrite the Google series (new DTSTART + EXDATE) before the client refetches.
     if (task.isRecurring) {
       await this.pendingGoogleWrites.syncTask(userId, saved.id);

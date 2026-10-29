@@ -12,6 +12,7 @@ import { ProblematicPlaceService } from './problematic-place.service';
 import { ConflictOptionPhrasesService } from './conflict-option-phrases.service';
 import { FreeSlotsService } from './free-slots.service';
 import { PlacementStepService } from './placement-step.service';
+import { UserLockService } from './user-lock';
 import { TasksModule } from '../tasks/tasks.module';
 import { UserSettingsModule } from '../user-settings/user-settings.module';
 import { Task } from '../tasks/entities/task.entity';
@@ -40,6 +41,7 @@ import { VoiceModule } from '../voice/voice.module';
     FreeSlotsService,
     PlacementStepService,
     ProblematicPlaceService,
+    UserLockService,
   ],
   exports: [ScheduleService, ScheduleJobService, PlacementStepService],
 })

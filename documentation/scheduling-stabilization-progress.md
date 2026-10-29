@@ -35,8 +35,8 @@ Runtime assumptions found: production runs one Render instance, Neon Postgres, `
 | # | Stage | Status | Commit |
 |---|-------|--------|--------|
 | 0 | Baseline, branch, findings, this file | done | — |
-| 1 | A: durable mutation jobs (atomic with the state change, lease + claim, bounded retry with backoff, terminal failures, recovery sweep, idempotent handlers) | done | (stage A commit) |
-| 2 | B: cross-instance user lock (Postgres advisory lock), transaction audit fixes | todo | |
+| 1 | A: durable mutation jobs (atomic with the state change, lease + claim, bounded retry with backoff, terminal failures, recovery sweep, idempotent handlers) | done | ead5ac6 |
+| 2 | B: cross-instance user lock (Postgres advisory lock), transaction audit fixes | done | (stage B commit) |
 | 3 | F1: root causes of the 5 voice e2e failures and the 13 historical suites | todo | |
 | 4 | G: versioned migrations instead of `TYPEORM_SYNC=true` | todo | |
 | 5 | C/D/E: historical identity tests, recurrence/temporal/placement edge tests, Google failure handling | todo | |
@@ -55,6 +55,15 @@ Design: the existing `schedule_jobs` table is the queue (no new infrastructure).
 - Results: backend unit 1245 pass / same 77 historical fails; structured voice 232/232; e2e 132 / same 5; frontend 304/304; builds ok.
 - Not covered here: Google sync has its own durable table already; `seatResolvedLayer` (Place on top) still writes its slot in the request after the commit.
 
+## Stage B — concurrency (done)
+
+- `schedule/user-lock.ts`: `withUserLock` keeps the per-process promise chain and, on Postgres, also takes a session `pg_advisory_lock(hashtext('luefy:user:<id>'))` (`UserLockService`, registered in `ScheduleModule`). The lock connection comes from a dedicated pool of 4 so lock holders never wait for the pool their own work needs (no pool deadlock). One lock type, never nested → no lock-order deadlock. A dead process drops its connection and Postgres releases the lock. SQLite keeps the chain only (single process).
+- Every placement write (`place`, `writeAndPlace`, `seatOpenHoles`, append, previews) and every job handler go through it, so API placement, the job sweep and the background append are serialized per user across instances. Job claiming is already cross-instance safe (conditional UPDATE).
+- Transaction fix: `TasksService.skipOccurrence` removed the slot, called Google, then saved the skip — a crash in between lost the skip and the append re-created the day. Now slot drop + skip commit together and Google runs after the commit.
+- Real Postgres 16 (Docker, `postgres:16-alpine` on port 55432) tests: `user-lock.pg.spec.ts` (same user serialized across two pools, other users not blocked, crashed holder releases, throw releases) and `mutation-jobs.pg.spec.ts` (4 jobs × 4 concurrent sweeps on two services → each runs once; lease takeover). Run: `PG_TEST_URL=postgres://postgres:test@localhost:55432/luefy DATABASE_URL=$PG_TEST_URL npx jest ".pg.spec"`. Without the env they are skipped (6 skipped in the default run).
+- Results: backend unit 1245 pass + 6 skipped / same 77 historical fails; Postgres 6/6; structured voice 232/232; e2e 132 / same 5; frontend 304/304; builds ok.
+- Not done: idempotency keys for repeated HTTP requests (creates are not deduplicated); Google sync keeps its per-task in-process lock (the Google write itself is idempotent per task: it reloads and upserts).
+
 ## Current work
 
-Stage B (cross-instance lock).
+Stage F1 (voice failures). Root cause of the 5 e2e failures found: `voice-agent.e2e-spec.ts` scripts the legacy orchestrator but `/voice/turn` defaults to the structured pipeline; the unit spec of that path sets `VOICE_TURN_ENGINE=legacy`, the e2e did not. CI (`.github/workflows/ci.yml`) runs `npm test` (includes the 13 historical suites → red) and never runs `test:vnext:structured`.
