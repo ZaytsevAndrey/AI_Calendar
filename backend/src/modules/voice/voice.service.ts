@@ -179,37 +179,54 @@ export class VoiceService {
     );
     const run = async () => {
       if (this.azureStt.enabled()) {
-        return this.transcribeWithAzure(buffer, sttLanguage);
+        try {
+          return await this.transcribeWithAzure(buffer, sttLanguage);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          this.logger.warn(
+            `voice.stt provider=azure failed, falling back to groq: ${message}`,
+          );
+        }
       }
-      const result = await this.groq.transcribe(
-        buffer,
-        `voice.${ext}`,
-        mimeType,
-        sttLanguage,
-        buildWhisperPrompt(sttLanguage),
-      );
-      const cleaned = cleanupVoiceTranscript(
-        result.text,
-        result.language || sttLanguage,
-      );
-      // Whisper often invents «дякую» / «thank you» on silence — drop it.
-      const transcript = isNoiseOrEmptyTranscript(cleaned) ? '' : cleaned;
-      this.logger.log(
-        `voice.stt provider=groq ${voiceTracePrefix()} kept=${transcript ? 'yes' : 'no'}`.replace(
-          /\s+/g,
-          ' ',
-        ),
-      );
-      this.logVoiceBody(
-        `voice.stt.raw provider=groq raw=${JSON.stringify(result.text)} cleaned=${JSON.stringify(cleaned)} kept=${JSON.stringify(transcript)}`,
-      );
-      return { transcript, language: result.language || sttLanguage };
+      return this.transcribeWithGroq(buffer, ext, mimeType, sttLanguage);
     };
     const sessionId = dto.sessionId?.trim();
     if (sessionId) {
       return this.withSessionGroq(userId, sessionId, run);
     }
     return run();
+  }
+
+  /** Groq Whisper. Used when Azure is not configured or Azure failed. */
+  private async transcribeWithGroq(
+    buffer: Buffer,
+    ext: string,
+    mimeType: string,
+    sttLanguage?: string,
+  ): Promise<{ transcript: string; language?: string }> {
+    const result = await this.groq.transcribe(
+      buffer,
+      `voice.${ext}`,
+      mimeType,
+      sttLanguage,
+      buildWhisperPrompt(sttLanguage),
+    );
+    const cleaned = cleanupVoiceTranscript(
+      result.text,
+      result.language || sttLanguage,
+    );
+    // Whisper often invents «дякую» / «thank you» on silence — drop it.
+    const transcript = isNoiseOrEmptyTranscript(cleaned) ? '' : cleaned;
+    this.logger.log(
+      `voice.stt provider=groq ${voiceTracePrefix()} kept=${transcript ? 'yes' : 'no'}`.replace(
+        /\s+/g,
+        ' ',
+      ),
+    );
+    this.logVoiceBody(
+      `voice.stt.raw provider=groq raw=${JSON.stringify(result.text)} cleaned=${JSON.stringify(cleaned)} kept=${JSON.stringify(transcript)}`,
+    );
+    return { transcript, language: result.language || sttLanguage };
   }
 
   /**

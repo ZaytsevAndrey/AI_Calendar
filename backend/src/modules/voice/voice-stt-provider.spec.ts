@@ -62,6 +62,37 @@ describe('VoiceService speech provider', () => {
     expect(result.transcript).toBe('дякую');
   });
 
+  it('falls back to Groq when Azure fails', async () => {
+    const { service, azure, groq } = build(true);
+    azure.transcribe.mockRejectedValue(new Error('Azure Speech did not answer'));
+
+    const result = await service.transcribe('user-1', {
+      audioBase64: audio,
+      mimeType: 'audio/webm',
+    });
+
+    expect(azure.transcribe).toHaveBeenCalled();
+    expect(groq.transcribe).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      'voice.webm',
+      'audio/webm',
+      'uk',
+      expect.any(String),
+    );
+    expect(result).toEqual({ transcript: 'до мешка', language: 'uk' });
+  });
+
+  it('falls back to Groq when audio conversion for Azure fails', async () => {
+    const { service, azure, groq } = build(true);
+    (transcodeToPcmWav as jest.Mock).mockRejectedValueOnce(new Error('ffmpeg'));
+
+    const result = await service.transcribe('user-1', { audioBase64: audio });
+
+    expect(azure.transcribe).not.toHaveBeenCalled();
+    expect(groq.transcribe).toHaveBeenCalled();
+    expect(result.transcript).toBe('до мешка');
+  });
+
   it('stays on Groq when Azure is not configured', async () => {
     const { service, azure, groq } = build(false);
 

@@ -7,7 +7,8 @@ import { ConfigService } from '@nestjs/config';
 import { traceStep } from '../../common/voice-trace';
 import { azureSpeechCredentials } from './azure-speech.config';
 
-const AZURE_STT_TIMEOUT_MS = 45_000;
+// Short so a hanging Azure falls back to Groq quickly.
+const AZURE_STT_TIMEOUT_MS = 12_000;
 
 /** Short-audio REST locale. No phrase list and no rewrite instructions. */
 export function azureSpeechLocale(language?: string | null): string {
