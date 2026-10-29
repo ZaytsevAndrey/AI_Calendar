@@ -36,7 +36,7 @@ import {
   type FreeSlotsPhaseLike,
   type MsInterval,
 } from './free-slots.util';
-import { normalizeFixedEventBufferMinutes, planningHorizonRange } from './intelligent-scheduling.engine';
+import { normalizeFixedEventBufferMinutes, planningHorizonRange } from './planning-horizon.util';
 import { lastContinuingSeriesIds } from './recurring-extend.util';
 import { placementNotBefore } from './placement-bounds.util';
 import {

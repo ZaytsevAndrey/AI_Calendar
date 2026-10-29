@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { closeTestApp, createTestApp, E2eApp } from './helpers/create-test-app';
 import { createTimePhase, seedOnboardedUser } from './helpers/auth';
 import { api, jsonBody } from './helpers/http';
+import { seedSlot } from './helpers/slots';
 
 async function createFlexible(
   ctx: E2eApp,
@@ -366,16 +367,7 @@ describe('Tasks API e2e', () => {
     const created = await createFlexible(ctx, token, 'Skip me');
     const start = '2026-12-01T10:00:00.000Z';
     const end = '2026-12-01T10:30:00.000Z';
-    const slot = await api(ctx.app, 'POST', '/schedule', {
-      token,
-      payload: {
-        taskId: created.body.id,
-        scheduledStartTime: start,
-        scheduledEndTime: end,
-      },
-    });
-    expect(slot.statusCode).toBe(201);
-    const slotId = jsonBody(slot).id;
+    const slotId = (await seedSlot(ctx.app, created.body.id, start, end)).id;
 
     const skipped = await api(ctx.app, 'POST', `/tasks/${created.body.id}/skip-occurrence`, {
       token,

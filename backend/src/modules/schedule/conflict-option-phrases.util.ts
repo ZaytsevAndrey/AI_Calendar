@@ -1,4 +1,4 @@
-import type { ConflictOptionId, SchedulingConflict } from './intelligent-scheduling.engine';
+import type { ConflictOptionId, SchedulingConflict } from './scheduling-conflict.types';
 
 export type ConflictOptionPhrase = {
   id: ConflictOptionId;

@@ -4,7 +4,6 @@ import { ScheduleController } from './schedule.controller';
 import { ScheduleService } from './schedule.service';
 import { ScheduledTask } from './schedule.entity';
 import { ScheduleJob } from './entities/schedule-job.entity';
-import { IntelligentSchedulingEngine } from './intelligent-scheduling.engine';
 import { ScheduleJobService } from './schedule-job.service';
 import { RecurringExtendProcessor } from './recurring-extend.processor';
 import { ScheduleJobController } from './schedule-job.controller';
@@ -34,7 +33,6 @@ import { VoiceModule } from '../voice/voice.module';
   controllers: [ScheduleController, ScheduleJobController],
   providers: [
     ScheduleService,
-    IntelligentSchedulingEngine,
     ScheduleJobService,
     RecurringExtendProcessor,
     DisplayedEventMoveService,

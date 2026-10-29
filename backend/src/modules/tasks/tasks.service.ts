@@ -31,7 +31,7 @@ import {
   type PlaceOptions,
 } from '../schedule/placement-step.service';
 import type { PlacementPlan } from '../schedule/placement-step.util';
-import type { SchedulingConflict } from '../schedule/intelligent-scheduling.engine';
+import type { SchedulingConflict } from '../schedule/scheduling-conflict.types';
 import { ScheduledTask } from '../schedule/schedule.entity';
 import { hasFullyEnded } from '../schedule/google-segment-sync.util';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';

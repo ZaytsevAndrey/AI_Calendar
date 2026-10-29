@@ -373,14 +373,10 @@ Generate body `{ startDate, endDate }` is **ignored**. Horizon = today → `recu
 
 | ID | Layer | P | Given | When | Then |
 |----|-------|---|-------|------|------|
-| A-SCH-001 | A | P1 | Valid task | `POST /schedule` slot | 201 |
-| A-SCH-002 | A | P1 | end ≤ start | POST slot | 400 |
-| A-SCH-003 | A | P1 | Overlapping slot same task | POST | 400 already scheduled |
-| A-SCH-004 | A | P1 | Unknown taskId | POST | 404 |
+| A-SCH-001 | A | P1 | Seeded slot | `POST /schedule`, `PATCH` / `DELETE /schedule/:id` | 404 (raw slot writes removed, PE-30); the slot is unchanged |
 | A-SCH-005 | A | P1 | Range query | `GET /schedule?startDate&endDate` | Only overlapping rows; date-only endDate includes that UTC day |
 | A-SCH-006 | A | P2 | `phaseId` query | GET | Filter by task phase (`categoryId` from old frontend must not be required) |
-| A-SCH-007 | A | P1 | Own slot | GET/PATCH/DELETE `/schedule/:id` | 200 |
-| A-SCH-008 | A | P1 | PATCH overlap / end ≤ start | PATCH | 400 |
+| A-SCH-007 | A | P1 | Own slot (seeded with `test/helpers/slots.ts`) | GET `/schedule/:id` | 200 |
 | A-SCH-009 | A | P0 | Flexible TODO in inbox? no — movable TODO | `POST /schedule/generate` | `{ jobId, status }`; poll → `done`; slot created |
 | A-SCH-010 | A | P0 | Unscheduled only | generate | No slot for that task |
 | A-SCH-011 | A | P0 | Poll `GET /schedule-jobs/:id` | While running | `progressStage` preparing → computing → syncing_google → done |

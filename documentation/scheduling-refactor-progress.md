@@ -23,9 +23,9 @@ Recurrence and scheduling behavior are independent everywhere (fixed/flexible ×
 
 | # | Stage | Status | Commit |
 |---|-------|--------|--------|
-| 0 | Baseline commit, branch, test baseline, progress file | in progress | 453770f |
-| 1 | Domain semantics: shared traits helpers (backend + frontend), occurrence-identity backfill migration, UI classification (chips, previews, voice cards, filters) | todo | |
-| 2 | PE-30: remove `IntelligentSchedulingEngine.run`, keep live helpers in their own module, remove `POST/PATCH/DELETE /schedule`, move e2e fixtures | todo | |
+| 0 | Baseline commit, branch, test baseline, progress file | done | 453770f |
+| 1 | Domain semantics: frontend `taskTraits`, occurrence-identity backfill migration, UI classification (chips, Now, preview facts, voice cards, task list, filters) | done | 2148694 |
+| 2 | PE-30: engine class, undo-of-Generate and dead Google replan code removed; live helpers in `planning-horizon.util.ts` / `scheduling-conflict.types.ts`; `POST/PATCH/DELETE /schedule` removed; e2e seed slots via `test/helpers/slots.ts` | done | see git log (PE-30 commit) |
 | 3 | PE-18: atomic `moveSeriesDay`, `moveSeriesTail`, `placeSeriesDay`; retry/idempotency; failure-injection tests | todo | |
 | 4 | PE-27: one external-calendar fetch per `seatOpenHoles` pass; drag loads only what it needs | todo | |
 | 5 | Voice (structured pipeline): fixed vs flexible recurring, preferred time, occurrence/future scope — spec → goldens → code/prompt | todo | |
@@ -54,10 +54,20 @@ Script used: scratchpad `baseline.sh` (runs all of the above); rerun after each 
 - **Voice (live structured path):** creates go through `vnext/state/project-apply.ts` `projectCreate`; `vnext/adapter/adapter.ts` is not on the live path. `projectCreate` sets `eventType` only for all-day; `spanRole: 'event'` is ignored, so "standup every Monday 10–11" is created flexible. A `preferred` clock becomes `unresolved` and is refused. Previews (`changePreviewCards.ts`) collapse fixed+recurring into "recurring". Series scope: move supports occurrence / from_day / all via `move-event`; update supports `all` only.
 - **PE-30:** `IntelligentSchedulingEngine` is only injected for `captureAutoSegmentsSnapshot`, used only by `undoLastGenerate` (no callers outside its spec). `POST/PATCH/DELETE /schedule` have no frontend / Playwright / voice callers; backend e2e seeds slots through them in `schedule.e2e-spec.ts`, `tasks.e2e-spec.ts:369`, `google-iso.e2e-spec.ts:167` (that one also calls the removed `POST /schedule/generate`).
 
+## Stage results
+
+- **Stage 1** — backend unit 1270 pass / same 77 historical fails; e2e 132 / same 5 voice fails; frontend 304/304; builds ok. Intentional test change: task-list Flexible filter now includes flexible series and their copies (behavior and recurrence are independent filters); chip kind for a series is its behavior + repeat marker.
+- **Stage 2** — backend unit 1216 pass / same 77 historical fails (−54 = deleted specs of removed code: engine `run` ~40, undo snapshot, warning utils, job-service wipe/undo; live-helper tests moved to `planning-horizon.util.spec.ts` unchanged + one DST case); structured voice 224/224; e2e 132 / same 5; frontend 304/304. A-SCH-001…004/008 replaced by a 404 contract test (raw slot writes removed); A-SCH-005/007 keep the GET checks with a repository-seeded slot. `ScheduleJob.undoSnapshotJson` / `undoConsumedAt` columns are kept (schema sync would drop data).
+
+## Decisions (continued)
+
+3. **PE-30 scope** — besides `run`, `ScheduleJobService` lost every member only reachable from it (undo of Generate, warnings → Problematic/Unscheduled, Google replan reconcile, wipe range). Remaining job service: mutation-job lifecycle, `processNextPending` (marks leftovers failed), `deleteSyncedGoogleEventsForTask`.
+4. **Found in stage 2 for stage 3:** `TasksService.skipOccurrence` refuses every fixed task, so a day of a fixed series cannot be skipped or dragged alone (`moveSeriesDay` skips first). Fix: refuse only fixed one-offs.
+
 ## Current work
 
-Stage 1.
+Stage 3 (PE-18).
 
 ## Next steps
 
-Stage 1 (domain semantics + UI), then 2 → 6 in order.
+Stage 3 design: `PlacementStepService.writeAndPlace(userId, write, accept)` — user lock + one transaction: prefetch external seats before the transaction, run `write` (copy / skip / truncate) on the transaction repos, place inside it, roll back when `accept(plan)` is false; Google after commit. Idempotency by occurrence identity (existing copy for `seriesGroupId` + `originalOccurrenceYmd`; existing tail series for `parentSeriesId` + split day).

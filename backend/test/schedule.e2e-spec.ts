@@ -1,7 +1,7 @@
-import { randomUUID } from 'crypto';
 import { closeTestApp, createTestApp, E2eApp } from './helpers/create-test-app';
 import { createTimePhase, seedOnboardedUser } from './helpers/auth';
 import { api, jsonBody } from './helpers/http';
+import { seedSlot } from './helpers/slots';
 import {
   addDaysToYmd,
   localDateTimeIso,
@@ -53,60 +53,36 @@ describe('Schedule API e2e', () => {
     return jsonBody(res);
   }
 
-  it('A-SCH-001 / A-SCH-002 / A-SCH-003 / A-SCH-004 manual slots', async () => {
+  it('A-SCH-001 slots have no raw write API (placement writes them)', async () => {
+    // PE-30: POST / PATCH / DELETE /schedule wrote slots around the engine. Gone.
     const { token } = await seedOnboardedUser(ctx.app);
     const task = await unscheduledFlexible(token);
-    const start = '2026-09-22T10:00:00.000Z';
-    const end = '2026-09-22T10:30:00.000Z';
-    const created = await api(ctx.app, 'POST', '/schedule', {
-      token,
-      payload: { taskId: task.id, scheduledStartTime: start, scheduledEndTime: end },
-    });
-    expect(created.statusCode).toBe(201);
-
-    const badOrder = await api(ctx.app, 'POST', '/schedule', {
-      token,
-      payload: {
-        taskId: task.id,
-        scheduledStartTime: end,
-        scheduledEndTime: start,
-      },
-    });
-    expect(badOrder.statusCode).toBe(400);
-
-    const overlap = await api(ctx.app, 'POST', '/schedule', {
-      token,
-      payload: {
-        taskId: task.id,
-        scheduledStartTime: '2026-09-22T10:15:00.000Z',
-        scheduledEndTime: '2026-09-22T10:45:00.000Z',
-      },
-    });
-    expect(overlap.statusCode).toBe(400);
-
-    const missing = await api(ctx.app, 'POST', '/schedule', {
-      token,
-      payload: {
-        taskId: randomUUID(),
-        scheduledStartTime: '2026-09-22T12:00:00.000Z',
-        scheduledEndTime: '2026-09-22T12:30:00.000Z',
-      },
-    });
-    expect(missing.statusCode).toBe(404);
+    const slot = await seedSlot(
+      ctx.app,
+      task.id,
+      '2026-09-22T10:00:00.000Z',
+      '2026-09-22T10:30:00.000Z',
+    );
+    const payload = {
+      taskId: task.id,
+      scheduledStartTime: '2026-09-22T11:00:00.000Z',
+      scheduledEndTime: '2026-09-22T11:30:00.000Z',
+    };
+    expect((await api(ctx.app, 'POST', '/schedule', { token, payload })).statusCode).toBe(404);
+    expect(
+      (await api(ctx.app, 'PATCH', `/schedule/${slot.id}`, { token, payload })).statusCode,
+    ).toBe(404);
+    expect((await api(ctx.app, 'DELETE', `/schedule/${slot.id}`, { token })).statusCode).toBe(404);
+    // The slot is untouched.
+    expect((await api(ctx.app, 'GET', `/schedule/${slot.id}`, { token })).statusCode).toBe(200);
   });
 
-  it('A-SCH-005 / A-SCH-007 / A-SCH-008 list patch delete slot', async () => {
+  it('A-SCH-005 / A-SCH-007 list and read a slot', async () => {
     const { token } = await seedOnboardedUser(ctx.app);
     const task = await unscheduledFlexible(token, 'Range');
-    const created = await api(ctx.app, 'POST', '/schedule', {
-      token,
-      payload: {
-        taskId: task.id,
-        scheduledStartTime: '2026-09-22T13:00:00.000Z',
-        scheduledEndTime: '2026-09-22T13:30:00.000Z',
-      },
-    });
-    const slotId = jsonBody(created).id;
+    const slotId = (
+      await seedSlot(ctx.app, task.id, '2026-09-22T13:00:00.000Z', '2026-09-22T13:30:00.000Z')
+    ).id;
 
     const ranged = await api(
       ctx.app,
@@ -121,28 +97,6 @@ describe('Schedule API e2e', () => {
 
     const one = await api(ctx.app, 'GET', `/schedule/${slotId}`, { token });
     expect(one.statusCode).toBe(200);
-
-    const badPatch = await api(ctx.app, 'PATCH', `/schedule/${slotId}`, {
-      token,
-      payload: {
-        scheduledStartTime: '2026-09-22T14:00:00.000Z',
-        scheduledEndTime: '2026-09-22T13:00:00.000Z',
-      },
-    });
-    expect(badPatch.statusCode).toBe(400);
-
-    const okPatch = await api(ctx.app, 'PATCH', `/schedule/${slotId}`, {
-      token,
-      payload: {
-        scheduledStartTime: '2026-09-22T14:00:00.000Z',
-        scheduledEndTime: '2026-09-22T14:30:00.000Z',
-      },
-    });
-    expect(okPatch.statusCode).toBe(200);
-
-    expect(
-      (await api(ctx.app, 'DELETE', `/schedule/${slotId}`, { token })).statusCode,
-    ).toBe(200);
   });
 
   it('A-SCH-035 recurring without preferred: fit / squeeze gaps / pack between fixed / no capacity / fixed mosaic', async () => {
