@@ -48,7 +48,7 @@ Runtime assumptions found: production runs one Render instance, Neon Postgres, `
 | 11 | Phase 2: placement edge cases; DST wall-clock fix | done | 794a8f6 |
 | 12 | Phase 2: Google sync edge cases; durable post-placement sync | done | c7206f7 |
 | 13 | Phase 2: deployment rehearsal on a master-shaped database; docs; .env.example | done (Neon blocked) | 14a7ce0 |
-| 14 | Phase 2: resolved-layer atomicity; docs and cleanup | done | (stage 14 commit) |
+| 14 | Phase 2: resolved-layer atomicity; docs and cleanup | done | 198c150 |
 
 ## Stage A — durable placement (done)
 
