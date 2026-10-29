@@ -48,6 +48,7 @@ import {
   matchScheduledSlotIndex,
 } from './skipped-occurrence.util';
 import { breaksSeriesMembership } from '../schedule/series-group.util';
+import { isUniqueViolation } from '../../database/unique-violation';
 
 @Injectable()
 export class TasksService implements OnModuleInit {
@@ -551,10 +552,21 @@ export class TasksService implements OnModuleInit {
     return Object.assign(task, { jobId });
   }
 
+  /**
+   * `requestKey` (HTTP Idempotency-Key) names one create operation: the same
+   * key again returns the task it made instead of a second one. Two creates
+   * with identical content but different keys (or none) are two tasks.
+   */
   async create(
     userId: string,
     createTaskDto: CreateTaskDto,
+    opts?: { requestKey?: string | null },
   ): Promise<Task & { jobId: string | null; conflicts?: SchedulingConflict[] }> {
+    const requestKey = opts?.requestKey ?? null;
+    if (requestKey) {
+      const replay = await this.replayCreate(userId, requestKey);
+      if (replay) return replay;
+    }
     const isUnscheduled = !!createTaskDto.isUnscheduled;
     const eventType = isUnscheduled
       ? TaskEventType.ADMIN
@@ -654,22 +666,55 @@ export class TasksService implements OnModuleInit {
       }
     }
 
+    task.createRequestKey = requestKey;
+
     // The task and the job that places it commit together: a crash after
     // this point leaves durable work for the recovery sweep, not a lost task.
-    const { saved, job } = await this.placementStep.runExclusive(userId, () =>
-      this.tasksRepository.manager.transaction(async (manager) => {
-        const saved = await manager.save(task);
-        const job = await this.scheduleJobService.beginMutationJob(
-          userId,
-          { taskId: saved.id, op: 'create' },
-          { manager },
-        );
-        return { saved, job };
-      }),
-    );
+    // Under the user lock a replay of the same request finds the first task.
+    let created: { saved: Task; job: { id: string } } | { replay: Task & { jobId: string | null } };
+    try {
+      created = await this.placementStep.runExclusive(userId, async () => {
+        const replay = requestKey ? await this.replayCreate(userId, requestKey) : null;
+        if (replay) return { replay };
+        return this.tasksRepository.manager.transaction(async (manager) => {
+          const saved = await manager.save(task);
+          const job = await this.scheduleJobService.beginMutationJob(
+            userId,
+            { taskId: saved.id, op: 'create' },
+            { manager },
+          );
+          return { saved, job };
+        });
+      });
+    } catch (err) {
+      // The unique (userId, createRequestKey) index caught a concurrent replay.
+      const replay = requestKey && isUniqueViolation(err) ? await this.replayCreate(userId, requestKey) : null;
+      if (replay) return replay;
+      throw err;
+    }
+    if ('replay' in created) return created.replay;
+    const { saved, job } = created;
     void this.scheduleJobService.runNow(job.id);
     const row = await this.findOne(saved.id, userId);
     return this.withConflicts(row, undefined, job.id);
+  }
+
+  /**
+   * The task an earlier request with this Idempotency-Key created, with its
+   * create job (the client may still be waiting on it), or null.
+   */
+  private async replayCreate(
+    userId: string,
+    requestKey: string,
+  ): Promise<(Task & { jobId: string | null }) | null> {
+    const existing = await this.tasksRepository.findOne({
+      where: { userId, createRequestKey: requestKey },
+      relations: ['phase', 'phases'],
+    });
+    if (!existing) return null;
+    this.logger.log(`create replay for key ${requestKey}: task ${existing.id}`);
+    const job = await this.scheduleJobService.findLatestMutationJob(userId, existing.id, 'create');
+    return this.withConflicts(existing, undefined, job?.id ?? null);
   }
 
   async findAll(userId: string): Promise<Task[]> {

@@ -73,8 +73,14 @@ export const eventTasksApi = createApi({
       query: (id) => ({ url: `/tasks/${id}` }),
       providesTags: (_r, _e, id) => [{ type: 'EventTask' as const, id }],
     }),
-    createEvent: builder.mutation<TaskWriteResult, CreateTaskDTO>({
-      query: (body) => ({ url: '/tasks', method: 'POST', data: body }),
+    createEvent: builder.mutation<TaskWriteResult, CreateTaskDTO & { idempotencyKey?: string }>({
+      // The key names this create operation: a retry of it returns the same task.
+      query: ({ idempotencyKey, ...body }) => ({
+        url: '/tasks',
+        method: 'POST',
+        data: body,
+        headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      }),
       invalidatesTags: [{ type: 'EventTask', id: 'LIST' }],
       async onQueryStarted(arg, { dispatch, queryFulfilled }) {
         const tempId = `temp-${Date.now()}`;

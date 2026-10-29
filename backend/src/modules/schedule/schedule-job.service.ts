@@ -225,6 +225,22 @@ export class ScheduleJobService {
     );
   }
 
+  /** Newest mutation job of `op` for one task (payload holds the task id). */
+  async findLatestMutationJob(
+    userId: string,
+    taskId: string,
+    op: string,
+  ): Promise<ScheduleJob | null> {
+    const rows = await this.jobRepo
+      .createQueryBuilder('job')
+      .where('job.userId = :userId', { userId })
+      .andWhere('job.payloadJson LIKE :pattern', { pattern: `%"taskId":"${taskId}"%` })
+      .orderBy('job.createdAt', 'DESC')
+      .take(10)
+      .getMany();
+    return rows.find((row) => parsePayload(row.payloadJson).op === op) ?? null;
+  }
+
   /** Record that a step committed, so a retry of this job skips it. */
   async mergeMutationPayload(
     jobId: string,

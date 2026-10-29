@@ -55,6 +55,7 @@ describePg('versioned migrations (Postgres)', () => {
       'Baseline1761750000000',
       'SchedulingQueueAndOccurrenceIdentity1761760000000',
       'GoogleWriteQueueLifecycle1761770000000',
+      'TaskCreateRequestKey1761780000000',
     ]);
     expect(await drift(ds)).toEqual([]);
     expect(await ds.runMigrations()).toEqual([]);
@@ -68,6 +69,8 @@ describePg('versioned migrations (Postgres)', () => {
     await old.query(`DROP INDEX "IDX_schedule_jobs_status_next_run"`);
     await old.query(`ALTER TABLE "schedule_jobs" DROP COLUMN "attempts", DROP COLUMN "nextRunAt", DROP COLUMN "leaseUntil"`);
     await old.query(`ALTER TABLE "tasks" DROP COLUMN "originalOccurrenceYmd", DROP COLUMN "googleInsertEventId"`);
+    await old.query(`DROP INDEX "IDX_tasks_user_create_request_key"`);
+    await old.query(`ALTER TABLE "tasks" DROP COLUMN "createRequestKey"`);
     await old.query(`DROP INDEX "IDX_pending_google_writes_status_next_run"`);
     await old.query(
       `ALTER TABLE "pending_google_writes" DROP COLUMN "status", DROP COLUMN "nextRunAt", DROP COLUMN "leaseUntil", DROP COLUMN "revision"`,
@@ -99,7 +102,7 @@ describePg('versioned migrations (Postgres)', () => {
 
     const ds = await open(dbUrl);
     const ran = await ds.runMigrations();
-    expect(ran).toHaveLength(3); // baseline is recorded, not re-run
+    expect(ran).toHaveLength(4); // baseline is recorded, not re-run
     expect(await drift(ds)).toEqual([]);
     const copies = await ds.query(
       `SELECT name, "originalOccurrenceYmd" FROM "tasks" WHERE "isRecurring" IS FALSE ORDER BY name`,

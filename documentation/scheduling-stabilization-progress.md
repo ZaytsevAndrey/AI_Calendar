@@ -42,7 +42,8 @@ Runtime assumptions found: production runs one Render instance, Neon Postgres, `
 | 5 | C/D/E: historical identity tests, recurrence/temporal/placement edge tests, Google failure handling | done (partial, see section) | 1c2a18f |
 | 6 | F2 live voice eval, F3/F4, H frontend states, I matrix, J operations doc | done | d8a3b4b |
 | 7 | Phase 2: OAuth client shared across users (found while auditing Google sync) | done | 85188d4 |
-| 8 | Phase 2: Google write queue lifecycle + no duplicate events on retry | done | (stage 8 commit) |
+| 8 | Phase 2: Google write queue lifecycle + no duplicate events on retry | done | 0c34220 |
+| 9 | Phase 2: idempotent task create (Idempotency-Key) | done | (stage 9 commit) |
 
 ## Stage A — durable placement (done)
 
@@ -173,6 +174,16 @@ Voice is out of scope for this phase; no voice code or test expectation was chan
 - No transaction is open during Google calls (the queue uses single-row statements).
 - Tests: `pending-google-write.queue.spec` (SQLite: backoff sequence and terminal stop, lease takeover, fairness, write during send, revive, lost insert answer, spent id), `pending-google-write.pg.spec` (Postgres 16: 4 concurrent sweeps on two pools send 12 rows exactly once; crashed-lease takeover), `google-calendar.service.spec` (409 with own id → existing event; 409 without id still fails), `migrations.pg.spec` (third migration; a queued row survives the upgrade).
 - Results: backend unit 1048 pass + 11 skipped, 0 fail; Postgres 11/11; e2e 137/137.
+
+### Stage 9 — duplicate request protection (done)
+
+- `POST /tasks` takes an optional `Idempotency-Key` header (validated: 1–64 of `A-Z a-z 0-9 . _ : -`, else 400). It is stored on the task (`tasks.createRequestKey`, unique index `(userId, createRequestKey)`, migration `1761780000000-TaskCreateRequestKey`). The same key again returns the first task and its create job; nothing new is written. Content never decides: identical bodies with different keys, or with no key, are separate tasks (intentional duplicates stay possible).
+- Concurrency: the replay check runs under the per-user lock (cross-instance on Postgres), and a race that still gets through (lock not involved) hits the unique index; the error is caught and the first task returned.
+- SPA: `useEventEditor` makes one key per opened create form (`newRequestKey`), reused when the user presses Save again after an error or a lost response; a new form is a new key. `customBaseQuery` now passes request headers. CORS reflects requested headers (no change needed).
+- Other mutations: `PATCH /tasks/:id`, skip, delete and move target explicit state and are idempotent by design; detached series copies are keyed by series + day; job retries never re-place (stage 6). Voice confirmations are out of scope for this phase (the voice pipeline has its own confirm-once guard).
+- Limits: a key outlives only its task — after the task is deleted, the same key creates again. Reusing a key with a different body returns the original task (no body fingerprint).
+- Tests: `task-create-idempotency.spec` (SQLite: replay returns first task + job, different/no keys make separate tasks, 3 concurrent identical requests → one task, a race past the lock caught by the unique index), `tasks.controller.spec` (header trim, null, 400), e2e `A-TSK-030` over HTTP, frontend `customBaseQuery.spec`, `migrations.pg.spec` (fourth migration, no drift).
+- Results: backend unit 1054 pass + 11 skipped, 0 fail; tasks e2e 19/19; frontend 308/308.
 
 ## Final status (2026-10-30)
 

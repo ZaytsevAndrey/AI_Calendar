@@ -29,6 +29,26 @@ describe('Tasks API e2e', () => {
     await closeTestApp(ctx);
   });
 
+  it('A-TSK-030 a replayed create (same Idempotency-Key) returns the first task', async () => {
+    const { token } = await seedOnboardedUser(ctx.app);
+    const post = (key?: string) =>
+      api(ctx.app, 'POST', '/tasks', {
+        token,
+        payload: { name: 'Twice', estimatedTimeInMinutes: 30 },
+        headers: key ? { 'idempotency-key': key } : undefined,
+      });
+    const first = await post('submit-1');
+    const replay = await post('submit-1');
+    const other = await post('submit-2');
+    await ctx.drainJobs();
+    expect([first.statusCode, replay.statusCode, other.statusCode]).toEqual([201, 201, 201]);
+    expect(jsonBody(replay).id).toBe(jsonBody(first).id);
+    expect(jsonBody(other).id).not.toBe(jsonBody(first).id);
+    const list = jsonBody(await api(ctx.app, 'GET', '/tasks', { token })).value as Array<{ name: string }>;
+    expect(list.filter((task) => task.name === 'Twice')).toHaveLength(2);
+    expect((await post('bad key!')).statusCode).toBe(400);
+  });
+
   it('A-TSK-002 missing name is recorded as current status', async () => {
     const { token } = await seedOnboardedUser(ctx.app);
     const res = await api(ctx.app, 'POST', '/tasks', {

@@ -29,6 +29,7 @@ import { Button } from 'ui/Button';
 import { dialogButtonSize } from 'ui/controlSize';
 import { showErrorToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
+import { newRequestKey } from '../../../utils/requestKey';
 import { planEditorDelete } from '../planEditorDelete';
 
 const TaskForm = lazy(
@@ -87,6 +88,9 @@ export function useEventEditor() {
     updateReminderState.isLoading;
   const isReminderDeleting = deleteReminderState.isLoading;
 
+  // One create operation per opened form: a retry after an error or a lost
+  // response reuses it, so the server returns the first task, not a second.
+  const createKeyRef = useRef<string>(newRequestKey());
   const formDirtyRef = useRef(false);
   const [discardOpen, setDiscardOpen] = useState(false);
   const handleDirtyChange = useCallback((dirty: boolean) => {
@@ -110,6 +114,7 @@ export function useEventEditor() {
   };
 
   const openCreate = (defaults?: CreateTaskDefaults) => {
+    createKeyRef.current = newRequestKey();
     setEditingEvent(null);
     setEditingReminder(null);
     setCreatingReminder(false);
@@ -137,6 +142,7 @@ export function useEventEditor() {
     payload: CreateTaskDTO,
     options?: { afterCreate?: () => Promise<void> },
   ) => {
+    createKeyRef.current = newRequestKey();
     setEditingEvent(null);
     setEditingReminder(null);
     setCreatingReminder(false);
@@ -191,7 +197,7 @@ export function useEventEditor() {
     setLocalSubmitting(true);
     const request = editing
       ? updateEvent({ id: editing.id, body: cleanData as UpdateTaskDTO }).unwrap()
-      : createEvent(cleanData as CreateTaskDTO).unwrap();
+      : createEvent({ ...(cleanData as CreateTaskDTO), idempotencyKey: createKeyRef.current }).unwrap();
     void request
       .then(async () => {
         // Progress toast (save → place → sync) comes from eventTasksApi.onQueryStarted.
