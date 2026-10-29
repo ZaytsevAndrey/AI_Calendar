@@ -11,6 +11,7 @@ All up-to-date docs live under **[documentation/](documentation/README.md)**:
 - [API reference](documentation/api-reference.md)  
 - [Google OAuth / Calendar](documentation/integrations.md)  
 - [Deploy (Render + Neon)](documentation/deploy.md)  
+- [Admin console](documentation/admin-console.md)  
 - [Roadmap](documentation/roadmap.md)  
 - [Roadmap archive](documentation/roadmap-archive.md)  
 
@@ -39,6 +40,7 @@ Production (free): [Deploy on Render + Neon](documentation/deploy.md).
 | Command | Action |
 |---------|--------|
 | `npm start` | Frontend + backend |
+| `npm run start:admin` | Admin console on http://localhost:3002 (needs `ADMIN_EMAILS`) |
 | `npm run build` | Build both packages |
 | `npm run build:frontend` | Frontend only |
 | `npm run build:backend` | Backend only |

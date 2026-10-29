@@ -4,17 +4,20 @@
   "private": true,
   "workspaces": [
     "frontend",
-    "backend"
+    "backend",
+    "admin"
   ],
   "scripts": {
     "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
     "start:frontend": "npm run start --workspace=frontend",
     "start:backend": "npm run start:dev --workspace=backend",
+    "start:admin": "npm run start --workspace=admin",
     "start:piper": "node tools/piper-http.mjs",
     "voice:eval:dialogue": "npm run voice:eval:dialogue --workspace=backend",
     "build": "npm run build --workspaces",
     "build:frontend": "npm run build --workspace=frontend",
     "build:backend": "npm run build --workspace=backend",
+    "build:admin": "npm run build --workspace=admin",
     "lint": "npm run lint --workspaces",
     "test": "npm run test --workspace=backend && npm run test --workspace=frontend",
     "test:e2e:ui": "playwright test --config e2e/playwright.config.ts",

@@ -44,6 +44,13 @@ services:
         sync: false
       - key: REMINDER_CRON_SECRET
         sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: ADMIN_URL
+        fromService:
+          name: ai-calendar-admin
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
       - key: FRONTEND_URL
         fromService:
           name: ai-calendar-web
@@ -93,3 +100,31 @@ services:
         value: 18.18.0
       - key: REACT_APP_API_BASE_URL
         sync: false
+
+  # Owner-only admin console (admin/). Sign-in is Google, limited to ADMIN_EMAILS on the API.
+  - type: web
+    name: ai-calendar-admin
+    runtime: static
+    branch: master
+    autoDeployTrigger: commit
+    buildCommand: npm ci --workspace=admin --include-workspace-root --include=dev && npm run build:admin
+    staticPublishPath: admin/dist
+    headers:
+      - path: /*
+        name: X-Robots-Tag
+        value: noindex, nofollow
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: NODE_VERSION
+        value: 18.18.0
+      - key: REACT_APP_API_BASE_URL
+        fromService:
+          name: ai-calendar-api
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL

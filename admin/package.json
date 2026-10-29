@@ -1,0 +1,27 @@
+{
+  "name": "luefy-admin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "concurrently -k \"tailwindcss -c tailwind.config.cjs -i src/styles.css -o public/admin.css --watch\" \"webpack serve --config webpack.config.js --mode development\"",
+    "build": "webpack --config webpack.config.js --mode production && tailwindcss -c tailwind.config.cjs -i src/styles.css -o dist/admin.css --minify",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "concurrently": "^8.2.2",
+    "html-webpack-plugin": "^5.6.3",
+    "tailwindcss": "^3.4.19",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.7.2",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^5.2.2"
+  }
+}

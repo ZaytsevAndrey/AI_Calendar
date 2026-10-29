@@ -70,6 +70,11 @@ import { CalendarProvidersModule } from '../calendar-providers/calendar-provider
     UserIdentitiesService,
     MicrosoftAuthService,
   ],
-  exports: [AuthService, UserIdentitiesService, MicrosoftAuthService],
+  exports: [
+    AuthService,
+    AccountDeletionService,
+    UserIdentitiesService,
+    MicrosoftAuthService,
+  ],
 })
 export class AuthModule {}

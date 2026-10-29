@@ -13,6 +13,11 @@ import { Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { User } from '../users/user.entity';
+import {
+  ADMIN_LOGIN_STATE,
+  isAdminEmail,
+  issueAdminTicket,
+} from '../admin/admin-config';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { EventPhasesService } from '../event-phases/event-phases.service';
 import { PhasesService } from '../phases/phases.service';
@@ -144,9 +149,17 @@ export class GoogleCalendarService {
     );
   }
 
-  getLoginAuthUrl() {
+  getLoginAuthUrl(target?: string) {
     if (stubExternalApis()) {
       return 'https://accounts.google.com/o/oauth2/v2/auth?e2e=1';
+    }
+    if (target === ADMIN_LOGIN_STATE) {
+      // Identity only: the admin console never touches calendars or stored tokens.
+      return this.oauth2Client.generateAuthUrl({
+        prompt: 'select_account',
+        scope: ['openid', 'email', 'profile'],
+        state: ADMIN_LOGIN_STATE,
+      });
     }
     const scopes = [
       'openid',
@@ -205,6 +218,9 @@ export class GoogleCalendarService {
     }
 
     const user = await this.findOrLinkGoogleUser(googleId, email);
+    if (user.isBlocked) {
+      throw new BadRequestException('This account is blocked.');
+    }
     await this.persistGoogleTokens(user.id, tokens);
     await this.ensureSettingsLinked(user.id);
 
@@ -226,6 +242,47 @@ export class GoogleCalendarService {
     return this.issueLoginTicket(pair);
   }
 
+  /**
+   * Admin-console sign-in. Finds an existing account by Google id or email and
+   * returns a one-time admin ticket. Never creates a user, never stores Google
+   * tokens and never replaces the app refresh token, so the owner's normal
+   * session is left alone. The email must be in ADMIN_EMAILS.
+   */
+  async completeAdminGoogleSignIn(code: string): Promise<string> {
+    const { tokens } = await this.oauth2Client.getToken(code);
+    const fromId: { sub?: string; email?: string; email_verified?: boolean | string } =
+      tokens.id_token ? this.parseGoogleIdToken(tokens.id_token) : {};
+    const googleId = fromId.sub;
+    const email = (fromId.email ?? '').trim().toLowerCase();
+    if (!googleId || !email) {
+      throw new BadRequestException('Google did not return an email address.');
+    }
+    // An unverified address could belong to someone else; never grant admin on it.
+    if (fromId.email_verified !== true && fromId.email_verified !== 'true') {
+      throw new UnauthorizedException('email_not_verified');
+    }
+    if (!isAdminEmail(email)) {
+      throw new UnauthorizedException('not_admin');
+    }
+    const user =
+      (await this.userRepo.findOne({ where: { googleId } })) ??
+      (await this.userRepo
+        .createQueryBuilder('user')
+        .where('LOWER(user.email) = LOWER(:email)', { email })
+        .getOne());
+    if (!user) {
+      throw new UnauthorizedException('no_account');
+    }
+    // The account is already tied to another Google identity: the email match is not enough.
+    if (user.googleId && user.googleId !== googleId) {
+      throw new UnauthorizedException('not_admin');
+    }
+    if (!isAdminEmail(user.email)) {
+      throw new UnauthorizedException('not_admin');
+    }
+    return issueAdminTicket(user.id);
+  }
+
   redeemLoginTicket(ticket: string): {
     access_token: string;
     refresh_token: string;
@@ -244,13 +301,18 @@ export class GoogleCalendarService {
   private parseGoogleIdToken(idToken: string): {
     sub?: string;
     email?: string;
+    email_verified?: boolean | string;
   } {
     try {
       const payload = idToken.split('.')[1];
       if (!payload) return {};
       const json = Buffer.from(payload, 'base64url').toString('utf8');
-      const parsed = JSON.parse(json) as { sub?: string; email?: string };
-      return { sub: parsed.sub, email: parsed.email };
+      const parsed = JSON.parse(json) as {
+        sub?: string;
+        email?: string;
+        email_verified?: boolean | string;
+      };
+      return { sub: parsed.sub, email: parsed.email, email_verified: parsed.email_verified };
     } catch {
       return {};
     }

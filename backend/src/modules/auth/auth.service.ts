@@ -21,7 +21,7 @@ export class AuthService {
   ): Promise<{ access_token: string; refresh_token: string }> {
     const user = await this.getUserIfRefreshTokenMatches(refreshToken);
 
-    if (!user) {
+    if (!user || user.isBlocked) {
       throw new ApiError('INVALID_REFRESH_TOKEN', {
         refreshToken: 'Invalid refresh token',
       });

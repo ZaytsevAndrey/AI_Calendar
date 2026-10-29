@@ -127,6 +127,9 @@ export class MicrosoftAuthService {
     }
 
     const user = await this.findOrCreateUser(providerUserId, email, tokens);
+    if (user.isBlocked) {
+      throw new UnauthorizedException('This account is blocked.');
+    }
     await this.ensureSettings(user.id);
     const pair = this.createAppTokenPair(user.id);
     await this.userRepo.update(

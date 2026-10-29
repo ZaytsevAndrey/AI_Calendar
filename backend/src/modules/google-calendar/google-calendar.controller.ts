@@ -16,6 +16,7 @@ import { GoogleCalendarService } from './google-calendar.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Response } from 'express';
 import { getFrontendBaseUrl } from '../../common/public-url';
+import { ADMIN_LOGIN_STATE, adminAppUrl } from '../admin/admin-config';
 import {
   ApiTags,
   ApiOperation,
@@ -47,7 +48,12 @@ export class GoogleCalendarController {
     @Query('code') code: string,
     @Query('error') error: string,
     @Res() res: Response,
+    @Query('state') state?: string,
   ) {
+    if (state === ADMIN_LOGIN_STATE) {
+      await this.handleAdminCallback(code, error, res);
+      return;
+    }
     const frontend = getFrontendBaseUrl();
     const redirect = (path: string) => {
       const redirectUrl = `${frontend}${path}`;
@@ -79,6 +85,33 @@ export class GoogleCalendarController {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'sign_in_failed';
       this.logger.error(`Error processing Google OAuth callback: ${msg}`);
+      redirect(`/login?error=${encodeURIComponent(msg)}`);
+    }
+  }
+
+  /** Google sign-in started from the admin app. Lands on the admin app, never on the main frontend. */
+  private async handleAdminCallback(code: string, error: string, res: Response) {
+    const admin = adminAppUrl();
+    const redirect = (path: string) => {
+      res.status(302);
+      res.header('Location', `${admin}${path}`);
+      res.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.redirect(`${admin}${path}`);
+    };
+    if (!admin) {
+      res.status(404).send({ message: 'ADMIN_URL is not configured' });
+      return;
+    }
+    if (error || !code) {
+      redirect(`/login?error=${encodeURIComponent(error || 'no_code')}`);
+      return;
+    }
+    try {
+      const ticket = await this.googleCalendarService.completeAdminGoogleSignIn(code);
+      redirect(`/auth/callback?ticket=${encodeURIComponent(ticket)}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'sign_in_failed';
+      this.logger.warn(`Admin sign-in refused: ${msg}`);
       redirect(`/login?error=${encodeURIComponent(msg)}`);
     }
   }

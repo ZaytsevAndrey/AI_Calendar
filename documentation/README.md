@@ -10,6 +10,7 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Integrations](integrations.md) | Google OAuth / Calendar, Groq voice, common errors (`redirect_uri_mismatch`) |
 | [Deploy](deploy.md) | Free hosting on Render + Neon, GitHub Actions CI, `master` auto-deploy |
 | [Task creation rules](task-creation-rules.md) | Presets vs settings, validation, phase, recurrence weekdays, Google sync |
+| [Admin console](admin-console.md) | Owner-only app in `admin/`: access via `ADMIN_EMAILS`, pages, user actions, stored data |
 | [Roadmap](roadmap.md) | Live queue |
 | [Roadmap archive](roadmap-archive.md) | Shipped work |
 | [Spec: Incremental placement](spec-incremental-placement.md) | Who is read and written per calendar edit. No Generate button. A displaced day becomes a new task; a chain runs only when everyone still fits (target; engine still full-replans) |

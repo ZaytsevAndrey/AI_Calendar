@@ -10,6 +10,8 @@ import { getFrontendBaseUrl } from './common/public-url';
 import { Logger } from '@nestjs/common';
 import { VoiceFileLogger } from './common/voice-file-logger';
 import { registerVoiceHttpTiming } from './common/voice-http-timing';
+import { VoiceTurnLogService } from './modules/admin/voice-turn-log.service';
+import { adminAppUrl } from './modules/admin/admin-config';
 
 function isAllowedOrigin(origin: string | undefined): boolean {
   if (!origin) {
@@ -18,7 +20,9 @@ function isAllowedOrigin(origin: string | undefined): boolean {
   if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
     return true;
   }
-  return origin === getFrontendBaseUrl();
+  if (origin === getFrontendBaseUrl()) return true;
+  const admin = adminAppUrl();
+  return Boolean(admin) && origin === admin;
 }
 
 async function bootstrap() {
@@ -62,6 +66,7 @@ async function bootstrap() {
     .addTag('voice', 'Voice transcription and task parsing')
     .addTag('habits', 'Daily habit check-ins, streaks, and points')
     .addTag('reminders', 'Web Push reminders for upcoming blocks and habits')
+    .addTag('admin', 'Owner-only admin console')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
@@ -74,7 +79,8 @@ async function bootstrap() {
   });
 
   const fastify = app.getHttpAdapter().getInstance();
-  registerVoiceHttpTiming(fastify, new Logger('HTTP'));
+  const voiceTurnLog = app.get(VoiceTurnLogService);
+  registerVoiceHttpTiming(fastify, new Logger('HTTP'), (turn) => voiceTurnLog.record(turn));
   fastify.get('/health', async () => ({ status: 'ok' }));
 
   if (process.env.E2E_BOOTSTRAP === '1') {
