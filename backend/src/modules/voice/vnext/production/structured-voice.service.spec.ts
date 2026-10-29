@@ -656,9 +656,17 @@ describe('structured recurring tasks and occurrence scope', () => {
     expect(stale.intents).toEqual([]);
   });
 
-  it('refuses a per-occurrence completion and a series scope on a one-off task', async () => {
+  it('completes one occurrence by clearing that day, and refuses it from a day on', async () => {
     const complete = await run('done with gym today', { action: 'complete', seriesScope: 'occurrence', occurrence: '2026-10-19' });
-    expect(complete.intents).toEqual([]);
+    expect(complete.intents[0]).toMatchObject({
+      summary: 'Mark done and clear from the calendar “Gym” on 2026-10-19',
+      command: { kind: 'skip', taskId: 'gym', occurrenceStart: '2026-10-19T07:00:00.000Z' },
+    });
+    const tail = await run('done with gym from today', { action: 'complete', seriesScope: 'from_day', occurrence: '2026-10-19' });
+    expect(tail.intents).toEqual([]);
+  });
+
+  it('refuses a series scope on a one-off task', async () => {
     const transcript = 'delete report once';
     const oneOff = await build(world({ tasks: [task('report', 'Report')], model: [envelope(transcript, [{ opId: 'op-1', action: 'delete', target: { kind: 'existing', proposedId: 'report' }, seriesScope: 'occurrence', occurrence: '2026-10-19' }])] }))
       .service.turn(USER, dto({ transcript }));

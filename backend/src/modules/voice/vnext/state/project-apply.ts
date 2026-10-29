@@ -469,6 +469,7 @@ const COMMAND_VERBS: Record<VNextLanguage, Record<string, string>> = {
     move: 'Перенести',
     update: 'Змінити',
     end_series: 'Завершити серію',
+    complete_occurrence: 'Позначити виконаним і прибрати з календаря',
   },
   en: {
     delete: 'Delete',
@@ -478,6 +479,7 @@ const COMMAND_VERBS: Record<VNextLanguage, Record<string, string>> = {
     move: 'Move',
     update: 'Change',
     end_series: 'End the series',
+    complete_occurrence: 'Mark done and clear from the calendar',
   },
 };
 
@@ -645,7 +647,7 @@ const CLIENT_SERIES_SCOPE: Record<SeriesScope, 'occurrence' | 'series' | 'all'> 
  * A command on a recurring Luefy task, with the scope the model stated.
  * delete: occurrence → skip, from_day → end the series there, all → delete the task.
  * skip: occurrence only. move: any scope, anchored on a named occurrence.
- * complete, cancel, update: the whole series only.
+ * complete: one occurrence (cleared like a skip) or the whole series. cancel, update: the whole series only.
  */
 function projectSeriesCommand(operation: PendingOperation, clock: Clock, language: VNextLanguage): { ok: true; intent: VoiceWriteIntent } | ProjectError {
   if (operation.target.kind !== 'entity') return { ok: false, code: 'draft_command', detail: operation.action };
@@ -655,12 +657,12 @@ function projectSeriesCommand(operation: PendingOperation, clock: Clock, languag
   const taskId = target.entityId;
   const summary = commandSummary(language, operation.action, operation, clock);
   const taskName = target.name || operation.changes.title || operation.sourceText || operation.action;
-  const occurrenceCommand = (kind: 'skip' | 'end_series'): { ok: true; intent: VoiceWriteIntent } | ProjectError => {
-    const rejected = onlyKinds(operation, []) ?? onlyChanges(operation, []);
+  const occurrenceCommand = (kind: 'skip' | 'end_series', copy: string = kind, allowedChanges: Array<keyof OperationChangesV1> = []): { ok: true; intent: VoiceWriteIntent } | ProjectError => {
+    const rejected = onlyKinds(operation, []) ?? onlyChanges(operation, allowedChanges);
     if (rejected) return rejected;
     const picked = pickOccurrence(operation, clock.timeZone);
     if (!picked.ok) return picked;
-    const text = commandSummary(language, kind, operation, clock, { occurrence: picked.occurrence.start });
+    const text = commandSummary(language, copy, operation, clock, { occurrence: picked.occurrence.start });
     return {
       ok: true,
       intent: {
@@ -684,6 +686,10 @@ function projectSeriesCommand(operation: PendingOperation, clock: Clock, languag
   if (operation.action === 'delete') {
     if (scope === 'occurrence') return occurrenceCommand('skip');
     if (scope === 'from_day') return occurrenceCommand('end_series');
+  }
+  // Done on one day of a series clears that day, as Done on a repeating task does in the app.
+  if (operation.action === 'complete' && scope === 'occurrence') {
+    return occurrenceCommand('skip', 'complete_occurrence', operation.changes.status === 'completed' ? ['status'] : []);
   }
   if (operation.action === 'move') {
     const rejected = onlyKinds(operation, ['date', 'clock', 'duration']) ?? placementOnly(operation) ?? onlyChanges(operation, []);
