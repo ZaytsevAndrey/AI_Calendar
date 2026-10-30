@@ -36,6 +36,19 @@ describe('task create idempotency', () => {
     expect(await kit.slotsOf(first.id)).toHaveLength(1);
   });
 
+  it('AUD-024: a replay finds the create job even after many later edits of the task', async () => {
+    const first = await create('form-1');
+    await kit.jobs.settle();
+    for (let i = 0; i < 11; i += 1) {
+      await kit.tasksService.update(first.id, kit.user.id, { name: `Buy milk ${i}` } as never);
+      await kit.jobs.settle();
+    }
+
+    const again = await create('form-1');
+
+    expect(again.jobId).toBe(first.jobId);
+  });
+
   it('identical content with different keys, or no key, is two tasks', async () => {
     const a = await create('form-1');
     const b = await create('form-2');

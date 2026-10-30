@@ -29,7 +29,12 @@ import { Button } from 'ui/Button';
 import { dialogButtonSize } from 'ui/controlSize';
 import { showErrorToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
-import { keyForSubmission, newRequestKey, type SubmissionKey } from '../../../utils/requestKey';
+import {
+  keyAfterFailure,
+  keyForSubmission,
+  newRequestKey,
+  type SubmissionKey,
+} from '../../../utils/requestKey';
 import { planEditorDelete } from '../planEditorDelete';
 
 const TaskForm = lazy(
@@ -91,6 +96,8 @@ export function useEventEditor() {
   // One create operation per opened form and content: a retry after an error
   // or a lost response reuses the key, so the server returns the first task.
   const createKeyRef = useRef<SubmissionKey>({ key: newRequestKey(), body: null });
+  /** Key of `createFromPayload`: the same payload again is a retry (AUD-024). */
+  const payloadKeyRef = useRef<SubmissionKey>({ key: newRequestKey(), body: null });
   const formDirtyRef = useRef(false);
   const [discardOpen, setDiscardOpen] = useState(false);
   const handleDirtyChange = useCallback((dirty: boolean) => {
@@ -218,6 +225,7 @@ export function useEventEditor() {
       })
       .catch((err) => {
         setLocalSubmitting(false);
+        if (!editing) createKeyRef.current = keyAfterFailure(createKeyRef.current, err);
         showErrorToast({
           title: editing ? t('tasks.toast.updateFailed') : t('tasks.toast.createFailed'),
           detail: extractApiErrorMessage(err),
@@ -227,8 +235,17 @@ export function useEventEditor() {
 
   const createFromPayload = async (data: CreateTaskDTO) => {
     const cleanData = cleanPayload(data) as CreateTaskDTO;
-    // Progress toast from eventTasksApi.onQueryStarted.
-    await createEvent(cleanData).unwrap();
+    // AUD-024: a retry of the same payload keeps its key (one task, not two);
+    // after a success the next payload is a new operation.
+    payloadKeyRef.current = keyForSubmission(payloadKeyRef.current, cleanData);
+    try {
+      // Progress toast from eventTasksApi.onQueryStarted.
+      await createEvent({ ...cleanData, idempotencyKey: payloadKeyRef.current.key }).unwrap();
+      payloadKeyRef.current = { key: newRequestKey(), body: null };
+    } catch (err) {
+      payloadKeyRef.current = keyAfterFailure(payloadKeyRef.current, err);
+      throw err;
+    }
   };
 
   const canSkipOccurrence = ((): boolean => {

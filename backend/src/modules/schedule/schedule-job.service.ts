@@ -266,17 +266,20 @@ export class ScheduleJobService {
     taskId: string,
     op: string,
   ): Promise<ScheduleJob | null> {
+    // AUD-024: the op is matched in SQL too; taking the 10 newest jobs of the
+    // task and filtering here missed a create edited more than 10 times since.
+    // Payloads are JSON.stringify output, so both fragments appear exactly so.
     const rows = await this.jobRepo
       .createQueryBuilder('job')
       .where('job.userId = :userId', { userId })
-      .andWhere('job.payloadJson LIKE :pattern', { pattern: `%"taskId":"${taskId}"%` })
+      .andWhere('job.payloadJson LIKE :task', { task: `%${JSON.stringify({ taskId }).slice(1, -1)}%` })
+      .andWhere('job.payloadJson LIKE :op', { op: `%${JSON.stringify({ op }).slice(1, -1)}%` })
       .orderBy('job.createdAt', 'DESC')
       .take(10)
       .getMany();
     return rows.find((row) => parsePayload(row.payloadJson).op === op) ?? null;
   }
 
-  /** Record that a step committed, so a retry of this job skips it. */
   /**
    * AUD-018: true when a newer mutation job exists for the same task, so this
    * one's absolute intent (a drop at a clock) is stale and must not be
@@ -300,6 +303,7 @@ export class ScheduleJobService {
     });
   }
 
+  /** Record that a step committed, so a retry of this job skips it. */
   async mergeMutationPayload(
     jobId: string,
     patch: Record<string, unknown>,

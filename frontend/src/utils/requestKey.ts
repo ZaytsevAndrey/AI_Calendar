@@ -22,3 +22,20 @@ export function keyForSubmission(current: SubmissionKey, body: unknown): Submiss
   }
   return { key: newRequestKey(), body: serialized };
 }
+
+/** HTTP status of an RTK `unwrap` error from `customBaseQuery` (an axios error). */
+function errorStatus(err: unknown): number | undefined {
+  const e = err as { status?: unknown; response?: { status?: unknown } } | null;
+  const status = e?.response?.status ?? e?.status;
+  return typeof status === 'number' ? status : undefined;
+}
+
+/**
+ * Key to keep after a failed send. 410: the task this key created was
+ * deleted since (by the user or the system), so the key is spent — the next
+ * Save is a new operation (AUD-024; before, every retry answered 410 again).
+ * Anything else may be a lost answer: keep the key for the retry.
+ */
+export function keyAfterFailure(current: SubmissionKey, err: unknown): SubmissionKey {
+  return errorStatus(err) === 410 ? { key: newRequestKey(), body: null } : current;
+}
