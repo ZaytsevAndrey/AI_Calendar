@@ -47,6 +47,7 @@ function arg(name, fallback) {
             height: sc.height?.[size] ?? height,
             scenario: sc.scenario,
             auth: sc.auth !== false,
+            hints: !!sc.hints,
           });
           const file = path.join(outRoot, lang, theme, size, `${sc.name}.png`);
           fs.mkdirSync(path.dirname(file), { recursive: true });

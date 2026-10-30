@@ -1,6 +1,6 @@
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
+import type { PhasePaletteId } from 'theme/phasePalette';
 
-export const PAST_APP_EVENT_COLOR = '#9e9e9e';
 
 export function eventEndMs(event: GoogleCalendarEvent): number | null {
   if (event.end?.dateTime) {
@@ -14,27 +14,38 @@ export function eventEndMs(event: GoogleCalendarEvent): number | null {
   return null;
 }
 
-/** Gray styling only for our app-calendar events that have fully ended. */
+/** Our app-calendar events that have fully ended (drawn faded). */
 export function isPastAppEvent(event: GoogleCalendarEvent, now = Date.now()): boolean {
   if (!event.isAppGenerated) return false;
   const end = eventEndMs(event);
   return end != null && end <= now;
 }
 
+/** Google colorId → phase palette entry (backend writes the phase's colorId on our events). */
+export const GOOGLE_COLOR_PALETTE: Record<string, PhasePaletteId> = {
+  '1': 'violet',
+  '2': 'teal',
+  '3': 'violet',
+  '4': 'pink',
+  '5': 'amber',
+  '6': 'orange',
+  '7': 'cyan',
+  '8': 'slate',
+  '9': 'blue',
+  '10': 'green',
+  '11': 'rose',
+};
+
+/** Neutral bar for events from other calendars. */
+export const EXTERNAL_EVENT_COLOR = 'rgb(var(--ide-muted))';
+
+export function googleColorCss(colorId?: string | null): string {
+  const id = (colorId && GOOGLE_COLOR_PALETTE[colorId]) || 'blue';
+  return `rgb(var(--ph-${id}))`;
+}
+
+/** Chip color: the phase color for our events, neutral for external ones. Past is a class, not a color. */
 export const getEventColor = (event: GoogleCalendarEvent): string => {
-  if (isPastAppEvent(event)) return PAST_APP_EVENT_COLOR;
-  const colorMap: { [key: string]: string } = {
-    '1': '#7986cb',
-    '2': '#33b679',
-    '3': '#8e63ce',
-    '4': '#e67c73',
-    '5': '#f6c026',
-    '6': '#f5511d',
-    '7': '#039be5',
-    '8': '#616161',
-    '9': '#3f51b5',
-    '10': '#0b8043',
-    '11': '#d60000',
-  };
-  return event.colorId ? colorMap[event.colorId] || '#039be5' : '#039be5';
+  if (!event.isAppGenerated) return EXTERNAL_EVENT_COLOR;
+  return googleColorCss(event.colorId);
 };

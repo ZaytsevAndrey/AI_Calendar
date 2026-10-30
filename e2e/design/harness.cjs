@@ -46,7 +46,7 @@ const JWT = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: 'u-1', email: 'an
 /** Thursday 29 Oct 2026, 11:20 in Kyiv — the mock data is built around this moment. */
 const NOW = new Date('2026-10-29T11:20:00+02:00');
 
-async function newPage(browser, { theme = 'dark', lang = 'uk', scenario = 'full', width = 1440, height = 900, auth = true, state = {} } = {}) {
+async function newPage(browser, { theme = 'dark', lang = 'uk', scenario = 'full', width = 1440, height = 900, auth = true, state = {}, hints = false } = {}) {
   const mobile = width < 768;
   const ctx = await browser.newContext({
     viewport: { width, height },
@@ -65,7 +65,7 @@ async function newPage(browser, { theme = 'dark', lang = 'uk', scenario = 'full'
     _persist: JSON.stringify({ version: -1, rehydrated: true }),
   });
   await page.addInitScript(
-    ({ jwt, persist, theme, lang, auth }) => {
+    ({ jwt, persist, theme, lang, auth, hints }) => {
       try {
         if (auth) {
           localStorage.setItem('access_token', jwt);
@@ -73,12 +73,16 @@ async function newPage(browser, { theme = 'dark', lang = 'uk', scenario = 'full'
           localStorage.setItem('persist:root', persist);
         }
         localStorage.setItem('luefy.theme', theme);
+        if (!hints) {
+          localStorage.setItem('luefy.hint.calendar-drag', '1');
+          localStorage.setItem('luefy.hint.calendar-touch', '1');
+        }
         localStorage.setItem('app_language', lang);
       } catch (e) {
         /* storage blocked */
       }
     },
-    { jwt: JWT, persist, theme, lang, auth },
+    { jwt: JWT, persist, theme, lang, auth, hints },
   );
   page.unhandled = new Set();
   page.mockState = state;

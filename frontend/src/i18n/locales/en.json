@@ -78,7 +78,11 @@
     "pickEndDay": "Now pick the last day",
     "start": "Start",
     "end": "End",
-    "chooseDayOrRange": "Pick a day or several days"
+    "chooseDayOrRange": "Pick a day or several days",
+    "andMore_one": "and {{count}} more",
+    "andMore_other": "and {{count}} more",
+    "moreActions": "More actions",
+    "gotIt": "Got it"
   },
   "settings": {
     "title": "Settings",
@@ -354,7 +358,7 @@
     "previousMonth": "Previous month",
     "nextMonth": "Next month",
     "showDay": "Show {{label}}",
-    "dragHint": "Drag an empty area to create a fixed task for that time. Drag a block or its top/bottom edge to move it. Step: 15 min. Click the center to open the preview.",
+    "dragHint": "Drag across empty time to create a task. Drag an event or its edge to change the time.",
     "nowLine": "Current time",
     "weekdayMon": "Mon",
     "weekdayTue": "Tue",
@@ -461,11 +465,16 @@
       "color10": "Basil",
       "color11": "Tomato"
     },
-    "attendeeCount_few": "{{count}} attendees",
-    "attendeeCount_many": "{{count}} attendees",
     "attendeeCount": "{{count}} attendees",
     "chooseDates": "Choose dates",
-    "chooseDateTime": "When"
+    "chooseDateTime": "When",
+    "threeDays": "3 days",
+    "view": "Calendar view",
+    "phases": "Phases",
+    "phasesLegend": "Phases of this day",
+    "editPhases": "Edit phases",
+    "agendaEmpty": "Nothing planned. Tap to add a task.",
+    "touchHint": "Hold an empty slot to create a task. Hold an event to move it."
   },
   "schedule": {
     "generate": "Review schedule",
@@ -582,18 +591,6 @@
     "clearedDetail_one": "{{count}} generated time block removed.",
     "clearedDetail_other": "{{count}} generated time blocks removed.",
     "clearFailed": "Could not clear schedule",
-    "block_few": "{{count}} blocks",
-    "block_many": "{{count}} blocks",
-    "errorsDetail_few": "{{count}} errors. Details are on this page.",
-    "errorsDetail_many": "{{count}} errors. Details are on this page.",
-    "warningsDetail_few": "{{count}} warnings. Details are on this page.",
-    "warningsDetail_many": "{{count}} warnings. Details are on this page.",
-    "rescheduled_few": "{{count}} tasks rescheduled.",
-    "rescheduled_many": "{{count}} tasks rescheduled.",
-    "blocksInRange_few": "{{count}} time blocks in this range.",
-    "blocksInRange_many": "{{count}} time blocks in this range.",
-    "clearedDetail_few": "{{count}} generated time blocks removed.",
-    "clearedDetail_many": "{{count}} generated time blocks removed.",
     "block": "{{count}} blocks",
     "blocksInRange": "{{count}} time blocks in this range.",
     "clearedDetail": "{{count}} generated time blocks removed.",
@@ -620,7 +617,8 @@
     "problematicMoveNoDayFound": "No room in the next {{days}} days. Try a shorter duration or another phase.",
     "problematicSlotFree": "Free",
     "problematicAutoSeated": "“{{name}}” is back on the schedule",
-    "problematicSlotHintTouch": "Scroll the timeline or tap a day."
+    "problematicSlotHintTouch": "Scroll the timeline or tap a day.",
+    "problematicLead": "These did not fit their phases. Pick another time or place them on top."
   },
   "now": {
     "label": "Now",
@@ -633,7 +631,10 @@
     "occurrenceSkipped": "Occurrence skipped",
     "skipFailed": "Could not skip occurrence",
     "habits": "Habits",
-    "allHabits": "All habits"
+    "allHabits": "All habits",
+    "until": "until {{time}}",
+    "nextAt": "Next at {{time}}",
+    "markDone": "Mark done"
   },
   "places": {
     "placeholder": "Address or place",
@@ -1293,5 +1294,15 @@
     "cannotShow": "This browser cannot show reminders.",
     "notificationsBlocked": "Notifications are blocked in this browser.",
     "subscriptionReadFailed": "Could not read the push subscription."
+  },
+  "today": {
+    "title": "Today",
+    "toggle": "Today panel",
+    "hide": "Hide panel",
+    "open": "Open Today",
+    "remindersCount_one": "{{count}} reminder",
+    "remindersCount_other": "{{count}} reminders",
+    "laterCount_one": "{{count}} task for later",
+    "laterCount_other": "{{count}} tasks for later"
   }
 }

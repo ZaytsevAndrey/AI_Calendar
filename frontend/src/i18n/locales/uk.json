@@ -78,7 +78,13 @@
     "pickEndDay": "Тепер оберіть останній день",
     "start": "Початок",
     "end": "Кінець",
-    "chooseDayOrRange": "Оберіть день або кілька днів"
+    "chooseDayOrRange": "Оберіть день або кілька днів",
+    "andMore_one": "і ще {{count}}",
+    "andMore_few": "і ще {{count}}",
+    "andMore_many": "і ще {{count}}",
+    "andMore_other": "і ще {{count}}",
+    "moreActions": "Інші дії",
+    "gotIt": "Зрозуміло"
   },
   "settings": {
     "title": "Налаштування",
@@ -354,7 +360,7 @@
     "previousMonth": "Попередній місяць",
     "nextMonth": "Наступний місяць",
     "showDay": "Показати {{label}}",
-    "dragHint": "Потягніть порожню область, щоб створити фіксовану задачу на цей час. Перетягніть блок або верхній/нижній край, щоб перенести. Крок: 15 хв. Клацніть по центру, щоб відкрити прев’ю.",
+    "dragHint": "Потягніть по порожньому місцю, щоб створити задачу. Перетягніть подію або її край, щоб змінити час.",
     "nowLine": "Поточний час",
     "weekdayMon": "Пн",
     "weekdayTue": "Вт",
@@ -465,7 +471,14 @@
     },
     "attendeeCount": "{{count}} учасників",
     "chooseDates": "Оберіть дати",
-    "chooseDateTime": "Коли"
+    "chooseDateTime": "Коли",
+    "threeDays": "3 дні",
+    "view": "Вигляд календаря",
+    "phases": "Фази",
+    "phasesLegend": "Фази цього дня",
+    "editPhases": "Редагувати фази",
+    "agendaEmpty": "Нічого не заплановано. Торкніться, щоб додати задачу.",
+    "touchHint": "Утримуйте порожнє місце, щоб створити задачу. Утримуйте подію, щоб перенести її."
   },
   "schedule": {
     "generate": "Переглянути розклад",
@@ -622,7 +635,8 @@
     "problematicMoveNoDayFound": "Наступні {{days}} днів місця немає. Спробуйте коротшу тривалість або іншу фазу.",
     "problematicSlotFree": "Вільно",
     "problematicAutoSeated": "«{{name}}» повернулась у розклад",
-    "problematicSlotHintTouch": "Гортайте таймлайн або торкніться дня."
+    "problematicSlotHintTouch": "Гортайте таймлайн або торкніться дня.",
+    "problematicLead": "Не вмістилися у свої фази. Оберіть інший час або поставте поверх."
   },
   "now": {
     "label": "Зараз",
@@ -635,7 +649,10 @@
     "occurrenceSkipped": "Повтор пропущено",
     "skipFailed": "Не вдалося пропустити повтор",
     "habits": "Звички",
-    "allHabits": "Усі звички"
+    "allHabits": "Усі звички",
+    "until": "до {{time}}",
+    "nextAt": "Далі о {{time}}",
+    "markDone": "Виконано"
   },
   "places": {
     "placeholder": "Адреса або місце",
@@ -1295,5 +1312,19 @@
     "ACCOUNT_DELETE_CONFIRMATION_INVALID": "Введіть точно DELETE або email акаунта.",
     "ACCOUNT_DELETE_CALENDAR_FAILED": "Не вдалося прибрати дані Google Календаря. Акаунт не видалено. Відновіть доступ до календаря й спробуйте знову.",
     "GENERIC": "Щось пішло не так. Спробуйте ще раз."
+  },
+  "today": {
+    "title": "Сьогодні",
+    "toggle": "Панель «Сьогодні»",
+    "hide": "Сховати панель",
+    "open": "Відкрити «Сьогодні»",
+    "remindersCount_one": "{{count}} нагадування",
+    "remindersCount_few": "{{count}} нагадування",
+    "remindersCount_many": "{{count}} нагадувань",
+    "remindersCount_other": "{{count}} нагадування",
+    "laterCount_one": "{{count}} задача на потім",
+    "laterCount_few": "{{count}} задачі на потім",
+    "laterCount_many": "{{count}} задач на потім",
+    "laterCount_other": "{{count}} задачі на потім"
   }
 }

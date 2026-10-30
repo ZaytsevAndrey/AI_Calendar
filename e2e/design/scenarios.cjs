@@ -24,6 +24,7 @@ const scenarios = [
   },
   { name: 'calendar', route: '/' },
   { name: 'calendar-empty', route: '/', scenario: 'empty' },
+  { name: 'calendar-coachmark', route: '/', hints: true, sizes: ['d', 'm'] },
   {
     name: 'calendar-day',
     route: '/',
@@ -34,9 +35,20 @@ const scenarios = [
     name: 'calendar-month',
     route: '/',
     run: async (page, { mobile }) => {
-      if (mobile) await openFirst(page, '[data-testid="view-month"], button[aria-label="Місяць"], button[aria-label="Month"]');
-      else await page.getByRole('button', { name: L('Місяць', 'Month') }).first().click();
+      await page.getByRole('button', { name: L('Місяць', 'Month') }).first().click();
     },
+  },
+  {
+    name: 'calendar-3day',
+    route: '/',
+    sizes: phone,
+    run: async (page) => page.getByRole('button', { name: L('3 дні', '3 days') }).first().click(),
+  },
+  {
+    name: 'calendar-panel-closed',
+    route: '/',
+    sizes: ['xl'],
+    run: async (page) => page.getByRole('button', { name: L('Сховати панель', 'Hide panel') }).first().click(),
   },
   {
     name: 'today-sheet',

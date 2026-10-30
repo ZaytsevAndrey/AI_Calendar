@@ -8,7 +8,7 @@ import { Modal } from 'ui/Modal';
 import { Button } from 'ui/Button';
 import { formatDateTime, formatDateTimeRange } from 'utils/formatDate';
 import { eventEndDate, eventStartDate } from '../calendarView';
-import { getEventColor } from '../hooks/eventAppearance';
+import { getEventColor, googleColorCss } from '../hooks/eventAppearance';
 import { formatMinutes } from 'utils/formatDate';
 import { KindIcon } from '../kindIcons';
 import type { SchedulingKind } from '../schedulingKind';
@@ -308,7 +308,7 @@ export function EventPreview({
       }
     >
       <div className="flex flex-col gap-4">
-        <div style={{ boxShadow: `inset 3px 0 0 ${event ? getEventColor(event) : '#039be5'}` }} className="pl-3">
+        <div style={{ boxShadow: `inset 3px 0 0 ${event ? getEventColor(event) : 'rgb(var(--ph-blue))'}` }} className="pl-3">
           <h2 className="text-xl font-semibold leading-snug text-ide-text">{title}</h2>
           <p className="mt-1 flex items-center gap-1.5 text-sm text-ide-muted">
             <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -406,7 +406,7 @@ function TextValue({
       <span className="inline-flex items-center gap-2">
         <span
           className="h-3.5 w-3.5 rounded-full border border-ide-text/20"
-          style={{ background: getEventColor({ id: 'color', start: {}, end: {}, colorId: fact.text }) }}
+          style={{ background: googleColorCss(fact.text) }}
         />
         {node}
       </span>

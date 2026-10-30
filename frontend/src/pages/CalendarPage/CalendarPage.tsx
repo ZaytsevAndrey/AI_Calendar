@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useStore } from 'react-redux';
 import { useTranslation } from 'react-i18next';
-import { Calendar, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Columns3, Mic, Plus, Trash2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Mic, PanelRight, Plus, Trash2, X } from 'lucide-react';
 import {
     useEventsForDay,
     useEventsForWeek,
     useEventsForMonth,
+    useEventsForThreeDays,
     useUpdateEvent,
     useDeleteEvent,
     visibleGoogleEvents,
@@ -20,7 +21,6 @@ import { CalendarVisibilityMenu } from 'modules/calendar/components/CalendarVisi
 import { EventType } from 'modules/calendar/types';
 import { ScheduleApi } from 'api/schedule.api';
 import { useScheduleActions } from 'modules/schedule/hooks/useScheduleActions';
-import { ProblematicInboxBanner } from 'modules/schedule/components/ProblematicInboxBanner';
 import { ProblematicInboxSheet } from 'modules/schedule/components/ProblematicInboxSheet';
 import { SeriesDragHost } from 'modules/schedule/components/SeriesDragHost';
 import {
@@ -30,9 +30,8 @@ import {
 } from 'modules/schedule/seriesDragChoice';
 import { isActiveProblematicTask, todayYmdInZone } from 'modules/schedule/problematicDays';
 import { autoSeatedFromPark } from 'modules/schedule/problematicSeatWatch';
-import { NowStrip } from 'modules/now/components/NowStrip';
 import { useGetDayRemindersQuery } from 'api/dayReminders.api';
-import { ReminderList, reminderGoogleEventIds } from 'modules/day-reminders/ReminderList';
+import { reminderGoogleEventIds } from 'modules/day-reminders/ReminderList';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { useEventEditor } from 'modules/events/hooks/useEventEditor';
 import {
@@ -60,11 +59,19 @@ import {
     type TaskMutationProgressHandle,
 } from 'modules/schedule/taskMutationProgress';
 import { useCoarsePointer, usePhoneLayout } from 'modules/common/hooks/useMediaQuery';
+import { useMatchMedia } from 'ui/useViewport';
+import { IconButton } from 'ui/IconButton';
+import { Segmented } from 'ui/Segmented';
+import { cx } from 'ui/cx';
+import { Coachmark } from 'ui/Coachmark';
+import { PhaseLegend } from 'modules/calendar/components/PhaseLegend';
+import { TodayPanel, todaySectionDomId, type TodaySectionId } from 'modules/today/TodayPanel';
+import { TodayBar } from 'modules/today/TodayBar';
+import { useToday } from 'modules/today/useToday';
 import { PhoneWeekStrip } from 'modules/calendar/components/PhoneWeekStrip';
 import { Modal } from '../../ui/Modal';
 import { Button } from 'ui/Button';
 import { dialogButtonSize } from 'ui/controlSize';
-import { Spinner } from '../../ui/Spinner';
 import { showErrorToast, showInfoToast, showSuccessToast } from '../../utils/toast';
 import { extractApiErrorMessage } from '../../utils/extractApiErrorMessage';
 import { formatCivilYmd, formatDateTimeRange, joinToastDetail } from '../../utils/formatDate';
@@ -77,6 +84,9 @@ import {
     eventStartDate,
     eventEndDate,
     eventsQueryRange,
+    THREE_DAYS,
+    threeDayLabel,
+    threeDays,
 } from 'modules/calendar/calendarView';
 import { todayNowContext } from 'modules/now/nowBlocks';
 import { CalendarChipMeta } from 'modules/calendar/components/CalendarChipMeta';
@@ -87,25 +97,6 @@ import {
 } from 'api/calendarOverlays.api';
 import type { CalendarNameById } from 'modules/calendar/components/CalendarChipMeta';
 import { overlayForEvent } from 'modules/calendar/schedulingKind';
-
-const toggleBtn = (active: boolean) =>
-    `min-h-[44px] rounded-md px-4 py-2 text-sm font-medium transition ${
-        active ? 'bg-ide-selection text-ide-text' : 'text-ide-muted hover:bg-ide-surface'
-    }`;
-
-const phoneIcon =
-    'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ide-text hover:bg-ide-text/5';
-
-const phoneToggle = (active: boolean) =>
-    `inline-flex h-7 w-7 items-center justify-center rounded ${
-        active ? 'bg-ide-selection text-ide-text' : 'text-ide-muted'
-    }`;
-
-const PHONE_VIEWS = [
-    { id: 'day' as const, labelKey: 'calendar.day', Icon: Calendar },
-    { id: 'week' as const, labelKey: 'calendar.week', Icon: Columns3 },
-    { id: 'month' as const, labelKey: 'calendar.month', Icon: CalendarDays },
-];
 
 const CALENDAR_VIEW_KEY = 'calendar-view';
 
@@ -127,6 +118,34 @@ function defaultCalendarView(): CalendarView {
     }
     return 'week';
 }
+
+const TODAY_PANEL_KEY = 'luefy.todayPanel';
+
+/** Remembered choice; without one the panel starts open only where the week still has room (≥ 1536 px). */
+function storedPanelOpen(): boolean {
+    let stored: string | null = null;
+    try {
+        stored = localStorage.getItem(TODAY_PANEL_KEY);
+    } catch {
+        stored = null;
+    }
+    if (stored === 'open') return true;
+    if (stored === 'closed') return false;
+    return typeof window !== 'undefined' && window.innerWidth >= 1536;
+}
+
+/** Placeholder while a range loads: the grid's shape instead of a spinner. */
+function CalendarSkeleton() {
+    return (
+        <div className="flex min-h-0 flex-1 flex-col gap-2 rounded-control border border-ide-border bg-ide-panel p-3" aria-busy="true">
+            {Array.from({ length: 8 }, (_, i) => (
+                <div key={i} className="h-10 animate-pulse rounded-chip bg-ide-surface" style={{ opacity: 1 - i * 0.09 }} />
+            ))}
+        </div>
+    );
+}
+
+const SWIPE_MIN_PX = 60;
 
 const CalendarPage: React.FC = () => {
     const { t } = useTranslation();
@@ -152,6 +171,36 @@ const CalendarPage: React.FC = () => {
         eventName: '',
     });
     const [problematicOpen, setProblematicOpen] = useState(false);
+    const [todaySheet, setTodaySheet] = useState<TodaySectionId | null>(null);
+    const wide = useMatchMedia('(min-width: 1280px)');
+    const [panelOpen, setPanelOpenState] = useState(storedPanelOpen);
+    const setPanelOpen = (next: boolean | ((prev: boolean) => boolean)) =>
+        setPanelOpenState((prev) => {
+            const value = typeof next === 'function' ? next(prev) : next;
+            try {
+                localStorage.setItem(TODAY_PANEL_KEY, value ? 'open' : 'closed');
+            } catch {
+                /* storage blocked */
+            }
+            return value;
+        });
+    const threeDayMode = phone && currentView === 'week';
+    const swipeFrom = React.useRef<{ x: number; y: number } | null>(null);
+    const onSwipeStart = (event: React.TouchEvent) => {
+        const touch = event.touches[0];
+        swipeFrom.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+    };
+    const onSwipeEnd = (event: React.TouchEvent) => {
+        const from = swipeFrom.current;
+        swipeFrom.current = null;
+        const touch = event.changedTouches[0];
+        if (!from || !touch) return;
+        const dx = touch.clientX - from.x;
+        const dy = touch.clientY - from.y;
+        if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+        const step = threeDayMode ? THREE_DAYS : 1;
+        setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + (dx < 0 ? step : -step)));
+    };
     const [eventFormDialog, setEventFormDialog] = useState<{
         open: boolean;
         event: GoogleCalendarEvent | null;
@@ -176,8 +225,9 @@ const CalendarPage: React.FC = () => {
     const weekEventsQuery = useEventsForWeek(
         currentDate,
         undefined,
-        currentView !== 'week',
+        currentView !== 'week' || phone,
     );
+    const threeDayEventsQuery = useEventsForThreeDays(currentDate, !(currentView === 'week' && phone));
     const monthEventsQuery = useEventsForMonth(
         currentDate.getFullYear(),
         currentDate.getMonth() + 1,
@@ -187,7 +237,7 @@ const CalendarPage: React.FC = () => {
 
     const queryMap = {
         day: dayEventsQuery,
-        week: weekEventsQuery,
+        week: phone ? threeDayEventsQuery : weekEventsQuery,
         month: monthEventsQuery,
     };
 
@@ -296,7 +346,7 @@ const CalendarPage: React.FC = () => {
             /* private mode */
         }
     }, [currentView]);
-    const gridView: CalendarView = phone && currentView === 'week' ? 'day' : currentView;
+    const gridView: CalendarView = currentView;
     const hiddenCalendarIds = userSettings?.hiddenGoogleCalendarIds ?? [];
     const displayEvents = overlayCompletedTaskEvents(
         visibleGoogleEvents(eventsForRange || []).filter(
@@ -796,238 +846,287 @@ const CalendarPage: React.FC = () => {
         timeZone,
     ]);
 
+    const today = useToday({
+        sharedEvents: eventsForRange,
+        skipEventsFetch: nowStripReuseCalendarEvents,
+        hiddenEventIds: reminderEventIds,
+    });
+    useEffect(() => {
+        if (!todaySheet || todaySheet === 'now') return;
+        const id = window.setTimeout(() => {
+            document.getElementById(todaySectionDomId(todaySheet))?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        }, 240);
+        return () => window.clearTimeout(id);
+    }, [todaySheet]);
+
+    const todayPanel = (
+        <TodayPanel
+            today={today}
+            problematicTasks={problematicTasks}
+            onOpenProblematic={() => {
+                setTodaySheet(null);
+                setProblematicOpen(true);
+            }}
+            onOpenPreview={(event) => {
+                setTodaySheet(null);
+                setEventPreview({ open: true, event });
+            }}
+            onEditTask={(task) => {
+                setTodaySheet(null);
+                openEdit(task);
+            }}
+            onScheduleTask={(task) => {
+                setTodaySheet(null);
+                openSchedule(task);
+            }}
+            onEditReminder={(reminder) => {
+                setTodaySheet(null);
+                openEditReminder(reminder);
+            }}
+        />
+    );
+    const attention = problematicTasks.length + today.overdueReminders.length;
+    const periodText = threeDayMode ? threeDayLabel(currentDate) : periodLabel(currentDate, currentView);
+    const shift = (delta: number) =>
+        setCurrentDate((prev) =>
+            threeDayMode
+                ? new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + delta * THREE_DAYS)
+                : shiftPeriod(prev, currentView, delta),
+        );
+    const viewLabel = (view: CalendarView) =>
+        phone && view === 'week' ? t('calendar.threeDays') : t(`calendar.${view}`);
+
     return (
-        <div className="page-shell-fill max-md:px-3 max-md:py-2">
-            <header className="mb-4 shrink-0 space-y-4 max-md:mb-1 max-md:space-y-1">
-                {phone ? (
-                    <>
-                        <h1 className="sr-only">{t('nav.calendar')}</h1>
-                        <div className="flex min-w-0 items-center gap-0.5">
-                            <button
-                                type="button"
-                                className={phoneIcon}
-                                onClick={() => setCurrentDate((prev) => shiftPeriod(prev, currentView, -1))}
-                                aria-label={t('common.previous', { view: t(`calendar.${currentView}`) })}
-                            >
-                                <ChevronLeft className="h-4 w-4" aria-hidden />
-                            </button>
-                            <div className="min-w-0 flex-1">
-                                <CalendarDatePicker
-                                    compact
-                                    value={currentDate}
-                                    label={periodLabel(currentDate, currentView)}
-                                    caption={compactPeriodLabel(currentDate, currentView)}
-                                    onChange={setCurrentDate}
-                                />
-                            </div>
-                            <button
-                                type="button"
-                                className={phoneIcon}
-                                onClick={() => setCurrentDate((prev) => shiftPeriod(prev, currentView, 1))}
-                                aria-label={t('common.next', { view: t(`calendar.${currentView}`) })}
-                            >
-                                <ChevronRight className="h-4 w-4" aria-hidden />
-                            </button>
-                            <button
-                                type="button"
-                                className="h-7 shrink-0 rounded-md px-1.5 text-xs font-medium text-ide-muted hover:bg-ide-text/5"
-                                onClick={() => setCurrentDate(new Date())}
-                            >
-                                {t('common.today')}
-                            </button>
+        <div className="page-shell-fill relative md:min-h-0 md:overflow-hidden max-md:px-3 max-md:pb-2 max-md:pt-2">
+            {phone ? (
+                <header className="mb-2 shrink-0 space-y-2">
+                    <h1 className="sr-only">{t('nav.calendar')}</h1>
+                    <div className="flex min-w-0 items-center gap-1">
+                        <IconButton
+                            label={t('common.previous', { view: viewLabel(currentView) })}
+                            onClick={() => shift(-1)}
+                        >
+                            <ChevronLeft className="h-5 w-5" aria-hidden />
+                        </IconButton>
+                        <div className="min-w-0 flex-1">
+                            <CalendarDatePicker
+                                compact
+                                value={currentDate}
+                                label={periodText}
+                                caption={threeDayMode ? periodText : compactPeriodLabel(currentDate, currentView)}
+                                onChange={setCurrentDate}
+                            />
                         </div>
-                        <div className="flex items-center gap-0.5">
-                            <div className="inline-flex rounded-md border border-ide-border bg-ide-surface p-0.5">
-                                {PHONE_VIEWS.map(({ id, labelKey, Icon }) => (
-                                    <button
-                                        key={id}
-                                        type="button"
-                                        onClick={() => setCurrentView(id)}
-                                        className={phoneToggle(currentView === id)}
-                                        aria-pressed={currentView === id}
-                                        aria-label={t(labelKey)}
-                                    >
-                                        <Icon className="h-3.5 w-3.5" aria-hidden />
-                                    </button>
-                                ))}
-                            </div>
-                            <span className="ml-auto">
-                                <CalendarVisibilityMenu compact />
-                            </span>
-                        </div>
-                    </>
-                ) : (
-                    <>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                        <h1 className="page-title">{t('nav.calendar')}</h1>
-                        <p className="page-lead">{periodLabel(currentDate, currentView)}</p>
-                    </div>
-                    <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap sm:justify-end">
-                        <button
-                            type="button"
-                            onClick={() => openCreate()}
-                            className="ui-btn-primary w-auto flex-none"
+                        <IconButton
+                            label={t('common.next', { view: viewLabel(currentView) })}
+                            onClick={() => shift(1)}
                         >
-                            <Plus className="h-4 w-4" aria-hidden />
-                            {t('calendar.createTask')}
-                        </button>
-                        <VoiceTaskButton onClick={voice.open} />
-                    </div>
-                </div>
-                    </>
-                )}
-                <NowStrip
-                    skipEventsFetch={nowStripReuseCalendarEvents}
-                    sharedEvents={eventsForRange}
-                    onEditTask={openEdit}
-                    onScheduleTask={openSchedule}
-                    onOpenPreview={(event) =>
-                        setEventPreview({ open: true, event })
-                    }
-                    hiddenEventIds={reminderEventIds}
-                />
-                <ReminderList scope="due" onEdit={openEditReminder} />
-                {problematicTasks.length > 0 ? (
-                    <ProblematicInboxBanner
-                        count={problematicTasks.length}
-                        onOpen={() => setProblematicOpen(true)}
-                    />
-                ) : null}
-                {phone ? null : (
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="inline-flex w-full max-w-md rounded-lg border border-ide-border bg-ide-surface p-1 sm:w-auto">
-                        {(['day', 'week', 'month'] as const).map((v) => (
-                            <button
-                                key={v}
-                                type="button"
-                                onClick={() => setCurrentView(v)}
-                                className={`flex-1 sm:flex-none ${toggleBtn(currentView === v)}`}
-                                aria-pressed={currentView === v}
-                            >
-                                {t(`calendar.${v}`)}
-                            </button>
-                        ))}
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-center gap-1 sm:justify-end">
-                        <button
-                            type="button"
-                            className="ui-btn-ghost min-h-[44px] min-w-[44px] px-0"
-                            onClick={() => setCurrentDate((prev) => shiftPeriod(prev, currentView, -1))}
-                            aria-label={t('common.previous', { view: t(`calendar.${currentView}`) })}
-                        >
-                            <ChevronLeft className="mx-auto h-5 w-5" aria-hidden />
-                        </button>
-                        <CalendarDatePicker
-                            value={currentDate}
-                            label={periodLabel(currentDate, currentView)}
-                            onChange={setCurrentDate}
-                        />
-                        <button
-                            type="button"
-                            className="ui-btn-ghost min-h-[44px] min-w-[44px] px-0"
-                            onClick={() => setCurrentDate((prev) => shiftPeriod(prev, currentView, 1))}
-                            aria-label={t('common.next', { view: t(`calendar.${currentView}`) })}
-                        >
-                            <ChevronRight className="mx-auto h-5 w-5" aria-hidden />
-                        </button>
-                        <button type="button" className="ui-btn-secondary px-4" onClick={() => setCurrentDate(new Date())}>
-                            <CalendarCheck className="h-4 w-4" aria-hidden />
+                            <ChevronRight className="h-5 w-5" aria-hidden />
+                        </IconButton>
+                        <Button variant="ghost" size="md" onClick={() => setCurrentDate(new Date())} className="shrink-0 px-2">
                             {t('common.today')}
-                        </button>
-                        <CalendarVisibilityMenu />
+                        </Button>
                     </div>
-                </div>
-                )}
-            </header>
-
-            {eventsLoading ? (
-                <div className="flex min-h-0 flex-1 items-center justify-center">
-                    <Spinner className="h-10 w-10" />
-                </div>
-            ) : getEventsQuery.isError ? (
-                <div
-                    className="rounded-lg border border-ide-error bg-ide-error/10 px-4 py-3 text-sm text-ide-error"
-                    role="alert"
-                >
-                    {t('calendar.loadFailed')}
-                </div>
+                    <div className="flex items-center gap-2">
+                        <Segmented
+                            label={t('calendar.view')}
+                            value={currentView}
+                            onChange={setCurrentView}
+                            options={(['day', 'week', 'month'] as const).map((v) => ({ value: v, label: viewLabel(v) }))}
+                            className="flex-1"
+                        />
+                        <PhaseLegend date={currentDate} compact />
+                        <CalendarVisibilityMenu compact />
+                    </div>
+                </header>
             ) : (
-                <div className="flex flex-col gap-4 max-md:min-h-0 max-md:flex-1 max-md:overflow-hidden lg:min-h-0 lg:flex-1 lg:overflow-y-auto xl:flex-row xl:overflow-hidden">
-                    <div className="flex w-full min-w-0 flex-col max-md:min-h-0 max-md:flex-1 xl:min-h-0 xl:flex-1 xl:overflow-hidden">
-                        {phone && currentView === 'week' ? (
-                            <PhoneWeekStrip date={currentDate} onSelect={setCurrentDate} />
-                        ) : null}
+                <header className="mb-4 shrink-0 space-y-4">
+                    <div className="flex flex-wrap items-end justify-between gap-3">
+                        <div className="min-w-0">
+                            <h1 className="page-title">{t('nav.calendar')}</h1>
+                            <p className="page-lead">{periodText}</p>
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                            <VoiceTaskButton onClick={voice.open} />
+                            <Button icon={Plus} onClick={() => openCreate()}>
+                                {t('calendar.createTask')}
+                            </Button>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Segmented
+                            label={t('calendar.view')}
+                            value={currentView}
+                            onChange={setCurrentView}
+                            options={(['day', 'week', 'month'] as const).map((v) => ({ value: v, label: t(`calendar.${v}`) }))}
+                        />
+                        <div className="flex items-center gap-1">
+                            <IconButton
+                                size="md"
+                                label={t('common.previous', { view: t(`calendar.${currentView}`) })}
+                                onClick={() => shift(-1)}
+                            >
+                                <ChevronLeft className="h-5 w-5" aria-hidden />
+                            </IconButton>
+                            <IconButton
+                                size="md"
+                                label={t('common.next', { view: t(`calendar.${currentView}`) })}
+                                onClick={() => shift(1)}
+                            >
+                                <ChevronRight className="h-5 w-5" aria-hidden />
+                            </IconButton>
+                            <Button variant="secondary" size="md" onClick={() => setCurrentDate(new Date())}>
+                                {t('common.today')}
+                            </Button>
+                            <CalendarDatePicker value={currentDate} label={periodText} onChange={setCurrentDate} />
+                        </div>
+                        <div className="ml-auto flex items-center gap-2">
+                            <PhaseLegend date={currentDate} />
+                            <CalendarVisibilityMenu />
+                            <button
+                                type="button"
+                                onClick={() => (wide ? setPanelOpen((v) => !v) : setTodaySheet('now'))}
+                                aria-pressed={wide ? panelOpen : undefined}
+                                aria-label={t('today.toggle')}
+                                className={cx(
+                                    'relative inline-flex h-9 items-center gap-2 rounded-control border px-3 text-body-sm transition',
+                                    wide && panelOpen
+                                        ? 'border-ide-link/50 bg-ide-link/10 text-ide-text'
+                                        : 'border-ide-border bg-ide-panel text-ide-text hover:bg-ide-surface',
+                                )}
+                            >
+                                <PanelRight className="h-4 w-4" aria-hidden />
+                                {t('today.title')}
+                                {attention > 0 && !(wide && panelOpen) ? (
+                                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-ide-warnTint px-1 text-caption font-semibold tabular-nums text-ide-warn">
+                                        {attention}
+                                    </span>
+                                ) : null}
+                            </button>
+                        </div>
+                    </div>
+                </header>
+            )}
+
+            {phone ? (
+                <div className="mb-2 shrink-0">
+                    <TodayBar
+                        today={today}
+                        problematicCount={problematicTasks.length}
+                        onOpen={(section) => setTodaySheet(section ?? 'now')}
+                    />
+                </div>
+            ) : null}
+            {phone && currentView === 'day' ? (
+                <PhoneWeekStrip date={currentDate} onSelect={setCurrentDate} />
+            ) : null}
+
+            <div className="flex min-h-0 flex-1 gap-4">
+                <div
+                    className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+                    onTouchStart={phone && currentView !== 'month' ? onSwipeStart : undefined}
+                    onTouchEnd={phone && currentView !== 'month' ? onSwipeEnd : undefined}
+                >
+                    {eventsLoading ? (
+                        <CalendarSkeleton />
+                    ) : getEventsQuery.isError ? (
+                        <div
+                            className="rounded-control border border-ide-error/40 bg-ide-errorTint px-4 py-3 text-body-sm text-ide-error"
+                            role="alert"
+                        >
+                            {t('calendar.loadFailed')}
+                        </div>
+                    ) : (
                         <CalendarGrid
                             view={gridView}
                             date={currentDate}
+                            days={threeDayMode ? threeDays(currentDate) : undefined}
                             events={displayEvents}
                             onEditEvent={handleEditEvent}
                             onCreateForDate={handleCreateForDate}
-                            onCreateForRange={coarse ? undefined : handleCreateForRange}
-                            onEventTimeChange={coarse ? undefined : handleEventTimeChange}
-                            onDeleteEvent={(event) => void handleDeleteCalendarEvent(event)}
+                            onCreateForRange={handleCreateForRange}
+                            onEventTimeChange={handleEventTimeChange}
+                            onDeleteEvent={coarse ? undefined : (event) => void handleDeleteCalendarEvent(event)}
                             isEventCompleted={(event) => isCompletedCalendarEvent(event, tasks)}
                             phoneMonth={phone && currentView === 'month'}
                             onPickDay={(day) => {
                                 setCurrentDate(day);
-                                setCurrentView('day');
+                                if (!phone) setCurrentView('day');
                             }}
                             renderEventMeta={(event, completed) => (
                                 <CalendarChipMeta
                                     event={event}
                                     task={resolveTaskForCalendarEvent(tasks, event)}
-                                    overlay={overlayForEvent(
-                                        overlays,
-                                        event,
-                                        event.provider ?? 'google',
-                                    )}
+                                    overlay={overlayForEvent(overlays, event, event.provider ?? 'google')}
                                     completed={completed}
                                     calendarNameById={calendarNameById}
                                     provider={event.provider ?? 'google'}
                                     dismissWarnFlexibleMove={userSettings?.dismissWarnFlexibleMove}
-                                    dismissWarnUnscheduleExternal={
-                                        userSettings?.dismissWarnUnscheduleExternal
-                                    }
+                                    dismissWarnUnscheduleExternal={userSettings?.dismissWarnUnscheduleExternal}
                                     onOverlaysChanged={refreshOverlays}
                                     onUnscheduled={() => {
                                         refreshOverlays();
                                         void getEventsQuery.refetch?.();
-                                        dispatch(
-                                            eventTasksApi.util.invalidateTags([
-                                                { type: 'EventTask', id: 'LIST' },
-                                            ]),
-                                        );
+                                        dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));
                                     }}
                                 />
                             )}
                         />
-                    </div>
+                    )}
+                    {!eventsLoading && currentView !== 'month' ? (
+                        <Coachmark
+                            id={coarse ? 'calendar-touch' : 'calendar-drag'}
+                            className="absolute left-1/2 z-10 w-[min(28rem,calc(100%-1.5rem))] -translate-x-1/2 max-md:top-3 md:bottom-3"
+                        >
+                            {coarse ? t('calendar.touchHint') : t('calendar.dragHint')}
+                        </Coachmark>
+                    ) : null}
                 </div>
-            )}
+                {wide && panelOpen ? (
+                    <aside
+                        aria-label={t('today.title')}
+                        className="flex w-80 shrink-0 flex-col overflow-hidden rounded-control border border-ide-border bg-ide-panel"
+                    >
+                        <div className="flex shrink-0 items-center justify-between border-b border-ide-border px-4 py-2.5">
+                            <h2 className="text-heading font-semibold text-ide-text">{t('today.title')}</h2>
+                            <IconButton label={t('today.hide')} size="sm" onClick={() => setPanelOpen(false)}>
+                                <X className="h-4 w-4" aria-hidden />
+                            </IconButton>
+                        </div>
+                        <div className="min-h-0 flex-1 overflow-y-auto p-4">{todayPanel}</div>
+                    </aside>
+                ) : null}
+            </div>
 
             {phone ? (
-                <div className="mt-1 flex shrink-0 items-center gap-2 border-t border-ide-border pt-2 md:hidden">
-                    <button
-                        type="button"
-                        className="inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg bg-ide-accentBlue px-3 text-sm font-medium text-white"
-                        aria-label={t('calendar.createTask')}
-                        onClick={() => openCreate()}
-                    >
-                        <Plus className="h-4 w-4 shrink-0" aria-hidden />
-                        {t('common.create')}
-                    </button>
-                    <button
-                        type="button"
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-ide-border bg-ide-surface text-ide-text"
-                        aria-label={t('calendar.addByVoice')}
-                        onClick={() => voice.open()}
-                    >
-                        <Mic className="h-4 w-4" aria-hidden />
-                    </button>
-                </div>
+                <button
+                    type="button"
+                    aria-label={t('calendar.createTask')}
+                    onClick={() => openCreate()}
+                    className="absolute bottom-4 right-4 z-20 inline-flex h-14 w-14 items-center justify-center rounded-full bg-ide-accentBlue text-white shadow-ide-md transition active:scale-95"
+                >
+                    <Plus className="h-6 w-6" aria-hidden />
+                </button>
             ) : null}
+            {phone ? (
+                <button
+                    type="button"
+                    aria-label={t('voice.addByVoice')}
+                    onClick={() => voice.open()}
+                    className="absolute bottom-[5.5rem] right-5 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border border-ide-border bg-ide-elevated text-ide-text shadow-ide-md transition active:scale-95"
+                >
+                    <Mic className="h-5 w-5" aria-hidden />
+                </button>
+            ) : null}
+
+            <Modal
+                open={todaySheet != null}
+                onClose={() => setTodaySheet(null)}
+                title={t('today.title')}
+                maxWidthClass="max-w-md"
+            >
+                {todayPanel}
+            </Modal>
 
             <EventPreview
                 open={eventPreview.open}

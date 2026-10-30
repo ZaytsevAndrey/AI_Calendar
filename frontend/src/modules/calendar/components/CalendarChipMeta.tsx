@@ -53,7 +53,6 @@ export function CalendarChipMeta({
   task,
   overlay,
   isHabit,
-  completed,
   calendarNameById,
   provider = 'google',
   dismissWarnFlexibleMove,
@@ -90,6 +89,8 @@ export function CalendarChipMeta({
     : undefined;
   const calProvider = calMeta?.provider ?? eventProvider;
   const calName = calMeta?.summary?.trim() || '';
+  // Our tasks carry the phase color; only events from other calendars show where they come from.
+  const external = !task && !event.isAppGenerated;
   const calTitle = calName
     ? `${providerLabel(calProvider)} · ${calName}`
     : providerLabel(calProvider);
@@ -282,7 +283,7 @@ export function CalendarChipMeta({
               setMenuOpen((v) => !v);
             }}
           >
-            <KindIcon kind={kind} className="h-2.5 w-2.5" />
+            <KindIcon kind={kind} />
           </button>
         ) : (
           <span
@@ -290,25 +291,13 @@ export function CalendarChipMeta({
             title={kindTitle}
             aria-label={kindTitle}
           >
-            <KindIcon kind={kind} className="h-2.5 w-2.5" />
-            {repeats ? <KindIcon kind="recurring" className="h-2.5 w-2.5" /> : null}
+            <KindIcon kind={repeats ? 'recurring' : kind} />
           </span>
         )}
-        <span
-          className="calendar-chip__cal"
-          title={calTitle}
-        >
-          <ProviderLogo provider={calProvider} className="h-2.5 w-2.5" />
-          {calName ? (
-            <span className="calendar-chip__cal-name">{calName}</span>
-          ) : (
-            <span className="calendar-chip__cal-name">
-              {providerLabel(calProvider)}
-            </span>
-          )}
-        </span>
-        {completed ? (
-          <span className="calendar-chip__badge">{t('calendar.completedBadge')}</span>
+        {external ? (
+          <span className="calendar-chip__cal" title={calTitle} aria-label={calTitle}>
+            <ProviderLogo provider={calProvider} className="h-3 w-3" />
+          </span>
         ) : null}
       </span>
       {kindMenu}

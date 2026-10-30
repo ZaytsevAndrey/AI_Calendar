@@ -25,7 +25,7 @@ import {
 import { dateOnDayAtMinutes } from '../eventDrag';
 import { ymdFromLocalDate } from '../../../utils/ianaDateTime';
 import { formatClock } from '../../../utils/formatDate';
-import { phaseColor } from 'theme/phasePalette';
+import { cx } from 'ui/cx';
 
 function eventStartMinutes(event: GoogleCalendarEvent): number {
     if (!event.start.dateTime) return -1;
@@ -52,6 +52,8 @@ interface CalendarGridProps {
     phoneMonth?: boolean;
     onPickDay?: (day: Date) => void;
     renderEventMeta?: (event: GoogleCalendarEvent, completed: boolean) => React.ReactNode;
+    /** Explicit columns for a time view (phone «3 дні»). */
+    days?: Date[];
 }
 
 const CalendarGrid: React.FC<CalendarGridProps> = ({
@@ -67,6 +69,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     phoneMonth = false,
     onPickDay,
     renderEventMeta,
+    days: daysOverride,
 }) => {
     const { t, i18n } = useTranslation();
     const { data: timePhases = [] } = useTimePhasesForDate(date);
@@ -106,7 +109,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
             );
     };
 
-    const days = getDaysInView(view, date);
+    const days = view !== 'month' && daysOverride?.length ? daysOverride : getDaysInView(view, date);
     const visibleEvents = events;
 
     const weekdayKeys = [
@@ -120,90 +123,26 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     ] as const;
     const dateLocale = i18n.language === 'uk' ? 'uk-UA' : 'en-GB';
 
-    if (view === 'month' && phoneMonth) {
-        return (
-            <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-lg border border-ide-border bg-ide-panel">
-                <div className="grid shrink-0 grid-cols-7 border-b border-ide-border">
-                    {weekdayKeys.map((key) => (
-                        <div
-                            key={key}
-                            className="py-2 text-center text-xs font-medium text-ide-muted"
-                        >
-                            {t(key)}
-                        </div>
-                    ))}
-                </div>
-                <div
-                    className="grid min-h-0 flex-1 auto-rows-fr grid-cols-7 overflow-y-auto"
-                    data-testid="calendar-month-grid"
-                >
-                    {days.map((day) => {
-                        const dayEvents = gridEventsForDay(visibleEvents, day, sleepWindow);
-                        const ymd = ymdFromLocalDate(day);
-                        const marked = dayEvents.length > 0;
-                        const isCurrentDay = isToday(day);
-                        const isInCurrentMonth = isCurrentMonth(day);
-                        const label = day.toLocaleDateString(dateLocale, {
-                            weekday: 'long',
-                            day: 'numeric',
-                            month: 'long',
-                        });
-                        return (
-                            <button
-                                key={ymd}
-                                type="button"
-                                aria-label={t('calendar.showDay', { label })}
-                                className={`flex min-h-[44px] flex-col items-center justify-center border-b border-r border-ide-border text-sm ${
-                                    !isInCurrentMonth ? 'opacity-50' : ''
-                                } ${
-                                    isCurrentDay
-                                        ? 'bg-ide-selection/30 font-bold text-ide-link'
-                                        : 'text-ide-text'
-                                }`}
-                                onClick={() => onPickDay?.(day)}
-                            >
-                                <span>{day.getDate()}</span>
-                                <span
-                                    className={`mt-1 h-1.5 w-1.5 rounded-full ${
-                                        marked ? 'bg-ide-link' : 'bg-transparent'
-                                    }`}
-                                    aria-hidden
-                                />
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
-        );
-    }
-
-    const renderGridEvent = (event: GoogleCalendarEvent) => {
-        let eventPhase = null;
-        if (event.start?.dateTime) {
-            const eventTime = formatClock(new Date(event.start.dateTime));
-            eventPhase = getPhaseForTime(eventTime);
-        }
-
+    /** One-line chip: month cells, the phone agenda and all-day rows. */
+    function renderLineChip(event: GoogleCalendarEvent, roomy = false) {
         const completed = isEventCompleted?.(event) ?? false;
+        const time = event.start?.dateTime ? formatClock(new Date(event.start.dateTime)) : null;
+        const end = event.end?.dateTime ? new Date(event.end.dateTime).getTime() : null;
+        const past = end != null && end <= now.getTime();
         return (
             <div
                 key={event.id}
                 title={tooltipText(event)}
                 role="button"
                 tabIndex={0}
-                className={`calendar-chip relative mb-1 flex cursor-pointer items-center gap-0.5 px-1.5 py-1 pl-2 text-xs font-medium ${
-                    completed ? 'calendar-chip--done' : ''
-                }`}
-                style={
-                    {
-                        '--chip-color': getEventColor(event),
-                        ...(eventPhase
-                            ? {
-                                  boxShadow: `inset 3px 0 0 0 ${getEventColor(event)}, 0 0 0 1px ${phaseColor(eventPhase.color)}`,
-                              }
-                            : null),
-                    } as React.CSSProperties
-                }
+                className={cx(
+                    'calendar-chip calendar-chip--line relative cursor-pointer font-medium',
+                    roomy ? 'min-h-11 text-body' : 'mb-1',
+                    completed && 'calendar-chip--done',
+                    past && 'calendar-chip--past',
+                    !event.isAppGenerated && 'calendar-chip--external',
+                )}
+                style={{ '--chip-color': getEventColor(event) } as React.CSSProperties}
                 onClick={(e) => {
                     e.stopPropagation();
                     onEditEvent?.(event.id);
@@ -216,24 +155,103 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                     }
                 }}
             >
-                <span className="min-w-0 flex-1 truncate">
-                    {completed ? (
-                        <span className="calendar-chip__check" aria-hidden>
-                            ✓
-                        </span>
-                    ) : null}
-                    {chipLabel(event)}
-                </span>
+                {completed ? (
+                    <span className="calendar-chip__check" aria-hidden>
+                        ✓
+                    </span>
+                ) : null}
+                {time ? <span className="calendar-chip__time">{time}</span> : null}
+                <span className="min-w-0 flex-1 truncate">{chipLabel(event)}</span>
                 {renderEventMeta?.(event, completed)}
-                {eventPhase && (
-                    <span
-                        className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-ide-bg"
-                        style={{ backgroundColor: phaseColor(eventPhase.color) }}
-                    />
-                )}
             </div>
         );
-    };
+    }
+
+    if (view === 'month' && phoneMonth) {
+        const selectedYmd = ymdFromLocalDate(date);
+        const agenda = gridEventsForDay(visibleEvents, date, sleepWindow).sort(
+            (a, b) => eventStartMinutes(a) - eventStartMinutes(b),
+        );
+        return (
+            <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-control border border-ide-border bg-ide-panel">
+                <div className="grid shrink-0 grid-cols-7 border-b border-ide-border">
+                    {weekdayKeys.map((key) => (
+                        <div key={key} className="py-1.5 text-center text-caption text-ide-muted">
+                            {t(key)}
+                        </div>
+                    ))}
+                </div>
+                <div className="grid shrink-0 grid-cols-7" data-testid="calendar-month-grid">
+                    {days.map((day) => {
+                        const dayEvents = gridEventsForDay(visibleEvents, day, sleepWindow);
+                        const ymd = ymdFromLocalDate(day);
+                        const isCurrentDay = isToday(day);
+                        const isInCurrentMonth = isCurrentMonth(day);
+                        const selected = ymd === selectedYmd;
+                        const dots = Array.from(new Set(dayEvents.map((event) => getEventColor(event)))).slice(0, 3);
+                        const label = day.toLocaleDateString(dateLocale, {
+                            weekday: 'long',
+                            day: 'numeric',
+                            month: 'long',
+                        });
+                        return (
+                            <button
+                                key={ymd}
+                                type="button"
+                                aria-label={t('calendar.showDay', { label })}
+                                aria-pressed={selected}
+                                className={cx(
+                                    'flex min-h-[48px] flex-col items-center justify-center gap-1 text-body',
+                                    !isInCurrentMonth && 'text-ide-subtle',
+                                )}
+                                onClick={() => onPickDay?.(day)}
+                            >
+                                <span
+                                    className={cx(
+                                        'inline-flex h-8 w-8 items-center justify-center rounded-full tabular-nums',
+                                        selected
+                                            ? 'bg-ide-accentBlue font-semibold text-white'
+                                            : isCurrentDay
+                                              ? 'font-semibold text-ide-link'
+                                              : isInCurrentMonth
+                                                ? 'text-ide-text'
+                                                : undefined,
+                                    )}
+                                >
+                                    {day.getDate()}
+                                </span>
+                                <span className="flex h-1.5 gap-0.5" aria-hidden>
+                                    {dots.map((color) => (
+                                        <span key={color} className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
+                                    ))}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto border-t border-ide-border p-2" data-testid="calendar-month-agenda">
+                    <p className="px-1 pb-2 text-body-sm font-medium capitalize text-ide-muted">
+                        {date.toLocaleDateString(dateLocale, { weekday: 'long', day: 'numeric', month: 'long' })}
+                    </p>
+                    {agenda.length ? (
+                        <ul className="flex flex-col gap-1.5">
+                            {agenda.map((event) => (
+                                <li key={event.id}>{renderLineChip(event, true)}</li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <button
+                            type="button"
+                            className="w-full rounded-control border border-dashed border-ide-border px-3 py-4 text-center text-body-sm text-ide-muted"
+                            onClick={() => onCreateForDate?.(date)}
+                        >
+                            {t('calendar.agendaEmpty')}
+                        </button>
+                    )}
+                </div>
+            </div>
+        );
+    }
 
     if (view !== 'month') {
         const axis = buildCalendarAxis(sleepWindow, phasesForDays(allTimePhases, days));
@@ -251,35 +269,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
         const allDay = visibleEvents.filter((event) => isAllDayEvent(event));
 
         return (
-            <div className="flex flex-col rounded-lg border border-ide-border bg-ide-panel p-2 sm:p-4 max-md:!p-1.5 max-md:h-full max-md:min-h-0 max-md:flex-1 max-md:overflow-hidden lg:h-full lg:min-h-0">
-                {getDisplayPhases().length > 0 && (
-                    <div className="mb-4 hidden max-h-24 shrink-0 flex-wrap gap-2 overflow-y-auto md:flex">
-                        {getDisplayPhases().map((phase: any) => (
-                            <div
-                                key={phase.id}
-                                className="flex items-center gap-1 rounded p-1"
-                                style={{
-                                    backgroundColor: phaseColor(phase.color, 0.1),
-                                    border: `1px solid ${phaseColor(phase.color, 0.35)}`,
-                                }}
-                            >
-                                <span
-                                    className="h-3 w-3 shrink-0 rounded-full border border-ide-border"
-                                    style={{ backgroundColor: phaseColor(phase.color) }}
-                                />
-                                <span className="text-xs text-ide-muted">
-                                    {phase.name} ({phase.startTime}-{phase.endTime})
-                                </span>
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                {onEventTimeChange ? (
-                    <p className="mb-2 hidden shrink-0 text-xs text-ide-muted md:block">
-                        {t('calendar.dragHint')}
-                    </p>
-                ) : null}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-control border border-ide-border bg-ide-panel">
                 <CalendarTimeGrid
                     days={days}
                     events={timed}
@@ -316,39 +306,16 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     const weeks = createWeeks(days);
 
     return (
-        <div className="flex w-full flex-col lg:h-full lg:min-h-0">
-            {getDisplayPhases().length > 0 && !phoneMonth && (
-                <div className="mb-4 flex shrink-0 flex-wrap gap-2">
-                    {getDisplayPhases().map((phase: any) => (
-                        <div
-                            key={phase.id}
-                            className="flex items-center gap-1 rounded p-1"
-                            style={{
-                                backgroundColor: phaseColor(phase.color, 0.1),
-                                border: `1px solid ${phaseColor(phase.color, 0.35)}`,
-                            }}
-                        >
-                            <span
-                                className="h-3 w-3 shrink-0 rounded-full border border-ide-border"
-                                style={{ backgroundColor: phaseColor(phase.color) }}
-                            />
-                            <span className="text-xs text-ide-muted">
-                                {phase.name} ({phase.startTime}-{phase.endTime})
-                            </span>
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            <div className="mb-1 grid shrink-0 grid-cols-7 border-b border-ide-border">
+        <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-control border border-ide-border bg-ide-panel">
+            <div className="grid shrink-0 grid-cols-7 border-b border-ide-border">
                 {weekdayKeys.map((key) => (
-                    <div key={key} className="border-r border-ide-border bg-ide-surface last:border-r-0">
-                        <div className="p-2 text-center text-xs font-bold text-ide-text">{t(key)}</div>
+                    <div key={key} className="border-r border-ide-border px-2 py-1.5 text-body-sm text-ide-muted last:border-r-0">
+                        {t(key)}
                     </div>
                 ))}
             </div>
 
-            <div className="flex flex-col xl:min-h-0 xl:flex-1 xl:overflow-auto" data-testid="calendar-month-grid">
+            <div className="flex min-h-0 flex-1 flex-col overflow-auto" data-testid="calendar-month-grid">
                 {weeks.map((week, weekIndex) => (
                     <div
                         key={weekIndex}
@@ -362,33 +329,36 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                             return (
                                 <div
                                     key={dayIndex}
-                                    className={`relative flex h-full min-w-0 flex-col overflow-hidden border-r border-ide-border p-1 last:border-r-0 sm:p-2 ${
-                                        view === 'month' && !isInCurrentMonth ? 'opacity-50' : ''
-                                    } ${
-                                        isCurrentDay
-                                            ? 'bg-ide-selection/30 ring-1 ring-inset ring-ide-link'
-                                            : 'bg-ide-panel'
-                                    }`}
+                                    className={cx(
+                                        'relative flex h-full min-w-0 flex-col overflow-hidden border-r border-ide-border p-1 last:border-r-0',
+                                        !isInCurrentMonth && 'bg-ide-bg/40',
+                                    )}
+                                    onClick={() => onCreateForDate?.(day)}
                                 >
                                     <span
-                                        className={`shrink-0 text-xs ${
-                                            isCurrentDay ? 'font-bold text-ide-link' : 'text-ide-text'
-                                        }`}
+                                        className={cx(
+                                            'mb-0.5 inline-flex h-6 min-w-6 shrink-0 items-center justify-center self-start rounded-full px-1 text-body-sm tabular-nums',
+                                            isCurrentDay
+                                                ? 'bg-ide-accentBlue font-semibold text-white'
+                                                : isInCurrentMonth
+                                                  ? 'text-ide-text'
+                                                  : 'text-ide-subtle',
+                                        )}
                                     >
                                         {day.getDate()}
                                     </span>
 
-                                    <div className="mt-1 min-h-0 flex-1 overflow-y-auto">
+                                    <div className="min-h-0 flex-1 overflow-y-auto">
                                         {dayEvents
                                             .filter((event) => !event.start?.dateTime)
-                                            .map((event) => renderGridEvent(event))}
+                                            .map((event) => renderLineChip(event))}
                                         {dayEvents
                                             .filter((event) => event.start?.dateTime)
                                             .sort(
                                                 (a, b) =>
                                                     eventStartMinutes(a) - eventStartMinutes(b),
                                             )
-                                            .map((event) => renderGridEvent(event))}
+                                            .map((event) => renderLineChip(event))}
                                     </div>
                                 </div>
                             );

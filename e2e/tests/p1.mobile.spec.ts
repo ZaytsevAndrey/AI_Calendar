@@ -27,7 +27,7 @@ async function expectHoursOnScreen(page: Page, label: string) {
 test.describe('phone layout', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('U-CAL-017 day fills the screen, week stays one column, tasks stay reachable', async ({ page, auth }) => {
+  test('U-CAL-017 day fills the screen, 3 days fit the width, month shows the day agenda', async ({ page, auth }) => {
     await openAs(page, auth.onboarded);
     await expect(page.getByRole('button', { name: 'Day', exact: true })).toHaveAttribute('aria-pressed', 'true');
     const hours = page.getByTestId('calendar-hour-scroll');
@@ -51,7 +51,7 @@ test.describe('phone layout', () => {
     expect(day!.visible).toBeGreaterThan(160);
     expect(day!.pageWider).toBe(false);
 
-    await page.getByRole('button', { name: 'Week', exact: true }).click();
+    await page.getByRole('button', { name: '3 days', exact: true }).click();
     const grid = page.getByTestId('calendar-time-grid');
     await expect(grid).toBeVisible();
     const weekFits = await grid.evaluate((node) => node.scrollWidth <= node.clientWidth + 2);
@@ -59,8 +59,8 @@ test.describe('phone layout', () => {
 
     await page.getByRole('button', { name: 'Month', exact: true }).click();
     await page.getByRole('button', { name: /^Show / }).first().click();
-    await expect(page.getByRole('button', { name: 'Day', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    await expect(hours).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Month', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('calendar-month-agenda')).toBeVisible();
 
     await page.getByRole('link', { name: 'Tasks' }).click();
     await expect(page.getByRole('heading', { name: 'Tasks' })).toBeVisible();
@@ -205,7 +205,7 @@ test.describe('widths between the phone and desktop layouts', () => {
     expect(monthBox.visible).toBeGreaterThan(40);
 
     await page.setViewportSize({ width: 1280, height: 720 });
-    await page.getByRole('button', { name: 'Week', exact: true }).click();
+    await page.getByRole('button', { name: '3 days', exact: true }).click();
     const hours = page.getByTestId('calendar-hour-scroll');
     await hours.scrollIntoViewIfNeeded();
     const desktop = await painted(hours);

@@ -64,11 +64,11 @@ const STAGE_CLASS: Record<MutationStage, string> = {
 
 /** Overlay colors for calendar blocks (match toast stages). */
 export const MUTATION_STAGE_COLORS: Record<MutationStage, string> = {
-  saving: '#bbb529',
-  placing: '#589df6',
-  syncing: '#a78bfa',
-  done: '#4e9f4e',
-  error: '#bc3f3c',
+  saving: 'rgb(var(--ide-warn))',
+  placing: 'rgb(var(--ide-link))',
+  syncing: 'rgb(var(--ph-violet))',
+  done: 'rgb(var(--ide-accent))',
+  error: 'rgb(var(--ide-error))',
 };
 
 function stageLabel(stage: MutationStage): string {

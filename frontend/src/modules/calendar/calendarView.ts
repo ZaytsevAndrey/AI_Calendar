@@ -617,3 +617,25 @@ export function compactPeriodLabel(date: Date, view: CalendarView): string {
   }
   return `${format(start, 'd MMM', loc)}–${format(end, 'd MMM', loc)}`;
 }
+
+/** Phone «3 дні»: the focused day and the two after it. */
+export const THREE_DAYS = 3;
+
+export function threeDays(date: Date): Date[] {
+  return Array.from({ length: THREE_DAYS }, (_, i) => addLocalDays(startOfLocalDay(date), i));
+}
+
+export function threeDayQueryRange(date: Date, sleep?: SleepWindow): { timeMin: string; timeMax: string } {
+  const days = threeDays(date);
+  return {
+    timeMin: startOfLocalDay(days[0]).toISOString(),
+    timeMax: personalDayQueryEnd(days[days.length - 1], sleep).toISOString(),
+  };
+}
+
+export function threeDayLabel(date: Date): string {
+  const loc = { locale: dateFnsLocale() };
+  const [start, , end] = threeDays(date);
+  if (start.getMonth() === end.getMonth()) return `${format(start, 'd', loc)}–${format(end, 'd MMM', loc)}`;
+  return `${format(start, 'd MMM', loc)} – ${format(end, 'd MMM', loc)}`;
+}
