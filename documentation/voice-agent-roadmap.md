@@ -4,6 +4,8 @@ Authoritative Voice Agent backlog after the scheduling stabilization (30 October
 
 **Status:** phase V1 (VC-01, VC-13, VC-14, VC-06) is implemented and tested, 30 Oct 2026 — see §F. V2 is next and needs a go-ahead.
 
+**Implementing V3–V9?** Start from [voice-agent-handoff.md](voice-agent-handoff.md) — the verified baseline, the work packages, what is ready versus blocked, and the corrections this file still carries (dead code in §A, the VC-11 call sites, the VR-24 privacy wording).
+
 **Detailed backlog:** [voice-agent-backlog.md](voice-agent-backlog.md) — every task with status, priority, complexity, acceptance criteria, required tests, MVP classification, the decisions D-01…D-11 and the critical path. This file keeps the architecture, the compatibility matrix, the phase plan and the next task. Both files share identifiers (VC, VR, VN, VB, D); a task is edited in the backlog and only summarized here.
 
 **Evidence levels used below.** *Verified* — read in code during this review (file:line given). *Confirmed* — both sides of a conflict cited in code by the compatibility analysis; the four marked ✔ were re-checked by hand. *Suspected* — inferred, needs a test. *Reported* — stated in a transcript or deleted report, not re-measured.

@@ -2,6 +2,8 @@
 
 Detailed, dependency-aware backlog behind [voice-agent-roadmap.md](voice-agent-roadmap.md). The roadmap holds the architecture, the compatibility matrix, the phase plan and the next task; this file holds every task with its status, priority, complexity, acceptance criteria and tests. One identifier per task, reused across both files. Dated 30 October 2026 (verification pass, second review session).
 
+**Implementation handoff:** [voice-agent-handoff.md](voice-agent-handoff.md) groups the items below into work packages with their blockers, verified file references and traps. Where the two disagree on a code fact, the handoff was re-verified later and wins.
+
 **Identifiers.** `VC-xx` — scheduling compatibility findings; `VR-xx` — carried requirements; `VN-xx` — findings of the 30 Oct verification pass; `VB-xx` — executable units split out of a larger item; `D-xx` — decisions that need product or architecture approval. VC / VR numbers are never reissued.
 
 **Status values.** `verified` — implemented and covered by a test read in code; `unverified` — implemented, no test or no live evidence; `partial`; `missing`; `broken`; `obsolete`; `blocked` (names the blocker). **Evidence**: *Verified* (read in code, file:line), *Confirmed* (cited by the compatibility analysis, re-checked for the ✔ items), *Suspected* (needs a test), *Reported* (transcript or deleted report).
