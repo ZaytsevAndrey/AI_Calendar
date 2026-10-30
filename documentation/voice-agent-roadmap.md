@@ -292,7 +292,7 @@ Full text in [voice-agent-backlog.md](voice-agent-backlog.md) §1, §4, §5. Sum
 
 ---
 
-## G. Integration requirements from the scheduling UI alignment (30 Oct 2026, not implemented in voice)
+## H. Integration requirements from the scheduling UI alignment (30 Oct 2026; the domain is merged into the integration branch — voice adopts them in WP-B)
 
 New domain capabilities the voice agent does not use yet (voice code was not changed in that work):
 
