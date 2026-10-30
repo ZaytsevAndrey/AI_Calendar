@@ -110,6 +110,90 @@ describe('Google write queue', () => {
     expect(tried).toHaveLength(GOOGLE_WRITE_PER_USER);
   });
 
+  describe('pull from Google never mistakes our own writes or a series start (AUD-009/010)', () => {
+    /** Fake Google that stamps `updated` on each write, like the real API. */
+    const stampingGoogle = (initial: Record<string, unknown>) => {
+      const remote: Record<string, unknown> = { ...initial };
+      google.getEvent.mockImplementation(async () => ({ ...remote }));
+      google.updateEvent.mockImplementation(async (_u: string, _id: string, body: Record<string, unknown>) => {
+        Object.assign(remote, body, { updated: new Date(Date.now()).toISOString() });
+        return { ...remote };
+      });
+      return remote;
+    };
+
+    it('AUD-010: our own write landing after a newer local change is not taken for a user edit', async () => {
+      const task = await kit.addTask({
+        name: 'A',
+        googleEventId: 'evt-1',
+        googleEventCalendarId: 'app-cal',
+        scheduledStartTime: kit.at('2026-11-05', '10:00'),
+        scheduledEndTime: kit.at('2026-11-05', '11:00'),
+      });
+      await kit.addSlot(task.id, kit.at('2026-11-05', '10:00'), kit.at('2026-11-05', '11:00'));
+      const remote = stampingGoogle({
+        summary: 'A',
+        description: '',
+        start: { dateTime: kit.at('2026-11-05', '10:00').toISOString() },
+        end: { dateTime: kit.at('2026-11-05', '11:00').toISOString() },
+        updated: new Date(Date.now() - 60 * 60_000).toISOString(),
+      });
+      await writes.enqueue(kit.user.id, 'upsert', { taskId: task.id, googleEventId: 'evt-1' });
+      jest.setSystemTime(Date.now() + 3 * 60_000);
+      // Pass 1: while our send of "A" is in flight, the user renames the task to "B".
+      google.updateEvent.mockImplementationOnce(async (_u: string, _id: string, body: Record<string, unknown>) => {
+        await kit.taskRepo.update({ id: task.id }, { name: 'B' });
+        await writes.enqueue(kit.user.id, 'upsert', { taskId: task.id, googleEventId: 'evt-1' });
+        jest.setSystemTime(Date.now() + 1_000);
+        // Our (now stale) "A" lands after the rename; Google stamps it.
+        Object.assign(remote, body, { updated: new Date(Date.now()).toISOString() });
+        return { ...remote };
+      });
+      await writes.processQueue();
+      // Pass 2: the re-send of "B" fails (503) and backs off.
+      google.updateEvent.mockImplementationOnce(async () => {
+        throw Object.assign(new Error('Backend Error'), { status: 503 });
+      });
+      jest.setSystemTime(Date.now() + 1_000);
+      await writes.processQueue();
+      // Pass 3: after the backoff the row has waited (> lease): Google is read first.
+      jest.setSystemTime(Date.now() + 5 * 60_000);
+      await writes.processQueue();
+
+      expect((await kit.reload(task.id)).name).toBe('B');
+      expect(remote.summary).toBe('B');
+    });
+
+    it('AUD-009: a series master is never pulled back to its (past) DTSTART', async () => {
+      const series = await kit.addTask({
+        name: 'Gym',
+        isRecurring: true,
+        recurrencePattern: 'DAILY',
+        googleEventId: 'series-1',
+        googleEventCalendarId: 'app-cal',
+        scheduledStartTime: kit.at('2026-11-05', '18:00'),
+        scheduledEndTime: kit.at('2026-11-05', '19:00'),
+      });
+      await kit.addSlot(series.id, kit.at('2026-11-01', '18:00'), kit.at('2026-11-01', '19:00'));
+      await kit.addSlot(series.id, kit.at('2026-11-05', '18:00'), kit.at('2026-11-05', '19:00'));
+      // Google shows the series start (DTSTART, in the past), edited in Google after our change (e.g. its colour).
+      stampingGoogle({
+        summary: 'Gym',
+        start: { dateTime: kit.at('2026-11-01', '18:00').toISOString() },
+        end: { dateTime: kit.at('2026-11-01', '19:00').toISOString() },
+        updated: new Date(Date.now() + 10 * 60_000).toISOString(),
+      });
+      await writes.enqueue(kit.user.id, 'upsert', { taskId: series.id, googleEventId: 'series-1' });
+      jest.setSystemTime(Date.now() + 3 * 60_000);
+
+      await writes.processQueue();
+
+      const after = await kit.reload(series.id);
+      expect(after.scheduledStartTime).toEqual(kit.at('2026-11-05', '18:00'));
+      expect(await kit.slotsOf(series.id)).toEqual(['2026-11-01 18:00-19:00', '2026-11-05 18:00-19:00']);
+    });
+  });
+
   it('AUD-005: rows of a disconnected user cannot starve a connected user', async () => {
     google.checkConnection.mockImplementation(async (userId: string) => ({ connected: userId !== 'gone-user' }));
     for (let i = 0; i < 120; i += 1) await queueDelete('gone-user', `stuck-${i}`);
@@ -208,7 +292,8 @@ describe('Google write queue', () => {
       await writes.enqueue(kit.user.id, 'upsert', { taskId: task.id, googleEventId: 'gone-1', error: 'timeout' });
       // What GoogleCalendarService.getEvent throws for a 404/410.
       google.getEvent.mockRejectedValue(new GoogleEventMissingError('gone-1'));
-      jest.setSystemTime(Date.now() + 2 * 60_000);
+      // Past the lease: the queued write has waited, so Google is read first.
+      jest.setSystemTime(Date.now() + 3 * 60_000);
 
       await writes.processQueue();
 

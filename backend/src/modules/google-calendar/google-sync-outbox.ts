@@ -119,6 +119,9 @@ export async function recordGoogleWrite(
     googleCalendarId: intent.googleCalendarId ?? null,
     attempts: 0,
     lastError: intent.error ?? null,
+    // App clock, like every later refresh: not the DB default (other clock /
+    // zone), which skewed the waited and edited-after checks (H-4).
+    enqueuedAt: now,
     status: 'pending',
     nextRunAt: dueAt,
     leaseUntil: null,

@@ -335,6 +335,9 @@ export class PendingGoogleWriteService implements OnModuleInit, OnModuleDestroy 
               leaseUntil: null,
               nextRunAt: new Date(Date.now() + delay),
               lastError: message.slice(0, 2000),
+              // The failed request may still have reached Google: an `updated`
+              // from it must not count as a user edit later (AUD-010).
+              enqueuedAt: new Date(),
             },
       );
       if (final) {
@@ -354,7 +357,8 @@ export class PendingGoogleWriteService implements OnModuleInit, OnModuleDestroy 
     if (!removed.affected) {
       await this.pendingRepo.update(
         { id: row.id },
-        { status: 'pending', leaseUntil: null, nextRunAt: null },
+        // We just wrote: our own `updated` is not a user edit (AUD-010).
+        { status: 'pending', leaseUntil: null, nextRunAt: null, enqueuedAt: new Date() },
       );
       return 'again';
     }
@@ -400,7 +404,10 @@ export class PendingGoogleWriteService implements OnModuleInit, OnModuleDestroy 
         // A write that waited (retries, reconnect): an edit made in Google
         // since the last local change wins. Sent right after the change, the
         // local state is the newest and no extra read is spent.
-        const waited = Date.now() - new Date(row.enqueuedAt).getTime() > GOOGLE_WRITE_LEASE_MS;
+        // A series is never pulled: its Google start is DTSTART (often past),
+        // not the next occurrence the task holds (AUD-009).
+        const waited =
+          !task.isRecurring && Date.now() - new Date(row.enqueuedAt).getTime() > GOOGLE_WRITE_LEASE_MS;
         if (waited) {
           const remote = await this.google.getEvent(
             row.userId,
