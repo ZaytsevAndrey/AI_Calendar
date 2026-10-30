@@ -3,11 +3,11 @@
  * Assemble the single public site from two independent builds:
  *
  *   frontend/dist  (React SPA, webpack)   → site/       with index.html renamed to app.html
- *   landing/out    (Next.js static export) → site/       index.html, uk/, _next/, sitemap, robots, OG images
+ *   landing/out    (Next.js static export) → site/       index.html, privacy/, en/, _next/, sitemap, robots, OG images
  *
  * The apps stay separate in source and build; they only share a domain. Routing on the host:
- *   1. an existing file wins  (/ → landing index.html, /uk/ → landing, /bundle.js → SPA, …)
- *   2. /uk → /uk/             (redirect)
+ *   1. an existing file wins  (/ → landing index.html, /en/ → landing, /main.*.js → SPA, …)
+ *   2. /en → /en/, /uk… → /   (redirects)
  *   3. everything else → /app.html (the SPA shell; React Router takes over)
  * render.yaml and scripts/preview-site.mjs implement exactly these rules.
  *

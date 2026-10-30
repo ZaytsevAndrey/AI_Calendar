@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { getDictionary } from './content';
-import { BRAND, LOCALES, SITE_URL, absoluteUrl, localePath, type Locale } from './site';
+import { BRAND, DEFAULT_LOCALE, LOCALES, SITE_URL, absoluteUrl, localePath, type Locale } from './site';
 
 const OG_IMAGE: Record<Locale, string> = { en: '/og-en.png', uk: '/og-uk.png' };
 
@@ -14,18 +14,28 @@ export const viewport: Viewport = {
     ],
 };
 
-export function buildMetadata(locale: Locale): Metadata {
+/**
+ * Per-locale metadata for a page. `page` is the locale-free path ('/', '/privacy/');
+ * `title` / `description` override the landing's own for other pages.
+ */
+export function buildMetadata(
+    locale: Locale,
+    page = '/',
+    override?: { title: string; description: string },
+): Metadata {
     const t = getDictionary(locale);
-    const path = localePath(locale);
+    const path = localePath(locale, page);
     const languages: Record<string, string> = Object.fromEntries(
-        LOCALES.map((l) => [l, localePath(l)]),
+        LOCALES.map((l) => [l, localePath(l, page)]),
     );
-    languages['x-default'] = localePath('en');
+    languages['x-default'] = localePath(DEFAULT_LOCALE, page);
+    const title = override?.title ?? t.meta.title;
+    const description = override?.description ?? t.meta.description;
 
     return {
         metadataBase: new URL(SITE_URL),
-        title: t.meta.title,
-        description: t.meta.description,
+        title,
+        description,
         keywords: t.meta.keywords,
         applicationName: BRAND,
         authors: [{ name: BRAND }],
@@ -35,16 +45,16 @@ export function buildMetadata(locale: Locale): Metadata {
             type: 'website',
             siteName: BRAND,
             url: path,
-            title: t.meta.title,
-            description: t.meta.description,
+            title,
+            description,
             locale: t.ogLocale,
             alternateLocale: LOCALES.filter((l) => l !== locale).map((l) => getDictionary(l).ogLocale),
             images: [{ url: OG_IMAGE[locale], width: 1200, height: 630, alt: t.meta.ogAlt }],
         },
         twitter: {
             card: 'summary_large_image',
-            title: t.meta.title,
-            description: t.meta.description,
+            title,
+            description,
             images: [OG_IMAGE[locale]],
         },
         robots: {
@@ -100,7 +110,7 @@ export function buildJsonLd(locale: Locale) {
                 browserRequirements: 'Requires JavaScript and a modern browser',
                 inLanguage: t.htmlLang,
                 image: absoluteUrl(OG_IMAGE[locale]),
-                featureList: t.features.items.map((f) => f.title),
+                featureList: t.principles.items.map((f) => f.title),
                 publisher: { '@id': orgId },
             },
             {

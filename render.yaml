@@ -1,6 +1,6 @@
 # Render Blueprint: API (Node web service) + one static site on one domain.
 # The static site is two independent builds served together (see scripts/assemble-site.mjs):
-#   landing/ (Next.js static export) owns "/" and "/uk/"; the React app (frontend/) owns every other path.
+#   landing/ (Next.js static export) owns "/", "/privacy/" and "/en/..."; the React app (frontend/) owns every other path.
 # Database is Neon Postgres — set DATABASE_URL in the dashboard (sync: false).
 # Auto-deploys from the `master` branch. See documentation/deploy.md.
 
@@ -71,8 +71,15 @@ services:
     # Existing files are served first (landing pages, app bundle). Rules apply only to the rest.
     routes:
       - type: redirect
+        source: /en
+        destination: /en/
+      # Ukrainian moved from /uk/ to the root.
+      - type: redirect
+        source: /uk/*
+        destination: /
+      - type: redirect
         source: /uk
-        destination: /uk/
+        destination: /
       - type: rewrite
         source: /*
         destination: /app.html
@@ -96,6 +103,9 @@ services:
           name: ai-calendar-api
           type: web
           envVarKey: RENDER_EXTERNAL_URL
+      # Optional: a contact address shown on /privacy/.
+      - key: NEXT_PUBLIC_CONTACT_EMAIL
+        sync: false
       # Sign-in buttons on the landing; providers without server credentials are hidden at runtime.
       - key: NEXT_PUBLIC_AUTH_PROVIDERS
         value: google,microsoft

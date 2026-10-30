@@ -30,15 +30,20 @@ export const API_BASE_URL = toAbsoluteUrl(
 
 export const BRAND = 'Luefy';
 
-export const LOCALES = ['en', 'uk'] as const;
+export const LOCALES = ['uk', 'en'] as const;
 export type Locale = (typeof LOCALES)[number];
-export const DEFAULT_LOCALE: Locale = 'en';
+/** Ukrainian lives at the root; other locales under their own prefix. */
+export const DEFAULT_LOCALE: Locale = 'uk';
 
-/** Path of the home page for a locale. English lives at the root. */
-export function localePath(locale: Locale): string {
-    return locale === DEFAULT_LOCALE ? '/' : `/${locale}/`;
+/** Path of a page for a locale: localePath('en', '/privacy/') → '/en/privacy/'. */
+export function localePath(locale: Locale, page = '/'): string {
+    const p = page.startsWith('/') ? page : `/${page}`;
+    return locale === DEFAULT_LOCALE ? p : `/${locale}${p}`;
 }
 
 export function absoluteUrl(path: string): string {
     return `${SITE_URL}${path.startsWith('/') ? path : `/${path}`}`;
 }
+
+/** Public contact for data requests (privacy page). Unset → that line is left out. */
+export const CONTACT_EMAIL = (process.env.NEXT_PUBLIC_CONTACT_EMAIL || '').trim();

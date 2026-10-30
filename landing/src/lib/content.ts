@@ -1,32 +1,75 @@
 import { ENABLED_PROVIDERS, PROVIDERS } from './auth';
 import type { Locale } from './site';
 
-export type PhaseKey = 'dawn' | 'focus' | 'day' | 'dusk';
+/*
+ * All landing copy, both languages. The Ukrainian text follows the "Luefy — тексти лендінгу" doc;
+ * the English one is its translation. "{providers}" becomes the enabled sign-in providers.
+ */
+
+export type CaptureKind = 'event' | 'reminder' | 'task' | 'later';
+
+export interface WaitlistLabels {
+    emailLabel: string;
+    placeholder: string;
+    submit: string;
+    pending: string;
+    waking: string;
+    note: string;
+    privacyLink: string;
+    invalid: string;
+    error: string;
+    done: string;
+    exists: string;
+    followIntro: string;
+    calendarLabel: string;
+    calendars: { value: string; label: string }[];
+    painLabel: string;
+    painPlaceholder: string;
+    send: string;
+    skip: string;
+    thanks: string;
+}
 
 export interface Dictionary {
     htmlLang: string;
     ogLocale: string;
-    meta: {
-        title: string;
-        description: string;
-        keywords: string[];
-        ogAlt: string;
-    };
+    meta: { title: string; description: string; keywords: string[]; ogAlt: string };
     nav: {
         how: string;
-        features: string;
+        who: string;
         faq: string;
         signIn: string;
         langLabel: string;
         otherLangName: string;
         skip: string;
+        home: string;
     };
-    hero: {
+    hero: { badge: string; title: string; lead: string };
+    demo: {
+        label: string;
+        kinds: Record<CaptureKind, string>;
+        items: { said: string; kind: CaptureKind; result: string }[];
+    };
+    waitlist: WaitlistLabels;
+    problem: { title: string; paras: string[]; pull: string };
+    how: { title: string; steps: { title: string; body: string }[]; summary: string };
+    principles: {
         title: string;
         lead: string;
+        items: { title: string; body: string }[];
+        dialogLabel: string;
+        dialog: { from: 'you' | 'luefy'; text: string }[];
+    };
+    audience: {
+        title: string;
+        groups: { title: string; body: string; bullets?: string[] }[];
         note: string;
     };
+    vision: { title: string; body: string; bullets: string[]; closing: string };
+    faq: { title: string; items: { q: string; a: string }[] };
+    final: { title: string; body: string };
     signIn: {
+        title: string;
         with: string;
         pending: string;
         waking: string;
@@ -34,237 +77,223 @@ export interface Dictionary {
         unavailable: string;
         failedRedirect: string;
     };
-    strip: {
-        label: string;
-        caption: string;
-        phases: { key: PhaseKey; name: string; from: string; to: string }[];
-        tasks: { name: string; from: string; to: string; fixed?: boolean }[];
-    };
-    how: {
+    footer: { tagline: string; privacy: string };
+    privacy: {
         title: string;
-        intro: string;
-        steps: { title: string; body: string }[];
-    };
-    features: {
-        title: string;
-        items: { title: string; body: string }[];
-    };
-    faq: {
-        title: string;
-        items: { q: string; a: string }[];
-    };
-    final: {
-        title: string;
-        body: string;
-    };
-    footer: {
-        tagline: string;
+        description: string;
+        updated: string;
+        sections: { title: string; paras: string[] }[];
+        contact: string;
+        back: string;
     };
 }
-
-/*
- * Copy follows documentation/overview.md (Features). Keep it in step when the product changes.
- * "{providers}" is replaced with the enabled sign-in providers ("Google or Microsoft").
- */
-
-const en: Dictionary = {
-    htmlLang: 'en',
-    ogLocale: 'en_US',
-    meta: {
-        title: 'Luefy: AI day planner that schedules your tasks',
-        description:
-            'Split your day into phases, add tasks by voice or text, and Luefy places each one in a free slot around your Google, Outlook and iCloud events. In English and Ukrainian.',
-        keywords: [
-            'AI day planner',
-            'AI calendar',
-            'auto schedule tasks',
-            'time blocking app',
-            'daily planner',
-            'Google Calendar planner',
-            'Outlook calendar planner',
-            'voice to task',
-        ],
-        ogAlt: 'Luefy places your tasks into the phases of your day',
-    },
-    nav: {
-        how: 'How it works',
-        features: 'Features',
-        faq: 'FAQ',
-        signIn: 'Sign in',
-        langLabel: 'Language',
-        otherLangName: 'Українська',
-        skip: 'Skip to content',
-    },
-    hero: {
-        title: 'An AI day planner that finds a time for every task',
-        lead:
-            'Split your day into phases like focus hours, errands and evening. Add a task by voice or by typing, and Luefy puts it in a free slot of the right phase, around what is already in your Google, Outlook or iCloud calendar.',
-        note: 'Sign in with {providers}. Calendar access is requested the first time you sign in.',
-    },
-    signIn: {
-        with: 'Continue with {provider}',
-        pending: 'Opening sign-in…',
-        waking: 'Starting the server, this can take up to a minute…',
-        error: 'Could not open sign-in. Check your connection and try again.',
-        unavailable: 'Sign-in with {provider} is not available right now. Use another option.',
-        failedRedirect: 'Sign-in did not finish. Try again.',
-    },
-    strip: {
-        label: 'Example of a planned day in Luefy',
-        caption: 'A Tuesday in Luefy',
-        phases: [
-            { key: 'dawn', name: 'Morning', from: '07:00', to: '09:00' },
-            { key: 'focus', name: 'Focus hours', from: '09:00', to: '13:00' },
-            { key: 'day', name: 'Errands & calls', from: '13:00', to: '18:00' },
-            { key: 'dusk', name: 'Evening', from: '18:00', to: '22:00' },
-        ],
-        tasks: [
-            { name: 'Stretch & plan the day', from: '07:30', to: '08:00' },
-            { name: 'Write the project brief', from: '09:15', to: '11:00' },
-            { name: 'Team call', from: '11:30', to: '12:00', fixed: true },
-            { name: 'Reply to emails', from: '12:00', to: '12:45' },
-            { name: 'Call the dentist', from: '13:30', to: '13:50' },
-            { name: 'Groceries', from: '16:00', to: '16:45' },
-            { name: 'Gym', from: '18:30', to: '19:30' },
-            { name: 'Read', from: '21:00', to: '21:30' },
-        ],
-    },
-    how: {
-        title: 'How Luefy plans your day',
-        intro: 'Three steps. After the first one, you only ever do the second.',
-        steps: [
-            {
-                title: 'Describe your day once',
-                body: 'Set your wake and sleep times, weekends and time zone. Pick a day shape to start from, then add your own phases, like focus hours or errands.',
-            },
-            {
-                title: 'Add tasks the quick way',
-                body: 'Tap the mic and say “call the dentist tomorrow, twenty minutes”, or type it. A task can be flexible, fixed to a time or recurring. To block time, drag across the calendar.',
-            },
-            {
-                title: 'Luefy finds the slot',
-                body: 'Each new task goes into a free slot of its phase, by priority, around fixed tasks and your calendar events. If two things clash, you choose what moves. Anything without room waits in Later.',
-            },
-        ],
-    },
-    features: {
-        title: 'What you get',
-        items: [
-            {
-                title: 'Day phases',
-                body: 'Give each part of the day a job. Deep work goes to focus hours, calls go to the afternoon, and nothing lands at 23:00.',
-            },
-            {
-                title: 'An assistant you can talk to',
-                body: 'Plan out loud or in a chat, in English or Ukrainian. It asks only what it needs and shows a preview of every change before you apply it.',
-            },
-            {
-                title: 'All your calendars in one view',
-                body: 'Connect Google and Microsoft Outlook with a sign-in, and iCloud from Settings. Their events count as busy time, and you choose which calendars to show.',
-            },
-            {
-                title: 'Your plan in Google Calendar',
-                body: 'Planned tasks go to Luefy’s own calendar in your Google account. Luefy changes only the events it created.',
-            },
-            {
-                title: 'Fixed, flexible and recurring tasks',
-                body: 'Pin a meeting to 11:30, let a report float within a From/Until window, or repeat the gym on chosen weekdays.',
-            },
-            {
-                title: 'Long tasks split into parts',
-                body: 'If a four-hour task does not fit in one go, Luefy can split it into blocks no shorter than the minimum you set.',
-            },
-            {
-                title: 'Now, Next and Later',
-                body: 'See what is on now, what comes next and what is still waiting for a slot today. Mark it done or skip it in one tap.',
-            },
-            {
-                title: 'Day reminders',
-                body: 'Errands that need a day but not a time slot, like picking up a parcel. Overdue ones get harder to ignore.',
-            },
-            {
-                title: 'On your phone, with reminders',
-                body: 'Add Luefy to your home screen on Android or iPhone and get a notification shortly before each task.',
-            },
-        ],
-    },
-    faq: {
-        title: 'Questions people ask',
-        items: [
-            {
-                q: 'What is Luefy?',
-                a: 'Luefy is an AI day planner. You split the day into phases and add tasks, and Luefy places them in free time around your calendar events.',
-            },
-            {
-                q: 'How do I sign in?',
-                a: 'With your {providers} account. There is no separate password to remember.',
-            },
-            {
-                q: 'Which calendars does Luefy work with?',
-                a: 'Google Calendar, Microsoft Outlook and Apple iCloud. Google and Microsoft connect with a sign-in; iCloud connects from Settings with an app-specific password.',
-            },
-            {
-                q: 'Will Luefy change my existing calendar events?',
-                a: 'No. Events you already have count as busy time. Luefy creates and moves only the events it planned, in its own calendar.',
-            },
-            {
-                q: 'What happens when a task does not fit?',
-                a: 'It is not squeezed in. When tasks clash you pick what to do, and anything without room waits in Later until you schedule it.',
-            },
-            {
-                q: 'Which languages does Luefy support?',
-                a: 'English and Ukrainian, both in the interface and for voice.',
-            },
-            {
-                q: 'Does Luefy work on a phone?',
-                a: 'Yes. It runs in the browser, installs to the home screen on Android and iPhone, and can send a reminder before each task.',
-            },
-        ],
-    },
-    final: {
-        title: 'Plan tomorrow in two minutes',
-        body: 'Sign in, set your phases and add a few tasks. Luefy takes it from there.',
-    },
-    footer: {
-        tagline: 'AI day planner with phases, voice input and your calendars in one place.',
-    },
-};
 
 const uk: Dictionary = {
     htmlLang: 'uk',
     ogLocale: 'uk_UA',
     meta: {
-        title: 'Luefy: AI-планувальник дня, що сам розставляє задачі',
+        title: 'Luefy: скажіть один раз, і можна відпустити',
         description:
-            'Поділіть день на фази, додавайте задачі голосом або текстом, а Luefy знайде кожній вільний час між подіями з Google, Outlook та iCloud. Українською та англійською.',
+            'Скажіть Luefy, що треба зробити або не забути. Він зрозуміє, що це — подія, нагадування чи задача, — і знайде для цього час у календарі. Ранній доступ.',
         keywords: [
             'AI планувальник дня',
             'планувальник задач',
             'розумний календар',
-            'автоматичне планування задач',
+            'задачі голосом',
+            'нагадування',
+            'планування при СДУГ',
             'тайм-блокінг',
             'планувальник з Google Календарем',
-            'планувальник з Outlook',
-            'задачі голосом',
         ],
-        ogAlt: 'Luefy розставляє задачі по фазах вашого дня',
+        ogAlt: 'Luefy перетворює сказане на події, нагадування й задачі в календарі',
     },
     nav: {
         how: 'Як це працює',
-        features: 'Можливості',
+        who: 'Для кого',
         faq: 'Питання',
         signIn: 'Увійти',
         langLabel: 'Мова',
         otherLangName: 'English',
         skip: 'Перейти до змісту',
+        home: 'На головну',
     },
     hero: {
-        title: 'AI-планувальник дня, який знаходить час для кожної задачі',
+        badge: 'Luefy у розробці. Відкриваємо доступ невеликими групами.',
+        title: 'Скажіть один раз — і можна відпустити.',
         lead:
-            'Поділіть день на фази: фокус, справи, вечір. Додайте задачу голосом або текстом, і Luefy поставить її у вільне місце потрібної фази, між подіями, що вже є у вашому Google, Outlook чи iCloud календарі.',
-        note: 'Вхід через {providers}. Доступ до календаря запитується під час першого входу.',
+            'Скажіть Luefy, що треба: подзвонити в банк, забрати посилку, нарешті розібратися зі страховкою. Він зрозуміє, що це — подія, нагадування чи задача, — і знайде для цього час у вашому календарі. Ви знаєте, коли це станеться, і більше не прокручуєте це в голові.',
+    },
+    demo: {
+        label: 'Як Luefy розбирає сказане',
+        kinds: { event: 'Подія', reminder: 'Нагадування', task: 'Задача', later: 'Пізніше' },
+        items: [
+            { said: 'Завтра о 15:00 стоматолог', kind: 'event', result: 'Завтра, 15:00–16:00' },
+            { said: 'Не забути забрати посилку', kind: 'reminder', result: 'Сьогодні, 18:00' },
+            {
+                said: 'Треба розібратися зі страховкою на тому тижні',
+                kind: 'task',
+                result: 'Середа, 10:00–11:00',
+            },
+        ],
+    },
+    waitlist: {
+        emailLabel: 'Ваш емейл',
+        placeholder: 'name@example.com',
+        submit: 'Хочу ранній доступ',
+        pending: 'Надсилаємо…',
+        waking: 'Будимо сервер, це може зайняти до хвилини…',
+        note: 'Напишемо, коли дійде ваша черга. Без розсилок.',
+        privacyLink: 'Як ми зберігаємо дані',
+        invalid: 'Схоже, в емейлі помилка. Перевірте його і спробуйте ще раз.',
+        error: 'Не вдалося надіслати. Спробуйте ще раз за хвилину.',
+        done: 'Дякуємо, ви в списку.',
+        exists: 'Ви вже в списку. Напишемо, коли дійде ваша черга.',
+        followIntro: 'Два коротких питання допоможуть зробити Luefy зручним саме для вас.',
+        calendarLabel: 'Яким календарем користуєтеся?',
+        calendars: [
+            { value: 'google', label: 'Google' },
+            { value: 'outlook', label: 'Outlook' },
+            { value: 'icloud', label: 'iCloud' },
+            { value: 'none', label: 'Не користуюся' },
+        ],
+        painLabel: 'Що найчастіше вилітає з голови?',
+        painPlaceholder: 'Дзвінки, оплати, дні народження…',
+        send: 'Надіслати',
+        skip: 'Пропустити',
+        thanks: 'Дякуємо! До зустрічі в Luefy.',
+    },
+    problem: {
+        title: 'Чому про справи так важко не думати',
+        paras: [
+            'Незроблена справа не дає спокою. Ви згадуєте про неї в душі, перед сном, посеред розмови — і щоразу нічого з цим не робите. Думка крутиться по колу, забирає увагу і сили, а справа не рухається.',
+            'Психологи давно це помітили: незавершене тримається в голові наполегливіше за завершене. Але є і добра новина: щоб думка відпустила, справу не обов’язково робити просто зараз. Досить чітко вирішити, коли і як ви її зробите.',
+            'Luefy робить саме це. Кожне «треба б…» отримує своє місце в календарі. Ви знаєте, коли до нього повернетеся, і можете думати про інше.',
+            'А якщо для рішення бракує інформації? Тоді план — дізнатися. «Порівняти ціни на страховку, 30 хвилин у четвер» — теж задача, і вона теж звільняє голову.',
+        ],
+        pull: 'Конкретний план для голови — як обіцянка. І вона перестає нагадувати.',
+    },
+    how: {
+        title: 'Від «треба б…» до місця в календарі',
+        steps: [
+            {
+                title: 'Скажіть як є',
+                body: 'Голосом або текстом, своїми словами. Дата, час і тривалість — за бажанням. «Треба розібратися зі страховкою на тому тижні» — уже достатньо.',
+            },
+            {
+                title: 'Luefy розбереться, що це',
+                body: 'Подія з точним часом, нагадування на день, задача, якій потрібен час, чи те, що чекає на «потім». Якщо чогось важливого бракує, спитає одне питання, а не десять.',
+            },
+            {
+                title: 'І знайде час',
+                body: 'У вільному місці вашого дня, не поверх зустрічей і не о 23:00. Ваші події з Google, Outlook чи iCloud він уже бачить.',
+            },
+        ],
+        summary: 'Десять секунд на те, щоб сказати. Жодної хвилини на те, щоб пам’ятати.',
+    },
+    principles: {
+        title: 'План, який ви справді проживете',
+        lead: 'AI сьогодні за секунду складе ідеальний день з йогою, читанням і глибокою роботою. Проблема в тому, що це не ваш день. Luefy працює навпаки.',
+        items: [
+            {
+                title: 'Не вигадує задач',
+                body: 'У календар потрапляє лише те, що ви самі сказали. Вільний час лишається вільним.',
+            },
+            {
+                title: 'Відрізняє «можу» від «хочу»',
+                body: 'Вісім вільних годин не означає вісім годин роботи. Ви кажете, скільки готові дати, і план це поважає.',
+            },
+            {
+                title: 'Питає, а не вгадує',
+                body: 'Якщо чогось важливого бракує, спитає. Одне питання — те, що найбільше впливає на план.',
+            },
+            {
+                title: 'План змінюється разом із днем',
+                body: 'Прокинулися пізніше чи затрималися на задачі — Luefy перебудує решту дня, а не докорятиме.',
+            },
+        ],
+        dialogLabel: 'Приклад розмови з Luefy',
+        dialog: [
+            { from: 'you', text: 'Розплануй мені завтра.' },
+            {
+                from: 'luefy',
+                text: 'У тебе три незавершені задачі, зустрічей немає. Скільки часу хочеш дати роботі?',
+            },
+            { from: 'you', text: 'Годин п’ять. Прокинуся о другій.' },
+            {
+                from: 'luefy',
+                text: 'Тоді два блоки після 15:00 і один коротший увечері. Решту часу не займатиму.',
+            },
+        ],
+    },
+    audience: {
+        title: 'Якщо в голові завжди відкрито десять вкладок',
+        groups: [
+            {
+                title: 'Коли справ більше, ніж голови',
+                body: 'Робота, діти, лікар, податки, подарунок мамі. Кожна справа сама по собі дрібна, але разом вони забирають увагу цілий день. Luefy тримає їх за вас, тож ви думаєте лише про те, чим займаєтесь зараз.',
+            },
+            {
+                title: 'Коли голова працює не за списком (СДУГ / ADHD)',
+                body: 'Записати нема коли, потім забув або сам запис десь загубився. Велика задача лякає, і ви відкладаєте її знову і знову. Luefy зроблений так, щоб допомогти саме тут:',
+                bullets: [
+                    'Записати — за десять секунд голосом, поки думка ще тут.',
+                    'Не треба одразу вирішувати коли: Luefy знайде час сам.',
+                    'Довга задача ділиться на короткі блоки, до яких легше взятися.',
+                    'Нагадування приходить тоді, коли потрібно, а не висить над вами цілий день.',
+                    'На екрані тільки «зараз» і «далі», без стіни задач.',
+                ],
+            },
+        ],
+        note: 'Luefy — інструмент планування, а не лікування. Він не замінює лікаря чи терапію.',
+    },
+    vision: {
+        title: 'Далі — помічник, який вас знає',
+        body: 'Зараз Luefy вчиться добре робити одну річ: приймати все, що ви йому кажете, і ставити це на місце. Наступний крок — помічник, який з часом розуміє саме вас:',
+        bullets: [
+            'коли ви справді працюєте, а коли лише думаєте, що працюватимете;',
+            'скільки часу у вас насправді забирають типові справи;',
+            'що для вас важливо, а що може почекати.',
+        ],
+        closing:
+            'І при цьому він не докучатиме порадами і не вигадуватиме задач, щоб виглядати корисним. Ранні користувачі впливають на те, яким він стане. Долучайтеся.',
+    },
+    faq: {
+        title: 'Часті питання',
+        items: [
+            {
+                q: 'Коли можна буде спробувати?',
+                a: 'Відкриваємо доступ невеликими групами, в порядку черги. Залиште емейл, і ми напишемо, коли дійде ваша черга.',
+            },
+            { q: 'Скільки це коштує?', a: 'Під час раннього доступу — безкоштовно.' },
+            {
+                q: 'З якими календарями працює Luefy?',
+                a: 'Google Календар, Microsoft Outlook та Apple iCloud. Ваші події там вважаються зайнятим часом.',
+            },
+            {
+                q: 'Чи змінить Luefy мої події?',
+                a: 'Ні. Він створює й переносить лише те, що запланував сам, у власному календарі.',
+            },
+            { q: 'Які мови він розуміє?', a: 'Українську та англійську, і голосом, і текстом.' },
+            {
+                q: 'Чи працює на телефоні?',
+                a: 'Так. Luefy відкривається в браузері і встановлюється на головний екран Android чи iPhone.',
+            },
+            {
+                q: 'Хто бачить мої справи?',
+                a: 'Лише ви. Щоб розпізнати голос і зрозуміти фразу, Luefy передає її сервісам розпізнавання мовлення та мовній моделі. Ми не продаємо дані й не показуємо рекламу.',
+            },
+            {
+                q: 'Чим це краще за звичайний список справ?',
+                a: 'Список пам’ятає за вас, але не каже, коли це робити. А саме «коли» дає голові відпочити. Luefy відповідає на обидва питання.',
+            },
+        ],
+    },
+    final: {
+        title: 'Звільніть голову для важливого',
+        body: 'Luefy ще росте, і ми шукаємо людей, для яких це важливо. Залиште емейл — і спробуйте серед перших.',
     },
     signIn: {
+        title: 'Вже маєте доступ?',
         with: 'Увійти через {provider}',
         pending: 'Відкриваємо вхід…',
         waking: 'Запускаємо сервер, це може зайняти до хвилини…',
@@ -272,131 +301,297 @@ const uk: Dictionary = {
         unavailable: 'Вхід через {provider} зараз недоступний. Скористайтеся іншим способом.',
         failedRedirect: 'Вхід не завершився. Спробуйте ще раз.',
     },
-    strip: {
-        label: 'Приклад спланованого дня в Luefy',
-        caption: 'Вівторок у Luefy',
-        phases: [
-            { key: 'dawn', name: 'Ранок', from: '07:00', to: '09:00' },
-            { key: 'focus', name: 'Години фокусу', from: '09:00', to: '13:00' },
-            { key: 'day', name: 'Справи й дзвінки', from: '13:00', to: '18:00' },
-            { key: 'dusk', name: 'Вечір', from: '18:00', to: '22:00' },
+    footer: {
+        tagline: 'Скажіть один раз — і можна відпустити.',
+        privacy: 'Конфіденційність',
+    },
+    privacy: {
+        title: 'Як ми зберігаємо ваші дані',
+        description: 'Які дані збирає Luefy, навіщо, де вони зберігаються і як їх видалити.',
+        updated: 'Оновлено 30 жовтня 2026 року.',
+        sections: [
+            {
+                title: 'Список очікування',
+                paras: [
+                    'Коли ви залишаєте заявку, ми зберігаємо ваш емейл, мову сторінки і, якщо ви відповіли, яким календарем користуєтеся та що найчастіше забуваєте.',
+                    'Ми використовуємо це лише для того, щоб написати вам про доступ і краще зрозуміти, для кого робимо Luefy. Без розсилок і без передачі третім особам.',
+                    'Заявка зберігається, доки ви не отримаєте доступ або не попросите її видалити.',
+                ],
+            },
+            {
+                title: 'Застосунок',
+                paras: [
+                    'Ви входите через Google або Microsoft. Ми отримуємо ваше ім’я та емейл, а також доступ до календаря, щоб бачити зайнятий час і записувати заплановане.',
+                    'Ваші задачі, фази та налаштування зберігаються на наших серверах. Щоб розпізнати голос і зрозуміти фразу, Luefy передає її сервісам розпізнавання мовлення та мовній моделі.',
+                    'Ми не продаємо дані й не використовуємо їх для реклами.',
+                ],
+            },
+            {
+                title: 'Де зберігаються дані',
+                paras: [
+                    'Сервери застосунку працюють у Render (Франкфурт), база даних — у Neon.',
+                ],
+            },
+            {
+                title: 'Ваші права',
+                paras: [
+                    'Ви можете попросити показати, виправити або видалити ваші дані. Акаунт можна видалити в налаштуваннях застосунку.',
+                ],
+            },
         ],
-        tasks: [
-            { name: 'Розминка й план дня', from: '07:30', to: '08:00' },
-            { name: 'Написати бриф проєкту', from: '09:15', to: '11:00' },
-            { name: 'Дзвінок з командою', from: '11:30', to: '12:00', fixed: true },
-            { name: 'Відповісти на листи', from: '12:00', to: '12:45' },
-            { name: 'Подзвонити стоматологу', from: '13:30', to: '13:50' },
-            { name: 'Продукти', from: '16:00', to: '16:45' },
-            { name: 'Спортзал', from: '18:30', to: '19:30' },
-            { name: 'Читання', from: '21:00', to: '21:30' },
+        contact: 'Питання і запити щодо даних: {email}.',
+        back: 'На головну',
+    },
+};
+
+const en: Dictionary = {
+    htmlLang: 'en',
+    ogLocale: 'en_US',
+    meta: {
+        title: 'Luefy: say it once, then let it go',
+        description:
+            'Tell Luefy what you need to do or remember. It works out whether it is an event, a reminder or a task, and finds time for it in your calendar. Early access.',
+        keywords: [
+            'AI day planner',
+            'AI calendar',
+            'voice to task',
+            'reminders app',
+            'ADHD planner',
+            'time blocking app',
+            'auto schedule tasks',
+            'Google Calendar planner',
         ],
+        ogAlt: 'Luefy turns what you say into events, reminders and tasks in your calendar',
+    },
+    nav: {
+        how: 'How it works',
+        who: 'Who it is for',
+        faq: 'FAQ',
+        signIn: 'Sign in',
+        langLabel: 'Language',
+        otherLangName: 'Українська',
+        skip: 'Skip to content',
+        home: 'Home',
+    },
+    hero: {
+        badge: 'Luefy is in development. We are opening access in small groups.',
+        title: 'Say it once, then let it go.',
+        lead:
+            'Tell Luefy what needs doing: call the bank, pick up a parcel, finally sort out the insurance. It works out whether that is an event, a reminder or a task, and finds time for it in your calendar. You know when it will happen, so you stop replaying it in your head.',
+    },
+    demo: {
+        label: 'How Luefy sorts what you say',
+        kinds: { event: 'Event', reminder: 'Reminder', task: 'Task', later: 'Later' },
+        items: [
+            { said: 'Dentist tomorrow at 3 pm', kind: 'event', result: 'Tomorrow, 15:00–16:00' },
+            { said: 'Don’t forget to pick up the parcel', kind: 'reminder', result: 'Today, 18:00' },
+            { said: 'Need to sort out the insurance next week', kind: 'task', result: 'Wednesday, 10:00–11:00' },
+        ],
+    },
+    waitlist: {
+        emailLabel: 'Your email',
+        placeholder: 'name@example.com',
+        submit: 'Get early access',
+        pending: 'Sending…',
+        waking: 'Waking the server, this can take up to a minute…',
+        note: 'We’ll write when your turn comes. No newsletters.',
+        privacyLink: 'How we store data',
+        invalid: 'That email looks wrong. Check it and try again.',
+        error: 'Could not send. Try again in a minute.',
+        done: 'Thanks, you’re on the list.',
+        exists: 'You’re already on the list. We’ll write when your turn comes.',
+        followIntro: 'Two quick questions help us make Luefy fit you.',
+        calendarLabel: 'Which calendar do you use?',
+        calendars: [
+            { value: 'google', label: 'Google' },
+            { value: 'outlook', label: 'Outlook' },
+            { value: 'icloud', label: 'iCloud' },
+            { value: 'none', label: 'None' },
+        ],
+        painLabel: 'What slips your mind most often?',
+        painPlaceholder: 'Calls, payments, birthdays…',
+        send: 'Send',
+        skip: 'Skip',
+        thanks: 'Thank you! See you in Luefy.',
+    },
+    problem: {
+        title: 'Why unfinished things won’t leave your head',
+        paras: [
+            'An unfinished task doesn’t let go. It comes back in the shower, before sleep, in the middle of a conversation, and each time you do nothing about it. The thought goes round in circles, taking attention and energy, and the task doesn’t move.',
+            'Psychologists noticed this long ago: unfinished things stick in the mind harder than finished ones. The good news is that you don’t have to do the task right now for the thought to let go. It is enough to decide clearly when and how you will do it.',
+            'That is what Luefy does. Every “I should…” gets its own place in the calendar. You know when you’ll come back to it, so you can think about something else.',
+            'And if you don’t have enough information to decide? Then the plan is to find out. “Compare insurance prices, 30 minutes on Thursday” is a task too, and it frees your head just the same.',
+        ],
+        pull: 'A concrete plan is a promise to your mind, and it stops nagging you.',
     },
     how: {
-        title: 'Як Luefy планує ваш день',
-        intro: 'Три кроки. Після першого ви робите лише другий.',
+        title: 'From “I should…” to a place in your calendar',
         steps: [
             {
-                title: 'Опишіть свій день один раз',
-                body: 'Вкажіть, коли прокидаєтесь і лягаєте, вихідні та часовий пояс. Оберіть шаблон дня, а потім додайте свої фази, наприклад години фокусу чи справи.',
+                title: 'Say it as it is',
+                body: 'By voice or by typing, in your own words. Date, time and length are optional. “Need to sort out the insurance next week” is enough.',
             },
             {
-                title: 'Додайте задачі швидким способом',
-                body: 'Натисніть мікрофон і скажіть «подзвонити стоматологу завтра, двадцять хвилин», або напишіть. Задача може бути гнучкою, прив’язаною до часу або повторюваною. Щоб зайняти час, просто проведіть по календарю.',
+                title: 'Luefy works out what it is',
+                body: 'An event at a set time, a reminder for a day, a task that needs time, or something for “later”. If something important is missing, it asks one question, not ten.',
             },
             {
-                title: 'Luefy знаходить місце',
-                body: 'Кожна нова задача стає у вільне місце своєї фази, за пріоритетом, між фіксованими задачами й подіями календаря. Якщо щось перетинається, ви обираєте, що перенести. Те, чому немає місця, чекає в «Пізніше».',
+                title: 'And finds the time',
+                body: 'In a free slot of your day, not on top of meetings and not at 11 pm. It already sees your events from Google, Outlook or iCloud.',
             },
         ],
+        summary: 'Ten seconds to say it. Not a minute spent remembering it.',
     },
-    features: {
-        title: 'Що ви отримуєте',
+    principles: {
+        title: 'A plan you will actually live',
+        lead: 'Any AI can draft a perfect day with yoga, reading and deep work in a second. The trouble is, it isn’t your day. Luefy works the other way round.',
         items: [
             {
-                title: 'Фази дня',
-                body: 'Дайте кожній частині дня свою роль. Глибока робота йде в години фокусу, дзвінки на після обіду, і нічого не потрапляє на 23:00.',
+                title: 'It doesn’t invent tasks',
+                body: 'Only what you said goes into the calendar. Free time stays free.',
             },
             {
-                title: 'Помічник, з яким можна говорити',
-                body: 'Плануйте вголос або в чаті, українською чи англійською. Він питає лише те, що потрібно, і показує кожну зміну до того, як ви її застосуєте.',
+                title: 'It knows “can” from “want to”',
+                body: 'Eight free hours don’t mean eight hours of work. You say how much you’re willing to give, and the plan respects it.',
             },
             {
-                title: 'Усі календарі в одному місці',
-                body: 'Підключіть Google і Microsoft Outlook входом, а iCloud у налаштуваннях. Їхні події вважаються зайнятим часом, і ви обираєте, які календарі показувати.',
+                title: 'It asks instead of guessing',
+                body: 'If something important is missing, it asks. One question: the one that changes the plan most.',
             },
             {
-                title: 'Ваш план у Google Календарі',
-                body: 'Заплановані задачі потрапляють в окремий календар Luefy у вашому Google-акаунті. Luefy змінює лише події, які створив сам.',
-            },
-            {
-                title: 'Фіксовані, гнучкі й повторювані задачі',
-                body: 'Закріпіть зустріч на 11:30, дайте звіту «плавати» у вікні Від/До або повторюйте спортзал у вибрані дні тижня.',
-            },
-            {
-                title: 'Довгі задачі діляться на частини',
-                body: 'Якщо чотиригодинна задача не вміщається за раз, Luefy розіб’є її на блоки, не коротші за мінімум, який ви задали.',
-            },
-            {
-                title: 'Зараз, Далі й Пізніше',
-                body: 'Видно, що відбувається зараз, що буде далі і що сьогодні ще чекає на місце. Позначте виконаним або пропустіть одним дотиком.',
-            },
-            {
-                title: 'Нагадування на день',
-                body: 'Справи, яким потрібен день, але не час у розкладі, як-от забрати посилку. Прострочені дедалі важче не помітити.',
-            },
-            {
-                title: 'На телефоні, з нагадуваннями',
-                body: 'Додайте Luefy на головний екран Android чи iPhone й отримуйте сповіщення незадовго до кожної задачі.',
+                title: 'The plan moves with your day',
+                body: 'Woke up late or a task ran long? Luefy rebuilds the rest of the day instead of nagging.',
             },
         ],
+        dialogLabel: 'An example conversation with Luefy',
+        dialog: [
+            { from: 'you', text: 'Plan my day tomorrow.' },
+            { from: 'luefy', text: 'You have three open tasks and no meetings. How much time do you want to give to work?' },
+            { from: 'you', text: 'About five hours. I’ll be up at two.' },
+            { from: 'luefy', text: 'Then two blocks after 15:00 and a shorter one in the evening. I’ll leave the rest free.' },
+        ],
+    },
+    audience: {
+        title: 'If your head always has ten tabs open',
+        groups: [
+            {
+                title: 'When there’s more to do than room to hold it',
+                body: 'Work, kids, the doctor, taxes, a present for mum. Each thing is small on its own, but together they take your attention all day. Luefy holds them for you, so you only think about what you’re doing now.',
+            },
+            {
+                title: 'When your brain doesn’t run on lists (ADHD)',
+                body: 'No time to write it down, then you forget, or the note gets lost. A big task feels heavy, so you put it off again and again. Luefy is built to help right there:',
+                bullets: [
+                    'Capture it in ten seconds by voice, while the thought is still there.',
+                    'No need to decide when right away: Luefy finds the time.',
+                    'A long task is split into short blocks that are easier to start.',
+                    'A reminder arrives when it’s needed, instead of hanging over you all day.',
+                    'Only “now” and “next” on screen, no wall of tasks.',
+                ],
+            },
+        ],
+        note: 'Luefy is a planning tool, not a treatment. It doesn’t replace a doctor or therapy.',
+    },
+    vision: {
+        title: 'Next: an assistant that knows you',
+        body: 'Right now Luefy is learning to do one thing well: take whatever you tell it and put it in its place. The next step is an assistant that, over time, understands you in particular:',
+        bullets: [
+            'when you really work, and when you only think you will;',
+            'how long your usual tasks actually take;',
+            'what matters to you, and what can wait.',
+        ],
+        closing:
+            'And it won’t pester you with advice or make up tasks to look useful. Early users shape what it becomes. Join in.',
     },
     faq: {
-        title: 'Часті питання',
+        title: 'Questions people ask',
         items: [
             {
-                q: 'Що таке Luefy?',
-                a: 'Luefy — це AI-планувальник дня. Ви ділите день на фази й додаєте задачі, а Luefy розставляє їх у вільний час між подіями вашого календаря.',
+                q: 'When can I try it?',
+                a: 'We’re opening access in small groups, in order. Leave your email and we’ll write when your turn comes.',
+            },
+            { q: 'How much does it cost?', a: 'It’s free during early access.' },
+            {
+                q: 'Which calendars does Luefy work with?',
+                a: 'Google Calendar, Microsoft Outlook and Apple iCloud. Your events there count as busy time.',
             },
             {
-                q: 'Як увійти?',
-                a: 'Через акаунт {providers}. Окремий пароль запам’ятовувати не треба.',
+                q: 'Will Luefy change my events?',
+                a: 'No. It only creates and moves what it planned itself, in its own calendar.',
+            },
+            { q: 'Which languages does it understand?', a: 'English and Ukrainian, by voice and by text.' },
+            {
+                q: 'Does it work on a phone?',
+                a: 'Yes. Luefy runs in the browser and installs to the home screen on Android or iPhone.',
             },
             {
-                q: 'З якими календарями працює Luefy?',
-                a: 'Google Календар, Microsoft Outlook та Apple iCloud. Google і Microsoft підключаються входом, iCloud — у налаштуваннях через пароль для застосунку.',
+                q: 'Who sees my tasks?',
+                a: 'Only you. To recognise your voice and understand a phrase, Luefy sends it to speech-recognition and language-model services. We don’t sell data or show ads.',
             },
             {
-                q: 'Чи змінить Luefy мої наявні події в календарі?',
-                a: 'Ні. Наявні події вважаються зайнятим часом. Luefy створює й переносить лише ті події, які запланував сам, у власному календарі.',
-            },
-            {
-                q: 'Що буде, якщо задача не вміщається?',
-                a: 'Її не втиснуть силою. Коли задачі перетинаються, ви обираєте, що робити, а те, чому немає місця, чекає в «Пізніше», доки ви його не заплануєте.',
-            },
-            {
-                q: 'Які мови підтримує Luefy?',
-                a: 'Українську та англійську, і в інтерфейсі, і для голосу.',
-            },
-            {
-                q: 'Чи працює Luefy на телефоні?',
-                a: 'Так. Він працює в браузері, встановлюється на головний екран Android та iPhone і може нагадувати про кожну задачу.',
+                q: 'How is this better than a to-do list?',
+                a: 'A list remembers for you, but doesn’t say when to do it. It’s the “when” that lets your mind rest. Luefy answers both.',
             },
         ],
     },
     final: {
-        title: 'Сплануйте завтра за дві хвилини',
-        body: 'Увійдіть, налаштуйте фази й додайте кілька задач. Далі Luefy впорається сам.',
+        title: 'Free your head for what matters',
+        body: 'Luefy is still growing, and we’re looking for people who need it. Leave your email and be among the first to try it.',
+    },
+    signIn: {
+        title: 'Already have access?',
+        with: 'Continue with {provider}',
+        pending: 'Opening sign-in…',
+        waking: 'Starting the server, this can take up to a minute…',
+        error: 'Could not open sign-in. Check your connection and try again.',
+        unavailable: 'Sign-in with {provider} is not available right now. Use another option.',
+        failedRedirect: 'Sign-in did not finish. Try again.',
     },
     footer: {
-        tagline: 'AI-планувальник дня з фазами, голосовим введенням і всіма календарями в одному місці.',
+        tagline: 'Say it once, then let it go.',
+        privacy: 'Privacy',
+    },
+    privacy: {
+        title: 'How we store your data',
+        description: 'What data Luefy collects, why, where it is stored and how to delete it.',
+        updated: 'Updated 30 October 2026.',
+        sections: [
+            {
+                title: 'Waiting list',
+                paras: [
+                    'When you join, we store your email, the page language and, if you answered, which calendar you use and what you forget most often.',
+                    'We use this only to write to you about access and to understand who we are building Luefy for. No newsletters, nothing shared with third parties.',
+                    'Your request is kept until you get access or ask us to delete it.',
+                ],
+            },
+            {
+                title: 'The app',
+                paras: [
+                    'You sign in with Google or Microsoft. We receive your name and email, plus calendar access so Luefy can see busy time and write what it plans.',
+                    'Your tasks, phases and settings are stored on our servers. To recognise your voice and understand a phrase, Luefy sends it to speech-recognition and language-model services.',
+                    'We don’t sell data or use it for advertising.',
+                ],
+            },
+            {
+                title: 'Where data is stored',
+                paras: ['The app servers run on Render (Frankfurt); the database is hosted by Neon.'],
+            },
+            {
+                title: 'Your rights',
+                paras: [
+                    'You can ask us to show, correct or delete your data. You can delete your account in the app settings.',
+                ],
+            },
+        ],
+        contact: 'Questions and data requests: {email}.',
+        back: 'Home',
     },
 };
 
-const JOIN: Record<Locale, string> = { en: ' or ', uk: ' або ' };
+const JOIN: Record<Locale, string> = { uk: ' або ', en: ' or ' };
 
 /** "Google", "Google or Microsoft", "Google, Microsoft or Apple" */
-function providerList(locale: Locale): string {
+export function providerList(locale: Locale): string {
     const names = ENABLED_PROVIDERS.map((id) => PROVIDERS[id].name);
     if (names.length < 2) return names.join('');
     return `${names.slice(0, -1).join(', ')}${JOIN[locale]}${names[names.length - 1]}`;
@@ -414,8 +609,8 @@ function fillProviders<T>(value: T, providers: string): T {
 }
 
 const dictionaries: Record<Locale, Dictionary> = {
-    en: fillProviders(en, providerList('en')),
     uk: fillProviders(uk, providerList('uk')),
+    en: fillProviders(en, providerList('en')),
 };
 
 export function getDictionary(locale: Locale): Dictionary {

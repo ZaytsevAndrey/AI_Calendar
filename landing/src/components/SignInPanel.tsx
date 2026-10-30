@@ -37,7 +37,16 @@ function loadStatus(): Promise<Status | null> {
 
 const fill = (s: string, provider: ProviderId) => s.replace('{provider}', PROVIDERS[provider].name);
 
-export default function SignInPanel({ labels, tone = 'light' }: { labels: SignInLabels; tone?: 'light' | 'dark' }) {
+export default function SignInPanel({
+    labels,
+    tone = 'light',
+    quiet = false,
+}: {
+    labels: SignInLabels;
+    tone?: 'light' | 'dark';
+    /** Every button secondary (a low-key "already have access" spot). */
+    quiet?: boolean;
+}) {
     const [providers, setProviders] = useState<ProviderId[]>(ENABLED_PROVIDERS);
     const [active, setActive] = useState<ProviderId | null>(null);
     const [phase, setPhase] = useState<Phase>('idle');
@@ -111,7 +120,7 @@ export default function SignInPanel({ labels, tone = 'light' }: { labels: SignIn
                         <button
                             key={id}
                             type="button"
-                            className={i === 0 ? 'btn btn-primary' : 'btn btn-quiet'}
+                            className={i === 0 && !quiet ? 'btn btn-primary' : 'btn btn-quiet'}
                             onClick={() => start(id)}
                             onPointerEnter={() => void loadStatus()}
                             onFocus={() => void loadStatus()}

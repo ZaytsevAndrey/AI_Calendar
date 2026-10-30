@@ -50,9 +50,13 @@ const server = http.createServer((req, res) => {
     const url = new URL(req.url || '/', 'http://localhost');
     // 1. existing file wins
     let file = existingFile(url.pathname);
-    // 2. /uk → /uk/
-    if (!file && url.pathname === '/uk') {
-        res.writeHead(301, { Location: `/uk/${url.search}` });
+    // 2. redirects: /en → /en/, the old /uk/… → /
+    if (!file && url.pathname === '/en') {
+        res.writeHead(301, { Location: `/en/${url.search}` });
+        return res.end();
+    }
+    if (!file && (url.pathname === '/uk' || url.pathname.startsWith('/uk/'))) {
+        res.writeHead(301, { Location: `/${url.search}` });
         return res.end();
     }
     // 3. everything else → SPA shell
