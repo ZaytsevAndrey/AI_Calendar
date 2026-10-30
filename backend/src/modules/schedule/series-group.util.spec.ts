@@ -94,3 +94,61 @@ describe('series-group.util', () => {
     });
   });
 });
+
+describe('breaksSeriesMembership against the stored task', () => {
+  const current = {
+    name: 'Standup',
+    description: null,
+    priority: 'medium',
+    eventType: 'admin',
+    isRecurring: false,
+    recurrencePattern: null,
+    recurrenceWeekDays: null,
+    deadline: new Date('2026-05-01T00:00:00.000Z'),
+    earliestStartTime: null,
+    googleReminders: { useDefault: true },
+    location: null,
+  };
+
+  it('a field sent back with its current value is not a change', () => {
+    expect(
+      breaksSeriesMembership(
+        {
+          name: 'Standup',
+          description: '',
+          priority: 'medium',
+          eventType: 'admin',
+          isRecurring: false,
+          recurrencePattern: undefined,
+          recurrenceWeekDays: [],
+          deadline: '2026-05-01T00:00:00.000Z',
+          earliestStartTime: null,
+          googleReminders: { useDefault: true },
+          location: '',
+          scheduledStartTime: '2026-04-20T10:00:00.000Z',
+        },
+        current,
+      ),
+    ).toBe(false);
+  });
+
+  it('a real change still breaks membership', () => {
+    expect(breaksSeriesMembership({ name: 'Standup 2' }, current)).toBe(true);
+    expect(breaksSeriesMembership({ priority: 'high' }, current)).toBe(true);
+    expect(breaksSeriesMembership({ deadline: '2026-05-02T00:00:00.000Z' }, current)).toBe(true);
+    expect(breaksSeriesMembership({ deadline: null }, current)).toBe(true);
+    expect(breaksSeriesMembership({ recurrenceWeekDays: [1] }, current)).toBe(true);
+    expect(
+      breaksSeriesMembership(
+        { googleReminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 10 }] } },
+        current,
+      ),
+    ).toBe(true);
+  });
+
+  it('weekday order does not matter', () => {
+    expect(
+      breaksSeriesMembership({ recurrenceWeekDays: [3, 1] }, { ...current, recurrenceWeekDays: [1, 3] }),
+    ).toBe(false);
+  });
+});

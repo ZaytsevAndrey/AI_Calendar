@@ -208,8 +208,8 @@ export class TasksService implements OnModuleInit {
       phaseId: task.phaseId ?? null,
       isRecurring: !!task.isRecurring,
       recurrencePattern: task.recurrencePattern ?? null,
-      recurrenceWeekDays: JSON.stringify(task.recurrenceWeekDays ?? null),
-      eligibleWeekDays: JSON.stringify(task.eligibleWeekDays ?? null),
+      recurrenceWeekDays: canonicalWeekDays(task.recurrenceWeekDays),
+      eligibleWeekDays: canonicalWeekDays(task.eligibleWeekDays),
       allowSplit: !!task.allowSplit,
     };
   }
@@ -279,6 +279,24 @@ export class TasksService implements OnModuleInit {
         durationMinutes: task.estimatedTimeInMinutes,
         expandSeries: !!task.isRecurring,
       };
+    }
+    const ruleChanged =
+      task.isRecurring &&
+      before.isRecurring &&
+      (before.recurrencePattern !== after.recurrencePattern ||
+        before.recurrenceWeekDays !== after.recurrenceWeekDays);
+    if (ruleChanged) {
+      // A new repeat rule rewrites the open horizon: days the rule no longer
+      // names leave the calendar, new days are seated. Past days stay (§7.3).
+      if (task.scheduledStartTime) {
+        return {
+          commit: task.eventType === TaskEventType.FIXED ? 'always' : 'preferred',
+          preferredStart: new Date(task.scheduledStartTime),
+          durationMinutes: task.estimatedTimeInMinutes,
+          expandSeries: true,
+        };
+      }
+      return { searchHole: true, expandSeries: true };
     }
     const durationChanged =
       before.estimatedTimeInMinutes !== after.estimatedTimeInMinutes;
@@ -504,14 +522,18 @@ export class TasksService implements OnModuleInit {
         (job.payload.before as ScheduleSnapshot | undefined) ?? null,
       ),
     );
-    this.scheduleJobService.registerHandler('park', async (job) => {
+    const syncAndFill = async (job: { id: string; userId: string; payload: Record<string, unknown> }) => {
       await this.scheduleJobService.setMutationStage(job.id, 'syncing');
       await this.pendingGoogleWrites.syncTask(job.userId, String(job.payload.taskId));
       await this.placementStep.seatOpenHoles(
         job.userId,
         typeof job.payload.exceptTaskId === 'string' ? job.payload.exceptTaskId : undefined,
       );
-    });
+    };
+    this.scheduleJobService.registerHandler('park', syncAndFill);
+    // Repeat turned off: the kept slot is already seated; Google gets the
+    // single event and the freed days are refilled.
+    this.scheduleJobService.registerHandler('series_off', syncAndFill);
     this.scheduleJobService.registerHandler('sync', async (job) => {
       await this.scheduleJobService.setMutationStage(job.id, 'syncing');
       await this.pendingGoogleWrites.syncTask(job.userId, String(job.payload.taskId));
@@ -891,7 +913,10 @@ export class TasksService implements OnModuleInit {
 
     if (
       (task.seriesGroupId || task.parentSeriesId) &&
-      breaksSeriesMembership(dto as Record<string, unknown>)
+      breaksSeriesMembership(
+        dto as Record<string, unknown>,
+        task as unknown as Record<string, unknown>,
+      )
     ) {
       task.seriesGroupId = null;
       task.parentSeriesId = null;
@@ -946,6 +971,13 @@ export class TasksService implements OnModuleInit {
 
     this.applyUnscheduledConstraints(task);
     this.applyProblematicConstraints(task);
+
+    // Repeat turned off: the series becomes the single task of its nearest
+    // upcoming occurrence; the other open days leave the calendar, history stays.
+    const leavesSeries = before.isRecurring && !task.isRecurring && !task.isUnscheduled;
+    const obsoleteSeriesSlots = leavesSeries
+      ? await this.convertSeriesToSingle(task)
+      : [];
 
     if (
       task.isRecurring &&
@@ -1003,9 +1035,12 @@ export class TasksService implements OnModuleInit {
       ? { taskId: task.id, op: 'park', ...(enteredProblematic ? { exceptTaskId: task.id } : {}) }
       : enteredResolved
         ? { taskId: task.id, op: 'sync' }
-        : { taskId: task.id, op: 'update', before };
+        : leavesSeries
+          ? { taskId: task.id, op: 'series_off', exceptTaskId: task.id }
+          : { taskId: task.id, op: 'update', before };
     const { saved, job } = await this.tasksRepository.manager.transaction(async (manager) => {
       const saved = await manager.save(task);
+      if (obsoleteSeriesSlots.length) await manager.remove(obsoleteSeriesSlots);
       if (parks) {
         const now = Date.now();
         const open = (await manager.find(ScheduledTask, { where: { taskId: saved.id } })).filter(
@@ -1033,6 +1068,41 @@ export class TasksService implements OnModuleInit {
     void this.scheduleJobService.runNow(job.id);
     const row = await this.findOne(saved.id, userId);
     return this.withConflicts(row, undefined, job.id);
+  }
+
+  /**
+   * Series → single task (repeat turned off). The task keeps the nearest
+   * upcoming occurrence — the earliest open slot (ends after now, in the
+   * user's effective time zone) — as its one slot and its clock. Returns the
+   * other open slots, which the caller removes in the same transaction as
+   * the save. Past slots and detached day copies are left alone: they are
+   * history. Without an upcoming occurrence the request is refused rather
+   * than picking a historical day.
+   */
+  private async convertSeriesToSingle(task: Task): Promise<ScheduledTask[]> {
+    const rows = await this.scheduledTaskRepository.find({ where: { taskId: task.id } });
+    const now = Date.now();
+    const open = rows
+      .filter((row) => new Date(row.scheduledEndTime).getTime() > now)
+      .sort(
+        (a, b) =>
+          new Date(a.scheduledStartTime).getTime() -
+          new Date(b.scheduledStartTime).getTime(),
+      );
+    if (!open.length) {
+      throw new BadRequestException(
+        'The series has no upcoming occurrence to keep. Delete it or end it instead.',
+      );
+    }
+    const kept = open[0];
+    task.scheduledStartTime = new Date(kept.scheduledStartTime);
+    task.scheduledEndTime = new Date(kept.scheduledEndTime);
+    task.recurrencePattern = null;
+    task.recurrenceWeekDays = null;
+    task.skippedOccurrenceYmds = null;
+    // No longer a series: its detached day copies stay as the one-offs they are.
+    task.seriesGroupId = null;
+    return open.slice(1);
   }
 
   async remove(id: string, userId: string): Promise<void> {
@@ -1472,6 +1542,15 @@ function resolvedScheduleChanged(before: ScheduleSnapshot, task: Task): boolean 
     before.scheduledEndTime !== isoInstant(task.scheduledEndTime) ||
     before.estimatedTimeInMinutes !== (task.estimatedTimeInMinutes ?? 0)
   );
+}
+
+/** Sorted unique weekdays; empty, null and all seven days are the same "no filter". */
+function canonicalWeekDays(days: number[] | null | undefined): string {
+  const set = [...new Set((days ?? []).map(Number).filter((d) => d >= 0 && d <= 6))].sort(
+    (a, b) => a - b,
+  );
+  if (set.length === 0 || set.length === 7) return 'null';
+  return JSON.stringify(set);
 }
 
 function isoInstant(value: Date | string | null | undefined): string | null {

@@ -47,16 +47,57 @@ const MEMBERSHIP_BREAKING_KEYS = new Set([
 ]);
 
 /**
+ * Canonical form of a membership field for comparison: empty strings, null
+ * and undefined are the same "unset"; dates compare as instants; weekday
+ * lists compare as sorted sets (empty = null = no filter); JSON (reminders)
+ * compares structurally.
+ */
+function canonicalMembershipValue(key: string, value: unknown): string {
+  if (value === undefined || value === null) return 'null';
+  if (typeof value === 'string' && value.trim() === '') return 'null';
+  if (key === 'deadline' || key === 'earliestStartTime') {
+    const date = value instanceof Date ? value : new Date(String(value));
+    return Number.isNaN(date.getTime()) ? `raw:${String(value)}` : date.toISOString();
+  }
+  if (key === 'recurrenceWeekDays' || key === 'eligibleWeekDays') {
+    if (!Array.isArray(value) || value.length === 0) return 'null';
+    return JSON.stringify([...new Set(value.map(Number))].sort((a, b) => a - b));
+  }
+  if (key === 'googleReminders') {
+    const row = value as { useDefault?: boolean; overrides?: unknown[] };
+    if (row.useDefault !== false) return 'default';
+    const overrides = (row.overrides ?? []).map((o) => JSON.stringify(o)).sort();
+    return `custom:${overrides.join('|')}`;
+  }
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
+/**
  * True when the patch edits identity/content fields (not time or phase) —
  * the task must leave its series group permanently.
+ *
+ * With `current`, a key counts only when its value differs from the stored
+ * task: a form that sends every field back (same name, same priority) keeps
+ * a day copy in its series. Without `current` the mere presence of a key
+ * counts (legacy behaviour).
  */
 export function breaksSeriesMembership(
   patch: Record<string, unknown> | null | undefined,
+  current?: Record<string, unknown> | null,
 ): boolean {
   if (!patch) return false;
   for (const key of Object.keys(patch)) {
     if (patch[key] === undefined) continue;
-    if (MEMBERSHIP_BREAKING_KEYS.has(key)) return true;
+    if (!MEMBERSHIP_BREAKING_KEYS.has(key)) continue;
+    if (!current) return true;
+    if (
+      canonicalMembershipValue(key, patch[key]) !==
+      canonicalMembershipValue(key, current[key])
+    ) {
+      return true;
+    }
   }
   return false;
 }
