@@ -7,7 +7,10 @@
 import { randomUUID } from 'crypto';
 import { join } from 'path';
 import { DataSource } from 'typeorm';
-import { migrationGlob } from './typeorm.config';
+import { DataSourceOptions } from 'typeorm';
+import { createTypeOrmOptions, migrationGlob } from './typeorm.config';
+import { initializeDataSource } from './migration-lock';
+import { migrateLegacyScheduleState } from './migrate-schedule-state';
 
 const url = process.env.PG_TEST_URL;
 const describePg = url ? describe : describe.skip;
@@ -137,5 +140,22 @@ describePg('versioned migrations (Postgres)', () => {
     await ds.runMigrations();
     expect(await drift(ds)).toEqual([]);
     await ds.destroy();
+  });
+
+  it('AUD-026: three instances booting at once on an empty database all come up; each migration runs once', async () => {
+    const env = { DATABASE_URL: await freshDatabase(), DATABASE_SSL: 'false' };
+    // The real boot path: the pre-step (migrations + legacy fixes), then the app DataSource.
+    const boot = async () => {
+      await migrateLegacyScheduleState(env);
+      return initializeDataSource(createTypeOrmOptions(env) as DataSourceOptions);
+    };
+    const sources = await Promise.all([boot(), boot(), boot()]);
+    try {
+      const rows = await sources[0].query(`SELECT name FROM migrations ORDER BY id`);
+      expect(rows).toHaveLength(5);
+      expect(await drift(sources[0])).toEqual([]);
+    } finally {
+      for (const ds of sources) await ds.destroy();
+    }
   });
 });

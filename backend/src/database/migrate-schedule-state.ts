@@ -1,5 +1,6 @@
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { createTypeOrmOptions } from './typeorm.config';
+import { runPendingMigrations, withMigrationLock } from './migration-lock';
 
 /**
  * Copy legacy `isProblematic` into `scheduleState` before TypeORM synchronize
@@ -14,11 +15,17 @@ export async function migrateLegacyScheduleState(
     synchronize: false,
     entities: [],
     logging: false,
-  });
+    // AUD-026: migrations run below, under the boot lock.
+    migrationsRun: false,
+  } as DataSourceOptions);
   await ds.initialize();
   try {
-    await copyIsProblematicFlag(ds, options.type === 'postgres');
-    await backfillOccurrenceIdentity(ds, options.type === 'postgres');
+    // One booting instance at a time: migrations, then the legacy fixes.
+    await withMigrationLock(ds, async () => {
+      if (options.migrationsRun) await runPendingMigrations(ds);
+      await copyIsProblematicFlag(ds, options.type === 'postgres');
+      await backfillOccurrenceIdentity(ds, options.type === 'postgres');
+    });
   } finally {
     await ds.destroy();
   }

@@ -46,19 +46,25 @@ export function withUserLock<T>(userId: string, run: () => Promise<T>): Promise<
  */
 export const USER_LOCK_TIMEOUT_MS = 60_000;
 
-/** Session advisory lock on its own connection; released (or dropped with the connection) after `run`. */
+/**
+ * Session advisory lock on its own connection; released (or dropped with the
+ * connection) after `run`. `timeoutMs` null: wait without a bound and leave
+ * the session's `lock_timeout` alone (connections of a shared pool).
+ */
 export async function withPgAdvisoryLock<T>(
   source: DataSource,
   key: string,
   run: () => Promise<T>,
-  timeoutMs = USER_LOCK_TIMEOUT_MS,
+  timeoutMs: number | null = USER_LOCK_TIMEOUT_MS,
 ): Promise<T> {
   const runner = source.createQueryRunner();
   await runner.connect();
   let broken: Error | undefined;
   try {
-    // Session-wide on a pool used only for these locks; set on every take.
-    await runner.query(`SELECT set_config('lock_timeout', $1, false)`, [`${Math.max(1, Math.round(timeoutMs))}ms`]);
+    if (timeoutMs !== null) {
+      // Session-wide on a pool used only for these locks; set on every take.
+      await runner.query(`SELECT set_config('lock_timeout', $1, false)`, [`${Math.max(1, Math.round(timeoutMs))}ms`]);
+    }
     await runner.query(`SELECT pg_advisory_lock(hashtext($1))`, [key]);
     try {
       return await run();

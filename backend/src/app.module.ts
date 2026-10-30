@@ -19,6 +19,8 @@ import { CalendarProvidersModule } from './modules/calendar-providers/calendar-p
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { migrateLegacyScheduleState } from './database/migrate-schedule-state';
 import { createTypeOrmOptions } from './database/typeorm.config';
+import { initializeDataSource } from './database/migration-lock';
+import type { DataSourceOptions } from 'typeorm';
 
 @Module({
   imports: [
@@ -38,6 +40,8 @@ import { createTypeOrmOptions } from './database/typeorm.config';
         await migrateLegacyScheduleState(env);
         return createTypeOrmOptions(env);
       },
+      // AUD-026: pending migrations run under a boot lock, not in initialize().
+      dataSourceFactory: (options) => initializeDataSource(options as DataSourceOptions),
     }),
     AuthModule,
     UsersModule,
