@@ -16,45 +16,26 @@ describe('presetPatch', () => {
   it('clears isUnscheduled when switching to flexible or fixed', () => {
     expect(presetPatch('flexible').isUnscheduled).toBe(false);
     expect(presetPatch('fixed').isUnscheduled).toBe(false);
-    expect(presetPatch('recurring').isUnscheduled).toBe(false);
+  });
+
+  it('flexible and fixed leave the repeat rule alone (repeat is not a mode)', () => {
+    for (const id of ['flexible', 'fixed'] as const) {
+      const patch = presetPatch(id);
+      expect('isRecurring' in patch).toBe(false);
+      expect('recurrencePattern' in patch).toBe(false);
+      expect('recurrenceWeekDays' in patch).toBe(false);
+    }
   });
 });
 
 describe('matchPreset', () => {
   it('prefers unscheduled even if other flags are set', () => {
-    expect(
-      matchPreset({
-        isUnscheduled: true,
-        isFixed: true,
-        isRecurring: false,
-        allowSplit: false,
-        recurrencePattern: undefined,
-      }),
-    ).toBe('unscheduled');
+    expect(matchPreset({ isUnscheduled: true, isFixed: true })).toBe('unscheduled');
   });
 
-  it('matches a weekly series even when split is off', () => {
-    expect(
-      matchPreset({
-        isUnscheduled: false,
-        isFixed: false,
-        isRecurring: true,
-        allowSplit: false,
-        recurrencePattern: 'WEEKLY',
-      }),
-    ).toBe('recurring');
-  });
-
-  it('matches flexible when the inbox flag is off', () => {
-    expect(
-      matchPreset({
-        isUnscheduled: false,
-        isFixed: false,
-        isRecurring: false,
-        allowSplit: true,
-        recurrencePattern: undefined,
-      }),
-    ).toBe('flexible');
+  it('a repeating task is still flexible or fixed: repeat is not a mode', () => {
+    expect(matchPreset({ isUnscheduled: false, isFixed: false })).toBe('flexible');
+    expect(matchPreset({ isUnscheduled: false, isFixed: true })).toBe('fixed');
   });
 });
 

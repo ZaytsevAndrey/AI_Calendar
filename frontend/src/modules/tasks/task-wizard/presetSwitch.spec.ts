@@ -60,21 +60,66 @@ describe('switchPreset', () => {
     });
   });
 
-  it('fixed slot → recurring starts the series there without an end', () => {
+  it('fixed series slot → flexible starts the series on the slot day and keeps Until', () => {
     const next = switchPreset(
       values({
         isFixed: true,
+        isRecurring: true,
+        recurrencePattern: 'DAILY',
+        recurrenceWeekDays: [1],
         scheduledStartTime: '2026-10-24T10:00',
         scheduledEndTime: '2026-10-24T11:00',
+        deadline: '2026-12-31T23:59',
       }),
-      'recurring',
+      'flexible',
     );
     expect(next.patch.earliestStartTime).toBe('2026-10-24T00:00');
-    expect(next.patch.deadline).toBe('');
+    expect(next.patch.deadline).toBe('2026-12-31T23:59');
   });
 
-  it('keeps a typed duration between flexible and recurring', () => {
-    const next = switchPreset(values({ estimatedTimeInMinutes: 75 }), 'recurring', 30);
+  it('keeps a typed duration when switching back to flexible', () => {
+    const next = switchPreset(values({ estimatedTimeInMinutes: 75 }), 'flexible', 30);
     expect(next.patch.estimatedTimeInMinutes).toBe(75);
+  });
+});
+
+describe('switchPreset keeps recurrence (scheduling mode and repeat are independent)', () => {
+  it('fixed series → flexible keeps the repeat rule', () => {
+    const before = values({
+      isFixed: true,
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      recurrenceWeekDays: [1, 3, 5],
+      scheduledStartTime: '2026-10-26T10:00',
+      scheduledEndTime: '2026-10-26T10:30',
+    });
+    const after = { ...before, ...switchPreset(before, 'flexible').patch };
+    expect(after.isRecurring).toBe(true);
+    expect(after.recurrencePattern).toBe('DAILY');
+    expect(after.recurrenceWeekDays).toEqual([1, 3, 5]);
+    expect(after.isFixed).toBe(false);
+  });
+
+  it('flexible monthly series → fixed keeps monthly', () => {
+    const before = values({
+      isRecurring: true,
+      recurrencePattern: 'MONTHLY',
+      recurrenceWeekDays: [],
+      earliestStartTime: '2026-10-26T00:00',
+      preferredStartTime: '09:00',
+    });
+    const after = { ...before, ...switchPreset(before, 'fixed').patch };
+    expect(after.isRecurring).toBe(true);
+    expect(after.recurrencePattern).toBe('MONTHLY');
+    expect(after.isFixed).toBe(true);
+  });
+
+  it('later drops recurrence (the inbox cannot hold a series)', () => {
+    const next = switchPreset(
+      values({ isRecurring: true, recurrencePattern: 'DAILY', recurrenceWeekDays: [1] }),
+      'unscheduled',
+    );
+    expect(next.patch.isRecurring).toBe(false);
+    expect(next.patch.isUnscheduled).toBe(true);
   });
 });

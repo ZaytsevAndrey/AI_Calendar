@@ -23,6 +23,8 @@ export interface TaskDTO {
   eligibleWeekDays?: number[] | null;
   scheduleTimeZone?: string;
   status: 'todo' | 'in_progress' | 'completed' | 'canceled';
+  /** When the task became completed; null while not completed. */
+  completedAt?: string | null;
   scheduledStartTime?: string;
   scheduledEndTime?: string;
   googleEventId?: string | null;
@@ -42,6 +44,8 @@ export interface TaskDTO {
   parentSeriesId?: string | null;
   /** Logical recurring family (clock-split siblings + detached one-offs). */
   seriesGroupId?: string | null;
+  /** Detached series day only: the civil day (YYYY-MM-DD) this copy stands for. */
+  originalOccurrenceYmd?: string | null;
   /** First open occurrence start (Tasks UI series span). */
   seriesSpanStart?: string | null;
   /** Last open occurrence start (Tasks UI series span). */
@@ -127,6 +131,24 @@ export interface UpdateTaskDTO extends Partial<CreateTaskDTO> {
 
 export interface SkipOccurrenceDTO {
   occurrenceStart: string;
+  googleEventId?: string;
+  googleEventCalendarId?: string;
+}
+
+/**
+ * `PATCH /tasks/:id/occurrence`: change one day of a series (default) or this
+ * day and the following ones. Only the fields present are changed.
+ */
+export interface EditOccurrenceDTO {
+  occurrenceStart: string;
+  scope?: 'occurrence' | 'following';
+  name?: string;
+  description?: string | null;
+  phaseIds?: string[];
+  start?: string;
+  durationMinutes?: number;
+  /** Completion of this one occurrence (scope `occurrence` only). */
+  status?: 'todo' | 'completed';
   googleEventId?: string;
   googleEventCalendarId?: string;
 }

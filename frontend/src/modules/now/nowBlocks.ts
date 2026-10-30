@@ -35,10 +35,12 @@ export function weekdayIndexUtc(ymd: string): number {
   return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
 }
 
+/** Done on a Now / Next block. A series block completes that day only (it has its own completion). */
 export function canCompleteNowBlock(block: NowBlock): boolean {
   const task = block.task;
   if (!task) return false;
-  if (task.isRecurring || task.isFixedExternal) return false;
+  if (task.isFixedExternal) return false;
+  if (task.isRecurring && block.allDay) return false;
   if (task.status === 'completed' || task.status === 'canceled') return false;
   return true;
 }

@@ -13,9 +13,12 @@ test.describe('P0 tasks UI', () => {
   test('U-TSK-001 /tasks create defaults to Flexible', async ({ page, auth }) => {
     await openAs(page, auth.onboarded, '/tasks');
     const dialog = await openCreateTaskDialog(page);
-    await expect(dialog.getByRole('button', { name: 'Flexible' })).toBeVisible();
-    await expect(dialog.getByLabel(/Duration/)).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Flexible', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(dialog.getByRole('spinbutton', { name: /Duration/ })).toBeVisible();
     await expect(dialog.getByLabel(/^Start/)).toHaveCount(0);
+    // Repeat is a property of the task, not a third type.
+    await expect(dialog.getByRole('button', { name: 'Recurring' })).toHaveCount(0);
+    await expect(dialog.locator('#task-form-recurrence')).toHaveValue('NONE');
   });
 
   test('U-TSK-003 fixed missing end is blocked with no POST', async ({ page, auth }) => {
@@ -61,7 +64,8 @@ test.describe('P0 tasks UI', () => {
   }) => {
     await openAs(page, auth.onboarded, '/tasks');
     const dialog = await openCreateTaskDialog(page);
-    await dialog.getByRole('button', { name: 'Recurring' }).click();
+    // Repeat is a property, not a task type: the flexible default plus the Repeat select.
+    await dialog.locator('#task-form-recurrence').selectOption('DAILY');
     await expect(dialog.locator('#task-form-recurrence')).toHaveValue('DAILY');
     await expect(dialog.getByRole('button', { name: 'Mon' })).toHaveAttribute('aria-pressed', 'true');
     await expect(dialog.getByRole('button', { name: 'Fri' })).toHaveAttribute('aria-pressed', 'true');

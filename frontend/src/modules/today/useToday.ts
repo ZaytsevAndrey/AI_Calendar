@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useGetEventsQuery } from 'api/eventsApi';
 import type { GoogleCalendarEvent } from 'api/google-calendar.api';
 import {
+  useEditOccurrenceMutation,
   useGetEventsQuery as useGetTasksQuery,
   useSkipOccurrenceMutation,
   useUpdateEventMutation,
@@ -88,6 +89,7 @@ export function useToday({ sharedEvents, skipEventsFetch = false, hiddenEventIds
   const { data: reminders = [] } = useGetDayRemindersQuery();
   const [updateTask] = useUpdateEventMutation();
   const [skipOccurrence] = useSkipOccurrenceMutation();
+  const [editOccurrence] = useEditOccurrenceMutation();
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const blocks = useMemo(
@@ -122,6 +124,19 @@ export function useToday({ sharedEvents, skipEventsFetch = false, hiddenEventIds
 
   const complete = (task: TaskDTO) =>
     run(task.id, t('tasks.completeFailed'), () => updateTask({ id: task.id, body: { status: 'completed' } }).unwrap());
+
+  /** Done on a block: a series block completes that day only; a one-off completes the task. */
+  const completeBlock = (block: NowBlock) => {
+    const task = block.task;
+    if (!task) return Promise.resolve();
+    if (!task.isRecurring) return complete(task);
+    return run(task.id, t('tasks.completeFailed'), () =>
+      editOccurrence({
+        id: task.id,
+        body: { occurrenceStart: new Date(block.startMs).toISOString(), status: 'completed' },
+      }).unwrap(),
+    );
+  };
 
   const skipBlock = (block: NowBlock) => {
     const task = block.task;
@@ -159,6 +174,7 @@ export function useToday({ sharedEvents, skipEventsFetch = false, hiddenEventIds
     overdueReminders,
     busyId,
     complete,
+    completeBlock,
     skipBlock,
     skipLater,
     doNow,

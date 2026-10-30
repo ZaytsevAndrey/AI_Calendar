@@ -26,9 +26,10 @@ export type PresetSwitch = {
 };
 
 /**
- * Tab switch that keeps what the user already chose: the window day becomes the
- * Fixed day (and slot, with a preferred clock), a Fixed slot becomes the window
- * and preferred clock, and a typed duration survives Flexible ↔ Recurring.
+ * Mode switch that keeps what the user already chose: the window day becomes
+ * the Fixed day (and slot, with a preferred clock), a Fixed slot becomes the
+ * window and preferred clock, a typed duration survives, and the repeat rule
+ * is never touched (Later excepted: the inbox cannot hold a series).
  */
 export function switchPreset(
   values: TaskFormValues,
@@ -57,7 +58,7 @@ export function switchPreset(
     return { patch, fixedDay: day };
   }
 
-  if (id === 'flexible' || id === 'recurring') {
+  if (id === 'flexible') {
     if (wasFixed && slotStart && slotEnd) {
       const from = splitDateTimeLocal(slotStart);
       const to = splitDateTimeLocal(slotEnd);
@@ -73,8 +74,11 @@ export function switchPreset(
           estimatedTimeInMinutes: minutes,
           preferredStartTime: from.hm,
           earliestStartTime: `${from.ymd}T00:00`,
-          // A one-off keeps the slot's days; a series only starts there.
-          deadline: id === 'flexible' ? `${to.ymd || from.ymd}T23:59` : '',
+          // A one-off keeps the slot's days; a series only starts there and
+          // keeps its own Until day.
+          deadline: values.isRecurring
+            ? (values.deadline?.trim() ?? '')
+            : `${to.ymd || from.ymd}T23:59`,
         },
         fixedDay: '',
       };

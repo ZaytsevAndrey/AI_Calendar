@@ -291,9 +291,14 @@ export function CalendarChipMeta({
             title={kindTitle}
             aria-label={kindTitle}
           >
-            <KindIcon kind={repeats ? 'recurring' : kind} />
+            <KindIcon kind={kind} />
           </span>
         )}
+        {repeats ? (
+          <span className="calendar-chip__repeat" aria-hidden title={kindTitle}>
+            <KindIcon kind="recurring" />
+          </span>
+        ) : null}
         {external ? (
           <span className="calendar-chip__cal" title={calTitle} aria-label={calTitle}>
             <ProviderLogo provider={calProvider} className="h-3 w-3" />

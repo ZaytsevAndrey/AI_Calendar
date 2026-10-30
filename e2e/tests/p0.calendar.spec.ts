@@ -268,7 +268,7 @@ test.describe('P0 calendar UI', () => {
     await expect(inbox).toBeVisible({ timeout: 15_000 });
   });
 
-  test('U-CAL-014 recurring and external Google blocks have no Done', async ({ page, auth, request }) => {
+  test('U-CAL-014 a series block completes its day only; external Google blocks have no Done', async ({ page, auth, request }) => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const recurringName = uniqueName('E2E series');
     const now = Date.now();
@@ -322,7 +322,8 @@ test.describe('P0 calendar UI', () => {
     await openAs(page, auth.onboarded);
     const recurringBlock = stripBlock(page, recurringName);
     await expect(recurringBlock).toBeVisible();
-    await expect(recurringBlock.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0);
+    // Per-occurrence completion: Done on a series block marks that day only.
+    await expect(recurringBlock.getByRole('button', { name: 'Done', exact: true })).toBeVisible();
 
     const externalBlock = stripBlock(page, 'External dentist');
     await expect(externalBlock).toBeVisible();

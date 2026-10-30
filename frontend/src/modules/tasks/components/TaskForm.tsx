@@ -31,8 +31,11 @@ import {
 import { GoogleEventSettingsFields } from '../../calendar/components/GoogleEventSettingsFields';
 import { LocationField } from '../../calendar/components/LocationField';
 import { dateTimeLocalYmd, localYmd } from '../../../utils/ianaDateTime';
-import { Bell, Check, Info, Plus, SkipForward, Trash2, X } from 'lucide-react';
+import { Bell, Check, ChevronDown, ChevronUp, Info, Plus, SkipForward, Trash2, X } from 'lucide-react';
 import { Button } from 'ui/Button';
+import { Modal } from 'ui/Modal';
+import { dialogButtonSize } from 'ui/controlSize';
+import { formatDateTime } from '../../../utils/formatDate';
 import { DatePicker } from 'ui/DatePicker';
 import { DateRangeField } from 'ui/DateRangeField';
 import { HelpTip } from 'ui/HelpTip';
@@ -163,6 +166,10 @@ const TaskForm: React.FC<TaskFormProps> = ({
     !!initialData?.description || !!createDefaults?.formPrefill?.description;
   const [showDescription, setShowDescription] = useState(hasDescription);
   const [showMore, setShowMore] = useState(false);
+  /** Flexible: preferred clock, dates and weekdays sit behind «Уточнити». */
+  const [refineOpen, setRefineOpen] = useState(false);
+  /** Repeat turned off on an existing series: say what stays before saving. */
+  const [repeatOffConfirm, setRepeatOffConfirm] = useState<TaskFormValues | null>(null);
   const [fixedDay, setFixedDay] = useState('');
   const [dismissedTypes] = useState(readDismissedTypes);
   const [infoVisible, setInfoVisible] = useState<Partial<Record<TaskPresetId, boolean>>>({});
@@ -204,6 +211,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
       !!initialData?.description || !!createDefaults?.formPrefill?.description,
     );
     setShowMore(false);
+    setRefineOpen(false);
   }, [initialData, createDefaults, reset, timeZone, defaultTaskDurationMinutes, mode]);
 
   const isFixed = useWatch({ control, name: 'isFixed' });
@@ -230,6 +238,13 @@ const TaskForm: React.FC<TaskFormProps> = ({
   const windowStartYmd = dateTimeLocalYmd(earliestStartTime) ?? dateTimeLocalYmd(deadline) ?? '';
   const windowEndYmd = dateTimeLocalYmd(deadline) ?? dateTimeLocalYmd(earliestStartTime) ?? '';
   const seatedStartTime = useWatch({ control, name: 'seatedStartTime' });
+  const preferredStartTime = useWatch({ control, name: 'preferredStartTime' });
+  // A flexible task with a chosen clock, dates or weekdays shows them open.
+  const refineHasValue =
+    !!preferredStartTime?.trim() ||
+    (!isRecurring && (!!earliestStartTime?.trim() || !!deadline?.trim())) ||
+    selectedEligibleDays.length > 0;
+  const refineShown = refineOpen || refineHasValue;
   // Monthly repeats on the date of the first occurrence: the fixed slot day,
   // else the From day, else the seat.
   const seriesStartYmd = isFixed
@@ -297,9 +312,6 @@ const TaskForm: React.FC<TaskFormProps> = ({
   const activePreset = matchPreset({
     isFixed: !!isFixed,
     isUnscheduled: !!isUnscheduled,
-    isRecurring: !!isRecurring,
-    allowSplit,
-    recurrencePattern,
   });
 
   // Hide / show is per tab: closing Fixed's block leaves Flexible's alone.
@@ -329,18 +341,25 @@ const TaskForm: React.FC<TaskFormProps> = ({
     });
   };
 
-  /** Repeat on a fixed slot: weekly on the slot's weekday until the user picks days. */
-  const toggleFixedRepeat = (on: boolean) => {
+  /**
+   * Repeat is a property of the task, not a mode. Turning it on in Fixed
+   * preselects the slot's weekday; in Flexible, the workdays. Turning it off
+   * drops the series' Until day.
+   */
+  const toggleRepeat = (on: boolean) => {
     const options = { shouldDirty: true, shouldValidate: true };
     if (!on) {
       setValue('isRecurring', false, options);
       setValue('deadline', '', options);
+      if (!getValues('isFixed')) setValue('earliestStartTime', '', options);
       return;
     }
-    const startYmd = dateTimeLocalYmd(getValues('scheduledStartTime'));
+    const startYmd = getValues('isFixed') ? dateTimeLocalYmd(getValues('scheduledStartTime')) : null;
     const weekday = startYmd ? new Date(`${startYmd}T00:00:00Z`).getUTCDay() : null;
-    setValue('recurrencePattern', 'DAILY', options);
-    setValue('recurrenceWeekDays', weekday == null ? [...WORKDAYS] : [weekday], options);
+    if (!getValues('recurrencePattern')?.trim()) setValue('recurrencePattern', 'DAILY', options);
+    if (!getValues('recurrenceWeekDays')?.length) {
+      setValue('recurrenceWeekDays', weekday == null ? [...WORKDAYS] : [weekday], options);
+    }
     setValue('isRecurring', true, options);
   };
 
@@ -360,30 +379,29 @@ const TaskForm: React.FC<TaskFormProps> = ({
 
   const windows = quickWindows(new Date().toISOString(), timeZone);
 
-  /** Fixed adds "Does not repeat"; Recurring is always a series. */
   const chooseRepeat = (pattern: string) => {
     if (pattern === 'NONE') {
-      toggleFixedRepeat(false);
+      toggleRepeat(false);
       return;
     }
-    if (!getValues('isRecurring')) toggleFixedRepeat(true);
+    if (!getValues('isRecurring')) toggleRepeat(true);
     setValue('recurrencePattern', pattern, { shouldDirty: true, shouldValidate: true });
   };
 
-  const repeatSelect = (withNone: boolean) => (
+  /** One repeat control for both modes; «Не повторюється» is always offered. */
+  const repeatSelect = (
     <div>
       <FieldLabel
         label={t('tasks.form.repeat')}
         htmlFor="task-form-recurrence"
-        help={withNone ? t('tasks.form.help.repeatFixed') : t('tasks.form.help.repeat')}
+        help={isFixed ? t('tasks.form.help.repeatFixed') : t('tasks.form.help.repeat')}
       />
       <Select
         id="task-form-recurrence"
-
         value={isRecurring ? recurrencePattern || 'DAILY' : 'NONE'}
         onChange={(e) => chooseRepeat(e.target.value)}
       >
-        {withNone ? <option value="NONE">{t('tasks.recurrence.none')}</option> : null}
+        <option value="NONE">{t('tasks.recurrence.none')}</option>
         {recurrenceOptionsFor(initialData?.recurrencePattern ?? undefined).map((opt) => (
           <option key={opt.value} value={opt.value}>
             {opt.label}
@@ -392,6 +410,56 @@ const TaskForm: React.FC<TaskFormProps> = ({
       </Select>
       {errors.recurrencePattern ? (
         <p className="mt-0.5 text-xs text-ide-error">{errors.recurrencePattern.message}</p>
+      ) : null}
+    </div>
+  );
+
+  /** Series bounds live with the repeat rule, not with the one-off window. */
+  const seriesDates = isFixed ? (
+    <div>
+      <FieldLabel
+        label={t('tasks.form.seriesUntil')}
+        id="task-form-series-until-label"
+        help={t('tasks.form.help.seriesUntil')}
+      />
+      <DatePicker
+        id="task-form-series-until"
+        labelledBy="task-form-series-until-label"
+        value={dateTimeLocalYmd(deadline) ?? ''}
+        minYmd={dateTimeLocalYmd(scheduledStartTime) ?? undefined}
+        error={!!errors.deadline}
+        emptyLabel={t('tasks.form.seriesNoEnd')}
+        clearLabel={t('tasks.form.dateRangeClear')}
+        onChange={(ymd) =>
+          setValue('deadline', ymd ? `${ymd}T23:59` : '', {
+            shouldDirty: true,
+            shouldValidate: true,
+          })
+        }
+      />
+      {errors.deadline ? (
+        <p className="mt-0.5 text-xs text-ide-error">{errors.deadline.message}</p>
+      ) : null}
+    </div>
+  ) : (
+    <div>
+      <FieldLabel
+        label={t('tasks.form.seriesDates')}
+        id="task-form-window-label"
+        help={t('tasks.form.help.seriesDates', { timeZone })}
+      />
+      <DateRangeField
+        id="task-form-window"
+        labelledBy="task-form-window-label"
+        start={windowStartYmd}
+        end={windowEndYmd}
+        error={!!errors.deadline}
+        emptyLabel={t('tasks.form.seriesDatesEmpty')}
+        clearLabel={t('tasks.form.dateRangeClear')}
+        onChange={setWindow}
+      />
+      {errors.deadline ? (
+        <p className="mt-0.5 text-xs text-ide-error">{errors.deadline.message}</p>
       ) : null}
     </div>
   );
@@ -441,10 +509,36 @@ const TaskForm: React.FC<TaskFormProps> = ({
       </div>
     );
 
+  /** Repeat rule + its days + its bounds, the same block in Fixed and Flexible. */
+  const repeatBlock = (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {repeatSelect}
+        {isRecurring ? seriesDates : null}
+      </div>
+      {isRecurring ? repeatDays : null}
+    </div>
+  );
+
+  /** Repeat off on a saved series: show what stays before the save goes out. */
+  const submitValues = (data: TaskFormValues) => {
+    const turnsRepeatOff =
+      mode === 'edit' && !!initialData?.isRecurring && !data.isRecurring && !data.isUnscheduled;
+    if (turnsRepeatOff) {
+      setRepeatOffConfirm(data);
+      return;
+    }
+    onSubmit(buildTaskPayload(data, timeZone));
+  };
+  const keptOccurrence = initialData?.seriesSpanStart
+    ? formatDateTime(initialData.seriesSpanStart)
+    : null;
+
   return (
+    <>
     <form
       ref={formRef}
-      onSubmit={handleSubmit((data) => onSubmit(buildTaskPayload(data, timeZone)))}
+      onSubmit={handleSubmit(submitValues)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
           e.preventDefault();
@@ -604,8 +698,88 @@ const TaskForm: React.FC<TaskFormProps> = ({
         )}
 
         {!isUnscheduled ? (
-        <>
-        {!isFixed ? (
+          <>
+            {isFixed ? (
+              <>
+            <FixedSlotFields
+              startValue={scheduledStartTime}
+              endValue={scheduledEndTime}
+              setValue={setValue}
+              startError={errors.scheduledStartTime?.message}
+              endError={errors.scheduledEndTime?.message}
+              defaultDurationMinutes={defaultTaskDurationMinutes}
+              suggestedDay={fixedDay}
+              help={
+                <HelpTip label={t('tasks.form.helpAbout', { field: t('tasks.form.when') })}>
+                  {t('tasks.form.help.when', { timeZone })}
+                </HelpTip>
+              }
+            />
+            <div>
+              <FieldLabel label={t('calendar.eventSettings.location')} htmlFor="task-form-location" />
+              <Controller
+                name="location"
+                control={control}
+                render={({ field }) => (
+                  <LocationField
+                    id="task-form-location"
+                    value={field.value ?? ''}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
+            </div>
+                {repeatBlock}
+              </>
+            ) : (
+              <>
+            <div>
+              <FieldLabel
+                label={t('tasks.form.durationMin')}
+                htmlFor="task-form-duration"
+                required
+                help={t('tasks.form.help.duration')}
+              />
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Controller
+                  name="estimatedTimeInMinutes"
+                  control={control}
+                  render={({ field }) => (
+                    <Input
+                      {...field}
+                      id="task-form-duration"
+                      type="number"
+                      min={1}
+                      max={1440}
+
+                      className="w-20"
+                      error={!!errors.estimatedTimeInMinutes}
+                      onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
+                    />
+                  )}
+                />
+                {DURATION_CHIPS.map((minutes) => (
+                  <Chip
+                    key={minutes}
+                    on={estimatedTimeInMinutes === minutes}
+                    onClick={() =>
+                      setValue('estimatedTimeInMinutes', minutes, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
+                    }
+                  >
+                    {t('common.minutesShort', { count: minutes })}
+                  </Chip>
+                ))}
+              </div>
+              {errors.estimatedTimeInMinutes ? (
+                <p className="mt-0.5 text-xs text-ide-error">
+                  {errors.estimatedTimeInMinutes.message}
+                </p>
+              ) : null}
+            </div>
+
         <div>
           <FieldLabel
             label={t('tasks.form.phase')}
@@ -673,126 +847,25 @@ const TaskForm: React.FC<TaskFormProps> = ({
             }}
           />
         </div>
-        ) : null}
+                {repeatBlock}
 
-        {isFixed ? (
-          <>
-            <FixedSlotFields
-              startValue={scheduledStartTime}
-              endValue={scheduledEndTime}
-              setValue={setValue}
-              startError={errors.scheduledStartTime?.message}
-              endError={errors.scheduledEndTime?.message}
-              defaultDurationMinutes={defaultTaskDurationMinutes}
-              suggestedDay={fixedDay}
-              help={
-                <HelpTip label={t('tasks.form.helpAbout', { field: t('tasks.form.when') })}>
-                  {t('tasks.form.help.when', { timeZone })}
-                </HelpTip>
-              }
-            />
-            <div>
-              <FieldLabel label={t('calendar.eventSettings.location')} htmlFor="task-form-location" />
-              <Controller
-                name="location"
-                control={control}
-                render={({ field }) => (
-                  <LocationField
-                    id="task-form-location"
-                    value={field.value ?? ''}
-                    onChange={field.onChange}
-                  />
-                )}
-              />
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {repeatSelect(true)}
-              {isRecurring ? (
-                <div>
-                  <FieldLabel
-                    label={t('tasks.form.seriesUntil')}
-                    id="task-form-series-until-label"
-                    help={t('tasks.form.help.seriesUntil')}
-                  />
-                  <DatePicker
-                    id="task-form-series-until"
-                    labelledBy="task-form-series-until-label"
-                    value={dateTimeLocalYmd(deadline) ?? ''}
-                    minYmd={dateTimeLocalYmd(scheduledStartTime) ?? undefined}
-                    error={!!errors.deadline}
-                    emptyLabel={t('tasks.form.seriesNoEnd')}
-                    clearLabel={t('tasks.form.dateRangeClear')}
-                    onChange={(ymd) =>
-                      setValue('deadline', ymd ? `${ymd}T23:59` : '', {
-                        shouldDirty: true,
-                        shouldValidate: true,
-                      })
-                    }
-                  />
-                  {errors.deadline ? (
-                    <p className="mt-0.5 text-xs text-ide-error">{errors.deadline.message}</p>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-            {isRecurring ? repeatDays : null}
-          </>
-        ) : (
-          <>
-            {isRecurring ? (
-              <div className="space-y-3">
-                {repeatSelect(false)}
-                {repeatDays}
-              </div>
-            ) : null}
-
-            <div>
-              <FieldLabel
-                label={t('tasks.form.durationMin')}
-                htmlFor="task-form-duration"
-                required
-                help={t('tasks.form.help.duration')}
-              />
-              <div className="flex flex-wrap items-center gap-1.5">
-                <Controller
-                  name="estimatedTimeInMinutes"
-                  control={control}
-                  render={({ field }) => (
-                    <Input
-                      {...field}
-                      id="task-form-duration"
-                      type="number"
-                      min={1}
-                      max={1440}
-
-                      className="w-20"
-                      error={!!errors.estimatedTimeInMinutes}
-                      onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
-                    />
-                  )}
-                />
-                {DURATION_CHIPS.map((minutes) => (
-                  <Chip
-                    key={minutes}
-                    on={estimatedTimeInMinutes === minutes}
-                    onClick={() =>
-                      setValue('estimatedTimeInMinutes', minutes, {
-                        shouldDirty: true,
-                        shouldValidate: true,
-                      })
-                    }
-                  >
-                    {t('common.minutesShort', { count: minutes })}
-                  </Chip>
-                ))}
-              </div>
-              {errors.estimatedTimeInMinutes ? (
-                <p className="mt-0.5 text-xs text-ide-error">
-                  {errors.estimatedTimeInMinutes.message}
-                </p>
-              ) : null}
-            </div>
-
+                {refineShown ? (
+                  <div className="space-y-4 rounded-control border border-ide-border p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-ide-text">
+                        {t('tasks.form.refine')}
+                      </span>
+                      {!refineHasValue ? (
+                        <button
+                          type="button"
+                          className="inline-flex min-h-11 items-center gap-1 text-body-sm text-ide-link hover:underline md:min-h-0"
+                          onClick={() => setRefineOpen(false)}
+                        >
+                          <ChevronUp className="h-4 w-4" aria-hidden />
+                          {t('tasks.form.refineHide')}
+                        </button>
+                      ) : null}
+                    </div>
             <div className="sm:w-1/2 sm:pr-1.5">
               <FieldLabel
                 label={t('tasks.form.preferredStart')}
@@ -833,19 +906,17 @@ const TaskForm: React.FC<TaskFormProps> = ({
               />
             </div>
 
+                    {!isRecurring ? (
+                      <>
             <div>
               <FieldLabel
-                label={isRecurring ? t('tasks.form.seriesDates') : t('tasks.form.dates')}
-                id="task-form-window-label"
-                help={
-                  isRecurring
-                    ? t('tasks.form.help.seriesDates', { timeZone })
-                    : t('tasks.form.windowHint', { timeZone })
-                }
+                label={t('tasks.form.dates')}
+                id="task-form-dates-label"
+                help={t('tasks.form.windowHint', { timeZone })}
               />
               <DateRangeField
-                id="task-form-window"
-                labelledBy="task-form-window-label"
+                id="task-form-dates"
+                labelledBy="task-form-dates-label"
                 start={windowStartYmd}
                 end={windowEndYmd}
                 error={!!errors.deadline}
@@ -853,7 +924,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                 clearLabel={t('tasks.form.dateRangeClear')}
                 onChange={setWindow}
               />
-              {!isRecurring ? (
+              {(
                 <div className="mt-1 flex flex-wrap gap-1">
                   {windows.map((w) => (
                     <Chip
@@ -865,7 +936,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                     </Chip>
                   ))}
                 </div>
-              ) : null}
+              )}
               {errors.deadline ? (
                 <p className="mt-0.5 text-xs text-ide-error">{errors.deadline.message}</p>
               ) : null}
@@ -894,10 +965,24 @@ const TaskForm: React.FC<TaskFormProps> = ({
                 </div>
               </div>
             ) : null}
+                      </>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div>
+                    <button
+                      type="button"
+                      className="inline-flex min-h-11 items-center gap-1 text-body-sm text-ide-link hover:underline md:min-h-0"
+                      onClick={() => setRefineOpen(true)}
+                    >
+                      <ChevronDown className="h-4 w-4" aria-hidden />
+                      {t('tasks.form.refine')}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </>
-        )}
-
-        </>
         ) : null}
 
         {showMore ? (
@@ -1006,6 +1091,50 @@ const TaskForm: React.FC<TaskFormProps> = ({
         </Button>
       </div>
     </form>
+    <Modal
+      open={repeatOffConfirm !== null}
+      onClose={() => setRepeatOffConfirm(null)}
+      title={t('tasks.form.repeatOffTitle')}
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="secondary"
+            size={dialogButtonSize}
+            onClick={() => setRepeatOffConfirm(null)}
+            className="w-full sm:w-auto"
+          >
+            {t('tasks.form.keepEditing')}
+          </Button>
+          {keptOccurrence ? (
+            <Button
+              type="button"
+              size={dialogButtonSize}
+              className="w-full sm:w-auto"
+              disabled={isSubmitting}
+              icon={Check}
+              onClick={() => {
+                const data = repeatOffConfirm;
+                setRepeatOffConfirm(null);
+                if (data) onSubmit(buildTaskPayload(data, timeZone));
+              }}
+            >
+              {t('tasks.form.repeatOffConfirm', { when: keptOccurrence })}
+            </Button>
+          ) : null}
+        </>
+      }
+    >
+      <p className="text-ide-text">
+        {keptOccurrence
+          ? t('tasks.form.repeatOffBody', {
+              name: initialData?.name ?? t('tasks.thisTask'),
+              when: keptOccurrence,
+            })
+          : t('tasks.form.repeatOffNoUpcoming')}
+      </p>
+    </Modal>
+    </>
   );
 };
 

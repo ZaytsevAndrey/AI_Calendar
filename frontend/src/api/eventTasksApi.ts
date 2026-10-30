@@ -5,6 +5,7 @@ import {
   CreateTaskDTO,
   UpdateTaskDTO,
   SkipOccurrenceDTO,
+  EditOccurrenceDTO,
   PlaceProblematicDTO,
   PlaceProblematicResult,
 } from './tasks.api';
@@ -235,9 +236,12 @@ export const eventTasksApi = createApi({
         const title = existing?.name ?? i18n.t('tasks.thisTask');
         const patch = dispatch(
           eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) => {
-            // Match backend: deleting a series also drops Problematic park copies.
+            // Match backend: deleting a series also drops its Problematic park
+            // copies; seated and completed day copies stay as tasks of their own.
             const next = draft.filter(
-              (task) => task.id !== id && task.parentSeriesId !== id,
+              (task) =>
+                task.id !== id &&
+                !(task.parentSeriesId === id && task.scheduleState === 'problematic'),
             );
             draft.splice(0, draft.length, ...next);
           }),
@@ -256,6 +260,53 @@ export const eventTasksApi = createApi({
           });
         } catch {
           patch.undo();
+        }
+      },
+    }),
+    editOccurrence: builder.mutation<
+      TaskWriteResult,
+      { id: string; body: EditOccurrenceDTO }
+    >({
+      query: ({ id, body }) => ({
+        url: `/tasks/${id}/occurrence`,
+        method: 'PATCH',
+        data: body,
+      }),
+      invalidatesTags: (_r, _e, { id }) => [
+        { type: 'EventTask', id: 'LIST' },
+        { type: 'EventTask', id },
+      ],
+      async onQueryStarted({ id, body }, { dispatch, getState, queryFulfilled }) {
+        const existing = eventTasksApi.endpoints.getEvents
+          .select()(getState() as never)
+          ?.data?.find((row) => row.id === id);
+        const title = existing?.name ?? i18n.t('tasks.thisTask');
+        try {
+          await runTaskMutationProgress({
+            taskKey: `${id}:${body.occurrenceStart}`,
+            title,
+            motion: {
+              kind: body.status ? 'edit' : body.start ? 'place' : 'edit',
+              targetMs: isoMs(body.start),
+            },
+            run: async (progress) => {
+              const { data } = await queryFulfilled;
+              await refreshAfterSilentReplan(dispatch, data, (stage) => {
+                progress.setStage(stage);
+              });
+              return { saved: data };
+            },
+            doneDetail: () =>
+              body.status === 'completed'
+                ? i18n.t('tasks.occurrence.doneDetail')
+                : body.status === 'todo'
+                  ? i18n.t('tasks.occurrence.undoneDetail')
+                  : body.scope === 'following'
+                    ? i18n.t('tasks.occurrence.followingDetail')
+                    : i18n.t('tasks.occurrence.oneDetail'),
+          });
+        } catch {
+          return;
         }
       },
     }),
@@ -428,6 +479,7 @@ export const {
   useUpdateEventMutation,
   useDeleteEventMutation,
   useSkipOccurrenceMutation,
+  useEditOccurrenceMutation,
   usePlaceProblematicMutation,
   useEndSeriesFromMutation,
 } = eventTasksApi;
