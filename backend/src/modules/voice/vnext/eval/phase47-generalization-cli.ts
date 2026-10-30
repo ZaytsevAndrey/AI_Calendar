@@ -5,6 +5,7 @@
  *
  * npx ts-node --transpile-only src/modules/voice/vnext/eval/phase47-generalization-cli.ts --dry-run
  * npx ts-node --transpile-only src/modules/voice/vnext/eval/phase47-generalization-cli.ts --allow-paid-calls --budget-usd 2 --max-calls 1000 --output docs/voice-vnext/runs/phase47-generalization
+ * npx ts-node --transpile-only src/modules/voice/vnext/eval/phase47-generalization-cli.ts --suite english --dry-run   (native English set, KI-19)
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
@@ -21,6 +22,8 @@ import type { LlmComplete } from '../repair/repair';
 import { conversationSucceeded, judgeTurn, PHASE4711_SCORER, type ObservedTurn, type TurnVerdict } from './phase477-score';
 import { fixtureEchoProposal } from './phase477-run';
 import { GENERALIZATION_SCENARIOS, GENERALIZATION_SUITE, generalizationWorld, type GenScenario } from './phase47-generalization';
+import type { EntityRecord } from '../reference/reference-resolver';
+import { ENGLISH_SCENARIOS, ENGLISH_SUITE, englishWorld, type EnglishScenario, type EnglishWorld } from './english-set';
 
 const NOW = '2026-10-18T06:00:00.000Z';
 const ZONE = 'Europe/Kyiv';
@@ -60,10 +63,25 @@ function doneIds(path: string, promptHash: string): Set<string> {
   return ids;
 }
 
-function selected(): GenScenario[] {
+/** `--suite english` runs the native English set (KI-19); the default is the Ukrainian generalization set. */
+type RunScenario = GenScenario | EnglishScenario;
+
+function suiteName(): string {
+  return arg('--suite') === 'english' ? ENGLISH_SUITE : GENERALIZATION_SUITE;
+}
+
+function worldFor(row: RunScenario): EntityRecord[] {
+  return 'language' in row && row.language === 'en' ? englishWorld(row.world as EnglishWorld) : generalizationWorld(row.world as GenScenario['world']);
+}
+
+function languageOf(row: RunScenario): 'uk' | 'en' {
+  return 'language' in row && row.language === 'en' ? 'en' : 'uk';
+}
+
+function selected(): RunScenario[] {
   const ids = arg('--ids');
   const category = arg('--category');
-  let rows = GENERALIZATION_SCENARIOS;
+  let rows: RunScenario[] = arg('--suite') === 'english' ? ENGLISH_SCENARIOS : GENERALIZATION_SCENARIOS;
   if (category === 'A' || category === 'B' || category === 'C') rows = rows.filter((row) => row.category === category);
   if (ids) {
     const wanted = new Set(ids.split(',').map((id) => id.trim()).filter(Boolean));
@@ -82,7 +100,7 @@ function plan() {
       B: rows.filter((row) => row.category === 'B').length,
       C: rows.filter((row) => row.category === 'C').length,
     },
-    suite: GENERALIZATION_SUITE,
+    suite: suiteName(),
     scorer: PHASE4711_SCORER,
     promptHash: PROMPT_A_HASH,
     promptBHash: PROMPT_B_HASH,
@@ -117,7 +135,7 @@ async function run(outputDir: string, budget: number, maxCalls: number): Promise
       break;
     }
     const session = createSession('user-1', `${row.id}-${runId.slice(0, 8)}`);
-    const entities = generalizationWorld(row.world);
+    const entities = worldFor(row);
     const verdicts: TurnVerdict[] = [];
     const transcript: unknown[] = [];
     for (let index = 0; index < row.turns.length; index += 1) {
@@ -140,7 +158,7 @@ async function run(outputDir: string, budget: number, maxCalls: number): Promise
           sleepHm: '23:00',
           defaultDurationMinutes: 30,
           defaultReminderTime: '09:00',
-          language: 'uk',
+          language: languageOf(row),
           arm: 'A',
           entities,
           planContext: { tasks: [], slots: [], timeZone: ZONE, nowIso: NOW, defaultDurationMinutes: 30 },
@@ -204,7 +222,7 @@ async function run(outputDir: string, budget: number, maxCalls: number): Promise
       world: row.world,
       invariant: row.invariant,
       runId,
-      suite: GENERALIZATION_SUITE,
+      suite: suiteName(),
       scorer: PHASE4711_SCORER,
       promptHash: PROMPT_A_HASH,
       model: 'deepseek-flash',
@@ -294,7 +312,7 @@ function summarize(jsonl: string, spend: LiveSpend, runId: string, stopped: stri
     status: stopped ? 'partial' : rows.length === selected().length ? 'complete' : 'partial',
     stopped: stopped || null,
     runId,
-    suite: GENERALIZATION_SUITE,
+    suite: suiteName(),
     scorer: PHASE4711_SCORER,
     promptHash: PROMPT_A_HASH,
     promptBHash: PROMPT_B_HASH,
