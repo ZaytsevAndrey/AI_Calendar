@@ -33,6 +33,32 @@ describe('durable mutation jobs', () => {
   const dieAfterCommit = () =>
     jest.spyOn(kit.jobs, 'runNow').mockImplementation(async () => undefined);
 
+  it('AUD-025: finished jobs past the retention window are purged; recent and open ones stay', async () => {
+    const repo = kit.ds.getRepository(ScheduleJob);
+    const job = (status: string) =>
+      repo.save({
+        userId: kit.user.id,
+        status,
+        payloadJson: JSON.stringify({ type: 'task_mutation', op: 'probe' }),
+      } as never) as unknown as Promise<ScheduleJob>;
+    const oldDone = await job('done');
+    const oldFailed = await job('failed');
+    const recentDone = await job('done');
+    const oldPending = await job('pending');
+    // updatedAt is maintained by TypeORM on save: set it as a stored value.
+    for (const [row, daysAgo] of [[oldDone, 10], [oldFailed, 10], [recentDone, 1], [oldPending, 10]] as const) {
+      await repo.query('UPDATE schedule_jobs SET "updatedAt" = ? WHERE id = ?', [
+        new Date(Date.now() - daysAgo * 86_400_000).toISOString().replace('T', ' ').slice(0, 23),
+        row.id,
+      ]);
+    }
+
+    expect(await kit.jobs.purgeFinishedJobs()).toBe(2);
+
+    const left = (await repo.find()).map((row) => row.id).sort();
+    expect(left).toEqual([recentDone.id, oldPending.id].sort());
+  });
+
   it('a task saved before a crash is still placed by the recovery sweep', async () => {
     dieAfterCommit();
     const created = await createFlexible();

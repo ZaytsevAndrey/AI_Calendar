@@ -1,6 +1,7 @@
 import { HttpException, Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import { isUUID } from 'class-validator';
+import { EntityManager, In, LessThan, Repository } from 'typeorm';
 import { ScheduleJob } from './entities/schedule-job.entity';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { Task } from '../tasks/entities/task.entity';
@@ -13,6 +14,12 @@ export const MUTATION_LEASE_MS = 2 * 60_000;
 export const MUTATION_MAX_ATTEMPTS = 5;
 export const MUTATION_BACKOFF_BASE_MS = 15_000;
 export const MUTATION_BACKOFF_MAX_MS = 10 * 60_000;
+/**
+ * AUD-025: finished (done / failed) jobs are kept this long — polls, create
+ * replays and diagnostics read them — then purged. A replay after that gets
+ * its task without a job id.
+ */
+export const FINISHED_JOB_RETENTION_MS = 7 * 24 * 60 * 60_000;
 
 export type MutationHandler = (job: {
   id: string;
@@ -349,11 +356,27 @@ export class ScheduleJobService {
   }
 
   async getJob(jobId: string, userId: string): Promise<ScheduleJob> {
+    // AUD-025: a malformed id is no job (Postgres would fail the uuid cast: 500).
+    if (!isUUID(jobId)) throw new NotFoundException('Job not found');
     const job = await this.jobRepo.findOne({ where: { id: jobId } });
     if (!job || job.userId !== userId) {
       throw new NotFoundException('Job not found');
     }
     return job;
+  }
+
+  /** Delete finished jobs older than the retention window, a batch at a time. */
+  async purgeFinishedJobs(limit = 500): Promise<number> {
+    const cutoff = new Date(Date.now() - FINISHED_JOB_RETENTION_MS);
+    const finished = In(['done', 'failed']);
+    const rows = await this.jobRepo.find({
+      select: { id: true },
+      where: { status: finished, updatedAt: LessThan(cutoff) },
+      take: limit,
+    });
+    if (!rows.length) return 0;
+    await this.jobRepo.delete({ id: In(rows.map((row) => row.id)), status: finished });
+    return rows.length;
   }
 
   async getLatestDoneJob(userId: string): Promise<ScheduleJob | null> {

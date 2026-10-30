@@ -5,7 +5,7 @@
 import { randomUUID } from 'crypto';
 import { join } from 'path';
 import { DataSource } from 'typeorm';
-import { Logger } from '@nestjs/common';
+import { Logger, NotFoundException } from '@nestjs/common';
 import { ScheduleJob } from './entities/schedule-job.entity';
 import { ScheduleJobService } from './schedule-job.service';
 
@@ -55,6 +55,10 @@ describePg('durable mutation jobs on Postgres', () => {
     expect([...runs].sort()).toEqual(jobs.map((job) => job.id).sort());
     const rows = await ds.getRepository(ScheduleJob).find();
     expect(rows.every((row) => row.status === 'done' && row.attempts === 1)).toBe(true);
+  });
+
+  it('AUD-025: a job id that is not a UUID is not found (404), not a database error', async () => {
+    await expect(a.getJob('not-a-uuid', '00000000-0000-4000-8000-000000000001')).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('takes over a running job whose lease expired', async () => {

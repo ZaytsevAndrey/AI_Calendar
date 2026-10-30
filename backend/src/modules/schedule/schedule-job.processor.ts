@@ -6,10 +6,13 @@ import {
 } from '@nestjs/common';
 import { ScheduleJobService } from './schedule-job.service';
 
+const PURGE_EVERY_MS = 60 * 60_000;
+
 @Injectable()
 export class ScheduleJobProcessor implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ScheduleJobProcessor.name);
   private interval: ReturnType<typeof setInterval> | null = null;
+  private lastPurgeAt = 0;
 
   constructor(private readonly scheduleJobService: ScheduleJobService) {}
 
@@ -19,6 +22,13 @@ export class ScheduleJobProcessor implements OnModuleInit, OnModuleDestroy {
       void this.scheduleJobService.processDue().catch((err) => {
         this.logger.error(`Schedule job processor error: ${err}`);
       });
+      // AUD-025: drop finished jobs past their retention, about once an hour.
+      if (Date.now() - this.lastPurgeAt >= PURGE_EVERY_MS) {
+        this.lastPurgeAt = Date.now();
+        void this.scheduleJobService.purgeFinishedJobs().catch((err) => {
+          this.logger.error(`Schedule job purge error: ${err}`);
+        });
+      }
     }, 2000);
   }
 
