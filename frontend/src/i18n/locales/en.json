@@ -334,7 +334,7 @@
         "BIWEEKLY": "Bi-weekly",
         "MONTHLY": "Monthly"
       },
-      "occurrenceOf": "Changed day",
+      "occurrenceOf": "Series day",
       "completedAt": "Done"
     },
     "seriesDeleteTitle": "Delete repeating task",
@@ -975,11 +975,9 @@
       "sameDay": "Stays on {{when}}. To move it to another day, drag it in the calendar.",
       "markDone": "Mark this day done",
       "markUndone": "Mark this day not done",
-      "editedDay": "Changed occurrence of «{{name}}» for {{when}}",
-      "editedDayShort": "Changed occurrence",
       "save": "Save",
       "noDay": "This day cannot be told apart from the series here. Open it from the calendar.",
-      "editedDayValue": "Occurrence of {{when}}, changed on its own"
+      "editedDayValue": "Occurrence of the series for {{when}}"
     }
   },
   "habits": {
