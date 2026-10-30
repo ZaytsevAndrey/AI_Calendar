@@ -82,6 +82,47 @@ describe('buildChangePreviewCards', () => {
     expect(cards[0].name).toBe('Report');
   });
 
+  // VC-13: a repeat with no clock is a series the engine seats, not a Later task.
+  it('shows a recurring create with no clock as a flexible series, not Later', () => {
+    const cards = buildChangePreviewCards({
+      intents: [{
+        type: 'create',
+        summary: 'Exercise',
+        task: {
+          name: 'Exercise',
+          eventType: 'admin',
+          estimatedTimeInMinutes: 60,
+          isRecurring: true,
+          recurrencePattern: 'WEEKLY',
+          recurrenceWeekDays: [1],
+          isUnscheduled: false,
+          allowSplit: false,
+          priority: 'medium',
+        },
+      }],
+    });
+    expect(cards[0]).toMatchObject({ kind: 'create', taskType: 'flexible', repeats: true, startIso: null });
+  });
+
+  // VC-06: a card on a repeating task says which part of the series it touches.
+  it('carries the series scope of a command onto its card', () => {
+    const command = (c: Extract<VoiceWriteIntent, { type: 'command' }>['command']): VoiceWriteIntent => ({ type: 'command', summary: c.summary, command: c });
+    const cards = buildChangePreviewCards({
+      intents: [
+        command({ kind: 'skip', taskId: 'g', taskName: 'Gym', summary: 'Skip', occurrenceStart: '2026-10-21T07:00:00.000Z', googleEventId: null, googleEventCalendarId: null }),
+        command({ kind: 'end_series', taskId: 'g', taskName: 'Gym', summary: 'End', occurrenceStart: '2026-10-21T07:00:00.000Z', googleEventId: null, googleEventCalendarId: null }),
+        command({ kind: 'delete', taskId: 'g', taskName: 'Gym', summary: 'Delete', seriesScope: 'all' }),
+        command({ kind: 'complete', taskId: 'g', taskName: 'Gym', summary: 'Done', seriesScope: 'all' }),
+        command({ kind: 'update', taskId: 'g', taskName: 'Gym', summary: 'Rename', patch: { name: 'Yoga' }, seriesScope: 'all' }),
+        command({ kind: 'move', taskId: 'g', taskName: 'Gym', summary: 'Move', googleEventId: 'e', calendarId: null, recurringEventId: 'm', originalStart: '2026-10-21T07:00:00.000Z', originalEnd: '2026-10-21T08:00:00.000Z', start: '2026-10-21T12:00:00.000Z', end: '2026-10-21T13:00:00.000Z', seriesScope: 'series' }),
+        command({ kind: 'delete', taskId: 'r', taskName: 'Report', summary: 'Delete one-off' }),
+      ],
+    });
+    expect(cards.map((card) => card.scope ?? null)).toEqual(['occurrence', 'series', 'all', 'all', 'all', 'series', null]);
+    expect(cards.slice(0, 6).every((card) => card.repeats)).toBe(true);
+    expect(cards[6].repeats).toBeFalsy();
+  });
+
   it('maps a reminder create to a reminder card without a duration', () => {
     const intents: VoiceWriteIntent[] = [
       {

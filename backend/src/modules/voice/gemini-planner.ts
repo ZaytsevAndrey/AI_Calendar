@@ -43,14 +43,19 @@ type GeminiPart = { text?: string; thought?: boolean };
 
 export type GeminiPlannerPayload = {
   candidates?: Array<{ content?: { parts?: GeminiPart[] } }>;
-  usageMetadata?: { totalTokenCount?: number };
+  usageMetadata?: { totalTokenCount?: number; promptTokenCount?: number; candidatesTokenCount?: number };
   error?: { message?: string } | string;
 };
 
 /** Visible JSON only. Thought parts are not the planner decision. */
+/** Whole numbers from a provider usage block; a missing or odd value is null. */
+function tokenCount(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
+}
+
 export function geminiPlannerResult(
   payload: GeminiPlannerPayload,
-): { ok: true; content: string; tokens: number } | { ok: false; error: string } {
+): { ok: true; content: string; tokens: number; promptTokens: number | null; completionTokens: number | null } | { ok: false; error: string } {
   const err = payload.error;
   if (typeof err === 'string' && err.trim()) return { ok: false, error: err.trim() };
   if (err && typeof err === 'object' && typeof err.message === 'string' && err.message.trim()) {
@@ -68,5 +73,7 @@ export function geminiPlannerResult(
     ok: true,
     content,
     tokens: typeof tokens === 'number' && Number.isFinite(tokens) ? Math.floor(tokens) : 0,
+    promptTokens: tokenCount(payload.usageMetadata?.promptTokenCount),
+    completionTokens: tokenCount(payload.usageMetadata?.candidatesTokenCount),
   };
 }

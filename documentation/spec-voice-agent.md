@@ -2,7 +2,7 @@
 
 **Status:** the only product contract for Companion.  
 **Language:** English  
-**Last updated:** 29 October 2026
+**Last updated:** 31 October 2026
 
 Companion (Ukrainian: Помічник) talks with the user and returns write intents. The server does not change the calendar. The client applies intents through the existing task, habit, and placement APIs. Placement and conflict stay in [spec-conflict-rules.md](spec-conflict-rules.md) and [spec-incremental-placement.md](spec-incremental-placement.md). The screen is [features/companion-panel.md](features/companion-panel.md). HTTP fields are in [api-reference.md](api-reference.md).
 
@@ -24,7 +24,7 @@ Other voice files do not add product rules. [spec-voice-commander.md](spec-voice
 | `act` | The client runs `intents[]`. |
 | `refuse` | The agent cannot do this. |
 
-Every write waits for Apply or a spoken yes. Spoken yes and `confirm` are the same. Spoken no and `cancel` are the same. After a successful write the panel stays open.
+Every write waits for Apply or a spoken yes. Spoken yes and `confirm` are the same. Spoken no and `cancel` are the same. While a preview is open and no question is pending, a bare yes or no (`так`, `ні`, `yes`, `no`, and the like, with nothing else said) is that button: the server resolves it without a model call (D-10). Anything longer is speech for the model. A correction of the open preview keeps it open; a reply the server cannot read keeps the preview on screen unchanged. After a successful write the panel stays open.
 
 The preview names a stored task or event by its stored title, not by the words of the transcript: `Delete «Report»`, `Rename «A» to «B»`, `Move «Report» to 2026-10-30 18:00`. After a spoken yes the reply starts with `Applying:` and repeats those lines.
 
@@ -60,7 +60,10 @@ An open clarification batch is not that queue. A new command does not answer the
 
 ---
 
-## 3. How a turn is split
+## 3. How a turn is split (legacy engine only)
+
+> **Legacy.** This section describes the planner / router / specialist split of the legacy engine, which runs only with `VOICE_TURN_ENGINE=legacy` (frozen rollback, decision D-01). The structured engine on `/voice/turn` has no segments, router or specialists: the model returns one structured proposal, the server resolves it against the user's records and builds the preview ([voice-agent-roadmap.md](voice-agent-roadmap.md) §A). The product rules in §1, §2 and §4–§10 apply to both engines.
+
 
 One planner call, then each write goes through the router and one specialist. That call is `buildPlannerSystemPrompt`. Experimental Planner C2 is a separate prompt and `/voice/turn` does not call it. The planner does not choose the action. The router chooses `create`, `update`, `delete`, `skip`, or `needs_clarification`. Time, other fields, and done on one existing task are one `update`. The specialist fills only that intent's fields.
 
@@ -178,6 +181,9 @@ In the structured engine, one request may depend on a task it creates:
 
 ## 8. Fast create
 
+> **Hidden since 30 Oct 2026 (D-05).** The structured engine accepts `mode` and does not act on it yet (VR-30), so the switch is behind `FAST_CREATE_AVAILABLE` (false) in `frontend/src/modules/voice/companionMode.ts` and every turn runs as the assistant. The rules below describe the mode as it will behave when the flag returns.
+
+
 `mode` is `assistant` or `fast_create`. The panel switch stores it in `localStorage`.
 
 Fast create overrides the ask lines for a new task only. Moves, completions, skips, deletes, calendar questions, and day plans stay on the sections above.
@@ -224,6 +230,9 @@ Phone is a bottom sheet. Desktop is a floating panel. The thread shows the user 
 ---
 
 ## 11. API
+
+> The read tools listed below (`get_now_next`, `get_day_agenda`, `match_task`, …) are the legacy engine's. The structured engine reads through `find_tasks` (open tasks by day, range, title substring, calendar, or Later state; every row reports `state`: `later`, `parked`, `scheduled`, `unplaced`) and `find_events` (provider events over whole civil days). `POST /voice/parse-task` has no caller in the app; it serves the legacy engine and the Playwright voice specs until §49 removes it.
+
 
 `POST /voice/turn`
 

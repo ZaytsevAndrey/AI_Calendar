@@ -1,6 +1,6 @@
 # Voice prompts — next work (handoff)
 
-**Status:** working queue for roadmap **§23** (split; logging-first). Production Planner is `buildPlannerSystemPrompt`. Experimental Planner C2 is not used.  
+**Status:** **frozen (legacy engine only, D-01 / VC-15, 30 Oct 2026).** `buildPlannerSystemPrompt` runs only with `VOICE_TURN_ENGINE=legacy`; production is the structured engine ([voice-agent-roadmap.md](voice-agent-roadmap.md)). No new rule lands here; the queue below is history until §49 removes the legacy engine.  
 **Fix log:** [voice-fix-flow.md](voice-fix-flow.md).  
 **Use:** open a **new chat per mini-item** below. Product contract: [spec-voice-agent.md](spec-voice-agent.md). This file is a work queue. It does not add rules. Edits follow [voice-fix-flow.md](voice-fix-flow.md).
 

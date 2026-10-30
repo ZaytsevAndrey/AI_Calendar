@@ -23,6 +23,16 @@ export type EntityRecord = {
   seriesEventId?: string | null;
   /** A fixed Luefy task keeps its slot until a clock moves it; a window does not reseat it. */
   fixed?: boolean;
+  /** Stored fields of a day reminder, so an update can keep what the user did not restate (VC-05). */
+  reminder?: StoredReminderFields;
+};
+
+export type StoredReminderFields = {
+  dueYmd: string;
+  notificationTime: string | null;
+  description: string | null;
+  recurrencePattern: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | null;
+  recurrenceWeekDays: number[] | null;
 };
 
 export type ReferentBinding = { entityId?: string; localId?: string; phrase: string };

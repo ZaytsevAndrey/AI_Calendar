@@ -77,8 +77,9 @@ export type VoiceHabitFields = {
 
 export type VoiceCommand =
   | { kind: 'refuse'; message: string }
-  | { kind: 'complete'; taskId: string; taskName: string; summary: string }
-  | { kind: 'cancel'; taskId: string; taskName: string; summary: string }
+  /** seriesScope 'all' marks a write on a whole repeating task, so the preview can say so (VC-06). */
+  | { kind: 'complete'; taskId: string; taskName: string; summary: string; seriesScope?: VoiceSeriesScope }
+  | { kind: 'cancel'; taskId: string; taskName: string; summary: string; seriesScope?: VoiceSeriesScope }
   | {
       kind: 'skip';
       taskId: string;
@@ -137,12 +138,14 @@ export type VoiceCommand =
       taskName: string;
       summary: string;
       patch: VoiceTaskPatch;
+      seriesScope?: VoiceSeriesScope;
     }
   | {
       kind: 'delete';
       taskId: string;
       taskName: string;
       summary: string;
+      seriesScope?: VoiceSeriesScope;
     }
   | {
       kind: 'habit_check_in';

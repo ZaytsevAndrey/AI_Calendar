@@ -36,11 +36,21 @@ export function envelopeToProposalGroup(envelope: SemanticEnvelopeV1, _clock?: E
   for (const operation of envelope.operations) {
     if (operation.action === 'create' && operation.target.kind === 'new') creates.set(operation.opId, operation);
   }
+  // An operation_result whose opId is not a create of this envelope points at a pending operation
+  // of the open preview (the prompt lists them by that id). It becomes a pending-target proposal
+  // below; the state machine validates the id and folds it into that draft (VR-03 / VR-38).
+  const crossTurn = new Set<string>();
   for (const operation of envelope.operations) {
     if (operation.target.kind !== 'operation_result') continue;
     const baseId = operation.target.opId;
     const base = creates.get(baseId);
-    if (!base || dropped.has(baseId)) return null;
+    if (!base) {
+      if (dropped.has(baseId)) return null;
+      if (!CORRECTION_ACTIONS.has(operation.action)) return null;
+      crossTurn.add(operation.opId);
+      continue;
+    }
+    if (dropped.has(baseId)) return null;
     if (operation.action === 'delete' || operation.action === 'cancel') {
       dropped.add(baseId);
       continue;
@@ -73,17 +83,20 @@ export function envelopeToProposalGroup(envelope: SemanticEnvelopeV1, _clock?: E
   const proposals: SemanticOperationProposal[] = [];
   for (const operation of envelope.operations) {
     const standalone = reminders.get(operation.opId);
-    if ((operation.target.kind === 'operation_result' && !standalone) || dropped.has(operation.opId)) continue;
+    if ((operation.target.kind === 'operation_result' && !standalone && !crossTurn.has(operation.opId)) || dropped.has(operation.opId)) continue;
     const mapped = mapOperation(standalone ?? creates.get(operation.opId) ?? operation);
     if (!mapped) return null;
     proposals.push(mapped);
   }
+  // A restatement replaces the open preview (extending would keep a corrected item next to its
+  // correction). An envelope made only of corrections that address pending operations by id
+  // extends it instead: the unmentioned operations of the preview are what the user did not
+  // change and must stay (Stage 3: two creates, correct one, the other was lost).
+  const correctionsOnly = crossTurn.size > 0 && proposals.every((proposal) => proposal.target.kind === 'pending');
   return {
     version: '1',
     control: 'none',
-    // A V1 envelope cannot address a pending operation or say "also". A new utterance therefore
-    // replaces the open preview; extending it would keep a corrected item next to its correction.
-    previewBoundary: 'replace',
+    previewBoundary: correctionsOnly ? 'extend' : 'replace',
     proposals,
     patches: [],
   };
@@ -137,8 +150,12 @@ function mapTarget(operation: SemanticOperationV1): ProposalTarget | null {
     return { kind: 'unresolved', reason: 'ambiguous' };
   }
   if (target.kind === 'unresolved') return { kind: 'unresolved', reason: 'not_found' };
+  if (target.kind === 'operation_result') return { kind: 'pending', pendingId: target.opId };
   return null;
 }
+
+/** Actions that may address a pending operation of the open preview across turns. */
+const CORRECTION_ACTIONS = new Set(['update', 'move', 'complete', 'delete', 'cancel']);
 
 /** Field-for-field. Anything without a proposal equivalent is `unresolved`, which projection refuses to preview. */
 function mapConstraint(constraint: SemanticConstraintV1): TemporalProposal {

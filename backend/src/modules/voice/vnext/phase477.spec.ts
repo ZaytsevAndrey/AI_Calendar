@@ -370,6 +370,31 @@ describe('phase 4.7.7 untrusted ids', () => {
 });
 
 describe('phase 4.7.7 evaluator', () => {
+  // WP-H1: a create intent is { type: 'create', task } and has no `kind`; the scorer must still see its action.
+  it('passes a create preview when the expectation names action create', () => {
+    const verdict = judgeTurn({
+      outcome: 'confirm',
+      blocked: [],
+      intents: [{ type: 'create', summary: 'Купити лампочку', task: { name: 'Купити лампочку', isUnscheduled: true } }],
+      serverWrites: 0,
+      assistantMessage: 'Купити лампочку',
+      draftNames: [],
+      pendingCount: 1,
+    }, { outcomes: ['confirm'], nameIncludes: 'лампоч', unscheduled: true, action: 'create' });
+    expect(verdict.semantic).toBe(true);
+    expect(verdict.completion).toBe(true);
+    const command = judgeTurn({
+      outcome: 'confirm',
+      blocked: [],
+      intents: [{ type: 'command', summary: 'Done', command: { kind: 'complete', taskId: 'task-report', taskName: 'Звіт' } }],
+      serverWrites: 0,
+      assistantMessage: 'Звіт',
+      draftNames: [],
+      pendingCount: 1,
+    }, { outcomes: ['confirm'], taskId: 'task-report', action: 'create' });
+    expect(command.semantic).toBe(false);
+  });
+
   it('does not pass a safe clarification when a preview was possible', () => {
     const verdict = judgeTurn({
       outcome: 'clarify',

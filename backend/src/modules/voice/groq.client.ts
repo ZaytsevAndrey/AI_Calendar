@@ -104,6 +104,16 @@ type GroqChatPayload = {
 type GroqRequestContext = {
   keyIndex: number;
   tokensUsed: number;
+  /** Usage of the most recent completion in this request, until the caller takes it. */
+  lastCompletion: LlmCompletionUsage | null;
+};
+
+/** What one model call cost in tokens, as the provider reported it. The split is null when it gave only a total. */
+export type LlmCompletionUsage = {
+  model: string;
+  totalTokens: number;
+  promptTokens: number | null;
+  completionTokens: number | null;
 };
 
 /**
@@ -246,7 +256,7 @@ export class GroqClient {
     const keys = this.rotationKeys();
     const safeIndex =
       keys.length === 0 ? 0 : ((keyIndex % keys.length) + keys.length) % keys.length;
-    const ctx: GroqRequestContext = { keyIndex: safeIndex, tokensUsed: 0 };
+    const ctx: GroqRequestContext = { keyIndex: safeIndex, tokensUsed: 0, lastCompletion: null };
     this.pinnedKeyIndex = safeIndex;
     const value = await this.requestAls.run(ctx, fn);
     return { value, keyIndex: ctx.keyIndex, tokensUsed: ctx.tokensUsed };
@@ -288,6 +298,31 @@ export class GroqClient {
     if (total == null || !Number.isFinite(total) || total <= 0) return;
     const ctx = this.requestAls.getStore();
     if (ctx) ctx.tokensUsed += Math.floor(total);
+  }
+
+  /** Remember the usage of the completion that just returned, for `takeLastCompletion`. */
+  private noteCompletion(model: string, usage: { tokens: number | undefined; promptTokens?: number | null; completionTokens?: number | null }): void {
+    const ctx = this.requestAls.getStore();
+    if (!ctx) return;
+    const total = usage.tokens != null && Number.isFinite(usage.tokens) ? Math.max(0, Math.floor(usage.tokens)) : 0;
+    ctx.lastCompletion = {
+      model,
+      totalTokens: total,
+      promptTokens: usage.promptTokens ?? null,
+      completionTokens: usage.completionTokens ?? null,
+    };
+  }
+
+  /**
+   * The usage of the most recent completion in this request, then nothing until the next
+   * call. Null outside a pin context or when the provider reported no usage (VR-24).
+   */
+  takeLastCompletion(): LlmCompletionUsage | null {
+    const ctx = this.requestAls.getStore();
+    if (!ctx) return null;
+    const usage = ctx.lastCompletion;
+    ctx.lastCompletion = null;
+    return usage;
   }
 
   /** Keys still usable after a tokens-per-day retirement. */
@@ -644,6 +679,7 @@ export class GroqClient {
     this.recordTokens(parsed.tokens);
     this.noteEvalSpend(model, parsed.tokens, null);
     this.noteStepTokens(parsed.tokens);
+    this.noteCompletion(model, parsed);
     return parsed.content;
     }, (value) => value == null);
   }
@@ -694,6 +730,7 @@ export class GroqClient {
     this.recordTokens(parsed.tokens);
     this.noteEvalSpend(model, parsed.tokens, null);
     this.noteStepTokens(parsed.tokens);
+    this.noteCompletion(model, parsed);
     return parsed.content;
     }, (value) => value == null);
   }
@@ -743,6 +780,7 @@ export class GroqClient {
     this.recordTokens(parsed.tokens);
     this.noteEvalSpend(model, parsed.tokens, null);
     this.noteStepTokens(parsed.tokens);
+    this.noteCompletion(model, parsed);
     return parsed.content;
     }, (value) => value == null);
   }
@@ -1090,6 +1128,11 @@ export class GroqClient {
       response.headers?.get('x-ratelimit-limit-tokens') ?? null,
     );
     this.noteStepTokens(payload.usage?.total_tokens);
+    this.noteCompletion(model, {
+      tokens: payload.usage?.total_tokens,
+      promptTokens: typeof payload.usage?.prompt_tokens === 'number' ? Math.floor(payload.usage.prompt_tokens) : null,
+      completionTokens: typeof payload.usage?.completion_tokens === 'number' ? Math.floor(payload.usage.completion_tokens) : null,
+    });
     return { ok: true, content };
   }
 }

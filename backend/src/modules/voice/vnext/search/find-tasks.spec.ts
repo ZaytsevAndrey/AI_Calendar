@@ -1,4 +1,4 @@
-import { TaskStatus, type Task } from '../../../tasks/entities/task.entity';
+import { ScheduleState, TaskStatus, type Task } from '../../../tasks/entities/task.entity';
 import type { ScheduledTask } from '../../../schedule/schedule.entity';
 import { FIND_TASKS_CAP, findTasks } from './find-tasks';
 
@@ -18,7 +18,9 @@ const TASKS = [
   task('b', 'Standup'),
   task('c', 'Gym'),
   task('d', 'Sync done', { status: TaskStatus.COMPLETED }),
-  task('e', 'Later sync'),
+  task('e', 'Later sync', { isUnscheduled: true }),
+  // Parked (problematic): no slot either, but it is not a Later task.
+  task('p', 'Parked sync', { scheduleState: ScheduleState.PROBLEMATIC }),
   task('x', 'Other user sync', { userId: 'u2' }),
 ];
 const SLOTS = [
@@ -40,9 +42,18 @@ describe('find_tasks', () => {
   });
 
   it('applies literal name, calendar, and scheduled filters', () => {
-    expect(run({ nameContains: 'SYNC' }).receipt.ids).toEqual(['a', 'e']);
+    expect(run({ nameContains: 'SYNC' }).receipt.ids).toEqual(['a', 'e', 'p']);
     expect(run({ calendarId: 'work' }).receipt.ids).toEqual(['a']);
     expect(run({ scheduled: false }).receipt.ids).toEqual(['e']);
+  });
+
+  // VC-16: Later means isUnscheduled; a parked task has no slot but is not Later, and each row says which it is.
+  it('tells Later from parked, and reports the state of every row', () => {
+    const later = run({ scheduled: false }).result as { items: Array<{ id: string; state: string }> };
+    expect(later.items.map((row) => [row.id, row.state])).toEqual([['e', 'later']]);
+    const all = run({ nameContains: 'sync' }).result as { items: Array<{ id: string; state: string }> };
+    expect(all.items.map((row) => [row.id, row.state])).toEqual([['a', 'scheduled'], ['e', 'later'], ['p', 'parked']]);
+    expect(run({ scheduled: true }).receipt.ids).toEqual(['a', 'b', 'c']);
   });
 
   it('rejects a search with no filter or a malformed one instead of returning everything', () => {

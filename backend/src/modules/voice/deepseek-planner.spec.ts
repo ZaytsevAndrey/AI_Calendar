@@ -15,13 +15,19 @@ describe('deepseekPlannerCall', () => {
 });
 
 describe('deepseekPlannerResult', () => {
+  // WP-F (VR-24): the prompt / completion split is kept when the provider gives it.
+  it('keeps the prompt and completion token split', () => {
+    const result = deepseekPlannerResult({ choices: [{ message: { content: '{"type":"steps"}' } }], usage: { total_tokens: 20, prompt_tokens: 15, completion_tokens: 5 } } as never);
+    expect(result).toMatchObject({ ok: true, tokens: 20, promptTokens: 15, completionTokens: 5 });
+  });
+
   it('returns the answer and ignores reasoning', () => {
     expect(
       deepseekPlannerResult({
         choices: [{ message: { reasoning_content: 'skip', content: '{"type":"steps"}' } }],
         usage: { total_tokens: 20 },
       }),
-    ).toEqual({ ok: true, content: '{"type":"steps"}', tokens: 20 });
+    ).toEqual({ ok: true, content: '{"type":"steps"}', tokens: 20, promptTokens: null, completionTokens: null });
   });
 
   it('surfaces an API error', () => {

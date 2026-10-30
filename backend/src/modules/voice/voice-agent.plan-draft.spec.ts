@@ -454,6 +454,23 @@ function fillDraft(count: number): PlanDraft {
 }
 
 describe('planToIntents', () => {
+  // VC-11: the end-of-day deadline of a planned new task is the start of the next civil day.
+  it('gives a new task the civil end of a DST plan day as its deadline', () => {
+    const intents = planToIntents(
+      {
+        day: '2027-03-14',
+        stage: 'review',
+        revision: 1,
+        items: [{ itemId: 'new:1', taskId: null, source: 'new', name: 'Gym', start: '2027-03-14T19:00:00.000Z', end: '2027-03-14T20:00:00.000Z', durationMinutes: 60 }],
+        unplaced: [],
+        changedItemIds: [],
+      },
+      { slots: [], timeZone: 'America/New_York', nowIso: '2027-03-14T12:00:00.000Z', language: 'en' },
+    );
+    const create = intents[0] as unknown as { task: { deadline: string } };
+    expect(create.task.deadline).toBe('2027-03-15T00:00:00-04:00');
+  });
+
   const proposal = (items: DayPlanProposal['items']): DayPlanProposal => ({
     day: DAY,
     stage: 'review',

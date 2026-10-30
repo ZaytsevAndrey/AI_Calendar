@@ -5,7 +5,7 @@
  * Membership is never decided by the model's own list of ids.
  */
 import type { ScheduledTask } from '../../../schedule/schedule.entity';
-import { TaskStatus, type Task } from '../../../tasks/entities/task.entity';
+import { TaskStatus, type Task, isProblematicSchedule } from '../../../tasks/entities/task.entity';
 import { localHm, localYmd } from '../../voice-local-date.util';
 import type { SearchReceipt } from './receipt';
 
@@ -29,8 +29,21 @@ export type FindTasksResult =
       complete: boolean;
       truncated: boolean;
       total: number;
-      items: Array<{ id: string; name: string; status: string; starts: string[]; calendarId: string | null; recurring: boolean }>;
+      items: Array<{ id: string; name: string; status: string; starts: string[]; calendarId: string | null; recurring: boolean; state: TaskSearchState }>;
     };
+
+/**
+ * Where an open task stands: `later` is the Unscheduled inbox (`isUnscheduled`), `parked` has
+ * no seat because placement could not find one (`scheduleState` problematic), `scheduled` has
+ * at least one slot, `unplaced` has none yet. A parked task is not a Later task (VC-16).
+ */
+export type TaskSearchState = 'later' | 'parked' | 'scheduled' | 'unplaced';
+
+export function taskSearchState(task: Pick<Task, 'isUnscheduled' | 'scheduleState'>, slotCount: number): TaskSearchState {
+  if (task.isUnscheduled) return 'later';
+  if (isProblematicSchedule(task)) return 'parked';
+  return slotCount ? 'scheduled' : 'unplaced';
+}
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -88,8 +101,9 @@ export function findTasks(
     if (args.calendarId && !slots.some((slot) => slot.googleEventCalendarId === args.calendarId) && task.googleEventCalendarId !== args.calendarId) {
       return false;
     }
+    // `scheduled: false` is the Later inbox, not every task without a slot: a parked task is reported as parked.
     if (args.scheduled === true && !slots.length) return false;
-    if (args.scheduled === false && slots.length) return false;
+    if (args.scheduled === false && !task.isUnscheduled) return false;
     if (args.day || args.from || args.to) {
       const from = args.day ?? args.from ?? '0000-00-00';
       const to = args.day ?? args.to ?? '9999-99-99';
@@ -118,6 +132,7 @@ export function findTasks(
           .map((iso) => `${localYmd(iso, input.timeZone)} ${localHm(iso, input.timeZone)}`),
         calendarId: task.googleEventCalendarId ?? null,
         recurring: Boolean(task.isRecurring),
+        state: taskSearchState(task, (slotsByTask.get(task.id) ?? []).length),
       })),
     },
     receipt: truncated

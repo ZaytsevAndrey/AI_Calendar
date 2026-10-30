@@ -6,11 +6,11 @@ import type { VoiceTurnResponse, VoiceWriteIntent } from '../voice-agent.types';
 import { expandStructuredScope } from './adapter/structured-scope';
 import { envelopeToProposalGroup } from './contracts/envelope-to-proposal';
 import type { ProposalGroup } from './contracts/proposal';
-import type { SemanticEnvelopeV1 } from './contracts/types';
+import type { DayPlanEditV1, SemanticEnvelopeV1 } from './contracts/types';
 import { voiceCopy } from './copy';
 import { handleStructuredDayPlan } from './day-plan/structured-day-plan';
 import { evidenceCovers } from './evidence/evidence';
-import { ask as askDialogue, clearDialogue } from './session/dialogue';
+import { ask as askDialogue, canConfirm, clearDialogue } from './session/dialogue';
 import { appendTurn, clearPending, intentKey, invalidateLegacyPreview, pinArm, type VNextSession } from './session/session';
 import { prepareStructuredPreview } from './state/prepare-preview';
 import { readPreviewEntities, revalidateFingerprints } from './state/revalidate-preview';
@@ -81,6 +81,7 @@ export function entitiesToKnown(entities: EntityRecord[], userId: string): Known
       ...(entity.seriesEventId != null ? { seriesEventId: entity.seriesEventId } : {}),
       ...(entity.name ? { name: entity.name } : {}),
       ...(entity.fixed ? { fixed: true } : {}),
+      ...(entity.reminder ? { reminder: entity.reminder } : {}),
     }));
 }
 
@@ -116,13 +117,25 @@ function ensureStructured(session: VNextSession): StructuredState {
 
 function publishPreview(session: VNextSession, state: StructuredState, intents: VoiceWriteIntent[], summary: string): void {
   session.protocol = 'structured';
-  session.structured = state;
+  // A preview answers whatever question was open: the block a clarification set must not outlive
+  // it, or the new preview could never be applied, by tap or by voice (VR-13 / g-b-10).
+  // Not through setConfirmationBlock: that bumps the session version the fresh claim was cut from.
+  session.structured = state.blocksConfirmation ? { ...state, blocksConfirmation: false } : state;
+  clearDialogue(session);
   session.structuredIntents = intents;
   session.pendingIntents = intents;
   session.pendingSummary = summary;
   session.previewSuspended = false;
   session.openQuestion = null;
   session.pendingClarification = null;
+}
+
+/** The intents of an open structured preview that can still be confirmed, else null. */
+function keptPreview(input: TurnInput): VoiceWriteIntent[] | null {
+  const session = input.session;
+  if (session.protocol !== 'structured' || !canConfirm(session)) return null;
+  if (session.structured?.preview?.executionState !== 'open') return null;
+  return session.pendingIntents?.length ? session.pendingIntents : null;
 }
 
 function summarize(intents: VoiceWriteIntent[]): string {
@@ -154,11 +167,29 @@ export async function runStructuredTurn(input: TurnInput, interpreter: VNextInte
     });
   }
   if (!interpreted.ok) {
+    // VR-38: an unreadable reply while a preview is open re-presents that preview instead of
+    // refusing. The client drops its cards on any outcome but confirm, so the target would be lost.
+    const kept = keptPreview(input);
+    if (kept) {
+      return done(input, reply(input.session.sessionId, { outcome: 'confirm', assistantMessage: voiceCopy(input.language, 'preview_kept'), intents: kept, actions: ['confirm', 'cancel', 'skip_speak'] }), {
+        traces,
+        usage: interpreted.usage,
+        blocked: [interpreted.code ?? 'invalid_model_output'],
+      });
+    }
     return done(input, reply(input.session.sessionId, { outcome: 'refuse', assistantMessage: voiceCopy(input.language, 'invalid'), actions: ['retry'] }), {
       traces,
       usage: interpreted.usage,
       blocked: [interpreted.code ?? 'invalid_model_output'],
     });
+  }
+
+  // VR-06 (spec §9): while a plan is open, an activity with no date of its own is a plan edit,
+  // even when the model answered with plain creates. A create that names its own date stays a task.
+  const asDraftEdit = input.session.planDraft && interpreted.envelope ? draftEditFromCreates(interpreted.envelope) : null;
+  if (asDraftEdit) {
+    traces.push({ name: 'draft_route', fields: { creates: asDraftEdit.dayPlan?.edits?.length ?? 0 } });
+    return handleStructuredDayPlan(input, asDraftEdit, interpreted, traces);
   }
 
   const group = resolveGroup(interpreted, input);
@@ -182,6 +213,42 @@ export async function runStructuredTurn(input: TurnInput, interpreter: VNextInte
     usage: interpreted.usage,
     blocked: ['unsupported'],
   });
+}
+
+/**
+ * An operations envelope made only of new creates that name no day of their own, as the day-plan
+ * edit the open draft needs. Anything else (a date, a weekday, a repeat, a delay, a stored target)
+ * returns null and is handled as ordinary operations.
+ */
+function draftEditFromCreates(envelope: SemanticEnvelopeV1): SemanticEnvelopeV1 | null {
+  if (envelope.kind !== 'operations' || !envelope.operations.length) return null;
+  const edits: DayPlanEditV1[] = [];
+  for (const operation of envelope.operations) {
+    if (operation.action !== 'create' || operation.target.kind !== 'new' || !operation.changes.title) return null;
+    // A draft item holds a name, a length and clocks only. Notes, a place, a priority, a status or a
+    // reminder would be dropped by the draft, so such a create stays an ordinary task (Stage 3).
+    const extra = Object.keys(operation.changes).filter((key) => key !== 'title');
+    if (extra.length) return null;
+    const own = operation.constraints.some((constraint) =>
+      constraint.kind === 'date' || constraint.kind === 'weekday' || constraint.kind === 'recurrence' || constraint.kind === 'relative_time' || constraint.kind === 'ordering' || constraint.kind === 'all_day');
+    if (own) return null;
+    const clock = (role: string) => {
+      const found = operation.constraints.find((constraint) => constraint.kind === 'clock' && constraint.role === role);
+      return found && found.kind === 'clock' ? found.value : null;
+    };
+    const duration = operation.constraints.find((constraint) => constraint.kind === 'duration');
+    const label = operation.constraints.find((constraint) => constraint.kind === 'time_of_day');
+    edits.push({
+      op: 'add_task',
+      name: operation.changes.title,
+      durationMinutes: duration && duration.kind === 'duration' ? duration.minutes : null,
+      preferredHm: clock('start') ?? clock('preferred'),
+      earliestHm: clock('earliest'),
+      deadlineHm: clock('deadline') ?? clock('end'),
+      ...(label && label.kind === 'time_of_day' ? { qualitative: label.label } : {}),
+    });
+  }
+  return { version: '1', kind: 'day_plan', operations: [], dayPlan: { phase: 'edit', edits } };
 }
 
 function resolveGroup(interpreted: InterpretOutput, input: TurnInput): ProposalGroup | null {

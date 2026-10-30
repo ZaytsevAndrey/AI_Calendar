@@ -76,6 +76,8 @@ function walk(value: unknown, zone: string | undefined, view: IntentView, depth:
   if (typeof row.kind === 'string' && ['create', 'update', 'move', 'complete', 'delete', 'skip', 'cancel', 'window'].includes(row.kind)) {
     view.actions.push(row.kind);
   }
+  // A create intent is { type: 'create', task } with no `kind`; its action is its type.
+  if (row.type === 'create' && row.task && typeof row.task === 'object') view.actions.push('create');
   for (const key of ['scheduledStartTime', 'scheduledEndTime', 'earliestStartTime', 'deadline']) {
     if (typeof row[key] === 'string') {
       view.dates.push(row[key] as string);

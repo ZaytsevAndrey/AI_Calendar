@@ -2,7 +2,9 @@
  * Active structured regression gate for voice vNext (Stage 4.1).
  * Every suite here drives the structured path and must pass.
  * Historical suites that still assert removed V1 mechanisms run with `npm run test:vnext:historical`;
- * their classification is in docs/voice-vnext/STAGE-4.1-REPORT.md.
+ * their classification is in documentation/scheduling-stabilization-progress.md (stage F1);
+ * the original STAGE-4.1-REPORT was deleted and never committed (documentation/voice-agent-roadmap.md,
+ * "Missing historical context").
  */
 const { testRegex, ...base } = require('./package.json').jest;
 void testRegex;

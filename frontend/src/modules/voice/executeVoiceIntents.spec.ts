@@ -1,5 +1,6 @@
 import type { VoiceWriteIntent } from 'api/voice.api';
 import { eventsApi } from 'api/eventsApi';
+import { notifyScheduleJobSettled } from 'modules/schedule/conflictChoiceBus';
 import { executeVoiceIntents, isDefiniteFailure } from './executeVoiceIntents';
 
 const remove = (taskId: string): VoiceWriteIntent => ({
@@ -74,6 +75,38 @@ describe('executeVoiceIntents report', () => {
     expect(report.results).toEqual([{ summary: 'Rename', status: 'applied' }]);
     expect(initiate).toHaveBeenCalledWith({ eventId: 'ev', eventData: { summary: 'Dentist checkup' }, calendarId: 'primary', provider: 'google' });
     initiate.mockRestore();
+  });
+
+  // VC-14: two creates with one name in one request are two tasks. Nothing on the client may fold them
+  // by name; a retried identical request is covered by the Idempotency-Key on POST /tasks.
+  it('hands every create to onCreate, including two with the same name and different clocks', async () => {
+    // A create waits for the placement job of that task to settle, as it does in the app.
+    const onCreate = jest.fn(async (_task: { scheduledStartTime?: string | null }) => {
+      notifyScheduleJobSettled();
+    });
+    const create = (start: string): VoiceWriteIntent => ({
+      type: 'create',
+      summary: `Call mom ${start}`,
+      task: {
+        name: 'Call mom',
+        eventType: 'fixed',
+        estimatedTimeInMinutes: 15,
+        allowSplit: false,
+        priority: 'medium',
+        scheduledStartTime: start,
+        scheduledEndTime: start,
+      },
+    });
+    const { report } = await executeVoiceIntents(
+      [create('2026-10-19T07:00:00.000Z'), create('2026-10-19T12:00:00.000Z')],
+      { ...deps(async () => undefined), onCreate },
+    );
+    expect(onCreate).toHaveBeenCalledTimes(2);
+    expect(onCreate.mock.calls.map(([task]) => task.scheduledStartTime)).toEqual([
+      '2026-10-19T07:00:00.000Z',
+      '2026-10-19T12:00:00.000Z',
+    ]);
+    expect(report.results.map((row) => row.status)).toEqual(['applied', 'applied']);
   });
 
   it('classifies statuses', () => {
