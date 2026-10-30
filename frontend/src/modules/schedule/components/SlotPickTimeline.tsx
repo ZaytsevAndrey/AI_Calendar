@@ -16,6 +16,7 @@ import {
   SLOT_WHEEL_FACTOR,
 } from '../slotPickMath';
 import { phaseIdAtFocus, phaseWindowsForDay } from '../slotPickPhases';
+import { phaseColor } from 'theme/phasePalette';
 
 type Props = {
   data: FreeSlotsResponse;
@@ -100,7 +101,7 @@ export function SlotPickTimeline({
     data.timeZone,
   );
   const phaseAtFocus = windows.find((w) => w.id === phaseIdAtFocus(windows, liveMs));
-  const phaseColor = phaseAtFocus?.color || data.phase?.color || '#4a90e2';
+  const focusColor = phaseAtFocus?.color || data.phase?.color;
 
   const scrollTopFor = (ms: number, el: HTMLDivElement) =>
     Math.max(
@@ -270,7 +271,7 @@ export function SlotPickTimeline({
             style={{
               height: ghostH,
               background: placeable
-                ? `linear-gradient(135deg, ${phaseColor}cc, ${phaseColor}88)`
+                ? `linear-gradient(135deg, ${phaseColor(focusColor, 0.8)}, ${phaseColor(focusColor, 0.55)})`
                 : 'linear-gradient(135deg, #6b7280cc, #4b556388)',
             }}
           >
@@ -374,7 +375,7 @@ export function SlotPickTimeline({
                   style={{
                     top: minToPx(startMin),
                     height: h,
-                    background: `linear-gradient(90deg, ${tint}55, ${tint}22)`,
+                    background: `linear-gradient(90deg, ${phaseColor(tint, 0.35)}, ${phaseColor(tint, 0.14)})`,
                   }}
                 >
                   {label ? (

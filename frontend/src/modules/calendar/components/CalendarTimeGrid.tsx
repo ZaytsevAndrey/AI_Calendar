@@ -28,6 +28,7 @@ import {
 } from '../eventDrag';
 import { timedCardBox, timedCardClass } from '../timedCardLayout';
 import { applyTimeSelection } from '../timeSelection';
+import { phaseColor } from 'theme/phasePalette';
 
 const PX_PER_HOUR = 48;
 const HANDLE_PX = 4;
@@ -528,7 +529,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                     top,
                     height,
                       backgroundImage: band.color
-                      ? `linear-gradient(${band.color}1c, ${band.color}1c)`
+                      ? `linear-gradient(${phaseColor(band.color, 0.08)}, ${phaseColor(band.color, 0.08)})`
                       : undefined,
                   }}
                   onClick={() => {

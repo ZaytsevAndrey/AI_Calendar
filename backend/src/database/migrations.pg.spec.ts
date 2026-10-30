@@ -56,6 +56,7 @@ describePg('versioned migrations (Postgres)', () => {
       'SchedulingQueueAndOccurrenceIdentity1761760000000',
       'GoogleWriteQueueLifecycle1761770000000',
       'TaskCreateRequestKey1761780000000',
+      'PhasePaletteColors1761790000000',
     ]);
     expect(await drift(ds)).toEqual([]);
     expect(await ds.runMigrations()).toEqual([]);

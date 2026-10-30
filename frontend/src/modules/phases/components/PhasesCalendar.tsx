@@ -8,6 +8,7 @@ import {
   resolvePhaseRangeInActiveWindow,
   snapMinutes,
 } from '../utils/phasesTimeUtils';
+import { phaseColor } from 'theme/phasePalette';
 
 const PX_PER_HOUR = 44;
 const SNAP_MIN = 15;
@@ -317,7 +318,7 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
                       >
                         <span
                           className="h-3 w-3 shrink-0 rounded-full"
-                          style={{ backgroundColor: phase.color }}
+                          style={{ backgroundColor: phaseColor(phase.color) }}
                           aria-hidden
                         />
                         <span className="min-w-0 flex-1 truncate text-sm text-ide-text">{phase.name}</span>
@@ -409,7 +410,7 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
                       }}
                       className="flex min-h-0 flex-1 items-center justify-center opacity-85"
                       style={{
-                        backgroundColor: phase.color,
+                        backgroundColor: phaseColor(phase.color),
                         cursor: onPhaseTimeChange ? 'grab' : 'pointer',
                       }}
                     >
@@ -449,7 +450,7 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
               <div
                 key={phase.id}
                 className="flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold text-white"
-                style={{ backgroundColor: phase.color }}
+                style={{ backgroundColor: phaseColor(phase.color) }}
               >
                 {phase.name} ({phase.startTime}–{phase.endTime})
               </div>

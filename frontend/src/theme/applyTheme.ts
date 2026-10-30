@@ -1,13 +1,15 @@
 import {
-    DEFAULT_THEME,
+    DEFAULT_THEME_PREFERENCE,
     hexToRgbChannels,
-    isThemeId,
+    isThemePreference,
     THEME_CHROME,
     THEME_COLOR_NAMES,
     THEME_COLORS,
     THEME_STORAGE_KEY,
     type ThemeId,
+    type ThemePreference,
 } from './themeColors';
+import { phaseTones } from './phasePalette';
 
 export type ThemeRoot = {
     dataset: { theme?: string };
@@ -32,19 +34,40 @@ function browserStorage(): ThemeStorage | undefined {
     return localStorage;
 }
 
-export function readStoredTheme(storage?: ThemeStorage): ThemeId {
+/** The stored choice; `system` when nothing (or nothing valid) is stored. */
+export function readStoredPreference(storage?: ThemeStorage): ThemePreference {
     const store = storage ?? browserStorage();
-    if (!store) return DEFAULT_THEME;
+    if (!store) return DEFAULT_THEME_PREFERENCE;
     try {
         const raw = store.getItem(THEME_STORAGE_KEY);
-        return isThemeId(raw) ? raw : DEFAULT_THEME;
+        return isThemePreference(raw) ? raw : DEFAULT_THEME_PREFERENCE;
     } catch {
-        return DEFAULT_THEME;
+        return DEFAULT_THEME_PREFERENCE;
     }
 }
 
-/** Replace the active color list and remember the choice in this browser. */
-export function applyTheme(theme: ThemeId, root?: ThemeRoot, storage?: ThemeStorage): void {
+export function storePreference(preference: ThemePreference, storage?: ThemeStorage): void {
+    const store = storage ?? browserStorage();
+    if (!store) return;
+    try {
+        store.setItem(THEME_STORAGE_KEY, preference);
+    } catch {
+        // A blocked write still leaves the palette on the document.
+    }
+}
+
+/** The device theme; dark when the browser cannot tell. */
+export function systemTheme(): ThemeId {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'dark';
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+export function resolveTheme(preference: ThemePreference, system: ThemeId = systemTheme()): ThemeId {
+    return preference === 'system' ? system : preference;
+}
+
+/** Paint the palette for a resolved theme. */
+export function applyTheme(theme: ThemeId, root?: ThemeRoot): void {
     const target = root ?? browserRoot();
     const colors = THEME_COLORS[theme];
     const chrome = THEME_CHROME[theme];
@@ -55,17 +78,12 @@ export function applyTheme(theme: ThemeId, root?: ThemeRoot, storage?: ThemeStor
         for (const name of THEME_COLOR_NAMES) {
             target.style.setProperty(`--ide-${name}`, hexToRgbChannels(colors[name]));
         }
+        for (const [id, hex] of Object.entries(phaseTones(theme))) {
+            target.style.setProperty(`--ph-${id}`, hexToRgbChannels(hex));
+        }
+        target.style.setProperty('--phase-tint', theme === 'dark' ? '18%' : '12%');
         target.style.setProperty('--ide-shadow', chrome.shadow);
         target.style.setProperty('--ide-shadow-md', chrome.shadowMd);
-    }
-
-    const store = storage ?? browserStorage();
-    if (store) {
-        try {
-            store.setItem(THEME_STORAGE_KEY, theme);
-        } catch {
-            // A blocked write still leaves the palette on the document.
-        }
     }
 
     if (!root && typeof document !== 'undefined') {
@@ -74,7 +92,7 @@ export function applyTheme(theme: ThemeId, root?: ThemeRoot, storage?: ThemeStor
 }
 
 export function applyStoredTheme(): ThemeId {
-    const theme = readStoredTheme();
+    const theme = resolveTheme(readStoredPreference());
     applyTheme(theme);
     return theme;
 }

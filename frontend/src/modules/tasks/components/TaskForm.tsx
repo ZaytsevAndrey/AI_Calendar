@@ -42,6 +42,7 @@ import { readDismissedTypes, TaskTypeInfo } from './TaskTypeInfo';
 import { Input } from 'ui/Input';
 import { Select } from 'ui/Select';
 import { Textarea } from 'ui/Textarea';
+import { phaseColor } from 'theme/phasePalette';
 
 const labelText = 'block text-xs font-medium text-ide-text';
 const DURATION_CHIPS = [15, 30, 60, 90] as const;
@@ -644,11 +645,11 @@ const TaskForm: React.FC<TaskFormProps> = ({
                           on
                             ? {
                                 borderColor: color,
-                                backgroundColor: `${color}33`,
+                                backgroundColor: phaseColor(color, 0.2),
                               }
                             : {
-                                borderColor: `${color}88`,
-                                boxShadow: `inset 3px 0 0 ${color}`,
+                                borderColor: phaseColor(color, 0.55),
+                                boxShadow: `inset 3px 0 0 ${phaseColor(color)}`,
                               }
                         }
                         onClick={() => field.onChange(phase.id)}

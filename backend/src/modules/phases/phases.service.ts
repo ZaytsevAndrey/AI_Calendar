@@ -18,6 +18,7 @@ import {
   PhasePresetId,
 } from './lifestyle-presets';
 import { isAppLanguage, t, type AppLanguage } from '../../i18n';
+import { toPaletteHex } from './phase-palette';
 
 @Injectable()
 export class PhasesService {
@@ -59,7 +60,7 @@ export class PhasesService {
       {
         userId,
         name: t(language, 'preset.sleep.name'),
-        color: '#34495e',
+        color: '#64748B',
         description:
           language === 'uk'
             ? 'Відпочинок (зі налаштувань сон → підйом)'
@@ -72,7 +73,7 @@ export class PhasesService {
       {
         userId,
         name: t(language, 'preset.focus.name'),
-        color: '#2980b9',
+        color: '#2563EB',
         description:
           language === 'uk'
             ? 'Основне робоче вікно (підйом → сон зі налаштувань)'
@@ -178,7 +179,7 @@ export class PhasesService {
         ...blocks.map((block) => ({
           userId,
           name: block.name,
-          color: block.color,
+          color: toPaletteHex(block.color),
           description: block.description,
           startTime: block.startTime,
           endTime: block.endTime,
@@ -226,6 +227,7 @@ export class PhasesService {
   ): Promise<Phase> {
     const phase = this.phasesRepository.create({
       ...createPhaseDto,
+      color: toPaletteHex(createPhaseDto.color),
       userId,
       weekDays: this.normalizeWeekDays(createPhaseDto.weekDays ?? null),
     });
@@ -266,7 +268,10 @@ export class PhasesService {
     updatePhaseDto: UpdatePhaseDto,
   ): Promise<Phase> {
     const phase = await this.findOne(id, userId);
-    const updatedPhase = this.phasesRepository.merge(phase, updatePhaseDto);
+    const updatedPhase = this.phasesRepository.merge(phase, {
+      ...updatePhaseDto,
+      ...(updatePhaseDto.color !== undefined ? { color: toPaletteHex(updatePhaseDto.color) } : {}),
+    });
     if (
       updatePhaseDto.weekDays !== undefined &&
       (!updatePhaseDto.weekDays || updatePhaseDto.weekDays.length === 0)

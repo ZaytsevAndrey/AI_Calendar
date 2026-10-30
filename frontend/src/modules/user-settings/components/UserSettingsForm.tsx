@@ -9,7 +9,7 @@ import { Input } from 'ui/Input';
 import { TimeField } from 'ui/TimeField';
 import { Select } from 'ui/Select';
 import { useTheme } from 'theme/ThemeProvider';
-import { isThemeId } from 'theme/themeColors';
+import { isThemePreference } from 'theme/themeColors';
 import { timeZoneSelectOptions } from '../ianaTimeZones';
 import { ReminderSettingsSection } from '../../pwa/ReminderSettingsSection';
 import { VoiceSettingsSection } from '../../voice/components/VoiceSettingsSection';
@@ -43,7 +43,7 @@ interface UserSettingsFormData {
 
 const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
     const { t, i18n } = useTranslation();
-    const { theme, setTheme } = useTheme();
+    const { preference, setPreference } = useTheme();
     const [isCalendarConnected, setIsCalendarConnected] = useState(false);
     const [isCheckingConnection, setIsCheckingConnection] = useState(true);
     const [updateUserSettings] = useUpdateUserSettingsMutation();
@@ -372,13 +372,14 @@ const UserSettingsForm: React.FC<UserSettingsFormProps> = ({ initialData }) => {
                         <Select
                             id="app-theme"
                             className="max-w-xs"
-                            value={theme}
+                            value={preference}
                             onChange={(e) => {
-                                if (isThemeId(e.target.value)) setTheme(e.target.value);
+                                if (isThemePreference(e.target.value)) setPreference(e.target.value);
                             }}
                         >
-                            <option value="dark">{t('settings.themeDark')}</option>
+                            <option value="system">{t('settings.themeSystem')}</option>
                             <option value="light">{t('settings.themeLight')}</option>
+                            <option value="dark">{t('settings.themeDark')}</option>
                         </Select>
                         <p className="max-w-xs text-xs text-ide-muted">{t('settings.themeHint')}</p>
                     </div>

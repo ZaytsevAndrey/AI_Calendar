@@ -25,6 +25,7 @@ import {
 import { dateOnDayAtMinutes } from '../eventDrag';
 import { ymdFromLocalDate } from '../../../utils/ianaDateTime';
 import { formatClock } from '../../../utils/formatDate';
+import { phaseColor } from 'theme/phasePalette';
 
 function eventStartMinutes(event: GoogleCalendarEvent): number {
     if (!event.start.dateTime) return -1;
@@ -198,7 +199,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                         '--chip-color': getEventColor(event),
                         ...(eventPhase
                             ? {
-                                  boxShadow: `inset 3px 0 0 0 ${getEventColor(event)}, 0 0 0 1px ${eventPhase.color}`,
+                                  boxShadow: `inset 3px 0 0 0 ${getEventColor(event)}, 0 0 0 1px ${phaseColor(eventPhase.color)}`,
                               }
                             : null),
                     } as React.CSSProperties
@@ -227,7 +228,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                 {eventPhase && (
                     <span
                         className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-ide-bg"
-                        style={{ backgroundColor: eventPhase.color }}
+                        style={{ backgroundColor: phaseColor(eventPhase.color) }}
                     />
                 )}
             </div>
@@ -258,13 +259,13 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                                 key={phase.id}
                                 className="flex items-center gap-1 rounded p-1"
                                 style={{
-                                    backgroundColor: `${phase.color}18`,
-                                    border: `1px solid ${phase.color}55`,
+                                    backgroundColor: phaseColor(phase.color, 0.1),
+                                    border: `1px solid ${phaseColor(phase.color, 0.35)}`,
                                 }}
                             >
                                 <span
                                     className="h-3 w-3 shrink-0 rounded-full border border-ide-border"
-                                    style={{ backgroundColor: phase.color }}
+                                    style={{ backgroundColor: phaseColor(phase.color) }}
                                 />
                                 <span className="text-xs text-ide-muted">
                                     {phase.name} ({phase.startTime}-{phase.endTime})
@@ -323,13 +324,13 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                             key={phase.id}
                             className="flex items-center gap-1 rounded p-1"
                             style={{
-                                backgroundColor: `${phase.color}18`,
-                                border: `1px solid ${phase.color}55`,
+                                backgroundColor: phaseColor(phase.color, 0.1),
+                                border: `1px solid ${phaseColor(phase.color, 0.35)}`,
                             }}
                         >
                             <span
                                 className="h-3 w-3 shrink-0 rounded-full border border-ide-border"
-                                style={{ backgroundColor: phase.color }}
+                                style={{ backgroundColor: phaseColor(phase.color) }}
                             />
                             <span className="text-xs text-ide-muted">
                                 {phase.name} ({phase.startTime}-{phase.endTime})

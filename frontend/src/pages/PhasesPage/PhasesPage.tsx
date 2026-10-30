@@ -11,6 +11,7 @@ import { WeekDaysSelector } from 'modules/phases/components/WeekDaysSelector';
 import { showErrorToast } from 'utils/toast';
 import { Modal } from '../../ui/Modal';
 import { Button } from 'ui/Button';
+import { phaseColor } from 'theme/phasePalette';
 
 function weekDaysForPreset(phases: PhaseDTO[]): number[] {
     const named = phases.filter((phase) => phase.type !== 'sleep_time' && phase.type !== 'main_phase');
@@ -250,7 +251,7 @@ const PhasesPage: React.FC = () => {
                                         <span
                                             aria-hidden
                                             className="h-2.5 w-2.5 shrink-0 rounded-full"
-                                            style={{ backgroundColor: phase.color }}
+                                            style={{ backgroundColor: phaseColor(phase.color) }}
                                         />
                                         {phase.name}
                                     </span>

@@ -28,6 +28,7 @@ import { markProblematicHandled } from '../problematicSeatWatch';
 import type { ProblematicItem } from '../problematicItems';
 import { preferredMsOnDay, suggestedStarts } from '../slotPickMath';
 import { phaseIdForMovedSlot, phaseWindowsForDay } from '../slotPickPhases';
+import { phaseColor } from 'theme/phasePalette';
 
 type Props = {
   item: ProblematicItem;
@@ -185,8 +186,7 @@ export function ProblematicItemCard({ item, timeZone, todayYmd, onMove, onEdit }
     <li
       className="task-item flex flex-col gap-2.5 border-l-4"
       style={{
-        borderLeftColor: phase?.color || '#808080',
-        backgroundImage: `linear-gradient(135deg, ${phase?.color || '#808080'}38, ${phase?.color || '#808080'}14 46%, transparent)`,
+        borderLeftColor: phaseColor(phase?.color),
       }}
       aria-busy={disabled}
     >
@@ -214,9 +214,8 @@ export function ProblematicItemCard({ item, timeZone, todayYmd, onMove, onEdit }
           <span
             className={pill}
             style={{
-              borderColor: `${phase.color || '#808080'}88`,
-              backgroundColor: `${phase.color || '#808080'}24`,
-              color: phase.color || undefined,
+              borderColor: phaseColor(phase.color, 0.55),
+              backgroundColor: phaseColor(phase.color, 0.14),
             }}
           >
             {phase.name}

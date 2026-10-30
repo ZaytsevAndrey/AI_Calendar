@@ -506,7 +506,7 @@ export function useEventEditor() {
             </Button>
             <Button
               type="button"
-              variant="danger"
+              variant="dangerSolid"
               size={dialogButtonSize}
               onClick={confirmDeleteFromEditor}
               className="w-full sm:w-auto"

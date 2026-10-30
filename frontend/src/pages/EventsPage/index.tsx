@@ -316,7 +316,7 @@ const TasksPage: React.FC = () => {
             </Button>
             <Button
               type="button"
-              variant="danger"
+              variant="dangerSolid"
               size={dialogButtonSize}
               onClick={confirmDelete}
               className="w-full sm:w-auto"

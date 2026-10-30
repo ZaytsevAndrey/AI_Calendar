@@ -20,7 +20,8 @@
     "test:e2e:ui": "playwright test --config e2e/playwright.config.ts",
     "playwright:install": "playwright install chromium --with-deps",
     "clean": "node scripts/clean.js",
-    "design:shots": "npm run build:frontend && node e2e/design/shots.cjs"
+    "design:shots": "npm run build:frontend && node e2e/design/shots.cjs",
+    "lint:design": "node scripts/check-design-tokens.cjs"
   },
   "keywords": [],
   "author": "",

@@ -140,7 +140,7 @@ export function DeleteAccountSection() {
             </Button>
             <Button
               type="button"
-              variant="danger"
+              variant="dangerSolid"
               size={dialogButtonSize}
               disabled={busy || !confirmation.trim()}
               onClick={() => void submitDelete()}

@@ -1,6 +1,13 @@
 import fs from 'fs';
 import path from 'path';
-import { applyTheme, readStoredTheme, type ThemeRoot, type ThemeStorage } from './applyTheme';
+import {
+    applyTheme,
+    readStoredPreference,
+    resolveTheme,
+    storePreference,
+    type ThemeRoot,
+    type ThemeStorage,
+} from './applyTheme';
 import {
     hexToRgbChannels,
     THEME_CHROME,
@@ -45,7 +52,7 @@ describe('theme palettes', () => {
     });
 
     it('turns hex colors into RGB channels', () => {
-        expect(hexToRgbChannels('#2B2B2B')).toBe('43 43 43');
+        expect(hexToRgbChannels('#0E121A')).toBe('14 18 26');
         expect(hexToRgbChannels('#fff')).toBe('255 255 255');
     });
 
@@ -64,34 +71,41 @@ describe('theme palettes', () => {
 describe('applyTheme', () => {
     it('writes the selected palette and replaces it when the theme changes', () => {
         const root = themeRoot();
-        const storage = memoryStorage();
 
-        applyTheme('dark', root, storage);
+        applyTheme('dark', root);
 
         expect(root.dataset.theme).toBe('dark');
         expect(root.style.colorScheme).toBe('dark');
         expect(root.props.get('--ide-bg')).toBe(hexToRgbChannels(THEME_COLORS.dark.bg));
         expect(root.props.get('--ide-text')).toBe(hexToRgbChannels(THEME_COLORS.dark.text));
         expect(root.props.get('--ide-shadow')).toBe(THEME_CHROME.dark.shadow);
-        expect(storage.data[THEME_STORAGE_KEY]).toBe('dark');
 
-        applyTheme('light', root, storage);
+        applyTheme('light', root);
 
         expect(root.dataset.theme).toBe('light');
         expect(root.props.get('--ide-bg')).toBe(hexToRgbChannels(THEME_COLORS.light.bg));
         expect(root.props.get('--ide-text')).toBe(hexToRgbChannels(THEME_COLORS.light.text));
         expect(root.props.get('--ide-panel')).not.toBe(hexToRgbChannels(THEME_COLORS.dark.panel));
-        expect(storage.data[THEME_STORAGE_KEY]).toBe('light');
+    });
+});
+
+describe('theme preference', () => {
+    it('defaults to system when the stored value is missing or invalid', () => {
+        expect(readStoredPreference(memoryStorage())).toBe('system');
+        expect(readStoredPreference(memoryStorage({ [THEME_STORAGE_KEY]: 'blue' }))).toBe('system');
+        expect(readStoredPreference(memoryStorage({ [THEME_STORAGE_KEY]: 'light' }))).toBe('light');
     });
 
-    it('falls back to dark when the stored value is missing or invalid', () => {
-        expect(readStoredTheme(memoryStorage())).toBe('dark');
-        expect(readStoredTheme(memoryStorage({ [THEME_STORAGE_KEY]: 'blue' }))).toBe('dark');
-        expect(readStoredTheme(memoryStorage({ [THEME_STORAGE_KEY]: 'light' }))).toBe('light');
+    it('stores the choice and resolves system to the device theme', () => {
+        const storage = memoryStorage();
+        storePreference('dark', storage);
+        expect(storage.data[THEME_STORAGE_KEY]).toBe('dark');
+        expect(resolveTheme('system', 'light')).toBe('light');
+        expect(resolveTheme('system', 'dark')).toBe('dark');
+        expect(resolveTheme('light', 'dark')).toBe('light');
     });
 
-    it('still applies the palette when storage throws', () => {
-        const root = themeRoot();
+    it('survives storage that throws', () => {
         const storage: ThemeStorage = {
             getItem() {
                 throw new Error('blocked');
@@ -100,9 +114,7 @@ describe('applyTheme', () => {
                 throw new Error('blocked');
             },
         };
-
-        expect(readStoredTheme(storage)).toBe('dark');
-        expect(() => applyTheme('light', root, storage)).not.toThrow();
-        expect(root.props.get('--ide-bg')).toBe(hexToRgbChannels(THEME_COLORS.light.bg));
+        expect(readStoredPreference(storage)).toBe('system');
+        expect(() => storePreference('light', storage)).not.toThrow();
     });
 });

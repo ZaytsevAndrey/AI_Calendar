@@ -155,7 +155,8 @@
     "calendarNameSaveFailedDetail": "Check your connection and try again.",
     "checkingConnection": "Checking connection status…",
     "linked": "Linked with your Google account",
-    "notLinkedHint": "Calendar is linked automatically when you sign in with Google. Sign out and sign in again if this status does not update."
+    "notLinkedHint": "Calendar is linked automatically when you sign in with Google. Sign out and sign in again if this status does not update.",
+    "themeSystem": "Match device"
   },
   "calendar": {
     "createTask": "Create task",
@@ -1034,7 +1035,19 @@
     "createFailed": "Could not create phases",
     "saveSettingsFailed": "Could not save settings",
     "saveSettingsDetail": "Wake and sleep times were not saved. Try again.",
-    "colorLabel": "Color"
+    "colorLabel": "Color",
+    "palette": {
+      "blue": "Blue",
+      "violet": "Violet",
+      "teal": "Teal",
+      "green": "Green",
+      "amber": "Amber",
+      "orange": "Orange",
+      "rose": "Red",
+      "pink": "Pink",
+      "cyan": "Cyan",
+      "slate": "Graphite"
+    }
   },
   "voice": {
     "confirmTitle": "Confirm changes",

@@ -13,6 +13,7 @@ import { Check, Plus, Trash2, X } from 'lucide-react';
 import { Button } from 'ui/Button';
 import { Input } from 'ui/Input';
 import { Textarea } from 'ui/Textarea';
+import { PHASE_PALETTE } from 'theme/phasePalette';
 
 export type PhaseFormData = {
   name: string;
@@ -66,7 +67,7 @@ const PhaseForm = ({
       weekDays: initialData.weekDays || [1, 2, 3, 4, 5],
     } : {
       name: '',
-      color: `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`,
+      color: PHASE_PALETTE[Math.floor(Math.random() * PHASE_PALETTE.length)].hex,
       description: '',
       startTime: '09:00',
       endTime: '22:00',

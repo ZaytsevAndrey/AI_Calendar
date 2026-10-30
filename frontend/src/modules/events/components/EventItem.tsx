@@ -24,6 +24,7 @@ import {
 } from '../../../utils/formatDate';
 import { buildUnscheduledIconMeta } from '../unscheduledCardMeta';
 import type { SeriesMemberKind } from '../utils/groupTasksBySeriesGroup';
+import { phaseColor } from 'theme/phasePalette';
 
 interface EventItemProps {
   event: TaskDTO;
@@ -360,9 +361,8 @@ const EventItem: React.FC<EventItemProps> = ({
                 style={
                   meta.id === 'phase'
                     ? {
-                        borderColor: `${meta.color || '#808080'}88`,
-                        backgroundColor: `${meta.color || '#808080'}24`,
-                        color: meta.color || undefined,
+                        borderColor: phaseColor(meta.color, 0.55),
+                        backgroundColor: phaseColor(meta.color, 0.14),
                       }
                     : undefined
                 }
@@ -395,16 +395,15 @@ const EventItem: React.FC<EventItemProps> = ({
       ) : (
         <div className="flex flex-wrap gap-2">
           <span className="sr-only">{t('tasks.item.prioritySr', { priority: event.priority })}</span>
-          <Pill style={{ borderColor: `${color}88`, backgroundColor: `${color}24`, color }}>
+          <Pill style={{ borderColor: phaseColor(color, 0.55), backgroundColor: phaseColor(color, 0.14), color }}>
             {priorityLabel}
           </Pill>
           <Pill className={statusPill[event.status]}>{statusLabel}</Pill>
           {event.phase ? (
             <Pill
               style={{
-                borderColor: `${event.phase.color || '#808080'}88`,
-                backgroundColor: `${event.phase.color || '#808080'}24`,
-                color: event.phase.color || undefined,
+                borderColor: phaseColor(event.phase.color, 0.55),
+                backgroundColor: phaseColor(event.phase.color, 0.14),
               }}
             >
               {event.phase.name}

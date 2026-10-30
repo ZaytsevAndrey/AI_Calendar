@@ -1081,7 +1081,7 @@ const CalendarPage: React.FC = () => {
                         </Button>
                         <Button
                             type="button"
-                            variant="danger"
+                            variant="dangerSolid"
                             size={dialogButtonSize}
                             onClick={confirmDeleteEvent}
                             className="w-full sm:w-auto"
