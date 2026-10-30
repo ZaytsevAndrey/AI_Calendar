@@ -54,7 +54,7 @@ export default function LandingPage({ locale }: { locale: Locale }) {
                                 </li>
                             ))}
                         </ol>
-                        <p className="why">{t.why}</p>
+                        <p className="why">{t.calendarsLine}</p>
                     </div>
                 </section>
 

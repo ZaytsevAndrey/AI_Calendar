@@ -352,8 +352,8 @@ h2 {
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--dawn) 30%, transparent);
 }
 .hero h1 {
-    font-size: clamp(2.4rem, 1.4rem + 4vw, 4.5rem);
-    line-height: 1.02;
+    font-size: clamp(2.2rem, 1.3rem + 3.2vw, 3.75rem);
+    line-height: 1.04;
     letter-spacing: -0.04em;
     font-weight: 760;
 }

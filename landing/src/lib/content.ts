@@ -40,7 +40,7 @@ export interface Dictionary {
     };
     waitlist: WaitlistLabels;
     steps: { title: string; items: { title: string; body: string }[] };
-    why: string;
+    calendarsLine: string;
     final: { title: string; body: string };
     signIn: {
         title: string;
@@ -66,9 +66,9 @@ const uk: Dictionary = {
     htmlLang: 'uk',
     ogLocale: 'uk_UA',
     meta: {
-        title: 'Luefy — викинь це з голови',
+        title: 'Luefy — календар для тих, хто не веде календар',
         description:
-            'Скажи Luefy, що треба зробити. Він сам розбере, що це, і знайде для цього час у календарі. Ранній доступ.',
+            'Опиши свій тиждень один раз і кидай справи голосом чи текстом: Luefy розкладе їх у вільні місця. Google, Outlook та iCloud в одному календарі. Ранній доступ.',
         keywords: [
             'AI планувальник',
             'задачі голосом',
@@ -82,16 +82,17 @@ const uk: Dictionary = {
     nav: { signIn: 'Увійти', langLabel: 'Мова', otherLangName: 'English', skip: 'Перейти до змісту' },
     hero: {
         badge: 'Ще в розробці',
-        title: 'Викинь це з голови.',
-        lead: 'Скажи Luefy, що треба зробити. Він сам розбере, що це, і знайде для цього час у календарі. А ти більше про це не думаєш.',
+        title: 'Календар для тих, хто не веде календар.',
+        lead: 'Не треба розписувати кожну годину. Один раз опиши свій звичайний тиждень: коли робота, коли вільний час. Далі просто кидай справи, голосом чи текстом, і Luefy розкладе їх у вільні місця.',
     },
     demo: {
         label: 'Як Luefy розбирає сказане',
-        kinds: { event: 'Подія', reminder: 'Нагадування', task: 'Задача', later: 'Колись потім' },
+        kinds: { event: 'Подія', reminder: 'Нагадування', task: 'Задача', later: 'На потім' },
         items: [
+            { said: 'Подзвонити в банк', kind: 'task', result: 'Робота, вт 11:30' },
+            { said: 'Нагадай скасувати підписку через місяць', kind: 'reminder', result: '30 листопада' },
+            { said: 'Колись розібратися зі страховкою', kind: 'later', result: 'Без дати' },
             { said: 'Завтра о 15:00 стоматолог', kind: 'event', result: 'Завтра, 15:00–16:00' },
-            { said: 'Не забути забрати посилку', kind: 'reminder', result: 'Сьогодні, 18:00' },
-            { said: 'Розібратися зі страховкою на тому тижні', kind: 'task', result: 'Середа, 10:00–11:00' },
         ],
     },
     waitlist: {
@@ -123,14 +124,17 @@ const uk: Dictionary = {
     steps: {
         title: 'Як це працює',
         items: [
-            { title: 'Кажеш як є', body: 'Голосом або текстом. Без дат, форм і списків.' },
-            { title: 'Luefy розбирається', body: 'Подія, нагадування, задача чи «колись потім».' },
-            { title: 'І знаходить час', body: 'Між твоїми справами. Не о 23:00.' },
+            { title: 'Опиши свій тиждень', body: 'Коли робота, коли вдома, коли вільно. Один раз.' },
+            { title: 'Кидай справи', body: 'Голосом або текстом, як думаєш.' },
+            {
+                title: 'Luefy розкладе',
+                body: 'Справи без часу — у вільні місця твого тижня. Решту — в нагадування або на потім.',
+            },
         ],
     },
-    why: 'Поки в справи немає часу, голова про неї нагадує. Дав їй час — відпустило.',
+    calendarsLine: 'Google, Outlook та iCloud — в одному календарі.',
     final: {
-        title: 'Хочеш спробувати першим?',
+        title: 'Хочеш спробувати?',
         body: 'Залиш емейл — напишемо, коли відкриємо доступ.',
     },
     signIn: {
@@ -142,7 +146,7 @@ const uk: Dictionary = {
         unavailable: 'Вхід через {provider} зараз не працює. Спробуй інший.',
         failedRedirect: 'Вхід не завершився. Спробуй ще раз.',
     },
-    footer: { tagline: 'Викинь це з голови.', privacy: 'Конфіденційність' },
+    footer: { tagline: 'Календар для тих, хто не веде календар.', privacy: 'Конфіденційність' },
     privacy: {
         title: 'Про твої дані',
         description: 'Які дані збирає Luefy, навіщо, де вони зберігаються і як їх видалити.',
@@ -173,25 +177,26 @@ const en: Dictionary = {
     htmlLang: 'en',
     ogLocale: 'en_US',
     meta: {
-        title: 'Luefy — get it out of your head',
+        title: 'Luefy — a calendar for people who don’t keep one',
         description:
-            'Tell Luefy what needs doing. It works out what it is and finds time for it in your calendar. Early access.',
+            'Describe your week once and throw tasks at it by voice or text: Luefy fits them into the gaps. Google, Outlook and iCloud in one calendar. Early access.',
         keywords: ['AI planner', 'voice to task', 'reminders', 'AI calendar', 'day planner', 'Google Calendar'],
         ogAlt: 'Luefy turns what you say into events, reminders and tasks in your calendar',
     },
     nav: { signIn: 'Sign in', langLabel: 'Language', otherLangName: 'Українська', skip: 'Skip to content' },
     hero: {
         badge: 'Still in the works',
-        title: 'Get it out of your head.',
-        lead: 'Tell Luefy what needs doing. It works out what it is and finds time for it in your calendar. You stop thinking about it.',
+        title: 'A calendar for people who don’t keep one.',
+        lead: 'No need to plan every hour. Describe your usual week once: when you work, when you’re free. Then just throw tasks at it, by voice or text, and Luefy fits them into the gaps.',
     },
     demo: {
         label: 'How Luefy sorts what you say',
-        kinds: { event: 'Event', reminder: 'Reminder', task: 'Task', later: 'Someday' },
+        kinds: { event: 'Event', reminder: 'Reminder', task: 'Task', later: 'Later' },
         items: [
+            { said: 'Call the bank', kind: 'task', result: 'Work, Tue 11:30' },
+            { said: 'Remind me to cancel the subscription in a month', kind: 'reminder', result: '30 November' },
+            { said: 'Sort out the insurance someday', kind: 'later', result: 'No date' },
             { said: 'Dentist tomorrow at 3 pm', kind: 'event', result: 'Tomorrow, 15:00–16:00' },
-            { said: 'Don’t forget the parcel', kind: 'reminder', result: 'Today, 18:00' },
-            { said: 'Sort out the insurance next week', kind: 'task', result: 'Wednesday, 10:00–11:00' },
         ],
     },
     waitlist: {
@@ -223,14 +228,17 @@ const en: Dictionary = {
     steps: {
         title: 'How it works',
         items: [
-            { title: 'Say it as it is', body: 'Voice or text. No dates, forms or lists.' },
-            { title: 'Luefy sorts it out', body: 'An event, a reminder, a task or “someday”.' },
-            { title: 'And finds the time', body: 'Between your other plans. Not at 11 pm.' },
+            { title: 'Describe your week', body: 'When you work, when you’re home, when you’re free. Once.' },
+            { title: 'Throw tasks in', body: 'By voice or text, the way you think.' },
+            {
+                title: 'Luefy sorts them',
+                body: 'Tasks without a time go into free spots in your week. The rest become reminders or wait for later.',
+            },
         ],
     },
-    why: 'Until a task has a time, your head keeps reminding you. Give it a time and it lets go.',
+    calendarsLine: 'Google, Outlook and iCloud in one calendar.',
     final: {
-        title: 'Want to try it first?',
+        title: 'Want to try it?',
         body: 'Leave your email and we’ll write when access opens.',
     },
     signIn: {
@@ -242,7 +250,7 @@ const en: Dictionary = {
         unavailable: 'Sign-in with {provider} isn’t working right now. Try another.',
         failedRedirect: 'Sign-in didn’t finish. Try again.',
     },
-    footer: { tagline: 'Get it out of your head.', privacy: 'Privacy' },
+    footer: { tagline: 'A calendar for people who don’t keep one.', privacy: 'Privacy' },
     privacy: {
         title: 'About your data',
         description: 'What data Luefy collects, why, where it is stored and how to delete it.',
