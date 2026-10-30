@@ -1673,9 +1673,20 @@ export class PlacementStepService {
         where: { id: task.id, userId },
         relations: ['phase', 'phases'],
       });
-      if (fresh && firstPrimary.plan.outcome === 'seated') {
-        fresh.scheduledStartTime = new Date(firstPrimary.plan.start);
-        fresh.scheduledEndTime = new Date(firstPrimary.plan.end);
+      // The master carries the series clock. A first day whose clock was
+      // moved by a DST gap (02:30 → 03:30) would make every later day 03:30;
+      // take the clock from the first series day that kept it (AUD-022).
+      const clockDay =
+        primaryYmds
+          .map((ymd) => planByYmd.get(ymd)!)
+          .find(
+            (day) =>
+              day.plan.outcome === 'seated' &&
+              normalizeClockHm(localHm(new Date(day.plan.start).toISOString(), timeZone)) === primaryHm,
+          ) ?? firstPrimary;
+      if (fresh && firstPrimary.plan.outcome === 'seated' && clockDay.plan.outcome === 'seated') {
+        fresh.scheduledStartTime = new Date(clockDay.plan.start);
+        fresh.scheduledEndTime = new Date(clockDay.plan.end);
         fresh.estimatedTimeInMinutes = durationMinutes;
         fresh.scheduleState = ScheduleState.NONE;
         fresh.isUnscheduled = false;

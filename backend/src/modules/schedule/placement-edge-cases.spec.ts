@@ -281,6 +281,33 @@ describe('placement edge cases', () => {
     for (const ymd of days) expect(new Date(`${ymd}T12:00:00Z`).getUTCDay()).toBe(0);
   });
 
+  it('AUD-022: a 02:30 series whose first upcoming day is a spring-forward day keeps 02:30 on later days', async () => {
+    kit = await createPlacementKit({
+      // 23:00 on 13 March: today's 02:30 is over, so the first series day is the switch day.
+      now: '2027-03-14T04:00:00.000Z',
+      timeZone: 'America/New_York',
+      wakeTime: '00:00',
+      sleepTime: '23:59',
+      horizonDays: 3,
+    });
+    const series = await create({
+      name: 'Pills',
+      eventType: TaskEventType.ADMIN,
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      // The clock the user chose (02:30), on a day where it exists.
+      scheduledStartTime: kit.at('2027-03-13', '02:30').toISOString(),
+      estimatedTimeInMinutes: 15,
+    });
+    jest.setSystemTime(new Date('2027-03-17T05:00:00.000Z'));
+    await kit.service.appendMissingSeriesDays(kit.user.id);
+
+    const rows = await kit.slotsOf(series.id);
+    expect(rows[0]).toBe('2027-03-14 03:30-03:45'); // the skipped clock, shifted forward that day only
+    for (const row of rows.slice(1)) expect(row.slice(11)).toBe('02:30-02:45');
+    expect(rows.length).toBeGreaterThanOrEqual(4);
+  });
+
   it('a series clock edit while its create placement is still queued ends on the new clock only', async () => {
     kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
     // The create's in-request run is lost (crash); the job waits in the queue.
