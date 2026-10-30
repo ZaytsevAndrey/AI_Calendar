@@ -31,6 +31,7 @@ export function CalendarVisibilityMenu({ compact = false }: { compact?: boolean 
   const [open, setOpen] = useState(false);
   const [pendingHidden, setPendingHidden] = useState<string[] | null>(null);
   const [panelTop, setPanelTop] = useState(0);
+  const [panelRight, setPanelRight] = useState(8);
   const [calendars, setCalendars] = useState<ProviderCalendarItem[]>([]);
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'error' | 'ready'>(
     'idle',
@@ -64,8 +65,10 @@ export function CalendarVisibilityMenu({ compact = false }: { compact?: boolean 
         setLoadState('ready');
       })
       .catch(() => setLoadState('error'));
-    if (compact && rootRef.current) {
-      setPanelTop(rootRef.current.getBoundingClientRect().bottom + 6);
+    if (rootRef.current) {
+      const rect = rootRef.current.getBoundingClientRect();
+      setPanelTop(rect.bottom + 6);
+      setPanelRight(Math.max(8, window.innerWidth - rect.right));
     }
     const onDoc = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
@@ -134,9 +137,13 @@ export function CalendarVisibilityMenu({ compact = false }: { compact?: boolean 
           className={
             compact
               ? 'fixed z-[1400] w-[min(20rem,calc(100vw-1rem))] rounded-lg border border-ide-border bg-ide-panel p-2'
-              : 'absolute right-0 z-20 mt-1 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-ide-border bg-ide-panel p-2'
+              : 'fixed z-[1400] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-lg border border-ide-border bg-ide-panel p-2 shadow-ide-md'
           }
-          style={compact ? { top: panelTop, left: 8 } : undefined}
+          style={
+            compact
+              ? { top: panelTop, left: 8 }
+              : { top: panelTop, right: panelRight, maxHeight: `calc(100dvh - ${panelTop + 16}px)` }
+          }
         >
           {loadState === 'loading' || loadState === 'idle' ? (
             <p className="px-2 py-2 text-sm text-ide-muted">{t('calendar.loadingCalendars')}</p>

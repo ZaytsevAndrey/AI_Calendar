@@ -39,6 +39,14 @@ export default {
                     'sans-serif',
                 ],
             },
+            fontSize: {
+                caption: ['12px', { lineHeight: '16px' }],
+                'body-sm': ['13px', { lineHeight: '20px' }],
+                body: ['15px', { lineHeight: '22px' }],
+                heading: ['16px', { lineHeight: '24px' }],
+                title: ['20px', { lineHeight: '28px' }],
+                display: ['28px', { lineHeight: '34px' }],
+            },
             boxShadow: {
                 ide: 'var(--ide-shadow)',
                 'ide-md': 'var(--ide-shadow-md)',

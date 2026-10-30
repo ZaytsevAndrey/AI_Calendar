@@ -55,7 +55,15 @@
     "phase": "Phase",
     "status": "Status",
     "deadline": "Deadline",
-    "duration": "Duration"
+    "duration": "Duration",
+    "weekdays": {
+      "everyDay": "Every day",
+      "workdays": "Weekdays",
+      "weekend": "Weekend"
+    },
+    "loadingPage": "Loading…",
+    "apiUnreachable": "Cannot reach the server. If the app has not been opened for a while, the server can take up to a minute to wake up.",
+    "undo": "Undo"
   },
   "settings": {
     "title": "Settings",
@@ -74,7 +82,7 @@
     "minSplit": "Min split chunk (minutes)",
     "maxSplit": "Max split chunk (minutes)",
     "horizon": "Planning horizon (days)",
-    "horizonHint": "How far ahead recurring tasks stay scheduled. The app extends this window in the background; you do not need Review schedule to keep series alive.",
+    "horizonHint": "How many days ahead recurring tasks are placed. The window extends on its own in the background.",
     "defaultTaskDuration": "Default task length (minutes)",
     "defaultTaskDurationHint": "Used for a new task when you do not set a length. Voice uses the same value.",
     "defaultReminderTime": "Default reminder time",
@@ -112,7 +120,7 @@
     "deleteAccountForever": "Delete forever",
     "deleteAccountDone": "Account deleted",
     "deleteAccountDoneDetail": "Your account and app data are gone.",
-    "bufferHint": "Free time before and after each fixed task and external Google event. Generate uses that gap only when the task would not fit otherwise. 0 turns it off. Dragging a block can still land in the gap.",
+    "bufferHint": "Free minutes before and after each fixed task and external event. The planner uses them only when a task would not fit otherwise. 0 means no buffer.",
     "googleCalendar": "Google Calendar",
     "calendarAccounts": "Calendar accounts",
     "calendarAccountsHint": "Link Microsoft via OAuth, or Apple iCloud via an app-specific password. Linking keeps one app account across providers.",
@@ -323,7 +331,7 @@
     "loadCalendarsFailed": "Could not load calendars.",
     "noCalendars": "No calendars to show.",
     "alwaysShown": "Always shown",
-    "calendarsHint": "Hides events on this page. Generate still treats Primary and the app calendar as busy.",
+    "calendarsHint": "Hides events on this page. Hidden calendars are not counted as busy when tasks are placed.",
     "updateCalendarsFailed": "Could not update calendars",
     "goToDate": "Go to date, currently {{label}}",
     "chooseDate": "Choose date",
@@ -593,7 +601,8 @@
     "problematicMoveFindDay": "Next day with room",
     "problematicMoveNoDayFound": "No room in the next {{days}} days. Try a shorter duration or another phase.",
     "problematicSlotFree": "Free",
-    "problematicAutoSeated": "“{{name}}” is back on the schedule"
+    "problematicAutoSeated": "“{{name}}” is back on the schedule",
+    "problematicSlotHintTouch": "Scroll the timeline or tap a day."
   },
   "now": {
     "label": "Now",
@@ -1024,7 +1033,8 @@
     "skipDefaults": "Skip — default phases",
     "createFailed": "Could not create phases",
     "saveSettingsFailed": "Could not save settings",
-    "saveSettingsDetail": "Wake and sleep times were not saved. Try again."
+    "saveSettingsDetail": "Wake and sleep times were not saved. Try again.",
+    "colorLabel": "Color"
   },
   "voice": {
     "confirmTitle": "Confirm changes",
@@ -1200,7 +1210,8 @@
     "overdue": "Overdue {{count}} d",
     "saveFailed": "Could not save the reminder",
     "resolveFailed": "Could not mark the reminder done",
-    "deleteFailed": "Could not delete the reminder"
+    "deleteFailed": "Could not delete the reminder",
+    "deleted": "Reminder deleted"
   },
   "reminders": {
     "title": "Reminders",

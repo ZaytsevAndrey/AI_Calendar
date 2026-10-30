@@ -252,7 +252,12 @@ export function SlotPickTimeline({
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-xs text-ide-muted">{t('schedule.problematicSlotHint')}</p>
+      <p className="hidden text-xs text-ide-muted [@media(pointer:fine)]:block">
+        {t('schedule.problematicSlotHint')}
+      </p>
+      <p className="text-xs text-ide-muted [@media(pointer:fine)]:hidden">
+        {t('schedule.problematicSlotHintTouch')}
+      </p>
 
       <div className="relative overflow-hidden rounded-xl border border-ide-border bg-ide-bg">
         {/* Hairline at the viewport middle = slot start; ghost card hangs below it. */}

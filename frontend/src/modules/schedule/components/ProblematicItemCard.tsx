@@ -186,7 +186,6 @@ export function ProblematicItemCard({ item, timeZone, todayYmd, onMove, onEdit }
       className="task-item flex flex-col gap-2.5 border-l-4"
       style={{
         borderLeftColor: phase?.color || '#808080',
-        backgroundColor: '#3C3F41',
         backgroundImage: `linear-gradient(135deg, ${phase?.color || '#808080'}38, ${phase?.color || '#808080'}14 46%, transparent)`,
       }}
       aria-busy={disabled}

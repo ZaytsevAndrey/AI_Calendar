@@ -1,5 +1,6 @@
 import { Suspense, useEffect } from 'react';
 import { useSelector } from 'react-redux';
+import { useTranslation } from 'react-i18next';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import ProtectedRoute from 'modules/common/hocs/ProtectedRoute';
@@ -8,10 +9,11 @@ import type { RootState } from 'store';
 import { routeChunks, type RouteChunk } from './routeChunks';
 
 function PageLoading() {
+    const { t } = useTranslation();
     return (
         <div className="page-shell-fill">
             <div className="flex flex-1 items-center justify-center text-sm text-ide-muted">
-                Loading…
+                {t('common.loadingPage')}
             </div>
         </div>
     );

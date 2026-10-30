@@ -177,7 +177,9 @@ const TaskForm: React.FC<TaskFormProps> = ({
   } = useForm<TaskFormValues>({
     resolver: zodResolver(taskFormSchema),
     defaultValues,
-    mode: 'onTouched',
+    // Validate on submit: a blur error would shift the form under the next tap.
+    mode: 'onSubmit',
+    reValidateMode: 'onChange',
   });
 
   const isDirtyRef = useRef(isDirty);

@@ -12,6 +12,7 @@ import { TASK_PRESETS, WEEKDAY_OPTIONS, type TaskPresetId } from 'modules/tasks/
 import { localYmd } from 'utils/ianaDateTime';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { Button } from 'ui/Button';
+import { DatePicker } from 'ui/DatePicker';
 import { Input } from 'ui/Input';
 import { Select } from 'ui/Select';
 import { Textarea } from 'ui/Textarea';
@@ -130,12 +131,11 @@ export function ReminderForm({
             <label htmlFor="reminder-day" className={lbl}>
               {t('dayReminders.day')}
             </label>
-            <Input
+            <DatePicker
               id="reminder-day"
-              type="date"
-              size="sm"
               value={dueYmd}
-              onChange={(event) => setDueYmd(event.target.value)}
+              onChange={setDueYmd}
+              emptyLabel={t('dayReminders.day')}
             />
           </div>
           <div>

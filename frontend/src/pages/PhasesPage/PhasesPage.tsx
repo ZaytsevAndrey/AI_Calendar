@@ -3,6 +3,7 @@ import type { PhasePresetId } from 'api/phasesApi';
 import React, { lazy, Suspense, useCallback, useState } from 'react';
 import { LayoutTemplate, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { formatWeekdays } from 'utils/formatWeekdays';
 import type { PhaseDTO } from 'api/phases.api';
 import PhasesCalendar from 'modules/phases/components/PhasesCalendar';
 import { PhasePresetPicker, messageFromApiError } from 'modules/phases/components/PhasePresetPicker';
@@ -245,7 +246,12 @@ const PhasesPage: React.FC = () => {
                         {visiblePhases.map((phase: PhaseDTO) => (
                             <article key={phase.id} className="phase-card">
                                 <div className="category-header">
-                                    <span className="category-name" style={{ color: phase.color }}>
+                                    <span className="category-name inline-flex items-center gap-2">
+                                        <span
+                                            aria-hidden
+                                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                            style={{ backgroundColor: phase.color }}
+                                        />
                                         {phase.name}
                                     </span>
                                 </div>
@@ -254,10 +260,7 @@ const PhasesPage: React.FC = () => {
                                     {phase.startTime} – {phase.endTime}
                                 </div>
                                 <p className="text-xs text-ide-muted">
-                                    {t('phases.typeDays', {
-                                        type: phase.type,
-                                        days: phase.weekDays?.join(', '),
-                                    })}
+                                    {formatWeekdays(phase.weekDays, t)}
                                 </p>
                                 <div className="category-actions">
                                     <button

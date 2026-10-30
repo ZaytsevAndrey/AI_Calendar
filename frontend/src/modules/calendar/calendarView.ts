@@ -581,10 +581,15 @@ export function shiftPeriod(date: Date, view: CalendarView, delta: number): Date
   return next;
 }
 
+/** Standalone month names are lowercase in Ukrainian; a title starts with a capital. */
+function capitalize(text: string): string {
+  return text ? text[0].toLocaleUpperCase() + text.slice(1) : text;
+}
+
 export function periodLabel(date: Date, view: CalendarView): string {
   const loc = { locale: dateFnsLocale() };
   if (view === 'day') return format(date, 'EEEE, d MMMM yyyy', loc);
-  if (view === 'month') return format(date, 'MMMM yyyy', loc);
+  if (view === 'month') return capitalize(format(date, 'LLLL yyyy', loc));
   const start = startOfWeekMonday(date);
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
@@ -603,7 +608,7 @@ export function periodLabel(date: Date, view: CalendarView): string {
 export function compactPeriodLabel(date: Date, view: CalendarView): string {
   const loc = { locale: dateFnsLocale() };
   if (view === 'day') return format(date, 'EEE d MMM', loc);
-  if (view === 'month') return format(date, 'MMM yyyy', loc);
+  if (view === 'month') return capitalize(format(date, 'LLL yyyy', loc));
   const start = startOfWeekMonday(date);
   const end = new Date(start);
   end.setDate(start.getDate() + 6);

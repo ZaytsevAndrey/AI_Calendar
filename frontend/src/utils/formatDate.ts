@@ -11,7 +11,8 @@ export function formatLongDate(date: Date): string {
 }
 
 export function formatMonthYear(date: Date): string {
-  return format(date, 'MMMM yyyy', loc());
+  const text = format(date, 'LLLL yyyy', loc());
+  return text ? text[0].toLocaleUpperCase() + text.slice(1) : text;
 }
 
 export function formatWeekRange(start: Date, end: Date): string {

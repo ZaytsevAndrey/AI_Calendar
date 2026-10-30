@@ -126,9 +126,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                     {weekdayKeys.map((key) => (
                         <div
                             key={key}
-                            className="py-2 text-center text-[11px] font-medium text-ide-muted"
+                            className="py-2 text-center text-xs font-medium text-ide-muted"
                         >
-                            {t(key).slice(0, 1)}
+                            {t(key)}
                         </div>
                     ))}
                 </div>

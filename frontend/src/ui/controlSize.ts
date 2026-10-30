@@ -17,8 +17,8 @@ export type SizeClassSet = {
     lg: Record<ControlSize, string>;
 };
 
-/** Dialog footer actions: compact on a phone, touch-sized from the `md` breakpoint. */
-export const dialogButtonSize: ResponsiveSize = { base: 'sm', md: 'md' };
+/** Dialog footer actions: 44px on a phone, 36px from the `md` breakpoint. */
+export const dialogButtonSize: ResponsiveSize = 'md';
 
 export function responsiveClasses(
     size: ResponsiveSize | undefined,
@@ -39,28 +39,32 @@ export function responsiveClasses(
         .join(' ');
 }
 
+/**
+ * Phone first: every size is 44px with 16px text below 768px (touch target, no iOS zoom on focus).
+ * From 768px: sm 32px / 13px, md 36px / 15px, lg 44px / 16px.
+ */
 const textBase: Record<ControlSize, string> = {
-    sm: 'h-8 min-h-8 px-3 text-xs',
-    md: 'h-11 min-h-11 px-4 text-sm',
-    lg: 'h-12 min-h-12 px-5 text-base',
+    sm: 'h-11 min-h-11 px-3.5 text-base md:h-8 md:min-h-8 md:px-3 md:text-body-sm',
+    md: 'h-11 min-h-11 px-4 text-base md:h-9 md:min-h-9 md:px-3 md:text-body',
+    lg: 'h-12 min-h-12 px-5 text-base md:h-11 md:min-h-11 md:px-4',
 };
 
 const textSm: Record<ControlSize, string> = {
-    sm: 'sm:h-8 sm:min-h-8 sm:px-3 sm:text-xs',
-    md: 'sm:h-11 sm:min-h-11 sm:px-4 sm:text-sm',
-    lg: 'sm:h-12 sm:min-h-12 sm:px-5 sm:text-base',
+    sm: 'sm:h-8 sm:min-h-8 sm:px-3 sm:text-body-sm',
+    md: 'sm:h-9 sm:min-h-9 sm:px-3 sm:text-body',
+    lg: 'sm:h-11 sm:min-h-11 sm:px-4 sm:text-base',
 };
 
 const textMd: Record<ControlSize, string> = {
-    sm: 'md:h-8 md:min-h-8 md:px-3 md:text-xs',
-    md: 'md:h-11 md:min-h-11 md:px-4 md:text-sm',
-    lg: 'md:h-12 md:min-h-12 md:px-5 md:text-base',
+    sm: 'md:h-8 md:min-h-8 md:px-3 md:text-body-sm',
+    md: 'md:h-9 md:min-h-9 md:px-3 md:text-body',
+    lg: 'md:h-11 md:min-h-11 md:px-4 md:text-base',
 };
 
 const textLg: Record<ControlSize, string> = {
-    sm: 'lg:h-8 lg:min-h-8 lg:px-3 lg:text-xs',
-    md: 'lg:h-11 lg:min-h-11 lg:px-4 lg:text-sm',
-    lg: 'lg:h-12 lg:min-h-12 lg:px-5 lg:text-base',
+    sm: 'lg:h-8 lg:min-h-8 lg:px-3 lg:text-body-sm',
+    md: 'lg:h-9 lg:min-h-9 lg:px-3 lg:text-body',
+    lg: 'lg:h-11 lg:min-h-11 lg:px-4 lg:text-base',
 };
 
 export const textControlSize: SizeClassSet = {
@@ -71,9 +75,9 @@ export const textControlSize: SizeClassSet = {
 };
 
 const iconBase: Record<ControlSize, string> = {
-    sm: 'h-8 w-8',
-    md: 'h-11 w-11',
-    lg: 'h-12 w-12',
+    sm: 'h-11 w-11 md:h-8 md:w-8',
+    md: 'h-11 w-11 md:h-9 md:w-9',
+    lg: 'h-12 w-12 md:h-11 md:w-11',
 };
 
 const iconSm: Record<ControlSize, string> = {
@@ -84,8 +88,8 @@ const iconSm: Record<ControlSize, string> = {
 
 const iconMd: Record<ControlSize, string> = {
     sm: 'md:h-8 md:w-8',
-    md: 'md:h-11 md:w-11',
-    lg: 'md:h-12 md:w-12',
+    md: 'md:h-9 md:w-9',
+    lg: 'md:h-11 md:w-11',
 };
 
 const iconLg: Record<ControlSize, string> = {
@@ -102,26 +106,26 @@ export const iconControlSize: SizeClassSet = {
 };
 
 const areaBase: Record<ControlSize, string> = {
-    sm: 'min-h-[4.5rem] px-2.5 py-1.5 text-xs',
-    md: 'min-h-[5.5rem] px-3 py-2.5 text-sm',
+    sm: 'min-h-[4.5rem] px-3 py-2 text-base md:px-2.5 md:py-1.5 md:text-body-sm',
+    md: 'min-h-[5.5rem] px-3 py-2.5 text-base md:text-body',
     lg: 'min-h-[7rem] px-3.5 py-3 text-base',
 };
 
 const areaSm: Record<ControlSize, string> = {
-    sm: 'sm:min-h-[4.5rem] sm:px-2.5 sm:py-1.5 sm:text-xs',
-    md: 'sm:min-h-[5.5rem] sm:px-3 sm:py-2.5 sm:text-sm',
+    sm: 'sm:min-h-[4.5rem] sm:px-2.5 sm:py-1.5 sm:text-body-sm',
+    md: 'sm:min-h-[5.5rem] sm:px-3 sm:py-2.5 sm:text-body',
     lg: 'sm:min-h-[7rem] sm:px-3.5 sm:py-3 sm:text-base',
 };
 
 const areaMd: Record<ControlSize, string> = {
-    sm: 'md:min-h-[4.5rem] md:px-2.5 md:py-1.5 md:text-xs',
-    md: 'md:min-h-[5.5rem] md:px-3 md:py-2.5 md:text-sm',
+    sm: 'md:min-h-[4.5rem] md:px-2.5 md:py-1.5 md:text-body-sm',
+    md: 'md:min-h-[5.5rem] md:px-3 md:py-2.5 md:text-body',
     lg: 'md:min-h-[7rem] md:px-3.5 md:py-3 md:text-base',
 };
 
 const areaLg: Record<ControlSize, string> = {
-    sm: 'lg:min-h-[4.5rem] lg:px-2.5 lg:py-1.5 lg:text-xs',
-    md: 'lg:min-h-[5.5rem] lg:px-3 lg:py-2.5 lg:text-sm',
+    sm: 'lg:min-h-[4.5rem] lg:px-2.5 lg:py-1.5 lg:text-body-sm',
+    md: 'lg:min-h-[5.5rem] lg:px-3 lg:py-2.5 lg:text-body',
     lg: 'lg:min-h-[7rem] lg:px-3.5 lg:py-3 lg:text-base',
 };
 

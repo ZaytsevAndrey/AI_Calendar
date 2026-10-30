@@ -9,6 +9,7 @@ import { Button } from 'ui/Button';
 import { formatDateTime, formatDateTimeRange } from 'utils/formatDate';
 import { eventEndDate, eventStartDate } from '../calendarView';
 import { getEventColor } from '../hooks/eventAppearance';
+import { formatMinutes } from 'utils/formatDate';
 import { KindIcon } from '../kindIcons';
 import type { SchedulingKind } from '../schedulingKind';
 import { ProviderLogo } from './ProviderLogo';
@@ -221,8 +222,7 @@ export function EventPreview({
       return name ? `${providerLabel} · ${name}` : providerLabel;
     }
     if (fact.id === 'duration') {
-      const minutes = Number(fact.text);
-      return t('common.minutesShort', { count: minutes });
+      return formatMinutes(Number(fact.text));
     }
     if (fact.id === 'color') return t(`calendar.eventSettings.color${fact.text}`);
     if (fact.id === 'eligibleDays' || fact.id === 'repeatDays') {

@@ -328,7 +328,6 @@ const EventItem: React.FC<EventItemProps> = ({
       className="task-item flex flex-col gap-3 border-l-4"
       style={{
         borderLeftColor: color,
-        backgroundColor: '#3C3F41',
         backgroundImage: `linear-gradient(135deg, ${color}38, ${color}14 46%, transparent)`,
       }}
     >

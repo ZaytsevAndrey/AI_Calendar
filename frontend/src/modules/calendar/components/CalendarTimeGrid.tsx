@@ -472,7 +472,6 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                 style={{
                   top,
                   height,
-                  backgroundColor: index % 2 === 1 ? 'rgba(0,0,0,0.16)' : undefined,
                 }}
               >
                 {days.length === 1 ? (
@@ -528,8 +527,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                   style={{
                     top,
                     height,
-                    backgroundColor: index % 2 === 1 ? 'rgba(0,0,0,0.16)' : undefined,
-                    backgroundImage: band.color
+                      backgroundImage: band.color
                       ? `linear-gradient(${band.color}1c, ${band.color}1c)`
                       : undefined,
                   }}

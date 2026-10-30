@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Input } from 'ui/Input';
 
 interface ColorFieldProps {
@@ -8,9 +9,10 @@ interface ColorFieldProps {
 }
 
 export const ColorField = ({ errors, colorValue = '#000000', setColor }: ColorFieldProps) => {
+  const { t } = useTranslation();
   return (
     <div className="form-group">
-      <label htmlFor="color">Color*</label>
+      <label htmlFor="color">{t('phases.colorLabel')}</label>
       <div className="color-input-container">
         <Input
           id="color"

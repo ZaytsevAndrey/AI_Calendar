@@ -10,7 +10,7 @@ import {
 } from 'api/dayReminders.api';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { localYmd } from 'utils/ianaDateTime';
-import { showErrorToast } from 'utils/toast';
+import { runWithUndo, showErrorToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
 import { OVERDUE_ROW_CLASS, overdueDayCount, overdueTone } from './overdue';
 
@@ -31,13 +31,35 @@ export function ReminderList({ scope, onEdit }: ReminderListProps) {
   const [resolveReminder] = useResolveDayReminderMutation();
   const [deleteReminder] = useDeleteDayReminderMutation();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ReadonlySet<string>>(() => new Set());
 
   const visible = reminders.filter((reminder) => {
+    if (pendingDelete.has(reminder.id)) return false;
     if (scope === 'all') return true;
     return reminder.dueYmd <= today;
   });
 
   if (scope === 'due' && visible.length === 0) return null;
+
+  const forget = (id: string) =>
+    setPendingDelete((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+
+  const removeWithUndo = (id: string) => {
+    setPendingDelete((prev) => new Set(prev).add(id));
+    runWithUndo({
+      title: t('dayReminders.deleted'),
+      undoLabel: t('common.undo'),
+      onUndo: () => forget(id),
+      commit: async () => {
+        await run(id, 'delete');
+        forget(id);
+      },
+    });
+  };
 
   const run = async (id: string, action: 'resolve' | 'delete') => {
     setBusyId(id);
@@ -120,7 +142,7 @@ export function ReminderList({ scope, onEdit }: ReminderListProps) {
                   disabled={busy}
                   aria-label={t('common.delete')}
                   title={t('common.delete')}
-                  onClick={() => void run(reminder.id, 'delete')}
+                  onClick={() => removeWithUndo(reminder.id)}
                 >
                   <Trash2 className="h-3.5 w-3.5" aria-hidden />
                 </button>
