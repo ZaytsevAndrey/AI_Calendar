@@ -627,6 +627,31 @@ describe('placement edge cases', () => {
     });
   });
 
+  it('AUD-018: an older drag that runs after a newer one does not move the task back', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
+    const task = await flexible('Focus', 60);
+    const slot = await kit.slotRepo.findOneByOrFail({ taskId: task.id });
+    const drag = (from: string) =>
+      kit.moveService.move(kit.user.id, {
+        slotId: slot.id,
+        originalStart: new Date(slot.scheduledStartTime).toISOString(),
+        originalEnd: new Date(slot.scheduledEndTime).toISOString(),
+        start: kit.at('2026-11-06', from).toISOString(),
+        end: kit.at('2026-11-06', `${Number(from.slice(0, 2)) + 1}:00`).toISOString(),
+      } as never);
+    // The first drop's in-request run is lost (crash); its job waits in the queue.
+    jest.spyOn(kit.jobs, 'runNow').mockResolvedValueOnce(undefined as never);
+    await drag('14:00');
+    await drag('16:00');
+    await kit.jobs.settle();
+    expect(await kit.slotsOf(task.id)).toEqual(['2026-11-06 16:00-17:00']);
+
+    await kit.jobs.processDue();
+    await kit.jobs.settle();
+
+    expect(await kit.slotsOf(task.id)).toEqual(['2026-11-06 16:00-17:00']);
+  });
+
   it('a series clock edit while its create placement is still queued ends on the new clock only', async () => {
     kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
     // The create's in-request run is lost (crash); the job waits in the queue.

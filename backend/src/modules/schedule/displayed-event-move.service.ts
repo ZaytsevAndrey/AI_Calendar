@@ -261,10 +261,17 @@ export class DisplayedEventMoveService implements OnModuleInit {
     return { kind: 'slot', jobId: job.id };
   }
 
-  /** Move jobs run from their schedule_jobs row; a retry repeats the same drop. */
+  /**
+   * Move jobs run from their schedule_jobs row; a retry repeats the same drop.
+   * A drop is an absolute clock: once a newer change to the task was asked
+   * for, the old drop is skipped instead of moving the task back (AUD-018).
+   */
   onModuleInit(): void {
     this.scheduleJobs.registerHandler('move_slot', async (job) => {
       const p = job.payload as MovePayload;
+      if (await this.scheduleJobs.isSuperseded(job.id, job.userId, String(p.taskId))) {
+        return { superseded: true };
+      }
       await this.runFlexibleMoveJob(
         job.id,
         job.userId,
@@ -278,6 +285,9 @@ export class DisplayedEventMoveService implements OnModuleInit {
     });
     this.scheduleJobs.registerHandler('move_series', async (job) => {
       const p = job.payload as MovePayload;
+      if (await this.scheduleJobs.isSuperseded(job.id, job.userId, String(p.taskId))) {
+        return { superseded: true };
+      }
       const owner = await this.taskRepo.findOne({
         where: { id: String(p.taskId), userId: job.userId },
         relations: ['phase', 'phases'],

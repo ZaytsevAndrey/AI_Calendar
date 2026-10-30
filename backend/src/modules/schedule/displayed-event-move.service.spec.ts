@@ -106,6 +106,7 @@ describe('DisplayedEventMoveService', () => {
         }
       }),
       setMutationStage: jest.fn().mockResolvedValue(undefined),
+      isSuperseded: jest.fn().mockResolvedValue(false),
       completeMutationJob,
       failMutationJob,
     };

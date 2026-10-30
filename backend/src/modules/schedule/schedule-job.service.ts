@@ -33,6 +33,23 @@ function isMutationPayload(json: string | null): boolean {
   return parsePayload(json).type === 'task_mutation';
 }
 
+/**
+ * When a job was asked for: the app-stamped `requestedAt` (ms). DB timestamps
+ * are second-precision on SQLite and zone-shifted on Postgres (H-4); rows
+ * older than the stamp fall back to `createdAt`.
+ */
+let lastStamp = 0;
+/** Strictly increasing in this process, so two requests in one ms keep their order. */
+function nextStamp(): number {
+  lastStamp = Math.max(Date.now(), lastStamp + 1);
+  return lastStamp;
+}
+
+function requestedAt(job: ScheduleJob): number {
+  const at = parsePayload(job.payloadJson).requestedAt;
+  return typeof at === 'number' ? at : new Date(job.createdAt).getTime();
+}
+
 @Injectable()
 export class ScheduleJobService {
   private readonly logger = new Logger(ScheduleJobService.name);
@@ -83,6 +100,7 @@ export class ScheduleJobService {
         progressTotal: null,
         payloadJson: JSON.stringify({
           type: 'task_mutation',
+          requestedAt: nextStamp(),
           ...payload,
           ...(opts?.inline ? { inline: true } : {}),
         }),
@@ -259,6 +277,29 @@ export class ScheduleJobService {
   }
 
   /** Record that a step committed, so a retry of this job skips it. */
+  /**
+   * AUD-018: true when a newer mutation job exists for the same task, so this
+   * one's absolute intent (a drop at a clock) is stale and must not be
+   * applied over the newer one. Ties on `requestedAt` go to the larger id.
+   */
+  async isSuperseded(jobId: string, userId: string, taskId: string): Promise<boolean> {
+    const own = await this.jobRepo.findOne({ where: { id: jobId } });
+    if (!own) return false;
+    const mine = requestedAt(own);
+    // Payloads are JSON.stringify output: the task id appears exactly so.
+    const needle = JSON.stringify({ taskId }).slice(1, -1);
+    const others = await this.jobRepo
+      .createQueryBuilder('job')
+      .where('job.userId = :userId', { userId })
+      .andWhere('job.id != :jobId', { jobId })
+      .andWhere('job.payloadJson LIKE :needle', { needle: `%${needle}%` })
+      .getMany();
+    return others.some((other) => {
+      const theirs = requestedAt(other);
+      return theirs > mine || (theirs === mine && other.id > own.id);
+    });
+  }
+
   async mergeMutationPayload(
     jobId: string,
     patch: Record<string, unknown>,
