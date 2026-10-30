@@ -137,6 +137,28 @@ describe('Google outbox (transactional) and reconnect recovery', () => {
       expect(await queue().count()).toBe(0);
     });
 
+    it('H-1: a rolled-back savepoint queues nothing; the outer commit queues only what it kept', async () => {
+      const kept = await seated('Kept', '08:00', '09:00');
+      const doomed = await seated('Doomed', '10:00', '11:00');
+      await kit.taskRepo.update({ id: doomed.id }, { googleEventId: 'evt-doomed' });
+      await queue().clear();
+
+      await kit.ds.transaction(async (manager) => {
+        await manager.getRepository(Task).save({ ...(await kit.reload(kept.id)), name: 'Kept v2' });
+        // A nested step fails and is rolled back to its savepoint; the outer goes on.
+        await manager
+          .transaction(async (inner) => {
+            await inner.getRepository(Task).remove(await inner.getRepository(Task).findOneByOrFail({ id: doomed.id }));
+            throw new Error('nested step failed');
+          })
+          .catch(() => undefined);
+      });
+
+      expect(await kit.taskRepo.findOneBy({ id: doomed.id })).not.toBeNull();
+      const rows = await queue().find();
+      expect(rows.map((row) => [row.operation, row.taskId ?? row.googleEventId])).toEqual([['upsert', kept.id]]);
+    });
+
     it('a crash right after the commit (nothing sent) is recovered from the queue alone', async () => {
       // No kick registered: the process "dies" after the commit.
       const task = await seated('Report', '10:00', '11:00');

@@ -6,6 +6,7 @@ import {
   RemoveEvent,
   TransactionCommitEvent,
   TransactionRollbackEvent,
+  TransactionStartEvent,
   UpdateEvent,
 } from 'typeorm';
 import { Task } from '../tasks/entities/task.entity';
@@ -33,6 +34,24 @@ const SLOT_COLUMNS_WITHOUT_GOOGLE_EFFECT = new Set([
   'updatedAt',
   'createdAt',
 ]);
+
+/** Per runner: what was collected when each open savepoint began (H-1). */
+const SAVEPOINTS_KEY = 'googleOutboxSavepoints';
+
+function copyCollected(collected: Collected): Collected {
+  return {
+    upserts: new Map(collected.upserts),
+    removed: new Set(collected.removed),
+    deletes: new Map(collected.deletes),
+    written: [...collected.written],
+  };
+}
+
+function savepointsOn(runner: QueryRunner): Collected[] {
+  const data = runner.data as Record<string, unknown>;
+  if (!data[SAVEPOINTS_KEY]) data[SAVEPOINTS_KEY] = [];
+  return data[SAVEPOINTS_KEY] as Collected[];
+}
 
 /**
  * Google outbox subscriber (see google-sync-outbox.ts). Loaded by file glob
@@ -105,6 +124,17 @@ export class GoogleSyncOutboxSubscriber implements EntitySubscriberInterface {
     if (!runner.isTransactionActive) await flushNow(runner);
   }
 
+  /**
+   * H-1: a nested transaction is a savepoint. Remember what was collected
+   * before it, so a rollback to it also drops the writes it noted (a removal
+   * rolled back must not delete the event of a task that still exists).
+   */
+  afterTransactionStart(event: TransactionStartEvent): void {
+    const runner = event.queryRunner;
+    if ((runner as QueryRunner & { transactionDepth?: number }).transactionDepth! <= 1) return;
+    savepointsOn(runner).push(copyCollected(collectedOn(runner)));
+  }
+
   async beforeTransactionCommit(event: TransactionCommitEvent): Promise<void> {
     const runner = event.queryRunner;
     // Savepoint release of a nested transaction: wait for the outermost commit.
@@ -116,7 +146,12 @@ export class GoogleSyncOutboxSubscriber implements EntitySubscriberInterface {
 
   afterTransactionCommit(event: TransactionCommitEvent): void {
     const runner = event.queryRunner;
-    if (runner.isTransactionActive) return;
+    if (runner.isTransactionActive) {
+      // Savepoint released: its notes now belong to the enclosing transaction.
+      savepointsOn(runner).pop();
+      return;
+    }
+    delete (runner.data as Record<string, unknown>)[SAVEPOINTS_KEY];
     const collected = (runner.data as Record<string, Collected | undefined>)[OUTBOX_KEY];
     if (!collected?.written.length) return;
     const rows = collected.written;
@@ -126,8 +161,14 @@ export class GoogleSyncOutboxSubscriber implements EntitySubscriberInterface {
 
   afterTransactionRollback(event: TransactionRollbackEvent): void {
     const runner = event.queryRunner;
-    if (runner.isTransactionActive) return;
+    if (runner.isTransactionActive) {
+      // Rolled back to a savepoint: back to what was collected before it.
+      const before = savepointsOn(runner).pop();
+      if (before) (runner.data as Record<string, unknown>)[OUTBOX_KEY] = before;
+      return;
+    }
     delete (runner.data as Record<string, unknown>)[OUTBOX_KEY];
+    delete (runner.data as Record<string, unknown>)[SAVEPOINTS_KEY];
   }
 
   private noteUpsert(runner: QueryRunner, taskId: string, userId: string | null): void {
