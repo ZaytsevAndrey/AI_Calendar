@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkluefy_frontend=self.webpackChunkluefy_frontend||[]).push([[686],{9623:(e,n,u)=>{u.r(n),u.d(n,{default:()=>o});var f=u(2540),t=u(2291);function o({onPick:e}){return(0,f.jsx)(t.Ay,{theme:t.Sx.DARK,onEmojiClick:n=>{e(n.emoji)}})}}}]);
