@@ -11,6 +11,7 @@ import { DataSource } from 'typeorm';
 import { Logger } from '@nestjs/common';
 import { PendingGoogleWrite } from './entities/pending-google-write.entity';
 import { PendingGoogleWriteService } from './pending-google-write.service';
+import { recordGoogleWrite } from './google-sync-outbox';
 import { Task } from '../tasks/entities/task.entity';
 import { ScheduledTask } from '../schedule/schedule.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
@@ -83,6 +84,18 @@ describePg('Google write queue on Postgres', () => {
 
     expect([...sent].sort()).toEqual(rows.map((row) => row.googleEventId).sort());
     expect(await one.getRepository(PendingGoogleWrite).count()).toBe(0);
+  });
+
+  it('H-4: enqueuedAt round-trips exactly, whatever the Node and database time zones', async () => {
+    const before = Date.now();
+    const { id } = await recordGoogleWrite(one.manager, {
+      userId: '00000000-0000-4000-8000-0000000000cc',
+      operation: 'upsert',
+      taskId: '00000000-0000-4000-8000-0000000000dd',
+    });
+    const row = await one.getRepository(PendingGoogleWrite).findOneByOrFail({ id });
+    // Node runs in the developer's zone (e.g. +02:00), the database session in UTC.
+    expect(Math.abs(new Date(row.enqueuedAt).getTime() - before)).toBeLessThan(5_000);
   });
 
   it('AUD-005: 120 rows of a disconnected user do not starve a connected user', async () => {
