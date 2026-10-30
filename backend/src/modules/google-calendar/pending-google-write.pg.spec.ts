@@ -27,7 +27,7 @@ describePg('Google write queue on Postgres', () => {
   let name: string;
   const sent: string[] = [];
   const google = {
-    checkConnection: jest.fn(async () => ({ connected: true })),
+    checkConnection: jest.fn(async (_userId: string) => ({ connected: true })),
     deleteEvent: jest.fn(async (_userId: string, eventId: string) => {
       sent.push(eventId);
       await new Promise((resolve) => setTimeout(resolve, 30));
@@ -106,7 +106,7 @@ describePg('Google write queue on Postgres', () => {
     const waiting = await repo.findBy({ userId: gone });
     expect(waiting).toHaveLength(120);
     expect(waiting.every((row) => row.attempts === 0 && row.status === 'pending' && row.nextRunAt)).toBe(true);
-    google.checkConnection.mockImplementation(async () => ({ connected: true }));
+    google.checkConnection.mockImplementation(async (_userId: string) => ({ connected: true }));
   });
 
   it('takes over a row left running by a crashed instance once its lease expires', async () => {
