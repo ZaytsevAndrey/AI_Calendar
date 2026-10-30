@@ -50,4 +50,20 @@ Evidence rule: a finding is **fixed** only with a regression test that failed be
 
 ## Checkpoint
 
-All 27 findings and 5 hypotheses addressed (HEAD 5dab408). Next: known-issues, operations/placement docs, full verification (unit, e2e, Postgres, frontend, voice gate, tsc, builds), migration rehearsal on a master-shaped Postgres, final report.
+Complete. All 27 findings and 5 hypotheses addressed; NEW-01 and NEW-02 found and fixed (NEW-01 for scheduling only). known-issues, operations and deploy docs updated (35667f5).
+
+## Final verification (2026-10-30, HEAD 35667f5 + this note)
+
+| Check | Result |
+|-------|--------|
+| Backend `tsc --noEmit` | clean |
+| Backend unit (`npx jest`, SQLite) | 125 suites passed, 6 skipped (Postgres-only); 1143 passed, 30 skipped, 0 failed |
+| Backend e2e (`npm run test:e2e`, SQLite) | 12 suites, 140/140 |
+| Backend Postgres 16 (`npm run test:pg`, local Docker `postgres:16-alpine`) | 6 suites, 30/30 — concurrency tests use separate DataSources (pools) per "instance" |
+| Voice gate (`npm run test:vnext:structured`) | 18 suites, 232/232 (no voice code or expectation changed) |
+| Frontend `tsc --noEmit` | clean |
+| Frontend tests (`jest.config.cjs`) | 63 suites, 315/315 |
+| Builds | `build:backend` ok; `build:frontend` ok (2 pre-existing bundle-size warnings) |
+| Migration rehearsal (local Postgres 16) | Database synchronized from `master` (40117b9) entities + sample rows incl. duplicate queue rows; the built app (`node dist/main.js`, external APIs stubbed) started **twice at once**: both started; `migrations` lists the 5 migrations once; tasks/slots/users kept (3/1/1); queue 4 → 2 rows (duplicates removed), both unique indexes present; parked copy backfilled (`originalOccurrenceYmd`); stale `running` job failed; schema drift against the entities: none. Throwaway database dropped, scratch files removed. |
+
+Not executed: Neon, real Google Calendar API, GitHub CI (known-issues KI-01, KI-03, KI-02).
