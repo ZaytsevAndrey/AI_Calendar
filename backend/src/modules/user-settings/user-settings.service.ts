@@ -6,6 +6,7 @@ import { UpdateUserSettingsDto } from './dto/update-user-settings.dto';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { DayRemindersService } from '../day-reminders/day-reminders.service';
 import { normalizeHiddenCalendarIds } from './hidden-google-calendars.util';
+import { withoutIdentityKeys } from '../../common/scheduling-validation.pipe';
 
 @Injectable()
 export class UserSettingsService {
@@ -135,9 +136,11 @@ export class UserSettingsService {
       );
     }
 
+    // NEW-02: a body `id` / `userId` must not retarget the save to another
+    // user's row (merge copied them, and save wrote that row).
     const updatedSettings = this.userSettingsRepository.merge(
       userSettings,
-      updateUserSettingsDto,
+      withoutIdentityKeys(updateUserSettingsDto),
     );
     const saved = await this.userSettingsRepository.save(updatedSettings);
 
