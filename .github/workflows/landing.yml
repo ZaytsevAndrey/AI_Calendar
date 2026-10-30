@@ -3,10 +3,10 @@ name: Site (landing + app)
 # Builds the public site exactly as Render does: React app + Next.js landing, assembled into site/.
 on:
   pull_request:
-    paths: ['landing/**', 'frontend/**', 'e2e/**', 'scripts/*site*.mjs', 'render.yaml', '.github/workflows/landing.yml']
+    paths: ['landing/**', 'frontend/**', 'e2e/**', 'backend/src/modules/waitlist/**', 'backend/src/database/migrations/**', 'scripts/*site*.mjs', 'render.yaml', '.github/workflows/landing.yml']
   push:
     branches: [develop, master, 'feat/landing-waitlist']
-    paths: ['landing/**', 'frontend/**', 'e2e/**', 'scripts/*site*.mjs', 'render.yaml', '.github/workflows/landing.yml']
+    paths: ['landing/**', 'frontend/**', 'e2e/**', 'backend/src/modules/waitlist/**', 'backend/src/database/migrations/**', 'scripts/*site*.mjs', 'render.yaml', '.github/workflows/landing.yml']
 
 concurrency:
   group: site-${{ github.ref }}
@@ -93,3 +93,10 @@ jobs:
 
       - name: Frontend unit tests
         run: npm test --workspace=frontend
+
+      - name: Waitlist API tests
+        run: npx jest --runInBand src/modules/waitlist
+        working-directory: backend
+
+      - name: Backend compiles (waitlist module and migration)
+        run: npm run build --workspace=backend

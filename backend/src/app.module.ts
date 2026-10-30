@@ -14,6 +14,7 @@ import { HabitsModule } from './modules/habits/habits.module';
 import { RemindersModule } from './modules/reminders/reminders.module';
 import { DayRemindersModule } from './modules/day-reminders/day-reminders.module';
 import { PlacesModule } from './modules/places/places.module';
+import { WaitlistModule } from './modules/waitlist/waitlist.module';
 import { CalendarOverlaysModule } from './modules/calendar-overlays/calendar-overlays.module';
 import { CalendarProvidersModule } from './modules/calendar-providers/calendar-providers.module';
 import { AdminDataModule } from './modules/admin-data/admin-data.module';
@@ -62,6 +63,7 @@ import type { DataSourceOptions } from 'typeorm';
     AdminDataModule,
     InternalModule,
     PlacesModule,
+    WaitlistModule,
   ],
 })
 export class AppModule implements NestModule {

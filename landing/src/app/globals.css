@@ -1072,3 +1072,11 @@ h2 {
         transition: none;
     }
 }
+
+/* Message line only takes room when there is something to say. */
+.waitlist-msg:empty {
+    display: none;
+}
+.final .waitlist p {
+    max-width: none;
+}

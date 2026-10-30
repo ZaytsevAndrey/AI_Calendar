@@ -189,3 +189,13 @@ npm run copy-db:prod
 ```
 
 `PROD_DATABASE_URL` is the same Neon string as Render `DATABASE_URL`. After the copy, sign in again on the deployed site: production `JWT_SECRET` is not the local one. Google Calendar tokens on the user row are copied, so an existing Google connection should still work once you log in.
+
+## Early-access waiting list
+
+The landing's form posts to the API: `POST /waitlist` (`{ email, locale, source, website }`, where `website` is a
+honeypot) returns `{ status: "created" | "exists", token }`; `POST /waitlist/details` (`{ token, calendar, pain }`)
+stores the two optional follow-up answers once. Rows live in `waitlist_entries` (migration
+`1761820000000-WaitlistEntries`). Both endpoints are public and limited to 10 requests per IP per 10 minutes.
+There is no email notification yet; read new requests with
+`SELECT email, locale, calendar, pain, "createdAt" FROM waitlist_entries ORDER BY "createdAt" DESC;`.
+`invitedAt` is reserved for an allow-list on sign-in.
