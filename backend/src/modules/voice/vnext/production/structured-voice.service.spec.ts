@@ -372,6 +372,71 @@ describe('structured /voice/turn integration', () => {
     });
   });
 
+  // Stage 3 review probes of the cross-turn correction path added in WP-G.
+  describe('cross-turn corrections (Stage 3 review)', () => {
+    const twoCalls = envelope('call mom at 10 and at 15', [
+      { opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'a' }, changes: { title: 'Call mom' }, constraints: [{ kind: 'date', value: '2026-10-19', precision: 'day' }, { kind: 'clock', value: '10:00', role: 'start' }] },
+      { opId: 'op-2', action: 'create', target: { kind: 'new', localId: 'b' }, changes: { title: 'Call mom' }, constraints: [{ kind: 'date', value: '2026-10-19', precision: 'day' }, { kind: 'clock', value: '15:00', role: 'start' }] },
+    ]);
+
+    it('correcting one of two pending creates keeps the other in the preview', async () => {
+      const w = world({ model: [twoCalls, envelope('make the first one 11', [{ opId: 'op-3', action: 'update', target: { kind: 'operation_result', opId: 'pop_1' }, constraints: [{ kind: 'clock', value: '11:00', role: 'start' }] }])] });
+      const { service } = build(w);
+      const first = await service.turn(USER, dto({ transcript: 'call mom at 10 and at 15' }));
+      expect(first.intents).toHaveLength(2);
+      const corrected = await service.turn(USER, dto({ transcript: 'make the first one 11', ...claimOf(first) }));
+      expect(corrected.outcome).toBe('confirm');
+      const starts = corrected.intents.map((intent) => (intent.type === 'create' ? intent.task.scheduledStartTime : null)).sort();
+      expect(starts).toEqual(['2026-10-19T08:00:00.000Z', '2026-10-19T12:00:00.000Z']);
+    });
+
+    it('cancelling a pending create by its id withdraws it and writes nothing', async () => {
+      const w = world({ model: [twoCalls, envelope('drop the second one', [{ opId: 'op-3', action: 'cancel', target: { kind: 'operation_result', opId: 'pop_2' } }])] });
+      const { service } = build(w);
+      const first = await service.turn(USER, dto({ transcript: 'call mom at 10 and at 15' }));
+      const dropped = await service.turn(USER, dto({ transcript: 'drop the second one', ...claimOf(first) }));
+      expect(dropped.outcome).toBe('confirm');
+      expect(dropped.intents).toHaveLength(1);
+      expect(dropped.intents[0]).toMatchObject({ type: 'create', task: { scheduledStartTime: '2026-10-19T07:00:00.000Z' } });
+    });
+
+    it('a correction supersedes the earlier claim: the old claim cannot apply the new preview', async () => {
+      const w = world({ model: [twoCalls, envelope('make the first one 11', [{ opId: 'op-3', action: 'update', target: { kind: 'operation_result', opId: 'pop_1' }, constraints: [{ kind: 'clock', value: '11:00', role: 'start' }] }])] });
+      const { service } = build(w);
+      const first = await service.turn(USER, dto({ transcript: 'call mom at 10 and at 15' }));
+      const old = claimOf(first);
+      const corrected = await service.turn(USER, dto({ transcript: 'make the first one 11', ...old }));
+      const fresh = claimOf(corrected);
+      expect(fresh.executionId === old.executionId && fresh.previewRevision === old.previewRevision).toBe(false);
+      const staleTap = await service.turn(USER, dto({ actionId: 'confirm', ...old }));
+      expect(staleTap.outcome).not.toBe('act');
+      const staleYes = await service.turn(USER, dto({ transcript: 'yes', ...old }));
+      expect(staleYes.outcome).not.toBe('act');
+      const applied = await service.turn(USER, dto({ actionId: 'confirm', ...fresh }));
+      expect(applied.outcome).toBe('act');
+      expect(applied.intents).toHaveLength(2);
+    });
+
+    it('a correction aimed at an unknown or non-create pending id previews nothing', async () => {
+      const w = world({
+        tasks: [task('report', 'Report')],
+        model: [
+          envelope('delete the report', [{ opId: 'op-1', action: 'delete', target: { kind: 'existing', proposedId: 'report' } }]),
+          envelope('rename it to summary', [{ opId: 'op-2', action: 'update', target: { kind: 'operation_result', opId: 'pop_1' }, changes: { title: 'Summary' } }]),
+          envelope('rename it to summary', [{ opId: 'op-2', action: 'update', target: { kind: 'operation_result', opId: 'pop_777' }, changes: { title: 'Summary' } }]),
+        ],
+      });
+      const { service } = build(w);
+      const first = await service.turn(USER, dto({ transcript: 'delete the report' }));
+      expect(first.outcome).toBe('confirm');
+      const onDelete = await service.turn(USER, dto({ transcript: 'rename it to summary', ...claimOf(first) }));
+      expect(onDelete.outcome).not.toBe('act');
+      expect(onDelete.intents.some((intent) => intent.type === 'command' && intent.command.kind === 'update')).toBe(false);
+      const unknown = await service.turn(USER, dto({ transcript: 'rename it to summary' }));
+      expect(unknown.outcome).not.toBe('act');
+    });
+  });
+
   it('replaces the preview when the next utterance restates it', async () => {
     const w = world({
       model: [
@@ -531,6 +596,22 @@ describe('structured /voice/turn integration', () => {
     const dentist = await service.turn(USER, dto({ transcript: 'also dentist on friday at 9' }));
     expect(dentist.outcome).toBe('confirm');
     expect(dentist.intents[0]).toMatchObject({ type: 'create', task: { name: 'Dentist' } });
+  });
+
+  // Stage 3: a draft item cannot hold notes, a place or a priority; routing such a create to the draft would drop them.
+  it('does not route a create with notes, a place or a priority to the draft', async () => {
+    const start = JSON.stringify({ version: '1', kind: 'day_plan', operations: [], dayPlan: { phase: 'start', day: '2026-10-19' } });
+    const w = world({
+      model: [
+        start, start,
+        envelope('and call the bank, note the account number', [{ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'Call the bank', notes: 'account 1234' } }]),
+      ],
+    });
+    const { service } = build(w);
+    await service.turn(USER, dto({ transcript: 'plan my monday' }));
+    const result = await service.turn(USER, dto({ transcript: 'and call the bank, note the account number' }));
+    expect(result.plan?.items.map((item) => item.name) ?? []).not.toContain('Call the bank');
+    expect(JSON.stringify(result.intents)).toContain('account 1234');
   });
 
   it('plans a day through build_plan and re-reads the planned task at confirm', async () => {

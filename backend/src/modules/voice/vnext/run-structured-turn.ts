@@ -225,7 +225,10 @@ function draftEditFromCreates(envelope: SemanticEnvelopeV1): SemanticEnvelopeV1 
   const edits: DayPlanEditV1[] = [];
   for (const operation of envelope.operations) {
     if (operation.action !== 'create' || operation.target.kind !== 'new' || !operation.changes.title) return null;
-    if (operation.changes.reminder) return null;
+    // A draft item holds a name, a length and clocks only. Notes, a place, a priority, a status or a
+    // reminder would be dropped by the draft, so such a create stays an ordinary task (Stage 3).
+    const extra = Object.keys(operation.changes).filter((key) => key !== 'title');
+    if (extra.length) return null;
     const own = operation.constraints.some((constraint) =>
       constraint.kind === 'date' || constraint.kind === 'weekday' || constraint.kind === 'recurrence' || constraint.kind === 'relative_time' || constraint.kind === 'ordering' || constraint.kind === 'all_day');
     if (own) return null;

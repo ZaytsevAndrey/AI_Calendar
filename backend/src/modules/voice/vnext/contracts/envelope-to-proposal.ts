@@ -88,12 +88,15 @@ export function envelopeToProposalGroup(envelope: SemanticEnvelopeV1, _clock?: E
     if (!mapped) return null;
     proposals.push(mapped);
   }
+  // A restatement replaces the open preview (extending would keep a corrected item next to its
+  // correction). An envelope made only of corrections that address pending operations by id
+  // extends it instead: the unmentioned operations of the preview are what the user did not
+  // change and must stay (Stage 3: two creates, correct one, the other was lost).
+  const correctionsOnly = crossTurn.size > 0 && proposals.every((proposal) => proposal.target.kind === 'pending');
   return {
     version: '1',
     control: 'none',
-    // A V1 envelope cannot address a pending operation or say "also". A new utterance therefore
-    // replaces the open preview; extending it would keep a corrected item next to its correction.
-    previewBoundary: 'replace',
+    previewBoundary: correctionsOnly ? 'extend' : 'replace',
     proposals,
     patches: [],
   };
