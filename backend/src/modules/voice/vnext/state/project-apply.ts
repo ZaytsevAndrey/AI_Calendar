@@ -523,24 +523,31 @@ function projectRemind(operation: PendingOperation, clock: Clock): { ok: true; i
   if (operation.target.kind === 'entity' && (op === 'create' || operation.target.entityType !== 'reminder')) {
     return { ok: false, code: 'unsupported_combination', detail: `remind:${op}` };
   }
-  const name = reminder?.name || operation.changes.title || '';
+  // An update replaces the whole reminder on the server (PUT semantics), so the fields the
+  // user did not restate are filled from the stored row the catalog carried in (VC-05).
+  const stored = operation.target.kind === 'entity' ? operation.target.reminder : undefined;
+  const storedName = operation.target.kind === 'entity' ? operation.target.name : undefined;
+  const name = reminder?.name || operation.changes.title || (op === 'update' ? storedName : undefined) || '';
   const terminal = op === 'delete' || op === 'resolve';
   if (!name && !terminal) return { ok: false, code: 'missing_title', detail: operation.pendingId };
   const date = find(operation, 'date');
   if (reminder?.dueYmd && date && reminder.dueYmd !== date.value) {
     return { ok: false, code: 'contradictory_constraints', detail: operation.pendingId };
   }
-  const due = reminder?.dueYmd || date?.value;
+  const due = reminder?.dueYmd || date?.value || (op === 'update' ? stored?.dueYmd : undefined);
   if (!due && !terminal) return { ok: false, code: 'missing_day', detail: operation.pendingId };
-  const rejected = onlyKinds(operation, ['date']) ?? onlyChanges(operation, ['notes', 'reminder']);
+  const rejected = onlyKinds(operation, ['date']) ?? onlyChanges(operation, ['notes', 'reminder', ...(op === 'update' ? ['title' as const] : [])]);
   if (rejected) return rejected;
-  const explicitClock = reminder?.notificationTime ?? null;
+  const explicitClock = reminder?.notificationTime ?? (op === 'update' ? stored?.notificationTime ?? null : null);
   if (due && !terminal) {
     const resolved = resolveZonedClock(due, explicitClock || clock.defaultReminderTime, clock.timeZone);
     if (resolved.status === 'gap' || resolved.status === 'fold') return { ok: false, code: resolved.status, detail: operation.pendingId };
   }
   const kind = op === 'delete' ? 'remind_delete' : op === 'resolve' ? 'remind_resolve' : op === 'update' ? 'remind_update' : 'remind_create';
   const summary = name || operation.sourceText || kind;
+  const description = operation.changes.notes !== undefined ? operation.changes.notes : (op === 'update' ? stored?.description ?? null : null);
+  const recurrencePattern = reminder?.recurrencePattern ?? (op === 'update' ? stored?.recurrencePattern ?? null : null);
+  const recurrenceWeekDays = op === 'update' && reminder?.recurrencePattern == null ? stored?.recurrenceWeekDays ?? null : null;
   return {
     ok: true,
     intent: {
@@ -553,9 +560,9 @@ function projectRemind(operation: PendingOperation, clock: Clock): { ok: true; i
         ...(operation.target.kind === 'entity' ? { reminderId: operation.target.entityId } : {}),
         ...(due ? { dueYmd: due } : {}),
         notificationTime: explicitClock,
-        description: operation.changes.notes ?? null,
-        recurrencePattern: reminder?.recurrencePattern ?? null,
-        recurrenceWeekDays: null,
+        description,
+        recurrencePattern,
+        recurrenceWeekDays,
       },
     },
   };

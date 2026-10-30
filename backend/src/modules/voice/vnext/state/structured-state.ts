@@ -5,6 +5,7 @@
  * This module does not serialize requests across a process or a network.
  */
 import type { OperationChangesV1, SemanticActionV1 } from '../contracts/types';
+import type { StoredReminderFields } from '../reference/reference-resolver';
 import type {
   EntityOccurrence,
   ExecutionRecord,
@@ -36,6 +37,7 @@ export type KnownEntity = {
   seriesEventId?: string | null;
   name?: string;
   fixed?: boolean;
+  reminder?: StoredReminderFields;
 };
 
 export type EntityFingerprint = {
@@ -663,6 +665,7 @@ function entityReference(entity: KnownEntity): Extract<PendingOperation['target'
     ...(entity.seriesEventId != null ? { seriesEventId: entity.seriesEventId } : {}),
     ...(entity.name ? { name: entity.name } : {}),
     ...(entity.fixed ? { fixed: true } : {}),
+    ...(entity.reminder ? { reminder: entity.reminder } : {}),
   };
 }
 

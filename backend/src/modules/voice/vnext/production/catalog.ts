@@ -8,7 +8,7 @@ import type { ScheduledTask } from '../../../schedule/schedule.entity';
 import { googleRecurringInstanceId } from '../../../tasks/skipped-occurrence.util';
 import { TaskEventType } from '../../../scheduling/event-type.enum';
 import { TaskStatus, type Task } from '../../../tasks/entities/task.entity';
-import type { EntityRecord } from '../reference/reference-resolver';
+import type { EntityRecord, StoredReminderFields } from '../reference/reference-resolver';
 import type { EntityReadResult } from '../state/revalidate-preview';
 
 /** FNV-1a 32-bit. A content fingerprint, not a security boundary. Never 0. */
@@ -103,6 +103,13 @@ export function reminderRecord(row: DayReminder): EntityRecord {
     revision: fingerprint([iso(row.updatedAt), row.status, row.dueYmd, row.notificationTime ?? '', row.recurrencePattern ?? ''].join('|')),
     ...(row.googleEventCalendarId ? { calendarId: row.googleEventCalendarId } : {}),
     writable: true,
+    reminder: {
+      dueYmd: row.dueYmd,
+      notificationTime: row.notificationTime ?? null,
+      description: row.description ?? null,
+      recurrencePattern: (row.recurrencePattern ?? null) as StoredReminderFields['recurrencePattern'],
+      recurrenceWeekDays: row.recurrenceWeekDays ?? null,
+    },
   };
 }
 

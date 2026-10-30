@@ -328,6 +328,42 @@ describe('structured /voice/turn integration', () => {
     expect(result.intents[0]).toMatchObject({ type: 'command', command: { kind: 'remind_create', name: 'call mom', dueYmd: '2026-10-19', notificationTime: null } });
   });
 
+  // VC-05: an update sends what the user changed; everything else keeps its stored value.
+  describe('reminder updates keep their stored fields (VC-05)', () => {
+    const rent = {
+      id: 'rem-rent', userId: USER, name: 'Pay rent', description: 'transfer to the landlord', dueYmd: '2026-11-01',
+      notificationTime: '18:30', recurrencePattern: 'MONTHLY', recurrenceWeekDays: null, recurrenceMonthDay: 1,
+      googleEventId: null, googleEventCalendarId: null, status: 'open', updatedAt: new Date('2026-10-01T00:00:00.000Z'),
+    } as unknown as DayReminder;
+    const update = (transcript: string, reminder: Record<string, unknown>, constraints: SemanticConstraintV1[] = []) =>
+      build(world({ reminders: [rent], model: [envelope(transcript, [{
+        opId: 'op-1', action: 'remind', target: { kind: 'existing', proposedId: 'rem-rent' }, changes: { reminder: { op: 'update', ...reminder } }, constraints,
+      }])] })).service.turn(USER, dto({ transcript }));
+
+    it('moving the day keeps the clock, the notes and the repeat', async () => {
+      const result = await update('move the rent reminder to friday', { dueYmd: '2026-10-23' });
+      expect(result.outcome).toBe('confirm');
+      expect(result.intents[0]).toMatchObject({ type: 'command', command: {
+        kind: 'remind_update', reminderId: 'rem-rent', name: 'Pay rent', dueYmd: '2026-10-23',
+        notificationTime: '18:30', description: 'transfer to the landlord', recurrencePattern: 'MONTHLY',
+      } });
+    });
+
+    it('changing the clock keeps the day', async () => {
+      const result = await update('remind me about the rent at 9 instead', { notificationTime: '09:00' });
+      expect(result.intents[0]).toMatchObject({ type: 'command', command: { kind: 'remind_update', dueYmd: '2026-11-01', notificationTime: '09:00', recurrencePattern: 'MONTHLY' } });
+    });
+
+    it('a rename keeps the date and a note change is the only change', async () => {
+      const renamed = await update('call the rent reminder landlord', { name: 'Landlord' });
+      expect(renamed.intents[0]).toMatchObject({ type: 'command', command: { kind: 'remind_update', name: 'Landlord', dueYmd: '2026-11-01', notificationTime: '18:30' } });
+      const noted = await build(world({ reminders: [rent], model: [envelope('note on the rent reminder: pay by card', [{
+        opId: 'op-1', action: 'remind', target: { kind: 'existing', proposedId: 'rem-rent' }, changes: { notes: 'pay by card', reminder: { op: 'update' } },
+      }])] })).service.turn(USER, dto({ transcript: 'note on the rent reminder: pay by card' }));
+      expect(noted.intents[0]).toMatchObject({ type: 'command', command: { kind: 'remind_update', description: 'pay by card', dueYmd: '2026-11-01', recurrencePattern: 'MONTHLY' } });
+    });
+  });
+
   it('asks for a series scope on a recurring task and fails closed on an unproven bulk set', async () => {
     const w = world({
       tasks: [task('gym', 'Gym', { isRecurring: true }), task('a', 'Sync'), task('b', 'Sync')],

@@ -1,3 +1,4 @@
+import type { StoredReminderFields } from '../reference/reference-resolver';
 /**
  * Stage 2 proposal contract.
  * These types are not read by runVNextTurn. A localRef is not a stored id.
@@ -138,6 +139,8 @@ export type ResolvedEntityReference = {
   /** Stored title of the row, for preview copy. Never a match key. */
   name?: string;
   fixed?: boolean;
+  /** Stored fields of a day reminder; an update keeps what the user did not restate (VC-05). */
+  reminder?: StoredReminderFields;
 };
 
 export type PendingOperation = {

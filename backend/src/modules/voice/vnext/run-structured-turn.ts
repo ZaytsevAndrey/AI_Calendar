@@ -81,6 +81,7 @@ export function entitiesToKnown(entities: EntityRecord[], userId: string): Known
       ...(entity.seriesEventId != null ? { seriesEventId: entity.seriesEventId } : {}),
       ...(entity.name ? { name: entity.name } : {}),
       ...(entity.fixed ? { fixed: true } : {}),
+      ...(entity.reminder ? { reminder: entity.reminder } : {}),
     }));
 }
 
