@@ -308,6 +308,75 @@ describe('placement edge cases', () => {
     expect(rows.length).toBeGreaterThanOrEqual(4);
   });
 
+  describe('re-merging a detached copy (AUD-017, AUD-021)', () => {
+    const groupFixture = async () => {
+      kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 7 });
+      const groupId = '11111111-1111-4111-8111-111111111111';
+      // A same-clock series of the group that never held 11-06 (created first, found first).
+      const other = await kit.addTask({
+        name: 'Daily',
+        isRecurring: true,
+        recurrencePattern: 'DAILY',
+        seriesGroupId: groupId,
+        earliestStartTime: kit.at('2026-11-09', '00:00'),
+        scheduledStartTime: kit.at('2026-11-09', '09:00'),
+        scheduledEndTime: kit.at('2026-11-09', '09:30'),
+        estimatedTimeInMinutes: 30,
+      });
+      // The series the copy was detached from: 11-06 is skipped on it.
+      const owner = await kit.addTask({
+        name: 'Daily',
+        isRecurring: true,
+        recurrencePattern: 'DAILY',
+        seriesGroupId: groupId,
+        skippedOccurrenceYmds: ['2026-11-06'],
+        scheduledStartTime: kit.at('2026-11-05', '09:00'),
+        scheduledEndTime: kit.at('2026-11-05', '09:30'),
+        estimatedTimeInMinutes: 30,
+      });
+      await kit.addSlot(owner.id, kit.at('2026-11-05', '09:00'), kit.at('2026-11-05', '09:30'));
+      // Seated copy: parentSeriesId already cleared (as persist does on seat).
+      const copy = await kit.addTask({
+        name: 'Daily',
+        seriesGroupId: groupId,
+        originalOccurrenceYmd: '2026-11-06',
+        parentSeriesId: null,
+        scheduledStartTime: kit.at('2026-11-06', '14:00'),
+        scheduledEndTime: kit.at('2026-11-06', '14:30'),
+        estimatedTimeInMinutes: 30,
+      });
+      await kit.addSlot(copy.id, kit.at('2026-11-06', '14:00'), kit.at('2026-11-06', '14:30'));
+      return { other, owner, copy };
+    };
+    const dragHome = (copyId: string) =>
+      kit.service.place(kit.user.id, copyId, { preferredStart: kit.at('2026-11-06', '09:00'), drag: true });
+
+    it('AUD-021: the copy rejoins the series that skipped its day, not another same-clock series', async () => {
+      const { other, owner, copy } = await groupFixture();
+      await dragHome(copy.id);
+      expect(await kit.taskRepo.findOneBy({ id: copy.id })).toBeNull();
+      expect((await kit.reload(owner.id)).skippedOccurrenceYmds ?? []).not.toContain('2026-11-06');
+      expect(await kit.slotsOf(owner.id)).toContain('2026-11-06 09:00-09:30');
+      expect(await kit.slotsOf(other.id)).not.toContain('2026-11-06 09:00-09:30');
+    });
+
+    it('AUD-017: when the series cannot take the day back, the copy is kept (the day is never lost)', async () => {
+      const { owner, copy } = await groupFixture();
+      // Series duration 60 while its block is 30, and a fixed event right after the home slot.
+      await kit.taskRepo.update({ id: owner.id }, { estimatedTimeInMinutes: 60 });
+      await create({
+        name: 'Wall',
+        eventType: TaskEventType.FIXED,
+        scheduledStartTime: kit.at('2026-11-06', '09:30').toISOString(),
+        scheduledEndTime: kit.at('2026-11-06', '10:30').toISOString(),
+      });
+      await dragHome(copy.id);
+      const copySlots = (await kit.taskRepo.findOneBy({ id: copy.id })) ? await kit.slotsOf(copy.id) : [];
+      const ownerDay = (await kit.slotsOf(owner.id)).filter((row) => row.startsWith('2026-11-06'));
+      expect(copySlots.length + ownerDay.length).toBe(1);
+    });
+  });
+
   it('a series clock edit while its create placement is still queued ends on the new clock only', async () => {
     kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
     // The create's in-request run is lost (crash); the job waits in the queue.

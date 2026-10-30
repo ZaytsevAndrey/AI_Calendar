@@ -2184,11 +2184,14 @@ export class PlacementStepService {
       );
       return seriesHm === hm;
     };
-    // Prefer the parent series this one-off was detached from.
+    // The owner of this day is the series that skips it (a detached day is
+    // always skipped on its series); another same-clock series of the group
+    // never held it (AUD-021). Prefer the recorded parent among owners.
+    const owners = siblings.filter(
+      (series) => clockMatch(series) && (series.skippedOccurrenceYmds ?? []).includes(ymd),
+    );
     const match =
-      (task.parentSeriesId
-        ? siblings.find((series) => series.id === task.parentSeriesId && clockMatch(series))
-        : undefined) ?? siblings.find(clockMatch);
+      owners.find((series) => series.id === task.parentSeriesId) ?? owners[0];
     if (!match) return null;
     // A resize keeps the clock and changes the length. Absorbing it would
     // throw away that length and restore the series duration.
@@ -2202,11 +2205,30 @@ export class PlacementStepService {
       return null;
     }
 
+    // Plan the series day first; merge only if the series seats exactly this
+    // slot. Deleting the copy before checking could lose the day (AUD-017).
+    const homeStart = new Date(localDateTimeIso(ymd, hm, timeZone));
+    const trial = await this.placeUnlocked(userId, match.id, {
+      preferredStart: homeStart,
+      commit: 'preferred',
+      seriesDay: true,
+      dryRun: true,
+      ignoreTaskIds: [task.id],
+    });
+    if (
+      trial.outcome !== 'seated' ||
+      trial.start !== new Date(task.scheduledStartTime).getTime() ||
+      trial.end !== new Date(task.scheduledEndTime).getTime()
+    ) {
+      return null;
+    }
+
     match.skippedOccurrenceYmds = removeSkippedOccurrenceYmd(
       match.skippedOccurrenceYmds,
       ymd,
     );
-    await this.taskRepo.save(match);
+    await this.taskRepo.update({ id: match.id }, { skippedOccurrenceYmds: match.skippedOccurrenceYmds });
+    await noteGoogleSync(this.taskRepo.manager, match.id, userId);
 
     const memberSlots = await this.scheduledRepo.find({
       where: { taskId: task.id },
