@@ -7,8 +7,8 @@ import { Popover } from 'ui/Popover';
 import { cx } from 'ui/cx';
 import { phaseColor } from 'theme/phasePalette';
 
-/** Where phases are edited. Stage 4 moves them into Settings → «Мій день». */
-export const PHASES_SETTINGS_PATH = '/phases';
+/** Phases are edited in Settings → «Мій день». */
+export const PHASES_SETTINGS_PATH = '/settings/day';
 
 type Phase = {
   id: string;

@@ -66,6 +66,7 @@ test.describe('phone layout', () => {
     await expect(page.getByRole('heading', { name: 'Tasks' })).toBeVisible();
 
     await page.getByRole('link', { name: 'Settings' }).click();
+    await page.getByRole('link', { name: /^Account/ }).click();
     const signOut = page.getByRole('button', { name: 'Log out' });
     await signOut.scrollIntoViewIfNeeded();
     const signBox = await signOut.boundingBox();
@@ -205,7 +206,7 @@ test.describe('widths between the phone and desktop layouts', () => {
     expect(monthBox.visible).toBeGreaterThan(40);
 
     await page.setViewportSize({ width: 1280, height: 720 });
-    await page.getByRole('button', { name: '3 days', exact: true }).click();
+    await page.getByRole('button', { name: 'Week', exact: true }).click();
     const hours = page.getByTestId('calendar-hour-scroll');
     await hours.scrollIntoViewIfNeeded();
     const desktop = await painted(hours);

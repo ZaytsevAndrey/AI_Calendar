@@ -24,11 +24,10 @@ export function TimeRangeField<TFieldValues extends WithPhaseTimes>({
   const { t } = useTranslation();
 
   return (
-    <div className="form-group">
-      <label htmlFor="timeRange">{t('phases.timeRange')}</label>
-      <div className="phase-time-range-grid">
-        <div className="phase-time-range-col">
-          <label className="phase-time-range-label" htmlFor="phase-start-time">
+    <div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="mb-1.5 block text-body-sm font-medium text-ide-muted" htmlFor="phase-start-time">
             {t('phases.start')}
           </label>
           <Controller
@@ -47,8 +46,8 @@ export function TimeRangeField<TFieldValues extends WithPhaseTimes>({
           />
         </div>
 
-        <div className="phase-time-range-col">
-          <label className="phase-time-range-label" htmlFor="phase-end-time">
+        <div>
+          <label className="mb-1.5 block text-body-sm font-medium text-ide-muted" htmlFor="phase-end-time">
             {t('phases.end')}
           </label>
           <Controller

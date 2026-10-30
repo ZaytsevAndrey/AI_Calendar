@@ -9,15 +9,19 @@ import {
   snapMinutes,
 } from '../utils/phasesTimeUtils';
 import { phaseColor } from 'theme/phasePalette';
+import { cx } from 'ui/cx';
+import { layoutEventLanes } from 'modules/calendar/eventDrag';
 
-const PX_PER_HOUR = 44;
+const PX_PER_HOUR = 40;
 const SNAP_MIN = 15;
 const MIN_DURATION_MIN = 15;
 const HANDLE_PX = 8;
 
 const COLUMN_DOWS = [1, 2, 3, 4, 5, 6, 0] as const;
 
-interface PhasesCalendarProps {
+interface PhasesWeekProps {
+  selectedId?: string | null;
+  onSelectPhase?: (phase: PhaseDTO | null) => void;
   phases: PhaseDTO[];
   onEditPhase?: (phase: PhaseDTO) => void;
   onPhaseTimeChange?: (
@@ -36,10 +40,16 @@ function isSystemMainPhase(phase: PhaseDTO): boolean {
   return phase.type === 'main_phase' || phase.name === 'Focus hours';
 }
 
-const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
+/**
+ * Desktop weekly template: phases as chips with a 2 px gap; overlapping phases share the column side by side.
+ * Click selects (handles show), a second click opens the editor. Drag moves, edges resize, 15-minute steps.
+ */
+const PhasesWeek: React.FC<PhasesWeekProps> = ({
   phases,
   onEditPhase,
   onPhaseTimeChange,
+  selectedId = null,
+  onSelectPhase,
 }) => {
   const { t } = useTranslation();
   const { data: userSettings } = useGetUserSettingsQuery();
@@ -262,140 +272,107 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
     bindDragSession(phase.id, dayOfWeek, startMin, endMin, 'resize-end', 0);
   };
 
-  const blockMetrics = (
-    phase: PhaseDTO,
-    dayOfWeek: number,
-  ): { top: string; height: string } | null => {
-    const range = resolvePhaseRangeInActiveWindow(
-      phase.startTime,
-      phase.endTime,
-      activeWindow,
-    );
-    let startMin = range.start;
-    let endMin = range.end;
-    if (live && live.phaseId === phase.id && live.dayOfWeek === dayOfWeek) {
-      startMin = live.startMin;
-      endMin = live.endMin;
-    } else if (pending && pending.phaseId === phase.id) {
-      startMin = pending.startMin;
-      endMin = pending.endMin;
-    }
-    const clippedStart = Math.max(startMin, dayStartMin);
-    const clippedEnd = Math.min(endMin, dayEndMin);
-    if (clippedEnd <= clippedStart) return null;
-    const top = ((clippedStart - dayStartMin) / daySpanMin) * gridHeightPx;
-    const height = ((clippedEnd - clippedStart) / daySpanMin) * gridHeightPx;
-    return {
-      top: `${Math.max(0, top)}px`,
-      height: `${Math.max(HANDLE_PX * 2, height)}px`,
-    };
+  const rangeFor = (phase: PhaseDTO): { start: number; end: number } => {
+    if (live && live.phaseId === phase.id) return { start: live.startMin, end: live.endMin };
+    if (pending && pending.phaseId === phase.id) return { start: pending.startMin, end: pending.endMin };
+    return resolvePhaseRangeInActiveWindow(phase.startTime, phase.endTime, activeWindow);
   };
+  const yFor = (min: number) => ((min - dayStartMin) / daySpanMin) * gridHeightPx;
 
   return (
-    <div className="mt-2 max-w-full rounded-lg border border-ide-border bg-ide-panel p-3 shadow-ide sm:p-4">
-      <h2 className="mb-1 text-lg font-semibold text-ide-text">{t('phases.weeklyTemplate')}</h2>
-      <p className="mb-4 hidden text-xs text-ide-muted md:block">
-        {t('phases.dragHint', { minutes: SNAP_MIN })}
-      </p>
-      <p className="mb-4 text-xs text-ide-muted md:hidden">{t('phases.tapHint')}</p>
-
-      <ul className="space-y-3 md:hidden">
-        {columns.map(({ dow, label }) => {
-          const colPhases = displayPhases.filter((phase) => phaseAppliesOnDay(phase, dow));
-          return (
-            <li key={dow} className="rounded-lg border border-ide-border bg-ide-surface p-3">
-              <h3 className="text-sm font-semibold text-ide-text">{label}</h3>
-              {colPhases.length === 0 ? (
-                <p className="mt-2 text-sm text-ide-muted">{t('phases.noPhases')}</p>
-              ) : (
-                <ul className="mt-2 space-y-2">
-                  {colPhases.map((phase) => (
-                    <li key={phase.id}>
-                      <button
-                        type="button"
-                        className="flex min-h-[44px] w-full items-center gap-2 rounded-md border border-ide-border px-3 text-left"
-                        onClick={() => onEditPhase?.(phase)}
-                      >
-                        <span
-                          className="h-3 w-3 shrink-0 rounded-full"
-                          style={{ backgroundColor: phaseColor(phase.color) }}
-                          aria-hidden
-                        />
-                        <span className="min-w-0 flex-1 truncate text-sm text-ide-text">{phase.name}</span>
-                        <span className="shrink-0 text-xs text-ide-muted">
-                          {phase.startTime}–{phase.endTime}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-
-      <div className="hidden max-w-full overflow-auto overscroll-x-contain md:block [-webkit-overflow-scrolling:touch]">
+    <div className="max-w-full overflow-x-auto overscroll-x-contain">
       <div
-        className="grid min-w-[520px] gap-0 rounded border border-ide-border"
-        style={{
-          gridTemplateColumns: `56px repeat(${columns.length}, minmax(72px, 1fr))`,
+        className="grid min-w-[560px]"
+        style={{ gridTemplateColumns: `52px repeat(${columns.length}, minmax(72px, 1fr))` }}
+        onPointerDown={(e) => {
+          if (e.target === e.currentTarget) onSelectPhase?.(null);
         }}
       >
-        <div className="border-b border-ide-border bg-ide-surface/80 p-1" />
+        <div className="border-b border-ide-border" />
         {columns.map(({ dow, label }) => (
-          <div
-            key={dow}
-            className="border-b border-l border-ide-border bg-ide-surface/80 p-1 text-center"
-          >
-            <span className="text-xs font-semibold text-ide-text">{label}</span>
+          <div key={dow} className="border-b border-l border-ide-border py-1.5 text-center text-body-sm text-ide-muted">
+            {label}
           </div>
         ))}
 
-        <div
-          className="relative border-r border-ide-border bg-ide-surface"
-          style={{ height: gridHeightPx }}
-        >
-          {hourLabels.map(({ minutes, label }) => {
-            const top = ((minutes - dayStartMin) / daySpanMin) * gridHeightPx;
-            return (
-              <span
-                key={label}
-                className="absolute left-1 right-0.5 text-[0.65rem] leading-none text-ide-muted"
-                style={{ top: `${top}px` }}
-              >
-                {label}
-              </span>
-            );
-          })}
+        <div className="relative" style={{ height: gridHeightPx }}>
+          {hourLabels.map(({ minutes, label }) => (
+            <span
+              key={label}
+              className="absolute left-1.5 -translate-y-1/2 text-caption tabular-nums text-ide-muted first:translate-y-0"
+              style={{ top: yFor(minutes) }}
+            >
+              {label}
+            </span>
+          ))}
         </div>
 
-        {columns.map(({ dow: dayOfWeek }, dayIndex) => {
+        {columns.map(({ dow: dayOfWeek }) => {
           const colPhases = displayPhases.filter((p) => phaseAppliesOnDay(p, dayOfWeek));
+          const lanes = layoutEventLanes(
+            colPhases.map((p) => {
+              const r = rangeFor(p);
+              return { id: p.id, startMin: r.start, endMin: r.end };
+            }),
+          );
           return (
             <div
               key={dayOfWeek}
               id={`phase-col-${dayOfWeek}`}
-              className={`relative border-ide-border bg-ide-surface ${
-                dayIndex < columns.length - 1 ? 'border-l border-r' : 'border-l'
-              }`}
+              className="relative border-l border-ide-border"
               style={{ height: gridHeightPx }}
+              onPointerDown={(e) => {
+                if (e.target === e.currentTarget) onSelectPhase?.(null);
+              }}
             >
+              {hourLabels.map(({ minutes }) => (
+                <div
+                  key={minutes}
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-0 border-t border-ide-border/60"
+                  style={{ top: yFor(minutes) }}
+                />
+              ))}
               {colPhases.map((phase) => {
-                const pos = blockMetrics(phase, dayOfWeek);
-                if (!pos) return null;
+                const r = rangeFor(phase);
+                const start = Math.max(r.start, dayStartMin);
+                const end = Math.min(r.end, dayEndMin);
+                if (end <= start) return null;
+                const lane = lanes.get(phase.id) ?? { lane: 0, laneCount: 1 };
+                const width = 100 / lane.laneCount;
+                const top = yFor(start) + 1;
+                const height = Math.max(HANDLE_PX * 2, yFor(end) - yFor(start) - 2);
+                const selected = selectedId === phase.id || live?.phaseId === phase.id;
                 return (
                   <div
                     key={`${dayOfWeek}-${phase.id}`}
-                    className="absolute left-0.5 right-0.5 z-[1] flex flex-col overflow-hidden rounded border border-black/20"
-                    style={{ top: pos.top, height: pos.height, touchAction: 'none' }}
+                    data-phase-id={phase.id}
+                    className={cx(
+                      'group absolute z-[1] flex flex-col overflow-hidden rounded-chip border transition-shadow',
+                      selected ? 'z-[2] border-ide-text/50 shadow-ide-md' : 'border-transparent hover:border-ide-text/20',
+                    )}
+                    style={{
+                      top,
+                      height,
+                      left: `calc(${lane.lane * width}% + 2px)`,
+                      width: `calc(${width}% - 4px)`,
+                      background: `color-mix(in srgb, ${phaseColor(phase.color)} var(--phase-tint, 18%), rgb(var(--ide-panel)))`,
+                      boxShadow: `inset 3px 0 0 0 ${phaseColor(phase.color)}`,
+                      touchAction: 'none',
+                    }}
                   >
                     {onPhaseTimeChange ? (
                       <div
                         onPointerDown={(e) => startResizeStart(e, phase, dayOfWeek)}
-                        className="shrink-0 cursor-ns-resize bg-black/15"
+                        aria-hidden
+                        className={cx(
+                          'absolute inset-x-0 top-0 z-[2] flex cursor-ns-resize items-start justify-center transition-opacity',
+                          selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+                        )}
                         style={{ height: HANDLE_PX }}
-                      />
+                      >
+                        <span className="mt-0.5 h-0.5 w-5 rounded-full bg-ide-text/50" />
+                      </div>
                     ) : null}
                     <div
                       onPointerDown={(e) => startMove(e, phase, dayOfWeek)}
@@ -406,27 +383,33 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
                           skipClickAfterDragRef.current = false;
                           return;
                         }
-                        onEditPhase?.(phase);
+                        if (selectedId === phase.id || !onSelectPhase) onEditPhase?.(phase);
+                        else onSelectPhase(phase);
                       }}
-                      className="flex min-h-0 flex-1 items-center justify-center opacity-85"
-                      style={{
-                        backgroundColor: phaseColor(phase.color),
-                        cursor: onPhaseTimeChange ? 'grab' : 'pointer',
-                      }}
+                      className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden py-1 pl-2.5 pr-1.5"
+                      style={{ cursor: onPhaseTimeChange ? 'grab' : 'pointer' }}
                     >
-                      <span
-                        className="pointer-events-none px-0.5 text-center text-[0.65rem] font-bold leading-snug text-white"
-                        style={{ textShadow: '0 1px 2px rgba(0,0,0,0.45)' }}
-                      >
+                      <span className="pointer-events-none truncate text-caption font-semibold leading-tight text-ide-text">
                         {phase.name}
                       </span>
+                      {height >= 34 ? (
+                        <span className="pointer-events-none truncate text-caption tabular-nums leading-tight text-ide-muted">
+                          {minutesToTime(r.start)}–{minutesToTime(r.end)}
+                        </span>
+                      ) : null}
                     </div>
                     {onPhaseTimeChange ? (
                       <div
                         onPointerDown={(e) => startResizeEnd(e, phase, dayOfWeek)}
-                        className="cursor-ns-resize bg-black/15"
+                        aria-hidden
+                        className={cx(
+                          'absolute inset-x-0 bottom-0 z-[2] flex cursor-ns-resize items-end justify-center transition-opacity',
+                          selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+                        )}
                         style={{ height: HANDLE_PX }}
-                      />
+                      >
+                        <span className="mb-0.5 h-0.5 w-5 rounded-full bg-ide-text/50" />
+                      </div>
                     ) : null}
                   </div>
                 );
@@ -435,30 +418,8 @@ const PhasesCalendar: React.FC<PhasesCalendarProps> = ({
           );
         })}
       </div>
-      </div>
-
-      {displayPhases.length > 0 && (
-        <div className="mt-4 hidden flex-wrap gap-2 md:flex">
-          <span className="w-full text-sm font-semibold text-ide-text">{t('phases.legend')}</span>
-          {[...displayPhases]
-            .sort((a, b) => {
-              const aRange = resolvePhaseRangeInActiveWindow(a.startTime, a.endTime, activeWindow);
-              const bRange = resolvePhaseRangeInActiveWindow(b.startTime, b.endTime, activeWindow);
-              return aRange.start - bRange.start;
-            })
-            .map((phase) => (
-              <div
-                key={phase.id}
-                className="flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold text-white"
-                style={{ backgroundColor: phaseColor(phase.color) }}
-              >
-                {phase.name} ({phase.startTime}–{phase.endTime})
-              </div>
-            ))}
-        </div>
-      )}
     </div>
   );
 };
 
-export default PhasesCalendar;
+export default PhasesWeek;

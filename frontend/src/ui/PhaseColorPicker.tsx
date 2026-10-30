@@ -28,7 +28,7 @@ export function PhaseColorPicker({ id, value, onChange, labelledBy }: Props) {
             id={id}
             role="radiogroup"
             aria-labelledby={labelledBy}
-            className="grid grid-cols-5 gap-2.5 sm:flex sm:flex-wrap"
+            className="grid w-fit grid-cols-5 gap-2.5"
         >
             {PHASE_PALETTE.map((entry, index) => {
                 const on = entry.id === selected;

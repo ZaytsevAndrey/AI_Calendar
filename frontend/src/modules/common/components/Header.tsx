@@ -2,7 +2,6 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { prefetchRoute } from 'routeChunks';
-import { ThemeToggle } from 'theme/ThemeToggle';
 import { mainNavItems, mainNavLabel } from '../mainNav';
 
 const linkBase =
@@ -49,7 +48,6 @@ const Header: React.FC = () => {
                             </Link>
                         ))}
                     </nav>
-                    <ThemeToggle />
                 </div>
             </div>
         </header>

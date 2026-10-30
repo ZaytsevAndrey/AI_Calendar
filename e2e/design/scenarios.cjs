@@ -128,7 +128,29 @@ const scenarios = [
   { name: 'tasks', route: '/tasks' },
   { name: 'tasks-empty', route: '/tasks', scenario: 'empty' },
   { name: 'settings', route: '/settings' },
-  { name: 'phases', route: '/phases' },
+  { name: 'settings-general', route: '/settings/general' },
+  { name: 'settings-day', route: '/settings/day', full: true },
+  { name: 'settings-planning', route: '/settings/planning' },
+  { name: 'settings-calendars', route: '/settings/calendars' },
+  { name: 'settings-notifications', route: '/settings/notifications' },
+  { name: 'settings-assistant', route: '/settings/assistant' },
+  { name: 'settings-account', route: '/settings/account' },
+  {
+    name: 'phase-edit',
+    route: '/settings/day',
+    run: async (page) => {
+      await page.getByTestId('phase-row').first().click();
+      await page.waitForTimeout(700);
+    },
+  },
+  {
+    name: 'phase-presets',
+    route: '/settings/day',
+    run: async (page) => {
+      await page.getByRole('button', { name: L('Шаблони', 'Templates') }).first().click();
+      await page.waitForTimeout(500);
+    },
+  },
 ];
 
 module.exports = { scenarios, L };

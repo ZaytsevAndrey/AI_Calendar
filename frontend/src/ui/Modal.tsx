@@ -24,6 +24,8 @@ export type ModalProps = {
     headerAction?: React.ReactNode;
     /** Phone: drag the sheet down to close. Off for forms with unsaved input. */
     swipeToClose?: boolean;
+    /** Desktop: `center` dialog or a `right` drawer at full height. Phones always get a bottom sheet. */
+    placement?: 'center' | 'right';
 };
 
 const SWIPE_CLOSE_PX = 96;
@@ -40,6 +42,7 @@ export const Modal: React.FC<ModalProps> = ({
     phoneHeight = 'auto',
     headerAction,
     swipeToClose = true,
+    placement = 'center',
 }) => {
     const { t } = useTranslation();
     const titleId = useId();
@@ -74,7 +77,8 @@ export const Modal: React.FC<ModalProps> = ({
     return createPortal(
         <div
             className={cx(
-                'fixed inset-0 flex items-end justify-center p-0 md:items-center md:p-4',
+                'fixed inset-0 flex items-end justify-center p-0',
+                placement === 'right' ? 'md:items-stretch md:justify-end' : 'md:items-center md:p-4',
                 zIndexClass,
             )}
         >
@@ -94,11 +98,14 @@ export const Modal: React.FC<ModalProps> = ({
                 tabIndex={-1}
                 className={cx(
                     'relative z-10 flex w-full flex-col border border-ide-border bg-ide-panel text-ide-text shadow-ide-md outline-none',
-                    'rounded-t-sheet md:rounded-sheet',
+                    'rounded-t-sheet',
+                    placement === 'right' ? 'md:h-full md:rounded-none md:border-y-0 md:border-r-0' : 'md:max-h-[88vh] md:rounded-sheet',
                     phoneHeight === 'full' ? 'max-md:h-[96dvh]' : 'max-md:max-h-[92dvh]',
-                    'md:max-h-[88vh]',
                     maxWidthClass,
-                    'max-md:max-w-none motion-safe:max-md:animate-[sheet-in_220ms_cubic-bezier(.2,.8,.2,1)] motion-safe:md:animate-[pop-in_160ms_ease-out]',
+                    'max-md:max-w-none motion-safe:max-md:animate-[sheet-in_220ms_cubic-bezier(.2,.8,.2,1)]',
+                    placement === 'right'
+                        ? 'motion-safe:md:animate-[drawer-in_200ms_cubic-bezier(.2,.8,.2,1)]'
+                        : 'motion-safe:md:animate-[pop-in_160ms_ease-out]',
                 )}
                 style={{
                     marginBottom: phone && keyboard ? keyboard : undefined,

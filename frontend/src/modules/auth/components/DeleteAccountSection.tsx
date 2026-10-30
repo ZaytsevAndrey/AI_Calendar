@@ -70,14 +70,12 @@ export function DeleteAccountSection() {
 
   return (
     <>
-      <div className="mt-8 border-t border-ide-border pt-6">
-        <h3 className="mb-1 text-base font-semibold text-ide-error">
-          {t('settings.deleteAccount')}
-        </h3>
-        <p className="mb-4 text-sm text-ide-muted">{t('settings.deleteAccountHint')}</p>
-        {error && step === 'closed' ? (
-          <p className="mb-3 text-sm text-ide-error">{error}</p>
-        ) : null}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-6">
+        <div className="min-w-0">
+          <h3 className="text-body font-medium text-ide-text">{t('settings.deleteAccount')}</h3>
+          <p className="mt-0.5 text-body-sm text-ide-muted">{t('settings.deleteAccountHint')}</p>
+          {error && step === 'closed' ? <p className="mt-1 text-body-sm text-ide-error">{error}</p> : null}
+        </div>
         <Button
           type="button"
           variant="danger"

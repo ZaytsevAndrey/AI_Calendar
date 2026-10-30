@@ -261,8 +261,8 @@ test.describe('P1 voice UI', () => {
   });
 
   test('U-VOI-010 Speak replies toggle is in Settings', async ({ page, auth }) => {
-    await openAs(page, auth.onboarded, '/settings');
-    const speak = page.getByRole('checkbox', { name: 'Speak replies' });
+    await openAs(page, auth.onboarded, '/settings/assistant');
+    const speak = page.getByRole('switch', { name: 'Speak replies' });
     await expect(speak).toBeVisible();
     // Shared e2e user may already be off from a prior run — normalize via UI.
     if (!(await speak.isChecked())) {

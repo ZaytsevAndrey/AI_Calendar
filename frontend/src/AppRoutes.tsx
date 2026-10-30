@@ -62,9 +62,10 @@ const AppRoutes = () => {
                 <Route path="/events" element={<Navigate to="/tasks" replace />} />
                 <Route path="/schedule" element={<Navigate to="/" replace />} />
                 <Route path="/calendar" element={<Navigate to="/" replace />} />
-                <Route path="/phases" element={<LazyRoute chunk={routeChunks.phases} access="protected" />} />
+                <Route path="/phases" element={<Navigate to="/settings/day" replace />} />
                 <Route path="/habits" element={<Navigate to="/" replace />} />
                 <Route path="/settings" element={<LazyRoute chunk={routeChunks.settings} access="protected" />} />
+                <Route path="/settings/:section" element={<LazyRoute chunk={routeChunks.settings} access="protected" />} />
                 <Route
                     path="/setup/phases"
                     element={<LazyRoute chunk={routeChunks.phaseSetup} access="protected" />}

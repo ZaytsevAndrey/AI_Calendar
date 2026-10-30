@@ -54,6 +54,7 @@ import { eventsApi } from 'api/eventsApi';
 import { VoiceTaskButton } from 'modules/voice/components/VoiceTaskButton';
 import { VoiceTaskSheet } from 'modules/voice/components/VoiceTaskSheet';
 import { useVoiceTask } from 'modules/voice/hooks/useVoiceTask';
+import { useVoiceLauncher } from 'modules/voice/voiceLauncher';
 import { setConflictVoiceOpener } from 'modules/schedule/conflictChoiceBus';
 import { settleReplanJob } from 'modules/schedule/settleReplanJob';
 import {
@@ -338,6 +339,7 @@ const CalendarPage: React.FC = () => {
         onComplete: createFromPayload,
         onSufficient: openCreateFromPrefill,
     });
+    useVoiceLauncher(voice.open);
     useEffect(() => {
         setConflictVoiceOpener(() => voice.open());
         return () => setConflictVoiceOpener(null);
@@ -1109,16 +1111,6 @@ const CalendarPage: React.FC = () => {
                     className="absolute bottom-4 right-4 z-20 inline-flex h-14 w-14 items-center justify-center rounded-full bg-ide-accentBlue text-white shadow-ide-md transition active:scale-95"
                 >
                     <Plus className="h-6 w-6" aria-hidden />
-                </button>
-            ) : null}
-            {phone ? (
-                <button
-                    type="button"
-                    aria-label={t('voice.addByVoice')}
-                    onClick={() => voice.open()}
-                    className="absolute bottom-[5.5rem] right-5 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border border-ide-border bg-ide-elevated text-ide-text shadow-ide-md transition active:scale-95"
-                >
-                    <Mic className="h-5 w-5" aria-hidden />
                 </button>
             ) : null}
 

@@ -258,7 +258,7 @@ export function ProblematicItemCard({ item, timeZone, todayYmd, onMove, onEdit }
               icon={busy === 'place' ? undefined : CalendarCheck}
               disabled={disabled}
               onClick={placeSuggestion}
-             
+
             >
               {busy === 'place' ? <Spinner className="h-4 w-4" /> : null}
               {t(placeAtKey, { start: hm(suggestion.start) })}
@@ -275,7 +275,7 @@ export function ProblematicItemCard({ item, timeZone, todayYmd, onMove, onEdit }
             icon={CalendarPlus}
             disabled={disabled}
             onClick={() => onMove(item, placeDay)}
-           
+
           >
             {t('schedule.problematicOtherTime')}
           </Button>
