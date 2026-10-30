@@ -8,6 +8,14 @@ This document carries only what this pass **verified in code** plus what it corr
 
 ---
 
+## 0. Stage 2 result (31 Oct 2026)
+
+Done on `voice/v1-create-contract`, one commit per package, every change behind a test that was red first: **WP-H1** `ba3e651`, **WP-J1** `b41622d`, **WP-C** `0d28435`, **WP-D** `15ed818`, **WP-F** `cbfd3e9`, **WP-A** `fee2f92`, **WP-G** `645caf2`, docs (WP-E′ + WP-J4) `373725b`, **WP-H2** `ead7392`, English set `2f8f73c`, **WP-H4** `5e8da6d`. Structured gate **256/256** (242 before), frontend voice + i18n 33/33, both typechecks clean. Not merged into `master`; nothing pushed.
+
+**WP-G found three live-path defects the packages did not predict** (each reproduced before the fix): a preview published after a model clarification could not be applied at all, by tap or voice (`blocksConfirmation` outlived the question); a correction of the open preview was refused because the mapper accepted `operation_result` only inside one utterance while the prompt told the model to use it across turns and never listed the pending operations; an unreadable reply dropped the preview cards. All three are candidates for the F2 multi-turn 0/5 — re-measure in V7.
+
+**Still open from this list:** WP-B (blocked: `feat/scheduling-ui-alignment` @ `892b166` is finished but not merged), WP-H3 (historical suites — not started, L), WP-E″ (VR-04 / VR-25 / VR-27 gates; VR-25 is outside the voice boundary), WP-I (live; also needs the F2 set, which cannot be rebuilt without the 29 Oct transcript), WP-J2 / J3 (after V7), V2 (separate stage; `project-apply.ts` moves/Later paths untouched here), VR-13's remaining part (several simultaneous open questions still collapse to one — the queue in `session/dialogue.ts` is still never advanced; left untouched for lack of a scenario). Stage 3 review focus: §9 below plus the WP-G commit.
+
 ## 1. Boundaries
 
 - Implement from the backlog; do not redesign the structured pipeline. The working rules in the roadmap still hold: small diffs, focused tests, never edit a historical test to raise a pass count, terse commits, one per slice, no lexical crutches (`.claude/rules/voice-no-lexical-crutches.md`).
