@@ -2,7 +2,7 @@
 
 Permanent register of unresolved issues in scheduling, persistence, Google Calendar sync and (recorded only) the voice agent. Update it when an issue is found, changed or closed; close an entry only with code and test evidence (commit + test name).
 
-Last full review: 2026-10-30, branch `stabilize/scheduling`, after the audit remediation (AUD-001…AUD-027, H-1…H-5; per-item evidence in [audit-remediation-progress.md](audit-remediation-progress.md)). No Critical issue is known.
+Last full review: 2026-10-30, branch `stabilize/scheduling`, after the audit remediation (AUD-001…AUD-027, H-1…H-5; per-item evidence in [audit-remediation-progress.md](audit-remediation-progress.md)). No Critical issue is known. Risk view with release gates, security kinds and remediation order: [security-and-residual-risks.md](security-and-residual-risks.md).
 
 **Severity:** Critical — blocks release. High — fix before production rollout. Medium — accepted limitation or scheduled improvement. Low — non-blocking technical debt. External — cannot be verified in the local environment.
 
@@ -36,6 +36,9 @@ Last full review: 2026-10-30, branch `stabilize/scheduling`, after the audit rem
 | [KI-24](#ki-24) | Request bodies outside scheduling and settings are not validated | Medium | defect | neither |
 | [KI-25](#ki-25) | A request waiting behind a stuck user lock fails after 60 s | Low | limitation | neither |
 | [KI-26](#ki-26) | A seated re-merged day loses `parentSeriesId` | Low | limitation | neither |
+| [KI-27](#ki-27) | `PATCH /tasks/:id/status` accepts any status string | Low | defect | neither |
+| [KI-28](#ki-28) | OAuth and app refresh tokens stored in plaintext | Medium | defect (security) | release gate G-5 (recommended) |
+| [KI-29](#ki-29) | Account deletion without a Google grant leaves the app events in Google | Low | limitation | neither |
 
 ---
 
@@ -302,6 +305,33 @@ Last full review: 2026-10-30, branch `stabilize/scheduling`, after the audit rem
 **A seated re-merged day loses `parentSeriesId`** — Low, limitation (AUD-021 residual).
 - **Behavior:** the re-merge owner is chosen correctly (`8d7a0f4`), but a seated copy still clears `parentSeriesId`; deleting the series then does not delete that copy (unchanged series-delete scope).
 - **Source:** `schedule/placement-step.service.ts`.
+- **Blocks:** neither.
+
+### KI-27
+
+**`PATCH /tasks/:id/status` accepts any status string** — Low, defect (found 2026-10-30, by reading; not reproduced).
+- **Behavior:** the controller reads `@Body('status') status: TaskStatus`; a TypeScript enum is a primitive to `SchedulingValidationPipe`, so the value is not validated and is saved as sent.
+- **Impact:** an arbitrary status on the caller's own task (scoped by `userId`); placement treats unknown statuses as open.
+- **Resolution:** a DTO with `@IsEnum(TaskStatus)`.
+- **Source:** `tasks/tasks.controller.ts` (`updateStatus`), `common/scheduling-validation.pipe.ts`.
+- **Blocks:** neither.
+
+### KI-28
+
+**OAuth and app refresh tokens stored in plaintext** — Medium, defect (security; found 2026-10-30, by reading).
+- **Behavior:** `user.googleAccessToken`, `user.googleRefreshToken` and `user.refreshToken` (the app refresh JWT, matched by equality in `auth.service.ts`) are plain `text` columns.
+- **Impact:** a database leak yields working Google grants and app sessions.
+- **Mitigation:** storage encryption at the provider (Neon); the app refresh token rotates on use; disconnect revokes the Google grant.
+- **Resolution:** encrypt OAuth tokens with an application key; store only a hash of the app refresh token.
+- **Source:** `users/user.entity.ts`, `auth/auth.service.ts`.
+- **Blocks:** release gate G-5 in [security-and-residual-risks.md](security-and-residual-risks.md) (recommended; the owner may accept it explicitly).
+
+### KI-29
+
+**Account deletion without a Google grant leaves the app events in Google** — Low, limitation (by reading).
+- **Behavior:** `AccountDeletionService.purgeGoogleArtifacts` returns when the user has no stored grant (disconnected); local data is deleted, events and the app calendar stay in the user's Google account.
+- **Resolution:** say so in the delete dialog, or ask to reconnect first.
+- **Source:** `auth/account-deletion.service.ts`.
 - **Blocks:** neither.
 
 ## Audit findings (2026-10-30)

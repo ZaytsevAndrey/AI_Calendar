@@ -1,6 +1,6 @@
 # Operations: scheduling queue, locks, Google sync
 
-For whoever runs the backend (Render + Neon today). How the background work runs, what failure looks like, and what to do about it. Deployment and migrations are in [deploy.md](deploy.md#database-migrations).
+For whoever runs the backend (Render + Neon today). How the background work runs, what failure looks like, and what to do about it. Deployment and migrations are in [deploy.md](deploy.md#database-migrations). Architecture: [placement-engine.md](placement-engine.md). Open risks and release gates: [security-and-residual-risks.md](security-and-residual-risks.md).
 
 ## What runs in the background
 

@@ -8,6 +8,10 @@ Live queue only. Shipped work is in [roadmap archive](roadmap-archive.md). Produ
 
 **Voice engine.** `POST /voice/turn` runs the structured pipeline (`StructuredVoiceService`): interpret → resolve authorized entities → preview → explicit confirm → client Apply → outcome report. `VOICE_TURN_ENGINE=legacy` switches back to the old planner (`buildPlannerSystemPrompt`). Voice MVP work is §39–§43 below; finish this pipeline, do not redesign it.
 
+**Scheduling Domain stabilization: implementation completed and integrated, with documented residual risks and external release checks outstanding.** Branch `stabilize/scheduling` (placement engine refactor, durable jobs, locks and leases, transactional Google outbox, create idempotency, five migrations, the Oct 2026 audit AUD-001…AUD-027 / H-1…H-5 fixed with regression tests) is integrated into `master`. Still open: release gates G-1…G-6 below, residual risks KI-20…KI-29 ([security-and-residual-risks.md](security-and-residual-risks.md), [known-issues.md](known-issues.md)). Architecture: [placement-engine.md](placement-engine.md).
+
+**Development priority (30 Oct 2026):** 1) complete the Voice Agent MVP ([voice-agent-roadmap.md](voice-agent-roadmap.md); §39–§43); 2) validate end-to-end assistant workflows; 3) resolve the deferred hardening and the production release gates (section "After Voice MVP" below); 4) prepare a controlled release. This orders development work only: no production service is exposed to real users before the release gates are met or explicitly accepted.
+
 ---
 
 ## Now (ordered)
@@ -89,6 +93,32 @@ Do not start until the web product is finished. Not a phone polish of one screen
 Below 768px the shell already has a bottom tab bar and the calendar opens on day. That is not this item.
 
 - [ ] A complete mobile version of the product, after the web is done.
+
+---
+
+## After Voice MVP — deferred hardening and release gates
+
+Start after the Voice MVP (§39–§43) and the end-to-end check. Order, severity and evidence: [security-and-residual-risks.md](security-and-residual-risks.md).
+
+**Release gates — met, or accepted in writing by the owner, before real users:**
+
+- [ ] G-1 Neon migration rehearsal on a branch of the production database; non-pooled connection if more than one instance (KI-01).
+- [ ] G-2 Postgres CI job green on GitHub (KI-02).
+- [ ] G-3 Manual Google Calendar check with a test account: lost insert answer, deleted event, guests and Meet kept, disconnect and sign in again, DST series (KI-03).
+- [ ] G-4 Security: ownership and mass-assignment review plus request validation for the controllers outside scheduling, with two-user e2e tests (KI-24).
+- [ ] G-5 Security: encrypt stored OAuth tokens and hash the app refresh token (KI-28).
+- [ ] G-6 Voice rollout gates, if voice ships: live quality, Apply preconditions, shared session store (KI-04, KI-19, §42).
+
+**Deferred hardening (not release-blocking):**
+
+- [ ] Validate the task status body (KI-27).
+- [ ] Habits and day reminders on the Google queue (KI-12).
+- [ ] Google ETag preconditions and incremental sync (KI-05, KI-06, KI-23).
+- [ ] Placement: `placed` mark inside the placement transaction (KI-20), one transaction per placement (KI-22), hole refill on a job (KI-16).
+- [ ] Lock timeout as 503 (KI-25); shared Google connection-state cache (KI-15).
+- [ ] Series: creation on a DST day at a non-existent clock (KI-21); `parentSeriesId` after re-merge (KI-26).
+- [ ] Repository wrapper for criteria writes (KI-07); remove unused code and undo columns (KI-17).
+- [ ] Account deletion without a Google grant: tell the user (KI-29).
 
 ---
 

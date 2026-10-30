@@ -1,6 +1,6 @@
 # Specification: Intelligent scheduling & unified items
 
-**Status:** implemented in codebase (engine, jobs, diff); see [overview](overview.md) and [api-reference](api-reference.md) for HTTP/UI.  
+**Status: partly obsolete (30 Oct 2026).** The full-replan engine (`IntelligentSchedulingEngine`, Generate, diff/undo jobs) described here was removed (PE-30). Placement, durable mutation jobs, the Google outbox and series rules as implemented today: [placement-engine.md](placement-engine.md). The unified-items, settings and phases parts still describe the data model; anything about Generate, replan or undo does not apply.  
 **Placement write-set (target):** [spec-incremental-placement.md](spec-incremental-placement.md). Inboxes and option ids: [spec-conflict-rules.md](spec-conflict-rules.md).  
 **Language:** English (implementation reference)  
 **Last updated:** October 2026

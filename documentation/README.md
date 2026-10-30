@@ -10,6 +10,7 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Integrations](integrations.md) | Google OAuth / Calendar, Groq voice, common errors (`redirect_uri_mismatch`) |
 | [Deploy](deploy.md) | Free hosting on Render + Neon, GitHub Actions CI, `master` auto-deploy |
 | [Operations](operations.md) | Background job queue, retries, failed jobs, per-user lock, Google sync failures, logs |
+| [Known issues](known-issues.md) | Permanent register of open issues (KI-xx) with severity, evidence and what blocks release |
 | [Task creation rules](task-creation-rules.md) | Presets vs settings, validation, phase, recurrence weekdays, Google sync |
 | [Roadmap](roadmap.md) | Live queue |
 | [Roadmap archive](roadmap-archive.md) | Shipped work |
@@ -23,8 +24,11 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Voice prompts — next](voice-prompt-next.md) | Handoff for roadmap **§23** (split): logging-first, then goldens, then fixes |
 | [Voice fix flow](voice-fix-flow.md) | Prompt, spec, and dialogue tests stay one sentence: list the disagreement, you choose, then spec, tests, prompt |
 | [Local TTS](tts-local.md) | Azure Speech when configured; otherwise Piper on the home API (`npm run start:piper`); browser voice when both are down |
-| [Spec: Intelligent scheduling](spec-intelligent-scheduling.md) | Unified items, settings, phases, queue, diff/undo, Google anchors (defers placement to conflict rules) |
-| [Placement engine](placement-engine.md) | How placement works: rules, one placement step, the `planPlacement` core, series, inboxes, transactions, tests (Ukrainian) |
+| [Spec: Intelligent scheduling](spec-intelligent-scheduling.md) | **Partly obsolete:** unified items, settings, phases still valid; its full-replan engine, Generate and diff/undo were removed (PE-30) |
+| [Scheduling domain and placement engine](placement-engine.md) | **Authoritative scheduling architecture** as implemented: domain boundaries, task and recurrence model, placement, series edits/skips, locks and leases, durable jobs, Google outbox and recovery, idempotency, DST, account deletion, validation, migrations, API contract, unsupported behavior (Ukrainian) |
+| [Security and residual risks](security-and-residual-risks.md) | Engineering risk register: open vulnerabilities and limitations, external verification gaps, release gates |
+| [Audit remediation progress](audit-remediation-progress.md) | Oct 2026 audit AUD-001…AUD-027 / H-1…H-5: per-item status, commits, regression tests, final verification |
+| [Voice Agent roadmap](voice-agent-roadmap.md) | Voice Agent architecture, compatibility with the scheduling domain, consolidated backlog, phases |
 | [Scheduling refactor progress](scheduling-refactor-progress.md) | Oct 2026 scheduling-domain refactor: stages, commits, decisions, test results, open risks (handoff file) |
 | [Placement engine review](placement-engine-review.md) | Oct 2026 review: 30 defects (PE-01…PE-30), test gaps, fix order. Roadmap §50 |
 | [Task scheduling test matrix](task-scheduling-test-matrix.md) | Given/When/Then cases mapped to unit tests |
