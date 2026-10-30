@@ -156,7 +156,11 @@ export async function recordGoogleWrite(
   throw new Error(`Could not record the Google ${intent.operation} after repeated conflicts`);
 }
 
-/** Users with a stored Google grant: only they get queue rows. */
+/**
+ * Users with a stored Google grant: only they get upsert rows. Delete rows
+ * are kept for everyone (AUD-013): a delete exists only for an event we made,
+ * and while disconnected it waits for the reconnect instead of being lost.
+ */
 async function usersWithGoogle(manager: EntityManager, userIds: string[]): Promise<Set<string>> {
   if (!userIds.length) return new Set();
   const rows = await manager.getRepository(User).find({
@@ -201,7 +205,6 @@ export async function flush(manager: EntityManager, collected: Collected): Promi
     written.push((await recordGoogleWrite(manager, { userId, operation: 'upsert', taskId })).id);
   }
   for (const intent of deletes) {
-    if (!linked.has(intent.userId)) continue;
     written.push((await recordGoogleWrite(manager, intent)).id);
   }
   collected.upserts.clear();

@@ -21,7 +21,7 @@ import { createPlacementKit, type PlacementKit } from '../../../test/helpers/pla
 describe('Google outbox (transactional) and reconnect recovery', () => {
   let kit: PlacementKit;
   let remote: Map<string, Record<string, unknown>>;
-  let reconnect: ((userId: string) => void) | null;
+  let reconnect: ((userId: string, opts?: { wasDisconnected: boolean }) => void) | null;
   /** Whether the user's Google grant works right now. */
   const grant = { connected: true };
   let google: ReturnType<typeof fakeGoogle>;
@@ -41,7 +41,7 @@ describe('Google outbox (transactional) and reconnect recovery', () => {
       }),
       getEvent: jest.fn(async (_u: string, id: string) => remote.get(id)),
       capRecurringSeriesUntil: jest.fn(),
-      onReconnected: jest.fn((listener: (userId: string) => void) => {
+      onReconnected: jest.fn((listener: (userId: string, opts?: { wasDisconnected: boolean }) => void) => {
         reconnect = listener;
       }),
     };
@@ -288,6 +288,55 @@ describe('Google outbox (transactional) and reconnect recovery', () => {
   });
 
   describe('reconnect recovery', () => {
+    describe('AUD-013: changes made while disconnected reach Google after reconnect', () => {
+      const disconnect = () =>
+        kit.ds.getRepository(User).update(kit.user.id, { googleAccessToken: null, googleRefreshToken: null });
+      const synced = async () => {
+        const task = await seated('Report', '10:00', '11:00');
+        afterGrace();
+        await makeService().processQueue();
+        const eventId = (await kit.reload(task.id)).googleEventId!;
+        expect(remote.has(eventId)).toBe(true);
+        return { task, eventId };
+      };
+      /** The reconnect listener runs in the background: wait (bounded) for Google to reach `done`. */
+      const settle = async (done: () => boolean) => {
+        for (let i = 0; i < 200 && !done(); i += 1) await new Promise((r) => setTimeout(r, 5));
+      };
+
+      it('a task removed by the system while disconnected has its event deleted', async () => {
+        makeService().onModuleInit();
+        const { task, eventId } = await synced();
+        await disconnect();
+        grant.connected = false;
+
+        await kit.taskRepo.remove(await kit.reload(task.id));
+        await linkGoogle(kit.user.id);
+        grant.connected = true;
+        reconnect!(kit.user.id, { wasDisconnected: true });
+        await settle(() => !remote.has(eventId));
+
+        expect(remote.has(eventId)).toBe(false);
+      });
+
+      it('an edit made while disconnected is sent', async () => {
+        makeService().onModuleInit();
+        const { task, eventId } = await synced();
+        await disconnect();
+        grant.connected = false;
+
+        const row = await kit.reload(task.id);
+        row.name = 'Report v2';
+        await kit.taskRepo.save(row);
+        await linkGoogle(kit.user.id);
+        grant.connected = true;
+        reconnect!(kit.user.id, { wasDisconnected: true });
+        await settle(() => remote.get(eventId)?.summary === 'Report v2');
+
+        expect(remote.get(eventId)?.summary).toBe('Report v2');
+      });
+    });
+
     it('while access is revoked rows wait without spending attempts or calling Google', async () => {
       grant.connected = false;
       await seated('Report', '10:00', '11:00');

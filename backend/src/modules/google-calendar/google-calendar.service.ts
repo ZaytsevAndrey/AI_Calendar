@@ -135,18 +135,24 @@ function eventOverlapsWindow(event: DisplayGoogleEvent, startMs: number, endMs: 
 
 @Injectable()
 export class GoogleCalendarService {
-  /** Called after a user's Google grant is stored again (connect / sign-in). */
-  private readonly reconnectListeners: Array<(userId: string) => void> = [];
+  /**
+   * Called after a user's Google grant is stored again (connect / sign-in).
+   * `wasDisconnected`: no grant was stored before, so changes made meanwhile
+   * were never queued (AUD-013).
+   */
+  private readonly reconnectListeners: Array<
+    (userId: string, opts: { wasDisconnected: boolean }) => void
+  > = [];
 
   /** The write queue revives a reconnected user's waiting and failed writes. */
-  onReconnected(listener: (userId: string) => void): void {
+  onReconnected(listener: (userId: string, opts: { wasDisconnected: boolean }) => void): void {
     this.reconnectListeners.push(listener);
   }
 
-  private notifyReconnected(userId: string): void {
+  private notifyReconnected(userId: string, wasDisconnected: boolean): void {
     for (const listener of this.reconnectListeners) {
       try {
-        listener(userId);
+        listener(userId, { wasDisconnected });
       } catch (e: unknown) {
         this.logger.warn(`Reconnect listener failed for ${userId}: ${e instanceof Error ? e.message : String(e)}`);
       }
@@ -391,17 +397,25 @@ export class GoogleCalendarService {
   ): Promise<void> {
     const existing = await this.userRepo.findOne({
       where: { id: userId },
-      select: { googleRefreshToken: true },
+      select: { googleAccessToken: true, googleRefreshToken: true },
     });
+    const refreshToken = tokens.refresh_token ?? existing?.googleRefreshToken ?? null;
     await this.userRepo.update(userId, {
       googleAccessToken: tokens.access_token ?? existing?.googleAccessToken ?? null,
-      googleRefreshToken:
-        tokens.refresh_token ?? existing?.googleRefreshToken ?? null,
+      googleRefreshToken: refreshToken,
       googleTokenExpiry: new Date(
         tokens.expiry_date ?? Date.now() + 3_600_000,
       ),
     });
-    this.notifyReconnected(userId);
+    if (!refreshToken) {
+      // Google sends a refresh token only with consent; without one the
+      // grant ends with this access token (about an hour).
+      this.logger.warn(`Google returned no refresh token for user ${userId}; calendar sync stops when the access token expires`);
+    }
+    this.notifyReconnected(
+      userId,
+      !existing?.googleAccessToken && !existing?.googleRefreshToken,
+    );
   }
 
   private async ensureSettingsLinked(userId: string): Promise<void> {
@@ -468,7 +482,10 @@ export class GoogleCalendarService {
       );
 
       this.logger.log(`Successfully saved Google tokens for user ${user.id}`);
-      this.notifyReconnected(user.id);
+      this.notifyReconnected(
+        user.id,
+        !user.googleAccessToken && !user.googleRefreshToken,
+      );
 
       try {
         oauth.setCredentials({
@@ -674,6 +691,18 @@ export class GoogleCalendarService {
 
       if (!user) {
         throw new Error('User not found');
+      }
+
+      // AUD-013: revoke the grant at Google too. Otherwise the next sign-in
+      // (prompt: select_account, no consent) returns no refresh token and
+      // sync silently stops an hour after reconnecting. Best effort.
+      const grant = user.googleRefreshToken ?? user.googleAccessToken;
+      if (grant && !stubExternalApis()) {
+        try {
+          await this.newOAuthClient().revokeToken(grant);
+        } catch (e: unknown) {
+          this.logger.warn(`Could not revoke the Google grant of user ${userId}: ${e instanceof Error ? e.message : String(e)}`);
+        }
       }
 
       // Clear tokens

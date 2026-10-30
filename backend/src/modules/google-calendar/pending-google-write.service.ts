@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, LessThan, LessThanOrEqual, Not, Repository } from 'typeorm';
+import { In, IsNull, LessThan, LessThanOrEqual, MoreThan, Not, Repository } from 'typeorm';
 import { recordGoogleWrite, setGoogleOutboxKick } from './google-sync-outbox';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import { phaseHexToGoogleColorId } from './phase-hex-to-google-color-id.util';
@@ -124,12 +124,38 @@ export class PendingGoogleWriteService implements OnModuleInit, OnModuleDestroy 
         this.logger.warn(`Google outbox send failed: ${message}`);
       });
     });
-    this.google.onReconnected((userId) => {
-      void this.reviveForUser(userId).catch((err) => {
+    this.google.onReconnected((userId, opts) => {
+      void (async () => {
+        if (opts?.wasDisconnected) await this.reconcileUser(userId);
+        await this.reviveForUser(userId);
+      })().catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
         this.logger.warn(`Reviving Google writes for ${userId} failed: ${message}`);
       });
     });
+  }
+
+  /**
+   * AUD-013: while a user had no grant, edits queued nothing. After a
+   * reconnect that follows a disconnect, queue an upsert for every task Google
+   * may have to change: open or future, recurring, or still holding an event
+   * (parked meanwhile). Past seated tasks stay as they were. Sent by
+   * `reviveForUser`.
+   */
+  async reconcileUser(userId: string): Promise<number> {
+    const now = new Date();
+    const tasks = await this.taskRepo.find({
+      select: { id: true },
+      where: [
+        { userId, isRecurring: true },
+        { userId, scheduledEndTime: MoreThan(now) },
+        { userId, scheduledEndTime: IsNull(), googleEventId: Not(IsNull()) },
+      ],
+    });
+    for (const { id } of tasks) {
+      await recordGoogleWrite(this.pendingRepo.manager, { userId, operation: 'upsert', taskId: id, dueAt: now });
+    }
+    return tasks.length;
   }
 
   onModuleDestroy(): void {

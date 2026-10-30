@@ -238,6 +238,63 @@ describe('GoogleCalendarService', () => {
     expect(session.refresh_token).toBe('jwt-token');
   });
 
+  describe('AUD-013: disconnect and reconnect', () => {
+    const ok = { affected: 1, raw: [], generatedMaps: [] };
+    const { google } = jest.requireMock('googleapis');
+
+    it('disconnect revokes the grant at Google, then clears it', async () => {
+      jest.spyOn(userRepo, 'findOne').mockResolvedValue({
+        id: 'u1',
+        googleAccessToken: 'token',
+        googleRefreshToken: 'refresh',
+      } as User);
+      const update = jest.spyOn(userRepo, 'update').mockResolvedValue(ok);
+      jest.spyOn(userSettingsRepo, 'update').mockResolvedValue(ok);
+      const revokeToken = jest.fn().mockResolvedValue({});
+      (google.auth.OAuth2 as jest.Mock).mockImplementationOnce(() => ({ revokeToken }));
+
+      await service.disconnectCalendar('u1');
+
+      expect(revokeToken).toHaveBeenCalledWith('refresh');
+      expect(update).toHaveBeenCalledWith('u1', {
+        googleAccessToken: null,
+        googleRefreshToken: null,
+        googleTokenExpiry: null,
+      });
+    });
+
+    it('a failed revoke still disconnects', async () => {
+      jest.spyOn(userRepo, 'findOne').mockResolvedValue({ id: 'u1', googleAccessToken: 'token' } as User);
+      const update = jest.spyOn(userRepo, 'update').mockResolvedValue(ok);
+      jest.spyOn(userSettingsRepo, 'update').mockResolvedValue(ok);
+      (google.auth.OAuth2 as jest.Mock).mockImplementationOnce(() => ({
+        revokeToken: jest.fn().mockRejectedValue(new Error('network')),
+      }));
+
+      await expect(service.disconnectCalendar('u1')).resolves.toMatchObject({ success: true });
+      expect(update).toHaveBeenCalledWith('u1', expect.objectContaining({ googleRefreshToken: null }));
+    });
+
+    it('reports a reconnect after a disconnect as such; a routine sign-in is not', async () => {
+      const seen: boolean[] = [];
+      service.onReconnected((_userId, opts) => seen.push(opts.wasDisconnected));
+      jest.spyOn(userRepo, 'update').mockResolvedValue(ok);
+      jest.spyOn(userSettingsRepo, 'update').mockResolvedValue(ok);
+      jest.spyOn(userSettingsRepo, 'findOne').mockResolvedValue({
+        appGoogleCalendarId: null,
+        appGoogleCalendarName: 'luefy',
+      } as UserSettings);
+      const findOne = jest.spyOn(userRepo, 'findOne');
+
+      findOne.mockResolvedValue({ id: 'u1', googleAccessToken: null, googleRefreshToken: null } as User);
+      await service.saveToken('code', 'u1');
+      findOne.mockResolvedValue({ id: 'u1', googleAccessToken: 'old', googleRefreshToken: 'refresh' } as User);
+      await service.saveToken('code', 'u1');
+
+      expect(seen).toEqual([true, false]);
+    });
+  });
+
   it('should save token', async () => {
     const userId = '123';
     const code = 'auth-code';
