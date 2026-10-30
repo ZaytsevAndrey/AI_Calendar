@@ -2,6 +2,7 @@ export type VNextLanguage = 'uk' | 'en';
 
 const UK: Record<string, string> = {
   invalid: 'Не зрозумів команду. Скажіть інакше.',
+  preview_kept: 'Не розчув. Прев’ю без змін: скажіть інакше або натисніть Застосувати.',
   transport: 'Не вдалося звʼязатися з моделлю. Нічого не змінюю. Спробуйте ще раз.',
   timeout: 'Час очікування моделі вичерпано. Нічого не змінюю. Спробуйте ще раз.',
   provider_unavailable: 'Модель тимчасово недоступна. Нічого не змінюю. Спробуйте ще раз.',
@@ -50,6 +51,7 @@ const UK: Record<string, string> = {
 
 const EN: Record<string, string> = {
   invalid: 'I did not understand that. Please say it again.',
+  preview_kept: 'I did not catch that. The preview is unchanged: say it differently, or Apply.',
   transport: 'I could not reach the model. Nothing was changed. Please try again.',
   timeout: 'The model timed out. Nothing was changed. Please try again.',
   provider_unavailable: 'The model is temporarily unavailable. Nothing was changed. Please try again.',

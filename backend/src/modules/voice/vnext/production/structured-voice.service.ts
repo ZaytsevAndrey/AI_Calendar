@@ -29,7 +29,8 @@ import {
   nextWeekdayYmd,
   scheduleTodayYmd,
 } from '../../voice-local-date.util';
-import { isNoiseOrEmptyTranscript } from '../../voice-stt.util';
+import { isNoiseOrEmptyTranscript, spokenControl } from '../../voice-stt.util';
+import { canConfirm } from '../session/dialogue';
 import { ReadBroker } from '../broker/read-broker';
 import type { ProposalGroup } from '../contracts/proposal';
 import type { SemanticEnvelopeV1 } from '../contracts/types';
@@ -44,6 +45,7 @@ import { appendTurn, intentKey } from '../session/session';
 import { buildCatalog, fingerprint, readResult, reminderRecord, taskRecord } from './catalog';
 import { applyReport, expireUnreported, recordDispatch } from './outcomes';
 import { StructuredVoiceSessions, type SessionEntry } from './session-registry';
+import type { VNextSession } from '../session/session';
 import { TurnLog } from './turn-log';
 import { completionUsd } from '../llm/pricing';
 import { FIND_TASKS_TOOL, findTasks } from '../search/find-tasks';
@@ -166,12 +168,14 @@ export class StructuredVoiceService {
     }
     const expired = expireUnreported(entry);
     if (expired.length) log.warn('apply.unreported_marked_unknown', { executionIds: expired });
-    const interpreter = this.interpreterFor(actionId, transcript);
-    if (!interpreter) {
+    const chosen = this.interpreterFor(actionId, transcript, entry.session);
+    if (!chosen) {
       log.step('turn.ignored', { reason: actionId ? `client_action:${actionId}` : 'noise_or_empty' });
       return this.finish(log, entry, this.response(entry, { outcome: 'answer', assistantMessage: '' }));
     }
-    if (interpreter !== 'model') log.step('interpreter.ui_action', { actionId, model: false });
+    const interpreter: VNextInterpreter | 'model' = typeof chosen === 'object' && 'control' in chosen ? fixed({ group: CONTROL(chosen.control) }) : chosen;
+    if (typeof chosen === 'object' && 'control' in chosen) log.step('interpreter.spoken_control', { control: chosen.control, model: false });
+    else if (interpreter !== 'model') log.step('interpreter.ui_action', { actionId, model: false });
 
     const ctx = await this.loadContext(userId, dto, log);
     log.step('context.ready', {
@@ -276,13 +280,20 @@ export class StructuredVoiceService {
     return response;
   }
 
-  /** `model` for an utterance, a fixed control for a UI action, or null when there is nothing to do. */
-  private interpreterFor(actionId: string | undefined, transcript: string): VNextInterpreter | 'model' | null {
+  /**
+   * `model` for an utterance, a fixed control for a UI action, or null when there is nothing to do.
+   * While a preview is open and no question is pending, a bare yes or no is the same control as the
+   * Apply or Cancel button (D-10): no model call, nothing interpreted. Anything longer is speech.
+   */
+  private interpreterFor(actionId: string | undefined, transcript: string, session: VNextSession): VNextInterpreter | 'model' | null | { control: 'confirm' | 'cancel' } {
     if (actionId === 'confirm') return fixed({ group: CONTROL('confirm') });
     if (actionId === 'cancel') return fixed({ group: CONTROL('cancel') });
     if (actionId === 'build_plan') {
       return fixed({ envelope: { version: '1', kind: 'day_plan', operations: [], dayPlan: { phase: 'apply' } } });
     }
+    // Before the noise filter: a two-letter "no" is an answer when a preview is waiting for one.
+    const spoken = canConfirm(session) ? spokenControl(transcript) : null;
+    if (spoken) return { control: spoken };
     if (isNoiseOrEmptyTranscript(transcript)) return null;
     return 'model';
   }
@@ -446,6 +457,14 @@ export class StructuredVoiceService {
       openQuestion: session.openQuestion,
       pending: open,
       pendingSummary: open ? session.pendingSummary : null,
+      // The open preview's operations, by the id a correction must target (operation_result + opId).
+      pendingOperations: open
+        ? (session.structured?.operations ?? []).map((operation) => ({
+          opId: operation.pendingId,
+          action: operation.action,
+          constraints: operation.constraints.map(({ constraintId: _id, ...rest }) => rest),
+        }))
+        : [],
       // Built before the turn appends this utterance, so every stored turn is history.
       history: session.turns,
       draft: session.planDraft

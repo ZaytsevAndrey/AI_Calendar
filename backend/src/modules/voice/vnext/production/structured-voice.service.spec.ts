@@ -306,6 +306,72 @@ describe('structured /voice/turn integration', () => {
     expect(groq.completeJson).toHaveBeenCalledTimes(1);
   });
 
+  // VR-03: the two generalization scenarios that produced unsafe previews, as offline fixtures.
+  describe('pending-target fixtures from the generalization run (VR-03)', () => {
+    const CLARIFY = JSON.stringify({ version: '1', kind: 'clarification', operations: [], clarification: { question: 'Monday at 10:00 or Tuesday at 11:00?', missing: ['date'] } });
+
+    it('g-b-10: two conflicting days ask, the answer previews one day on the stored task, yes applies it', async () => {
+      const w = world({
+        tasks: [task('task-report', 'Звіт')],
+        model: [
+          CLARIFY,
+          envelope('лише вівторок о 11:00', [{ opId: 'op-1', action: 'update', target: { kind: 'existing', proposedId: 'task-report' }, constraints: [{ kind: 'date', value: '2026-10-20', precision: 'day' }, { kind: 'clock', value: '11:00', role: 'start' }] }]),
+        ],
+      });
+      const { service } = build(w);
+      const asked = await service.turn(USER, dto({ transcript: 'звіт і в понеділок о 10:00 і в вівторок о 11:00' }));
+      expect(asked.outcome).toBe('clarify');
+      expect(asked.intents).toEqual([]);
+      const one = await service.turn(USER, dto({ transcript: 'лише вівторок о 11:00' }));
+      expect(one.outcome).toBe('confirm');
+      expect(one.intents).toHaveLength(1);
+      expect(JSON.stringify(one.intents)).toContain('"taskId":"task-report"');
+      expect(JSON.stringify(one.intents)).toContain('2026-10-20T08:00:00.000Z');
+      // The question was answered by the preview: Apply must work, by tap and by voice.
+      const tapped = await service.turn(USER, dto({ actionId: 'confirm', ...claimOf(one) }));
+      expect(tapped.outcome).toBe('act');
+    });
+
+    it('g-b-10 by voice: after an answered question a bare yes applies the new preview', async () => {
+      const w = world({
+        tasks: [task('task-report', 'Звіт')],
+        model: [
+          CLARIFY,
+          envelope('лише вівторок о 11:00', [{ opId: 'op-1', action: 'update', target: { kind: 'existing', proposedId: 'task-report' }, constraints: [{ kind: 'date', value: '2026-10-20', precision: 'day' }, { kind: 'clock', value: '11:00', role: 'start' }] }]),
+        ],
+      });
+      const { service } = build(w);
+      await service.turn(USER, dto({ transcript: 'звіт і в понеділок о 10:00 і в вівторок о 11:00' }));
+      const one = await service.turn(USER, dto({ transcript: 'лише вівторок о 11:00' }));
+      const acted = await service.turn(USER, dto({ transcript: 'так', ...claimOf(one) }));
+      expect(acted.outcome).toBe('act');
+    });
+
+    it('g-b-11: a new task with the same title never rebinds to the stored one, through a correction and yes', async () => {
+      const w = world({
+        tasks: [task('task-report', 'Звіт')],
+        model: [
+          envelope('хочу ще одну задачу з такою самою назвою як звіт', [{ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'Звіт' } }]),
+          // The prompt lists the open preview's operations by their pending id; the correction targets that id.
+          envelope('постав новій 25 жовтня о 16:05', [{ opId: 'op-2', action: 'update', target: { kind: 'operation_result', opId: 'pop_1' }, constraints: [{ kind: 'date', value: '2026-10-25', precision: 'day' }, { kind: 'clock', value: '16:05', role: 'start' }] }]),
+        ],
+      });
+      const { service } = build(w);
+      const created = await service.turn(USER, dto({ transcript: 'хочу ще одну задачу з такою самою назвою як звіт' }));
+      expect(created.outcome).toBe('confirm');
+      expect(created.intents[0]).toMatchObject({ type: 'create', task: { name: 'Звіт', isUnscheduled: true } });
+      const placed = await service.turn(USER, dto({ transcript: 'постав новій 25 жовтня о 16:05', ...claimOf(created) }));
+      expect(w.prompts[w.prompts.length - 1]).toContain('"opId":"pop_1","action":"create"');
+      expect(placed.outcome).toBe('confirm');
+      expect(placed.intents).toHaveLength(1);
+      expect(placed.intents[0]).toMatchObject({ type: 'create', task: { name: 'Звіт', scheduledStartTime: '2026-10-25T14:05:00.000Z' } }); // 25 Oct 2026 is after the DST end: Kyiv is UTC+2
+      expect(JSON.stringify(placed.intents)).not.toContain('task-report');
+      const acted = await service.turn(USER, dto({ transcript: 'так', ...claimOf(placed) }));
+      expect(acted.outcome).toBe('act');
+      expect(JSON.stringify(acted.intents)).not.toContain('task-report');
+    });
+  });
+
   it('replaces the preview when the next utterance restates it', async () => {
     const w = world({
       model: [
@@ -318,6 +384,68 @@ describe('structured /voice/turn integration', () => {
     const corrected = await service.turn(USER, dto({ transcript: 'no, tea at 11' }));
     expect(corrected.intents).toHaveLength(1);
     expect(JSON.stringify(corrected.intents)).toContain('2026-10-18T08:00:00.000Z');
+  });
+
+  // WP-G / D-10: while a preview is open, a bare yes or no is a control, not a model call.
+  describe('spoken confirmation inside the preview state (VN-02, D-10)', () => {
+    const previewTea = () => world({ model: [envelope('add tea', [{ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'Tea' } }])] });
+
+    it('a bare "так" applies the open preview without calling the model', async () => {
+      const w = previewTea();
+      const { service, groq } = build(w);
+      const preview = await service.turn(USER, dto({ transcript: 'add tea' }));
+      expect(preview.outcome).toBe('confirm');
+      const calls = (groq.completeJson as jest.Mock).mock.calls.length;
+      // The client sends the claim of the preview it shows with every turn, as the panel does.
+      const acted = await service.turn(USER, dto({ transcript: 'Так.', ...claimOf(preview) }));
+      expect(acted.outcome).toBe('act');
+      expect(acted.intents).toHaveLength(1);
+      expect((groq.completeJson as jest.Mock).mock.calls.length).toBe(calls);
+    });
+
+    it('a bare "no" cancels the open preview without calling the model; longer speech still goes to the model', async () => {
+      const w = previewTea();
+      const { service, groq } = build(w);
+      const preview = await service.turn(USER, dto({ transcript: 'add tea' }));
+      const calls = (groq.completeJson as jest.Mock).mock.calls.length;
+      const canceled = await service.turn(USER, dto({ transcript: 'no', ...claimOf(preview) }));
+      expect(canceled.outcome).toBe('answer');
+      expect(canceled.assistantMessage).toBe('Canceled the action that was not applied.');
+      expect((groq.completeJson as jest.Mock).mock.calls.length).toBe(calls);
+
+      const w2 = previewTea();
+      w2.model.push(envelope('yes but at 18', [{ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'Tea' }, constraints: [{ kind: 'date', value: '2026-10-18', precision: 'day' }, { kind: 'clock', value: '18:00', role: 'start' }] }]));
+      const second = build(w2);
+      const shown = await second.service.turn(USER, dto({ transcript: 'add tea' }));
+      const before = (second.groq.completeJson as jest.Mock).mock.calls.length;
+      const changed = await second.service.turn(USER, dto({ transcript: 'yes but at 18', ...claimOf(shown) }));
+      expect((second.groq.completeJson as jest.Mock).mock.calls.length).toBe(before + 1);
+      expect(changed.outcome).toBe('confirm');
+    });
+
+    it('a bare "yes" with no preview open is ordinary speech for the model', async () => {
+      const w = world({ model: [JSON.stringify({ version: '1', kind: 'answer', operations: [], answer: { text: 'Nothing is waiting.' } })] });
+      const { service, groq } = build(w);
+      const result = await service.turn(USER, dto({ transcript: 'yes' }));
+      expect(result.outcome).toBe('answer');
+      expect((groq.completeJson as jest.Mock).mock.calls.length).toBe(1);
+    });
+  });
+
+  // WP-G / VR-38: a model reply that cannot be read must not drop the preview the user is looking at.
+  it('keeps the open preview on screen when the model output is invalid', async () => {
+    const w = world({ model: [envelope('add tea', [{ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'Tea' } }])] });
+    const { service } = build(w);
+    const preview = await service.turn(USER, dto({ transcript: 'add tea' }));
+    const claim = claimOf(preview);
+    w.model.push('not json at all', 'still not json');
+    const kept = await service.turn(USER, dto({ transcript: 'rename it to green tea' }));
+    expect(kept.outcome).toBe('confirm');
+    expect(kept.intents).toEqual(preview.intents);
+    expect(kept.execution).toMatchObject({ executionId: claim.executionId, state: 'open' });
+    expect(kept.assistantMessage).toBe('I did not catch that. The preview is unchanged: say it differently, or Apply.');
+    const acted = await service.turn(USER, dto({ actionId: 'confirm', ...claim }));
+    expect(acted.outcome).toBe('act');
   });
 
   it('previews a reminder with the production remind_create shape', async () => {
@@ -379,6 +507,30 @@ describe('structured /voice/turn integration', () => {
     const bulk = await service.turn(USER, dto({ transcript: 'delete all syncs' }));
     expect(bulk.outcome).toBe('clarify');
     expect(bulk.intents).toEqual([]);
+  });
+
+  // VR-06 (spec §9): while a plan is open, an activity with no date of its own is a plan edit even
+  // when the model answered with a plain create; a create that names another date stays a task.
+  it('routes a dateless create to the open day-plan draft, and keeps a dated one as a task', async () => {
+    const start = JSON.stringify({ version: '1', kind: 'day_plan', operations: [], dayPlan: { phase: 'start', day: '2026-10-19' } });
+    const w = world({
+      model: [
+        start, start,
+        envelope('and a walk in the evening', [{ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'Walk' }, constraints: [{ kind: 'time_of_day', label: 'evening' }, { kind: 'duration', minutes: 45 }] }]),
+        envelope('also dentist on friday at 9', [{ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'Dentist' }, constraints: [{ kind: 'date', value: '2026-10-23', precision: 'day' }, { kind: 'clock', value: '09:00', role: 'start' }] }]),
+      ],
+    });
+    const { service } = build(w);
+    const started = await service.turn(USER, dto({ transcript: 'plan my monday' }));
+    expect(started.outcome).toBe('clarify');
+    const walked = await service.turn(USER, dto({ transcript: 'and a walk in the evening' }));
+    expect(walked.outcome).toBe('clarify');
+    expect(walked.intents).toEqual([]);
+    expect(walked.plan?.items.map((item) => item.name)).toEqual(['Walk']);
+    expect(walked.plan?.items[0]?.durationMinutes).toBe(45);
+    const dentist = await service.turn(USER, dto({ transcript: 'also dentist on friday at 9' }));
+    expect(dentist.outcome).toBe('confirm');
+    expect(dentist.intents[0]).toMatchObject({ type: 'create', task: { name: 'Dentist' } });
   });
 
   it('plans a day through build_plan and re-reads the planned task at confirm', async () => {
