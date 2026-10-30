@@ -26,6 +26,9 @@ import { dateOnDayAtMinutes } from '../eventDrag';
 import { ymdFromLocalDate } from '../../../utils/ianaDateTime';
 import { formatClock } from '../../../utils/formatDate';
 import { cx } from 'ui/cx';
+import { cardMotionState } from '../motion/cardMotion';
+import { joinKeys } from '../motion/motionMath';
+import { useMotionPresence } from '../motion/useMotionPresence';
 
 function eventStartMinutes(event: GoogleCalendarEvent): number {
     if (!event.start.dateTime) return -1;
@@ -54,6 +57,8 @@ interface CalendarGridProps {
     renderEventMeta?: (event: GoogleCalendarEvent, completed: boolean) => React.ReactNode;
     /** Explicit columns for a time view (phone «3 дні»). */
     days?: Date[];
+    /** Ids an action on a card is known by (event id, its task id). */
+    motionKeys?: (event: GoogleCalendarEvent) => string[];
 }
 
 const CalendarGrid: React.FC<CalendarGridProps> = ({
@@ -70,6 +75,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     onPickDay,
     renderEventMeta,
     days: daysOverride,
+    motionKeys,
 }) => {
     const { t, i18n } = useTranslation();
     const { data: timePhases = [] } = useTimePhasesForDate(date);
@@ -111,6 +117,12 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
 
     const days = view !== 'month' && daysOverride?.length ? daysOverride : getDaysInView(view, date);
     const visibleEvents = events;
+    // The time views animate inside CalendarTimeGrid; this watches the month chips.
+    const monthRef = React.useRef<HTMLDivElement>(null);
+    const keysFor = (event: GoogleCalendarEvent) => motionKeys?.(event) ?? [event.id];
+    useMotionPresence(monthRef, {
+        resetKey: `${view}|${phoneMonth ? ymdFromLocalDate(date) : ''}|${days.map((d) => d.toDateString()).join('|')}`,
+    });
 
     const weekdayKeys = [
         'calendar.weekdayMon',
@@ -132,6 +144,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
         return (
             <div
                 key={event.id}
+                data-motion-id={event.id}
+                data-motion-keys={joinKeys(keysFor(event))}
+                data-motion={cardMotionState(keysFor(event)) ?? undefined}
                 title={tooltipText(event)}
                 role="button"
                 tabIndex={0}
@@ -173,7 +188,10 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
             (a, b) => eventStartMinutes(a) - eventStartMinutes(b),
         );
         return (
-            <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-control border border-ide-border bg-ide-panel">
+            <div
+                ref={monthRef}
+                className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-control border border-ide-border bg-ide-panel"
+            >
                 <div className="grid shrink-0 grid-cols-7 border-b border-ide-border">
                     {weekdayKeys.map((key) => (
                         <div key={key} className="py-1.5 text-center text-caption text-ide-muted">
@@ -290,6 +308,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
                     onDeleteEvent={onDeleteEvent}
                     isEventCompleted={isEventCompleted}
                     renderEventMeta={renderEventMeta}
+                    motionKeys={motionKeys}
                 />
             </div>
         );
@@ -306,7 +325,10 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
     const weeks = createWeeks(days);
 
     return (
-        <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-control border border-ide-border bg-ide-panel">
+        <div
+            ref={monthRef}
+            className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-control border border-ide-border bg-ide-panel"
+        >
             <div className="grid shrink-0 grid-cols-7 border-b border-ide-border">
                 {weekdayKeys.map((key) => (
                     <div key={key} className="border-r border-ide-border px-2 py-1.5 text-body-sm text-ide-muted last:border-r-0">

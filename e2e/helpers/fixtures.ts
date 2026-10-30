@@ -115,12 +115,15 @@ export async function waitForScheduleJob(
   throw new Error(`Schedule job ${jobId} did not finish in time`);
 }
 
-/** Task create/update/do-now/done/skip use staged progress toasts (title = task name). */
+/**
+ * Task create/update/do-now/done/skip end with one result toast (title = task
+ * name); the stages before it show on the calendar card, not in a toast.
+ */
 export async function expectMutationProgressToast(
   page: Page,
   title?: string | RegExp,
 ): Promise<void> {
-  const toast = page.locator('.Toastify__toast').filter({
+  const toast = page.locator('.Toastify__toast.app-toast-stage-done').filter({
     has: page.locator('.app-toast-body'),
   });
   // Prefer the toast for this task — leftovers from prior mutations can still be open.
@@ -129,17 +132,8 @@ export async function expectMutationProgressToast(
         has: page.locator('.app-toast-title').filter({ hasText: title }),
       })
     : toast;
-  await expect(scoped.first()).toBeVisible({ timeout: 15_000 });
-  await expect(
-    scoped
-      .locator('.app-toast-detail')
-      .filter({
-        hasText: /Saving task|Seating on the schedule|Updating Google Calendar|Done/,
-      })
-      .first(),
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(scoped.first()).toBeVisible({ timeout: 30_000 });
 }
-
 
 /**
  * The problematic block lives in «Today»: the side panel on wide screens, the sheet behind

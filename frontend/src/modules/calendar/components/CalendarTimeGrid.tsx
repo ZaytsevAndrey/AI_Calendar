@@ -5,11 +5,15 @@ import { useTranslation } from 'react-i18next';
 import { formatClock } from '../../../utils/formatDate';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 import { dateFnsOptions } from '../../../i18n/dateLocale';
-import {
-  getTaskMutationStage,
-  MUTATION_STAGE_COLORS,
-} from '../../schedule/taskMutationProgress';
 import { useTaskMutationStagesTick } from '../../schedule/useTaskMutationStage';
+import {
+  beginMove,
+  cardMotionStage,
+  cardMotionState,
+  isMotionLocked,
+} from '../motion/cardMotion';
+import { joinKeys, stageProgress } from '../motion/motionMath';
+import { useMotionPresence } from '../motion/useMotionPresence';
 import { getEventColor, eventEndMs } from '../hooks/useCalendar';
 import {
   chipLabel,
@@ -105,6 +109,8 @@ interface CalendarTimeGridProps {
   isEventCompleted?: (event: GoogleCalendarEvent) => boolean;
   renderDayExtra?: (day: Date) => React.ReactNode;
   renderEventMeta?: (event: GoogleCalendarEvent, completed: boolean) => React.ReactNode;
+  /** Ids an action on this card is known by (event id, its task id); default: the event id. */
+  motionKeys?: (event: GoogleCalendarEvent) => string[];
 }
 
 function eventMinutes(
@@ -141,8 +147,11 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
   isEventCompleted,
   renderDayExtra,
   renderEventMeta,
+  motionKeys,
 }) => {
   const { t } = useTranslation();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const keysFor = (event: GoogleCalendarEvent) => motionKeys?.(event) ?? [event.id];
   const daySpanMin = Math.max(dayEndMin - dayStartMin, 60);
   const gridHeightPx = (daySpanMin / 60) * PX_PER_HOUR;
   const colRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -251,6 +260,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
       if (!(end > start)) return;
       skipClickRef.current = true;
       const placed = current;
+      const motion = startMoveMotion(event, origin);
       setPending((prev) => ({ ...prev, [event.id]: placed }));
       // Keep pending until events refetch matches (or error / timeout) to avoid snap-back.
       const clearPending = () => {
@@ -267,9 +277,11 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
       const safety = window.setTimeout(clearPending, 12_000);
       void onChangeRef.current(event, start, end)
         .then(() => {
+          motion?.settle('done');
           window.setTimeout(clearPending, 400);
         })
         .catch(() => {
+          motion?.settle('error');
           clearPending();
         })
         .finally(() => {
@@ -282,6 +294,30 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
     window.addEventListener('pointercancel', handleUp);
   };
 
+  /** Leave the card's old self at `origin` while the server works; the new place fills up. */
+  const startMoveMotion = (event: GoogleCalendarEvent, origin: Placement) => {
+    const root = rootRef.current;
+    const originCol = colRefs.current[origin.dayIndex];
+    const card = root?.querySelector<HTMLElement>(`[data-motion-id="${CSS.escape(event.id)}"]`);
+    const cardCol = card?.parentElement;
+    if (!card || !cardCol || !originCol) return null;
+    const cardRect = card.getBoundingClientRect();
+    const fromCol = originCol.getBoundingClientRect();
+    const box = timedCardBox(origin.endMin - origin.startMin);
+    const day = days[origin.dayIndex];
+    return beginMove(
+      keysFor(event),
+      card,
+      {
+        left: cardRect.left - cardCol.getBoundingClientRect().left + fromCol.left,
+        top: fromCol.top + yFor(origin.startMin),
+        width: cardRect.width,
+        height: box.heightPx,
+      },
+      day ? `${clockAt(day, origin.startMin)}–${clockAt(day, origin.endMin)}` : undefined,
+    );
+  };
+
   const startDrag = (
     e: React.PointerEvent,
     event: GoogleCalendarEvent,
@@ -289,6 +325,10 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
     place: Placement,
   ) => {
     if (!onEventTimeChange) return;
+    if (isMotionLocked(keysFor(event))) {
+      e.stopPropagation();
+      return;
+    }
     e.stopPropagation();
     const col = colRefs.current[place.dayIndex];
     if (!col) return;
@@ -453,6 +493,10 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
   // Open on the current time (or the start of the day), a third from the top.
   const scrollRef = useRef<HTMLDivElement>(null);
   const daysKey = days.map((day) => day.toDateString()).join('|');
+  useMotionPresence(rootRef, {
+    resetKey: daysKey,
+    skipIds: live ? new Set([live.eventId]) : undefined,
+  });
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -467,6 +511,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
 
   return (
     <div
+      ref={rootRef}
       className="flex w-full max-w-full min-h-0 flex-1 flex-col overflow-x-auto overflow-y-hidden overscroll-x-contain [-webkit-overflow-scrolling:touch] lg:min-h-0 lg:flex-1"
       data-testid="calendar-time-grid"
     >
@@ -518,6 +563,9 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
               <button
                 key={event.id}
                 type="button"
+                data-motion-id={event.id}
+                data-motion-keys={joinKeys(keysFor(event))}
+                data-motion={cardMotionState(keysFor(event)) ?? undefined}
                 title={tooltipText(event)}
                 className={cx(
                   'calendar-chip calendar-chip--line mx-0.5 min-w-0 text-left font-medium',
@@ -546,7 +594,12 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
         </div>
       )}
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto" data-testid="calendar-hour-scroll">
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+        data-testid="calendar-hour-scroll"
+        data-motion-scroll
+      >
       <div className="grid" style={{ gridTemplateColumns: columns, minWidth: gridMinWidth }}>
         <div className="relative border-r border-ide-border" style={{ height: gridHeightPx }}>
           {hourBands.map((band, index) => {
@@ -643,28 +696,31 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
               const box = timedCardBox(place.endMin - place.startMin);
               const micro = box.mode === 'micro';
               const width = 100 / lane.laneCount;
-              const mutationStage =
-                getTaskMutationStage(event.id) ??
-                getTaskMutationStage(event.recurringEventId);
+              const keys = keysFor(event);
+              const motionState = cardMotionState(keys);
+              const motionStage = motionState ? cardMotionStage(keys) : null;
+              const locked = isMotionLocked(keys);
               const completed = isEventCompleted?.(event) ?? false;
               const endMs = eventEndMs(event);
               const past = !!now && endMs != null && endMs <= now.getTime() && !live;
               const timeText = `${clockAt(day, place.startMin)}–${clockAt(day, place.endMin)}`;
-              const chipColor = mutationStage
-                ? MUTATION_STAGE_COLORS[mutationStage]
-                : getEventColor(event);
+              const chipColor = getEventColor(event);
               return (
                 <div
                   key={event.id}
                   data-testid={`calendar-event-${event.id}`}
                   data-card-mode={box.mode}
+                  data-motion-id={event.id}
+                  data-motion-keys={joinKeys(keys)}
+                  data-motion={motionState ?? undefined}
+                  data-motion-stage={motionStage ?? undefined}
+                  aria-busy={motionState ? true : undefined}
                   className={cx(
                     'calendar-chip group absolute z-[2] flex flex-col',
                     box.mode === 'stacked' ? 'calendar-chip--stacked' : timedCardClass(box.mode),
-                    mutationStage && `calendar-event-stage-${mutationStage}`,
                     completed && 'calendar-chip--done',
-                    past && 'calendar-chip--past',
-                    !event.isAppGenerated && !mutationStage && 'calendar-chip--external',
+                    past && !motionState && 'calendar-chip--past',
+                    !event.isAppGenerated && 'calendar-chip--external',
                   )}
                   style={
                     {
@@ -676,12 +732,14 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                       '--chip-slot': `${box.heightPx}px`,
                       '--chip-open': `${box.openPx}px`,
                       '--chip-lines': Math.max(1, Math.floor((box.heightPx - 26) / 16)),
+                      '--motion-p': stageProgress(motionStage),
                       touchAction: live?.eventId === event.id ? 'none' : 'pan-y',
                     } as React.CSSProperties
                   }
-                  title={tooltipText(event)}
+                  // While an action runs, the tooltip says which server step it is on.
+                  title={motionStage ? t(`tasks.toast.progress.${motionStage}`) : tooltipText(event)}
                 >
-                  {onEventTimeChange ? (
+                  {onEventTimeChange && !locked ? (
                     <div
                       onPointerDown={(e) => startDrag(e, event, 'resize-start', place)}
                       className="calendar-chip__handle calendar-chip__handle--start cursor-ns-resize"
@@ -692,7 +750,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                     role="button"
                     tabIndex={0}
                     className={`calendar-chip__body relative flex min-h-0 flex-1 flex-col items-stretch ${
-                      onEventTimeChange ? 'cursor-grab' : 'cursor-pointer'
+                      !onEventTimeChange ? 'cursor-pointer' : locked ? 'cursor-not-allowed' : 'cursor-grab'
                     }`}
                     onPointerDown={(e) => startDrag(e, event, 'move', place)}
                     onClick={(e) => {
@@ -734,7 +792,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                       </button>
                     ) : null}
                   </div>
-                  {onEventTimeChange ? (
+                  {onEventTimeChange && !locked ? (
                     <div
                       onPointerDown={(e) => startDrag(e, event, 'resize-end', place)}
                       className="calendar-chip__handle calendar-chip__handle--end cursor-ns-resize"

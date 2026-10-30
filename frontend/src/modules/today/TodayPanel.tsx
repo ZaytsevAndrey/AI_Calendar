@@ -27,6 +27,8 @@ import { formatDurationShort } from 'ui/durationLabel';
 import { formatCivilYmd } from 'utils/formatDate';
 import { localYmd } from 'utils/ianaDateTime';
 import { blockEnd, blockRange, blockStart, canActOnLater, type TodayState } from './useToday';
+import { cardMotionState } from 'modules/calendar/motion/cardMotion';
+import { useMotionPresence } from 'modules/calendar/motion/useMotionPresence';
 
 export type TodaySectionId = 'now' | 'problems' | 'reminders' | 'later';
 
@@ -99,9 +101,12 @@ export function TodayPanel({
 }: Props) {
   const { t } = useTranslation();
   const { now, next, later, timeZone, busyId } = today;
+  // Rows that leave for the grid fly there (calendar/motion).
+  const rootRef = useRef<HTMLDivElement>(null);
+  useMotionPresence(rootRef, { resetKey: 'today' });
 
   return (
-    <div className={cx('flex flex-col gap-5', className)}>
+    <div ref={rootRef} className={cx('flex flex-col gap-5', className)}>
       <section id={todaySectionDomId('now')} aria-label={t('now.label')}>
         {now ? (
           <NowCard block={now} today={today} onOpenPreview={onOpenPreview} />
@@ -118,7 +123,11 @@ export function TodayPanel({
       </section>
 
       {problematicTasks.length > 0 ? (
-        <section id={todaySectionDomId('problems')} aria-label={t('schedule.problematicAria')}>
+        <section
+          id={todaySectionDomId('problems')}
+          aria-label={t('schedule.problematicAria')}
+          data-motion-target="problems"
+        >
           <SectionHeader
             icon={AlertTriangle}
             tone="warning"
@@ -128,7 +137,13 @@ export function TodayPanel({
           <div className="rounded-control border border-ide-warn/40 bg-ide-warnTint p-3">
             <ul className="mb-2 flex flex-col gap-1">
               {problematicTasks.slice(0, 3).map((task) => (
-                <li key={task.id} className="truncate text-body text-ide-text">
+                <li
+                  key={task.id}
+                  data-motion-id={task.id}
+                  data-motion-keys={task.id}
+                  data-motion={cardMotionState([task.id]) ?? undefined}
+                  className="motion-row truncate rounded-chip text-body text-ide-text"
+                >
                   {task.name}
                 </li>
               ))}
@@ -153,7 +168,7 @@ export function TodayPanel({
         </section>
       ) : null}
 
-      <section id={todaySectionDomId('later')}>
+      <section id={todaySectionDomId('later')} data-motion-target="later">
         <SectionHeader icon={Inbox} title={t('now.unscheduled')} count={later.length} />
         {later.length ? (
           <ul className="flex flex-col gap-1">
@@ -325,7 +340,12 @@ function LaterRow({
       : null,
   ].filter(Boolean);
   return (
-    <li className="flex min-w-0 items-center gap-1 rounded-control bg-ide-surface pl-3">
+    <li
+      data-motion-id={task.id}
+      data-motion-keys={task.id}
+      data-motion={cardMotionState([task.id]) ?? undefined}
+      className="motion-row flex min-w-0 items-center gap-1 rounded-control bg-ide-surface pl-3"
+    >
       <button
         type="button"
         className="min-w-0 flex-1 py-2 text-left"

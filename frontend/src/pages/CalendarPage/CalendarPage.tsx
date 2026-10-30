@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { useDispatch, useStore } from 'react-redux';
 import { useTranslation } from 'react-i18next';
 import { CalendarCheck, ChevronLeft, ChevronRight, PanelRight, Plus, Trash2, X } from 'lucide-react';
@@ -90,6 +90,7 @@ import {
     THREE_DAYS,
     threeDayLabel,
     threeDays,
+    threeDayQueryRange,
 } from 'modules/calendar/calendarView';
 import { todayNowContext } from 'modules/now/nowBlocks';
 import { CalendarChipMeta } from 'modules/calendar/components/CalendarChipMeta';
@@ -100,6 +101,14 @@ import {
 } from 'api/calendarOverlays.api';
 import type { CalendarNameById } from 'modules/calendar/components/CalendarChipMeta';
 import { overlayForEvent } from 'modules/calendar/schedulingKind';
+import {
+    configureMotion,
+    getMotionEpoch,
+    isCreatePending,
+    subscribeMotion,
+    trackMotion,
+} from 'modules/calendar/motion/cardMotion';
+import { motionDestination, motionKeysForEvent, overlayPendingCreates } from 'modules/calendar/motion/calendarMotionData';
 
 const CALENDAR_VIEW_KEY = 'calendar-view';
 
@@ -151,7 +160,7 @@ function CalendarSkeleton() {
 const SWIPE_MIN_PX = 60;
 
 const CalendarPage: React.FC = () => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const dispatch = useDispatch();
     const store = useStore();
     const phone = usePhoneLayout();
@@ -281,6 +290,8 @@ const CalendarPage: React.FC = () => {
         );
         if (!previous) return;
         for (const task of autoSeatedFromPark(previous, tasks)) {
+            // Its card lands on the grid from the problem list.
+            trackMotion({ keys: [task.id, task.googleEventId], kind: 'place', from: 'problems' }).settle('done');
             const start = task.scheduledStartTime!;
             const day = localYmd(start, timeZone);
             showInfoToast({
@@ -352,8 +363,26 @@ const CalendarPage: React.FC = () => {
         }
     }, [currentView]);
     const gridView: CalendarView = currentView;
+    // Placeholders for tasks being created re-render with the motion store.
+    useSyncExternalStore(subscribeMotion, getMotionEpoch, () => 0);
+    const tasksRef = React.useRef(tasks);
+    tasksRef.current = tasks;
+    useEffect(() => {
+        const locale = i18n.language === 'uk' ? 'uk-UA' : 'en-GB';
+        const label = new Intl.DateTimeFormat(locale, {
+            weekday: 'short',
+            day: 'numeric',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+        configureMotion({
+            resolve: (keys) => motionDestination(tasksRef.current, keys),
+            edgeLabel: (ms) => label.format(new Date(ms)),
+        });
+    }, [i18n.language]);
     const hiddenCalendarIds = userSettings?.hiddenGoogleCalendarIds ?? [];
-    const displayEvents = overlayCompletedTaskEvents(
+    const displayEvents = overlayPendingCreates(overlayCompletedTaskEvents(
         visibleGoogleEvents(eventsForRange || []).filter(
             (event) => {
                 if (reminderEventIds.has(event.id)) return false;
@@ -373,7 +402,7 @@ const CalendarPage: React.FC = () => {
             },
         ),
         tasks,
-    );
+    ), tasks, isCreatePending);
     const occurrenceStartIso = (event: GoogleCalendarEvent): string | null => {
         if (event.start.dateTime) return event.start.dateTime;
         if (event.start.date) {
@@ -733,6 +762,8 @@ const CalendarPage: React.FC = () => {
                     taskKey: event.id,
                     title: event.summary || linkedTask?.name || t('calendar.eventMoved'),
                     relatedKeys,
+                    // Joins the drag's motion that the grid started on drop.
+                    motion: { kind: 'move' },
                 });
             }
             return mutationRef.current;
@@ -851,6 +882,20 @@ const CalendarPage: React.FC = () => {
         timeZone,
     ]);
 
+    useEffect(() => {
+        const focus =
+            currentView === 'month'
+                ? new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+                : currentDate;
+        const sleep = { sleepTime: userSettings?.sleepTime, wakeTime: userSettings?.wakeTime };
+        const range = threeDayMode
+            ? threeDayQueryRange(currentDate, sleep)
+            : eventsQueryRange(currentView, focus, sleep);
+        configureMotion({
+            range: { startMs: new Date(range.timeMin).getTime(), endMs: new Date(range.timeMax).getTime() },
+        });
+    }, [currentView, currentDate, threeDayMode, userSettings?.sleepTime, userSettings?.wakeTime]);
+
     const today = useToday({
         sharedEvents: eventsForRange,
         skipEventsFetch: nowStripReuseCalendarEvents,
@@ -910,6 +955,7 @@ const CalendarPage: React.FC = () => {
                         <IconButton
                             label={t('common.previous', { view: viewLabel(currentView) })}
                             onClick={() => shift(-1)}
+                            data-motion-edge="prev"
                         >
                             <ChevronLeft className="h-5 w-5" aria-hidden />
                         </IconButton>
@@ -925,6 +971,7 @@ const CalendarPage: React.FC = () => {
                         <IconButton
                             label={t('common.next', { view: viewLabel(currentView) })}
                             onClick={() => shift(1)}
+                            data-motion-edge="next"
                         >
                             <ChevronRight className="h-5 w-5" aria-hidden />
                         </IconButton>
@@ -977,6 +1024,7 @@ const CalendarPage: React.FC = () => {
                                 size="md"
                                 label={t('common.previous', { view: t(`calendar.${currentView}`) })}
                                 onClick={() => shift(-1)}
+                                data-motion-edge="prev"
                             >
                                 <ChevronLeft className="h-5 w-5" aria-hidden />
                             </IconButton>
@@ -984,6 +1032,7 @@ const CalendarPage: React.FC = () => {
                                 size="md"
                                 label={t('common.next', { view: t(`calendar.${currentView}`) })}
                                 onClick={() => shift(1)}
+                                data-motion-edge="next"
                             >
                                 <ChevronRight className="h-5 w-5" aria-hidden />
                             </IconButton>
@@ -1000,6 +1049,7 @@ const CalendarPage: React.FC = () => {
                                 onClick={() => (wide ? setPanelOpen((v) => !v) : setTodaySheet('now'))}
                                 aria-pressed={wide ? panelOpen : undefined}
                                 aria-label={t('today.toggle')}
+                                data-motion-target="today"
                                 className={cx(
                                     'relative inline-flex h-9 items-center gap-2 rounded-control border px-3 text-body-sm transition',
                                     wide && panelOpen
@@ -1054,6 +1104,7 @@ const CalendarPage: React.FC = () => {
                             date={currentDate}
                             days={threeDayMode ? threeDays(currentDate) : undefined}
                             events={displayEvents}
+                            motionKeys={(event) => motionKeysForEvent(tasks, event)}
                             onEditEvent={handleEditEvent}
                             onCreateForDate={handleCreateForDate}
                             onCreateForRange={handleCreateForRange}
@@ -1105,7 +1156,9 @@ const CalendarPage: React.FC = () => {
                                 <X className="h-4 w-4" aria-hidden />
                             </IconButton>
                         </div>
-                        <div className="min-h-0 flex-1 overflow-y-auto p-4">{todayPanel}</div>
+                        <div className="min-h-0 flex-1 overflow-y-auto p-4" data-motion-scroll>
+                            {todayPanel}
+                        </div>
                     </aside>
                 ) : null}
             </div>

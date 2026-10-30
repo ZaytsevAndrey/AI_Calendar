@@ -1,6 +1,13 @@
 import i18n from 'i18next';
 import { toast, type Id } from 'react-toastify';
 import React from 'react';
+import {
+  noteMotionStage,
+  setMotionStageSource,
+  trackMotion,
+  type MotionFrom,
+  type MotionKind,
+} from '../calendar/motion/cardMotion';
 
 export type MutationStage =
   | 'saving'
@@ -13,8 +20,13 @@ export type TaskMutationProgressOptions = {
   /** Stable id for toast + calendar tint (task id, temp id, or google event id). */
   taskKey: string;
   title: string;
-  /** Also tint these calendar event ids (series instances). */
+  /** Also mark these calendar event ids (series instances). */
   relatedKeys?: string[];
+  /**
+   * How the card animates (see calendar/motion). Defaults to an edit; `false`
+   * when the caller drives the motion itself.
+   */
+  motion?: { kind?: MotionKind; from?: MotionFrom; targetMs?: number } | false;
 };
 
 type Listener = () => void;
@@ -40,12 +52,15 @@ function setKeysStage(keys: string[], stage: MutationStage | null) {
     else stageByKey.set(key, stage);
   }
   notify();
+  noteMotionStage();
 }
 
 export function getTaskMutationStage(key: string | null | undefined): MutationStage | null {
   if (!key) return null;
   return stageByKey.get(key) ?? null;
 }
+
+setMotionStageSource(getTaskMutationStage);
 
 export function subscribeTaskMutationStages(listener: Listener): () => void {
   listeners.add(listener);
@@ -54,21 +69,11 @@ export function subscribeTaskMutationStages(listener: Listener): () => void {
   };
 }
 
-const STAGE_CLASS: Record<MutationStage, string> = {
-  saving: 'app-toast-stage-saving',
-  placing: 'app-toast-stage-placing',
-  syncing: 'app-toast-stage-syncing',
+type FinalStage = Extract<MutationStage, 'done' | 'error'>;
+
+const FINAL_CLASS: Record<FinalStage, string> = {
   done: 'app-toast-stage-done',
   error: 'app-toast-stage-error',
-};
-
-/** Overlay colors for calendar blocks (match toast stages). */
-export const MUTATION_STAGE_COLORS: Record<MutationStage, string> = {
-  saving: 'rgb(var(--ide-warn))',
-  placing: 'rgb(var(--ide-link))',
-  syncing: 'rgb(var(--ph-violet))',
-  done: 'rgb(var(--ide-accent))',
-  error: 'rgb(var(--ide-error))',
 };
 
 function stageLabel(stage: MutationStage): string {
@@ -90,14 +95,18 @@ function allKeys(taskKey: string, relatedKeys?: string[]): string[] {
 
 export type TaskMutationProgressHandle = {
   setStage: (stage: MutationStage) => void;
-  /** Point tint at the real task id after a temp optimistic id. */
+  /** Point the card marks at the real task id after a temp optimistic id. */
   retarget: (nextKey: string) => void;
   finish: (detail?: string) => void;
   fail: (detail?: string) => void;
-  /** Clear toast + tint without an error (e.g. user cancelled series scope). */
+  /** End without a result toast (e.g. user cancelled series scope). */
   dismiss: () => void;
 };
 
+/**
+ * Progress of one task write. The card on the calendar shows the stages
+ * (calendar/motion); the toast only reports the result.
+ */
 export function startTaskMutationProgress(
   opts: TaskMutationProgressOptions,
 ): TaskMutationProgressHandle {
@@ -105,37 +114,35 @@ export function startTaskMutationProgress(
   let keys = allKeys(taskKey, opts.relatedKeys);
   let stage: MutationStage = 'saving';
   const toastId: Id = `task-mutation-${opts.taskKey}-${Date.now()}`;
-  let started = false;
+  const motion =
+    opts.motion === false
+      ? null
+      : trackMotion({
+          keys,
+          kind: opts.motion?.kind ?? 'edit',
+          from: opts.motion?.from,
+          targetMs: opts.motion?.targetMs,
+        });
 
-  const render = (next: MutationStage, detail?: string) => {
-    const content = React.createElement(ToastBody, {
-      title: opts.title,
-      detail: detail?.trim() || stageLabel(next),
-    });
-    const className = STAGE_CLASS[next];
-    if (!started) {
-      started = true;
-      toast(content, {
+  const report = (next: FinalStage, detail?: string) => {
+    toast(
+      React.createElement(ToastBody, {
+        title: opts.title,
+        detail: detail?.trim() || stageLabel(next),
+      }),
+      {
         toastId,
-        autoClose: false,
-        closeOnClick: false,
+        className: FINAL_CLASS[next],
+        autoClose: next === 'done' ? 2200 : 5000,
+        closeOnClick: true,
         draggable: false,
-        className,
-      });
-    } else {
-      toast.update(toastId, {
-        render: content,
-        className,
-        autoClose: next === 'done' ? 2200 : next === 'error' ? 5000 : false,
-        closeOnClick: next === 'done' || next === 'error',
-      });
-    }
+      },
+    );
   };
 
   const setStage = (next: MutationStage) => {
     stage = next;
     setKeysStage(keys, next);
-    render(next);
   };
 
   setStage('saving');
@@ -147,22 +154,24 @@ export function startTaskMutationProgress(
       setKeysStage(keys, null);
       taskKey = nextKey;
       keys = allKeys(taskKey, opts.relatedKeys);
+      motion?.addKey(nextKey);
       setKeysStage(keys, stage);
     },
     finish: (detail?: string) => {
       stage = 'done';
-      setKeysStage(keys, 'done');
-      render('done', detail);
-      window.setTimeout(() => setKeysStage(keys, null), 2400);
+      setKeysStage(keys, null);
+      motion?.settle('done');
+      report('done', detail);
     },
     fail: (detail?: string) => {
       stage = 'error';
-      setKeysStage(keys, 'error');
-      render('error', detail);
-      window.setTimeout(() => setKeysStage(keys, null), 5200);
+      setKeysStage(keys, null);
+      motion?.settle('error');
+      report('error', detail);
     },
     dismiss: () => {
       setKeysStage(keys, null);
+      motion?.settle('cancel');
       toast.dismiss(toastId);
     },
   };

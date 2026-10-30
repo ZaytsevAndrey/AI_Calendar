@@ -17,17 +17,21 @@ function Pill({
   tone,
   label,
   onClick,
+  motionTarget,
 }: {
   icon: typeof Bell;
   count: number;
   tone: 'neutral' | 'warning' | 'danger';
   label: string;
   onClick: () => void;
+  /** Cards parked or moved to «На потім» fly into this counter. */
+  motionTarget?: 'problems' | 'later';
 }) {
   return (
     <button
       type="button"
       aria-label={label}
+      data-motion-target={motionTarget}
       onClick={(event) => {
         event.stopPropagation();
         onClick();
@@ -60,6 +64,7 @@ export function TodayBar({ today, problematicCount, onOpen }: Props) {
       role="button"
       tabIndex={0}
       data-testid="today-bar"
+      data-motion-target="today"
       aria-label={t('today.open')}
       onClick={() => onOpen()}
       onKeyDown={(event) => {
@@ -83,6 +88,7 @@ export function TodayBar({ today, problematicCount, onOpen }: Props) {
           tone="warning"
           label={t('schedule.problematicChip', { count: problematicCount })}
           onClick={() => onOpen('problems')}
+          motionTarget="problems"
         />
       ) : null}
       {dueReminders.length > 0 ? (
@@ -101,6 +107,7 @@ export function TodayBar({ today, problematicCount, onOpen }: Props) {
           tone="neutral"
           label={t('today.laterCount', { count: later.length })}
           onClick={() => onOpen('later')}
+          motionTarget="later"
         />
       ) : null}
       <ChevronUp className="h-4 w-4 shrink-0 text-ide-muted" aria-hidden />

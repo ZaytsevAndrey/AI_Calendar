@@ -15,6 +15,7 @@ import {
   runTaskMutationProgress,
   type MutationStage,
 } from 'modules/schedule/taskMutationProgress';
+import type { TaskMutationProgressOptions } from 'modules/schedule/taskMutationProgress';
 import i18n from 'i18next';
 import { describeStoredTask } from 'modules/voice/summarizeStoredTask';
 
@@ -52,6 +53,30 @@ async function refreshAfterSilentReplan(
   }
   dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));
   dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+}
+
+function isoMs(iso: string | null | undefined): number | undefined {
+  if (!iso) return undefined;
+  const ms = new Date(iso).getTime();
+  return Number.isFinite(ms) ? ms : undefined;
+}
+
+/** A task leaving «На потім» or the problem list lands on the grid from that panel section. */
+function updateMotion(
+  existing: TaskDTO | undefined,
+  body: UpdateTaskDTO,
+): TaskMutationProgressOptions['motion'] {
+  const from =
+    existing?.scheduleState === 'problematic'
+      ? 'problems'
+      : existing?.isUnscheduled && body.isUnscheduled !== true
+        ? 'later'
+        : undefined;
+  return {
+    kind: from && body.scheduledStartTime ? 'place' : 'edit',
+    from,
+    targetMs: isoMs(body.scheduledStartTime),
+  };
 }
 
 export const eventTasksApi = createApi({
@@ -115,6 +140,7 @@ export const eventTasksApi = createApi({
           await runTaskMutationProgress({
             taskKey: tempId,
             title: arg.name,
+            motion: { kind: 'create', targetMs: isoMs(arg.scheduledStartTime) },
             run: async (progress) => {
               const { data } = await queryFulfilled;
               progress.retarget(data.id);
@@ -157,6 +183,7 @@ export const eventTasksApi = createApi({
             taskKey: arg.id,
             title,
             relatedKeys: existing?.googleEventId ? [existing.googleEventId] : undefined,
+            motion: updateMotion(existing, arg.body),
             run: async (progress) => {
               const { data } = await queryFulfilled;
               await refreshAfterSilentReplan(dispatch, data, (stage) => {
@@ -205,6 +232,7 @@ export const eventTasksApi = createApi({
           await runTaskMutationProgress({
             taskKey: id,
             title,
+            motion: { kind: 'delete' },
             relatedKeys: existing?.googleEventId ? [existing.googleEventId] : undefined,
             run: async (progress) => {
               await queryFulfilled;
@@ -266,6 +294,7 @@ export const eventTasksApi = createApi({
           await runTaskMutationProgress({
             taskKey: id,
             title,
+            motion: { kind: 'delete' },
             relatedKeys: eventId ? [eventId] : undefined,
             run: async (progress) => {
               const { data } = await queryFulfilled;
@@ -317,6 +346,7 @@ export const eventTasksApi = createApi({
           await runTaskMutationProgress({
             taskKey: id,
             title,
+            motion: { kind: 'place', from: 'problems' },
             run: async (progress) => {
               await queryFulfilled;
               progress.setStage('syncing');
@@ -351,6 +381,7 @@ export const eventTasksApi = createApi({
           await runTaskMutationProgress({
             taskKey: id,
             title,
+            motion: { kind: 'delete' },
             relatedKeys: existing?.googleEventId ? [existing.googleEventId] : undefined,
             run: async (progress) => {
               const { data } = await queryFulfilled;

@@ -118,22 +118,7 @@
     height: 3px;
 }
 
-/* Task mutation progress stages (save → place → sync → done) */
-.app-toast-stage-saving {
-    background: linear-gradient(90deg, rgb(var(--ide-warn) / 0.2), rgb(var(--ide-panel)) 36%) !important;
-    border-left-color: rgb(var(--ide-warn)) !important;
-}
-
-.app-toast-stage-placing {
-    background: linear-gradient(90deg, rgb(var(--ide-link) / 0.2), rgb(var(--ide-panel)) 36%) !important;
-    border-left-color: rgb(var(--ide-link)) !important;
-}
-
-.app-toast-stage-syncing {
-    background: linear-gradient(90deg, rgba(167, 139, 250, 0.22), rgb(var(--ide-panel)) 36%) !important;
-    border-left-color: rgb(var(--ph-violet)) !important;
-}
-
+/* Task write result (the stages show on the calendar card). */
 .app-toast-stage-done {
     background: linear-gradient(90deg, rgb(var(--ide-accent) / 0.2), rgb(var(--ide-panel)) 36%) !important;
     border-left-color: rgb(var(--ide-accent)) !important;
@@ -513,27 +498,203 @@
     color: rgb(var(--ide-text));
 }
 
-.calendar-event-stage-saving {
-    box-shadow: inset 3px 0 0 0 rgb(var(--ide-warn)), inset 0 0 0 1px rgb(var(--ide-warn) / 0.55) !important;
-    filter: saturate(1.15);
+/* Card motion (calendar/motion, design-system.md «Анімації карток»).
+   Color stays the phase; the action reads as shape and fill:
+   busy = the left bar fills bottom-up with the server stages,
+   forming = a dashed card whose content shows up as it fills,
+   emptying = the old card fading out while the new one fills,
+   erasing = hatched and faded until the eraser sweeps it away.
+   --motion-p is 0…1 (saving .3, placing .6, syncing .85). */
+:root {
+    --motion-lift-shadow: var(--ide-shadow-md);
 }
 
-.calendar-event-stage-placing {
-    box-shadow: inset 3px 0 0 0 rgb(var(--ide-link)), inset 0 0 0 1px rgb(var(--ide-link) / 0.55) !important;
-    filter: saturate(1.15);
+.motion-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    overflow: hidden;
+    pointer-events: none;
 }
 
-.calendar-event-stage-syncing {
-    box-shadow: inset 3px 0 0 0 rgb(var(--ph-violet)), inset 0 0 0 1px rgb(var(--ph-violet) / 0.55) !important;
-    filter: saturate(1.15);
+.motion-ghost {
+    pointer-events: none !important;
 }
 
-.calendar-event-stage-done {
-    box-shadow: inset 3px 0 0 0 rgb(var(--ide-accent)), inset 0 0 0 1px rgb(var(--ide-accent) / 0.55) !important;
+.motion-ghost.calendar-chip:hover {
+    box-shadow: inset 3px 0 0 0 var(--chip-color);
 }
 
-.calendar-event-stage-error {
-    box-shadow: inset 3px 0 0 0 rgb(var(--ide-error)), inset 0 0 0 1px rgb(var(--ide-error) / 0.55) !important;
+.motion-row {
+    position: relative;
+    overflow: hidden;
+}
+
+.calendar-chip[data-motion] .calendar-chip__title,
+.calendar-chip[data-motion] .calendar-chip__sub,
+.calendar-chip[data-motion] .calendar-chip__time {
+    transition: opacity 320ms ease, filter 320ms ease;
+}
+
+.calendar-chip[data-motion='busy'],
+.calendar-chip[data-motion='forming'],
+.calendar-chip[data-motion='emptying'] {
+    box-shadow: inset 3px 0 0 0 color-mix(in srgb, var(--chip-color) 30%, transparent);
+}
+
+.calendar-chip[data-motion='busy']::before,
+.calendar-chip[data-motion='forming']::before,
+.calendar-chip[data-motion='emptying']::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 3px;
+    height: 100%;
+    background: var(--chip-color);
+    transform: scaleY(var(--motion-p, 0.3));
+    transform-origin: bottom;
+    transition: transform 480ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    pointer-events: none;
+}
+
+.calendar-chip[data-motion='emptying']::before {
+    transform: scaleY(calc(1 - var(--motion-p, 0.3)));
+    transform-origin: top;
+}
+
+.calendar-chip[data-motion='busy']::after,
+.calendar-chip[data-motion='forming']::after,
+.motion-row[data-motion='busy']::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        100deg,
+        transparent 30%,
+        rgb(var(--ide-text) / 0.07) 50%,
+        transparent 70%
+    );
+    background-size: 220% 100%;
+    animation: motion-shimmer 1.4s linear infinite;
+    pointer-events: none;
+}
+
+.calendar-chip[data-motion='forming'] {
+    border-style: dashed;
+    border-color: color-mix(in srgb, var(--chip-color) 70%, transparent);
+    background: color-mix(in srgb, var(--chip-color) calc(var(--phase-tint, 18%) * 0.5), rgb(var(--ide-panel)));
+}
+
+.calendar-chip[data-motion='forming'] .calendar-chip__title,
+.calendar-chip[data-motion='forming'] .calendar-chip__sub {
+    opacity: calc(0.2 + var(--motion-p, 0.3) * 0.8);
+}
+
+.calendar-chip[data-motion='emptying'] {
+    /* The shell sits in the layer above the grid: let an overlapping new card show through. */
+    opacity: calc(0.9 - var(--motion-p, 0.3) * 0.45);
+    border-style: dashed;
+    background: color-mix(in srgb, var(--chip-color) calc(var(--phase-tint, 18%) * 0.5), rgb(var(--ide-panel)));
+}
+
+.calendar-chip[data-motion='emptying'] .calendar-chip__title,
+.calendar-chip[data-motion='emptying'] .calendar-chip__sub {
+    opacity: calc(1 - var(--motion-p, 0.3) * 0.85);
+    filter: saturate(calc(1 - var(--motion-p, 0.3) * 0.7));
+}
+
+.calendar-chip[data-motion='flying'] {
+    border-style: solid;
+}
+
+/* Only the shell flies over; its content already moved to the new card. */
+.calendar-chip[data-motion='flying'] .calendar-chip__title,
+.calendar-chip[data-motion='flying'] .calendar-chip__sub {
+    opacity: 0.15;
+}
+
+/* Two classes deep so it beats the chip's :hover / :focus-within fill. */
+.calendar-chip[data-motion='erasing'],
+.motion-row[data-motion='erasing'] {
+    border-style: dashed;
+    background-image: repeating-linear-gradient(
+        135deg,
+        transparent 0 5px,
+        rgb(var(--ide-text) / 0.1) 5px 10px
+    );
+}
+
+.calendar-chip[data-motion='erasing'] > *,
+.motion-row[data-motion='erasing'] > * {
+    opacity: 0.45;
+    transition: opacity 240ms ease;
+}
+
+.motion-row[data-motion='busy']::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 2px;
+    width: 100%;
+    background: rgb(var(--ide-link));
+    transform: scaleX(var(--motion-p, 0.3));
+    transform-origin: left;
+    transition: transform 480ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    pointer-events: none;
+}
+
+.motion-pulse {
+    animation: motion-pulse 640ms cubic-bezier(0.3, 0.7, 0.4, 1);
+}
+
+.motion-edge-label {
+    position: absolute;
+    padding: 4px 10px;
+    border: 1px solid rgb(var(--ide-border));
+    border-radius: 999px;
+    background: rgb(var(--ide-elevated));
+    box-shadow: var(--ide-shadow-md);
+    color: rgb(var(--ide-text));
+    font-size: 12px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+@keyframes motion-shimmer {
+    from {
+        background-position: 120% 0;
+    }
+    to {
+        background-position: -120% 0;
+    }
+}
+
+@keyframes motion-pulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgb(var(--ide-link) / 0.45);
+    }
+    35% {
+        transform: scale(1.12);
+    }
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 10px rgb(var(--ide-link) / 0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .calendar-chip[data-motion]::after,
+    .motion-row[data-motion]::after {
+        animation: none;
+    }
+
+    .motion-pulse {
+        animation: none;
+    }
 }
 
 /* Phone: toasts sit above the tab bar, where the thumb is, not over the app bar. */

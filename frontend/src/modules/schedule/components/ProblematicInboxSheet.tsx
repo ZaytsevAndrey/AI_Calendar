@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TaskDTO } from 'api/tasks.api';
 import { Modal } from '../../../ui/Modal';
@@ -13,6 +13,7 @@ import {
 } from '../problematicItems';
 import { MoveOccurrenceSheet } from './MoveOccurrenceSheet';
 import { ProblematicItemCard } from './ProblematicItemCard';
+import { useMotionPresence } from '../../calendar/motion/useMotionPresence';
 
 type Props = {
   open: boolean;
@@ -44,6 +45,10 @@ export function ProblematicInboxSheet({
     [tasks, dayHints, todayYmd],
   );
 
+  // A card that gets a slot flies from this list to the grid (calendar/motion).
+  const listRef = useRef<HTMLDivElement>(null);
+  useMotionPresence(listRef, { resetKey: open ? 'open' : 'closed' });
+
   const edit = (item: ProblematicItem) => {
     // A new clock saved from the form seats it: the user's own doing.
     markProblematicHandled(item.task.id);
@@ -66,7 +71,7 @@ export function ProblematicInboxSheet({
         ) : (
           <>
             <p className="mb-4 text-body-sm text-ide-muted">{t('schedule.problematicIntro')}</p>
-            <div className="flex flex-col gap-5">
+            <div ref={listRef} className="flex flex-col gap-5" data-motion-scroll>
               {groups.map((group) => (
                 <section key={group.ymd ?? 'none'}>
                   <h3 className="mb-2 text-body-sm font-medium text-ide-muted">

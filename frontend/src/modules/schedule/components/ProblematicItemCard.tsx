@@ -30,6 +30,7 @@ import type { ProblematicItem } from '../problematicItems';
 import { preferredMsOnDay, suggestedStarts } from '../slotPickMath';
 import { phaseIdForMovedSlot, phaseWindowsForDay } from '../slotPickPhases';
 import { phaseColor } from 'theme/phasePalette';
+import { cardMotionState } from '../../calendar/motion/cardMotion';
 
 type Props = {
   item: ProblematicItem;
@@ -202,7 +203,10 @@ export function ProblematicItemCard({ item, timeZone, todayYmd, onMove, onEdit }
 
   return (
     <li
-      className="task-item relative flex flex-col gap-2 overflow-hidden rounded-control border border-ide-border bg-ide-panel p-3 pl-4"
+      data-motion-id={item.key}
+      data-motion-keys={task.id}
+      data-motion={cardMotionState([task.id]) ?? undefined}
+      className="motion-row task-item relative flex flex-col gap-2 overflow-hidden rounded-control border border-ide-border bg-ide-panel p-3 pl-4"
       aria-busy={disabled}
     >
       <span
