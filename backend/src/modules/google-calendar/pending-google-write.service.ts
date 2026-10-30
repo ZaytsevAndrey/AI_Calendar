@@ -201,6 +201,9 @@ export class PendingGoogleWriteService implements OnModuleInit, OnModuleDestroy 
     return result.affected ?? 0;
   }
 
+  /** Claim lease; renewed by a heartbeat while a send runs. Tests shorten it. */
+  leaseMs = GOOGLE_WRITE_LEASE_MS;
+
   /** Recently seen connection state per user (a revoked grant is not re-checked every pass). */
   private readonly connection = new Map<string, { connected: boolean; at: number }>();
 
@@ -300,7 +303,7 @@ export class PendingGoogleWriteService implements OnModuleInit, OnModuleDestroy 
       {
         status: 'running',
         attempts: row.attempts + 1,
-        leaseUntil: new Date(Date.now() + GOOGLE_WRITE_LEASE_MS),
+        leaseUntil: new Date(Date.now() + this.leaseMs),
       },
     );
     if (!result.affected) return false;
@@ -311,8 +314,29 @@ export class PendingGoogleWriteService implements OnModuleInit, OnModuleDestroy 
   /**
    * Perform one claimed row. `again`: sent, but the task changed during the
    * send (newer revision), so the row is pending again for the newest state.
+   * Every outcome is written only while this worker still owns the claim
+   * (status running + the attempts it claimed): a worker whose lease was
+   * taken over cannot overwrite the newer one (AUD-007).
    */
   private async send(row: PendingGoogleWrite): Promise<'sent' | 'again' | 'failed'> {
+    const owned = { id: row.id, status: 'running' as const, attempts: row.attempts };
+    // A live sender keeps its lease; a dead one stops renewing and is taken over.
+    const heartbeat = setInterval(() => {
+      void this.pendingRepo
+        .update(owned, { leaseUntil: new Date(Date.now() + this.leaseMs) })
+        .catch(() => undefined);
+    }, Math.max(50, Math.floor(this.leaseMs / 4)));
+    try {
+      return await this.sendOwned(row, owned);
+    } finally {
+      clearInterval(heartbeat);
+    }
+  }
+
+  private async sendOwned(
+    row: PendingGoogleWrite,
+    owned: { id: string; status: 'running'; attempts: number },
+  ): Promise<'sent' | 'again' | 'failed'> {
     try {
       if (row.operation === 'delete') {
         await this.processDelete(row);
@@ -326,21 +350,29 @@ export class PendingGoogleWriteService implements OnModuleInit, OnModuleDestroy 
         GOOGLE_WRITE_BACKOFF_MAX_MS,
         GOOGLE_WRITE_BACKOFF_BASE_MS * 2 ** (row.attempts - 1),
       );
-      await this.pendingRepo.update(
-        { id: row.id },
-        final
-          ? { status: 'failed', leaseUntil: null, nextRunAt: null, lastError: message.slice(0, 2000) }
-          : {
-              status: 'pending',
-              leaseUntil: null,
-              nextRunAt: new Date(Date.now() + delay),
-              lastError: message.slice(0, 2000),
-              // The failed request may still have reached Google: an `updated`
-              // from it must not count as a user edit later (AUD-010).
-              enqueuedAt: new Date(),
-            },
-      );
+      const retry = {
+        status: 'pending' as const,
+        leaseUntil: null,
+        nextRunAt: new Date(Date.now() + delay),
+        lastError: message.slice(0, 2000),
+        // The failed request may still have reached Google: an `updated`
+        // from it must not count as a user edit later (AUD-010).
+        enqueuedAt: new Date(),
+      };
+      let terminal = false;
       if (final) {
+        // Terminal only for the revision this attempt sent (AUD-023).
+        const failed = await this.pendingRepo.update(
+          { ...owned, revision: row.revision },
+          { status: 'failed', leaseUntil: null, nextRunAt: null, lastError: message.slice(0, 2000) },
+        );
+        terminal = !!failed.affected;
+        // A newer change arrived during the send: that is new work.
+        if (!terminal) await this.pendingRepo.update(owned, { ...retry, attempts: 0 });
+      } else {
+        await this.pendingRepo.update(owned, retry);
+      }
+      if (terminal) {
         this.logger.error(
           `Pending Google ${row.operation} ${row.id} failed after ${row.attempts} attempts: ${message}`,
         );
@@ -353,14 +385,15 @@ export class PendingGoogleWriteService implements OnModuleInit, OnModuleDestroy 
     }
     // Sent. A failure queued meanwhile (newer revision) is work this pass did
     // not see: put the row back instead of deleting it.
-    const removed = await this.pendingRepo.delete({ id: row.id, revision: row.revision });
+    const removed = await this.pendingRepo.delete({ ...owned, revision: row.revision });
     if (!removed.affected) {
-      await this.pendingRepo.update(
-        { id: row.id },
+      const requeued = await this.pendingRepo.update(
+        owned,
         // We just wrote: our own `updated` is not a user edit (AUD-010).
         { status: 'pending', leaseUntil: null, nextRunAt: null, enqueuedAt: new Date() },
       );
-      return 'again';
+      // Not ours any more (taken over): the new owner finishes it.
+      return requeued.affected ? 'again' : 'sent';
     }
     return 'sent';
   }

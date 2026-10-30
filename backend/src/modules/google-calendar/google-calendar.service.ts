@@ -55,6 +55,9 @@ export function isGoogleEventMissing(err: unknown): boolean {
   return status === 404 || status === 410;
 }
 
+/** Timeout of each Google API request; below the 2-minute queue leases. */
+export const GOOGLE_REQUEST_TIMEOUT_MS = 30_000;
+
 /** HTTP status of a googleapis error, wherever the client put it. */
 export function googleErrorStatus(err: unknown): number | null {
   const e = (err ?? {}) as {
@@ -187,6 +190,10 @@ export class GoogleCalendarService {
     this.logger.log(`Client ID: ${clientId ? 'SET' : 'NOT SET'}`);
     this.logger.log(`Client Secret: ${clientSecret ? 'SET' : 'NOT SET'}`);
     this.logger.log(`Redirect URI: ${redirectUri}`);
+
+    // Every Google API call ends well inside the queue leases (2 min):
+    // a hung request cannot hold a worker indefinitely (AUD-007).
+    google.options({ timeout: GOOGLE_REQUEST_TIMEOUT_MS });
 
     this.oauthConfig = [
       clientId,

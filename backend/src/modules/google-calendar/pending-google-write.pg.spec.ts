@@ -149,3 +149,100 @@ describePg('Google write queue on Postgres', () => {
     expect((await repo.findOneByOrFail({ googleEventId: 'g-held' })).status).toBe('running');
   });
 });
+
+/** AUD-007 for Google sends on Postgres, two independent connections. */
+describePg('Google send leases on Postgres (AUD-007)', () => {
+  jest.setTimeout(60_000);
+  let admin: DataSource;
+  let one: DataSource;
+  let two: DataSource;
+  let name: string;
+
+  beforeAll(async () => {
+    Logger.overrideLogger(['error']);
+    admin = await new DataSource({ type: 'postgres', url }).initialize();
+    name = `luefy_glease_${randomUUID().slice(0, 8)}`;
+    await admin.query(`CREATE DATABASE "${name}"`);
+    const target = new URL(url!);
+    target.pathname = `/${name}`;
+    one = await new DataSource({ type: 'postgres', url: target.toString(), entities, synchronize: true }).initialize();
+    two = await new DataSource({ type: 'postgres', url: target.toString(), entities }).initialize();
+  });
+
+  afterAll(async () => {
+    await one?.destroy();
+    await two?.destroy();
+    await admin?.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+    await admin?.destroy();
+  });
+
+  const user = '00000000-0000-4000-8000-0000000000ee';
+  const serviceOn = (ds: DataSource, google: Record<string, unknown>, leaseMs: number) => {
+    const service = new PendingGoogleWriteService(
+      ds.getRepository(PendingGoogleWrite),
+      ds.getRepository(Task),
+      ds.getRepository(ScheduledTask),
+      ds.getRepository(UserSettings),
+      google as never,
+    );
+    (service as unknown as { leaseMs: number }).leaseMs = leaseMs;
+    return service;
+  };
+  const queueDelete = (eventId: string) =>
+    one.getRepository(PendingGoogleWrite).save({ userId: user, taskId: null, googleEventId: eventId, operation: 'delete' } as never);
+
+  it('a slow live send keeps its lease: the other instance never sends it again', async () => {
+    const calls: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const slow = { checkConnection: async () => ({ connected: true }), deleteEvent: async () => { calls.push('a'); await gate; } };
+    const fast = { checkConnection: async () => ({ connected: true }), deleteEvent: async () => { calls.push('b'); } };
+    await queueDelete('slow-1');
+    const a = serviceOn(one, slow, 400);
+    const b = serviceOn(two, fast, 400);
+    const running = a.processQueue();
+    try {
+      for (let i = 0; i < 12; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        await b.processQueue();
+      }
+    } finally {
+      release();
+      await running;
+    }
+    expect(calls).toEqual(['a']);
+    expect(await one.getRepository(PendingGoogleWrite).countBy({ googleEventId: 'slow-1' })).toBe(0);
+  });
+
+  it('a sender whose lease was taken over cannot overwrite the newer worker\'s outcome', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const stale = {
+      checkConnection: async () => ({ connected: true }),
+      deleteEvent: async () => {
+        await gate;
+        throw Object.assign(new Error('stale worker 503'), { status: 503 });
+      },
+    };
+    const newer = {
+      checkConnection: async () => ({ connected: true }),
+      deleteEvent: async () => {
+        throw Object.assign(new Error('newer worker 503'), { status: 503 });
+      },
+    };
+    const row = await queueDelete('taken-1');
+    const a = serviceOn(one, stale, 10_000); // stalls: next heartbeat is seconds away
+    const b = serviceOn(two, newer, 400);
+    const running = a.processQueue();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await one.getRepository(PendingGoogleWrite).update({ id: (row as unknown as { id: string }).id }, { leaseUntil: new Date(Date.now() - 1000) });
+    try {
+      await b.processQueue();
+    } finally {
+      release();
+      await running;
+    }
+    const after = await one.getRepository(PendingGoogleWrite).findOneByOrFail({ googleEventId: 'taken-1' });
+    expect(after).toMatchObject({ status: 'pending', attempts: 2, lastError: 'newer worker 503' });
+  });
+});

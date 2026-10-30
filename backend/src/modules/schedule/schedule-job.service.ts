@@ -37,6 +37,8 @@ function isMutationPayload(json: string | null): boolean {
 export class ScheduleJobService {
   private readonly logger = new Logger(ScheduleJobService.name);
   private readonly handlers = new Map<string, MutationHandler>();
+  /** Claim lease; renewed by a heartbeat while the handler runs. Tests shorten it. */
+  leaseMs = MUTATION_LEASE_MS;
   private readonly inflight = new Set<Promise<void>>();
 
   constructor(
@@ -157,7 +159,7 @@ export class ScheduleJobService {
     const result = await qb
       .set({
         status: 'running',
-        leaseUntil: new Date(now.getTime() + MUTATION_LEASE_MS),
+        leaseUntil: new Date(now.getTime() + this.leaseMs),
         attempts: () => `${col('attempts')} + 1`,
       })
       .where(`${col('id')} = :id`, { id: jobId })
@@ -174,25 +176,39 @@ export class ScheduleJobService {
   private async execute(jobId: string): Promise<void> {
     const job = await this.jobRepo.findOne({ where: { id: jobId } });
     if (!job) return;
+    // This worker's claim: every outcome it writes is fenced on it, so a
+    // worker whose lease was taken over cannot overwrite the newer one (AUD-007).
+    const fence = { attempts: job.attempts };
     const payload = parsePayload(job.payloadJson);
     if (payload.inline) {
       // Its request owned the work and never finished it (process died).
-      await this.failMutationJob(jobId, 'Interrupted before it finished. Check the item and try again.');
+      await this.failMutationJob(jobId, 'Interrupted before it finished. Check the item and try again.', fence);
       return;
     }
     const handler = this.handlers.get(String(payload.op ?? ''));
     if (!handler) {
-      await this.failMutationJob(jobId, `No handler for mutation "${String(payload.op)}"`);
+      await this.failMutationJob(jobId, `No handler for mutation "${String(payload.op)}"`, fence);
       return;
     }
+    // A live worker keeps its lease; a dead one stops renewing and is taken over.
+    const heartbeat = setInterval(() => {
+      void this.jobRepo
+        .update(
+          { id: jobId, status: 'running', attempts: fence.attempts },
+          { leaseUntil: new Date(Date.now() + this.leaseMs) },
+        )
+        .catch(() => undefined);
+    }, Math.max(50, Math.floor(this.leaseMs / 4)));
     try {
       const result = await handler({ id: job.id, userId: job.userId, payload });
       // Some handlers finish their own job (with a result or a refusal).
       const after = await this.jobRepo.findOne({ where: { id: jobId } });
       if (after && (after.status === 'done' || after.status === 'failed')) return;
-      await this.completeMutationJob(jobId, result ?? undefined);
+      await this.completeMutationJob(jobId, result ?? undefined, fence);
     } catch (err: unknown) {
       await this.failOrRetry(job, err);
+    } finally {
+      clearInterval(heartbeat);
     }
   }
 
@@ -208,13 +224,14 @@ export class ScheduleJobService {
       if (!refused) {
         this.logger.error(`Mutation job ${job.id} failed after ${attempts} attempts: ${message}`);
       }
-      await this.failMutationJob(job.id, message);
+      await this.failMutationJob(job.id, message, { attempts });
       return;
     }
     const delay = Math.min(MUTATION_BACKOFF_MAX_MS, MUTATION_BACKOFF_BASE_MS * 2 ** (attempts - 1));
     this.logger.warn(`Mutation job ${job.id} attempt ${attempts} failed (${message}); retry in ${delay} ms`);
     await this.jobRepo.update(
-      { id: job.id },
+      // Only while this attempt still owns the job (AUD-007).
+      { id: job.id, status: 'running', attempts },
       {
         status: 'pending',
         progressStage: 'retrying',
@@ -254,19 +271,18 @@ export class ScheduleJobService {
     );
   }
 
+  /** Progress only; never brings a finished job back to running (AUD-007). */
   async setMutationStage(jobId: string, stage: string): Promise<void> {
-    await this.jobRepo.update(
-      { id: jobId },
-      { progressStage: stage, status: 'running' },
-    );
+    await this.jobRepo.update({ id: jobId, status: 'running' }, { progressStage: stage });
   }
 
   async completeMutationJob(
     jobId: string,
     result?: Record<string, unknown>,
+    fence?: { attempts: number },
   ): Promise<void> {
     await this.jobRepo.update(
-      { id: jobId },
+      fence ? { id: jobId, status: 'running', attempts: fence.attempts } : { id: jobId },
       {
         status: 'done',
         progressStage: 'done',
@@ -276,9 +292,9 @@ export class ScheduleJobService {
     );
   }
 
-  async failMutationJob(jobId: string, message: string): Promise<void> {
+  async failMutationJob(jobId: string, message: string, fence?: { attempts: number }): Promise<void> {
     await this.jobRepo.update(
-      { id: jobId },
+      fence ? { id: jobId, status: 'running', attempts: fence.attempts } : { id: jobId },
       {
         status: 'failed',
         progressStage: 'error',

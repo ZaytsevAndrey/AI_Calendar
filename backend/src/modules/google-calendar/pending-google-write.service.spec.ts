@@ -583,7 +583,8 @@ describe('PendingGoogleWriteService', () => {
     await service.processQueue();
     expect(google.createEvent).not.toHaveBeenCalled();
     expect(google.deleteEvent).toHaveBeenCalledWith('u1', 'g-stale', 'primary');
-    expect(pendingRepo.delete).toHaveBeenCalledWith({ id: 'p1', revision: 0 });
+    // Deleted for the sent revision, fenced on this worker's claim (AUD-007).
+    expect(pendingRepo.delete).toHaveBeenCalledWith({ id: 'p1', revision: 0, status: 'running', attempts: 1 });
     expect(pendingRepo.rows).toEqual([]);
   });
 
@@ -636,7 +637,8 @@ describe('PendingGoogleWriteService', () => {
     );
     expect(taskRepo.save).not.toHaveBeenCalled();
     expect(google.updateEvent).not.toHaveBeenCalled();
-    expect(pendingRepo.delete).toHaveBeenCalledWith({ id: 'p1', revision: 0 });
+    // Deleted for the sent revision, fenced on this worker's claim (AUD-007).
+    expect(pendingRepo.delete).toHaveBeenCalledWith({ id: 'p1', revision: 0, status: 'running', attempts: 1 });
     expect(pendingRepo.rows).toEqual([]);
   });
 });

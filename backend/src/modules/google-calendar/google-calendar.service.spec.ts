@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { GoogleCalendarService, GoogleEventMissingError, isGoogleEventMissing } from './google-calendar.service';
+import {
+  GOOGLE_REQUEST_TIMEOUT_MS,
+  GoogleCalendarService,
+  GoogleEventMissingError,
+  isGoogleEventMissing,
+} from './google-calendar.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { User } from '../users/user.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
@@ -37,6 +42,7 @@ jest.mock('googleapis', () => {
   globalThis.__gcalApiTestMocks = m;
   return {
     google: {
+      options: jest.fn(),
       auth: {
         OAuth2: jest.fn().mockImplementation(() => ({
           generateAuthUrl: jest.fn().mockReturnValue('mock-auth-url'),
@@ -192,6 +198,12 @@ describe('GoogleCalendarService', () => {
       );
       expect(seen.size).toBe(1);
     }
+  });
+
+  it('AUD-007: sets a Google request timeout below the queue leases', () => {
+    const { google } = jest.requireMock('googleapis');
+    expect(google.options).toHaveBeenCalledWith({ timeout: GOOGLE_REQUEST_TIMEOUT_MS });
+    expect(GOOGLE_REQUEST_TIMEOUT_MS).toBeLessThan(2 * 60_000);
   });
 
   it('should generate auth url', () => {

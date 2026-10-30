@@ -226,6 +226,19 @@ describe('Google write queue', () => {
     expect(await repo().findOneBy({ googleEventId: 'g-1' })).toBeNull();
   });
 
+  it('AUD-023: a newer change that arrives during the last attempt is not buried as failed', async () => {
+    await queueDelete('u1', 'g-1', { attempts: GOOGLE_WRITE_MAX_ATTEMPTS - 1 });
+    google.deleteEvent.mockImplementationOnce(async () => {
+      await writes.enqueue('u1', 'delete', { googleEventId: 'g-1', error: 'newer change' });
+      throw Object.assign(new Error('Backend Error'), { status: 503 });
+    });
+
+    await writes.processQueue();
+
+    const row = await repo().findOneByOrFail({ googleEventId: 'g-1' });
+    expect(row).toMatchObject({ status: 'pending', attempts: 0 });
+  });
+
   it('a new failure revives a terminally failed row with fresh attempts', async () => {
     await queueDelete('u1', 'g-1', { status: 'failed', attempts: GOOGLE_WRITE_MAX_ATTEMPTS });
     await writes.enqueue('u1', 'delete', { googleEventId: 'g-1', error: 'again' });
