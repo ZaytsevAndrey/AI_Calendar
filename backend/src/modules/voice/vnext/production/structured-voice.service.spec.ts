@@ -629,6 +629,27 @@ describe('structured recurring tasks and occurrence scope', () => {
     expect(all.intents[0]).toMatchObject({ type: 'command', command: { kind: 'delete', taskId: 'gym' } });
   });
 
+  // VC-06: a series-wide write and a one-day write of a repeating task must not read like a one-off.
+  it('names the series scope in every preview summary and carries it on the command', async () => {
+    const one = await run('delete gym on wednesday', { seriesScope: 'occurrence', occurrence: '2026-10-21' });
+    expect(one.intents[0]?.summary).toBe('Skip “Gym” on 2026-10-21 — this day only');
+    const tail = await run('delete gym from wednesday on', { seriesScope: 'from_day', occurrence: '2026-10-21' });
+    expect(tail.intents[0]?.summary).toBe('End the series “Gym” from 2026-10-21 — this day and following');
+    const all = await run('delete gym completely', { seriesScope: 'all' });
+    expect(all.intents[0]?.summary).toBe('Delete “Gym” — the whole series');
+    expect(all.intents[0]).toMatchObject({ command: { kind: 'delete', seriesScope: 'all' } });
+    const done = await run('gym is done for good', { action: 'complete', seriesScope: 'all', changes: { status: 'completed' } });
+    expect(done.intents[0]?.summary).toBe('Mark done “Gym” — the whole series');
+    expect(done.intents[0]).toMatchObject({ command: { kind: 'complete', seriesScope: 'all' } });
+    const moved = await run('move all gyms to 15:00', {
+      action: 'move',
+      seriesScope: 'all',
+      occurrence: '2026-10-21',
+      constraints: [{ kind: 'date', value: '2026-10-21', precision: 'day' }, { kind: 'clock', value: '15:00', role: 'start' }],
+    });
+    expect(moved.intents[0]?.summary).toBe('Move “Gym” to 2026-10-21 15:00 — every open day');
+  });
+
   it('skips one occurrence', async () => {
     const result = await run('skip gym on monday', { action: 'skip', seriesScope: 'occurrence', occurrence: '2026-10-19' });
     expect(result.outcome).toBe('confirm');
@@ -679,7 +700,7 @@ describe('structured recurring tasks and occurrence scope', () => {
   it('completes one occurrence by clearing that day, and refuses it from a day on', async () => {
     const complete = await run('done with gym today', { action: 'complete', seriesScope: 'occurrence', occurrence: '2026-10-19' });
     expect(complete.intents[0]).toMatchObject({
-      summary: 'Mark done and clear from the calendar “Gym” on 2026-10-19',
+      summary: 'Mark done and clear from the calendar “Gym” on 2026-10-19 — this day only',
       command: { kind: 'skip', taskId: 'gym', occurrenceStart: '2026-10-19T07:00:00.000Z' },
     });
     const tail = await run('done with gym from today', { action: 'complete', seriesScope: 'from_day', occurrence: '2026-10-19' });
@@ -751,6 +772,67 @@ describe('scheduling behavior is independent of recurrence (scheduling refactor)
       weekly,
       { kind: 'clock', value: '18:00', role: 'start' },
     ]))).toMatchObject({ eventType: 'admin', isRecurring: true, scheduledStartTime: '2026-10-19T15:00:00.000Z' });
+  });
+
+  // VC-01 / VC-13: on a series, deadline is the series end and earliestStartTime is its first day
+  // (seriesAnchorYmd / untilMs in placement-step.service.ts). A one-day window would end the series
+  // after its first day, and isUnscheduled would show the series as Later.
+  describe('a series never carries a day window (VC-01, VC-13)', () => {
+    const daily: SemanticConstraintV1 = { kind: 'recurrence', expression: 'every day', pattern: 'DAILY' };
+    const refused = (result: VoiceTurnResponse) => {
+      expect(result.outcome).toBe('clarify');
+      expect(result.intents).toEqual([]);
+      expect(result.assistantMessage).toBe('I cannot do part of that command. Nothing was changed. Please say it more simply.');
+    };
+
+    it('a softened clock on a repeat is the series clock, with no window around it', async () => {
+      const t = task(await create('every day around 18 go for a walk', [
+        daily,
+        { kind: 'clock', value: '18:00', role: 'preferred' },
+      ]));
+      expect(t).toMatchObject({ eventType: 'admin', isRecurring: true, recurrencePattern: 'DAILY', scheduledStartTime: '2026-10-18T15:00:00.000Z', isUnscheduled: false });
+      expect(t?.deadline).toBeUndefined();
+      expect(t?.earliestStartTime).toBeUndefined();
+    });
+
+    it('a repeat from a named day with no clock starts on that day and has no end', async () => {
+      const t = task(await create('every day from friday read', [
+        daily,
+        { kind: 'date', value: '2026-10-23', precision: 'day' },
+      ]));
+      expect(t).toMatchObject({ eventType: 'admin', isRecurring: true, earliestStartTime: '2026-10-23T00:00:00+03:00', isUnscheduled: false });
+      expect(t?.deadline).toBeUndefined();
+      expect(t?.scheduledStartTime).toBeUndefined();
+    });
+
+    it('a repeat with no clock and no day is a series, not Later', async () => {
+      const t = task(await create('every monday find an hour for exercise', [weekly, { kind: 'duration', minutes: 60 }]));
+      expect(t).toMatchObject({ isRecurring: true, isUnscheduled: false });
+      expect(t?.deadline).toBeUndefined();
+    });
+
+    it('a daily placement window on a repeat is refused before the preview', async () => {
+      refused(await create('every monday between 9 and 11 do the reports', [
+        weekly,
+        { kind: 'clock', value: '09:00', role: 'start' },
+        { kind: 'clock', value: '11:00', role: 'end' },
+      ], 'window'));
+    });
+
+    it('an end clock, a deadline, or an earliest bound on a repeat is refused', async () => {
+      refused(await create('every day finish the report by 18', [daily, { kind: 'clock', value: '18:00', role: 'end' }]));
+      refused(await create('every day finish the report by 18', [daily, { kind: 'clock', value: '18:00', role: 'deadline' }]));
+      refused(await create('every day after 9 do the reports', [daily, { kind: 'clock', value: '09:00', role: 'earliest' }]));
+      refused(await create('every day by the evening', [daily, { kind: 'day_bound', edge: 'sleep', role: 'deadline' }]));
+    });
+
+    it('a repeating event with its own span is still a fixed series', async () => {
+      expect(task(await create('standup every monday 10 to 11', [
+        weekly,
+        { kind: 'clock', value: '10:00', role: 'start' },
+        { kind: 'clock', value: '11:00', role: 'end' },
+      ], 'event'))).toMatchObject({ eventType: 'fixed', isRecurring: true, isUnscheduled: false });
+    });
   });
 
   it('flexible single with a preferred time: "at 18, move it if needed"', async () => {

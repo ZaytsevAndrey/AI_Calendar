@@ -18,10 +18,10 @@ The MVP is the Companion as a trustworthy **task controller for one user's own c
 
 | # | Workflow | Where it stands (30 Oct) | Backlog |
 |---|----------|--------------------------|---------|
-| W1 | Quick capture: one or several tasks in one utterance, with or without a clock, including Later | Works offline; two same-name creates lose one (VC-14) | VC-14 |
-| W2 | Create a routine (series) from one phrase | Broken for preferred clock / window / end / date only (VC-01); no-clock series shows as Later (VC-13) | VC-01, VC-13 |
+| W1 | Quick capture: one or several tasks in one utterance, with or without a clock, including Later | Works offline; VC-14 fixed in V1 | — |
+| W2 | Create a routine (series) from one phrase | VC-01 and VC-13 fixed in V1; a series the domain cannot hold is now refused at preview | — (live check in V7) |
 | W3 | Move or postpone a task, including a Later task and a task without Google | Later cannot be scheduled (VC-02); moves need Google ids (VC-03); cross-day series move fails after confirm (VC-04) | VC-02, VC-03, VC-04 |
-| W4 | Edit an existing task naturally (rename, notes, length, priority, done, delete, skip) | Works for one-offs; series scope hidden in preview (VC-06); fixed edge cases (VC-10); skip of a one-off refused (VC-09) | VC-06, VC-09, VC-10 |
+| W4 | Edit an existing task naturally (rename, notes, length, priority, done, delete, skip) | Works for one-offs; series scope now named in the preview (VC-06, V1); fixed edge cases (VC-10); skip of a one-off refused (VC-09) | VC-06, VC-09, VC-10 |
 | W5 | Reminders: create, resolve, delete, move | Create / resolve / delete work; update wipes fields (VC-05) | VC-05 |
 | W6 | Understand the calendar state (what is today, what is free, what is Later) | Works offline; agenda latency ~5 s cold (VR-08.6) | VR-08 |
 | W7 | Plan a day through conversation | Works offline; Later only offered (VR-07 done); draft routing prompt-only (VR-06) | VR-06 |
@@ -43,10 +43,10 @@ Columns: **Src** = traceable source; **Pri** P0 / P1 / P2; **Cat** bug / compat 
 
 | ID | Title | Src | Status | Pri | Cat | Cx | Class | Modules | Depends on |
 |----|-------|-----|--------|-----|-----|----|-------|---------|------------|
-| VC-01 | Recurring create must not take `deadline` / `earliestStartTime` from a one-day window | roadmap C.1; `project-apply.ts:465-490` (re-read 30 Oct) | broken | P0 | compat | M | MVP | `vnext/state/project-apply.ts` (`projectCreate`, `dayWindow`), `vnext/interpreters/prompts.ts`, `prompt-modules/kind-when.ts` (legacy text) | — |
-| VC-13 | Recurring create intents carry `isUnscheduled: false` | roadmap C.1; `project-apply.ts:399, 419-426` (re-read) | broken | P1 | compat | S | MVP | `project-apply.ts`, `changePreviewCards.ts` | — |
-| VC-14 | Remove the 15 s name-based create dedupe on the client | roadmap C.1; `useVoiceTask.ts:316-330` (re-read) | broken | P0 | bug | S | MVP | `frontend/src/modules/voice/hooks/useVoiceTask.ts` | — |
-| VC-06 | Preview names the series scope (whole series / this day and following / this day) | roadmap C.1; `project-apply.ts:579-606`, `changePreviewCards.ts:249-284` | broken | P1 | UX | S | MVP | `project-apply.ts` (`commandSummary`), `vnext/copy.ts`, `changePreviewCards.ts` | — |
+| VC-01 | Recurring create must not take `deadline` / `earliestStartTime` from a one-day window | roadmap C.1; `project-apply.ts:465-490` (re-read 30 Oct) | verified (V1, 30 Oct) | P0 | compat | M | MVP | `vnext/state/project-apply.ts` (`projectCreate`, `dayWindow`), `vnext/interpreters/prompts.ts`, `prompt-modules/kind-when.ts` (legacy text) | — |
+| VC-13 | Recurring create intents carry `isUnscheduled: false` | roadmap C.1; `project-apply.ts:399, 419-426` (re-read) | verified (V1, 30 Oct) | P1 | compat | S | MVP | `project-apply.ts`, `changePreviewCards.ts` | — |
+| VC-14 | Remove the 15 s name-based create dedupe on the client | roadmap C.1; `useVoiceTask.ts:316-330` (re-read) | verified (V1, 30 Oct) | P0 | bug | S | MVP | `frontend/src/modules/voice/hooks/useVoiceTask.ts` | — |
+| VC-06 | Preview names the series scope (whole series / this day and following / this day) | roadmap C.1; `project-apply.ts:579-606`, `changePreviewCards.ts:249-284` | verified (V1, 30 Oct) | P1 | UX | S | MVP | `project-apply.ts` (`commandSummary`), `vnext/copy.ts`, `changePreviewCards.ts` | — |
 
 ### 2.2 Phase V2 — move and schedule paths (P1)
 
@@ -138,23 +138,26 @@ Columns: **Src** = traceable source; **Pri** P0 / P1 / P2; **Cat** bug / compat 
 
 VR-01 (lifecycle, verified in `run-structured-turn.ts`, `phase4712-stage41.spec.ts`), VR-02 (trusted identity on the live path), VR-07 (Later only offered), VR-10 create path (reminder persistence), VR-34 (step logging with timings), VR-36 (Apply surface), VR-15 – VR-19 offline. Compatible by construction (roadmap B "do not re-fix"): event types `fixed` / `admin` only; every voice field declared in `CreateTaskDto` / `UpdateTaskDto` / `SkipOccurrenceDto`; occurrence identity as series + civil day; delete and move scope mapping; recurrence patterns; reminder default clock; create Idempotency-Key; owner / writable / open checks; confirm-time re-read with fingerprints.
 
-### 2.11 Counts (30 Oct 2026)
+### 2.11 Counts (after V1, 30 Oct 2026)
 
 | Status | Count | IDs |
 |--------|-------|-----|
-| broken | 14 | VC-01, 02, 03, 04, 05, 06, 09, 10, 11, 13, 14, VR-30, VR-38 (missing-as-broken), VN-02 (missing control) |
+| broken | 10 | VC-02, 03, 04, 05, 09, 10, 11, VR-30, VR-38 (missing-as-broken), VN-02 (missing control) |
 | partial | 10 | VC-16, VR-04, VR-06, VR-08, VR-11, VR-13, VR-21, VR-24, VR-27, VR-28 |
 | missing | 15 | VR-12, VR-14, VR-22, VR-23, VR-25, VR-26, VR-29, VR-31, VR-32, VR-33, VB-01, VB-02, VB-03, VN-03, VN-06 |
 | unverified (offline only) | 3 | VR-15–19 (as one), VR-35, VR-03 |
 | blocked by a decision | 2 | VC-07 (D-03), VC-12 (D-02) |
 | obsolete / dead code | 2 | VC-15, VR-05 |
 | deferred / deliberately unsupported | 2 | VR-37, VR-20 |
-| done | 8 | VR-01, 02, 07, 10 (create), 34, 36, 15–19 offline, 09 (stemmer obsolete) |
+| verified offline (V1) | 4 | VC-01, VC-06, VC-13, VC-14 |
+| done earlier | 8 | VR-01, 02, 07, 10 (create), 34, 36, 15–19 offline, 09 (stemmer obsolete) |
+
+Offline-verified is not live-verified: every V1 item is re-checked on the live model in V7 (VR-14).
 
 | Priority | Open items |
 |----------|------------|
-| P0 | VC-01, VC-14, VR-14 (+ VR-15–19 live) |
-| P1 | VC-02, 03, 04, 05, 06, 07, 12, 13, VR-03, 04, 06, 08, 09, 11, 12, 13, 24, 25, 26, 27, 30, 31, 32, 38, VB-01, VB-02, VB-03, VN-02 |
+| P0 | VR-14 (+ VR-15–19 live) |
+| P1 | VC-02, 03, 04, 05, 07, 12, VR-03, 04, 06, 08, 09, 11, 12, 13, 24, 25, 26, 27, 30, 31, 32, 38, VB-01, VB-02, VB-03, VN-02 |
 | P2 | VC-08, 09, 10, 11, 15, 16, VR-05, 21, 22, 23 (P1 in roadmap §41, moved after VR-24), 28, 29, 33, 37, VN-03, VN-06 |
 
 ---
@@ -163,10 +166,10 @@ VR-01 (lifecycle, verified in `run-structured-turn.ts`, `phase4712-stage41.spec.
 
 Each entry: **Done when** / **Tests**. Offline tests are the structured gate (`npm run test:vnext:structured`), backend unit (`npx jest`), backend e2e (`npm run test:e2e`), frontend (`npx jest --config jest.config.cjs`). Offline green is never evidence of live quality; live items say so.
 
-- **VC-01** — Done when no recurring create intent carries a `deadline` or `earliestStartTime` derived from a day window; a preferred clock on a series becomes `scheduledStartTime` on the first series day with `eventType: 'admin'`; a daily window, an end-only or interval clock on a series is refused with `unrepresented` unless start + end make a fixed clock; a date only with recurrence sets `earliestStartTime` to the civil-day start and no `deadline`. *Tests:* `structured-voice.service.spec.ts` recurrence × {preferred, end, interval, date only, `spanRole: 'window'`, earliest / deadline}; each must fail before the fix.
-- **VC-13** — Done when a recurring create without a clock projects `isUnscheduled: false` and the card does not show Later. *Tests:* projection test; `changePreviewCards.spec.ts`.
-- **VC-14** — Done when two creates with one name and different clocks in one request reach `POST /tasks` twice and a retried identical create yields one task (Idempotency-Key). *Tests:* new `useVoiceTask` or executor test (two `onCreate` calls); backend create-idempotency test already exists.
-- **VC-06** — Done when every summary and card for a series-scoped delete / move / done / skip names the scope in uk and en. *Tests:* `command-summary.spec.ts` per scope; `changePreviewCards.spec.ts`.
+- **VC-01** — *Met in V1 (30 Oct 2026).* Done when no recurring create intent carries a `deadline` or `earliestStartTime` derived from a day window; a preferred clock on a series becomes `scheduledStartTime` on the first series day with `eventType: 'admin'`; a daily window, an end-only or interval clock on a series is refused with `unrepresented` unless start + end make a fixed clock; a date only with recurrence sets `earliestStartTime` to the civil-day start and no `deadline`. *Tests:* `structured-voice.service.spec.ts` recurrence × {preferred, end, interval, date only, `spanRole: 'window'`, earliest / deadline}; each must fail before the fix.
+- **VC-13** — *Met in V1.* Done when a recurring create without a clock projects `isUnscheduled: false` and the card does not show Later. *Tests:* projection test; `changePreviewCards.spec.ts`.
+- **VC-14** — *Met in V1.* Done when two creates with one name and different clocks in one request reach `POST /tasks` twice and a retried identical create yields one task (Idempotency-Key). *Tests:* new `useVoiceTask` or executor test (two `onCreate` calls); backend create-idempotency test already exists.
+- **VC-06** — *Met in V1.* Done when every summary and card for a series-scoped delete / move / done / skip names the scope in uk and en. *Tests:* `command-summary.spec.ts` per scope; `changePreviewCards.spec.ts`.
 - **VC-02** — Done when a Later target moved to a day or clock gets `isUnscheduled: false` in the patch, the client forwards it, and the stored task is scheduled after Apply. *Tests:* projection test; frontend executor test (VB-01); one backend e2e on `PATCH /tasks/:id` with `isUnscheduled: false` + clock.
 - **VC-03** — Done when a one-off and a series occurrence without Google ids move through `move-event` with `slotId` (or `originalStart`). *Tests:* projection tests for no-Google one-off and series; `displayed-event-move.service.spec.ts` slot path (read, add if missing).
 - **VC-04** — Done when a series occurrence aimed at another day is refused or asked before confirm and never previewed as a move. *Tests:* projection test; prompt rule covered by a fixture.
@@ -209,6 +212,8 @@ Each entry: **Done when** / **Tests**. Offline tests are the structured gate (`n
 
 ## 4. Decisions requiring approval
 
+**Approved by the owner on 30 October 2026** (D-01…D-11 below are kept for their options and tradeoffs; the recommendation column is now the decision): D-01 legacy stays a frozen rollback until the structured engine passes MVP acceptance; D-02 trusted entity resolution stays, with explicit preview and confirmation — confirmation does not replace entity validation; D-03 unsupported or ambiguous series-group operations are refused for the MVP, never silently approximated; D-04 in-memory sessions are acceptable for the local MVP but are not production-ready; D-05 the nonfunctional Fast create toggle is hidden; D-06 several writes under one confirmation, each operation and its result shown; D-07 the current conversation context stays until tokens and latency are measured; D-08 DeepSeek remains an evaluation candidate, MVP targets UA ≥ 10/12, multi-turn ≥ 4/5, EN ≥ 10/12, zero unsafe or unconfirmed writes; D-09 voice and text share the structured pipeline; D-10 confirmation and rejection are handled deterministically inside the active preview state; D-11 series, individual occurrences and detached occurrences are distinguished explicitly.
+
 | ID | Decision | Options | Tradeoffs | Recommendation | Consequence |
 |----|----------|---------|-----------|----------------|-------------|
 | D-01 | Legacy engine: remove now or after the live bar | (a) remove now; (b) keep as rollback until V7 passes, remove in V8; (c) keep indefinitely | (a) frees ~3k lines and the e2e mocks but removes the only rollback before live proof; (b) carries a frozen dual path for weeks; (c) two sources of behavior forever | **(b)**, with VC-15 freeze now | V8 holds VR-31; e2e voice specs must be rewritten to script `/voice/turn` before removal |
@@ -228,7 +233,7 @@ Each entry: **Done when** / **Tests**. Offline tests are the structured gate (`n
 ## 5. Critical path and parallel work
 
 ```
-V1 (VC-01, VC-13, VC-14, VC-06)
+V1 (VC-01, VC-13, VC-14, VC-06)  ✓ done 30 Oct 2026
  └─ V2 (VC-02 → VC-03 → VC-04; VC-09, VC-10; VB-01 tests)
      └─ V3 core (VC-05; VB-02 stopgap for VC-07 after D-03)
          └─ V5 (VR-13, VR-38, VR-03, VR-06, VN-02 after D-10)

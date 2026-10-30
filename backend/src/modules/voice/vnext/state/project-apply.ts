@@ -7,7 +7,7 @@
  * A constraint or change that the target command cannot carry is rejected, never dropped.
  */
 import type { VoiceWriteIntent } from '../../voice-agent.types';
-import { addDaysToYmd, localDateTimeIso, localHm, localYmd, nextWeekdayYmd, scheduleTodayYmd } from '../../voice-local-date.util';
+import { addDaysToYmd, civilDayStartIso, localDateTimeIso, localHm, localYmd, nextWeekdayYmd, scheduleTodayYmd } from '../../voice-local-date.util';
 import { intentKey } from '../session/session';
 import { resolveZonedClock } from '../temporal/resolve-clock';
 import type { ApplyItem } from '../apply/apply-preview';
@@ -414,6 +414,15 @@ function projectCreate(
   const bounded = hasBounds(operation);
   const order = orderingBounds(operation, clock);
   if (!order.ok) return order;
+  if (recurrence) {
+    // On a series, deadline is the series end and earliestStartTime its first day
+    // (seriesAnchorYmd / untilMs in placement-step.service.ts). A daily window, an end
+    // clock, a bound, or an ordering would be stored as a one-day series: not representable.
+    const windowed = interval || operation.changes.spanRole === 'window' || bounded || (end && !start) || order.earliest || order.deadline;
+    if (windowed) return { ok: false, code: 'unrepresented_constraint', detail: `${operation.pendingId}:series_window` };
+    // A series is never the Later inbox; the engine seats each day (the server also coerces this).
+    task.isUnscheduled = false;
+  }
   if ((start || end || preferred || interval || allDay || bounded) && !date) return { ok: false, code: 'unrepresentable_schedule', detail: operation.pendingId };
   if (preferred && start) return { ok: false, code: 'contradictory_constraints', detail: operation.pendingId };
   if (!date) {
@@ -473,6 +482,9 @@ function projectCreate(
   } else if (interval) {
     task.earliestStartTime = localDateTimeIso(date.value, interval.startHm, clock.timeZone);
     task.deadline = localDateTimeIso(date.value, interval.endHm, clock.timeZone);
+  } else if (recurrence) {
+    // A repeat from a named day with no clock starts on that day (its anchor); it has no end.
+    if (!preferred) task.earliestStartTime = civilDayStartIso(date.value, clock.timeZone);
   } else if (!bounded) {
     Object.assign(task, dayWindow(date.value, clock));
   }
@@ -572,11 +584,36 @@ const COMMAND_VERBS: Record<VNextLanguage, Record<string, string>> = {
   },
 };
 
+/** Which part of a repeating task a command touches (VC-06). `all` on a move is every open day; elsewhere it is the whole series. */
+const SCOPE_LABELS: Record<VNextLanguage, Record<SeriesScope | 'all_move', string>> = {
+  uk: { occurrence: 'лише цей день', from_day: 'цей день і наступні', all: 'усю серію', all_move: 'усі відкриті дні' },
+  en: { occurrence: 'this day only', from_day: 'this day and following', all: 'the whole series', all_move: 'every open day' },
+};
+
+/** The scope phrase for a command on a repeating Luefy task; a one-off or a provider instance has none. */
+function scopeSuffix(language: VNextLanguage, kind: string, operation: PendingOperation): string {
+  const target = operation.target;
+  if (target.kind !== 'entity' || !target.recurring || target.entityType !== 'task' || !operation.seriesScope) return '';
+  const key = operation.seriesScope === 'all' && kind === 'move' ? 'all_move' : operation.seriesScope;
+  return ` — ${SCOPE_LABELS[language][key]}`;
+}
+
 /**
  * Preview copy for a command on a stored row: the verb and the stored title, never the transcript.
  * A rename names both titles. `at` is the occurrence or the new start, when the command has one.
+ * On a repeating task the text ends with the scope: whole series, this day and following, this day only.
  */
 export function commandSummary(
+  language: VNextLanguage,
+  kind: string,
+  operation: PendingOperation,
+  clock: Pick<Clock, 'timeZone'>,
+  at?: { occurrence?: string; start?: string; day?: string },
+): string {
+  return `${commandText(language, kind, operation, clock, at)}${scopeSuffix(language, kind, operation)}`;
+}
+
+function commandText(
   language: VNextLanguage,
   kind: string,
   operation: PendingOperation,
@@ -835,7 +872,8 @@ function projectSeriesCommand(operation: PendingOperation, clock: Clock, languag
     const implied = (operation.action === 'complete' && status === 'completed') || (operation.action === 'cancel' && status === 'canceled');
     const rejected = onlyKinds(operation, []) ?? onlyChanges(operation, implied ? ['status'] : []);
     if (rejected) return rejected;
-    return { ok: true, intent: { type: 'command', summary, command: { kind: operation.action, taskId, taskName, summary } } };
+    // seriesScope tells the card this row is the whole series, not a one-off (VC-06).
+    return { ok: true, intent: { type: 'command', summary, command: { kind: operation.action, taskId, taskName, summary, seriesScope: 'all' } } };
   }
   if (operation.action === 'update') {
     // A series patch keeps its own schedule; a new time for every occurrence is a series move.
@@ -843,7 +881,7 @@ function projectSeriesCommand(operation: PendingOperation, clock: Clock, languag
     if (rejected) return rejected;
     const patch = updatePatch(operation, clock);
     if (!patch.ok) return patch;
-    return { ok: true, intent: { type: 'command', summary, command: { kind: 'update', taskId, taskName, summary, patch: patch.patch } } };
+    return { ok: true, intent: { type: 'command', summary, command: { kind: 'update', taskId, taskName, summary, patch: patch.patch, seriesScope: 'all' } } };
   }
   return { ok: false, code: 'unsupported_action', detail: `${operation.action}:series` };
 }

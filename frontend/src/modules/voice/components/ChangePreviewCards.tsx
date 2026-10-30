@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import {
   buildChangePreviewCards,
   changePreviewKindLabelKey,
+  changePreviewScopeLabelKey,
   formatPreviewWhen,
   type ChangePreviewCard,
 } from '../changePreviewCards';
@@ -87,6 +88,11 @@ export function ChangePreviewCards({
                     ]
                       .filter(Boolean)
                       .join(' · ')}
+                  </span>
+                ) : null}
+                {card.scope ? (
+                  <span className="font-medium text-ide-text" data-testid="preview-scope">
+                    {t(changePreviewScopeLabelKey(card.scope))}
                   </span>
                 ) : null}
                 <span>{formatTimeRange(card, timeZone, t('voice.previewUnscheduled'))}</span>

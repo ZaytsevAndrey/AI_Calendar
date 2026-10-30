@@ -112,7 +112,6 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
   const [micEnabled, setMicEnabledState] = useState(true);
   const finishingRef = useRef(false);
   const turnLockRef = useRef(false);
-  const lastCreateKeyRef = useRef<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const micEnabledRef = useRef(true);
   const planRef = useRef<DayPlanProposal | null>(null);
@@ -313,19 +312,9 @@ export function useVoiceTask({ onComplete }: UseVoiceTaskOptions) {
         skipOccurrence,
         deleteTask,
         dispatch,
+        // Every create reaches POST /tasks: two tasks with one name in one request are two tasks
+        // (VC-14). A retried identical request is covered by the Idempotency-Key in createFromPayload.
         onCreate: async (task) => {
-          const key = [
-            task.name.trim().toLowerCase(),
-            task.earliestStartTime || '',
-            task.deadline || '',
-          ].join('|');
-          if (lastCreateKeyRef.current === key) {
-            return;
-          }
-          lastCreateKeyRef.current = key;
-          window.setTimeout(() => {
-            if (lastCreateKeyRef.current === key) lastCreateKeyRef.current = null;
-          }, 15_000);
           await onComplete(task);
         },
       });
