@@ -57,6 +57,36 @@ export async function skipSeriesDay(
 }
 
 /**
+ * The copy that already stands for `occurrenceYmd` of `series`, if any: a
+ * member of the series group, or a copy that names this series as its parent
+ * (an edited occurrence keeps that lineage even outside the group).
+ */
+export async function findDayCopy(
+  repos: SeriesExceptionRepos,
+  series: Task,
+  occurrenceYmd: string,
+): Promise<Task | null> {
+  const groupId = series.seriesGroupId ?? series.id;
+  return repos.tasks.findOne({
+    where: [
+      {
+        userId: series.userId,
+        seriesGroupId: groupId,
+        originalOccurrenceYmd: occurrenceYmd,
+        isRecurring: false,
+      },
+      {
+        userId: series.userId,
+        parentSeriesId: series.id,
+        originalOccurrenceYmd: occurrenceYmd,
+        isRecurring: false,
+      },
+    ],
+    relations: ['phases'],
+  });
+}
+
+/**
  * The one-off copy that stands for `occurrenceYmd` of `series`: the existing
  * one when a previous attempt already made it, else a new one. Same type,
  * name and look as the series; times are the chosen interval.
@@ -68,15 +98,7 @@ export async function findOrCreateDayCopy(
   slot: { start: Date; end: Date; minutes: number; phases: Phase[] },
 ): Promise<Task> {
   const groupId = series.seriesGroupId ?? series.id;
-  const existing = await repos.tasks.findOne({
-    where: {
-      userId: series.userId,
-      seriesGroupId: groupId,
-      originalOccurrenceYmd: occurrenceYmd,
-      isRecurring: false,
-    },
-    relations: ['phases'],
-  });
+  const existing = await findDayCopy(repos, series, occurrenceYmd);
   const copy =
     existing ??
     repos.tasks.create({

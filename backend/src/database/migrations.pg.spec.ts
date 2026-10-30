@@ -16,6 +16,18 @@ const url = process.env.PG_TEST_URL;
 const describePg = url ? describe : describe.skip;
 const entities = [join(__dirname, '..', 'modules', '**', '*.entity.{ts,js}').replace(/\\/g, '/')];
 
+/** Every versioned migration, in order. New migrations are appended here. */
+const MIGRATION_NAMES = [
+  'Baseline1761750000000',
+  'SchedulingQueueAndOccurrenceIdentity1761760000000',
+  'GoogleWriteQueueLifecycle1761770000000',
+  'CreateRequestIdempotency1761780000000',
+  'GoogleWriteQueueUniqueness1761790000000',
+  'AdminConsoleSchema1761800000000',
+  'PhasePaletteColors1761810000000',
+  'TaskCompletedAt1761820000000',
+];
+
 describePg('versioned migrations (Postgres)', () => {
   // Building the whole schema takes several seconds on a cold database.
   jest.setTimeout(60_000);
@@ -54,15 +66,7 @@ describePg('versioned migrations (Postgres)', () => {
   it('builds the entity schema on an empty database, and a second run changes nothing', async () => {
     const ds = await open(await freshDatabase());
     const first = await ds.runMigrations();
-    expect(first.map((m) => m.name)).toEqual([
-      'Baseline1761750000000',
-      'SchedulingQueueAndOccurrenceIdentity1761760000000',
-      'GoogleWriteQueueLifecycle1761770000000',
-      'CreateRequestIdempotency1761780000000',
-      'GoogleWriteQueueUniqueness1761790000000',
-      'AdminConsoleSchema1761800000000',
-      'PhasePaletteColors1761810000000',
-    ]);
+    expect(first.map((m) => m.name)).toEqual(MIGRATION_NAMES);
     expect(await drift(ds)).toEqual([]);
     expect(await ds.runMigrations()).toEqual([]);
     await ds.destroy();
@@ -112,7 +116,7 @@ describePg('versioned migrations (Postgres)', () => {
     const ds = await open(dbUrl);
     const ran = await ds.runMigrations();
     // Baseline is recorded, not re-run; the admin tables made by synchronize are kept (IF NOT EXISTS).
-    expect(ran).toHaveLength(6);
+    expect(ran.map((m) => m.name)).toEqual(MIGRATION_NAMES);
     expect(await drift(ds)).toEqual([]);
     const copies = await ds.query(
       `SELECT name, "originalOccurrenceYmd" FROM "tasks" WHERE "isRecurring" IS FALSE ORDER BY name`,
@@ -155,7 +159,7 @@ describePg('versioned migrations (Postgres)', () => {
     const sources = await Promise.all([boot(), boot(), boot()]);
     try {
       const rows = await sources[0].query(`SELECT name FROM migrations ORDER BY id`);
-      expect(rows).toHaveLength(6);
+      expect(rows.map((row: { name: string }) => row.name)).toEqual(MIGRATION_NAMES);
       expect(await drift(sources[0])).toEqual([]);
     } finally {
       for (const ds of sources) await ds.destroy();

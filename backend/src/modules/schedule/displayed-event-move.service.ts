@@ -43,6 +43,12 @@ export type MoveDisplayedEventResult = {
   taskName?: string;
 };
 
+/** Fields an edit of "this day and following" gives the new series. */
+export type SeriesTailOverrides = {
+  name?: string;
+  description?: string | null;
+};
+
 /** What a durable move job stores (dates as ISO strings). */
 type MovePayload = {
   taskId: string;
@@ -525,8 +531,36 @@ export class DisplayedEventMoveService implements OnModuleInit {
   }
 
   /**
+   * "This and following" with new fields: the old series ends before the
+   * day, a new series with `overrides` starts on it (one transaction). Days
+   * before the split keep their history. Returns the new series id.
+   */
+  async editSeriesFollowing(
+    userId: string,
+    series: Task,
+    occurrenceStart: Date,
+    start: Date,
+    minutes: number,
+    phaseIds: string[],
+    overrides: SeriesTailOverrides,
+  ): Promise<string> {
+    const end = new Date(start.getTime() + Math.max(1, minutes) * 60_000);
+    return this.moveSeriesTail(
+      userId,
+      series,
+      { originalStart: occurrenceStart.toISOString() } as MoveDisplayedEventDto,
+      start,
+      end,
+      minutes,
+      phaseIds,
+      overrides,
+    );
+  }
+
+  /**
    * End the old series before this day and start a new series at the new clock.
-   * Days before the drop stay on the old clock.
+   * Days before the drop stay on the old clock. `overrides` (an edit of this
+   * day and the following) replace the copied fields on the new series.
    */
   private async moveSeriesTail(
     userId: string,
@@ -536,7 +570,8 @@ export class DisplayedEventMoveService implements OnModuleInit {
     end: Date,
     minutes: number,
     phaseIds: string[],
-  ): Promise<void> {
+    overrides: SeriesTailOverrides = {},
+  ): Promise<string> {
     const settings = await this.userSettingsService.getSettings(userId);
     const timeZone = resolveIanaTimeZone(settings.timeZone || series.scheduleTimeZone);
     const splitYmd = localYmd(new Date(dto.originalStart).toISOString(), timeZone);
@@ -586,8 +621,11 @@ export class DisplayedEventMoveService implements OnModuleInit {
         existing ??
         tasks.create({
           userId,
-          name: old.name,
-          description: old.description,
+          name: overrides.name ?? old.name,
+          description:
+            overrides.description === undefined
+              ? old.description
+              : (overrides.description ?? undefined),
           eventType: old.eventType,
           isRecurring: true,
           recurrencePattern: old.recurrencePattern,
@@ -609,6 +647,11 @@ export class DisplayedEventMoveService implements OnModuleInit {
           seriesGroupId: groupId,
           parentSeriesId: old.id,
         });
+      if (existing) {
+        // A retry of an edit lands on the tail it already made.
+        if (overrides.name !== undefined) next.name = overrides.name;
+        if (overrides.description !== undefined) next.description = overrides.description as string;
+      }
       next.phaseId = nextPhases[0]?.id ?? null;
       next.phases = nextPhases;
       next.estimatedTimeInMinutes = minutes;
@@ -630,6 +673,7 @@ export class DisplayedEventMoveService implements OnModuleInit {
     await this.pendingGoogleWrites.syncTask(userId, series.id);
     await this.pendingGoogleWrites.syncTask(userId, out.taskId);
     await this.placementStep.seatOpenHoles(userId);
+    return out.taskId;
   }
 
   /**

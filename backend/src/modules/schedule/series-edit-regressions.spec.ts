@@ -151,7 +151,7 @@ describe('series edits via PATCH', () => {
     expect(await kit.slotsOf(after.id)).toEqual(['2026-11-06 16:00-16:30']);
   });
 
-  it('F3: a PATCH that really renames a day copy detaches it from the series group', async () => {
+  it('F3: a rename keeps the copy in its series (lineage), a repeat rule on the copy detaches it', async () => {
     kit = await createPlacementKit({ now: '2026-11-05T06:00:00.000Z', horizonDays: 5 });
     const series = await weekdaySeries();
     const move = kit.moveService as unknown as MoveInternals;
@@ -172,9 +172,50 @@ describe('series edits via PATCH', () => {
     );
     const copy = (await kit.taskRepo.find()).find((row) => row.originalOccurrenceYmd === '2026-11-06')!;
     await patch(copy.id, { name: 'Standup (moved)' });
-    const after = await kit.reload(copy.id);
-    expect(after.seriesGroupId).toBeNull();
-    expect(after.originalOccurrenceYmd).toBeNull();
+    const renamed = await kit.reload(copy.id);
+    expect(renamed.seriesGroupId).toBe(series.id);
+    expect(renamed.parentSeriesId).toBe(series.id);
+    expect(renamed.originalOccurrenceYmd).toBe('2026-11-06');
+
+    await patch(copy.id, { isRecurring: true, recurrencePattern: 'DAILY' });
+    const detached = await kit.reload(copy.id);
+    // A series of its own now: its group is its own, not the old series'.
+    expect(detached.seriesGroupId).not.toBe(series.id);
+    expect(detached.parentSeriesId).toBeNull();
+    expect(detached.originalOccurrenceYmd).toBeNull();
+  });
+
+  it('F3: a renamed copy put back on the series clock is not swallowed by re-merge', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T06:00:00.000Z', horizonDays: 5 });
+    const series = await weekdaySeries();
+    const move = kit.moveService as unknown as MoveInternals;
+    await move.moveSeriesDay(
+      kit.user.id,
+      await kit.reload(series.id),
+      {
+        googleEventId: 'evt-6',
+        originalStart: kit.at('2026-11-06', '10:00').toISOString(),
+        originalEnd: kit.at('2026-11-06', '10:30').toISOString(),
+        start: kit.at('2026-11-06', '15:00').toISOString(),
+        end: kit.at('2026-11-06', '15:30').toISOString(),
+        seriesScope: 'occurrence',
+      },
+      30,
+      [],
+      '2026-11-06',
+    );
+    const copy = (await kit.taskRepo.find()).find((row) => row.originalOccurrenceYmd === '2026-11-06')!;
+    await patch(copy.id, { name: 'Standup (guest)' });
+    // Back to 10:00 — the series clock. An identical copy would re-merge; this one must not.
+    await patch(copy.id, {
+      scheduledStartTime: kit.at('2026-11-06', '10:00').toISOString(),
+      scheduledEndTime: kit.at('2026-11-06', '10:30').toISOString(),
+    });
+    const after = await kit.taskRepo.findOne({ where: { id: copy.id } });
+    expect(after).not.toBeNull();
+    expect(after!.name).toBe('Standup (guest)');
+    expect(await kit.slotsOf(copy.id)).toEqual(['2026-11-06 10:00-10:30']);
+    expect((await kit.reload(series.id)).skippedOccurrenceYmds).toEqual(['2026-11-06']);
   });
 
   describe('F5 / Decision E: turning recurrence off keeps the nearest upcoming occurrence', () => {

@@ -19,6 +19,7 @@ import { Task } from '../tasks/entities/task.entity';
 import { GoogleCalendarModule } from '../google-calendar/google-calendar.module';
 import { CalendarProvidersModule } from '../calendar-providers/calendar-providers.module';
 import { PhasesModule } from '../phases/phases.module';
+import { OccurrenceEditService } from './occurrence-edit.service';
 import { VoiceModule } from '../voice/voice.module';
 
 @Module({
@@ -41,8 +42,9 @@ import { VoiceModule } from '../voice/voice.module';
     FreeSlotsService,
     PlacementStepService,
     ProblematicPlaceService,
+    OccurrenceEditService,
     UserLockService,
   ],
-  exports: [ScheduleService, ScheduleJobService, PlacementStepService],
+  exports: [ScheduleService, ScheduleJobService, PlacementStepService, OccurrenceEditService],
 })
 export class ScheduleModule {}

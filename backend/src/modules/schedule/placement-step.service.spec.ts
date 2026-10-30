@@ -776,7 +776,7 @@ describe('PlacementStepService.place (dryRun crowded day)', () => {
       estimatedTimeInMinutes: number;
     };
     expect(saved.scheduleState).toBe(ScheduleState.NONE);
-    expect(saved.parentSeriesId).toBeNull();
+    expect(saved.parentSeriesId).toBe('series-1');
     expect(saved.estimatedTimeInMinutes).toBe(105);
   });
 

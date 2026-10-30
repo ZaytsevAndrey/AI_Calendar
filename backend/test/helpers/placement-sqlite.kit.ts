@@ -15,6 +15,7 @@ import { ScheduleJob } from '../../src/modules/schedule/entities/schedule-job.en
 import { ScheduledTask } from '../../src/modules/schedule/schedule.entity';
 import { DisplayedEventMoveService } from '../../src/modules/schedule/displayed-event-move.service';
 import { ProblematicPlaceService } from '../../src/modules/schedule/problematic-place.service';
+import { OccurrenceEditService } from '../../src/modules/schedule/occurrence-edit.service';
 import { GoogleSyncOutboxSubscriber } from '../../src/modules/google-calendar/google-sync-outbox.subscriber';
 
 /**
@@ -241,6 +242,19 @@ export async function createPlacementKit(opts: {
     pendingGoogleWrites as never,
   );
 
+  /** Real one-occurrence / this-and-following edit service. */
+  const occurrenceEdit = new OccurrenceEditService(
+    taskRepo,
+    slotRepo,
+    service,
+    phasesStub as never,
+    settingsStub as never,
+    pendingGoogleWrites as never,
+    jobs as never,
+    moveService,
+    tasksService,
+  );
+
   // Nest calls these on boot; the kit builds services by hand.
   tasksService.onModuleInit();
   moveService.onModuleInit();
@@ -250,6 +264,7 @@ export async function createPlacementKit(opts: {
     service,
     moveService,
     problematicPlace,
+    occurrenceEdit,
     tasksService,
     jobs,
     taskRepo,

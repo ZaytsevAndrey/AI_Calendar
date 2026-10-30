@@ -1,5 +1,6 @@
 import {
   breaksSeriesMembership,
+  contentDiffersFromSeries,
   groupYmdsByClockHm,
   pickMajorityClockSlot,
   pickPrimaryClockHm,
@@ -20,17 +21,19 @@ describe('series-group.util', () => {
       ).toBe(false);
     });
 
-    it('breaks on name or other meta', () => {
-      expect(breaksSeriesMembership({ name: 'Renamed' })).toBe(true);
+    it('content edits (name, notes) keep membership; structure edits break it', () => {
+      expect(breaksSeriesMembership({ name: 'Renamed' })).toBe(false);
       expect(
         breaksSeriesMembership({
           scheduledStartTime: '2026-04-20T10:00:00.000Z',
           description: 'x',
         }),
-      ).toBe(true);
+      ).toBe(false);
       expect(breaksSeriesMembership({ deadline: '2026-05-01T00:00:00.000Z' })).toBe(
         true,
       );
+      expect(breaksSeriesMembership({ isRecurring: true })).toBe(true);
+      expect(breaksSeriesMembership({ eventType: 'fixed' })).toBe(true);
     });
   });
 
@@ -132,18 +135,21 @@ describe('breaksSeriesMembership against the stored task', () => {
     ).toBe(false);
   });
 
-  it('a real change still breaks membership', () => {
-    expect(breaksSeriesMembership({ name: 'Standup 2' }, current)).toBe(true);
-    expect(breaksSeriesMembership({ priority: 'high' }, current)).toBe(true);
+  it('a real structural change still breaks membership', () => {
     expect(breaksSeriesMembership({ deadline: '2026-05-02T00:00:00.000Z' }, current)).toBe(true);
     expect(breaksSeriesMembership({ deadline: null }, current)).toBe(true);
     expect(breaksSeriesMembership({ recurrenceWeekDays: [1] }, current)).toBe(true);
-    expect(
-      breaksSeriesMembership(
-        { googleReminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 10 }] } },
-        current,
-      ),
-    ).toBe(true);
+    expect(breaksSeriesMembership({ eventType: 'fixed' }, current)).toBe(true);
+  });
+
+  it('content differences keep a copy from re-merging into its series', () => {
+    const series = { ...current, status: 'todo', phaseId: null };
+    expect(contentDiffersFromSeries({ ...series }, series)).toBe(false);
+    expect(contentDiffersFromSeries({ ...series, name: 'Standup 2' }, series)).toBe(true);
+    expect(contentDiffersFromSeries({ ...series, description: 'notes' }, series)).toBe(true);
+    expect(contentDiffersFromSeries({ ...series, status: 'completed' }, series)).toBe(true);
+    expect(contentDiffersFromSeries({ ...series, phaseId: 'p1' }, series)).toBe(true);
+    expect(contentDiffersFromSeries({ ...series, description: '' }, series)).toBe(false);
   });
 
   it('weekday order does not matter', () => {

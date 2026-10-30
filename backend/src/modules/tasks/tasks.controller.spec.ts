@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
+import { OccurrenceEditService } from '../schedule/occurrence-edit.service';
 
 describe('TasksController', () => {
   let controller: TasksController;
@@ -20,6 +21,7 @@ describe('TasksController', () => {
             updateStatus: jest.fn(),
           },
         },
+        { provide: OccurrenceEditService, useValue: { edit: jest.fn() } },
       ],
     }).compile();
 

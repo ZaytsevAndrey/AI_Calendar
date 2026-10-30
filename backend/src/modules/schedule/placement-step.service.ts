@@ -47,6 +47,7 @@ import {
   type PlacementSeat,
 } from './placement-step.util';
 import {
+  contentDiffersFromSeries,
   groupYmdsByClockHm,
   pickPrimaryClockHm,
   seriesDayClockHm,
@@ -2231,6 +2232,9 @@ export class PlacementStepService {
     const match =
       owners.find((series) => series.id === task.parentSeriesId) ?? owners[0];
     if (!match) return null;
+    // An edited occurrence (its own name, notes, phase, look or a completion)
+    // is kept as it is; only an identical day rejoins the series.
+    if (contentDiffersFromSeries(task as never, match as never)) return null;
     // A resize keeps the clock and changes the length. Absorbing it would
     // throw away that length and restore the series duration.
     if (
