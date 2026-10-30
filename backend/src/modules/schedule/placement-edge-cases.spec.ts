@@ -211,6 +211,32 @@ describe('placement edge cases', () => {
     },
   );
 
+  it('AUD-003: editing a series created on an earlier day keeps its history (no past park, no copy)', async () => {
+    kit = await createPlacementKit({ now: '2026-11-01T07:00:00.000Z', horizonDays: 3 });
+    const series = await create({
+      name: 'Daily',
+      eventType: TaskEventType.ADMIN,
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      scheduledStartTime: kit.at('2026-11-01', '09:00').toISOString(),
+      estimatedTimeInMinutes: 30,
+    });
+    jest.setSystemTime(new Date('2026-11-03T07:00:00.000Z'));
+    await kit.service.appendMissingSeriesDays(kit.user.id);
+    const before = await kit.slotsOf(series.id);
+
+    for (const patch of [{ estimatedTimeInMinutes: 45 }, { deadline: kit.at('2026-12-31', '23:00').toISOString() }]) {
+      await kit.tasksService.update(series.id, kit.user.id, patch as never);
+      await kit.jobs.settle();
+    }
+
+    const master = await kit.reload(series.id);
+    expect(master.skippedOccurrenceYmds ?? []).toEqual([]);
+    // History kept; per the engine doc a duration edit does not rewrite seated days.
+    expect(await kit.slotsOf(series.id)).toEqual(expect.arrayContaining(before));
+    expect((await kit.taskRepo.find()).filter((t) => t.id !== series.id)).toEqual([]);
+  });
+
   it('a series clock edit while its create placement is still queued ends on the new clock only', async () => {
     kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
     // The create's in-request run is lost (crash); the job waits in the queue.

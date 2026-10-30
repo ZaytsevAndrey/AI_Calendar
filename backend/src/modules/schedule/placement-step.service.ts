@@ -798,6 +798,14 @@ export class PlacementStepService {
       }
     }
 
+    // A series whose master clock day is already over (created on an earlier
+    // day): its seated days stay as they are and only missing days are
+    // appended. Checking that past day's window would park history (AUD-003).
+    if (opts?.commit === 'keep' && task.isRecurring && interval && interval.end <= nowMs) {
+      if (opts.expandSeries && !opts.dryRun) await this.expandSeriesDays(userId, task.id);
+      return { outcome: 'seated', start: interval.start, end: interval.end, moves: [] };
+    }
+
     if (opts?.commit === 'keep' && !windowExpired && interval) {
       const free =
         !opts.revalidate ||
@@ -1146,8 +1154,9 @@ export class PlacementStepService {
       nowMs: number;
     },
   ): Promise<PlacementPlan> {
-    const parkYmd =
-      ctx.dayYmd ?? localYmd(ctx.now.toISOString(), ctx.timeZone);
+    const todayYmd = localYmd(ctx.now.toISOString(), ctx.timeZone);
+    // Never park a day that is already in the past (AUD-003).
+    const parkYmd = ctx.dayYmd && ctx.dayYmd >= todayYmd ? ctx.dayYmd : todayYmd;
     const reason =
       plan.outcome === 'problematic' ? plan.reason : 'no_slot';
     await this.parkFailedSeriesDay(
