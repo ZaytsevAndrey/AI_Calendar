@@ -34,9 +34,9 @@ export function Segmented<T extends string>({ value, onChange, options, label, c
                         aria-pressed={on}
                         onClick={() => onChange(option.value)}
                         className={cx(
-                            'inline-flex min-w-0 flex-auto items-center justify-center gap-1.5 whitespace-nowrap rounded-[8px] px-2.5 font-medium md:px-3 transition',
+                            'inline-flex min-w-0 flex-auto items-center justify-center gap-1.5 whitespace-nowrap rounded-[8px] px-2.5 font-medium max-[359px]:px-1.5 md:px-3 transition',
                             'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ide-link',
-                            size === 'sm' ? 'h-9 text-body-sm md:h-7' : 'h-10 text-body md:h-8 md:text-body-sm',
+                            size === 'sm' ? 'h-9 text-body-sm md:h-7' : 'h-10 text-body max-[359px]:text-body-sm md:h-8 md:text-body-sm',
                             on ? 'bg-ide-panel text-ide-text shadow-ide' : 'text-ide-muted hover:text-ide-text',
                         )}
                     >

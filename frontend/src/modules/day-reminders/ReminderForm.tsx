@@ -81,8 +81,12 @@ export function ReminderForm({
 
   return (
     <form id="reminder-form" onSubmit={submit} className="task-form">
-      <div className="space-y-3">
-        <div className="inline-flex max-w-full flex-wrap rounded-lg border border-ide-border p-0.5">
+      <div className="space-y-4">
+        <div
+          role="group"
+          aria-label={t('tasks.form.type')}
+          className="-mx-4 flex min-w-0 gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:flex-wrap md:px-0 [&::-webkit-scrollbar]:hidden"
+        >
           {onPickTaskPreset
             ? TASK_PRESETS.map((preset) => (
                 <button
@@ -91,10 +95,10 @@ export function ReminderForm({
                   title={`${preset.label}: ${preset.hint}`}
                   aria-label={preset.label}
                   onClick={() => onPickTaskPreset(preset.id)}
-                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-ide-muted hover:text-ide-text"
+                  className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-body-sm font-medium transition md:h-8 md:px-3 border-ide-border text-ide-muted hover:text-ide-text"
                 >
-                  <KindIcon kind={preset.id} className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">{preset.label}</span>
+                  <KindIcon kind={preset.id} className="h-4 w-4" />
+                  {preset.label}
                 </button>
               ))
             : null}
@@ -102,10 +106,11 @@ export function ReminderForm({
             type="button"
             title={`${t('tasks.preset.reminder')}: ${t('tasks.preset.reminderHint')}`}
             aria-label={t('tasks.preset.reminder')}
-            className="inline-flex items-center gap-1 rounded-md bg-ide-link px-2 py-1 text-xs font-medium text-white"
+            aria-pressed
+            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-body-sm font-medium transition md:h-8 md:px-3 border-transparent bg-ide-accentBlue text-white"
           >
-            <Bell className="h-3.5 w-3.5" aria-hidden />
-            <span className="hidden sm:inline">{t('tasks.preset.reminder')}</span>
+            <Bell className="h-4 w-4" aria-hidden />
+            {t('tasks.preset.reminder')}
           </button>
         </div>
 
@@ -168,7 +173,7 @@ export function ReminderForm({
         ) : (
           <button
             type="button"
-            className="text-xs text-ide-link hover:underline"
+            className="flex min-h-11 items-center text-body-sm text-ide-link hover:underline md:min-h-0"
             onClick={() => setShowDescription(true)}
           >
             {t('tasks.form.addDescription')}
@@ -199,7 +204,6 @@ export function ReminderForm({
                   <Button
                     key={day.value}
                     type="button"
-                    size="sm"
                     variant={weekDays.includes(day.value) ? 'primary' : 'secondary'}
                     pressed={weekDays.includes(day.value)}
                     onClick={() => toggleDay(day.value)}
@@ -213,7 +217,7 @@ export function ReminderForm({
         ) : (
           <button
             type="button"
-            className="text-xs text-ide-link hover:underline"
+            className="flex min-h-11 items-center text-body-sm text-ide-link hover:underline md:min-h-0"
             onClick={() => setShowMore(true)}
           >
             {t('tasks.form.moreOptions')}
@@ -238,7 +242,7 @@ export function ReminderForm({
           type="button"
           variant="secondary"
           onClick={onCancel}
-          className="w-full sm:w-auto"
+          className="w-full max-md:!hidden sm:w-auto"
           disabled={isSubmitting || isDeleting}
           icon={X}
         >

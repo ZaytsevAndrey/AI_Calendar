@@ -25,7 +25,7 @@ const scenarios = [
     route: '/setup/phases',
     scenario: 'needsPhases',
     run: async (page) => {
-      await page.getByRole('button', { name: /Далі|Next/ }).first().click();
+      await page.getByRole('button', { name: /Далі|Next|Continue/ }).first().click();
     },
   },
   { name: 'calendar', route: '/' },

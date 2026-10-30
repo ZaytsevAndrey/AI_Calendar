@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useStore } from 'react-redux';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, ChevronRight, Mic, PanelRight, Plus, Trash2, X } from 'lucide-react';
+import { CalendarCheck, ChevronLeft, ChevronRight, PanelRight, Plus, Trash2, X } from 'lucide-react';
 import {
     useEventsForDay,
     useEventsForWeek,
@@ -928,8 +928,15 @@ const CalendarPage: React.FC = () => {
                         >
                             <ChevronRight className="h-5 w-5" aria-hidden />
                         </IconButton>
-                        <Button variant="ghost" size="md" onClick={() => setCurrentDate(new Date())} className="shrink-0 px-2">
-                            {t('common.today')}
+                        <Button
+                            variant="ghost"
+                            size="md"
+                            onClick={() => setCurrentDate(new Date())}
+                            className="shrink-0 px-2"
+                            aria-label={t('common.today')}
+                        >
+                            <CalendarCheck className="hidden h-5 w-5 max-[359px]:block" aria-hidden />
+                            <span className="max-[359px]:hidden">{t('common.today')}</span>
                         </Button>
                     </div>
                     <div className="flex items-center gap-2">

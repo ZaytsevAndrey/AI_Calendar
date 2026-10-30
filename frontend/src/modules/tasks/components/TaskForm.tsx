@@ -596,7 +596,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
         ) : (
           <button
             type="button"
-            className="text-xs text-ide-link hover:underline"
+            className="flex min-h-11 items-center text-body-sm text-ide-link hover:underline md:min-h-0"
             onClick={() => setShowDescription(true)}
           >
             {t('tasks.form.addDescription')}

@@ -607,7 +607,7 @@ export function periodLabel(date: Date, view: CalendarView): string {
 /** Short label for the phone date control. The full periodLabel stays in the accessible name. */
 export function compactPeriodLabel(date: Date, view: CalendarView): string {
   const loc = { locale: dateFnsLocale() };
-  if (view === 'day') return format(date, 'EEE d MMM', loc);
+  if (view === 'day') return format(date, 'EEEEEE d MMM', loc);
   if (view === 'month') return capitalize(format(date, 'LLL yyyy', loc));
   const start = startOfWeekMonday(date);
   const end = new Date(start);

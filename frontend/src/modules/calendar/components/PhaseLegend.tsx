@@ -48,7 +48,7 @@ export function PhaseLegend({ date, compact = false }: Props) {
         onClick={() => setOpen((v) => !v)}
         className={cx(
           'inline-flex shrink-0 items-center gap-2 rounded-control border border-ide-border bg-ide-panel text-body-sm text-ide-text transition hover:bg-ide-surface',
-          compact ? 'h-11 px-3' : 'h-9 px-3',
+          compact ? 'h-11 px-2.5' : 'h-9 px-3',
         )}
       >
         <span className="flex -space-x-1" aria-hidden>
@@ -61,7 +61,7 @@ export function PhaseLegend({ date, compact = false }: Props) {
           ))}
         </span>
         {compact ? null : <span>{t('calendar.phases')}</span>}
-        <ChevronDown className="h-4 w-4 text-ide-muted" aria-hidden />
+        {compact ? null : <ChevronDown className="h-4 w-4 text-ide-muted" aria-hidden />}
       </button>
       <Popover open={open} onClose={() => setOpen(false)} anchorRef={ref} width={280} align="end" label={t('calendar.phasesLegend')} className="p-2">
         <ul className="flex flex-col">

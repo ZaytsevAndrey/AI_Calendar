@@ -17,8 +17,8 @@ import {
 import { TaskDTO } from '../../../api/tasks.api';
 import { taskTraits } from '../../tasks/schedulingTraits';
 import {
-  formatDateTime,
-  formatDateTimeRange,
+  formatDateTimeCompact,
+  formatSlotCompact,
   formatMinutes,
   formatSeriesSpanSummary,
 } from '../../../utils/formatDate';
@@ -59,9 +59,9 @@ const EventItem: React.FC<EventItemProps> = ({
   const { t } = useTranslation();
   const moreRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const until = formatDateTime(event.deadline);
-  const from = formatDateTime(event.earliestStartTime);
-  const slot = formatDateTimeRange(event.scheduledStartTime, event.scheduledEndTime);
+  const until = formatDateTimeCompact(event.deadline);
+  const from = formatDateTimeCompact(event.earliestStartTime);
+  const slot = formatSlotCompact(event.scheduledStartTime, event.scheduledEndTime);
   const unscheduled = !!event.isUnscheduled;
   const busy = busyId === event.id;
   const when = slot || (!unscheduled && from && until ? `${from} – ${until}` : null);
@@ -189,10 +189,10 @@ const EventItem: React.FC<EventItemProps> = ({
   if (event.estimatedTimeInMinutes) metaParts.push(<span key="dur">{formatMinutes(event.estimatedTimeInMinutes)}</span>);
   if (event.phase) {
     metaParts.push(
-      <span key="phase" className="inline-flex items-center gap-1">
+      <span key="phase">
         <span
           aria-hidden
-          className="h-2 w-2 rounded-full"
+          className="mr-1 inline-block h-2 w-2 rounded-full align-middle"
           style={{ backgroundColor: phaseColor(event.phase.color) }}
         />
         {event.phase.name}
@@ -276,7 +276,7 @@ const EventItem: React.FC<EventItemProps> = ({
               {event.name}
             </button>
           </h3>
-          <p className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-body-sm tabular-nums text-ide-muted">
+          <p className="mt-0.5 flex min-w-0 items-center gap-x-1.5 overflow-hidden whitespace-nowrap text-body-sm tabular-nums text-ide-muted">
             {KindGlyph ? (
               <span
                 className="inline-flex"
@@ -291,12 +291,14 @@ const EventItem: React.FC<EventItemProps> = ({
                 <Repeat className="h-3.5 w-3.5" aria-hidden />
               </span>
             ) : null}
-            {metaParts.map((part, index) => (
-              <React.Fragment key={index}>
-                {index > 0 ? <span aria-hidden>·</span> : null}
-                {part}
-              </React.Fragment>
-            ))}
+            <span className="min-w-0 truncate">
+              {metaParts.map((part, index) => (
+                <React.Fragment key={index}>
+                  {index > 0 ? <span aria-hidden> · </span> : null}
+                  {part}
+                </React.Fragment>
+              ))}
+            </span>
           </p>
         </div>
         {flagged ? (

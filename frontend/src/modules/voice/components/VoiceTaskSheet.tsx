@@ -28,7 +28,7 @@ function CompanionModeSwitch({ voice }: { voice: VoiceController }) {
     <div
       role="group"
       aria-label={t('voice.modeLabel')}
-      className="inline-flex w-full rounded-md border border-ide-border bg-ide-surface p-0.5"
+      className="inline-flex w-full rounded-control border border-ide-border bg-ide-surface p-0.5"
     >
       {options.map((option) => {
         const selected = companionMode === option.id;
@@ -36,8 +36,8 @@ function CompanionModeSwitch({ voice }: { voice: VoiceController }) {
           <button
             key={option.id}
             type="button"
-            className={`min-w-0 flex-1 rounded px-2 py-1 text-xs font-medium ${
-              selected ? 'bg-ide-selection text-ide-text' : 'text-ide-muted hover:bg-ide-text/5'
+            className={`h-10 min-w-0 flex-1 rounded-[8px] px-2 text-body-sm font-medium transition md:h-8 ${
+              selected ? 'bg-ide-panel text-ide-text shadow-ide' : 'text-ide-muted hover:text-ide-text'
             }`}
             aria-pressed={selected}
             title={option.hint}
@@ -300,7 +300,7 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
 
   const body = (
     <div
-      className={`flex h-full min-h-0 flex-col gap-3 text-sm ${phone ? 'min-h-[78dvh]' : ''}`}
+      className="flex h-full min-h-0 flex-col gap-3 text-body-sm"
     >
       <CompanionModeSwitch voice={voice} />
 
@@ -420,6 +420,7 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
         maxWidthClass="max-w-none"
         zIndexClass="z-[1400]"
         bodyOverflowHidden
+        phoneHeight="full"
         footer={footer}
       >
         {body}
