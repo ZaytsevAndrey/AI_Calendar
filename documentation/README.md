@@ -32,6 +32,7 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Design system](design/design-system.md) | Brand, color tokens (both themes), phase palette, type, spacing, components, layout, settings IA, copy rules |
 | [Design fix plan](design/design-fix-plan.md) | Staged fixes: P0, tokens, calendar, settings + phases, tasks, dialogs; files and done criteria |
 | [Mobile plan](design/mobile-plan.md) | Phone components: what is there, what replaces it (Today sheet, slot sheet, pickers, swipe rows), steps M0–M8 |
+| [Screen inventory](design/screen-inventory.md) | Every screen, dialog and state to redesign and check on desktop and phone |
 | [E2E test coverage plan](e2e-test-coverage.md) | All live API/UI cases and edge cases, layers, P0 smoke, implementation waves |
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
