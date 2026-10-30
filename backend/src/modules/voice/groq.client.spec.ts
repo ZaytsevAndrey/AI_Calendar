@@ -152,6 +152,29 @@ describe('GroqClient local LLM', () => {
     expect(bearers).toEqual(['Bearer key-1', 'Bearer key-1', 'Bearer key-2']);
   });
 
+  // WP-F (VR-24): the structured turn reads the usage of the call it just made.
+  it('hands the last completion usage to the caller inside a pin context, once', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: '{"ok":true}' } }],
+        usage: { total_tokens: 120, prompt_tokens: 100, completion_tokens: 20 },
+      }),
+    }) as unknown as typeof fetch;
+    const groq = new GroqClient({ get: (key: string) => (key === 'GROQ_API_KEY' ? 'key-1' : undefined) } as ConfigService);
+    const seen = await groq.runWithPin(0, async () => {
+      await groq.completeJson('system', 'user');
+      const first = groq.takeLastCompletion();
+      const again = groq.takeLastCompletion();
+      return { first, again };
+    });
+    expect(seen.value.first).toMatchObject({ totalTokens: 120, promptTokens: 100, completionTokens: 20 });
+    expect(typeof seen.value.first?.model).toBe('string');
+    expect(seen.value.again).toBeNull();
+    expect(seen.tokensUsed).toBe(120);
+  });
+
   it('rotates on the live API when two or more keys are set without GROQ_ROTATE_KEYS', async () => {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,

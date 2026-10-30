@@ -46,3 +46,23 @@ export function deepseekFlashUsd(input: {
     + input.output * rate.output) / 1_000_000;
   return { usd, peak };
 }
+
+/**
+ * Cost of one completion in USD for the models with a known price; null otherwise.
+ * Without a prompt / completion split the total is charged as cache-miss input (an upper bound).
+ */
+export function completionUsd(
+  model: string,
+  usage: { totalTokens: number; promptTokens: number | null; completionTokens: number | null },
+  at: Date = new Date(),
+): number | null {
+  const input = usage.promptTokens ?? usage.totalTokens;
+  const output = usage.completionTokens ?? 0;
+  if (model === DEEPSEEK_FLASH_PRICE.model) {
+    return Math.round(deepseekFlashUsd({ at, cacheHit: 0, cacheMiss: input, output }).usd * 1_000_000) / 1_000_000;
+  }
+  if (model === GPT6_LUNA_PRICE.model) {
+    return Math.round(gpt6LunaUsd({ cacheHit: 0, cacheMiss: input, output }).usd * 1_000_000) / 1_000_000;
+  }
+  return null;
+}

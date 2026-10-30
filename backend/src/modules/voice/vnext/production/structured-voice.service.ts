@@ -45,6 +45,7 @@ import { buildCatalog, fingerprint, readResult, reminderRecord, taskRecord } fro
 import { applyReport, expireUnreported, recordDispatch } from './outcomes';
 import { StructuredVoiceSessions, type SessionEntry } from './session-registry';
 import { TurnLog } from './turn-log';
+import { completionUsd } from '../llm/pricing';
 import { FIND_TASKS_TOOL, findTasks } from '../search/find-tasks';
 import { externalRecord, FIND_EVENTS_TOOL, parseFindEventsArgs } from '../search/find-events';
 import type { ProviderEvent } from '../../../calendar-providers/calendar-provider.types';
@@ -270,6 +271,7 @@ export class StructuredVoiceService {
       execution: response.execution ?? null,
       openQuestion: Boolean(entry.session.openQuestion),
       ledger: entry.session.applyLedger.map((row) => row.status),
+      usage: log.usage,
     }, { assistantMessage: response.assistantMessage, intents: response.intents });
     return response;
   }
@@ -302,6 +304,10 @@ export class StructuredVoiceService {
         const started = Date.now();
         try {
           const text = await this.groq.completeJson(system, user, { role: 'planner', label: `vnext.${kind}` });
+          // What the provider reported for this call: tokens, the model that answered, and its price (VR-24).
+          const measured = this.groq.takeLastCompletion();
+          const usd = measured ? completionUsd(measured.model, measured) : null;
+          log.noteModelCall(measured ? { ...measured, usd } : null);
           log.step('model.call', {
             call: index,
             kind,
@@ -309,8 +315,18 @@ export class StructuredVoiceService {
             systemChars: system.length,
             userChars: user.length,
             outputChars: text.length,
+            model: measured?.model ?? null,
+            tokens: measured?.totalTokens ?? null,
+            promptTokens: measured?.promptTokens ?? null,
+            completionTokens: measured?.completionTokens ?? null,
+            usd,
           }, index === 1 ? `output=${text}` : `user=${user} || output=${text}`);
-          return { text, inputTokens: 0, outputTokens: 0, latencyMs: Date.now() - started };
+          return {
+            text,
+            inputTokens: measured?.promptTokens ?? 0,
+            outputTokens: measured?.completionTokens ?? 0,
+            latencyMs: Date.now() - started,
+          };
         } catch (err) {
           log.warn('model.call', {
             call: index,

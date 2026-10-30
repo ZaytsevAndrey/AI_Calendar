@@ -90,6 +90,8 @@ function build(world: World) {
       if (next == null) throw new Error('unscripted model call');
       return next;
     }),
+    // What the client measured for the call that just returned; null when the provider gave nothing.
+    takeLastCompletion: jest.fn(() => ({ model: 'deepseek-flash', totalTokens: 120, promptTokens: 100, completionTokens: 20 })),
   };
   const externalBusy = { listVisibleEvents: jest.fn(async () => world.events ?? []) };
   const service = new StructuredVoiceService(
@@ -1122,6 +1124,13 @@ describe('structured voice step log', () => {
       'interpreter.ui_action', 'confirm.reread', 'apply.dispatched',
     ]));
     expect(lines.find((line) => line.includes(' model.call '))).toMatch(/"ms":\d+/);
+    // WP-F (VR-24): tokens, model and a cost estimate per call and per turn, without bodies.
+    expect(lines.find((line) => line.includes(' model.call '))).toContain('"model":"deepseek-flash"');
+    expect(lines.find((line) => line.includes(' model.call '))).toContain('"tokens":120');
+    expect(lines.find((line) => line.includes(' model.call '))).toContain('"promptTokens":100');
+    expect(lines.find((line) => line.includes(' model.call '))).toMatch(/"usd":0\.\d+/);
+    const result = lines.find((line) => line.includes(' turn.result ') && line.includes('"outcome":"confirm"'));
+    expect(result).toContain('"usage":{"calls":1,"tokens":120,"promptTokens":100,"completionTokens":20,"usd":');
     expect(lines.find((line) => line.includes(' turn.start '))).toContain('body=delete the report');
     expect(lines.find((line) => line.includes(' model.call '))).toContain('"proposedId":"report"');
     const names = trace.steps.map((step) => step.name);
