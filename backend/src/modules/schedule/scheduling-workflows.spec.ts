@@ -179,6 +179,8 @@ describe('scheduling workflows', () => {
       attempts: 0,
     } as never);
     const google = {
+      // The grant still refreshes; the writes themselves fail.
+      checkConnection: jest.fn().mockResolvedValue({ connected: true }),
       deleteEvent: jest.fn(async (userId: string) => {
         if (userId === 'revoked') throw new Error('invalid_grant');
       }),

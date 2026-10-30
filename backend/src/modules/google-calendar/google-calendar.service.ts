@@ -114,6 +114,24 @@ function eventOverlapsWindow(event: DisplayGoogleEvent, startMs: number, endMs: 
 
 @Injectable()
 export class GoogleCalendarService {
+  /** Called after a user's Google grant is stored again (connect / sign-in). */
+  private readonly reconnectListeners: Array<(userId: string) => void> = [];
+
+  /** The write queue revives a reconnected user's waiting and failed writes. */
+  onReconnected(listener: (userId: string) => void): void {
+    this.reconnectListeners.push(listener);
+  }
+
+  private notifyReconnected(userId: string): void {
+    for (const listener of this.reconnectListeners) {
+      try {
+        listener(userId);
+      } catch (e: unknown) {
+        this.logger.warn(`Reconnect listener failed for ${userId}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+  }
+
   /** OAuth app config. Each call builds its own client: credentials are per user. */
   private readonly oauthConfig: [string | undefined, string | undefined, string];
   private readonly logger = new Logger(GoogleCalendarService.name);
@@ -358,6 +376,7 @@ export class GoogleCalendarService {
         tokens.expiry_date ?? Date.now() + 3_600_000,
       ),
     });
+    this.notifyReconnected(userId);
   }
 
   private async ensureSettingsLinked(userId: string): Promise<void> {
@@ -424,6 +443,7 @@ export class GoogleCalendarService {
       );
 
       this.logger.log(`Successfully saved Google tokens for user ${user.id}`);
+      this.notifyReconnected(user.id);
 
       try {
         oauth.setCredentials({

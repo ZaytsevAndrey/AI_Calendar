@@ -15,6 +15,7 @@ import { ScheduleJob } from '../../src/modules/schedule/entities/schedule-job.en
 import { ScheduledTask } from '../../src/modules/schedule/schedule.entity';
 import { DisplayedEventMoveService } from '../../src/modules/schedule/displayed-event-move.service';
 import { ProblematicPlaceService } from '../../src/modules/schedule/problematic-place.service';
+import { GoogleSyncOutboxSubscriber } from '../../src/modules/google-calendar/google-sync-outbox.subscriber';
 
 /**
  * In-memory SQLite with the real entities and a real PlacementStepService.
@@ -32,6 +33,8 @@ export async function createPlacementKit(opts: {
   sleepTime?: string;
   horizonDays?: number;
   postgresUrl?: string;
+  /** Register the Google outbox subscriber (queue rows written with each change). */
+  outbox?: boolean;
 }) {
   jest.useFakeTimers({
     now: new Date(opts.now),
@@ -52,6 +55,7 @@ export async function createPlacementKit(opts: {
   const timeZone = opts.timeZone ?? 'UTC';
 
   const entities = [join(__dirname, '..', '..', 'src', 'modules', '**', '*.entity.{ts,js}').replace(/\\/g, '/')];
+  const subscribers = opts.outbox ? [GoogleSyncOutboxSubscriber] : [];
   let dropDatabase = async (): Promise<void> => undefined;
   let ds: DataSource;
   if (opts.postgresUrl) {
@@ -60,13 +64,13 @@ export async function createPlacementKit(opts: {
     await admin.query(`CREATE DATABASE "${name}"`);
     const target = new URL(opts.postgresUrl);
     target.pathname = `/${name}`;
-    ds = new DataSource({ type: 'postgres', url: target.toString(), synchronize: true, entities });
+    ds = new DataSource({ type: 'postgres', url: target.toString(), synchronize: true, entities, subscribers });
     dropDatabase = async () => {
       await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
       await admin.destroy();
     };
   } else {
-    ds = new DataSource({ type: 'sqlite', database: ':memory:', synchronize: true, entities });
+    ds = new DataSource({ type: 'sqlite', database: ':memory:', synchronize: true, entities, subscribers });
   }
   await ds.initialize();
 
@@ -93,6 +97,7 @@ export async function createPlacementKit(opts: {
     enqueue: jest.fn(async () => undefined),
     discardPendingUpserts: jest.fn(async () => undefined),
     waitForInflight: jest.fn(async () => undefined),
+    kickRows: jest.fn(async () => 0),
   };
 
   /** External calendars (Google / Microsoft) seen by placement. */

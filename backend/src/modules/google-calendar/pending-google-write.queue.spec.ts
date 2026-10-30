@@ -163,67 +163,6 @@ describe('Google write queue', () => {
     expect(await repo().count()).toBe(0);
   });
 
-  describe('sync after a placement (syncTaskSoon) survives a restart', () => {
-    const seated = async () => {
-      const task = await kit.addTask({
-        name: 'Shifted',
-        scheduledStartTime: kit.at('2026-11-05', '10:00'),
-        scheduledEndTime: kit.at('2026-11-05', '11:00'),
-      });
-      await kit.addSlot(task.id, kit.at('2026-11-05', '10:00'), kit.at('2026-11-05', '11:00'));
-      return task;
-    };
-    const durably = (service: PendingGoogleWriteService, taskId: string) =>
-      (service as unknown as { syncTaskDurably: (u: string, t: string) => Promise<void> }).syncTaskDurably(
-        kit.user.id,
-        taskId,
-      );
-
-    it('leaves nothing queued when the sync succeeds', async () => {
-      const task = await seated();
-      google.createEvent.mockImplementation(async (_u: string, body: { id: string }) => ({ id: body.id }));
-      await durably(writes, task.id);
-      expect(await repo().count()).toBe(0);
-      expect((await kit.taskRepo.findOneByOrFail({ id: task.id })).googleEventId).toMatch(/^[0-9a-v]{32}$/);
-    });
-
-    it('keeps the write queued when the sync fails', async () => {
-      const task = await seated();
-      google.createEvent.mockRejectedValue(new Error('Google 503'));
-      await durably(writes, task.id);
-      const row = await repo().findOneByOrFail({ taskId: task.id });
-      expect(row).toMatchObject({ status: 'pending', operation: 'upsert', lastError: 'Google 503' });
-    });
-
-    it('a process that dies mid-call leaves a record the next instance sends', async () => {
-      const task = await seated();
-      // This instance's Google call never returns (the process is killed).
-      google.createEvent.mockReturnValue(new Promise(() => undefined));
-      void durably(writes, task.id);
-      for (let i = 0; i < 50 && !(await repo().count()); i += 1) await new Promise((r) => setTimeout(r, 5));
-      const row = await repo().findOneByOrFail({ taskId: task.id });
-      // Not sent by the queue while the first attempt may still be running.
-      expect(row.nextRunAt!.getTime()).toBeGreaterThan(Date.now());
-
-      const restarted = {
-        ...google,
-        createEvent: jest.fn(async (_u: string, body: { id: string }) => ({ id: body.id })),
-      };
-      const next = new PendingGoogleWriteService(
-        repo(),
-        kit.taskRepo,
-        kit.slotRepo,
-        kit.ds.getRepository(UserSettings),
-        restarted as never,
-      );
-      jest.setSystemTime(row.nextRunAt!);
-      expect(await next.processQueue()).toBe(1);
-      expect(restarted.createEvent).toHaveBeenCalledTimes(1);
-      expect((await kit.taskRepo.findOneByOrFail({ id: task.id })).googleEventId).toBeTruthy();
-      expect(await repo().count()).toBe(0);
-    });
-  });
-
   describe('Google-side failures never corrupt the local schedule', () => {
     const seatedTask = async (extra: Record<string, unknown> = {}) => {
       const task = await kit.addTask({

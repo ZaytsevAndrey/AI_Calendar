@@ -27,6 +27,7 @@ describePg('Google write queue on Postgres', () => {
   let name: string;
   const sent: string[] = [];
   const google = {
+    checkConnection: jest.fn(async () => ({ connected: true })),
     deleteEvent: jest.fn(async (_userId: string, eventId: string) => {
       sent.push(eventId);
       await new Promise((resolve) => setTimeout(resolve, 30));
@@ -66,7 +67,8 @@ describePg('Google write queue on Postgres', () => {
 
   it('sends each due row exactly once across concurrent sweeps on two instances', async () => {
     const rows = Array.from({ length: 12 }, (_, i) => ({
-      userId: `user-${i % 3}`,
+      // tasks.userId is a uuid: the obsolete-delete check filters on it.
+      userId: `00000000-0000-4000-8000-00000000000${i % 3}`,
       taskId: null,
       googleEventId: `g-${i}`,
       operation: 'delete' as const,
@@ -86,7 +88,7 @@ describePg('Google write queue on Postgres', () => {
   it('takes over a row left running by a crashed instance once its lease expires', async () => {
     const repo = one.getRepository(PendingGoogleWrite);
     await repo.save({
-      userId: 'user-1',
+      userId: '00000000-0000-4000-8000-000000000001',
       taskId: null,
       googleEventId: 'g-crashed',
       operation: 'delete',
@@ -95,7 +97,7 @@ describePg('Google write queue on Postgres', () => {
       leaseUntil: new Date(Date.now() - 1_000),
     } as never);
     await repo.save({
-      userId: 'user-1',
+      userId: '00000000-0000-4000-8000-000000000001',
       taskId: null,
       googleEventId: 'g-held',
       operation: 'delete',

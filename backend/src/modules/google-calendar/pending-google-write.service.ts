@@ -1,7 +1,8 @@
 import { randomUUID } from 'crypto';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, LessThan, LessThanOrEqual, Repository } from 'typeorm';
+import { In, IsNull, LessThan, LessThanOrEqual, Not, Repository } from 'typeorm';
+import { recordGoogleWrite, setGoogleOutboxKick } from './google-sync-outbox';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import { phaseHexToGoogleColorId } from './phase-hex-to-google-color-id.util';
 import { applyTaskGoogleEventFields } from './task-google-event-fields.util';
@@ -29,6 +30,11 @@ export const GOOGLE_WRITE_MAX_ATTEMPTS = 8;
 export const GOOGLE_WRITE_BACKOFF_BASE_MS = 60_000;
 export const GOOGLE_WRITE_BACKOFF_MAX_MS = 60 * 60_000;
 export const GOOGLE_WRITE_PER_USER = 5;
+/** How long a connection check is trusted (a down one longer: no refresh storm). */
+export const GOOGLE_CONNECTION_OK_TTL_MS = 30_000;
+export const GOOGLE_CONNECTION_DOWN_TTL_MS = 10 * 60_000;
+/** Re-sends of one row in a kick when it keeps changing during its send. */
+export const GOOGLE_KICK_MAX_ROUNDS = 5;
 
 /** Up to `perUser` rows per user, users interleaved, in the given order. */
 export function fairBatch<T extends { userId: string }>(
@@ -52,7 +58,7 @@ export function fairBatch<T extends { userId: string }>(
 }
 
 @Injectable()
-export class PendingGoogleWriteService {
+export class PendingGoogleWriteService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PendingGoogleWriteService.name);
   /** Serialize syncs per task so two createEvent calls cannot race. */
   private readonly inflight = new Map<string, Promise<void>>();
@@ -89,6 +95,7 @@ export class PendingGoogleWriteService {
     return false;
   }
 
+  /** Queue one Google write outside any transaction (a failed send, a delete). */
   async enqueue(
     userId: string,
     operation: PendingGoogleWriteOperation,
@@ -101,62 +108,37 @@ export class PendingGoogleWriteService {
       dueAt?: Date;
     },
   ): Promise<{ id: string; revision: number }> {
-    const candidates = await this.pendingRepo.find({
-      where: { userId, operation },
-      take: 50,
+    return recordGoogleWrite(this.pendingRepo.manager, {
+      userId,
+      operation,
+      ...opts,
+      dueAt: opts.dueAt ?? new Date(Date.now() + GOOGLE_WRITE_BACKOFF_BASE_MS),
     });
-    const existing = candidates.find((row) => {
-      if (opts.taskId) return row.taskId === opts.taskId;
-      return (
-        !!opts.googleEventId && row.googleEventId === opts.googleEventId
-      );
-    });
-    const retryAt = opts.dueAt ?? new Date(Date.now() + GOOGLE_WRITE_BACKOFF_BASE_MS);
-    if (existing) {
-      // A new failure is new work: a running row is re-run by its worker
-      // (revision), a failed one gets a fresh set of attempts.
-      // Only "changed since the claim" matters, so a plain +1 is enough.
-      const patch: Partial<PendingGoogleWrite> = {
-        revision: (existing.revision ?? 0) + 1,
-        lastError: opts.error ?? existing.lastError,
-        googleEventId: opts.googleEventId ?? existing.googleEventId,
-        googleCalendarId: opts.googleCalendarId ?? existing.googleCalendarId,
-      };
-      if (existing.status !== 'running') {
-        Object.assign(patch, { status: 'pending', nextRunAt: retryAt, leaseUntil: null });
-        if (existing.status === 'failed') patch.attempts = 0;
-      }
-      await this.pendingRepo.update({ id: existing.id }, patch);
-      return { id: existing.id, revision: patch.revision! };
-    }
-    // insert, not save: no implicit transaction (SQLite shares one connection
-    // with the request that triggered this background write).
-    const id = randomUUID();
-    await this.pendingRepo.insert(
-      this.pendingRepo.create({
-        id,
-        userId,
-        operation,
-        taskId: opts.taskId ?? null,
-        googleEventId: opts.googleEventId ?? null,
-        googleCalendarId: opts.googleCalendarId ?? null,
-        attempts: 0,
-        lastError: opts.error ?? null,
-        status: 'pending',
-        nextRunAt: retryAt,
-        leaseUntil: null,
-        revision: 0,
-      }),
-    );
-    return { id, revision: 0 };
   }
 
-  /**
-   * Kick Google sync without blocking the HTTP/placement caller.
-   * Failures still enqueue retries inside `syncTask`.
-   */
+  onModuleInit(): void {
+    // Rows written by the outbox inside a transaction are sent right after its commit.
+    setGoogleOutboxKick((rowIds) => {
+      void this.kickRows(rowIds).catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Google outbox send failed: ${message}`);
+      });
+    });
+    this.google.onReconnected((userId) => {
+      void this.reviveForUser(userId).catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Reviving Google writes for ${userId} failed: ${message}`);
+      });
+    });
+  }
+
+  onModuleDestroy(): void {
+    setGoogleOutboxKick(null);
+  }
+
+  /** Send a task's Google write in the background (the queue row is the record). */
   syncTaskSoon(userId: string, taskId: string): void {
-    void this.syncTaskDurably(userId, taskId).catch((err) => {
+    void this.syncTask(userId, taskId).catch((err) => {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.warn(
         `Background Google sync failed for task ${taskId}: ${message}`,
@@ -165,115 +147,97 @@ export class PendingGoogleWriteService {
   }
 
   /**
-   * Record the write in the queue first (due after a lease), then send it now.
-   * If this process dies before Google answers, the queue sends it later. On
-   * success the record is removed — unless a failure re-queued it meanwhile
-   * (newer revision).
+   * Make Google match the task now, through its queue row: record (or
+   * refresh) the upsert row, claim it and send it. A failure stays on the row
+   * (backoff, then `failed`); a row another worker holds is sent by that
+   * worker, which re-runs it if this change came after its claim (revision).
+   * Without a Google connection nothing is written.
    */
-  private async syncTaskDurably(userId: string, taskId: string): Promise<void> {
-    // Nothing to send without a Google connection (and no write to record).
-    if (!(await this.google.checkConnection(userId)).connected) return;
+  async syncTask(userId: string, taskId: string): Promise<void> {
+    if (!(await this.connected(userId))) return;
     const intent = await this.enqueue(userId, 'upsert', {
       taskId,
       dueAt: new Date(Date.now() + GOOGLE_WRITE_LEASE_MS),
     });
-    await this.syncTask(userId, taskId);
-    await this.pendingRepo.delete({ id: intent.id, revision: intent.revision });
+    await this.kickRows([intent.id]);
   }
 
-  /**
-   * Drop queued upserts for a task that is being removed so the retry worker
-   * cannot recreate its Google event after local delete.
-   */
-  async discardPendingUpserts(userId: string, taskId: string): Promise<void> {
-    const rows = await this.pendingRepo.find({
-      where: { userId, taskId, operation: 'upsert' },
-      take: 50,
-    });
-    if (rows.length) await this.pendingRepo.remove(rows);
-  }
-
-  /** Wait until any in-flight `syncTask` for this id finishes. */
-  async waitForInflight(userId: string, taskId: string): Promise<void> {
-    const key = `${userId}:${taskId}`;
-    const run = this.inflight.get(key);
-    if (!run) return;
-    await run.catch(() => undefined);
-  }
-
-  /**
-   * Try to write the task to Google now; on failure enqueue a retry.
-   * No open seat → delete any linked Google event (and enqueue delete on failure).
-   * Concurrent calls for the same task wait and reload so only one createEvent runs.
-   */
-  async syncTask(userId: string, taskId: string): Promise<void> {
-    const key = `${userId}:${taskId}`;
-    const previous = this.inflight.get(key) ?? Promise.resolve();
-    const run = previous
-      .catch(() => undefined)
-      .then(() => this.syncTaskUnlocked(userId, taskId));
-    this.inflight.set(key, run);
-    try {
-      await run;
-    } finally {
-      if (this.inflight.get(key) === run) this.inflight.delete(key);
-    }
-  }
-
-  private async syncTaskUnlocked(userId: string, taskId: string): Promise<void> {
-    const task = await this.taskRepo.findOne({
-      where: { id: taskId, userId },
-      relations: ['phase', 'phases'],
-    });
-    if (!task) return;
-
-    if (!this.canSyncTask(task)) {
-      await this.deleteTaskGoogle(userId, task);
-      return;
-    }
-
-    const conn = await this.google.checkConnection(userId);
-    if (!conn.connected) return;
-
-    const calendarId = task.googleEventCalendarId ?? 'primary';
-    const syncOpts = { skipSleepWindowCheck: true as const, calendarId };
-    try {
-      if (task.isRecurring) {
-        await this.writeRecurringSeries(userId, task, calendarId);
-        return;
-      }
-      const payload = await this.buildPayload(task);
-      if (task.googleEventId) {
-        await this.google.updateEvent(
-          userId,
-          task.googleEventId,
-          payload,
-          syncOpts,
-        );
-        if (!(await this.taskStillExists(userId, taskId))) {
-          await this.deleteGoogleEventQuietly(
-            userId,
-            task.googleEventId,
-            calendarId,
-          );
-          return;
+  /** Claim and send these rows now (in-process one send per task at a time). */
+  async kickRows(rowIds: string[]): Promise<number> {
+    if (!rowIds.length) return 0;
+    const rows = await this.pendingRepo.find({ where: { id: In(rowIds) } });
+    let sent = 0;
+    for (const row of rows) {
+      if (row.status !== 'pending') continue;
+      if (!(await this.connected(row.userId))) continue;
+      await this.serialized(row, async () => {
+        // Changed while it was being sent: send the newest state now (bounded).
+        for (let round = 0; round < GOOGLE_KICK_MAX_ROUNDS; round += 1) {
+          const fresh = await this.pendingRepo.findOne({ where: { id: row.id } });
+          if (!fresh || fresh.status !== 'pending') return;
+          if (!(await this.claim(fresh))) return;
+          const result = await this.send(fresh);
+          if (result !== 'failed') sent += 1;
+          if (result !== 'again') return;
         }
-        await this.stampOpenSlotGoogle(task);
-      } else {
-        const ev = await this.createTaskEvent(userId, task, payload, syncOpts);
-        await this.attachCreatedGoogleEvent(userId, task, ev, calendarId);
-      }
-    } catch (err) {
-      if (!(await this.taskStillExists(userId, taskId))) return;
-      const message = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Google sync failed for task ${taskId}: ${message}`);
-      await this.enqueue(userId, 'upsert', {
-        taskId,
-        googleEventId: task.googleEventId,
-        googleCalendarId: task.googleEventCalendarId,
-        error: message,
       });
     }
+    return sent;
+  }
+
+  /**
+   * After a reconnect: waiting rows are due at once and terminally failed
+   * ones get a fresh set of attempts. Upserts send the task's current state,
+   * never a stale one; deletes skip events something still uses.
+   */
+  async reviveForUser(userId: string): Promise<number> {
+    this.connection.delete(userId);
+    const result = await this.pendingRepo.update(
+      { userId, status: In(['failed', 'pending']) },
+      { status: 'pending', attempts: 0, nextRunAt: null, leaseUntil: null },
+    );
+    const rows = await this.pendingRepo.find({ select: { id: true }, where: { userId, status: 'pending' } });
+    await this.kickRows(rows.map((row) => row.id));
+    return result.affected ?? 0;
+  }
+
+  /** Recently seen connection state per user (a revoked grant is not re-checked every pass). */
+  private readonly connection = new Map<string, { connected: boolean; at: number }>();
+
+  private async connected(userId: string): Promise<boolean> {
+    const cached = this.connection.get(userId);
+    const ttl = cached?.connected ? GOOGLE_CONNECTION_OK_TTL_MS : GOOGLE_CONNECTION_DOWN_TTL_MS;
+    if (cached && Date.now() - cached.at < ttl) return cached.connected;
+    const { connected } = await this.google.checkConnection(userId);
+    this.connection.set(userId, { connected, at: Date.now() });
+    return connected;
+  }
+
+  private async serialized(row: PendingGoogleWrite, run: () => Promise<void>): Promise<void> {
+    const key = `${row.userId}:${row.taskId ?? row.googleEventId ?? row.id}`;
+    const previous = this.inflight.get(key) ?? Promise.resolve();
+    const current = previous.catch(() => undefined).then(run);
+    this.inflight.set(key, current);
+    try {
+      await current;
+    } finally {
+      if (this.inflight.get(key) === current) this.inflight.delete(key);
+    }
+  }
+
+  /**
+   * Drop queued upserts for a task that is being removed (its event gets a
+   * delete row instead).
+   */
+  async discardPendingUpserts(userId: string, taskId: string): Promise<void> {
+    await this.pendingRepo.delete({ userId, taskId, operation: 'upsert', status: Not('running') });
+  }
+
+  /** Wait until any in-flight send for this task finishes. */
+  async waitForInflight(userId: string, taskId: string): Promise<void> {
+    const run = this.inflight.get(`${userId}:${taskId}`);
+    if (!run) return;
+    await run.catch(() => undefined);
   }
 
   /**
@@ -294,8 +258,12 @@ export class PendingGoogleWriteService {
     });
     let done = 0;
     for (const row of fairBatch(due, limit, GOOGLE_WRITE_PER_USER)) {
-      if (!(await this.claim(row))) continue;
-      if (await this.send(row)) done += 1;
+      // Disconnected / revoked: the row waits untouched (no attempt spent)
+      // until the user reconnects (reviveForUser) or the grant works again.
+      if (!(await this.connected(row.userId))) continue;
+      await this.serialized(row, async () => {
+        if ((await this.claim(row)) && (await this.send(row)) !== 'failed') done += 1;
+      });
     }
     return done;
   }
@@ -315,7 +283,11 @@ export class PendingGoogleWriteService {
     return true;
   }
 
-  private async send(row: PendingGoogleWrite): Promise<boolean> {
+  /**
+   * Perform one claimed row. `again`: sent, but the task changed during the
+   * send (newer revision), so the row is pending again for the newest state.
+   */
+  private async send(row: PendingGoogleWrite): Promise<'sent' | 'again' | 'failed'> {
     try {
       if (row.operation === 'delete') {
         await this.processDelete(row);
@@ -349,7 +321,7 @@ export class PendingGoogleWriteService {
           `Pending Google ${row.operation} ${row.id} attempt ${row.attempts} failed (${message}); retry in ${delay} ms`,
         );
       }
-      return false;
+      return 'failed';
     }
     // Sent. A failure queued meanwhile (newer revision) is work this pass did
     // not see: put the row back instead of deleting it.
@@ -359,8 +331,9 @@ export class PendingGoogleWriteService {
         { id: row.id },
         { status: 'pending', leaseUntil: null, nextRunAt: null },
       );
+      return 'again';
     }
-    return true;
+    return 'sent';
   }
 
   private async processUpsert(row: PendingGoogleWrite): Promise<void> {
@@ -399,18 +372,24 @@ export class PendingGoogleWriteService {
     if (task.googleEventId || row.googleEventId) {
       const eventId = task.googleEventId || row.googleEventId!;
       try {
-        const remote = await this.google.getEvent(
-          row.userId,
-          eventId,
-          calendarId,
-        );
-        const fields = googleEventFieldsFromApi(remote);
-        if (
-          googleContentDiffers(local, fields) &&
-          googleEditedAfterEnqueue(fields.updatedIso, row.enqueuedAt)
-        ) {
-          await this.pullGoogleOntoTask(task, fields);
-          return;
+        // A write that waited (retries, reconnect): an edit made in Google
+        // since the last local change wins. Sent right after the change, the
+        // local state is the newest and no extra read is spent.
+        const waited = Date.now() - new Date(row.enqueuedAt).getTime() > GOOGLE_WRITE_LEASE_MS;
+        if (waited) {
+          const remote = await this.google.getEvent(
+            row.userId,
+            eventId,
+            calendarId,
+          );
+          const fields = googleEventFieldsFromApi(remote);
+          if (
+            googleContentDiffers(local, fields) &&
+            googleEditedAfterEnqueue(fields.updatedIso, row.enqueuedAt)
+          ) {
+            await this.pullGoogleOntoTask(task, fields);
+            return;
+          }
         }
         if (task.isRecurring) {
           await this.writeRecurringSeries(row.userId, task, calendarId);
@@ -422,6 +401,11 @@ export class PendingGoogleWriteService {
           await this.buildPayload(task),
           { skipSleepWindowCheck: true, calendarId },
         );
+        // Deleted while the update was in flight: do not leave its event behind.
+        if (!(await this.taskStillExists(row.userId, task.id))) {
+          await this.deleteGoogleEventQuietly(row.userId, eventId, calendarId);
+          return;
+        }
         await this.stampOpenSlotGoogle(task);
         return;
       } catch (err) {
@@ -517,7 +501,16 @@ export class PendingGoogleWriteService {
     task.googleEventId = ev.id;
     task.googleInsertEventId = null;
     if (ev.appCalendarId) task.googleEventCalendarId = ev.appCalendarId;
-    await this.taskRepo.save(task);
+    // Link columns only: `task` was read before the Google call, and a full
+    // save would overwrite whatever the user changed meanwhile.
+    await this.taskRepo.update(
+      { id: task.id },
+      {
+        googleEventId: task.googleEventId,
+        googleEventCalendarId: task.googleEventCalendarId,
+        googleInsertEventId: null,
+      },
+    );
     await this.stampOpenSlotGoogle(task);
   }
 
@@ -541,6 +534,11 @@ export class PendingGoogleWriteService {
 
   private async processDelete(row: PendingGoogleWrite): Promise<void> {
     if (!row.googleEventId) return;
+    // Obsolete: a task or slot uses this event again (never delete live data).
+    const inUse =
+      (await this.taskRepo.count({ where: { userId: row.userId, googleEventId: row.googleEventId } })) +
+      (await this.scheduledRepo.count({ where: { googleEventId: row.googleEventId } }));
+    if (inUse) return;
     try {
       await this.google.deleteEvent(
         row.userId,
@@ -565,33 +563,35 @@ export class PendingGoogleWriteService {
       await this.taskRepo.remove(task);
       return;
     }
-    if (task.googleEventId === eventId) {
-      task.googleEventId = null;
-      task.googleEventCalendarId = null;
-      await this.taskRepo.save(task);
-    }
+    // Unlink only if the task still points at that event (no stale overwrite).
+    await this.taskRepo.update(
+      { id: task.id, googleEventId: eventId },
+      { googleEventId: null, googleEventCalendarId: null },
+    );
   }
 
   private async pullGoogleOntoTask(
     task: Task,
     fields: ReturnType<typeof googleEventFieldsFromApi>,
   ): Promise<void> {
-    if (fields.summary) task.name = fields.summary;
-    if (fields.description !== undefined) {
-      task.description = fields.description ?? '';
-    }
-    if (fields.startIso) task.scheduledStartTime = new Date(fields.startIso);
-    if (fields.endIso) task.scheduledEndTime = new Date(fields.endIso);
-    await this.taskRepo.save(task);
+    // The pulled columns only (the Google edit wins for these, nothing else).
+    const pulled: Partial<Task> = {};
+    if (fields.summary) pulled.name = fields.summary;
+    if (fields.description !== undefined) pulled.description = fields.description ?? '';
+    if (fields.startIso) pulled.scheduledStartTime = new Date(fields.startIso);
+    if (fields.endIso) pulled.scheduledEndTime = new Date(fields.endIso);
+    Object.assign(task, pulled);
+    if (Object.keys(pulled).length) await this.taskRepo.update({ id: task.id }, pulled);
     const now = Date.now();
     const rows = await this.scheduledRepo.find({ where: { taskId: task.id } });
     const open = rows.filter(
       (row) => new Date(row.scheduledEndTime).getTime() > now,
     );
     if (open.length === 1 && task.scheduledStartTime && task.scheduledEndTime) {
-      open[0].scheduledStartTime = task.scheduledStartTime;
-      open[0].scheduledEndTime = task.scheduledEndTime;
-      await this.scheduledRepo.save(open[0]);
+      await this.scheduledRepo.update(
+        { id: open[0].id },
+        { scheduledStartTime: task.scheduledStartTime, scheduledEndTime: task.scheduledEndTime },
+      );
     }
   }
 
@@ -620,13 +620,14 @@ export class PendingGoogleWriteService {
     if (task.googleEventId || task.googleEventCalendarId) {
       task.googleEventId = null;
       task.googleEventCalendarId = null;
-      await this.taskRepo.save(task);
+      await this.taskRepo.update({ id: task.id }, { googleEventId: null, googleEventCalendarId: null });
     }
     for (const row of rows) {
       if (row.googleEventId) {
-        row.googleEventId = null;
-        row.googleEventCalendarId = null;
-        await this.scheduledRepo.save(row);
+        await this.scheduledRepo.update(
+          { id: row.id },
+          { googleEventId: null, googleEventCalendarId: null },
+        );
       }
     }
   }
@@ -640,16 +641,9 @@ export class PendingGoogleWriteService {
     );
     if (!task.isRecurring) {
       if (open.length !== 1) return;
-      open[0].googleEventId = task.googleEventId;
-      open[0].googleEventCalendarId = task.googleEventCalendarId;
-      await this.scheduledRepo.save(open[0]);
-      return;
     }
-    for (const row of open) {
-      row.googleEventId = task.googleEventId;
-      row.googleEventCalendarId = task.googleEventCalendarId;
-      await this.scheduledRepo.save(row);
-    }
+    const link = { googleEventId: task.googleEventId, googleEventCalendarId: task.googleEventCalendarId };
+    for (const row of open) await this.scheduledRepo.update({ id: row.id }, link);
   }
 
   /**

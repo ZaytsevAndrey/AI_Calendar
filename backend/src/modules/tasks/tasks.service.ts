@@ -8,7 +8,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, In, Repository } from 'typeorm';
+import { EntityManager, In, Not, Repository } from 'typeorm';
 import { isValidIanaTimeZone, resolveIanaTimeZone } from '../../common/iana-time-zone';
 import {
   clearParkMetadata,
@@ -49,6 +49,8 @@ import {
 } from './skipped-occurrence.util';
 import { breaksSeriesMembership } from '../schedule/series-group.util';
 import { isUniqueViolation } from '../../database/unique-violation';
+import { noteGoogleSync, recordGoogleWrite } from '../google-calendar/google-sync-outbox';
+import { PendingGoogleWrite } from '../google-calendar/entities/pending-google-write.entity';
 
 @Injectable()
 export class TasksService implements OnModuleInit {
@@ -293,6 +295,7 @@ export class TasksService implements OnModuleInit {
           { id: task.id },
           { ...clearedParkColumns(), scheduleState: ScheduleState.NONE },
         );
+        await noteGoogleSync(this.tasksRepository.manager, task.id, userId);
       }
       return null;
     }
@@ -339,6 +342,7 @@ export class TasksService implements OnModuleInit {
         // place wrote (skipped days, park state).
         Object.assign(task, revert);
         await this.tasksRepository.update({ id: task.id }, revert);
+        await noteGoogleSync(this.tasksRepository.manager, task.id, userId);
       }
       return plan.outcome === 'conflict' ? plan.conflict : null;
     }
@@ -967,21 +971,36 @@ export class TasksService implements OnModuleInit {
     }
 
     const task = await this.findOne(id, userId);
-    // Stop retries / in-flight sync from recreating the Google event after delete.
-    await this.pendingGoogleWrites.discardPendingUpserts(userId, id);
+    // An in-process send may still create the event; let it finish first (it
+    // deletes what it created if the task is gone by then).
     await this.pendingGoogleWrites.waitForInflight(userId, id);
-    if (task.googleEventId || task.eventType !== TaskEventType.FIXED) {
-      try {
-        await this.scheduleJobService.deleteSyncedGoogleEventsForTask(userId, task);
-      } catch (e: any) {
-        this.logger.warn(
-          `Failed to delete Google event for removed task ${task.id}: ${e?.message ?? e}`,
-        );
-      }
-    }
+    const refs = await this.scheduleJobService.googleEventRefsForTask(task);
     const freed = !task.isUnscheduled;
-    await this.tasksRepository.remove(task);
-    await this.pendingGoogleWrites.discardPendingUpserts(userId, id);
+    // The removal and the Google deletes it owes commit together (outbox);
+    // Google is called only after the commit, and a failure retries.
+    const deleteRows = await this.tasksRepository.manager.transaction(async (manager) => {
+      const rowIds: string[] = [];
+      for (const ref of refs) {
+        const row = await recordGoogleWrite(manager, {
+          userId,
+          operation: 'delete',
+          googleEventId: ref.eventId,
+          googleCalendarId: ref.calendarId ?? null,
+        });
+        rowIds.push(row.id);
+      }
+      await manager.delete(PendingGoogleWrite, {
+        userId,
+        taskId: id,
+        operation: 'upsert',
+        status: Not('running'),
+      });
+      await manager.getRepository(Task).remove(task);
+      return rowIds;
+    });
+    void this.pendingGoogleWrites.kickRows(deleteRows).catch((e: unknown) => {
+      this.logger.warn(`Google delete for removed task ${id} queued: ${e instanceof Error ? e.message : String(e)}`);
+    });
     if (freed) await this.placementStep.seatOpenHoles(userId);
   }
 

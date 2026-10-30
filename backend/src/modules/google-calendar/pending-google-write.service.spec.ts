@@ -1,23 +1,81 @@
 import { PendingGoogleWriteService } from './pending-google-write.service';
 
-describe('PendingGoogleWriteService', () => {
-  const pendingRepo = {
-    find: jest.fn().mockResolvedValue([]),
-    findOne: jest.fn(),
-    save: jest.fn(async (row) => ({ id: 'p1', ...row })),
-    create: jest.fn((row) => row),
-    remove: jest.fn(),
-    update: jest.fn().mockResolvedValue({ affected: 1 }),
-    insert: jest.fn().mockResolvedValue({ identifiers: [] }),
-    delete: jest.fn().mockResolvedValue({ affected: 1 }),
+type Row = Record<string, unknown>;
+
+/** Matches one column against a value or a TypeORM operator (In, IsNull, Not, LessThan…). */
+function matchValue(actual: unknown, expected: unknown): boolean {
+  const op = expected as { _type?: string; _value?: unknown } | null;
+  if (op && typeof op === 'object' && typeof op._type === 'string') {
+    switch (op._type) {
+      case 'in':
+        return (op._value as unknown[]).includes(actual);
+      case 'isNull':
+        return actual == null;
+      case 'not':
+        return !matchValue(actual, op._value);
+      case 'lessThan':
+        return actual != null && (actual as number) < (op._value as number);
+      case 'lessThanOrEqual':
+        return actual != null && (actual as number) <= (op._value as number);
+      default:
+        throw new Error(`operator ${op._type} not faked`);
+    }
+  }
+  return actual === expected;
+}
+const matches = (row: Row, where: Row | Row[]) =>
+  (Array.isArray(where) ? where : [where]).some((w) =>
+    Object.entries(w).every(([key, value]) => matchValue(row[key], value)),
+  );
+
+/** In-memory pending_google_writes: the queue's real row lifecycle runs on it. */
+function memoryRepo() {
+  const rows: Row[] = [];
+  let seq = 0;
+  const repo = {
+    rows,
+    find: jest.fn(async (opts: { where?: Row | Row[] } = {}) =>
+      rows.filter((row) => !opts.where || matches(row, opts.where)).map((row) => ({ ...row })),
+    ),
+    findOne: jest.fn(async (opts: { where: Row | Row[] }) => {
+      const row = rows.find((r) => matches(r, opts.where));
+      return row ? { ...row } : null;
+    }),
+    create: jest.fn((row: Row) => row),
+    insert: jest.fn(async (row: Row) => {
+      rows.push({ enqueuedAt: new Date(), id: `p${(seq += 1)}`, ...row });
+      return { identifiers: [] };
+    }),
+    update: jest.fn(async (where: Row, patch: Row) => {
+      const hit = rows.filter((row) => matches(row, where));
+      for (const row of hit) Object.assign(row, patch);
+      return { affected: hit.length };
+    }),
+    delete: jest.fn(async (where: Row) => {
+      const hit = rows.filter((row) => matches(row, where));
+      for (const row of hit) rows.splice(rows.indexOf(row), 1);
+      return { affected: hit.length };
+    }),
+    manager: { getRepository: () => repo },
+    reset() {
+      rows.length = 0;
+    },
   };
+  return repo;
+}
+
+describe('PendingGoogleWriteService', () => {
+  const pendingRepo = memoryRepo();
   const taskRepo = {
     findOne: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
     save: jest.fn(async (row) => row),
     remove: jest.fn(),
     update: jest.fn().mockResolvedValue({ affected: 1 }),
   };
   const scheduledRepo = {
+    count: jest.fn().mockResolvedValue(0),
+    update: jest.fn().mockResolvedValue({ affected: 1 }),
     find: jest.fn().mockResolvedValue([]),
     save: jest.fn(async (row) => row),
     delete: jest.fn(),
@@ -44,7 +102,7 @@ describe('PendingGoogleWriteService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    pendingRepo.find.mockResolvedValue([]);
+    pendingRepo.reset();
     scheduledRepo.find.mockResolvedValue([]);
     settingsRepo.findOne.mockResolvedValue({ syncGoogleDeletions: false });
     google.checkConnection.mockResolvedValue({ connected: true });
@@ -125,7 +183,12 @@ describe('PendingGoogleWriteService', () => {
       }),
       expect.objectContaining({ skipSleepWindowCheck: true }),
     );
-    expect(scheduledRepo.save).toHaveBeenCalledTimes(3);
+    // Each open slot is linked to the series event (link columns only).
+    expect(scheduledRepo.update).toHaveBeenCalledTimes(3);
+    expect(scheduledRepo.update).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ googleEventId: 'g-new' }),
+    );
   });
 
   it('keeps a recurring series start on the first seated day, including the past', async () => {
@@ -461,14 +524,17 @@ describe('PendingGoogleWriteService', () => {
     });
     google.createEvent.mockRejectedValueOnce(new Error('rate limit'));
     await service.syncTask('u1', 't1');
-    expect(pendingRepo.insert).toHaveBeenCalledWith(
+    // The write stays queued with its error, waiting for the backoff.
+    expect(pendingRepo.rows).toEqual([
       expect.objectContaining({
         userId: 'u1',
         taskId: 't1',
         operation: 'upsert',
+        status: 'pending',
+        attempts: 1,
         lastError: 'rate limit',
       }),
-    );
+    ]);
   });
 
   it('deletes a just-created Google event when the local task was removed', async () => {
@@ -499,7 +565,7 @@ describe('PendingGoogleWriteService', () => {
   });
 
   it('drops a pending upsert for a deleted task and removes its Google event', async () => {
-    pendingRepo.find.mockResolvedValue([
+    pendingRepo.rows.push(...[
       {
         id: 'p1',
         userId: 'u1',
@@ -518,11 +584,12 @@ describe('PendingGoogleWriteService', () => {
     expect(google.createEvent).not.toHaveBeenCalled();
     expect(google.deleteEvent).toHaveBeenCalledWith('u1', 'g-stale', 'primary');
     expect(pendingRepo.delete).toHaveBeenCalledWith({ id: 'p1', revision: 0 });
+    expect(pendingRepo.rows).toEqual([]);
   });
 
   it('drops a pending upsert and pulls Google when the user edited after enqueue', async () => {
     const enqueuedAt = new Date('2026-10-08T08:00:00.000Z');
-    pendingRepo.find.mockResolvedValue([
+    pendingRepo.rows.push(...[
       {
         id: 'p1',
         userId: 'u1',
@@ -559,13 +626,17 @@ describe('PendingGoogleWriteService', () => {
 
     await service.processQueue();
 
-    expect(taskRepo.save).toHaveBeenCalledWith(
+    // Only the pulled columns are written (no stale full save).
+    expect(taskRepo.update).toHaveBeenCalledWith(
+      { id: 't1' },
       expect.objectContaining({
         name: 'Renamed in Google',
         scheduledStartTime: new Date('2026-10-08T11:00:00.000Z'),
       }),
     );
+    expect(taskRepo.save).not.toHaveBeenCalled();
     expect(google.updateEvent).not.toHaveBeenCalled();
     expect(pendingRepo.delete).toHaveBeenCalledWith({ id: 'p1', revision: 0 });
+    expect(pendingRepo.rows).toEqual([]);
   });
 });

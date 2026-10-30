@@ -5,6 +5,8 @@
  * set to the same URL; each test gets its own throwaway database.
  */
 import { ScheduleJob } from './entities/schedule-job.entity';
+import { PendingGoogleWrite } from '../google-calendar/entities/pending-google-write.entity';
+import { User } from '../users/user.entity';
 import { createPlacementKit, type PlacementKit } from '../../../test/helpers/placement-sqlite.kit';
 
 const url = process.env.PG_TEST_URL;
@@ -60,6 +62,25 @@ describePg('placement on Postgres', () => {
 
     expect(await kit.slotsOf(task.id)).toHaveLength(1);
     expect((await jobRows())[0]).toMatchObject({ status: 'done', attempts: 2 });
+  });
+
+  it('Google outbox rows commit and roll back with the placement (real transactions)', async () => {
+    await kit.destroy();
+    kit = await createPlacementKit({ now: '2026-11-05T08:00:00.000Z', postgresUrl: url, outbox: true });
+    await kit.ds.getRepository(User).update(kit.user.id, { googleAccessToken: 't', googleRefreshToken: 'r' });
+    const queue = kit.ds.getRepository(PendingGoogleWrite);
+
+    // Rolled back: the job write fails inside the create transaction.
+    kit.jobs.beginMutationJob.mockRejectedValueOnce(new Error('disk full'));
+    await expect(kit.tasksService.create(kit.user.id, body('Lost'))).rejects.toThrow('disk full');
+    expect(await queue.count()).toBe(0);
+
+    // Committed: the task and its outbox row, then the placement and its row.
+    const task = await kit.tasksService.create(kit.user.id, body('Kept'));
+    await kit.jobs.settle();
+    const rows = await queue.find();
+    expect(rows.map((row) => [row.operation, row.taskId])).toEqual([['upsert', task.id]]);
+    expect(rows[0].revision).toBeGreaterThanOrEqual(1);
   });
 
   it('concurrent creates for one user are all placed without overlap', async () => {

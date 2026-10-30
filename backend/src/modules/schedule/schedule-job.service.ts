@@ -398,6 +398,12 @@ export class ScheduleJobService {
     }
   }
 
+  /** Every Google event stored on the task or its scheduled segments. */
+  async googleEventRefsForTask(task: Task): Promise<GoogleEventRef[]> {
+    const rows = await this.scheduledRepo.find({ where: { taskId: task.id } });
+    return this.refsFromScheduledRows(task, rows);
+  }
+
   /**
    * Delete every Google event stored on the task or its scheduled segments.
    */

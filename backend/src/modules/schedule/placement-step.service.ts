@@ -115,6 +115,7 @@ export type PlacementPreviewInput = {
 };
 import { providerEventsToBusyIntervals } from './external-calendar-busy.util';
 import { ScheduledTask } from './schedule.entity';
+import { noteGoogleSync } from '../google-calendar/google-sync-outbox';
 import { withUserLock } from './user-lock';
 
 /** Thrown inside `writeAndPlace` to roll the transaction back on an unwanted plan. */
@@ -2671,6 +2672,8 @@ export class PlacementStepService {
       .where('taskId = :taskId', { taskId })
       .andWhere('scheduledEndTime > :now', { now })
       .execute();
+    // A criteria delete is invisible to the outbox subscriber.
+    await noteGoogleSync(slots.manager, taskId);
   }
 
   /** Timed events on every visible connected calendar. All-day events are not anchors. */

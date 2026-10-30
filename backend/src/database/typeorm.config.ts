@@ -6,6 +6,15 @@ const entityGlob = join(__dirname, '..', 'modules', '**', '*.entity.{ts,js}').re
   '/',
 );
 
+/**
+ * Entity subscribers (the Google outbox). By glob, like entities: importing the
+ * class here would load the entities before this module finishes.
+ */
+const subscriberGlob = join(__dirname, '..', 'modules', '**', '*.subscriber.{ts,js}').replace(
+  /\\/g,
+  '/',
+);
+
 /** Versioned migrations (Postgres). SQLite dev and tests keep `synchronize`. */
 export const migrationGlob = join(__dirname, 'migrations', '*.{ts,js}').replace(
   /\\/g,
@@ -30,6 +39,8 @@ export function createTypeOrmOptions(
       url: databaseUrl,
       ssl: env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false },
       entities: [entityGlob],
+      // Google outbox: queue rows written in the same transaction as the change.
+      subscribers: [subscriberGlob],
       migrations: [migrationGlob],
       migrationsRun: env.TYPEORM_MIGRATIONS !== 'false',
       migrationsTransactionMode: 'each',
@@ -42,6 +53,7 @@ export function createTypeOrmOptions(
     type: 'sqlite',
     database: env.SQLITE_PATH || 'db.sqlite',
     entities: [entityGlob],
+    subscribers: [subscriberGlob],
     synchronize: true,
   };
 }
