@@ -19,7 +19,8 @@
     "test": "npm run test --workspace=backend && npm run test --workspace=frontend",
     "test:e2e:ui": "playwright test --config e2e/playwright.config.ts",
     "playwright:install": "playwright install chromium --with-deps",
-    "clean": "node scripts/clean.js"
+    "clean": "node scripts/clean.js",
+    "design:shots": "npm run build:frontend && node e2e/design/shots.cjs"
   },
   "keywords": [],
   "author": "",
