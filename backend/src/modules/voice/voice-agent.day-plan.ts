@@ -17,7 +17,7 @@ import type {
   PlanDraft,
   PlanItem,
 } from './voice-agent.types';
-import { endOfLocalDayIso, localDateTimeIso } from './voice-local-date.util';
+import { addDaysToYmd, civilDayStartIso, localDateTimeIso } from './voice-local-date.util';
 
 /**
  * Turns a day-plan draft into a preview through the placement engine (dry-run).
@@ -129,7 +129,7 @@ function draftTaskFor(
     : (base?.earliestStartTime ?? null);
   const deadline = item.deadlineHm
     ? new Date(localDateTimeIso(day, item.deadlineHm, timeZone))
-    : (base?.deadline ?? new Date(endOfLocalDayIso(day, timeZone)));
+    : (base?.deadline ?? new Date(civilDayStartIso(addDaysToYmd(day, 1), timeZone)));
   const fresh = {
     id: item.id,
     userId,

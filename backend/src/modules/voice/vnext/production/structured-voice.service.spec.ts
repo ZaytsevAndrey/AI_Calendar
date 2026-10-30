@@ -57,6 +57,8 @@ type World = {
   prompts: string[];
   propose?: (userId: string, draft: PlanDraft, timeZone: string) => Promise<DayPlanProposal>;
   events?: ProviderEvent[];
+  /** Settings time zone; Europe/Kyiv unless a test needs a DST day elsewhere. */
+  timeZone?: string;
 };
 
 function build(world: World) {
@@ -89,11 +91,12 @@ function build(world: World) {
       return next;
     }),
   };
+  const externalBusy = { listVisibleEvents: jest.fn(async () => world.events ?? []) };
   const service = new StructuredVoiceService(
     groq as never,
     {
       getSettings: jest.fn(async () => ({
-        timeZone: 'Europe/Kyiv',
+        timeZone: world.timeZone ?? 'Europe/Kyiv',
         wakeTime: '08:00:00',
         sleepTime: '23:00:00',
         speechLanguage: 'en',
@@ -104,13 +107,13 @@ function build(world: World) {
     } as never,
     { execute: jest.fn(async () => ({})) } as never,
     { propose: jest.fn((userId: string, draft: PlanDraft, timeZone: string) => world.propose!(userId, draft, timeZone)) } as never,
-    { listVisibleEvents: jest.fn(async () => world.events ?? []) } as never,
+    externalBusy as never,
     { findAll: jest.fn(async (userId: string) => world.reminders.filter((row) => row.userId === userId && row.status === 'open')) } as never,
     tasksRepository as never,
     scheduledRepository as never,
     { find: jest.fn(async () => []) } as never,
   );
-  return { service, groq };
+  return { service, groq, externalBusy };
 }
 
 function dto(extra: Partial<VoiceTurnDto> = {}): VoiceTurnDto {
@@ -490,6 +493,18 @@ function reads(name: string, args: Record<string, unknown>): string {
 }
 
 describe('structured operations on provider calendar events', () => {
+  // VC-11: a day is the half-open civil day [00:00, next 00:00), with the offset at midnight.
+  // On 14 Mar 2027 America/New_York springs forward at 02:00: midnight is -05:00, noon is -04:00.
+  it('reads provider events over the civil day on a DST switch day', async () => {
+    const w = world({
+      timeZone: 'America/New_York',
+      model: [reads('find_events', { day: '2027-03-14' }), envelope('what is on sunday', [])],
+    });
+    const { service, externalBusy } = build(w);
+    await service.turn(USER, dto({ transcript: 'what is on sunday', timeZone: 'America/New_York', clientNowIso: '2027-03-13T15:00:00.000Z' }));
+    expect(externalBusy.listVisibleEvents).toHaveBeenCalledWith(USER, '2027-03-14T00:00:00-05:00', '2027-03-15T00:00:00-04:00');
+  });
+
   const said = 'move the dentist to 15:00';
   const moveDentist = envelope(said, [{
     opId: 'op-1',

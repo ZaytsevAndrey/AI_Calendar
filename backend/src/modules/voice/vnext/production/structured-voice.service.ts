@@ -23,12 +23,11 @@ import { VoiceAgentTools, type VoiceToolContext } from '../../voice-agent.tools'
 import type { PlanItem, VoiceExecutionClaim, VoiceTurnResponse } from '../../voice-agent.types';
 import {
   addDaysToYmd,
-  endOfLocalDayIso,
+  civilDayStartIso,
   localHm,
   localYmd,
   nextWeekdayYmd,
   scheduleTodayYmd,
-  startOfLocalDayIso,
 } from '../../voice-local-date.util';
 import { isNoiseOrEmptyTranscript } from '../../voice-stt.util';
 import { ReadBroker } from '../broker/read-broker';
@@ -463,7 +462,8 @@ export class StructuredVoiceService {
   private async findEvents(ctx: Context, entry: SessionEntry, raw: Record<string, unknown>, onExternal: (records: EntityRecord[]) => void): Promise<unknown> {
     const parsed = parseFindEventsArgs(raw);
     if (!parsed.ok) return { error: parsed.error };
-    const events = await this.externalBusy.listVisibleEvents(ctx.userId, startOfLocalDayIso(parsed.args.from, ctx.timeZone), endOfLocalDayIso(parsed.args.to, ctx.timeZone));
+    // Civil days, half-open: [from 00:00, the day after `to` 00:00), each with its own midnight offset (VC-11 / AUD-014).
+    const events = await this.externalBusy.listVisibleEvents(ctx.userId, civilDayStartIso(parsed.args.from, ctx.timeZone), civilDayStartIso(addDaysToYmd(parsed.args.to, 1), ctx.timeZone));
     const needle = parsed.args.nameContains?.toLocaleLowerCase();
     const records = this.externalRecords(ctx, events).filter((record) => !needle || record.name.toLocaleLowerCase().includes(needle));
     for (const record of records) entry.external.set(record.id, record);
@@ -495,7 +495,7 @@ export class StructuredVoiceService {
   /** Re-read one provider event on the day it was seen. Moved off that day reads as gone, which fails closed. */
   private async rereadEvent(ctx: Context, entry: SessionEntry, seen: EntityRecord) {
     const day = seen.scheduledStart ? localYmd(seen.scheduledStart, ctx.timeZone) : localYmd(ctx.nowIso, ctx.timeZone);
-    const events = await this.externalBusy.listVisibleEvents(ctx.userId, startOfLocalDayIso(day, ctx.timeZone), endOfLocalDayIso(day, ctx.timeZone));
+    const events = await this.externalBusy.listVisibleEvents(ctx.userId, civilDayStartIso(day, ctx.timeZone), civilDayStartIso(addDaysToYmd(day, 1), ctx.timeZone));
     const fresh = this.externalRecords(ctx, events).find((record) => record.id === seen.id);
     if (!fresh) return { exists: false };
     entry.external.set(fresh.id, fresh);
