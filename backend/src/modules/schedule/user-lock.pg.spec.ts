@@ -79,4 +79,46 @@ describePg('Postgres advisory user lock (two instances)', () => {
     await withPgAdvisoryLock(b, 'luefy:user:u4', async () => undefined);
     expect(Date.now() - started).toBeLessThan(2000);
   });
+
+  const tryLock = async (source: DataSource, key: string) => {
+    const [row] = await source.query(`SELECT pg_try_advisory_lock(hashtext($1)) AS ok`, [key]);
+    if (row.ok) await source.query(`SELECT pg_advisory_unlock(hashtext($1))`, [key]);
+    return row.ok as boolean;
+  };
+
+  it('AUD-020: a lock wait gives up after the timeout instead of waiting forever', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const holder = withPgAdvisoryLock(a, 'luefy:user:u5', () => held);
+    await sleep(50);
+    const started = Date.now();
+    try {
+      await expect(withPgAdvisoryLock(b, 'luefy:user:u5', async () => undefined, 300)).rejects.toThrow(/lock timeout/i);
+      expect(Date.now() - started).toBeLessThan(2000);
+    } finally {
+      release();
+      await holder;
+    }
+    // The pool's connections carry no leftover timeout: a later wait still works.
+    await withPgAdvisoryLock(b, 'luefy:user:u5', async () => undefined);
+  });
+
+  it('AUD-020: a connection whose unlock failed is closed, not returned to the pool holding the lock', async () => {
+    const single = await new DataSource({ type: 'postgres', url, extra: { max: 1 } }).initialize();
+    const create = single.createQueryRunner.bind(single);
+    jest.spyOn(single, 'createQueryRunner').mockImplementationOnce((...args) => {
+      const runner = create(...args);
+      const query = runner.query.bind(runner);
+      jest.spyOn(runner, 'query').mockImplementation((sql: string, params?: unknown[]) =>
+        sql.includes('pg_advisory_unlock') ? Promise.reject(new Error('connection reset')) : query(sql, params),
+      );
+      return runner;
+    });
+    try {
+      await withPgAdvisoryLock(single, 'luefy:user:u6', async () => undefined);
+      expect(await tryLock(b, 'luefy:user:u6')).toBe(true);
+    } finally {
+      await single.destroy();
+    }
+  });
 });

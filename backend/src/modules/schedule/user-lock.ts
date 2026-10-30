@@ -39,23 +39,43 @@ export function withUserLock<T>(userId: string, run: () => Promise<T>): Promise<
   return next;
 }
 
+/**
+ * AUD-020: how long a request waits for another instance's lock on the same
+ * user before failing (Postgres `lock_timeout`, error 55P03). Placement for
+ * one user takes seconds; a longer wait means a stuck holder.
+ */
+export const USER_LOCK_TIMEOUT_MS = 60_000;
+
 /** Session advisory lock on its own connection; released (or dropped with the connection) after `run`. */
 export async function withPgAdvisoryLock<T>(
   source: DataSource,
   key: string,
   run: () => Promise<T>,
+  timeoutMs = USER_LOCK_TIMEOUT_MS,
 ): Promise<T> {
   const runner = source.createQueryRunner();
   await runner.connect();
+  let broken: Error | undefined;
   try {
+    // Session-wide on a pool used only for these locks; set on every take.
+    await runner.query(`SELECT set_config('lock_timeout', $1, false)`, [`${Math.max(1, Math.round(timeoutMs))}ms`]);
     await runner.query(`SELECT pg_advisory_lock(hashtext($1))`, [key]);
     try {
       return await run();
     } finally {
-      await runner.query(`SELECT pg_advisory_unlock(hashtext($1))`, [key]).catch(() => undefined);
+      await runner.query(`SELECT pg_advisory_unlock(hashtext($1))`, [key]).catch((err: unknown) => {
+        broken = err instanceof Error ? err : new Error(String(err));
+      });
     }
   } finally {
-    await runner.release();
+    // AUD-020: a connection that may still hold the lock is closed (the lock
+    // dies with its session), never handed back to the pool.
+    if (broken) {
+      await (runner as unknown as { releasePostgresConnection(err: Error): Promise<void> })
+        .releasePostgresConnection(broken);
+    } else {
+      await runner.release();
+    }
   }
 }
 
