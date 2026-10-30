@@ -134,7 +134,11 @@ describe('DisplayedEventMoveService', () => {
         get: jest.fn().mockReturnValue({ updateEvent: providerUpdate }),
       } as never,
       { syncTask } as never,
-      { place, seatOpenHoles } as never,
+      {
+        place,
+        seatOpenHoles,
+        runExclusive: (_userId: string, run: () => Promise<unknown>) => run(),
+      } as never,
       {
         getSettings: jest.fn().mockResolvedValue({ timeZone: 'UTC' }),
       } as never,

@@ -9,6 +9,7 @@ import { Repository } from 'typeorm';
 import { TaskEventType } from '../scheduling/event-type.enum';
 import { ScheduleState, Task } from '../tasks/entities/task.entity';
 import { ScheduleJob } from './entities/schedule-job.entity';
+import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { createPlacementKit, type PlacementKit } from '../../../test/helpers/placement-sqlite.kit';
 
 describe('placement edge cases', () => {
@@ -507,6 +508,122 @@ describe('placement edge cases', () => {
       const copySlots = (await kit.taskRepo.findOneBy({ id: copy.id })) ? await kit.slotsOf(copy.id) : [];
       const ownerDay = (await kit.slotsOf(owner.id)).filter((row) => row.startsWith('2026-11-06'));
       expect(copySlots.length + ownerDay.length).toBe(1);
+    });
+  });
+
+  describe('AUD-008: task edits wait for a running placement (no stale overwrite)', () => {
+    /**
+     * Pause the next placement right after it loaded the task (at its settings
+     * read) until `release()`; `paused` resolves once it waits.
+     */
+    const pausePersist = () => {
+      let release!: () => void;
+      let reached!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const paused = new Promise<void>((resolve) => (reached = resolve));
+      const settings = (kit.service as unknown as { userSettingsService: { getSettings: jest.Mock } })
+        .userSettingsService;
+      const read = settings.getSettings.getMockImplementation()!;
+      settings.getSettings.mockImplementationOnce(async (...args: unknown[]) => {
+        reached();
+        await gate;
+        return read(...args);
+      });
+      return { release, paused };
+    };
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+    it('a rename during placement survives the placement write', async () => {
+      kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 2 });
+      const task = await flexible('Draft', 30);
+      const { release, paused } = pausePersist();
+      const placing = kit.service.place(kit.user.id, task.id);
+      await paused;
+      const renaming = kit.tasksService.update(task.id, kit.user.id, { name: 'Final' } as never);
+      await tick();
+      release();
+      await Promise.all([placing, renaming]);
+      await kit.jobs.settle();
+
+      expect((await kit.reload(task.id)).name).toBe('Final');
+    });
+
+    it('marking done during placement stays done', async () => {
+      kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 2 });
+      const task = await flexible('Draft', 30);
+      const { release, paused } = pausePersist();
+      const placing = kit.service.place(kit.user.id, task.id);
+      await paused;
+      const completing = kit.tasksService.updateStatus(task.id, kit.user.id, 'completed' as never);
+      await tick();
+      release();
+      await Promise.all([placing, completing]);
+
+      expect((await kit.reload(task.id)).status).toBe('completed');
+    });
+
+    /** Pause the next task edit right after it loaded the task (at its settings read). */
+    const pauseEdit = () => {
+      let release!: () => void;
+      let reached!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const paused = new Promise<void>((resolve) => (reached = resolve));
+      const repo = (kit.tasksService as unknown as { userSettingsRepository: Repository<UserSettings> })
+        .userSettingsRepository;
+      const findOne = repo.findOne.bind(repo);
+      jest.spyOn(repo, 'findOne').mockImplementationOnce(async (...args: unknown[]) => {
+        reached();
+        await gate;
+        return findOne(...(args as [never]));
+      });
+      return { release, paused };
+    };
+    const series = () =>
+      create({
+        name: 'Daily',
+        eventType: TaskEventType.ADMIN,
+        isRecurring: true,
+        recurrencePattern: 'DAILY',
+        scheduledStartTime: kit.at('2026-11-05', '09:00').toISOString(),
+        estimatedTimeInMinutes: 30,
+      });
+
+    it('a rename while a series day is being skipped survives the skip', async () => {
+      kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
+      const daily = await series();
+      const { release, paused } = pauseEdit();
+      const skipping = kit.tasksService.skipOccurrence(daily.id, kit.user.id, {
+        occurrenceStart: kit.at('2026-11-06', '09:00').toISOString(),
+      } as never);
+      await paused;
+      const renaming = kit.tasksService.update(daily.id, kit.user.id, { name: 'Standup' } as never);
+      await tick();
+      release();
+      await Promise.all([skipping, renaming]);
+      await kit.jobs.settle();
+
+      const after = await kit.reload(daily.id);
+      expect(after.name).toBe('Standup');
+      expect(after.skippedOccurrenceYmds).toContain('2026-11-06');
+    });
+
+    it('a rename while a series is being ended survives the end', async () => {
+      kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
+      const daily = await series();
+      const { release, paused } = pauseEdit();
+      const ending = kit.tasksService.endSeriesFrom(daily.id, kit.user.id, {
+        occurrenceStart: kit.at('2026-11-06', '09:00').toISOString(),
+      } as never);
+      await paused;
+      const renaming = kit.tasksService.update(daily.id, kit.user.id, { name: 'Standup' } as never);
+      await tick();
+      release();
+      await Promise.all([ending, renaming]);
+      await kit.jobs.settle();
+
+      const after = await kit.reload(daily.id);
+      expect(after.name).toBe('Standup');
+      expect(after.deadline).not.toBeNull();
     });
   });
 

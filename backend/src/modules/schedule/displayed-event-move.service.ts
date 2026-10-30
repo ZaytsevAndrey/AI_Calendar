@@ -347,33 +347,34 @@ export class DisplayedEventMoveService implements OnModuleInit {
   ): Promise<void> {
     try {
       await this.scheduleJobs.setMutationStage(jobId, 'placing');
-      const task = await this.taskRepo.findOne({
-        where: { id: taskId, userId },
-        relations: ['phases'],
-      });
-      if (!task) {
-        throw new BadRequestException('Task not found');
-      }
       const nextPhases = phaseIds.length
         ? (await this.phasesService.findAllForScheduling(userId)).filter((p) =>
             phaseIds.includes(p.id),
           )
         : [];
-      const previousPhaseId = task.phaseId;
-      const previousPhases = task.phases ?? [];
-      task.phaseId = nextPhases[0]?.id ?? null;
-      task.phases = nextPhases;
-      await this.taskRepo.save(task);
+      // AUD-008: phase writes read and save the task under the placement lock,
+      // so a placement in flight cannot overwrite them with a stale copy.
+      const setPhases = (phaseId: string | null, phases: typeof nextPhases) =>
+        this.placementStep.runExclusive(userId, async () => {
+          const fresh = await this.taskRepo.findOne({
+            where: { id: taskId, userId },
+            relations: ['phases'],
+          });
+          if (!fresh) return null;
+          const previous = { phaseId: fresh.phaseId, phases: fresh.phases ?? [] };
+          fresh.phaseId = phaseId;
+          fresh.phases = phases;
+          await this.taskRepo.save(fresh);
+          return { task: fresh, previous };
+        });
+      const changed = await setPhases(nextPhases[0]?.id ?? null, nextPhases);
+      if (!changed) {
+        throw new BadRequestException('Task not found');
+      }
+      const { task, previous } = changed;
       // The task stays on its old slot: give it back its old phase too.
       const restorePhase = async () => {
-        const fresh = await this.taskRepo.findOne({
-          where: { id: taskId, userId },
-          relations: ['phases'],
-        });
-        if (!fresh) return;
-        fresh.phaseId = previousPhaseId;
-        fresh.phases = previousPhases;
-        await this.taskRepo.save(fresh);
+        await setPhases(previous.phaseId, previous.phases);
       };
 
       const placed = await this.placementStep.place(userId, taskId, {
@@ -653,17 +654,25 @@ export class DisplayedEventMoveService implements OnModuleInit {
     const anchorStart = new Date(localDateTimeIso(anchorYmd, hm, timeZone));
     const anchorEnd = new Date(anchorStart.getTime() + durationMs);
 
-    series.scheduledStartTime = anchorStart;
-    series.scheduledEndTime = anchorEnd;
-    series.estimatedTimeInMinutes = minutes;
     const nextPhases = phaseIds.length
       ? (await this.phasesService.findAllForScheduling(userId)).filter((p) =>
           phaseIds.includes(p.id),
         )
       : [];
-    series.phaseId = nextPhases[0]?.id ?? null;
-    series.phases = nextPhases;
-    await this.taskRepo.save(series);
+    // AUD-008: re-read and save under the placement lock (no stale overwrite).
+    await this.placementStep.runExclusive(userId, async () => {
+      const fresh = await this.taskRepo.findOne({
+        where: { id: series.id, userId },
+        relations: ['phases'],
+      });
+      if (!fresh) throw new BadRequestException('Task not found');
+      fresh.scheduledStartTime = anchorStart;
+      fresh.scheduledEndTime = anchorEnd;
+      fresh.estimatedTimeInMinutes = minutes;
+      fresh.phaseId = nextPhases[0]?.id ?? null;
+      fresh.phases = nextPhases;
+      await this.taskRepo.save(fresh);
+    });
     // Do not wipe open seats before place: an empty seat list makes syncTask
     // delete the Google series mid-move. place + expandSeries rewrite days.
 

@@ -447,59 +447,70 @@ export class PlacementStepService {
       list.push(task);
       byUser.set(task.userId, list);
     }
-    for (const [userId, tasks] of byUser) {
+    for (const [userId, listed] of byUser) {
       if (changed >= limit) break;
       const settings = await this.userSettingsService.getSettings(userId);
       const timeZone = resolveIanaTimeZone(settings.timeZone);
       const today = localYmd(new Date().toISOString(), timeZone);
-      for (const task of tasks) {
-        if (changed >= limit) break;
-        const day = task.problematicDay;
-        const ymds = (task.problematicOccurrenceYmds ?? []).filter(
-          (ymd) => typeof ymd === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ymd),
-        );
-        const futureYmds = ymds.filter((ymd) => ymd >= today);
-        const dayPast = !!day && day < today;
-
-        // One-off / detached copy whose day is past — delete the row.
-        if (!task.isRecurring && dayPast) {
-          await this.pendingGoogleWrites.syncTask(userId, task.id);
-          await this.taskRepo.remove(task);
-          changed += 1;
-          continue;
+      // AUD-008: each task is re-read and written under the user's lock, so
+      // the sweep never saves a copy older than a placement or an edit.
+      changed += await withUserLock(userId, async () => {
+        let done = 0;
+        for (const { id } of listed) {
+          if (changed + done >= limit) break;
+          if (await this.purgePastPark(userId, id, today)) done += 1;
         }
-
-        // Series (or multi-day) park: drop past occurrence days.
-        if (ymds.length && futureYmds.length < ymds.length) {
-          if (futureYmds.length === 0 && (!day || dayPast)) {
-            clearParkMetadata(task);
-            await this.taskRepo.save(task);
-            changed += 1;
-            continue;
-          }
-          task.problematicOccurrenceYmds = futureYmds;
-          if (dayPast) {
-            task.problematicDay = futureYmds[0] ?? null;
-          }
-          await this.taskRepo.save(task);
-          changed += 1;
-          continue;
-        }
-
-        // Legacy single-day park with only problematicDay in the past.
-        if (dayPast && !ymds.length) {
-          if (task.isRecurring) {
-            clearParkMetadata(task);
-            await this.taskRepo.save(task);
-          } else {
-            await this.pendingGoogleWrites.syncTask(userId, task.id);
-            await this.taskRepo.remove(task);
-          }
-          changed += 1;
-        }
-      }
+        return done;
+      });
     }
     return changed;
+  }
+
+  /** One task of `purgePastProblematicCopies`; true when it changed. */
+  private async purgePastPark(userId: string, id: string, today: string): Promise<boolean> {
+    const task = await this.taskRepo.findOne({ where: { id, userId } });
+    if (!task || task.scheduleState !== ScheduleState.PROBLEMATIC) return false;
+    const day = task.problematicDay;
+    const ymds = (task.problematicOccurrenceYmds ?? []).filter(
+      (ymd) => typeof ymd === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ymd),
+    );
+    const futureYmds = ymds.filter((ymd) => ymd >= today);
+    const dayPast = !!day && day < today;
+
+    // One-off / detached copy whose day is past — delete the row.
+    if (!task.isRecurring && dayPast) {
+      await this.pendingGoogleWrites.syncTask(userId, task.id);
+      await this.taskRepo.remove(task);
+      return true;
+    }
+
+    // Series (or multi-day) park: drop past occurrence days.
+    if (ymds.length && futureYmds.length < ymds.length) {
+      if (futureYmds.length === 0 && (!day || dayPast)) {
+        clearParkMetadata(task);
+        await this.taskRepo.save(task);
+        return true;
+      }
+      task.problematicOccurrenceYmds = futureYmds;
+      if (dayPast) {
+        task.problematicDay = futureYmds[0] ?? null;
+      }
+      await this.taskRepo.save(task);
+      return true;
+    }
+
+    // Legacy single-day park with only problematicDay in the past.
+    if (dayPast && !ymds.length) {
+      if (task.isRecurring) {
+        clearParkMetadata(task);
+        await this.taskRepo.save(task);
+      } else {
+        await this.pendingGoogleWrites.syncTask(userId, task.id);
+        await this.taskRepo.remove(task);
+      }
+      return true;
+    }
+    return false;
   }
 
   private async seatOpenHolesUnlocked(

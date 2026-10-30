@@ -841,7 +841,22 @@ export class TasksService implements OnModuleInit {
     return tasks;
   }
 
-  async update(
+  /**
+   * AUD-008: edits load, change and save the whole task, so they run under the
+   * user's placement lock; a placement in flight cannot write a stale copy
+   * over them (or they over it). Placement continues on the job, unlocked here.
+   */
+  update(
+    id: string,
+    userId: string,
+    updateTaskDto: UpdateTaskDto,
+  ): Promise<Task & { jobId: string | null; conflicts?: SchedulingConflict[] }> {
+    return this.placementStep.runExclusive(userId, () =>
+      this.updateUnlocked(id, userId, updateTaskDto),
+    );
+  }
+
+  private async updateUnlocked(
     id: string,
     userId: string,
     updateTaskDto: UpdateTaskDto,
@@ -1091,19 +1106,7 @@ export class TasksService implements OnModuleInit {
     dto: SkipOccurrenceDto,
   ): Promise<Task & { jobId: string | null }> {
     const task = await this.findOne(id, userId);
-    if (task.isUnscheduled) {
-      throw new BadRequestException('Unscheduled tasks have no occurrence to skip');
-    }
-    // A fixed one-off has no day to skip; a day of a fixed series does.
-    if (
-      task.isFixedExternal ||
-      (task.eventType === TaskEventType.FIXED && !task.isRecurring)
-    ) {
-      throw new BadRequestException('Fixed events cannot be skipped');
-    }
-    if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.CANCELED) {
-      throw new BadRequestException('Completed or canceled tasks cannot be skipped');
-    }
+    this.assertSkippable(task);
 
     // Problematic copy: record the series skip, then delete the copy (and its Google event).
     if (isProblematicSchedule(task) && !task.isRecurring) {
@@ -1123,6 +1126,56 @@ export class TasksService implements OnModuleInit {
       } as Task & { jobId: string | null; deleted: true };
     }
 
+    // AUD-008: the skip is read, changed and saved under the placement lock;
+    // Google and hole seating follow after it (they take the lock themselves).
+    const { saved, googleEventId, googleCalendarId, openSlot, leavesInbox } =
+      await this.placementStep.runExclusive(userId, () =>
+        this.recordSkip(id, userId, dto),
+      );
+    if (googleEventId) {
+      await this.deleteSkippedGoogleEvent(userId, googleEventId, googleCalendarId);
+    }
+    // Rewrite the Google series (new DTSTART + EXDATE) before the client refetches.
+    if (saved.isRecurring) {
+      await this.pendingGoogleWrites.syncTask(userId, saved.id);
+    }
+    if (openSlot) await this.placementStep.seatOpenHoles(userId);
+    if (leavesInbox) {
+      return this.update(saved.id, userId, { scheduleState: ScheduleState.NONE });
+    }
+    const row = await this.findOne(saved.id, userId);
+    return Object.assign(row, { jobId: null });
+  }
+
+  private assertSkippable(task: Task): void {
+    if (task.isUnscheduled) {
+      throw new BadRequestException('Unscheduled tasks have no occurrence to skip');
+    }
+    // A fixed one-off has no day to skip; a day of a fixed series does.
+    if (
+      task.isFixedExternal ||
+      (task.eventType === TaskEventType.FIXED && !task.isRecurring)
+    ) {
+      throw new BadRequestException('Fixed events cannot be skipped');
+    }
+    if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.CANCELED) {
+      throw new BadRequestException('Completed or canceled tasks cannot be skipped');
+    }
+  }
+
+  private async recordSkip(
+    id: string,
+    userId: string,
+    dto: SkipOccurrenceDto,
+  ): Promise<{
+    saved: Task;
+    googleEventId: string | null;
+    googleCalendarId: string | null | undefined;
+    openSlot: ScheduledTask | null;
+    leavesInbox: boolean;
+  }> {
+    const task = await this.findOne(id, userId);
+    this.assertSkippable(task);
     const occurrenceStart = new Date(dto.occurrenceStart);
     if (Number.isNaN(occurrenceStart.getTime())) {
       throw new BadRequestException('occurrenceStart must be a valid ISO date');
@@ -1201,19 +1254,7 @@ export class TasksService implements OnModuleInit {
       if (openSlot) await manager.remove(openSlot);
       return manager.save(task);
     });
-    if (googleEventId) {
-      await this.deleteSkippedGoogleEvent(userId, googleEventId, googleCalendarId);
-    }
-    // Rewrite the Google series (new DTSTART + EXDATE) before the client refetches.
-    if (task.isRecurring) {
-      await this.pendingGoogleWrites.syncTask(userId, saved.id);
-    }
-    if (openSlot) await this.placementStep.seatOpenHoles(userId);
-    if (leavesInbox) {
-      return this.update(saved.id, userId, { scheduleState: ScheduleState.NONE });
-    }
-    const row = await this.findOne(saved.id, userId);
-    return Object.assign(row, { jobId: null });
+    return { saved, googleEventId, googleCalendarId, openSlot, leavesInbox };
   }
 
   private pickSkipSlot(
@@ -1315,11 +1356,14 @@ export class TasksService implements OnModuleInit {
     userId: string,
     status: TaskStatus,
   ): Promise<Task> {
-    const task = await this.findOne(id, userId);
-    const wasDone =
-      task.status === TaskStatus.COMPLETED || task.status === TaskStatus.CANCELED;
-    task.status = status;
-    const saved = await this.tasksRepository.save(task);
+    // AUD-008: read and save under the placement lock (see update).
+    const { saved, wasDone } = await this.placementStep.runExclusive(userId, async () => {
+      const task = await this.findOne(id, userId);
+      const wasDone =
+        task.status === TaskStatus.COMPLETED || task.status === TaskStatus.CANCELED;
+      task.status = status;
+      return { saved: await this.tasksRepository.save(task), wasDone };
+    });
     // Back from done / canceled: its time was free meanwhile. Keep the slot
     // when it is still valid, else seat only this task in a free hole (§40).
     if (
@@ -1349,6 +1393,21 @@ export class TasksService implements OnModuleInit {
     userId: string,
     dto: SkipOccurrenceDto,
   ): Promise<Task & { jobId: string | null }> {
+    // AUD-008: read, change and save under the placement lock (see update).
+    const { saved, tail } = await this.placementStep.runExclusive(userId, () =>
+      this.recordSeriesEnd(id, userId, dto),
+    );
+    await this.pendingGoogleWrites.syncTask(userId, saved.id);
+    if (tail.length) await this.placementStep.seatOpenHoles(userId);
+    const row = await this.findOne(saved.id, userId);
+    return Object.assign(row, { jobId: null as string | null });
+  }
+
+  private async recordSeriesEnd(
+    id: string,
+    userId: string,
+    dto: SkipOccurrenceDto,
+  ): Promise<{ saved: Task; tail: ScheduledTask[] }> {
     const task = await this.findOne(id, userId);
     if (!task.isRecurring) {
       throw new BadRequestException('Only recurring tasks can end from a day');
@@ -1386,10 +1445,7 @@ export class TasksService implements OnModuleInit {
     );
     this.refreshTaskScheduleAfterSkip(task, remaining);
     const saved = await this.tasksRepository.save(task);
-    await this.pendingGoogleWrites.syncTask(userId, saved.id);
-    if (tail.length) await this.placementStep.seatOpenHoles(userId);
-    const row = await this.findOne(saved.id, userId);
-    return Object.assign(row, { jobId: null as string | null });
+    return { saved, tail };
   }
 }
 

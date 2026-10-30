@@ -14,11 +14,11 @@ Evidence rule: a finding is **fixed** only with a regression test that failed be
 | AUD-004 | High | fixed | 733d585 | `account-deletion.pg.spec` (real Postgres; failed with `syntax error` before) | Raw SQL replaced by TypeORM deletes in one transaction; `day_reminders` wiped; day-reminder Google events purged. Order kept: Google purge first (fail closed), retry converges. |
 | AUD-005 | High | fixed | bf3fad6, 420a04a | queue spec + `pending-google-write.pg.spec` "AUD-005: 120 rows of a disconnected user…" (0 sent before) | A disconnected user's due rows are deferred by the down TTL (attempts untouched) and the pass re-fetches (≤ 3 rounds). bf3fad6 shipped a test that did not compile; fixed in 420a04a. |
 | AUD-006 | High | fixed | f915d86 | e2e `A-TSK-032` (two users) | Reproduced: a create carrying Alice's task id returned (overwrote) Alice's task. Fix: `SchedulingValidationPipe` (class-validator only, whitelist) on tasks, phases and schedule controllers; services drop `id/userId/createdAt/updatedAt` from bodies. Phases had the same pattern. Remaining: other modules' controllers are not covered (outside this audit). |
-| AUD-007 | High | pending | | | |
+| AUD-007 | High | fixed | 356cebe | `mutation-jobs.pg.spec` + `pending-google-write.pg.spec` "AUD-007" (two independent connections: a slow live worker was re-run by the other instance; a stale worker overwrote the newer outcome — both failed before) | Lease heartbeat (lease/4) while a job/send runs; every outcome write is fenced on `status = running AND attempts = claimed attempts`. `setMutationStage` no longer sets `running`. Google API requests time out after 30 s (below the 2-min lease). |
 | AUD-008 | High | pending | | | |
 | AUD-009 | High | fixed | 701ef20 | queue spec "AUD-009: a series master is never pulled back…" | Series are no longer pulled from Google. |
 | AUD-010 | Medium | fixed | 701ef20 | queue spec "AUD-010: our own write landing after a newer local change…" | A row put back after an attempt gets `enqueuedAt = now`; inserts are stamped by the app clock. Residual: a genuine Google edit made between a failed attempt and its retry is overwritten (local is authoritative). |
-| AUD-011 | Medium | pending | | | |
+| AUD-011 | Medium | fixed | 7781bff | `pending-google-write.pg.spec` "AUD-011" ×2 (20 concurrent writers on two connections → duplicate rows before; a write racing the worker's delete → lost before) | Partial unique indexes (migration `1761790000000`, dedupes first); insert `ON CONFLICT DO NOTHING` + re-read; an existing row gets an atomic `revision + 1` and is reopened only if no worker holds it. |
 | AUD-012 | Medium | pending | | | |
 | AUD-013 | Medium | pending | | | |
 | AUD-014 | Medium | fixed | d26220c | `dst-clock.spec` AUD-014 (horizon starts at local midnight on a spring-forward day); `placement-edge-cases.spec` "AUD-014: this and following…" (2 tails, Saturday anchor before) | New `civilDayStartIso` (offset at midnight) for scheduling day bounds (move tail, end series, free slots, external all-day, horizon, `civilDayBounds` end = next midnight). `startOfLocalDayIso` unchanged for voice callers. |
@@ -30,7 +30,7 @@ Evidence rule: a finding is **fixed** only with a regression test that failed be
 | AUD-020 | Medium | pending | | | |
 | AUD-021 | Low | fixed | 8d7a0f4 | `placement-edge-cases.spec` "AUD-021…" (merged into the wrong series before) | Owner = the group series that skips the day (preferring `parentSeriesId`). `parentSeriesId` is still cleared on seat (changing that would change series-delete scope; not needed for identity). |
 | AUD-022 | Low | fixed (residual) | 35cd614 | `placement-edge-cases.spec` "AUD-022…" (later days at 03:30 before) | Master clock taken from the first series day DST did not shift. Residual: 1-day horizon; a series created *on* the switch day at 02:30 arrives as 03:30 (ISO instant) — not distinguishable server-side. |
-| AUD-023 | Low | pending | | | |
+| AUD-023 | Low | fixed | 356cebe | queue spec "AUD-023…" (a newer change was marked failed before) | A final failure is terminal only for the revision that was sent; a newer revision is re-queued with attempts 0. |
 | AUD-024 | Low | pending | | | |
 | AUD-025 | Low | pending | | | |
 | AUD-026 | Low | pending | | | |
