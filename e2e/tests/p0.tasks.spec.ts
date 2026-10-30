@@ -175,7 +175,8 @@ test.describe('P0 tasks UI', () => {
     await row.getByRole('button', { name: 'Schedule', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Schedule' });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByText(name)).toBeVisible();
+    // The name shows in the sheet header (and again in the slot preview once it loads).
+    await expect(dialog.getByText(name, { exact: true }).first()).toBeVisible();
     await expect(dialog.getByRole('button', { name: /^Place( |$)/ })).toBeVisible();
   });
 
