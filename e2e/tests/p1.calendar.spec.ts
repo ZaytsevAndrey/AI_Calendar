@@ -56,7 +56,7 @@ test.describe('P1 calendar UI', () => {
     await openAs(page, auth.onboarded);
     const nowCard = stripBlock(page, 'All-day holiday');
     await expect(nowCard).toBeVisible();
-    await expect(nowCard.getByRole('button', { name: 'Done' })).toHaveCount(0);
+    await expect(nowCard.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0);
   });
 
   test('U-CAL-022 calendars menu hides a Google calendar on this page', async ({ page, auth, request }) => {

@@ -195,7 +195,7 @@ test.describe('P1 voice UI', () => {
     const sheet = page.getByRole('dialog');
     await expect(sheet.getByText(/Listening/)).toBeVisible();
     await expect(sheet.getByRole('img', { name: 'Microphone level' })).toBeVisible();
-    await sheet.getByRole('button', { name: 'Done' }).click();
+    await sheet.getByRole('button', { name: 'Done', exact: true }).click();
     await expect(sheet.getByTestId('change-preview').getByText('Equalizer task')).toBeVisible();
     await sheet.getByRole('button', { name: 'Apply' }).click();
     await expectMutationProgressToast(page, 'Equalizer task');
@@ -252,7 +252,7 @@ test.describe('P1 voice UI', () => {
     const sheet = page.getByRole('dialog');
     await expect(sheet.getByText(/Listening/)).toBeVisible();
     await turnMicOff(page);
-    await expect(sheet.getByRole('button', { name: 'Done' })).toHaveCount(0);
+    await expect(sheet.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0);
     await typeOnce(page, 'create from keyboard');
     await expect(sheet.getByTestId('change-preview').getByText('Mic off typed')).toBeVisible();
     await sheet.getByRole('button', { name: 'Apply' }).click();

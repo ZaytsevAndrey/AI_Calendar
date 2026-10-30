@@ -87,10 +87,10 @@ test.describe('P0 tasks UI', () => {
 
     const row = page.locator('.task-item').filter({ hasText: name });
     await expect(row.getByRole('heading', { name })).toBeVisible();
-    await expect(row.getByLabel('Unscheduled', { exact: true })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Schedule', exact: true })).toBeVisible();
 
     const dialog = await openCreateTaskDialog(page);
-    await expect(dialog.getByRole('button', { name: 'Unscheduled', exact: true })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Later', exact: true })).toBeVisible();
   });
 
   test('U-TSK-009 inbox Do now clears unscheduled', async ({ page, auth, request }) => {
@@ -103,12 +103,14 @@ test.describe('P0 tasks UI', () => {
 
     await openAs(page, auth.onboarded, '/tasks?tab=later');
     const row = page.locator('.task-item').filter({ hasText: name });
-    await row.getByRole('button', { name: 'Do now' }).click();
+    await row.getByRole('button', { name: 'Do now', exact: true }).click();
     await expectMutationProgressToast(page, name);
 
-    const scheduled = page.locator('section').filter({ hasText: 'Scheduled' });
-    await expect(scheduled.getByRole('heading', { name })).toBeVisible({ timeout: 15_000 });
-    await expect(row.getByLabel('Unscheduled', { exact: true })).toHaveCount(0);
+    await expect(row).toHaveCount(0, { timeout: 15_000 });
+    await page.getByRole('tab', { name: 'Scheduled' }).click();
+    await expect(page.locator('.task-item').filter({ hasText: name }).getByRole('heading', { name })).toBeVisible({
+      timeout: 15_000,
+    });
   });
 
   test('U-TSK-010 inbox Done completes without a confirm dialog', async ({ page, auth, request }) => {
@@ -121,7 +123,7 @@ test.describe('P0 tasks UI', () => {
 
     await openAs(page, auth.onboarded, '/tasks?tab=later');
     const row = page.locator('.task-item').filter({ hasText: name });
-    await row.getByRole('button', { name: 'Done' }).click();
+    await row.getByRole('button', { name: 'Done', exact: true }).click();
     await expectMutationProgressToast(page, name);
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(row).toHaveCount(0);
@@ -137,7 +139,7 @@ test.describe('P0 tasks UI', () => {
 
     await openAs(page, auth.onboarded, '/tasks?tab=later');
     const row = page.locator('.task-item').filter({ hasText: name });
-    await row.getByRole('button', { name: 'Skip' }).click();
+    await row.getByRole('button', { name: 'Skip', exact: true }).click();
     await expectMutationProgressToast(page, name);
     await expect(row).toHaveCount(0);
   });
@@ -152,7 +154,7 @@ test.describe('P0 tasks UI', () => {
 
     await openAs(page, auth.onboarded, '/tasks?tab=later');
     const row = page.locator('.task-item').filter({ hasText: name });
-    await row.getByRole('button', { name: 'Edit' }).click();
+    await row.getByRole('button', { name: 'Edit', exact: true }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('textbox', { name: /Name/ })).toHaveValue(name);
   });
@@ -167,7 +169,7 @@ test.describe('P0 tasks UI', () => {
 
     await openAs(page, auth.onboarded, '/tasks?tab=later');
     const row = page.locator('.task-item').filter({ hasText: name });
-    await row.getByRole('button', { name: 'Schedule' }).click();
+    await row.getByRole('button', { name: 'Schedule', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Schedule' });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText(name)).toBeVisible();
@@ -184,11 +186,11 @@ test.describe('P0 tasks UI', () => {
 
     await openAs(page, auth.onboarded, '/tasks?tab=later');
     const row = page.locator('.task-item').filter({ hasText: name });
-    await row.getByRole('button', { name: 'Edit' }).click();
+    await row.getByRole('button', { name: 'Edit', exact: true }).click();
     const editor = page.getByRole('dialog', { name: 'Edit task' });
-    await editor.getByRole('button', { name: 'Delete' }).click();
+    await editor.getByRole('button', { name: 'Delete', exact: true }).click();
     const confirm = page.getByRole('dialog', { name: 'Delete task' });
-    await confirm.getByRole('button', { name: 'Delete' }).click();
+    await confirm.getByRole('button', { name: 'Delete', exact: true }).click();
     await expectMutationProgressToast(page, name);
     await expect(row).toHaveCount(0);
   });

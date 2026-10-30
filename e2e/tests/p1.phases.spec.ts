@@ -120,8 +120,8 @@ test.describe('P1 phases UI', () => {
     await openAs(page, auth.onboarded, '/settings/day');
     const row = page.getByTestId('phase-row').filter({ hasText: name });
     await row.click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
-    await page.getByRole('dialog', { name: 'Delete phase?' }).getByRole('button', { name: 'Delete' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Delete phase?' }).getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(row).toHaveCount(0);
   });
 });

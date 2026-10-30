@@ -97,7 +97,7 @@ test.describe('phone layout', () => {
     await page.getByRole('button', { name: 'Create task', exact: true }).click();
     const createDialog = page.getByRole('dialog');
     await expect(createDialog.getByRole('textbox', { name: /Name/ })).toBeVisible();
-    await expect(createDialog.getByRole('button', { name: 'Unscheduled', exact: true })).toBeVisible();
+    await expect(createDialog.getByRole('button', { name: 'Later', exact: true })).toBeVisible();
     await createDialog.getByRole('button', { name: 'Cancel' }).click();
 
     await page.getByRole('link', { name: 'Tasks' }).click();

@@ -669,7 +669,7 @@
     "allHabits": "All habits",
     "until": "until {{time}}",
     "nextAt": "Next at {{time}}",
-    "markDone": "Mark done"
+    "markDone": "Done"
   },
   "places": {
     "placeholder": "Address or place",

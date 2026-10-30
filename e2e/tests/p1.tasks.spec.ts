@@ -134,13 +134,13 @@ test.describe('P1 tasks UI', () => {
 
     await openAs(page, auth.onboarded, '/tasks');
     const row = page.locator('.task-item').filter({ hasText: name });
-    await row.getByRole('button', { name: 'Delete' }).click();
+    await row.getByRole('button', { name: 'Delete', exact: true }).click();
     const confirm = page.getByRole('dialog').filter({ hasText: 'Delete task' });
     await confirm.getByRole('button', { name: 'Cancel' }).click();
     await expect(row).toBeVisible();
 
-    await row.getByRole('button', { name: 'Delete' }).click();
-    await page.getByRole('dialog').filter({ hasText: 'Delete task' }).getByRole('button', { name: 'Delete' }).click();
+    await row.getByRole('button', { name: 'Delete', exact: true }).click();
+    await page.getByRole('dialog').filter({ hasText: 'Delete task' }).getByRole('button', { name: 'Delete', exact: true }).click();
     await expectMutationProgressToast(page, name);
     await expect(page.getByRole('heading', { name })).toHaveCount(0);
   });
@@ -160,6 +160,7 @@ test.describe('P1 tasks UI', () => {
 
     await openAs(page, auth.onboarded, '/tasks');
     const dialog = await openCreateTaskDialog(page);
+    await dialog.getByRole('button', { name: 'Flexible', exact: true }).click();
     await dialog.getByRole('textbox', { name: /Name/ }).fill(uniqueName('P1 fail create'));
     await dialog.getByRole('button', { name: 'Create task' }).click();
     await expect(page.getByText('Could not create task')).toBeVisible();
@@ -196,13 +197,13 @@ test.describe('P1 tasks UI', () => {
     );
     await openAs(page, auth.onboarded, '/tasks?tab=later');
     const row = page.locator('.task-item').filter({ hasText: name });
-    await expect(row.getByLabel('Unscheduled', { exact: true })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Schedule', exact: true })).toBeVisible();
     await expect(row.getByText(phaseName, { exact: true })).toBeVisible();
     await expect(row.getByText(/^From /)).toBeVisible();
     await expect(row.getByText(/Overdue/)).toBeVisible();
-    await expect(row.getByRole('button', { name: 'Done' })).toBeVisible();
-    await expect(row.getByRole('button', { name: 'Do now' })).toBeAttached();
-    await expect(row.getByRole('button', { name: 'Schedule' })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Done', exact: true })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Do now', exact: true })).toBeAttached();
+    await expect(row.getByRole('button', { name: 'Schedule', exact: true })).toBeVisible();
   });
 
   test('U-TSK-012 edit can clear phase and deadline', async ({ page, auth, request }) => {
@@ -235,7 +236,7 @@ test.describe('P1 tasks UI', () => {
       await route.continue();
     });
     const row = page.locator('.task-item').filter({ hasText: name });
-    await row.getByRole('button', { name: 'Edit' }).click();
+    await row.getByRole('button', { name: 'Edit', exact: true }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByText('Edit task')).toBeVisible();
     await dialog.locator('#task-form-phase').getByRole('option', { name: 'Any time' }).click();
@@ -300,17 +301,21 @@ test.describe('P1 tasks UI', () => {
     );
 
     await openAs(page, auth.onboarded, '/tasks?tab=later');
-    const unscheduled = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Unscheduled' }) });
-    const scheduled = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Scheduled' }) });
+    const heading = (name: string) => page.locator('.task-item').getByRole('heading', { name });
 
-    await page.getByLabel('Search unscheduled').fill('inbox');
-    await expect(unscheduled.getByRole('heading', { name: inboxName })).toBeVisible();
-    await expect(scheduled.getByRole('heading', { name: scheduledName })).toBeVisible();
+    await page.getByLabel('Search later').fill('inbox');
+    await expect(heading(inboxName)).toBeVisible();
 
+    await page.getByRole('tab', { name: 'Scheduled' }).click();
+    await expect(page.getByLabel('Search scheduled')).toHaveValue('');
+    await expect(heading(scheduledName)).toBeVisible();
     await page.getByLabel('Search scheduled').fill('plan');
-    await expect(scheduled.getByRole('heading', { name: scheduledName })).toBeVisible();
+    await expect(heading(scheduledName)).toBeVisible();
     await page.getByLabel('Search scheduled').fill('inbox');
-    await expect(scheduled.getByRole('heading', { name: scheduledName })).toHaveCount(0);
-    await expect(unscheduled.getByRole('heading', { name: inboxName })).toBeVisible();
+    await expect(heading(scheduledName)).toHaveCount(0);
+
+    await page.getByRole('tab', { name: 'Later' }).click();
+    await expect(page.getByLabel('Search later')).toHaveValue('inbox');
+    await expect(heading(inboxName)).toBeVisible();
   });
 });
