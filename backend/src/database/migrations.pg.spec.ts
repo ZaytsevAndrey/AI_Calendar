@@ -56,6 +56,7 @@ describePg('versioned migrations (Postgres)', () => {
       'SchedulingQueueAndOccurrenceIdentity1761760000000',
       'GoogleWriteQueueLifecycle1761770000000',
       'CreateRequestIdempotency1761780000000',
+      'GoogleWriteQueueUniqueness1761790000000',
     ]);
     expect(await drift(ds)).toEqual([]);
     expect(await ds.runMigrations()).toEqual([]);
@@ -70,6 +71,8 @@ describePg('versioned migrations (Postgres)', () => {
     await old.query(`ALTER TABLE "schedule_jobs" DROP COLUMN "attempts", DROP COLUMN "nextRunAt", DROP COLUMN "leaseUntil"`);
     await old.query(`ALTER TABLE "tasks" DROP COLUMN "originalOccurrenceYmd", DROP COLUMN "googleInsertEventId"`);
     await old.query(`DROP TABLE "request_idempotency"`);
+    await old.query(`DROP INDEX "IDX_pending_google_writes_user_task_upsert"`);
+    await old.query(`DROP INDEX "IDX_pending_google_writes_user_event_delete"`);
     await old.query(`DROP INDEX "IDX_pending_google_writes_status_next_run"`);
     await old.query(
       `ALTER TABLE "pending_google_writes" DROP COLUMN "status", DROP COLUMN "nextRunAt", DROP COLUMN "leaseUntil", DROP COLUMN "revision"`,
@@ -94,14 +97,16 @@ describePg('versioned migrations (Postgres)', () => {
       [user.id],
     );
     await old.query(
-      `INSERT INTO "pending_google_writes" ("userId", "operation", "googleEventId", "attempts") VALUES ($1, 'delete', 'g-old', 4)`,
+      // Two rows for the same event: the old code could insert duplicates (AUD-011).
+      `INSERT INTO "pending_google_writes" ("userId", "operation", "googleEventId", "attempts", "enqueuedAt")
+       VALUES ($1, 'delete', 'g-old', 1, now() - interval '1 hour'), ($1, 'delete', 'g-old', 4, now())`,
       [user.id],
     );
     await old.destroy();
 
     const ds = await open(dbUrl);
     const ran = await ds.runMigrations();
-    expect(ran).toHaveLength(4); // baseline is recorded, not re-run
+    expect(ran).toHaveLength(5); // baseline is recorded, not re-run
     expect(await drift(ds)).toEqual([]);
     const copies = await ds.query(
       `SELECT name, "originalOccurrenceYmd" FROM "tasks" WHERE "isRecurring" IS FALSE ORDER BY name`,
@@ -112,6 +117,8 @@ describePg('versioned migrations (Postgres)', () => {
     ]);
     const [job] = await ds.query(`SELECT status, attempts FROM "schedule_jobs"`);
     expect(job).toEqual({ status: 'failed', attempts: 0 });
+    // Duplicates collapse to the latest row; it survives and is due at once.
+    expect(await ds.query(`SELECT count(*)::int AS n FROM "pending_google_writes"`)).toEqual([{ n: 1 }]);
     // A queued Google write survives and is due at once.
     const [write] = await ds.query(
       `SELECT "googleEventId", attempts, status, "nextRunAt", revision FROM "pending_google_writes"`,

@@ -92,42 +92,68 @@ export async function recordGoogleWrite(
     intent.operation === 'delete'
       ? { userId: intent.userId, operation: intent.operation, googleEventId: intent.googleEventId ?? IsNull() }
       : { userId: intent.userId, operation: intent.operation, taskId: intent.taskId ?? IsNull() };
-  const existing = await repo.findOne({ where });
-  if (existing) {
-    const patch: Partial<PendingGoogleWrite> = {
-      revision: (existing.revision ?? 0) + 1,
-      enqueuedAt: now,
-      lastError: intent.error ?? existing.lastError,
-      googleEventId: intent.googleEventId ?? existing.googleEventId,
-      googleCalendarId: intent.googleCalendarId ?? existing.googleCalendarId,
-    };
-    if (existing.status !== 'running') {
-      Object.assign(patch, { status: 'pending', nextRunAt: dueAt, leaseUntil: null });
-      if (existing.status === 'failed') patch.attempts = 0;
+  // Race-safe (AUD-011): one row per task / event is guaranteed by partial
+  // unique indexes, and an existing row is changed by atomic statements that
+  // cannot conflict: bump the revision (a worker holding the row sees it and
+  // sends again), then reopen it unless a worker holds it, then reset the
+  // attempts of a failed one. A row deleted meanwhile (sent) is inserted
+  // anew; an insert that loses to another writer is ignored and re-read.
+  for (let round = 0; round < 8; round += 1) {
+    const existing = await repo.findOne({ where });
+    if (existing) {
+      const qb = repo.createQueryBuilder();
+      const revision = qb.escape('revision');
+      const bumped = await qb
+        .update(PendingGoogleWrite)
+        .set({
+          revision: () => `${revision} + 1`,
+          enqueuedAt: now,
+          ...(intent.error ? { lastError: intent.error } : {}),
+          ...(intent.googleEventId ? { googleEventId: intent.googleEventId } : {}),
+          ...(intent.googleCalendarId ? { googleCalendarId: intent.googleCalendarId } : {}),
+        })
+        .where({ id: existing.id })
+        .execute();
+      if (!bumped.affected) continue; // deleted meanwhile: insert anew
+      await repo.update(
+        { id: existing.id, status: 'failed' },
+        { status: 'pending', attempts: 0, nextRunAt: dueAt, leaseUntil: null },
+      );
+      await repo.update(
+        { id: existing.id, status: 'pending' },
+        { nextRunAt: dueAt, leaseUntil: null },
+      );
+      const after = await repo.findOne({ where: { id: existing.id }, select: { id: true, revision: true } });
+      return { id: existing.id, revision: after?.revision ?? existing.revision + 1 };
     }
-    await repo.update({ id: existing.id }, patch);
-    return { id: existing.id, revision: patch.revision! };
+    const id = randomUUID();
+    // ON CONFLICT DO NOTHING: a unique violation would abort the caller's
+    // transaction on Postgres. No nested transaction of its own either.
+    await repo
+      .createQueryBuilder()
+      .insert()
+      .values({
+        id,
+        userId: intent.userId,
+        operation: intent.operation,
+        taskId: intent.taskId ?? null,
+        googleEventId: intent.googleEventId ?? null,
+        googleCalendarId: intent.googleCalendarId ?? null,
+        attempts: 0,
+        lastError: intent.error ?? null,
+        // App clock, like every later refresh: not the DB default (other clock /
+        // zone), which skewed the waited and edited-after checks (H-4).
+        enqueuedAt: now,
+        status: 'pending',
+        nextRunAt: dueAt,
+        leaseUntil: null,
+        revision: 0,
+      })
+      .orIgnore()
+      .execute();
+    if (await repo.findOne({ where: { id }, select: { id: true } })) return { id, revision: 0 };
   }
-  const id = randomUUID();
-  // insert, not save: no nested transaction of its own.
-  await repo.insert({
-    id,
-    userId: intent.userId,
-    operation: intent.operation,
-    taskId: intent.taskId ?? null,
-    googleEventId: intent.googleEventId ?? null,
-    googleCalendarId: intent.googleCalendarId ?? null,
-    attempts: 0,
-    lastError: intent.error ?? null,
-    // App clock, like every later refresh: not the DB default (other clock /
-    // zone), which skewed the waited and edited-after checks (H-4).
-    enqueuedAt: now,
-    status: 'pending',
-    nextRunAt: dueAt,
-    leaseUntil: null,
-    revision: 0,
-  });
-  return { id, revision: 0 };
+  throw new Error(`Could not record the Google ${intent.operation} after repeated conflicts`);
 }
 
 /** Users with a stored Google grant: only they get queue rows. */

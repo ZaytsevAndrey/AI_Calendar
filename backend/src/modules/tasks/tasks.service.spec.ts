@@ -59,8 +59,19 @@ describe('TasksService', () => {
   };
   /** Google outbox rows written inside the task transaction. */
   const pendingRows = {
-    findOne: jest.fn().mockResolvedValue(null),
+    // No existing row; the read-back after an insert finds the new id.
+    findOne: jest.fn(async (opts: { where?: { id?: string } }) => (opts?.where?.id ? { id: opts.where.id } : null)),
     insert: jest.fn().mockResolvedValue({}),
+    // recordGoogleWrite inserts with INSERT … ON CONFLICT DO NOTHING.
+    createQueryBuilder: () => {
+      const builder = {
+        insert: () => builder,
+        values: (values: unknown) => (pendingRows.insert(values), builder),
+        orIgnore: () => builder,
+        execute: async () => ({ identifiers: [] }),
+      };
+      return builder;
+    },
     update: jest.fn().mockResolvedValue({ affected: 1 }),
     delete: jest.fn().mockResolvedValue({ affected: 0 }),
   };

@@ -56,6 +56,41 @@ function memoryRepo() {
       for (const row of hit) rows.splice(rows.indexOf(row), 1);
       return { affected: hit.length };
     }),
+    /** The two builder chains recordGoogleWrite uses: insert-or-ignore, update with an increment. */
+    createQueryBuilder: () => {
+      const state: { values?: Row; set?: Row; where?: Row; update?: boolean } = {};
+      const builder = {
+        escape: (name: string) => `"${name}"`,
+        insert: () => builder,
+        values: (values: Row) => ((state.values = values), builder),
+        orIgnore: () => builder,
+        update: () => ((state.update = true), builder),
+        set: (set: Row) => ((state.set = set), builder),
+        where: (where: Row) => ((state.where = where), builder),
+        execute: async () => {
+          if (state.update) {
+            const hit = rows.filter((row) => matches(row, state.where!));
+            for (const row of hit) {
+              for (const [key, value] of Object.entries(state.set!)) {
+                row[key] = typeof value === 'function' ? (row[key] as number) + 1 : value;
+              }
+            }
+            return { affected: hit.length };
+          }
+          const v = state.values!;
+          // The partial unique indexes: one upsert per task, one delete per event.
+          const taken = rows.some(
+            (row) =>
+              row.userId === v.userId &&
+              row.operation === v.operation &&
+              (v.operation === 'upsert' ? row.taskId === v.taskId : row.googleEventId === v.googleEventId),
+          );
+          if (!taken) rows.push({ enqueuedAt: new Date(), ...v });
+          return { identifiers: [] };
+        },
+      };
+      return builder;
+    },
     manager: { getRepository: () => repo },
     reset() {
       rows.length = 0;
@@ -460,7 +495,9 @@ describe('PendingGoogleWriteService', () => {
     await Promise.all([first, second]);
 
     expect(google.createEvent).toHaveBeenCalledTimes(1);
-    expect(google.updateEvent).toHaveBeenCalledTimes(1);
+    // The second change lands on the same queue row before it is sent, so one
+    // send (which reads the current task) may cover both: at most one update.
+    expect(google.updateEvent.mock.calls.length).toBeLessThanOrEqual(1);
   });
 
   it('deletes Google when an ended recurring task has no open seats left', async () => {

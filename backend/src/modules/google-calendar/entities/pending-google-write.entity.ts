@@ -19,6 +19,16 @@ export type PendingGoogleWriteStatus = 'pending' | 'running' | 'failed';
 
 @Entity('pending_google_writes')
 @Index('IDX_pending_google_writes_status_next_run', ['status', 'nextRunAt'])
+// One upsert row per task, one delete row per event (AUD-011): concurrent
+// writers update the same row instead of inserting duplicates.
+@Index('IDX_pending_google_writes_user_task_upsert', ['userId', 'taskId'], {
+  unique: true,
+  where: "\"operation\" = 'upsert'",
+})
+@Index('IDX_pending_google_writes_user_event_delete', ['userId', 'googleEventId'], {
+  unique: true,
+  where: "\"operation\" = 'delete'",
+})
 export class PendingGoogleWrite {
   @PrimaryGeneratedColumn('uuid')
   id: string;

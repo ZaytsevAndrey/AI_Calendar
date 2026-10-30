@@ -98,6 +98,39 @@ describePg('Google write queue on Postgres', () => {
     expect(Math.abs(new Date(row.enqueuedAt).getTime() - before)).toBeLessThan(5_000);
   });
 
+  it('AUD-011: concurrent writes for one task from two connections leave exactly one row', async () => {
+    const userId = '00000000-0000-4000-8000-0000000000f1';
+    const taskId = '00000000-0000-4000-8000-0000000000f2';
+    await Promise.all(
+      Array.from({ length: 20 }, (_, i) =>
+        recordGoogleWrite((i % 2 ? one : two).manager, { userId, operation: 'upsert', taskId }),
+      ),
+    );
+    const rows = await one.getRepository(PendingGoogleWrite).findBy({ userId, taskId });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].revision).toBe(19);
+  });
+
+  it('AUD-011: a write racing the worker\'s delete of the sent row is not lost', async () => {
+    const userId = '00000000-0000-4000-8000-0000000000f3';
+    const taskId = '00000000-0000-4000-8000-0000000000f4';
+    const repo = one.getRepository(PendingGoogleWrite);
+    const first = await recordGoogleWrite(one.manager, { userId, operation: 'upsert', taskId });
+    // The worker deletes the sent row between the writer's read and its update.
+    const findOne = repo.findOne.bind(repo);
+    const spy = jest.spyOn(Object.getPrototypeOf(repo), 'findOne').mockImplementationOnce(async function (this: unknown, opts: unknown) {
+      const found = await findOne(opts as never);
+      await two.getRepository(PendingGoogleWrite).delete({ id: first.id });
+      return found;
+    });
+    try {
+      await recordGoogleWrite(one.manager, { userId, operation: 'upsert', taskId });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await repo.countBy({ userId, taskId })).toBe(1);
+  });
+
   it('AUD-005: 120 rows of a disconnected user do not starve a connected user', async () => {
     const gone = '00000000-0000-4000-8000-0000000000aa';
     const live = '00000000-0000-4000-8000-0000000000bb';
