@@ -308,6 +308,31 @@ describe('placement edge cases', () => {
     expect(rows.length).toBeGreaterThanOrEqual(4);
   });
 
+  it('AUD-027: a dry run of a series edit writes nothing, even when days are missing', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
+    const series = await create({
+      name: 'Daily',
+      eventType: TaskEventType.ADMIN,
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      scheduledStartTime: kit.at('2026-11-05', '09:00').toISOString(),
+      estimatedTimeInMinutes: 30,
+    });
+    // Two days later the horizon has days the series does not hold yet.
+    jest.setSystemTime(new Date('2026-11-07T07:00:00.000Z'));
+    const before = await kit.slotsOf(series.id);
+
+    for (const opts of [
+      { commit: 'keep' as const, expandSeries: true, dryRun: true },
+      { expandSeries: true, dryRun: true },
+      { expandSeries: true, dryRun: true, preferredStart: kit.at('2026-11-07', '09:00') },
+    ]) {
+      await kit.service.place(kit.user.id, series.id, opts);
+    }
+
+    expect(await kit.slotsOf(series.id)).toEqual(before);
+  });
+
   describe('re-merging a detached copy (AUD-017, AUD-021)', () => {
     const groupFixture = async () => {
       kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 7 });

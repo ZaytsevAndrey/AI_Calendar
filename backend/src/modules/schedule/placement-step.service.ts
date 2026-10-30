@@ -820,7 +820,7 @@ export class PlacementStepService {
               interval!.start >= window.start && interval!.end <= window.end,
           ));
       if (fits) {
-        if (opts.expandSeries && task.isRecurring) {
+        if (opts.expandSeries && task.isRecurring && !opts.dryRun) {
           await this.expandSeriesDays(userId, task.id);
         }
         return {
@@ -839,7 +839,7 @@ export class PlacementStepService {
       return { outcome: 'problematic', reason: 'no_slot' };
     }
     if (interval && interval.end <= nowMs) {
-      if (opts?.expandSeries && !opts.seriesDay && task.isRecurring) {
+      if (opts?.expandSeries && !opts.seriesDay && task.isRecurring && !opts.dryRun) {
         await this.expandSeriesDays(userId, task.id);
       }
       return {
@@ -955,6 +955,11 @@ export class PlacementStepService {
       return this.placeUnlocked(userId, taskId, {
         searchHole: true,
         expandSeries: true,
+        // Keep the caller's mode (AUD-027: a dry run stayed a write here).
+        dryRun: opts.dryRun,
+        durationMinutes: opts.durationMinutes,
+        extraSeats: opts.extraSeats,
+        ignoreTaskIds: opts.ignoreTaskIds,
         windowYmd: dayYmd ?? undefined,
         preferredStart:
           opts.preferredStart ??
@@ -1133,7 +1138,10 @@ export class PlacementStepService {
   }
 
   private shouldExpandSeries(task: Task, opts?: PlaceOptions): boolean {
-    return !!opts?.expandSeries && !opts.seriesDay && task.isRecurring && !!task.scheduledStartTime;
+    // A dry run never writes series days (AUD-027).
+    return (
+      !!opts?.expandSeries && !opts.seriesDay && !opts.dryRun && task.isRecurring && !!task.scheduledStartTime
+    );
   }
 
   /**
