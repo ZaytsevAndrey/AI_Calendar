@@ -55,7 +55,11 @@ function savepointsOn(runner: QueryRunner): Collected[] {
 
 /**
  * Google outbox subscriber (see google-sync-outbox.ts). Loaded by file glob
- * from the TypeORM options; sees every Task / ScheduledTask write.
+ * from the TypeORM options; sees every Task / ScheduledTask write — except a
+ * change of only the `phases` link (many-to-many): TypeORM writes the junction
+ * rows without an update event of the task (H-5). Code that changes phases
+ * without a task column must call `noteGoogleSync`; today every such path
+ * also writes `phaseId` or syncs the task explicitly.
  */
 // TypeORM registers only decorated subscriber classes.
 @EventSubscriber()

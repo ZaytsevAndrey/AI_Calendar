@@ -8,6 +8,7 @@ import { TaskEventType } from '../scheduling/event-type.enum';
 import { Task } from '../tasks/entities/task.entity';
 import { ScheduledTask } from '../schedule/schedule.entity';
 import { User } from '../users/user.entity';
+import { Phase } from '../phases/entities/phase.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { PendingGoogleWrite } from './entities/pending-google-write.entity';
 import {
@@ -157,6 +158,29 @@ describe('Google outbox (transactional) and reconnect recovery', () => {
       expect(await kit.taskRepo.findOneBy({ id: doomed.id })).not.toBeNull();
       const rows = await queue().find();
       expect(rows.map((row) => [row.operation, row.taskId ?? row.googleEventId])).toEqual([['upsert', kept.id]]);
+    });
+
+    it('H-5: a phases-only change (phaseId unchanged) through the task API still reaches Google', async () => {
+      const task = await seated('Report', '10:00', '11:00');
+      const phase = await kit.ds.getRepository(Phase).save({
+        name: 'Deep work',
+        color: '#2980b9',
+        startTime: '09:00',
+        endTime: '12:00',
+        userId: kit.user.id,
+      } as Phase);
+      // phaseId already points at the phase; only the many-to-many link is new.
+      await kit.taskRepo.update({ id: task.id }, { phaseId: phase.id });
+      await queue().clear();
+
+      await kit.tasksService.update(task.id, kit.user.id, { phaseIds: [phase.id] } as never);
+      await kit.jobs.settle();
+
+      // The outbox cannot see a junction-only write (TypeORM fires no update
+      // event); the update job's sync covers it.
+      const queued = (await queue().find()).some((row) => row.taskId === task.id);
+      const synced = kit.pendingGoogleWrites.syncTask.mock.calls.some((call) => call[1] === task.id);
+      expect(queued || synced).toBe(true);
     });
 
     it('a crash right after the commit (nothing sent) is recovered from the queue alone', async () => {
