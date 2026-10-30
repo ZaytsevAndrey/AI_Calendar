@@ -52,7 +52,7 @@ Runtime assumptions found: production runs one Render instance, Neon Postgres, `
 | 15 | Phase 3: transactional Google outbox; reconnect recovery; no stale overwrite | done | 3c1900b |
 | 16 | Phase 3: create idempotency outlives the task | done | f7a4f09 |
 | 17 | Phase 3: reliability sweep | done | 0706bfa |
-| 18 | Phase 3: known-issues register and documentation | done | (stage 18 commit) |
+| 18 | Phase 3: known-issues register and documentation | done | afa722a |
 
 ## Stage A — durable placement (done)
 
