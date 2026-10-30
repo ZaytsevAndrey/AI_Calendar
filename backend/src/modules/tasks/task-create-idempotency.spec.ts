@@ -2,6 +2,10 @@
  * Idempotent task creation on a real (SQLite) database: one Idempotency-Key
  * is one create operation. Content never decides what is a duplicate.
  */
+import { GoneException, UnprocessableEntityException } from '@nestjs/common';
+import { RequestIdempotency } from './entities/request-idempotency.entity';
+import { createRequestHash, IDEMPOTENCY_RETENTION_MS } from './tasks.service';
+import { User } from '../users/user.entity';
 import { createPlacementKit, type PlacementKit } from '../../../test/helpers/placement-sqlite.kit';
 
 describe('task create idempotency', () => {
@@ -72,10 +76,20 @@ describe('task create idempotency', () => {
   });
 
   it('a race the lock cannot see (another instance) is caught by the unique index', async () => {
-    // Another instance inserts the same key between our replay check and our insert.
+    // Another instance records the same key (with its task) between our replay
+    // check and our insert: our transaction hits the unique index and rolls back.
     const runExclusive = kit.service.runExclusive.bind(kit.service);
+    let otherId = '';
     jest.spyOn(kit.service, 'runExclusive').mockImplementationOnce(async (userId, run) => {
-      await kit.addTask({ name: 'Buy milk', createRequestKey: 'race-1' });
+      const other = await kit.addTask({ name: 'Buy milk' });
+      otherId = other.id;
+      await kit.ds.getRepository(RequestIdempotency).insert({
+        userId: kit.user.id,
+        operation: 'task.create',
+        key: 'race-1',
+        requestHash: createRequestHash(body),
+        resourceId: other.id,
+      });
       return runExclusive(userId, run);
     });
     jest.spyOn(kit.tasksService as never, 'replayCreate' as never).mockResolvedValueOnce(null as never);
@@ -83,7 +97,65 @@ describe('task create idempotency', () => {
     const result = await create('race-1');
 
     expect(await count()).toBe(1);
-    const stored = await kit.taskRepo.findOneByOrFail({ createRequestKey: 'race-1' });
-    expect(result.id).toBe(stored.id);
+    expect(result.id).toBe(otherId);
+  });
+
+  it('a replay after the task was deleted is Gone (410) and never creates it again', async () => {
+    const first = await create('form-1');
+    await kit.jobs.settle();
+    await kit.tasksService.remove(first.id, kit.user.id);
+
+    await expect(create('form-1')).rejects.toBeInstanceOf(GoneException);
+    await expect(create('form-1')).rejects.toBeInstanceOf(GoneException);
+    expect(await count()).toBe(0);
+    // A new operation (new key) still creates.
+    await create('form-2');
+    await kit.jobs.settle();
+    expect(await count()).toBe(1);
+  });
+
+  it('the same key with a different body is refused (422) and writes nothing', async () => {
+    const first = await create('form-1');
+    await kit.jobs.settle();
+    await expect(
+      kit.tasksService.create(kit.user.id, { name: 'Buy bread', estimatedTimeInMinutes: 30, timeZone: 'UTC' } as never, {
+        requestKey: 'form-1',
+      }),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+    expect(await count()).toBe(1);
+    expect((await kit.reload(first.id)).name).toBe('Buy milk');
+  });
+
+  it('field order does not change the request identity', () => {
+    expect(createRequestHash({ a: 1, b: { c: 2, d: [1, { e: 3, f: 4 }] } })).toBe(
+      createRequestHash({ b: { d: [1, { f: 4, e: 3 }], c: 2 }, a: 1 }),
+    );
+    expect(createRequestHash({ a: 1 })).not.toBe(createRequestHash({ a: 2 }));
+  });
+
+  it('keys are remembered for the retention window, then forgotten', async () => {
+    const first = await create('form-1');
+    await kit.jobs.settle();
+    // SQLite stamps createdAt with the real clock; pin it to the test clock.
+    await kit.ds.getRepository(RequestIdempotency).update({ key: 'form-1' }, { createdAt: new Date() });
+    jest.setSystemTime(Date.now() + IDEMPOTENCY_RETENTION_MS - 60_000);
+    expect((await create('form-1')).id).toBe(first.id);
+    // Age the record past the window.
+    await kit.ds.getRepository(RequestIdempotency).update(
+      { key: 'form-1' },
+      { createdAt: new Date(Date.now() - IDEMPOTENCY_RETENTION_MS - 60_000) },
+    );
+    const later = await create('form-1');
+    await kit.jobs.settle();
+    expect(later.id).not.toBe(first.id);
+    expect(await kit.ds.getRepository(RequestIdempotency).count()).toBe(1);
+  });
+
+  it('keys are per user', async () => {
+    const other = await kit.ds.getRepository(User).save({ email: 'other@example.com', password: 'x' } as User);
+    const mine = await create('shared-key');
+    const theirs = await kit.tasksService.create(other.id, body, { requestKey: 'shared-key' });
+    await kit.jobs.settle();
+    expect(theirs.id).not.toBe(mine.id);
   });
 });

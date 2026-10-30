@@ -6,9 +6,13 @@ import {
   forwardRef,
   Logger,
   OnModuleInit,
+  GoneException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, In, Not, Repository } from 'typeorm';
+import { EntityManager, In, LessThan, Not, Repository } from 'typeorm';
+import { RequestIdempotency } from './entities/request-idempotency.entity';
 import { isValidIanaTimeZone, resolveIanaTimeZone } from '../../common/iana-time-zone';
 import {
   clearParkMetadata,
@@ -51,6 +55,28 @@ import { breaksSeriesMembership } from '../schedule/series-group.util';
 import { isUniqueViolation } from '../../database/unique-violation';
 import { noteGoogleSync, recordGoogleWrite } from '../google-calendar/google-sync-outbox';
 import { PendingGoogleWrite } from '../google-calendar/entities/pending-google-write.entity';
+
+/** Idempotency record operation for task creation. */
+const CREATE_OPERATION = 'task.create';
+/** How long an Idempotency-Key is remembered (a later replay creates again). */
+export const IDEMPOTENCY_RETENTION_MS = 30 * 24 * 60 * 60_000;
+
+/** SHA-256 of the body with sorted keys: the same request always hashes the same. */
+export function createRequestHash(body: unknown): string {
+  const canonical = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === 'object' && !(value instanceof Date)) {
+      return Object.fromEntries(
+        Object.keys(value as Record<string, unknown>)
+          .filter((key) => (value as Record<string, unknown>)[key] !== undefined)
+          .sort()
+          .map((key) => [key, canonical((value as Record<string, unknown>)[key])]),
+      );
+    }
+    return value;
+  };
+  return createHash('sha256').update(JSON.stringify(canonical(body))).digest('hex');
+}
 
 @Injectable()
 export class TasksService implements OnModuleInit {
@@ -561,9 +587,11 @@ export class TasksService implements OnModuleInit {
   }
 
   /**
-   * `requestKey` (HTTP Idempotency-Key) names one create operation: the same
-   * key again returns the task it made instead of a second one. Two creates
-   * with identical content but different keys (or none) are two tasks.
+   * `requestKey` (HTTP Idempotency-Key) names one create operation, recorded
+   * in `request_idempotency` with a hash of the body and the task it made.
+   * The same key again: the same body returns that task (and its job); another
+   * body is refused (422); a task deleted since stays deleted (410). Two
+   * creates with identical content but different keys (or none) are two tasks.
    */
   async create(
     userId: string,
@@ -571,8 +599,9 @@ export class TasksService implements OnModuleInit {
     opts?: { requestKey?: string | null },
   ): Promise<Task & { jobId: string | null; conflicts?: SchedulingConflict[] }> {
     const requestKey = opts?.requestKey ?? null;
+    const requestHash = requestKey ? createRequestHash(createTaskDto) : '';
     if (requestKey) {
-      const replay = await this.replayCreate(userId, requestKey);
+      const replay = await this.replayCreate(userId, requestKey, requestHash);
       if (replay) return replay;
     }
     const isUnscheduled = !!createTaskDto.isUnscheduled;
@@ -674,18 +703,26 @@ export class TasksService implements OnModuleInit {
       }
     }
 
-    task.createRequestKey = requestKey;
-
     // The task and the job that places it commit together: a crash after
     // this point leaves durable work for the recovery sweep, not a lost task.
     // Under the user lock a replay of the same request finds the first task.
     let created: { saved: Task; job: { id: string } } | { replay: Task & { jobId: string | null } };
     try {
       created = await this.placementStep.runExclusive(userId, async () => {
-        const replay = requestKey ? await this.replayCreate(userId, requestKey) : null;
+        const replay = requestKey ? await this.replayCreate(userId, requestKey, requestHash) : null;
         if (replay) return { replay };
         return this.tasksRepository.manager.transaction(async (manager) => {
           const saved = await manager.save(task);
+          if (requestKey) {
+            // The operation record commits with the task (unique per user + key).
+            await manager.getRepository(RequestIdempotency).insert({
+              userId,
+              operation: CREATE_OPERATION,
+              key: requestKey,
+              requestHash,
+              resourceId: saved.id,
+            });
+          }
           const job = await this.scheduleJobService.beginMutationJob(
             userId,
             { taskId: saved.id, op: 'create' },
@@ -695,8 +732,9 @@ export class TasksService implements OnModuleInit {
         });
       });
     } catch (err) {
-      // The unique (userId, createRequestKey) index caught a concurrent replay.
-      const replay = requestKey && isUniqueViolation(err) ? await this.replayCreate(userId, requestKey) : null;
+      // The unique (userId, operation, key) index caught a concurrent replay.
+      const replay =
+        requestKey && isUniqueViolation(err) ? await this.replayCreate(userId, requestKey, requestHash) : null;
       if (replay) return replay;
       throw err;
     }
@@ -709,17 +747,37 @@ export class TasksService implements OnModuleInit {
 
   /**
    * The task an earlier request with this Idempotency-Key created, with its
-   * create job (the client may still be waiting on it), or null.
+   * create job (the client may still be waiting on it), or null for a new key.
    */
   private async replayCreate(
     userId: string,
     requestKey: string,
+    requestHash: string,
   ): Promise<(Task & { jobId: string | null }) | null> {
-    const existing = await this.tasksRepository.findOne({
-      where: { userId, createRequestKey: requestKey },
-      relations: ['phase', 'phases'],
+    const operations = this.tasksRepository.manager.getRepository(RequestIdempotency);
+    // Retention: keys older than the window are forgotten (lazily, per user).
+    await operations.delete({
+      userId,
+      createdAt: LessThan(new Date(Date.now() - IDEMPOTENCY_RETENTION_MS)),
     });
-    if (!existing) return null;
+    const record = await operations.findOne({
+      where: { userId, operation: CREATE_OPERATION, key: requestKey },
+    });
+    if (!record) return null;
+    if (record.requestHash !== requestHash) {
+      throw new UnprocessableEntityException(
+        'This Idempotency-Key was already used for a different request.',
+      );
+    }
+    const existing = record.resourceId
+      ? await this.tasksRepository.findOne({
+          where: { id: record.resourceId, userId },
+          relations: ['phase', 'phases'],
+        })
+      : null;
+    if (!existing) {
+      throw new GoneException('The task this request created has been deleted.');
+    }
     this.logger.log(`create replay for key ${requestKey}: task ${existing.id}`);
     const job = await this.scheduleJobService.findLatestMutationJob(userId, existing.id, 'create');
     return this.withConflicts(existing, undefined, job?.id ?? null);

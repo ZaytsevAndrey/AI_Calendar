@@ -1,6 +1,6 @@
 import { customBaseQuery } from './customBaseQuery';
 import apiCall from '../modules/common/utils/apiCall';
-import { newRequestKey } from '../utils/requestKey';
+import { keyForSubmission, newRequestKey } from '../utils/requestKey';
 
 jest.mock('../modules/common/utils/apiCall', () => ({
   __esModule: true,
@@ -30,5 +30,17 @@ describe('newRequestKey', () => {
     const b = newRequestKey();
     expect(a).toMatch(/^[A-Za-z0-9._:-]{1,64}$/);
     expect(a).not.toBe(b);
+  });
+});
+
+describe('keyForSubmission', () => {
+  it('keeps the key for the same content and makes a new one for changed content', () => {
+    const opened = { key: 'k1', body: null };
+    const first = keyForSubmission(opened, { name: 'A' });
+    expect(first.key).toBe('k1');
+    expect(keyForSubmission(first, { name: 'A' }).key).toBe('k1');
+    const changed = keyForSubmission(first, { name: 'B' });
+    expect(changed.key).not.toBe('k1');
+    expect(changed.body).toBe(JSON.stringify({ name: 'B' }));
   });
 });

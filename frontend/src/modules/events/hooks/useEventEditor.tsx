@@ -29,7 +29,7 @@ import { Button } from 'ui/Button';
 import { dialogButtonSize } from 'ui/controlSize';
 import { showErrorToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
-import { newRequestKey } from '../../../utils/requestKey';
+import { keyForSubmission, newRequestKey, type SubmissionKey } from '../../../utils/requestKey';
 import { planEditorDelete } from '../planEditorDelete';
 
 const TaskForm = lazy(
@@ -88,9 +88,9 @@ export function useEventEditor() {
     updateReminderState.isLoading;
   const isReminderDeleting = deleteReminderState.isLoading;
 
-  // One create operation per opened form: a retry after an error or a lost
-  // response reuses it, so the server returns the first task, not a second.
-  const createKeyRef = useRef<string>(newRequestKey());
+  // One create operation per opened form and content: a retry after an error
+  // or a lost response reuses the key, so the server returns the first task.
+  const createKeyRef = useRef<SubmissionKey>({ key: newRequestKey(), body: null });
   const formDirtyRef = useRef(false);
   const [discardOpen, setDiscardOpen] = useState(false);
   const handleDirtyChange = useCallback((dirty: boolean) => {
@@ -114,7 +114,7 @@ export function useEventEditor() {
   };
 
   const openCreate = (defaults?: CreateTaskDefaults) => {
-    createKeyRef.current = newRequestKey();
+    createKeyRef.current = { key: newRequestKey(), body: null };
     setEditingEvent(null);
     setEditingReminder(null);
     setCreatingReminder(false);
@@ -142,7 +142,7 @@ export function useEventEditor() {
     payload: CreateTaskDTO,
     options?: { afterCreate?: () => Promise<void> },
   ) => {
-    createKeyRef.current = newRequestKey();
+    createKeyRef.current = { key: newRequestKey(), body: null };
     setEditingEvent(null);
     setEditingReminder(null);
     setCreatingReminder(false);
@@ -197,7 +197,10 @@ export function useEventEditor() {
     setLocalSubmitting(true);
     const request = editing
       ? updateEvent({ id: editing.id, body: cleanData as UpdateTaskDTO }).unwrap()
-      : createEvent({ ...(cleanData as CreateTaskDTO), idempotencyKey: createKeyRef.current }).unwrap();
+      : createEvent({
+          ...(cleanData as CreateTaskDTO),
+          idempotencyKey: (createKeyRef.current = keyForSubmission(createKeyRef.current, cleanData)).key,
+        }).unwrap();
     void request
       .then(async () => {
         // Progress toast (save → place → sync) comes from eventTasksApi.onQueryStarted.

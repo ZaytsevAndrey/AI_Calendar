@@ -14,6 +14,7 @@ import { PushSubscription } from '../reminders/entities/push-subscription.entity
 import { ReminderDelivery } from '../reminders/entities/reminder-delivery.entity';
 import { ScheduleJob } from '../schedule/entities/schedule-job.entity';
 import { PendingGoogleWrite } from '../google-calendar/entities/pending-google-write.entity';
+import { RequestIdempotency } from '../tasks/entities/request-idempotency.entity';
 import { CalendarEventOverlay } from '../calendar-overlays/entities/calendar-event-overlay.entity';
 import { VoiceDailyUsage } from '../voice/entities/voice-daily-usage.entity';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
@@ -165,6 +166,7 @@ export class AccountDeletionService {
           manager.getRepository(entity).metadata.tableName;
 
         await manager.delete(PendingGoogleWrite, { userId });
+        await manager.delete(RequestIdempotency, { userId });
         await manager.delete(ScheduleJob, { userId });
         await manager.delete(ReminderDelivery, { userId });
         await manager.delete(PushSubscription, { userId });

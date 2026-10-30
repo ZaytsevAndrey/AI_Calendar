@@ -29,12 +29,12 @@ describe('Tasks API e2e', () => {
     await closeTestApp(ctx);
   });
 
-  it('A-TSK-030 a replayed create (same Idempotency-Key) returns the first task', async () => {
+  it('A-TSK-031 a replayed create (same Idempotency-Key) returns the first task', async () => {
     const { token } = await seedOnboardedUser(ctx.app);
-    const post = (key?: string) =>
+    const post = (key?: string, name = 'Twice') =>
       api(ctx.app, 'POST', '/tasks', {
         token,
-        payload: { name: 'Twice', estimatedTimeInMinutes: 30 },
+        payload: { name, estimatedTimeInMinutes: 30 },
         headers: key ? { 'idempotency-key': key } : undefined,
       });
     const first = await post('submit-1');
@@ -47,6 +47,15 @@ describe('Tasks API e2e', () => {
     const list = jsonBody(await api(ctx.app, 'GET', '/tasks', { token })).value as Array<{ name: string }>;
     expect(list.filter((task) => task.name === 'Twice')).toHaveLength(2);
     expect((await post('bad key!')).statusCode).toBe(400);
+    // One key, another body: refused, nothing written.
+    expect((await post('submit-1', 'Different')).statusCode).toBe(422);
+    // Deleted since: a late retry does not bring it back.
+    expect((await api(ctx.app, 'DELETE', `/tasks/${jsonBody(first).id}`, { token })).statusCode).toBeLessThan(300);
+    await ctx.drainJobs();
+    expect((await post('submit-1')).statusCode).toBe(410);
+    const after = jsonBody(await api(ctx.app, 'GET', '/tasks', { token })).value as Array<{ name: string }>;
+    expect(after.filter((task) => task.name === 'Twice')).toHaveLength(1);
+    expect(after.some((task) => task.name === 'Different')).toBe(false);
   });
 
   it('A-TSK-002 missing name is recorded as current status', async () => {

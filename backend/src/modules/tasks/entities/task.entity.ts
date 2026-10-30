@@ -8,7 +8,6 @@ import {
   JoinTable,
   CreateDateColumn,
   UpdateDateColumn,
-  Index,
 } from 'typeorm';
 import { User } from '../../users/user.entity';
 import { Phase } from '../../phases/entities/phase.entity';
@@ -99,8 +98,6 @@ export function rememberSingleProblematicDay(task: {
 }
 
 @Entity('tasks')
-// One create operation (Idempotency-Key) makes at most one task per user.
-@Index('IDX_tasks_user_create_request_key', ['userId', 'createRequestKey'], { unique: true })
 export class Task {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -213,10 +210,6 @@ export class Task {
    */
   @Column({ type: 'varchar', length: 64, nullable: true })
   googleInsertEventId: string | null;
-
-  /** Idempotency-Key of the request that created this task (replays return it). */
-  @Column({ type: 'varchar', length: 64, nullable: true })
-  createRequestKey: string | null;
 
   @Column({ default: false })
   isFixedExternal: boolean;

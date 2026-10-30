@@ -24,7 +24,6 @@ const TASK_COLUMNS_WITHOUT_GOOGLE_EFFECT = new Set([
   'googleEventId',
   'googleEventCalendarId',
   'googleInsertEventId',
-  'createRequestKey',
   'updatedAt',
   'createdAt',
 ]);
