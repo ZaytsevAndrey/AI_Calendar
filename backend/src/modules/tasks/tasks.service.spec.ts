@@ -82,7 +82,6 @@ describe('TasksService', () => {
   const scheduleJobService = {
     enqueueReplan: jest.fn().mockResolvedValue({ id: 'job-1' }),
     processNextPendingForUser: jest.fn(),
-    deleteSyncedGoogleEventsForTask: jest.fn().mockResolvedValue(undefined),
     googleEventRefsForTask: jest.fn().mockResolvedValue([]),
     beginMutationJob: jest.fn(async (_userId: string, payload: Record<string, unknown>) => {
       jobPayloads.set('job-mut-1', JSON.parse(JSON.stringify(payload)));

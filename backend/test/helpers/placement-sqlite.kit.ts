@@ -129,7 +129,6 @@ export async function createPlacementKit(opts: {
   jest.spyOn(jobService, 'beginMutationJob');
   jest.spyOn(jobService, 'completeMutationJob');
   jest.spyOn(jobService, 'failMutationJob');
-  jest.spyOn(jobService, 'deleteSyncedGoogleEventsForTask').mockResolvedValue(undefined);
   const jobs = Object.assign(jobService, {
     settle: () => jobService.drain(),
   }) as ScheduleJobService & {

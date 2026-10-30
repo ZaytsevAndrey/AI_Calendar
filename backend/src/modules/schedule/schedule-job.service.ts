@@ -380,37 +380,9 @@ export class ScheduleJobService {
     ]);
   }
 
-  private async deleteGoogleRef(
-    userId: string,
-    ref: GoogleEventRef,
-    taskId: string,
-  ): Promise<void> {
-    try {
-      await this.googleCalendarService.deleteEvent(
-        userId,
-        ref.eventId,
-        ref.calendarId,
-      );
-    } catch (e: any) {
-      this.logger.warn(
-        `Google delete skipped for task ${taskId} event ${ref.eventId}: ${e?.message ?? e}`,
-      );
-    }
-  }
-
   /** Every Google event stored on the task or its scheduled segments. */
   async googleEventRefsForTask(task: Task): Promise<GoogleEventRef[]> {
     const rows = await this.scheduledRepo.find({ where: { taskId: task.id } });
     return this.refsFromScheduledRows(task, rows);
-  }
-
-  /**
-   * Delete every Google event stored on the task or its scheduled segments.
-   */
-  async deleteSyncedGoogleEventsForTask(userId: string, task: Task): Promise<void> {
-    const rows = await this.scheduledRepo.find({ where: { taskId: task.id } });
-    for (const ref of this.refsFromScheduledRows(task, rows)) {
-      await this.deleteGoogleRef(userId, ref, task.id);
-    }
   }
 }
