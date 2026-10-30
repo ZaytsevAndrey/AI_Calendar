@@ -253,7 +253,7 @@ export function EventPreview({
       title={t('calendar.preview.title')}
       maxWidthClass="max-w-xl"
       footer={
-          <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <div className="grid w-full grid-flow-col auto-cols-fr gap-2 sm:flex sm:justify-end [&>*:first-child]:sm:mr-auto">
             {deletePlan === 'series_menu' ? (
               <SeriesScopeMenu
                 label={t('common.delete')}
@@ -283,7 +283,7 @@ export function EventPreview({
                 onClick={() => onDone?.()}
                 icon={Check}
               >
-                {t('common.done')}
+                {t('tasks.item.done')}
               </Button>
             ) : null}
             {editPlan === 'series_menu' ? (

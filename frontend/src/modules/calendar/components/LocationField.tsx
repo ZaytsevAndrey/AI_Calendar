@@ -100,7 +100,6 @@ export function LocationField({ id, value, onChange, placeholder }: Props) {
     <div ref={wrapRef} className="relative">
       <Input
         id={id}
-        size="sm"
         autoComplete="off"
         leadingIcon={MapPin}
         role="combobox"

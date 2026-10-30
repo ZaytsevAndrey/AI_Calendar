@@ -1,5 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Mic, Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2, X } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { cx } from 'ui/cx';
+import { localYmd } from 'utils/ianaDateTime';
+import { useGetDayRemindersQuery } from 'api/dayReminders.api';
+import { MoveOccurrenceSheet } from 'modules/schedule/components/MoveOccurrenceSheet';
 import { useTranslation } from 'react-i18next';
 import { useGetEventsQuery, useDeleteEventMutation, useUpdateEventMutation } from 'api/eventTasksApi';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
@@ -21,6 +26,7 @@ import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import {
   filterScheduledTasks,
   filterUnscheduledTasks,
+  matchesTaskName,
   type ScheduleModeFilter,
   type TaskStatusFilter,
 } from 'modules/events/utils/taskListFilters';
@@ -31,6 +37,9 @@ import type { TaskDTO } from 'api/tasks.api';
 import { ReminderList } from 'modules/day-reminders/ReminderList';
 
 type Priority = 'urgent' | 'high' | 'medium' | 'low';
+type TasksTab = 'scheduled' | 'later' | 'reminders' | 'done';
+const isTasksTab = (value: string | null): boolean =>
+  value === 'scheduled' || value === 'later' || value === 'reminders' || value === 'done';
 type SortField = 'name' | 'priority' | 'deadline' | 'estimatedTimeInMinutes';
 
 const PRIORITY_ORDER: Record<Priority, number> = {
@@ -91,11 +100,22 @@ const TasksPage: React.FC = () => {
     group: false,
   });
   const phone = usePhoneLayout();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab: TasksTab = isTasksTab(searchParams.get('tab')) ? (searchParams.get('tab') as TasksTab) : 'scheduled';
+  const setTab = (next: TasksTab) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'scheduled') params.delete('tab');
+    else params.set('tab', next);
+    setSearchParams(params, { replace: true });
+  };
+  const [laterTarget, setLaterTarget] = useState<{ task: TaskDTO; occurrenceYmd: string } | null>(null);
+  const { data: dayReminders = [] } = useGetDayRemindersQuery();
 
   const { data: events = [], isLoading: isLoadingEvents } = useGetEventsQuery();
   const { data: phases = [] } = useGetAllPhasesQuery();
   const { data: userSettings } = useGetUserSettingsQuery();
   const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
+  const todayYmd = localYmd(new Date().toISOString(), timeZone);
   const [deleteEvent] = useDeleteEventMutation();
   const [updateEvent] = useUpdateEventMutation();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -105,6 +125,7 @@ const TasksPage: React.FC = () => {
     onComplete: createFromPayload,
     onSufficient: openCreateFromPrefill,
   });
+  useVoiceLauncher(voice.open);
   useEffect(() => {
     setConflictVoiceOpener(() => voice.open());
     return () => setConflictVoiceOpener(null);
@@ -204,99 +225,168 @@ const TasksPage: React.FC = () => {
   const unscheduledInbox = sortUnscheduled(filterUnscheduledTasks(events, inboxFilters));
   const inboxFiltersNarrow = inboxQuery.trim() !== '' || inboxStatus !== 'active';
 
+  const doneTasks = [...events]
+    .filter((task) => task.status === 'completed' || task.status === 'canceled')
+    .filter((task) => matchesTaskName(task.name, scheduledQuery))
+    .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
+  const reminderCount = dayReminders.length;
+  const tabs: Array<{ id: TasksTab; label: string; count?: number }> = [
+    { id: 'scheduled', label: t('tasks.scheduled'), count: filterScheduledTasks(events, { ...scheduledFilters, query: '', overdueOnly: false, phaseId: 'any', mode: 'any', status: 'active' }).length },
+    { id: 'later', label: t('tasks.unscheduled'), count: filterUnscheduledTasks(events, { query: '', status: 'active', overdueOnly: false }).length },
+    { id: 'reminders', label: t('dayReminders.title'), count: reminderCount },
+    { id: 'done', label: t('tasks.tabs.done') },
+  ];
+
   return (
     <div className="page-shell-fill">
       <header className="page-head shrink-0">
         <div>
           <h1 className="page-title">{t('tasks.title')}</h1>
-          <p className="page-lead max-md:hidden">
-            {t('tasks.pageLead')}
-          </p>
         </div>
         {phone ? null : (
-          <div className="flex w-full shrink-0 flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
-            <button type="button" onClick={() => openCreate()} className="ui-btn-primary w-auto flex-none">
-              <Plus className="h-4 w-4" aria-hidden />
-              {t('calendar.createTask')}
-            </button>
+          <div className="flex shrink-0 gap-2">
             <VoiceTaskButton onClick={voice.open} />
+            <Button icon={Plus} onClick={() => openCreate(tab === 'later' ? { unscheduled: true } : undefined)}>
+              {t('calendar.createTask')}
+            </Button>
           </div>
         )}
       </header>
 
-      <div className="page-scroll space-y-6 max-md:pb-28">
-        <ReminderList scope="all" onEdit={openEditReminder} />
-        <section>
-          <div className="mb-3">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-ide-muted">{t('tasks.unscheduled')}</h2>
-            <p className="text-xs text-ide-muted">{t('tasks.unscheduledHint')}</p>
-          </div>
-          <TaskSectionFilters
-            idPrefix="inbox"
-            query={inboxQuery}
-            onQueryChange={setInboxQuery}
-            status={inboxStatus}
-            onStatusChange={setInboxStatus}
-            overdueOnly={false}
-            onOverdueOnlyChange={() => undefined}
-            showOverdue={false}
-            searchAriaLabel={t('tasks.searchUnscheduled')}
-            statusAriaLabel={t('tasks.statusUnscheduled')}
-            overdueAriaLabel={t('tasks.overdueUnscheduled')}
-          />
-          {isLoadingEvents ? (
-            <div className="loading">{t('common.loading')}</div>
-          ) : unscheduledInbox.length === 0 ? (
-            <p className="text-sm text-ide-muted">
-              {inboxFiltersNarrow ? t('tasks.noUnscheduledMatch') : t('tasks.noUnscheduled')}
-            </p>
-          ) : (
+      <div
+        role="tablist"
+        aria-label={t('tasks.title')}
+        className="-mx-4 mb-4 flex shrink-0 gap-1 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:px-0 [&::-webkit-scrollbar]:hidden"
+      >
+        {tabs.map((item) => {
+          const on = item.id === tab;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              onClick={() => setTab(item.id)}
+              className={cx(
+                'inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-4 text-body-sm font-medium transition md:h-9',
+                on
+                  ? 'border-transparent bg-ide-text text-ide-bg'
+                  : 'border-ide-border bg-ide-panel text-ide-muted hover:text-ide-text',
+              )}
+            >
+              {item.label}
+              {item.count ? (
+                <span className={cx('tabular-nums', on ? 'opacity-70' : 'text-ide-subtle')}>{item.count}</span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="page-scroll max-md:pb-28">
+        {tab === 'later' ? (
+          <section aria-labelledby="tasks-later-title">
+            <h2 id="tasks-later-title" className="sr-only">
+              {t('tasks.unscheduled')}
+            </h2>
+            <p className="mb-3 text-body-sm text-ide-muted">{t('tasks.unscheduledHint')}</p>
+            <TaskSectionFilters
+              idPrefix="inbox"
+              query={inboxQuery}
+              onQueryChange={setInboxQuery}
+              status={inboxStatus}
+              onStatusChange={setInboxStatus}
+              overdueOnly={false}
+              onOverdueOnlyChange={() => undefined}
+              showOverdue={false}
+              searchAriaLabel={t('tasks.searchUnscheduled')}
+              statusAriaLabel={t('tasks.statusUnscheduled')}
+              overdueAriaLabel={t('tasks.overdueUnscheduled')}
+            />
+            {isLoadingEvents ? (
+              <div className="loading">{t('common.loading')}</div>
+            ) : unscheduledInbox.length === 0 ? (
+              <p className="rounded-control border border-dashed border-ide-border px-4 py-8 text-center text-body-sm text-ide-muted">
+                {inboxFiltersNarrow ? t('tasks.noUnscheduledMatch') : t('tasks.noUnscheduled')}
+              </p>
+            ) : (
+              <EventList
+                events={unscheduledInbox}
+                onEdit={openEdit}
+                onDelete={requestDelete}
+                onDeleteGroup={requestDeleteGroup}
+                onCreate={() => openCreate({ unscheduled: true })}
+                onDone={markDone}
+                onSkip={markSkipped}
+                onDoNow={doNow}
+                onSchedule={(task) => setLaterTarget({ task, occurrenceYmd: todayYmd })}
+                busyId={busyId}
+                isLoading={false}
+              />
+            )}
+          </section>
+        ) : tab === 'reminders' ? (
+          <section aria-labelledby="tasks-reminders-title">
+            <h2 id="tasks-reminders-title" className="sr-only">
+              {t('dayReminders.title')}
+            </h2>
+            <ReminderList scope="all" headless onEdit={openEditReminder} />
+          </section>
+        ) : tab === 'done' ? (
+          <section aria-labelledby="tasks-done-title">
+            <h2 id="tasks-done-title" className="sr-only">
+              {t('tasks.tabs.done')}
+            </h2>
+            {doneTasks.length === 0 ? (
+              <p className="rounded-control border border-dashed border-ide-border px-4 py-8 text-center text-body-sm text-ide-muted">
+                {t('tasks.tabs.doneEmpty')}
+              </p>
+            ) : (
+              <EventList
+                events={doneTasks}
+                onEdit={openEdit}
+                onDelete={requestDelete}
+                onDeleteGroup={requestDeleteGroup}
+                onCreate={() => openCreate()}
+                isLoading={false}
+              />
+            )}
+          </section>
+        ) : (
+          <section aria-labelledby="tasks-scheduled-title">
+            <h2 id="tasks-scheduled-title" className="sr-only">
+              {t('tasks.scheduled')}
+            </h2>
+            <TaskSectionFilters
+              idPrefix="scheduled"
+              query={scheduledQuery}
+              onQueryChange={setScheduledQuery}
+              status={filterStatus}
+              onStatusChange={setFilterStatus}
+              overdueOnly={scheduledOverdue}
+              onOverdueOnlyChange={setScheduledOverdue}
+              searchAriaLabel={t('tasks.searchScheduled')}
+              overdueAriaLabel={t('tasks.overdueScheduled')}
+              phases={phases}
+              phaseId={phaseId}
+              onPhaseIdChange={setPhaseId}
+              mode={scheduleMode}
+              onModeChange={setScheduleMode}
+              sortField={sortField}
+              onSortFieldChange={setSortField}
+            />
             <EventList
-              events={unscheduledInbox}
+              events={sortedEvents}
               onEdit={openEdit}
               onDelete={requestDelete}
               onDeleteGroup={requestDeleteGroup}
-              onCreate={() => openCreate({ unscheduled: true })}
+              onCreate={() => openCreate()}
               onDone={markDone}
-              onSkip={markSkipped}
-              onDoNow={doNow}
-              onSchedule={openSchedule}
-              busyId={busyId}
-              isLoading={false}
+              isLoading={isLoadingEvents}
+              emptyTitle={t('tasks.noScheduledFilter')}
             />
-          )}
-        </section>
-
-        <section>
-          <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-ide-muted">{t('tasks.scheduled')}</h2>
-          <TaskSectionFilters
-            idPrefix="scheduled"
-            query={scheduledQuery}
-            onQueryChange={setScheduledQuery}
-            status={filterStatus}
-            onStatusChange={setFilterStatus}
-            overdueOnly={scheduledOverdue}
-            onOverdueOnlyChange={setScheduledOverdue}
-            searchAriaLabel={t('tasks.searchScheduled')}
-            overdueAriaLabel={t('tasks.overdueScheduled')}
-            phases={phases}
-            phaseId={phaseId}
-            onPhaseIdChange={setPhaseId}
-            mode={scheduleMode}
-            onModeChange={setScheduleMode}
-            sortField={sortField}
-            onSortFieldChange={setSortField}
-          />
-          <EventList
-            events={sortedEvents}
-            onEdit={openEdit}
-            onDelete={requestDelete}
-            onDeleteGroup={requestDeleteGroup}
-            onCreate={() => openCreate()}
-            isLoading={isLoadingEvents}
-            emptyTitle={t('tasks.noScheduledFilter')}
-          />
-        </section>
+          </section>
+        )}
       </div>
 
       <Modal
@@ -341,6 +431,13 @@ const TasksPage: React.FC = () => {
       {editorModal}
       <VoiceTaskSheet voice={voice} />
       <SeriesDragHost />
+      <MoveOccurrenceSheet
+        mode="later"
+        target={laterTarget}
+        timeZone={timeZone}
+        onClose={() => setLaterTarget(null)}
+        onDone={() => setLaterTarget(null)}
+      />
       {phone ? (
         <div
           className="fixed z-[1250] flex items-center gap-2 md:hidden"
@@ -348,17 +445,9 @@ const TasksPage: React.FC = () => {
         >
           <button
             type="button"
-            className="flex h-12 w-12 items-center justify-center rounded-full border border-ide-border bg-ide-panel text-ide-text shadow-ide-md"
-            aria-label={t('calendar.addByVoice')}
-            onClick={() => voice.open()}
-          >
-            <Mic className="h-5 w-5" aria-hidden />
-          </button>
-          <button
-            type="button"
             className="flex h-14 w-14 items-center justify-center rounded-full bg-ide-accentBlue text-white shadow-ide-md"
             aria-label={t('calendar.createTask')}
-            onClick={() => openCreate()}
+            onClick={() => openCreate(tab === 'later' ? { unscheduled: true } : undefined)}
           >
             <Plus className="h-7 w-7" aria-hidden />
           </button>

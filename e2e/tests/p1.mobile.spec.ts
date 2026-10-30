@@ -104,8 +104,9 @@ test.describe('phone layout', () => {
     await expect(page.getByRole('button', { name: 'Create task', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Open Companion', exact: true })).toBeVisible();
     const card = page.locator('.task-item').filter({ hasText: name });
-    await expect(card.getByText('To Do', { exact: true })).toBeVisible();
-    await expect(card.getByText('Medium', { exact: true })).toBeVisible();
+    await expect(card).toBeVisible();
+    // Medium priority has no flag; status lives in the tabs, not on the row.
+    await expect(card.getByText('Medium', { exact: true })).toHaveCount(0);
 
     const scheduled = page
       .locator('section')

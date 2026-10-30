@@ -50,8 +50,9 @@ test.describe('P0 tasks UI', () => {
     await expectMutationProgressToast(page, name);
     await expect(page.getByRole('heading', { name })).toBeVisible();
     const card = page.locator('.task-item').filter({ hasText: name });
-    await expect(card.getByText('To Do', { exact: true })).toBeVisible();
-    await expect(card.getByText('Medium', { exact: true })).toBeVisible();
+    await expect(card).toBeVisible();
+    // Medium priority has no flag; status lives in the tabs, not on the row.
+    await expect(card.getByText('Medium', { exact: true })).toHaveCount(0);
   });
 
   test('U-TSK-005/006 recurring Daily Mon–Fri creates; empty pattern is auto-filled', async ({
@@ -81,11 +82,10 @@ test.describe('P0 tasks UI', () => {
         isUnscheduled: true,
       }),
     );
-    await openAs(page, auth.onboarded, '/tasks');
+    await openAs(page, auth.onboarded, '/tasks?tab=later');
     await expect(page.getByRole('button', { name: 'Add unscheduled' })).toHaveCount(0);
 
-    const inbox = page.locator('section').filter({ hasText: 'Unscheduled' }).first();
-    const row = inbox.locator('.task-item').filter({ hasText: name });
+    const row = page.locator('.task-item').filter({ hasText: name });
     await expect(row.getByRole('heading', { name })).toBeVisible();
     await expect(row.getByLabel('Unscheduled', { exact: true })).toBeVisible();
 
@@ -101,7 +101,7 @@ test.describe('P0 tasks UI', () => {
     });
     expectOk(created);
 
-    await openAs(page, auth.onboarded, '/tasks');
+    await openAs(page, auth.onboarded, '/tasks?tab=later');
     const row = page.locator('.task-item').filter({ hasText: name });
     await row.getByRole('button', { name: 'Do now' }).click();
     await expectMutationProgressToast(page, name);
@@ -119,7 +119,7 @@ test.describe('P0 tasks UI', () => {
     });
     expectOk(created);
 
-    await openAs(page, auth.onboarded, '/tasks');
+    await openAs(page, auth.onboarded, '/tasks?tab=later');
     const row = page.locator('.task-item').filter({ hasText: name });
     await row.getByRole('button', { name: 'Done' }).click();
     await expectMutationProgressToast(page, name);
@@ -135,7 +135,7 @@ test.describe('P0 tasks UI', () => {
     });
     expectOk(created);
 
-    await openAs(page, auth.onboarded, '/tasks');
+    await openAs(page, auth.onboarded, '/tasks?tab=later');
     const row = page.locator('.task-item').filter({ hasText: name });
     await row.getByRole('button', { name: 'Skip' }).click();
     await expectMutationProgressToast(page, name);
@@ -150,14 +150,14 @@ test.describe('P0 tasks UI', () => {
     });
     expectOk(created);
 
-    await openAs(page, auth.onboarded, '/tasks');
+    await openAs(page, auth.onboarded, '/tasks?tab=later');
     const row = page.locator('.task-item').filter({ hasText: name });
     await row.getByRole('button', { name: 'Edit' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('textbox', { name: /Name/ })).toHaveValue(name);
   });
 
-  test('U-TSK-024 inbox Schedule opens the schedule form', async ({ page, auth, request }) => {
+  test('U-TSK-024 Later Schedule opens the slot sheet', async ({ page, auth, request }) => {
     const name = uniqueName('E2E inbox schedule');
     const created = await apiJson(request, auth.onboarded.access_token, 'post', '/tasks', {
       name,
@@ -165,13 +165,13 @@ test.describe('P0 tasks UI', () => {
     });
     expectOk(created);
 
-    await openAs(page, auth.onboarded, '/tasks');
+    await openAs(page, auth.onboarded, '/tasks?tab=later');
     const row = page.locator('.task-item').filter({ hasText: name });
     await row.getByRole('button', { name: 'Schedule' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Schedule task' });
+    const dialog = page.getByRole('dialog', { name: 'Schedule' });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('textbox', { name: /Name/ })).toHaveValue(name);
-    await expect(dialog.getByText('Phase', { exact: true })).toBeVisible();
+    await expect(dialog.getByText(name)).toBeVisible();
+    await expect(dialog.getByRole('button', { name: /^Place( |$)/ })).toBeVisible();
   });
 
   test('U-TSK-025 edit modal delete removes a one-off task', async ({ page, auth, request }) => {
@@ -182,7 +182,7 @@ test.describe('P0 tasks UI', () => {
     });
     expectOk(created);
 
-    await openAs(page, auth.onboarded, '/tasks');
+    await openAs(page, auth.onboarded, '/tasks?tab=later');
     const row = page.locator('.task-item').filter({ hasText: name });
     await row.getByRole('button', { name: 'Edit' }).click();
     const editor = page.getByRole('dialog', { name: 'Edit task' });

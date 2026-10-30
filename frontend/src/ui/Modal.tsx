@@ -22,6 +22,8 @@ export type ModalProps = {
     phoneHeight?: 'auto' | 'full';
     /** Small action on the right of the title, e.g. «Готово» in a picker. */
     headerAction?: React.ReactNode;
+    /** Phone forms: «Скасувати» on the left of the title. */
+    headerLead?: React.ReactNode;
     /** Phone: drag the sheet down to close. Off for forms with unsaved input. */
     swipeToClose?: boolean;
     /** Desktop: `center` dialog or a `right` drawer at full height. Phones always get a bottom sheet. */
@@ -41,6 +43,7 @@ export const Modal: React.FC<ModalProps> = ({
     bodyOverflowHidden = false,
     phoneHeight = 'auto',
     headerAction,
+    headerLead,
     swipeToClose = true,
     placement = 'center',
 }) => {
@@ -124,8 +127,15 @@ export const Modal: React.FC<ModalProps> = ({
                     <div className="mx-auto mb-1 mt-2 h-1 w-9 rounded-full bg-ide-border md:hidden" aria-hidden />
                     {title || headerAction ? (
                         <div className="flex min-h-[3rem] items-center gap-3 border-b border-ide-border px-4 py-2.5 md:px-5 md:py-3.5">
+                            {headerLead}
                             {title ? (
-                                <h2 id={titleId} className="min-w-0 flex-1 text-title font-semibold">
+                                <h2
+                                    id={titleId}
+                                    className={cx(
+                                        'min-w-0 flex-1 truncate font-semibold',
+                                        headerLead ? 'text-center text-heading' : 'text-title',
+                                    )}
+                                >
                                     {title}
                                 </h2>
                             ) : (

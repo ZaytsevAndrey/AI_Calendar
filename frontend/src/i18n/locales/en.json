@@ -769,7 +769,8 @@
         "priority": "For your own sorting. The planner does not use it to decide which task gets a slot.",
         "repeatFixed": "Every occurrence keeps this exact time and length; the planner never moves it. A day where another fixed item already sits goes to Problematic.",
         "seriesUntil": "Last day of the series. Empty = no end date. Days use {{timeZone}}."
-      }
+      },
+      "type": "Task type"
     },
     "typeInfo": {
       "dontShowAgain": "Don't show again",
@@ -814,7 +815,8 @@
           "Waits in Later on the Tasks page until you press Schedule.",
           "Only a name is needed."
         ]
-      }
+      },
+      "whatIs": "What is this?"
     },
     "preset": {
       "flexible": "Flexible",
@@ -913,7 +915,8 @@
       "prioritySr": "{{priority}} priority",
       "overduePrefix": "Overdue · ",
       "dueSoonPrefix": "Due soon · ",
-      "approachingPrefix": "Approaching · "
+      "approachingPrefix": "Approaching · ",
+      "overdueUntil": "Overdue · due {{when}}"
     },
     "filters": {
       "clearSearch": "Clear {{section}} search",
@@ -950,6 +953,10 @@
         "oneOff": "One-off",
         "problematic": "Problematic"
       }
+    },
+    "tabs": {
+      "done": "Done",
+      "doneEmpty": "Done and skipped tasks show up here."
     }
   },
   "habits": {
@@ -1075,11 +1082,11 @@
     "noPhases": "No phases",
     "legend": "Legend",
     "setupSleepTitle": "When do you wake and sleep?",
-    "setupSleepLead": "The calendar uses this window. You can change it later in Settings.",
+    "setupSleepLead": "The calendar counts your day from these hours. You can change them in Settings.",
     "setupContinue": "Continue",
     "setupBack": "Back",
     "setupTitle": "Set up your phases",
-    "setupLead": "Pick the days this applies to, then a day shape. Or skip and keep sleep plus one focus window.",
+    "setupLead": "Pick the days and the shape of your day. Or skip — you keep sleep and one focus window.",
     "wake": "Wake",
     "sleep": "Sleep",
     "dayShape": "Day shape",
@@ -1107,7 +1114,8 @@
     "deleteFailed": "Could not delete the phase",
     "deleteTitle": "Delete phase?",
     "deleteConfirmNamed": "«{{name}}» goes away from every day.",
-    "deleteHint": "Its tasks stay; the planner places them at another time."
+    "deleteHint": "Its tasks stay; the planner places them at another time.",
+    "setupStep": "Step {{step}} of {{total}}"
   },
   "voice": {
     "confirmTitle": "Confirm changes",

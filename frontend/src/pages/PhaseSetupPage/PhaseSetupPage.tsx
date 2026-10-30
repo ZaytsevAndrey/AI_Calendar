@@ -130,11 +130,21 @@ const PhaseSetupPage: React.FC = () => {
         <div className="page-shell-fill">
             <div className="page-scroll">
                 <div className="mx-auto w-full max-w-2xl">
-                    <div className="rounded-xl border border-ide-border bg-ide-panel p-5 shadow-ide-md sm:p-8">
-                        <h1 className="page-title mb-2">
+                    <div className="rounded-sheet border border-ide-border bg-ide-panel p-5 shadow-ide-md sm:p-8">
+                        <div className="mb-6 flex items-center gap-3" aria-hidden>
+                            <img src="/icon-64.png" alt="" className="h-8 w-8 rounded-[9px]" />
+                            <div className="flex flex-1 gap-1.5">
+                                <span className="h-1.5 flex-1 rounded-full bg-ide-accentBlue" />
+                                <span className={`h-1.5 flex-1 rounded-full ${showDayShape ? 'bg-ide-accentBlue' : 'bg-ide-border'}`} />
+                            </div>
+                        </div>
+                        <p className="mb-1 text-body-sm text-ide-muted">
+                            {t('phases.setupStep', { step: showDayShape ? 2 : 1, total: 2 })}
+                        </p>
+                        <h1 className="mb-2 text-title font-semibold text-ide-text md:text-display">
                             {showDayShape ? t('phases.setupTitle') : t('phases.setupSleepTitle')}
                         </h1>
-                        <p className="page-lead mb-8">
+                        <p className="mb-8 text-body text-ide-muted">
                             {showDayShape ? t('phases.setupLead') : t('phases.setupSleepLead')}
                         </p>
 
@@ -146,7 +156,7 @@ const PhaseSetupPage: React.FC = () => {
                                     errors={errors}
                                 />
                                 <div>
-                                    <p className="ui-label mb-2">{t('phases.dayShape')}</p>
+                                    <p className="mb-2 text-body-sm font-medium text-ide-muted">{t('phases.dayShape')}</p>
                                     <PhasePresetPicker
                                         includeDefaults
                                         value={presetChoice}
@@ -158,26 +168,28 @@ const PhaseSetupPage: React.FC = () => {
                         ) : (
                             <div className="space-y-6">
                                 <div>
-                                    <label htmlFor="setup-wake" className="ui-label">
+                                    <label htmlFor="setup-wake" className="mb-1.5 block text-body-sm font-medium text-ide-muted">
                                         {t('phases.wake')}
                                     </label>
                                     <TimeField
                                         id="setup-wake"
                                         value={wakeTime}
                                         onChange={setWakeTime}
-                                        className="max-w-xs"
+                                        className="w-40"
+                                        minuteStep={15}
                                         aria-label={t('phases.wake')}
                                     />
                                 </div>
                                 <div>
-                                    <label htmlFor="setup-sleep" className="ui-label">
+                                    <label htmlFor="setup-sleep" className="mb-1.5 block text-body-sm font-medium text-ide-muted">
                                         {t('phases.sleep')}
                                     </label>
                                     <TimeField
                                         id="setup-sleep"
                                         value={sleepTime}
                                         onChange={setSleepTime}
-                                        className="max-w-xs"
+                                        className="w-40"
+                                        minuteStep={15}
                                         aria-label={t('phases.sleep')}
                                     />
                                 </div>
@@ -208,10 +220,10 @@ const PhaseSetupPage: React.FC = () => {
                                     </Button>
                                     <Button
                                         type="button"
-                                        variant="secondary"
+                                        variant="ghost"
                                         disabled={busy}
                                         onClick={() => setStep('sleep')}
-                                        className="flex-1 sm:flex-initial"
+                                        className="flex-1 sm:order-first sm:mr-auto sm:flex-initial"
                                         icon={ArrowLeft}
                                     >
                                         {t('phases.setupBack')}
@@ -233,7 +245,7 @@ const PhaseSetupPage: React.FC = () => {
                             type="button"
                             disabled={busy}
                             onClick={() => dispatch(logout(true))}
-                            className="mt-6 text-sm text-ide-muted underline-offset-2 hover:text-ide-text hover:underline"
+                            className="mt-6 min-h-11 text-body-sm text-ide-muted underline-offset-2 hover:text-ide-text hover:underline md:min-h-0"
                         >
                             {t('settings.logout')}
                         </button>

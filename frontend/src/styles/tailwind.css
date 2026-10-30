@@ -246,8 +246,9 @@
         @apply mb-4 sm:mb-4;
     }
 
+    /* On a phone the app bar already names the screen. */
     .page-title {
-        @apply text-2xl font-semibold tracking-tight text-ide-text sm:text-3xl;
+        @apply text-2xl font-semibold tracking-tight text-ide-text max-md:sr-only sm:text-3xl;
     }
 
     .page-lead {

@@ -80,7 +80,7 @@ export function ReminderForm({
   };
 
   return (
-    <form onSubmit={submit} className="task-form">
+    <form id="reminder-form" onSubmit={submit} className="task-form">
       <div className="space-y-3">
         <div className="inline-flex max-w-full flex-wrap rounded-lg border border-ide-border p-0.5">
           {onPickTaskPreset
@@ -115,7 +115,6 @@ export function ReminderForm({
           </label>
           <Input
             id="reminder-name"
-            size="sm"
             value={name}
             error={nameError}
             autoComplete="off"
@@ -144,7 +143,6 @@ export function ReminderForm({
             </label>
             <TimeField
               id="reminder-time"
-              size="sm"
               value={notificationTime}
               onChange={setNotificationTime}
               aria-label={t('dayReminders.time')}
@@ -163,7 +161,6 @@ export function ReminderForm({
             <Textarea
               id="reminder-description"
               rows={2}
-              size="sm"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
             />
@@ -186,7 +183,6 @@ export function ReminderForm({
               </label>
               <Select
                 id="reminder-repeat"
-                size="sm"
                 value={pattern}
                 onChange={(event) => setPattern(event.target.value as DayReminderPattern | '')}
               >

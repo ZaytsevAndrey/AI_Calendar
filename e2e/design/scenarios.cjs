@@ -125,7 +125,35 @@ const scenarios = [
     sizes: desk,
     run: async (page) => openFirst(page, '[data-testid="calendars-menu"], button:has-text("Календарі"), button:has-text("Calendars")'),
   },
+  {
+    name: 'event-preview',
+    route: '/',
+    run: async (page, { mobile }) => {
+      await page.locator('[data-testid^="calendar-event-"] [role="button"]').first().click();
+      await page.waitForTimeout(600);
+    },
+  },
+  {
+    name: 'edit-task',
+    route: '/tasks',
+    run: async (page) => {
+      await page.locator('.task-item h3 button').first().click();
+      await page.waitForTimeout(800);
+    },
+  },
   { name: 'tasks', route: '/tasks' },
+  { name: 'tasks-later', route: '/tasks?tab=later' },
+  { name: 'tasks-reminders', route: '/tasks?tab=reminders' },
+  { name: 'tasks-done', route: '/tasks?tab=done' },
+  {
+    name: 'tasks-menu',
+    route: '/tasks?tab=later',
+    sizes: phone,
+    run: async (page) => {
+      await page.getByRole('button', { name: L('Інші дії', 'More actions') }).first().click();
+      await page.waitForTimeout(300);
+    },
+  },
   { name: 'tasks-empty', route: '/tasks', scenario: 'empty' },
   { name: 'settings', route: '/settings' },
   { name: 'settings-general', route: '/settings/general' },

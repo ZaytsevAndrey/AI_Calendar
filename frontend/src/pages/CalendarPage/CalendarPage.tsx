@@ -1106,6 +1106,7 @@ const CalendarPage: React.FC = () => {
             {phone ? (
                 <button
                     type="button"
+                    data-testid="create-task"
                     aria-label={t('calendar.createTask')}
                     onClick={() => openCreate()}
                     className="absolute bottom-4 right-4 z-20 inline-flex h-14 w-14 items-center justify-center rounded-full bg-ide-accentBlue text-white shadow-ide-md transition active:scale-95"

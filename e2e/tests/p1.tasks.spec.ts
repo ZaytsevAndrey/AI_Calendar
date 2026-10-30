@@ -194,16 +194,15 @@ test.describe('P1 tasks UI', () => {
         deadline,
       }),
     );
-    await openAs(page, auth.onboarded, '/tasks');
+    await openAs(page, auth.onboarded, '/tasks?tab=later');
     const row = page.locator('.task-item').filter({ hasText: name });
     await expect(row.getByLabel('Unscheduled', { exact: true })).toBeVisible();
-    await expect(row.getByLabel(phaseName, { exact: true })).toBeVisible();
-    await expect(row.getByLabel(/^From /)).toBeVisible();
-    await expect(row.getByLabel(/Overdue/)).toBeVisible();
-    // Icon-only actions (aria-label), not desktop text pills for duration.
+    await expect(row.getByText(phaseName, { exact: true })).toBeVisible();
+    await expect(row.getByText(/^From /)).toBeVisible();
+    await expect(row.getByText(/Overdue/)).toBeVisible();
     await expect(row.getByRole('button', { name: 'Done' })).toBeVisible();
-    await expect(row.getByRole('button', { name: 'Do now' })).toBeVisible();
-    await expect(row.getByText(/min/i)).toHaveCount(0);
+    await expect(row.getByRole('button', { name: 'Do now' })).toBeAttached();
+    await expect(row.getByRole('button', { name: 'Schedule' })).toBeVisible();
   });
 
   test('U-TSK-012 edit can clear phase and deadline', async ({ page, auth, request }) => {
@@ -281,7 +280,7 @@ test.describe('P1 tasks UI', () => {
     expect(task?.googleReminders?.useDefault).toBe(false);
   });
 
-  test('U-TSK-020 search in one section leaves the other list alone', async ({ page, auth, request }) => {
+  test('U-TSK-020 each tab keeps its own search', async ({ page, auth, request }) => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const stamp = Date.now();
     const inboxName = `P1 ${stamp} inbox milk`;
@@ -300,7 +299,7 @@ test.describe('P1 tasks UI', () => {
       }),
     );
 
-    await openAs(page, auth.onboarded, '/tasks');
+    await openAs(page, auth.onboarded, '/tasks?tab=later');
     const unscheduled = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Unscheduled' }) });
     const scheduled = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Scheduled' }) });
 
