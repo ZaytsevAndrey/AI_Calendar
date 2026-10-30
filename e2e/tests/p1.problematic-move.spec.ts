@@ -1,5 +1,5 @@
 import type { Locator, Page, Route } from '@playwright/test';
-import { test, expect, openAs, apiJson, expectOk, uniqueName, completeOpenTasks } from '../helpers/fixtures';
+import { test, expect, openAs, apiJson, expectOk, uniqueName, completeOpenTasks, problematicRegion } from '../helpers/fixtures';
 
 /** The move sheet start time is a shared TimeField, not a native time input. */
 async function setStartTime(page: Page, move: Locator, value: string) {
@@ -114,8 +114,7 @@ async function mockFreeSlots(
 
 async function openInbox(page: Page, auth: { onboarded: { access_token: string } }, name: string) {
   await openAs(page, auth.onboarded);
-  const banner = page.getByRole('region', { name: 'Tasks that fell out of the schedule' });
-  await expect(banner).toBeVisible();
+  const banner = await problematicRegion(page);
   await banner.getByRole('button', { name: 'Review' }).click();
   const inbox = page.getByRole('dialog', { name: 'Problematic' });
   await expect(inbox).toBeVisible();

@@ -612,13 +612,15 @@
     "problematicMovePrevDay": "Previous day",
     "problematicMoveNextDay": "Next day",
     "problematicMoveSuggest": "Free near the old time",
-    "problematicMoveConfirmAt": "Place {{day}}, {{start}}",
+    "problematicMoveConfirmAt": "Place at {{start}}",
     "problematicMoveFindDay": "Next day with room",
     "problematicMoveNoDayFound": "No room in the next {{days}} days. Try a shorter duration or another phase.",
     "problematicSlotFree": "Free",
     "problematicAutoSeated": "“{{name}}” is back on the schedule",
     "problematicSlotHintTouch": "Scroll the timeline or tap a day.",
-    "problematicLead": "These did not fit their phases. Pick another time or place them on top."
+    "problematicLead": "These did not fit their phases. Pick another time or place them on top.",
+    "planLaterTitle": "Schedule",
+    "planLaterSuggest": "Nearest free time"
   },
   "now": {
     "label": "Now",

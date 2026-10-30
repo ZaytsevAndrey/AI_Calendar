@@ -23,6 +23,8 @@ import { ScheduleApi } from 'api/schedule.api';
 import { useScheduleActions } from 'modules/schedule/hooks/useScheduleActions';
 import { ProblematicInboxSheet } from 'modules/schedule/components/ProblematicInboxSheet';
 import { SeriesDragHost } from 'modules/schedule/components/SeriesDragHost';
+import { MoveOccurrenceSheet } from 'modules/schedule/components/MoveOccurrenceSheet';
+import type { TaskDTO } from 'api/tasks.api';
 import {
     askSeriesDeleteScope,
     SeriesMoveCancelled,
@@ -172,6 +174,7 @@ const CalendarPage: React.FC = () => {
     });
     const [problematicOpen, setProblematicOpen] = useState(false);
     const [todaySheet, setTodaySheet] = useState<TodaySectionId | null>(null);
+    const [laterTarget, setLaterTarget] = useState<{ task: TaskDTO; occurrenceYmd: string } | null>(null);
     const wide = useMatchMedia('(min-width: 1280px)');
     const [panelOpen, setPanelOpenState] = useState(storedPanelOpen);
     const setPanelOpen = (next: boolean | ((prev: boolean) => boolean)) =>
@@ -877,7 +880,7 @@ const CalendarPage: React.FC = () => {
             }}
             onScheduleTask={(task) => {
                 setTodaySheet(null);
-                openSchedule(task);
+                setLaterTarget({ task, occurrenceYmd: today.todayYmd });
             }}
             onEditReminder={(reminder) => {
                 setTodaySheet(null);
@@ -1216,6 +1219,13 @@ const CalendarPage: React.FC = () => {
                 dayHints={parkDayHints}
                 onClose={() => setProblematicOpen(false)}
                 onEdit={(task) => openEdit(task)}
+            />
+            <MoveOccurrenceSheet
+                mode="later"
+                target={laterTarget}
+                timeZone={timeZone}
+                onClose={() => setLaterTarget(null)}
+                onDone={() => setLaterTarget(null)}
             />
             <VoiceTaskSheet voice={voice} />
             <SeriesDragHost />

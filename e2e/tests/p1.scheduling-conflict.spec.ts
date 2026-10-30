@@ -10,6 +10,7 @@ import {
   waitForScheduleJob,
   expectMutationProgressToast,
   stripBlock,
+  problematicRegion,
 } from '../helpers/fixtures';
 
 /** First Europe/Kyiv civil day whose 09:00 is still in the future. */
@@ -97,10 +98,7 @@ test.describe('P1 scheduling conflict (real placement, JWT openAs)', () => {
     await conflict.getByRole('button', { name: 'Park as problematic', exact: true }).last().click();
     await expect(conflict).toBeHidden({ timeout: 15_000 });
 
-    const banner = page.getByRole('region', {
-      name: 'Tasks that fell out of the schedule',
-    });
-    await expect(banner).toBeVisible({ timeout: 15_000 });
+    const banner = await problematicRegion(page);
     await banner.getByRole('button', { name: 'Review' }).click();
     const inbox = page.getByRole('dialog', { name: 'Problematic' });
     await expect(inbox).toBeVisible();

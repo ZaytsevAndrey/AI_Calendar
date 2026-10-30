@@ -118,7 +118,7 @@ export function TodayPanel({
       </section>
 
       {problematicTasks.length > 0 ? (
-        <section id={todaySectionDomId('problems')}>
+        <section id={todaySectionDomId('problems')} aria-label={t('schedule.problematicAria')}>
           <SectionHeader
             icon={AlertTriangle}
             tone="warning"

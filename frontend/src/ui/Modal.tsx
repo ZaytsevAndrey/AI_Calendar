@@ -1,6 +1,7 @@
 import React, { useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { X } from 'lucide-react';
 import { cx } from './cx';
 import { useDialogFocus } from './useDialogFocus';
 import { useIsPhone, useKeyboardInset } from './useViewport';
@@ -123,7 +124,16 @@ export const Modal: React.FC<ModalProps> = ({
                             ) : (
                                 <span className="flex-1" />
                             )}
-                            {headerAction}
+                            {headerAction ?? (
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    aria-label={t('common.closeModal')}
+                                    className="-mr-1.5 hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ide-muted transition hover:bg-ide-surface hover:text-ide-text md:inline-flex"
+                                >
+                                    <X className="h-4 w-4" aria-hidden />
+                                </button>
+                            )}
                         </div>
                     ) : null}
                 </div>

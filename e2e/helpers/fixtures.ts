@@ -140,3 +140,19 @@ export async function expectMutationProgressToast(
   ).toBeVisible({ timeout: 15_000 });
 }
 
+
+/**
+ * The problematic block lives in «Today»: the side panel on wide screens, the sheet behind
+ * the Today bar on a phone, the panel button in between. Opens it when needed.
+ */
+export async function problematicRegion(page: Page, timeout = 15_000) {
+  const region = page.getByRole('region', { name: 'Tasks that fell out of the schedule' });
+  const toggle = page.getByRole('button', { name: /^(Today panel|Open Today)$/ }).first();
+  await expect(toggle).toBeVisible({ timeout });
+  if (!(await region.isVisible())) {
+    const pressed = await toggle.getAttribute('aria-pressed');
+    if (pressed !== 'true') await toggle.click();
+  }
+  await expect(region).toBeVisible({ timeout });
+  return region;
+}

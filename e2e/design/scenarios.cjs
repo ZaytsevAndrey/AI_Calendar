@@ -6,6 +6,12 @@ const L = (uk, en) => new RegExp(`^(${uk}|${en})$`, 'i');
 const desk = ['d', 'xl', 't'];
 const phone = ['m', 'xs'];
 
+async function openToday(page) {
+  const region = page.locator('#today-later');
+  if (await region.isVisible()) return;
+  await openFirst(page, 'button[aria-label="Панель «Сьогодні»"], button[aria-label="Today panel"], [data-testid="today-bar"]');
+}
+
 async function openFirst(page, selector) {
   await page.locator(selector).first().click({ timeout: 8000 });
   await page.waitForTimeout(500);
@@ -87,7 +93,31 @@ const scenarios = [
   {
     name: 'problematic',
     route: '/',
-    run: async (page) => openFirst(page, '[data-testid="open-problematic"], button:has-text("Переглянути"), button:has-text("Review")'),
+    run: async (page) => {
+      await openToday(page);
+      await page.getByRole('button', { name: L('Переглянути', 'Review') }).last().click();
+      await page.waitForTimeout(600);
+    },
+  },
+  {
+    name: 'problematic-more',
+    route: '/',
+    run: async (page) => {
+      await openToday(page);
+      await page.getByRole('button', { name: L('Переглянути', 'Review') }).last().click();
+      await page.waitForTimeout(600);
+      await page.getByRole('button', { name: L('Інші дії', 'More actions') }).last().click();
+      await page.waitForTimeout(300);
+    },
+  },
+  {
+    name: 'plan-later',
+    route: '/',
+    run: async (page) => {
+      await openToday(page);
+      await page.locator('#today-later').getByRole('button', { name: L('Запланувати', 'Schedule') }).first().click();
+      await page.waitForTimeout(800);
+    },
   },
   {
     name: 'calendars-menu',

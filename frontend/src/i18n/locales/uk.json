@@ -630,13 +630,15 @@
     "problematicMovePrevDay": "Попередній день",
     "problematicMoveNextDay": "Наступний день",
     "problematicMoveSuggest": "Вільно біля старого часу",
-    "problematicMoveConfirmAt": "Поставити {{day}}, {{start}}",
+    "problematicMoveConfirmAt": "Поставити на {{start}}",
     "problematicMoveFindDay": "Наступний день з місцем",
     "problematicMoveNoDayFound": "Наступні {{days}} днів місця немає. Спробуйте коротшу тривалість або іншу фазу.",
     "problematicSlotFree": "Вільно",
     "problematicAutoSeated": "«{{name}}» повернулась у розклад",
     "problematicSlotHintTouch": "Гортайте таймлайн або торкніться дня.",
-    "problematicLead": "Не вмістилися у свої фази. Оберіть інший час або поставте поверх."
+    "problematicLead": "Не вмістилися у свої фази. Оберіть інший час або поставте поверх.",
+    "planLaterTitle": "Запланувати",
+    "planLaterSuggest": "Найближчий вільний час"
   },
   "now": {
     "label": "Зараз",
