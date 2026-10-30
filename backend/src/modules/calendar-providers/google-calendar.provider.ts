@@ -66,8 +66,10 @@ export class GoogleCalendarProvider implements CalendarProvider {
     patch: ProviderEventPatch,
     calendarId?: string,
   ): Promise<ProviderEvent | null> {
+    // Some fields only: every other field of the event stays (H-3).
     const updated = await this.google.updateEvent(userId, eventId, patch, {
       calendarId,
+      partial: true,
     });
     if (!updated?.id) return null;
     return {

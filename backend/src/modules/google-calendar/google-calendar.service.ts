@@ -133,6 +133,24 @@ function eventOverlapsWindow(event: DisplayGoogleEvent, startMs: number, endMs: 
   return googleEventEndMs(event) > startMs && googleEventStartMs(event) < endMs;
 }
 
+/**
+ * Event fields this app writes in full on every update (task and reminder
+ * payloads): absent from the body means cleared. Everything else on the event
+ * is Google's or the user's and is kept (H-3).
+ */
+const APP_OWNED_EVENT_FIELDS = [
+  'summary',
+  'description',
+  'location',
+  'start',
+  'end',
+  'colorId',
+  'visibility',
+  'transparency',
+  'reminders',
+  'recurrence',
+] as const;
+
 @Injectable()
 export class GoogleCalendarService {
   /**
@@ -1123,6 +1141,8 @@ export class GoogleCalendarService {
       this.logger.log(
         `Successfully fetched event ${eventId} for user ${userId}`,
       );
+      // H-2: a deleted event can still be read, as `cancelled`: it is gone.
+      if (response.data.status === 'cancelled') throw new GoogleEventMissingError(eventId);
       // Include phaseId in the response when linked
       const eventData = response.data;
       if (eventId && userId) {
@@ -1423,11 +1443,20 @@ export class GoogleCalendarService {
     };
   }
 
+  /**
+   * Replace the event with `event` (H-2 / H-3). PUT replaces the whole event,
+   * so it starts from the event as Google holds it: what this app does not
+   * manage (guests, conferencing, attachments…) survives, and the fields it
+   * owns (`APP_OWNED_EVENT_FIELDS`) are replaced — cleared when absent from
+   * `event` — unless `partial` (an edit of some fields only). A deleted event
+   * reads back as `cancelled`: reported missing, never restored. One extra
+   * read per update.
+   */
   async updateEvent(
     userId: string,
     eventId: string,
     event: Record<string, unknown>,
-    opts?: { skipSleepWindowCheck?: boolean; calendarId?: string },
+    opts?: { skipSleepWindowCheck?: boolean; calendarId?: string; partial?: boolean },
   ) {
     const oauth = this.newOAuthClient();
     const { phaseId } = await this.assertCalendarWritePayload(
@@ -1484,12 +1513,25 @@ export class GoogleCalendarService {
 
     let response;
     try {
+      const { data: current } = await calendar.events.get({
+        calendarId: writableCalendarId,
+        eventId,
+      });
+      if (current.status === 'cancelled') throw new GoogleEventMissingError(eventId);
+      const merged: Record<string, unknown> = { ...current };
+      if (!opts?.partial) {
+        for (const key of APP_OWNED_EVENT_FIELDS) delete merged[key];
+      }
+      Object.assign(merged, requestBody);
       response = await calendar.events.update({
         calendarId: writableCalendarId,
         eventId,
-        requestBody,
+        requestBody: merged,
+        // Without it Google ignores conference data in the body.
+        ...(merged.conferenceData ? { conferenceDataVersion: 1 } : {}),
       });
     } catch (err: unknown) {
+      if (err instanceof GoogleEventMissingError) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Google Calendar update failed: ${msg}`);
       if (this.isGoogleNotFound(err)) throw new GoogleEventMissingError(eventId);

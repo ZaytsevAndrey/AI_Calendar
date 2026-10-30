@@ -624,6 +624,75 @@ describe('GoogleCalendarService', () => {
     });
   });
 
+  describe('H-2 / H-3: updating an event Google already holds', () => {
+    beforeEach(() => {
+      jest.spyOn(userRepo, 'findOne').mockResolvedValue({
+        googleAccessToken: 'valid-token',
+        googleTokenExpiry: new Date(Date.now() + 10000),
+      } as User);
+      jest.spyOn(userSettingsRepo, 'findOne').mockResolvedValue({ appGoogleCalendarId: 'app-cal' } as UserSettings);
+    });
+    const remote = (extra: Record<string, unknown> = {}) => ({
+      data: {
+        id: 'evt-1',
+        status: 'confirmed',
+        summary: 'Old name',
+        description: 'Old notes',
+        start: { dateTime: '2026-11-05T10:00:00Z' },
+        end: { dateTime: '2026-11-05T11:00:00Z' },
+        attendees: [{ email: 'guest@example.com' }],
+        conferenceData: { conferenceId: 'abc-defg-hij' },
+        ...extra,
+      },
+    });
+    const sentBody = () => g().eventsUpdate.mock.calls[0][0].requestBody as Record<string, unknown>;
+
+    it('H-3: guests and conferencing added in Google survive; a field the app cleared is cleared', async () => {
+      g().eventsGet.mockResolvedValueOnce(remote());
+
+      await service.updateEvent('123', 'evt-1', {
+        summary: 'New name',
+        start: { dateTime: '2026-11-05T12:00:00Z' },
+        end: { dateTime: '2026-11-05T13:00:00Z' },
+      }, { calendarId: 'app-cal' });
+
+      expect(sentBody()).toMatchObject({
+        summary: 'New name',
+        attendees: [{ email: 'guest@example.com' }],
+        conferenceData: { conferenceId: 'abc-defg-hij' },
+      });
+      expect(sentBody()).not.toHaveProperty('description');
+      expect(g().eventsUpdate.mock.calls[0][0].conferenceDataVersion).toBe(1);
+    });
+
+    it('a partial edit (provider patch) keeps every other field', async () => {
+      g().eventsGet.mockResolvedValueOnce(remote());
+
+      await service.updateEvent('123', 'evt-1', { summary: 'Renamed' }, { calendarId: 'app-cal', partial: true });
+
+      expect(sentBody()).toMatchObject({ summary: 'Renamed', description: 'Old notes', start: { dateTime: '2026-11-05T10:00:00Z' } });
+    });
+
+    it('H-2: an event deleted in Google (cancelled) is reported missing, never restored', async () => {
+      g().eventsGet.mockResolvedValueOnce(remote({ status: 'cancelled' }));
+
+      const error = await service
+        .updateEvent('123', 'evt-1', { summary: 'New name' }, { calendarId: 'app-cal' })
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(GoogleEventMissingError);
+      expect(g().eventsUpdate).not.toHaveBeenCalled();
+    });
+
+    it('H-2: reading a cancelled event reports it missing', async () => {
+      g().eventsGet.mockResolvedValueOnce(remote({ status: 'cancelled' }));
+
+      const error = await service.getEvent('123', 'evt-1', 'app-cal').catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(GoogleEventMissingError);
+    });
+  });
+
   it('should delete event', async () => {
     const userId = '123';
     const eventId = 'event123';
