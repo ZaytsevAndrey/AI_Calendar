@@ -93,7 +93,7 @@ Frontend **build-time** variable:
 
 ## Database migrations
 
-Postgres schema comes from versioned TypeORM migrations in `backend/src/database/migrations/`, run on every boot before the API listens (`migrationsRun`; each migration in its own transaction; `TYPEORM_MIGRATIONS=false` skips them). `TYPEORM_SYNC` is `false` in `render.yaml`; `synchronize` runs on Postgres only when `TYPEORM_SYNC=true` is set explicitly (throwaway databases). Local SQLite still synchronizes.
+Postgres schema comes from versioned TypeORM migrations in `backend/src/database/migrations/`, run on every boot before the API listens (each migration in its own transaction; `TYPEORM_MIGRATIONS=false` skips them). Since AUD-026 they run under the Postgres advisory lock `luefy:migrations` (`src/database/migration-lock.ts`): instances booting at once migrate one after another, and the next finds nothing to do. A crashed booting instance releases the lock with its connection. `TYPEORM_SYNC` is `false` in `render.yaml`; `synchronize` runs on Postgres only when `TYPEORM_SYNC=true` is set explicitly (throwaway databases). Local SQLite still synchronizes.
 
 Render: `buildCommand` runs `npm run build:backend` (`nest build` → `backend/dist/main.js` and `backend/dist/database/migrations/*.js`); `startCommand` runs `node dist/main`, which connects, runs pending migrations, then serves. A failed migration stops the boot (the previous deploy keeps serving).
 
@@ -103,17 +103,18 @@ Render: `buildCommand` runs `npm run build:backend` (`nest build` → `backend/d
 | `1761760000000-SchedulingQueueAndOccurrenceIdentity` | Idempotent `ADD COLUMN IF NOT EXISTS`: `tasks.originalOccurrenceYmd`, `schedule_jobs.attempts / nextRunAt / leaseUntil` + index. Backfills the day of parked series copies from `problematicDay` (seated copies stay null: ambiguous). Fails jobs left `running` without a lease by the old in-process runner. |
 | `1761770000000-GoogleWriteQueueLifecycle` | Idempotent: `pending_google_writes.status / nextRunAt / leaseUntil / revision` + index (existing rows become `pending`, due now); `tasks.googleInsertEventId`. |
 | `1761780000000-CreateRequestIdempotency` | Idempotent: table `request_idempotency` (user, operation, key, body hash, created resource) + unique index `(userId, operation, key)`. Replaces the unreleased `TaskCreateRequestKey` of the same branch (never deployed). |
+| `1761790000000-GoogleWriteQueueUniqueness` | AUD-011. Deletes duplicate `pending_google_writes` rows (keeps the most recent of each task upsert / event delete; a queue row means "make Google match now", so a duplicate carries no extra intent), then partial unique indexes `(userId, taskId) WHERE operation = 'upsert'` and `(userId, googleEventId) WHERE operation = 'delete'`. Idempotent. |
 
-All four only add columns, a table and indexes, backfill one column and fail stale queue rows; no column is dropped or retyped, no user data is deleted.
+All five only add columns, a table and indexes, backfill one column, fail stale queue rows and delete duplicate queue rows; no column is dropped or retyped, no user data is deleted.
 
-**Verified (local Postgres 16, not Neon):** fresh database → four migrations → no drift against the entities; a database built by `TYPEORM_SYNC` from `master`'s entities with sample rows → the built app (`node dist/main.js`) booted, recorded the baseline, ran the other three, no drift, every row kept, the parked copy backfilled, the stale job failed, the queued Google write due; a second boot ran nothing; an interrupted upgrade reruns cleanly (`migrations.pg.spec`).
+**Verified (local Postgres 16, not Neon):** fresh database → five migrations; three instances booting at once on an empty database all come up with each migration run once (`migrations.pg.spec` AUD-026) → no drift against the entities; a database built by `TYPEORM_SYNC` from `master`'s entities with sample rows → the built app (`node dist/main.js`) booted, recorded the baseline, ran the others, no drift, every row kept, the parked copy backfilled, the stale job failed, the queued Google write due; a second boot ran nothing; an interrupted upgrade reruns cleanly (`migrations.pg.spec`).
 
 **Not verified: Neon.** No Neon access was available (no API key, no `neonctl`, no connection string in this environment). Neon is Postgres (16/17) and supports `uuid-ossp`, so no difference is expected, but run this before the first deploy:
 
 1. In the Neon console, create a branch of the production database (it is a copy; the production branch is untouched) and copy its connection string.
 2. Locally, from the repo root: `npm run build:backend`, then
    `DATABASE_URL='<branch url>' PORT=3999 node backend/dist/main.js` — wait for "Nest application successfully started", stop it.
-3. On the branch: `SELECT name FROM migrations ORDER BY id;` lists the four migrations; spot-check row counts of `tasks`, `scheduled_tasks`, `user` against production.
+3. On the branch: `SELECT name FROM migrations ORDER BY id;` lists the five migrations; spot-check row counts of `tasks`, `scheduled_tasks`, `user` against production.
 4. Optional drift check: `PG_TEST_URL='<branch url>' DATABASE_URL='<branch url>'` and open the branch with the entities (`createSchemaBuilder().log()` must be empty), the way `migrations.pg.spec` does.
 5. Delete the branch.
 
@@ -121,7 +122,7 @@ All four only add columns, a table and indexes, backfill one column and fail sta
 
 1. Back up the database (Neon branch or `pg_dump`).
 2. Deploy with `TYPEORM_SYNC=false` (already in `render.yaml`; check the dashboard value too — a dashboard value overrides the Blueprint).
-3. On boot the backend runs the migrations; the log shows the TypeORM migration lines, and `SELECT name FROM migrations` lists all four.
+3. On boot the backend runs the migrations; the log shows the TypeORM migration lines, and `SELECT name FROM migrations` lists all five.
 4. If a deploy is interrupted, simply redeploy: the migrations are safe to rerun (`IF NOT EXISTS`).
 
 **Every later entity change needs a migration.** Generate the SQL on an empty local Postgres (the same way as the baseline) or write it by hand, keep it idempotent where possible, and run `npm run test:pg` (CI runs it): `src/database/migrations.pg.spec.ts` fails when migrations no longer produce exactly the entity schema (fresh database and upgrade from the pre-migration schema).
