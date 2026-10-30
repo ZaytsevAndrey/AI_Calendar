@@ -54,6 +54,7 @@ import {
 import { breaksSeriesMembership } from '../schedule/series-group.util';
 import { isUniqueViolation } from '../../database/unique-violation';
 import { noteGoogleSync, recordGoogleWrite } from '../google-calendar/google-sync-outbox';
+import { withoutIdentityKeys } from '../../common/scheduling-validation.pipe';
 import { PendingGoogleWrite } from '../google-calendar/entities/pending-google-write.entity';
 
 /** Idempotency record operation for task creation. */
@@ -656,7 +657,7 @@ export class TasksService implements OnModuleInit {
     const scheduleTimeZone = await this.resolveTaskTimeZone(userId, timeZone);
 
     const task = this.tasksRepository.create({
-      ...rest,
+      ...withoutIdentityKeys(rest),
       userId,
       eventType,
       isUnscheduled,
@@ -893,7 +894,7 @@ export class TasksService implements OnModuleInit {
       problematicOriginalEnd,
       ...rest
     } = dto;
-    this.tasksRepository.merge(task, rest);
+    this.tasksRepository.merge(task, withoutIdentityKeys(rest));
 
     if (deadline !== undefined) {
       task.deadline = deadline ? new Date(deadline) : null;

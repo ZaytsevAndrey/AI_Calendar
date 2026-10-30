@@ -12,6 +12,7 @@ import {
   HttpCode,
   Headers,
   BadRequestException,
+  UsePipes,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -28,10 +29,14 @@ import { SkipOccurrenceDto } from './dto/skip-occurrence.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TaskStatus } from './entities/task.entity';
 
+import { schedulingValidationPipe } from '../../common/scheduling-validation.pipe';
+
 @ApiTags('tasks')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('tasks')
+// AUD-006: DTO whitelist; undeclared body keys (id, userId, …) are stripped.
+@UsePipes(schedulingValidationPipe)
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 

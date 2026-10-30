@@ -58,6 +58,57 @@ describe('Tasks API e2e', () => {
     expect(after.some((task) => task.name === 'Different')).toBe(false);
   });
 
+  it('A-TSK-032 (AUD-006) clients cannot write internal columns or another user\'s task', async () => {
+    const alice = await seedOnboardedUser(ctx.app);
+    const mallory = await seedOnboardedUser(ctx.app);
+    const own = await api(ctx.app, 'POST', '/tasks', {
+      token: alice.token,
+      payload: { name: 'Alice task', estimatedTimeInMinutes: 30 },
+    });
+    await ctx.drainJobs();
+    const aliceTask = jsonBody(own);
+
+    // Create with another user's task id and internal columns.
+    const hijack = await api(ctx.app, 'POST', '/tasks', {
+      token: mallory.token,
+      payload: {
+        name: 'Hijack',
+        estimatedTimeInMinutes: 30,
+        id: aliceTask.id,
+        userId: alice.user.id,
+        googleEventId: 'forged-event',
+        googleInsertEventId: 'forged-insert',
+      },
+    });
+    await ctx.drainJobs();
+    expect(hijack.statusCode).toBe(201);
+    expect(jsonBody(hijack).id).not.toBe(aliceTask.id);
+    expect(jsonBody(hijack).googleEventId ?? null).toBeNull();
+
+    // Patch own task with another user's id and internal columns.
+    const malloryTask = jsonBody(hijack);
+    const patch = await api(ctx.app, 'PATCH', `/tasks/${malloryTask.id}`, {
+      token: mallory.token,
+      payload: { name: 'Patched', id: aliceTask.id, userId: alice.user.id, googleEventId: 'forged' },
+    });
+    await ctx.drainJobs();
+    expect(patch.statusCode).toBe(200);
+    expect(jsonBody(patch)).toMatchObject({ id: malloryTask.id, name: 'Patched' });
+    expect(jsonBody(patch).googleEventId ?? null).toBeNull();
+
+    const aliceAfter = jsonBody(await api(ctx.app, 'GET', `/tasks/${aliceTask.id}`, { token: alice.token }));
+    expect(aliceAfter).toMatchObject({ id: aliceTask.id, name: 'Alice task' });
+    const aliceList = jsonBody(await api(ctx.app, 'GET', '/tasks', { token: alice.token })).value as unknown[];
+    expect(aliceList).toHaveLength(1);
+
+    // Invalid input is a 400, not a 500.
+    const invalid = await api(ctx.app, 'POST', '/tasks', {
+      token: alice.token,
+      payload: { estimatedTimeInMinutes: 'soon' },
+    });
+    expect(invalid.statusCode).toBe(400);
+  });
+
   it('A-TSK-002 missing name is recorded as current status', async () => {
     const { token } = await seedOnboardedUser(ctx.app);
     const res = await api(ctx.app, 'POST', '/tasks', {

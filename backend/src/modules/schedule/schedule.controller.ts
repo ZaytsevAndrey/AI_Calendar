@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
   Request,
+  UsePipes,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -37,10 +38,14 @@ import { PhraseConflictOptionsDto } from './dto/phrase-conflict-options.dto';
 import { ScheduledTask } from './schedule.entity';
 import type { SchedulingConflict } from './scheduling-conflict.types';
 
+import { schedulingValidationPipe } from '../../common/scheduling-validation.pipe';
+
 @ApiTags('schedule')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('schedule')
+// AUD-006: DTO whitelist; undeclared body keys (id, userId, …) are stripped.
+@UsePipes(schedulingValidationPipe)
 export class ScheduleController {
   constructor(
     private readonly scheduleService: ScheduleService,
