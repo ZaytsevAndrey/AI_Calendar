@@ -167,3 +167,15 @@ export async function pickFixedSlot(page: Page, dialog: Locator, startHour: stri
   await expect(dialog.locator('#task-form-slot')).toContainText(`${startHour}:`);
   return ymd;
 }
+
+/** One civil day in a DateRangeField (`fieldId`): open it, find the month, click the day twice. */
+export async function pickDayRange(page: Page, dialog: Locator, fieldId: string, ymd: string) {
+  await dialog.locator(`#${fieldId}`).click();
+  const day = page.locator(`[data-ymd="${ymd}"]`).first();
+  for (let i = 0; i < 3 && !(await day.isVisible()); i += 1) {
+    await page.getByRole('button', { name: 'Next month' }).click();
+  }
+  await day.click();
+  if (await day.isVisible()) await day.click();
+  if (await page.locator(`[data-ymd="${ymd}"]`).first().isVisible()) await page.keyboard.press('Escape');
+}

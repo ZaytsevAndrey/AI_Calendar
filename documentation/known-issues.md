@@ -39,6 +39,7 @@ Last full review: 2026-10-30, branch `stabilize/scheduling`, after the audit rem
 | [KI-27](#ki-27) | `PATCH /tasks/:id/status` accepts any status string | Low | defect | neither |
 | [KI-28](#ki-28) | OAuth and app refresh tokens stored in plaintext | Medium | defect (security) | release gate G-5 (recommended) |
 | [KI-29](#ki-29) | Account deletion without a Google grant leaves the app events in Google | Low | limitation | neither |
+| [KI-30](#ki-30) | Problematic one-tap suggestion can offer a day beyond the planning horizon | Low | defect | neither |
 
 ---
 
@@ -332,6 +333,14 @@ Last full review: 2026-10-30, branch `stabilize/scheduling`, after the audit rem
 - **Behavior:** `AccountDeletionService.purgeGoogleArtifacts` returns when the user has no stored grant (disconnected); local data is deleted, events and the app calendar stay in the user's Google account.
 - **Resolution:** say so in the delete dialog, or ask to reconnect first.
 - **Source:** `auth/account-deletion.service.ts`.
+- **Blocks:** neither.
+
+### KI-30
+
+**Problematic one-tap suggestion can offer a day beyond the planning horizon** — Low, defect (found by e2e U-CAL-025p, 30 Oct 2026).
+- **Behavior:** a task parked on a day past `recurringScheduleHorizonDays` gets a «Place at …» suggestion on that day (free-slots does not clip to the horizon), but `POST /schedule/problematic/:id/place` refuses it («That time is no longer free») because placement windows end at the horizon.
+- **Fix direction:** clip the suggestion (and the Move sheet days) to the horizon, or let an explicit Move seat past it.
+- **Source:** `schedule/components/ProblematicItemCard.tsx`, `schedule/free-slots.util.ts`, `schedule/problematic-place.service.ts`.
 - **Blocks:** neither.
 
 ## Audit findings (2026-10-30)
