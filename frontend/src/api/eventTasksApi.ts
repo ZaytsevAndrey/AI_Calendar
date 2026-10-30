@@ -106,17 +106,19 @@ export const eventTasksApi = createApi({
           createdAt: nowIso,
           updatedAt: nowIso,
         } satisfies TaskDTO;
-        const patch = dispatch(
+        dispatch(
           eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) => {
             draft.unshift(optimistic);
           }),
         );
+        let accepted = false;
         try {
           await runTaskMutationProgress({
             taskKey: tempId,
             title: arg.name,
             run: async (progress) => {
               const { data } = await queryFulfilled;
+              accepted = true;
               progress.retarget(data.id);
               dispatch(
                 eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) => {
@@ -137,7 +139,19 @@ export const eventTasksApi = createApi({
               }) || undefined,
           });
         } catch {
-          patch.undo();
+          // AUD-019: never undo by patch — it removes by position, and the
+          // list may have been refetched meanwhile (the real task, or another
+          // row, would go). Drop only the optimistic row; an accepted create
+          // whose job poll failed stays, and the list is refetched.
+          dispatch(
+            eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) => {
+              const index = draft.findIndex((row) => row.id === tempId);
+              if (index >= 0) draft.splice(index, 1);
+            }),
+          );
+          if (accepted) {
+            dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));
+          }
         }
       },
     }),

@@ -49,14 +49,32 @@ export interface ScheduleJobStatusResponse {
   updatedAt?: string;
 }
 
-/** A job waiting for a scheduled retry is still alive: wait past its retry time. */
+/** How long a running job keeps the poll alive past each answer. */
+export const RUNNING_JOB_GRACE_MS = 30_000;
+/** A poll never outlives this, whatever the job says. */
+export const JOB_POLL_HARD_CAP_MS = 10 * 60_000;
+
+/**
+ * A job waiting for a scheduled retry is still alive: wait past its retry
+ * time. A running job is alive too (AUD-019): its worker renews the lease, and
+ * a dead worker's job is taken over after it — reporting a timeout while the
+ * backend still works showed an error for a change that then succeeded. Both
+ * stop at `hardDeadline`.
+ */
 export function jobPollDeadline(
   deadline: number,
   job: Pick<ScheduleJobStatusResponse, 'status' | 'nextRunAt'>,
+  now = Date.now(),
+  hardDeadline = Number.POSITIVE_INFINITY,
 ): number {
-  if (job.status !== 'pending' || !job.nextRunAt) return deadline;
-  const retryAt = new Date(job.nextRunAt).getTime();
-  return Number.isFinite(retryAt) ? Math.max(deadline, retryAt + 30_000) : deadline;
+  let next = deadline;
+  if (job.status === 'running') {
+    next = Math.max(deadline, now + RUNNING_JOB_GRACE_MS);
+  } else if (job.status === 'pending' && job.nextRunAt) {
+    const retryAt = new Date(job.nextRunAt).getTime();
+    if (Number.isFinite(retryAt)) next = Math.max(deadline, retryAt + 30_000);
+  }
+  return Math.min(next, Math.max(deadline, hardDeadline));
 }
 
 async function pollJobUntilDone(
@@ -64,7 +82,8 @@ async function pollJobUntilDone(
   timeoutMs = 120_000,
   onProgress?: (job: ScheduleJobStatusResponse) => void,
 ): Promise<ScheduleJobStatusResponse> {
-  let deadline = Date.now() + timeoutMs;
+  const startedAt = Date.now();
+  let deadline = startedAt + timeoutMs;
   let status = 'pending';
   let last: ScheduleJobStatusResponse | null = null;
   let first = true;
@@ -82,7 +101,7 @@ async function pollJobUntilDone(
     const { data } = await axios.get<ScheduleJobStatusResponse>(`/schedule-jobs/${jobId}`);
     last = data;
     status = data.status;
-    deadline = jobPollDeadline(deadline, data);
+    deadline = jobPollDeadline(deadline, data, Date.now(), startedAt + JOB_POLL_HARD_CAP_MS);
     onProgress?.(data);
     if (status === 'failed') {
       throw new Error(data.errorMessage || 'Schedule job failed');
