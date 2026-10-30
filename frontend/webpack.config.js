@@ -106,6 +106,11 @@ export default async (_env, argv) => {
                     exclude: /node_modules/,
                 },
                 {
+                    test: /\.woff2?$/,
+                    type: 'asset/resource',
+                    generator: { filename: 'fonts/[name].[contenthash:8][ext]' },
+                },
+                {
                     test: /\.css$/,
                     use: ['style-loader', 'css-loader', 'postcss-loader'],
                 },

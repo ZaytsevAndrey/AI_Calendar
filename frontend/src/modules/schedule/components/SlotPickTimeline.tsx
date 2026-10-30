@@ -16,6 +16,7 @@ import {
   SLOT_WHEEL_FACTOR,
 } from '../slotPickMath';
 import { phaseIdAtFocus, phaseWindowsForDay } from '../slotPickPhases';
+import { phaseColor } from 'theme/phasePalette';
 
 type Props = {
   data: FreeSlotsResponse;
@@ -100,7 +101,7 @@ export function SlotPickTimeline({
     data.timeZone,
   );
   const phaseAtFocus = windows.find((w) => w.id === phaseIdAtFocus(windows, liveMs));
-  const phaseColor = phaseAtFocus?.color || data.phase?.color || '#4a90e2';
+  const focusColor = phaseAtFocus?.color || data.phase?.color;
 
   const scrollTopFor = (ms: number, el: HTMLDivElement) =>
     Math.max(
@@ -252,34 +253,40 @@ export function SlotPickTimeline({
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-xs text-ide-muted">{t('schedule.problematicSlotHint')}</p>
+      <p className="hidden text-xs text-ide-muted [@media(pointer:fine)]:block">
+        {t('schedule.problematicSlotHint')}
+      </p>
+      <p className="text-xs text-ide-muted [@media(pointer:fine)]:hidden">
+        {t('schedule.problematicSlotHintTouch')}
+      </p>
 
       <div className="relative overflow-hidden rounded-xl border border-ide-border bg-ide-bg">
         {/* Hairline at the viewport middle = slot start; ghost card hangs below it. */}
         <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30" aria-hidden>
-          <div className="absolute inset-x-0 top-0 h-0.5 -translate-y-1/2 bg-ide-link/80 shadow-[0_0_12px_rgba(74,144,226,0.55)]" />
+          <div className="absolute inset-x-0 top-0 h-0.5 -translate-y-1/2 bg-ide-link/80 shadow-[0_0_10px_rgb(var(--ide-link)/0.5)]" />
           <div
-            className={`absolute inset-x-5 top-0 rounded-lg border shadow-lg transition-[opacity,filter] duration-150 ${
-              placeable ? 'border-white/25 opacity-95' : 'border-ide-warn/60 opacity-75 grayscale'
+            className={`absolute inset-x-5 top-0 overflow-hidden rounded-chip border shadow-ide-md transition-[opacity] duration-150 ${
+              placeable ? 'border-ide-border' : 'border-ide-warn/60 opacity-80'
             }`}
             style={{
               height: ghostH,
               background: placeable
-                ? `linear-gradient(135deg, ${phaseColor}cc, ${phaseColor}88)`
-                : 'linear-gradient(135deg, #6b7280cc, #4b556388)',
+                ? `color-mix(in srgb, ${phaseColor(focusColor)} 30%, rgb(var(--ide-panel)))`
+                : 'rgb(var(--ide-warnTint))',
+              boxShadow: `inset 3px 0 0 0 ${placeable ? phaseColor(focusColor) : 'rgb(var(--ide-warn))'}`,
             }}
           >
-            <div className="flex h-full flex-col justify-center gap-0.5 px-3 py-2">
-              <p className="truncate text-sm font-semibold leading-tight text-white drop-shadow">
+            <div className="flex h-full flex-col justify-start gap-0.5 px-3 py-2">
+              <p className="truncate text-body-sm font-semibold leading-tight text-ide-text">
                 {taskName}
               </p>
-              <p className="text-[11px] tabular-nums leading-tight text-white/90">
+              <p className="text-caption tabular-nums leading-tight text-ide-muted">
                 {t('schedule.problematicSlotRange', { start: startLabel, end: endLabel })}
                 {phaseAtFocus ? ` · ${phaseAtFocus.name}` : ''}
               </p>
               <p
-                className={`text-[11px] font-medium leading-tight ${
-                  placeable ? 'text-white/80' : 'text-ide-warn'
+                className={`text-caption font-medium leading-tight ${
+                  placeable ? 'text-ide-muted' : 'text-ide-warn'
                 }`}
               >
                 {statusText}
@@ -315,7 +322,7 @@ export function SlotPickTimeline({
                 className="pointer-events-none absolute inset-x-0 border-t border-ide-border"
                 style={{ top: minToPx(tick.min) }}
               >
-                <span className="-mt-2.5 ml-1 inline-block bg-ide-bg pr-1 text-[10px] tabular-nums text-ide-muted">
+                <span className="-mt-2.5 ml-1 inline-block bg-ide-bg pr-1 text-caption tabular-nums text-ide-muted">
                   {tick.label}
                 </span>
               </div>
@@ -360,32 +367,31 @@ export function SlotPickTimeline({
               const startMin = msToMinOfDay(Date.parse(b.start), dayStartMs);
               const endMin = msToMinOfDay(Date.parse(b.end), dayStartMs);
               const h = Math.max(4, minToPx(endMin - startMin));
-              const tint = b.color || '#6b7280';
               const label = b.label?.trim();
               return (
                 <div
                   key={`busy-${b.start}-${b.end}-${idx}`}
-                  className="pointer-events-none absolute inset-x-10 overflow-hidden rounded-md border border-ide-border"
+                  className="pointer-events-none absolute inset-x-10 overflow-hidden rounded-chip border border-ide-border bg-ide-surface"
                   style={{
                     top: minToPx(startMin),
                     height: h,
-                    background: `linear-gradient(90deg, ${tint}55, ${tint}22)`,
+                    boxShadow: `inset 3px 0 0 0 ${b.color ? phaseColor(b.color) : 'rgb(var(--ide-muted))'}`,
                   }}
                 >
                   {label ? (
                     <div className="flex h-full min-h-0 flex-col justify-center gap-0.5 px-2 py-1">
-                      <p className="truncate text-[11px] font-semibold leading-tight text-white/95 drop-shadow">
+                      <p className="truncate text-caption font-semibold leading-tight text-ide-text">
                         {label}
                       </p>
                       {h >= 36 ? (
-                        <p className="truncate text-[10px] tabular-nums leading-tight text-white/75">
+                        <p className="truncate text-caption tabular-nums leading-tight text-ide-muted">
                           {formatHmFromIso(b.start, data.timeZone)}–
                           {formatHmFromIso(b.end, data.timeZone)}
                         </p>
                       ) : null}
                     </div>
                   ) : (
-                    <div className="h-full w-full bg-[repeating-linear-gradient(-45deg,transparent,transparent_4px,rgba(0,0,0,0.18)_4px,rgba(0,0,0,0.18)_8px)]" />
+                    <div className="h-full w-full bg-[repeating-linear-gradient(-45deg,transparent,transparent_4px,rgb(var(--ide-muted)/0.18)_4px,rgb(var(--ide-muted)/0.18)_8px)]" />
                   )}
                 </div>
               );

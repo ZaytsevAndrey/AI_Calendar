@@ -2,6 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes drawer-in {
+    from {
+        transform: translateX(24px);
+        opacity: 0;
+    }
+    to {
+        transform: none;
+        opacity: 1;
+    }
+}
+
+@keyframes sheet-in {
+    from { transform: translateY(24px); opacity: 0.6; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes pop-in {
+    from { transform: scale(0.98); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
 /*
   Design system: IDE tokens, mobile-first. Light and dark palettes live in theme/themeColors.ts.
   Combine classes: ui-btn + ui-btn-primary, page-shell, and so on.
@@ -25,49 +51,83 @@
         color-scheme: dark;
         --phone-tab-offset: 0px;
         /* Pre-paint copy of THEME_COLORS.dark. applyTheme overwrites these from the constants. */
-        --ide-bg: 43 43 43;
-        --ide-panel: 60 63 65;
-        --ide-surface: 50 50 50;
-        --ide-elevated: 69 73 74;
-        --ide-border: 81 81 81;
-        --ide-line: 49 51 53;
-        --ide-text: 169 183 198;
-        --ide-muted: 128 128 128;
-        --ide-dim: 106 135 89;
-        --ide-link: 88 157 246;
-        --ide-accent: 78 159 78;
-        --ide-accentBlue: 40 123 222;
-        --ide-keyword: 204 120 50;
-        --ide-error: 188 63 60;
-        --ide-warn: 187 181 41;
-        --ide-selection: 33 66 131;
-        --ide-input: 69 73 74;
-        --ide-shadow: 0 1px 3px rgba(0,0,0,0.45);
-        --ide-shadow-md: 0 4px 12px rgba(0,0,0,0.5);
+        --ide-bg: 14 18 26;
+        --ide-panel: 21 26 36;
+        --ide-surface: 26 32 48;
+        --ide-elevated: 35 42 58;
+        --ide-border: 44 52 70;
+        --ide-line: 32 39 54;
+        --ide-text: 231 235 243;
+        --ide-muted: 154 165 184;
+        --ide-dim: 61 203 138;
+        --ide-link: 76 141 255;
+        --ide-accent: 61 203 138;
+        --ide-accentBlue: 47 107 240;
+        --ide-keyword: 245 181 68;
+        --ide-error: 255 107 102;
+        --ide-warn: 245 181 68;
+        --ide-selection: 24 38 74;
+        --ide-input: 15 20 29;
+        --ide-subtle: 110 122 144;
+        --ide-overlay: 35 42 58;
+        --ide-successTint: 22 48 42;
+        --ide-warnTint: 51 41 26;
+        --ide-errorTint: 58 29 34;
+        --ide-errorFill: 201 51 56;
+        --ide-shadow: 0 1px 2px rgba(0,0,0,0.35);
+        --ide-shadow-md: 0 8px 24px rgba(0,0,0,0.45);
+        --ph-blue: 76 141 255;
+        --ph-violet: 167 139 250;
+        --ph-teal: 45 212 191;
+        --ph-green: 74 222 128;
+        --ph-amber: 251 191 36;
+        --ph-orange: 251 146 60;
+        --ph-rose: 251 113 133;
+        --ph-pink: 244 114 182;
+        --ph-cyan: 34 211 238;
+        --ph-slate: 148 163 184;
+        --phase-tint: 18%;
     }
 
     :root[data-theme='light'] {
         color-scheme: light;
         /* Pre-paint copy of THEME_COLORS.light. */
-        --ide-bg: 244 245 247;
+        --ide-bg: 246 247 250;
         --ide-panel: 255 255 255;
-        --ide-surface: 238 241 244;
-        --ide-elevated: 226 230 235;
-        --ide-border: 208 213 220;
-        --ide-line: 228 231 236;
-        --ide-text: 28 33 40;
-        --ide-muted: 92 103 112;
-        --ide-dim: 62 107 53;
-        --ide-link: 21 101 192;
-        --ide-accent: 46 125 50;
-        --ide-accentBlue: 21 101 192;
-        --ide-keyword: 163 77 0;
-        --ide-error: 180 35 24;
-        --ide-warn: 138 101 0;
-        --ide-selection: 214 228 247;
+        --ide-surface: 240 242 246;
+        --ide-elevated: 230 234 240;
+        --ide-border: 220 225 234;
+        --ide-line: 232 235 240;
+        --ide-text: 18 24 38;
+        --ide-muted: 86 97 115;
+        --ide-dim: 24 121 78;
+        --ide-link: 36 88 211;
+        --ide-accent: 24 121 78;
+        --ide-accentBlue: 36 88 211;
+        --ide-keyword: 163 90 0;
+        --ide-error: 198 45 41;
+        --ide-warn: 163 90 0;
+        --ide-selection: 231 237 251;
         --ide-input: 255 255 255;
-        --ide-shadow: 0 1px 3px rgba(15,23,42,0.08);
-        --ide-shadow-md: 0 4px 12px rgba(15,23,42,0.12);
+        --ide-subtle: 107 117 136;
+        --ide-overlay: 255 255 255;
+        --ide-successTint: 230 242 236;
+        --ide-warnTint: 248 238 223;
+        --ide-errorTint: 251 231 230;
+        --ide-errorFill: 198 45 41;
+        --ide-shadow: 0 1px 2px rgba(16,24,40,0.06);
+        --ide-shadow-md: 0 8px 24px rgba(16,24,40,0.12);
+        --ph-blue: 37 99 235;
+        --ph-violet: 124 58 237;
+        --ph-teal: 13 148 136;
+        --ph-green: 22 163 74;
+        --ph-amber: 217 119 6;
+        --ph-orange: 234 88 12;
+        --ph-rose: 225 29 72;
+        --ph-pink: 219 39 119;
+        --ph-cyan: 8 145 178;
+        --ph-slate: 100 116 139;
+        --phase-tint: 12%;
     }
 
     @media (max-width: 767px) {
@@ -186,8 +246,9 @@
         @apply mb-4 sm:mb-4;
     }
 
+    /* On a phone the app bar already names the screen. */
     .page-title {
-        @apply text-2xl font-semibold tracking-tight text-ide-text sm:text-3xl;
+        @apply text-2xl font-semibold tracking-tight text-ide-text max-md:sr-only sm:text-3xl;
     }
 
     .page-lead {
@@ -196,26 +257,26 @@
 
     /* ——— Кнопки (мін. 44px для touch) ——— */
     .ui-btn {
-        @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition;
+        @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-control md:min-h-9 md:px-3 md:py-1.5 px-4 py-2.5 text-sm font-medium transition;
         @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link;
         @apply disabled:pointer-events-none disabled:opacity-50;
     }
 
     .ui-btn-primary {
-        @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition;
+        @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-control md:min-h-9 md:px-3 md:py-1.5 px-4 py-2.5 text-sm font-medium transition;
         @apply bg-ide-accentBlue text-white hover:brightness-110 active:brightness-95;
         @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link;
         @apply disabled:pointer-events-none disabled:opacity-50;
     }
 
     .ui-btn-secondary {
-        @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-ide-border bg-ide-surface px-4 py-2.5 text-sm font-medium text-ide-text transition hover:bg-ide-elevated;
+        @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-control md:min-h-9 md:px-3 md:py-1.5 border border-ide-border bg-ide-panel px-4 py-2.5 text-sm font-medium text-ide-text transition hover:bg-ide-surface;
         @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link;
         @apply disabled:pointer-events-none disabled:opacity-50;
     }
 
     .ui-btn-danger {
-        @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-ide-error px-4 py-2.5 text-sm font-medium text-white transition hover:brightness-110;
+        @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-control md:min-h-9 md:px-3 md:py-1.5 px-4 py-2.5 text-sm font-medium text-ide-error transition hover:bg-ide-errorTint;
         @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-error;
         @apply disabled:pointer-events-none disabled:opacity-50;
     }
@@ -232,7 +293,7 @@
     }
 
     .ui-btn-ghost {
-        @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-ide-text transition hover:bg-ide-text/5;
+        @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-control md:min-h-9 md:px-3 md:py-1.5 px-4 py-2.5 text-sm font-medium text-ide-text transition hover:bg-ide-text/5;
         @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-link;
         @apply disabled:pointer-events-none disabled:opacity-50;
     }

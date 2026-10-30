@@ -10,14 +10,15 @@ import {
   listProviderCalendars,
   type LinkedIdentityDTO,
 } from 'api/calendarOverlays.api';
-import {
-  useGetUserSettingsQuery,
-  useUpdateUserSettingsMutation,
-} from 'api/userSettingsApi';
+import { useGetUserSettingsQuery } from 'api/userSettingsApi';
+import { googleCalendarAPI } from 'api/google-calendar.api';
+import { Switch } from 'ui/Switch';
+import { SettingRow, SettingsGroup } from '../settings/SettingsUi';
+import { useAutosave } from '../settings/useAutosave';
 import { ProviderLogo } from 'modules/calendar/components/ProviderLogo';
 import { showErrorToast, showSuccessToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
-import { Check, Link2, Unlink, X } from 'lucide-react';
+import { Link2, Unlink, X } from 'lucide-react';
 import { Button } from 'ui/Button';
 import { Input } from 'ui/Input';
 
@@ -26,7 +27,9 @@ export function CalendarAccountsSection() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: settings } = useGetUserSettingsQuery();
-  const [updateSettings] = useUpdateUserSettingsMutation();
+  const { save, status: saveStatus } = useAutosave();
+  const [appName, setAppName] = useState('');
+  const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
   const [status, setStatus] = useState<{
     google: boolean;
     microsoft: boolean;
@@ -82,6 +85,19 @@ export function CalendarAccountsSection() {
     next.delete('detail');
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams, t, refreshIdentities, refreshCalendars]);
+
+  useEffect(() => {
+    void googleCalendarAPI
+      .checkConnection()
+      .then((response) => setGoogleConnected(!!(response.data as { connected?: boolean })?.connected))
+      .catch(() => setGoogleConnected(!!settings?.googleCalendarLinked));
+    // Once on open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    setAppName(settings?.appGoogleCalendarName?.trim() || 'luefy');
+  }, [settings?.appGoogleCalendarName]);
 
   useEffect(() => {
     if (!settings) return;
@@ -153,165 +169,143 @@ export function CalendarAccountsSection() {
     }
   };
 
-  const saveTargets = async () => {
-    try {
-      const syncTargetCalendars = syncNowhere
-        ? []
-        : selected.map((key) => {
-            const [provider, ...rest] = key.split(':');
-            return { provider, calendarId: rest.join(':') };
-          });
-      await updateSettings({ syncTargetCalendars }).unwrap();
-      showSuccessToast(t('settings.syncTargetsSaved'));
-    } catch (e) {
-      showErrorToast({
-        title: t('settings.saveFailed'),
-        detail: extractApiErrorMessage(e),
-      });
-    }
+  const saveTargets = (nowhere: boolean, keys: string[]) => {
+    const syncTargetCalendars = nowhere
+      ? []
+      : keys.map((key) => {
+          const [provider, ...rest] = key.split(':');
+          return { provider, calendarId: rest.join(':') };
+        });
+    void save('targets', { syncTargetCalendars });
+  };
+
+  const saveName = () => {
+    const v = appName.trim() || 'luefy';
+    if (v === (settings?.appGoogleCalendarName?.trim() || 'luefy')) return;
+    void save('name', { appGoogleCalendarName: v, googleCalendarLinked: googleConnected ?? googleLinked });
   };
 
   const identityEmail = (provider: 'google' | 'microsoft' | 'apple') =>
     identities.find((i) => i.provider === provider)?.email;
 
-  return (
-    <section className="border-t border-ide-border pt-10">
-      <h2 className="mb-2 text-lg font-semibold text-ide-text">
-        {t('settings.calendarAccounts')}
-      </h2>
-      <p className="mb-4 text-sm text-ide-muted">{t('settings.calendarAccountsHint')}</p>
+  const providerRow = (
+    provider: 'google' | 'microsoft' | 'apple',
+    name: string,
+    linked: boolean,
+    detail: React.ReactNode,
+    action: React.ReactNode,
+    extra?: React.ReactNode,
+  ) => (
+    <div className="px-4 py-3 md:px-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-ide-surface">
+          <ProviderLogo provider={provider} className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-body font-medium text-ide-text">{name}</p>
+          <p className={`truncate text-body-sm ${linked ? 'text-ide-accent' : 'text-ide-muted'}`}>{detail}</p>
+        </div>
+        {action}
+      </div>
+      {extra}
+    </div>
+  );
 
-      <ul className="mb-6 space-y-3">
-        <li className="flex flex-wrap items-center gap-3 rounded-lg border border-ide-border px-3 py-2">
-          <ProviderLogo provider="google" className="h-4 w-4" />
-          <span className="min-w-0 flex-1 text-sm text-ide-text">
-            Google
-            {googleLinked ? (
-              <span className="ml-2 text-ide-dim">{t('settings.accountConnected')}</span>
-            ) : (
-              <span className="ml-2 text-ide-muted">{t('settings.accountNotConnected')}</span>
-            )}
-          </span>
-        </li>
-        <li className="flex flex-wrap items-center gap-3 rounded-lg border border-ide-border px-3 py-2">
-          <ProviderLogo provider="microsoft" className="h-4 w-4" />
-          <span className="min-w-0 flex-1 text-sm text-ide-text">
-            Microsoft
-            {microsoftLinked ? (
-              <>
-                <span className="ml-2 text-ide-dim">{t('settings.accountConnected')}</span>
-                {identityEmail('microsoft') ? (
-                  <span className="ml-2 text-xs text-ide-muted">
-                    {identityEmail('microsoft')}
-                  </span>
-                ) : null}
-              </>
-            ) : (
-              <span className="ml-2 text-ide-muted">{t('settings.accountNotConnected')}</span>
-            )}
-          </span>
-          {microsoftLinked ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => void disconnect('microsoft')}
-              icon={Unlink}
-            >
+  return (
+    <div className="space-y-4">
+      <SettingsGroup title={t('settings.calendarAccounts')} hint={t('settings.calendarAccountsHint')}>
+        {providerRow(
+          'google',
+          'Google',
+          !!(googleConnected ?? googleLinked),
+          googleConnected === null
+            ? t('settings.checkingConnection')
+            : googleConnected
+              ? [t('settings.linked'), identityEmail('google')].filter(Boolean).join(' · ')
+              : t('settings.notLinkedHint'),
+          null,
+        )}
+        {providerRow(
+          'microsoft',
+          'Microsoft',
+          microsoftLinked,
+          microsoftLinked
+            ? [t('settings.accountConnected'), identityEmail('microsoft')].filter(Boolean).join(' · ')
+            : status?.microsoft === false
+              ? t('settings.providerNotConfigured')
+              : t('settings.accountNotConnected'),
+          microsoftLinked ? (
+            <Button type="button" variant="ghost" size={{ base: 'md', md: 'sm' }} onClick={() => void disconnect('microsoft')} icon={Unlink}>
               {t('settings.disconnect')}
             </Button>
           ) : (
             <Button
               type="button"
               variant="secondary"
-              size="sm"
+              size={{ base: 'md', md: 'sm' }}
               disabled={status?.microsoft === false}
               onClick={() => void connectMicrosoft()}
               icon={Link2}
             >
               {t('settings.connectMicrosoft')}
             </Button>
-          )}
-        </li>
-        <li className="rounded-lg border border-ide-border px-3 py-2">
-          <div className="flex flex-wrap items-center gap-3">
-            <ProviderLogo provider="apple" className="h-4 w-4" />
-            <span className="min-w-0 flex-1 text-sm text-ide-text">
-              Apple
-              {appleLinked ? (
-                <>
-                  <span className="ml-2 text-ide-dim">{t('settings.accountConnected')}</span>
-                  {identityEmail('apple') ? (
-                    <span className="ml-2 text-xs text-ide-muted">
-                      {identityEmail('apple')}
-                    </span>
-                  ) : null}
-                </>
-              ) : (
-                <span className="ml-2 text-ide-muted">{t('settings.accountNotConnected')}</span>
-              )}
-            </span>
-            {appleLinked ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => void disconnect('apple')}
-                icon={Unlink}
-              >
-                {t('settings.disconnect')}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  setAppleFormOpen((v) => !v);
-                  setShowAppleHelp(true);
-                }}
-                icon={Link2}
-              >
-                {t('settings.connectApple')}
-              </Button>
-            )}
-          </div>
-          {!appleLinked && appleFormOpen ? (
-            <div className="mt-3 space-y-3 border-t border-ide-border pt-3">
+          ),
+        )}
+        {providerRow(
+          'apple',
+          'Apple',
+          appleLinked,
+          appleLinked
+            ? [t('settings.accountConnected'), identityEmail('apple')].filter(Boolean).join(' · ')
+            : t('settings.accountNotConnected'),
+          appleLinked ? (
+            <Button type="button" variant="ghost" size={{ base: 'md', md: 'sm' }} onClick={() => void disconnect('apple')} icon={Unlink}>
+              {t('settings.disconnect')}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              size={{ base: 'md', md: 'sm' }}
+              onClick={() => {
+                setAppleFormOpen((v) => !v);
+                setShowAppleHelp(true);
+              }}
+              icon={Link2}
+            >
+              {t('settings.connectApple')}
+            </Button>
+          ),
+          !appleLinked && appleFormOpen ? (
+            <div className="mt-3 space-y-3 rounded-control bg-ide-surface p-3">
               <button
                 type="button"
-                className="text-left text-xs font-medium text-ide-link hover:underline"
+                className="text-left text-body-sm font-medium text-ide-link hover:underline"
                 onClick={() => setShowAppleHelp((v) => !v)}
               >
                 {t('settings.appleInstructionsTitle')}
               </button>
               {showAppleHelp ? (
-                <pre className="whitespace-pre-wrap rounded-md bg-ide-surface px-3 py-2 text-xs leading-relaxed text-ide-muted">
+                <p className="whitespace-pre-wrap text-body-sm leading-relaxed text-ide-muted">
                   {t('settings.appleInstructions')}
-                </pre>
+                </p>
               ) : null}
-              <div className="grid gap-2 sm:grid-cols-2">
-                <label className="block text-sm text-ide-text">
-                  <span className="mb-1 block text-xs text-ide-muted">
-                    {t('settings.appleIdLabel')}
-                  </span>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-body-sm text-ide-muted">{t('settings.appleIdLabel')}</span>
                   <Input
                     type="email"
                     autoComplete="username"
-                    size="sm"
                     value={appleId}
                     onChange={(e) => setAppleId(e.target.value)}
                     disabled={appleBusy}
                   />
                 </label>
-                <label className="block text-sm text-ide-text">
-                  <span className="mb-1 block text-xs text-ide-muted">
-                    {t('settings.appleAppPasswordLabel')}
-                  </span>
+                <label className="block">
+                  <span className="mb-1 block text-body-sm text-ide-muted">{t('settings.appleAppPasswordLabel')}</span>
                   <Input
                     type="password"
                     autoComplete="current-password"
-                    size="sm"
                     value={applePassword}
                     onChange={(e) => setApplePassword(e.target.value)}
                     disabled={appleBusy}
@@ -321,7 +315,6 @@ export function CalendarAccountsSection() {
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
-                  size="sm"
                   disabled={appleBusy || !appleId.trim() || !applePassword.trim()}
                   onClick={() => void submitAppleCalDav()}
                   icon={Link2}
@@ -331,7 +324,6 @@ export function CalendarAccountsSection() {
                 <Button
                   type="button"
                   variant="ghost"
-                  size="sm"
                   disabled={appleBusy}
                   onClick={() => {
                     setAppleFormOpen(false);
@@ -343,52 +335,71 @@ export function CalendarAccountsSection() {
                 </Button>
               </div>
             </div>
-          ) : null}
-        </li>
-      </ul>
+          ) : null,
+        )}
+      </SettingsGroup>
 
-      <h3 className="mb-2 text-sm font-semibold text-ide-text">{t('settings.syncTargets')}</h3>
-      <p className="mb-3 text-xs text-ide-muted">{t('settings.syncTargetsHint')}</p>
-      <label className="mb-2 flex items-center gap-2 text-sm text-ide-text">
-        <Input
-          type="checkbox"
-          checked={syncNowhere}
-          onChange={(e) => {
-            setSyncNowhere(e.target.checked);
-            if (e.target.checked) setSelected([]);
-          }}
-        />
-        {t('settings.syncNowhere')}
-      </label>
-      {!syncNowhere && calendars.length > 0 ? (
-        <ul className="mb-3 max-h-48 space-y-1 overflow-y-auto rounded border border-ide-border p-2">
-          {calendars.map((cal) => {
-            const key = `${cal.provider}:${cal.id}`;
-            return (
-              <li key={key}>
-                <label className="flex items-center gap-2 text-sm text-ide-text">
-                  <Input
-                    type="checkbox"
-                    checked={selected.includes(key)}
-                    onChange={(e) => {
-                      setSelected((prev) =>
-                        e.target.checked
-                          ? [...prev, key]
-                          : prev.filter((k) => k !== key),
-                      );
-                    }}
-                  />
-                  <ProviderLogo provider={cal.provider} className="h-3 w-3" />
-                  <span className="truncate">{cal.summary}</span>
-                </label>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
-      <Button type="button" onClick={() => void saveTargets()} icon={Check}>
-        {t('common.save')}
-      </Button>
-    </section>
+      <SettingsGroup>
+        <SettingRow
+          stack
+          label={t('settings.appCalendarName')}
+          htmlFor="app-google-calendar-name"
+          hint={t('settings.appCalendarNameHint')}
+          status={saveStatus('name')}
+        >
+          <Input
+            id="app-google-calendar-name"
+            type="text"
+            className="md:w-64"
+            maxLength={200}
+            value={appName}
+            onChange={(e) => setAppName(e.target.value)}
+            onBlur={saveName}
+          />
+        </SettingRow>
+        <SettingRow label={t('settings.syncTargets')} hint={t('settings.syncTargetsHint')} status={saveStatus('targets')} stack>
+          <div className="flex items-center justify-between gap-3 rounded-control bg-ide-surface px-3">
+            <label htmlFor="sync-nowhere" className="text-body text-ide-text">
+              {t('settings.syncNowhere')}
+            </label>
+            <Switch
+              id="sync-nowhere"
+              checked={syncNowhere}
+              onChange={(next) => {
+                setSyncNowhere(next);
+                const keys = next ? [] : selected;
+                if (next) setSelected([]);
+                saveTargets(next, keys);
+              }}
+            />
+          </div>
+          {!syncNowhere && calendars.length > 0 ? (
+            <ul className="mt-2 flex flex-col">
+              {calendars.map((cal) => {
+                const key = `${cal.provider}:${cal.id}`;
+                return (
+                  <li key={key}>
+                    <label className="flex min-h-11 items-center gap-3 rounded-lg px-2 text-body text-ide-text hover:bg-ide-surface md:min-h-9 md:text-body-sm">
+                      <input
+                        type="checkbox"
+                        className="h-5 w-5 accent-ide-accentBlue md:h-4 md:w-4"
+                        checked={selected.includes(key)}
+                        onChange={(e) => {
+                          const next = e.target.checked ? [...selected, key] : selected.filter((k) => k !== key);
+                          setSelected(next);
+                          saveTargets(false, next);
+                        }}
+                      />
+                      <ProviderLogo provider={cal.provider} className="h-3.5 w-3.5" />
+                      <span className="truncate">{cal.summary}</span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </SettingRow>
+      </SettingsGroup>
+    </div>
   );
 }

@@ -581,10 +581,15 @@ export function shiftPeriod(date: Date, view: CalendarView, delta: number): Date
   return next;
 }
 
+/** Standalone month names are lowercase in Ukrainian; a title starts with a capital. */
+function capitalize(text: string): string {
+  return text ? text[0].toLocaleUpperCase() + text.slice(1) : text;
+}
+
 export function periodLabel(date: Date, view: CalendarView): string {
   const loc = { locale: dateFnsLocale() };
   if (view === 'day') return format(date, 'EEEE, d MMMM yyyy', loc);
-  if (view === 'month') return format(date, 'MMMM yyyy', loc);
+  if (view === 'month') return capitalize(format(date, 'LLLL yyyy', loc));
   const start = startOfWeekMonday(date);
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
@@ -602,8 +607,8 @@ export function periodLabel(date: Date, view: CalendarView): string {
 /** Short label for the phone date control. The full periodLabel stays in the accessible name. */
 export function compactPeriodLabel(date: Date, view: CalendarView): string {
   const loc = { locale: dateFnsLocale() };
-  if (view === 'day') return format(date, 'EEE d MMM', loc);
-  if (view === 'month') return format(date, 'MMM yyyy', loc);
+  if (view === 'day') return format(date, 'EEEEEE d MMM', loc);
+  if (view === 'month') return capitalize(format(date, 'LLL yyyy', loc));
   const start = startOfWeekMonday(date);
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
@@ -611,4 +616,26 @@ export function compactPeriodLabel(date: Date, view: CalendarView): string {
     return `${format(start, 'd', loc)}–${format(end, 'd MMM', loc)}`;
   }
   return `${format(start, 'd MMM', loc)}–${format(end, 'd MMM', loc)}`;
+}
+
+/** Phone «3 дні»: the focused day and the two after it. */
+export const THREE_DAYS = 3;
+
+export function threeDays(date: Date): Date[] {
+  return Array.from({ length: THREE_DAYS }, (_, i) => addLocalDays(startOfLocalDay(date), i));
+}
+
+export function threeDayQueryRange(date: Date, sleep?: SleepWindow): { timeMin: string; timeMax: string } {
+  const days = threeDays(date);
+  return {
+    timeMin: startOfLocalDay(days[0]).toISOString(),
+    timeMax: personalDayQueryEnd(days[days.length - 1], sleep).toISOString(),
+  };
+}
+
+export function threeDayLabel(date: Date): string {
+  const loc = { locale: dateFnsLocale() };
+  const [start, , end] = threeDays(date);
+  if (start.getMonth() === end.getMonth()) return `${format(start, 'd', loc)}–${format(end, 'd MMM', loc)}`;
+  return `${format(start, 'd MMM', loc)} – ${format(end, 'd MMM', loc)}`;
 }

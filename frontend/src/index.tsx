@@ -1,5 +1,6 @@
 import React from 'react';
 import './i18n';
+import '@fontsource-variable/onest/index.css';
 import './styles/tailwind.css';
 import { createRoot } from 'react-dom/client';
 import { Provider } from 'react-redux';

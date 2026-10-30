@@ -24,6 +24,7 @@ import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { SeriesDeleteHost } from 'modules/schedule/components/SeriesDeleteHost';
 import { askSeriesDeleteScope } from 'modules/schedule/seriesDragChoice';
 import { Trash2, X } from 'lucide-react';
+import { useIsPhone } from 'ui/useViewport';
 import { Modal } from '../../../ui/Modal';
 import { Button } from 'ui/Button';
 import { dialogButtonSize } from 'ui/controlSize';
@@ -59,6 +60,7 @@ export type EditorActionsMode = 'full' | 'editOnly';
 
 export function useEventEditor() {
   const { t } = useTranslation();
+  const phone = useIsPhone();
   const [open, setOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<TaskDTO | null>(null);
   const [editingReminder, setEditingReminder] = useState<DayReminderDTO | null>(null);
@@ -451,6 +453,31 @@ export function useEventEditor() {
         title={editorTitle}
         maxWidthClass="max-w-xl"
         footer={null}
+        phoneHeight="full"
+        swipeToClose={false}
+        headerLead={
+          phone ? (
+            <button
+              type="button"
+              onClick={requestClose}
+              className="-ml-2 min-h-11 shrink-0 rounded-control px-2 text-body text-ide-link active:bg-ide-surface"
+            >
+              {t('common.cancel')}
+            </button>
+          ) : undefined
+        }
+        headerAction={
+          phone ? (
+            <button
+              type="submit"
+              form={showingReminder ? 'reminder-form' : 'task-form'}
+              disabled={isSubmitting}
+              className="-mr-2 min-h-11 shrink-0 rounded-control px-2 text-body font-semibold text-ide-link active:bg-ide-surface disabled:opacity-50"
+            >
+              {editingEvent || editingReminder ? t('common.save') : t('common.create')}
+            </button>
+          ) : undefined
+        }
       >
         <Suspense fallback={<div className="px-1 py-6 text-sm text-ide-muted">{t('common.loading')}</div>}>
           {showingReminder ? (
@@ -526,7 +553,7 @@ export function useEventEditor() {
             </Button>
             <Button
               type="button"
-              variant="danger"
+              variant="dangerSolid"
               size={dialogButtonSize}
               onClick={confirmDeleteFromEditor}
               className="w-full sm:w-auto"

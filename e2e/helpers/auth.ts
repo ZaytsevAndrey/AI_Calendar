@@ -44,6 +44,10 @@ export async function seedBrowserAuth(page: Page, tokens: TokenPair): Promise<vo
       window.localStorage.setItem('access_token', access);
       window.localStorage.setItem('refresh_token', refresh);
       window.localStorage.setItem('persist:root', persist);
+      // Tests read Now / Next from the Today panel; at 1280 px it starts closed without a stored choice.
+      if (window.localStorage.getItem('luefy.todayPanel') === null) {
+        window.localStorage.setItem('luefy.todayPanel', 'open');
+      }
     },
     {
       access: tokens.access_token,

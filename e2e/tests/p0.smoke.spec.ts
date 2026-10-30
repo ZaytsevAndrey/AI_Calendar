@@ -34,9 +34,9 @@ test.describe('P0 UI smoke', () => {
   test('U-CAL-001 onboarded user sees calendar chrome', async ({ page, auth }) => {
     await openAs(page, auth.onboarded);
     await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible();
-    await expect(page.getByText('Now', { exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Now' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Create task' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Schedule' })).toHaveCount(0);
+    await expect(page.locator('main header').getByRole('button', { name: 'Schedule', exact: true })).toHaveCount(0);
     await expect(
       page.getByText('Failed to load calendar events. Please check your Google Calendar connection.'),
     ).toHaveCount(0);
@@ -47,6 +47,7 @@ test.describe('P0 UI smoke', () => {
     await page.getByRole('button', { name: 'Create task' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Flexible', exact: true }).click();
     await dialog.getByRole('textbox', { name: /Name/ }).fill('E2E flexible task');
     await dialog.getByRole('button', { name: 'Create task' }).click();
     await expectMutationProgressToast(page, 'E2E flexible task');
@@ -73,7 +74,7 @@ test.describe('P0 UI smoke', () => {
     const nowCard = stripBlock(page, name);
     await expect(nowCard).toBeVisible({ timeout: 15_000 });
     await nowCard.hover();
-    await nowCard.getByRole('button', { name: 'Done' }).click();
+    await nowCard.getByRole('button', { name: 'Done', exact: true }).click();
     await expectMutationProgressToast(page, name);
     // Completed stays on the calendar grid; Now strip drops it.
     await expect(stripBlock(page, name)).toHaveCount(0);

@@ -31,7 +31,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
             type={type}
             aria-pressed={pressed}
             className={cx(
-                'inline-flex items-center justify-center gap-2 rounded-lg font-medium',
+                'inline-flex items-center justify-center gap-2 rounded-control font-medium',
                 buttonMotion,
                 buttonFocusClass(variant),
                 'disabled:pointer-events-none disabled:opacity-50',

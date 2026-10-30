@@ -1,5 +1,5 @@
 import type { Locator, Page, Route } from '@playwright/test';
-import { test, expect, openAs, apiJson, expectOk, uniqueName, completeOpenTasks } from '../helpers/fixtures';
+import { test, expect, openAs, apiJson, expectOk, uniqueName, completeOpenTasks, problematicRegion } from '../helpers/fixtures';
 
 /** The move sheet start time is a shared TimeField, not a native time input. */
 async function setStartTime(page: Page, move: Locator, value: string) {
@@ -8,9 +8,10 @@ async function setStartTime(page: Page, move: Locator, value: string) {
   if ((await trigger.getAttribute('aria-expanded')) !== 'true') {
     await trigger.click();
   }
-  const list = page.getByRole('listbox', { name: 'Start time' });
-  await list.getByRole('option', { name: hour, exact: true }).click();
-  await list.getByRole('option', { name: minute, exact: true }).click();
+  // Popover with an hour column, then a minute column.
+  const picker = page.getByRole('dialog', { name: 'Start time' });
+  await picker.getByRole('option', { name: hour, exact: true }).first().click();
+  await picker.getByRole('option', { name: minute, exact: true }).last().click();
   await page.keyboard.press('Escape');
 }
 
@@ -114,8 +115,7 @@ async function mockFreeSlots(
 
 async function openInbox(page: Page, auth: { onboarded: { access_token: string } }, name: string) {
   await openAs(page, auth.onboarded);
-  const banner = page.getByRole('region', { name: 'Tasks that fell out of the schedule' });
-  await expect(banner).toBeVisible();
+  const banner = await problematicRegion(page);
   await banner.getByRole('button', { name: 'Review' }).click();
   const inbox = page.getByRole('dialog', { name: 'Problematic' });
   await expect(inbox).toBeVisible();
@@ -129,7 +129,7 @@ async function openMoveSheet(
   name: string,
 ) {
   const inbox = await openInbox(page, auth, name);
-  await inbox.getByRole('button', { name: 'Other time' }).click();
+  await inbox.getByRole('listitem').filter({ hasText: name }).getByRole('button', { name: 'Other time' }).click();
   const move = page.getByRole('dialog', { name: 'Pick a time' });
   await expect(move).toBeVisible();
   return { inbox, move };
@@ -148,7 +148,7 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     await completeOpenTasks(request, auth.onboarded.access_token);
     const { name } = await seedProblematic(request, auth.onboarded.access_token);
     const inbox = await openInbox(page, auth, name);
-    await expect(inbox.getByRole('button', { name: 'More actions' }).first()).toBeVisible();
+    await expect(inbox.getByRole('button', { name: 'More actions', exact: true }).first()).toBeVisible();
   });
 
   test('U-CAL-025b Move has a day stepper and a start time, no phase select', async ({
@@ -539,7 +539,10 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
     await completeOpenTasks(request, token);
     const { name, placeYmd, taskId } = await seedProblematic(request, token, { ymd: Y.d15 });
     const inbox = await openInbox(page, auth, name);
-    const suggestion = inbox.getByRole('button', { name: /^Place at \d{2}:\d{2}$/ });
+    const suggestion = inbox
+      .getByRole('listitem')
+      .filter({ hasText: name })
+      .getByRole('button', { name: /^Place at \d{2}:\d{2}$/ });
     await expect(suggestion).toBeVisible({ timeout: 30_000 });
     await suggestion.click();
     await expect

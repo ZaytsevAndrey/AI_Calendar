@@ -25,19 +25,19 @@ test.describe('P1 settings UI', () => {
     });
   });
   test('U-SET-001 changing horizon auto-saves after debounce', async ({ page, auth, request }) => {
-    await openAs(page, auth.onboarded, '/settings');
-    const horizon = page.getByLabel('Planning horizon (days)');
+    await openAs(page, auth.onboarded, '/settings/planning');
+    const horizon = page.getByLabel('Plan repeats ahead');
     await horizon.scrollIntoViewIfNeeded();
     await expect(horizon).toBeVisible();
     const current = Number((await horizon.inputValue()) || '14');
     const next = current === 21 ? 22 : 21;
     await horizon.fill(String(next));
-    await expect(page.getByText('Settings saved')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('status').filter({ hasText: 'Saved' }).first()).toBeVisible({ timeout: 5_000 });
     const saved = await apiJson(request, auth.onboarded.access_token, 'get', '/user-settings');
     expectOk(saved);
     expect(saved.body.recurringScheduleHorizonDays).toBe(next);
 
-    const buffer = page.getByLabel('Fixed-event buffer (minutes)');
+    const buffer = page.getByLabel('Buffer around fixed events');
     await expect(buffer).toBeVisible();
     await buffer.fill('15');
     await expect
@@ -100,7 +100,7 @@ test.describe('P1 settings UI', () => {
         await route.continue();
       });
 
-      await openAs(page, auth.onboarded, '/settings');
+      await openAs(page, auth.onboarded, '/settings/general');
       await expect(page.getByLabel('Time zone')).toHaveValue('Europe/Kyiv');
       await page.reload();
       await expect(page.getByLabel('Time zone')).toHaveValue('Europe/Kyiv');
@@ -112,8 +112,8 @@ test.describe('P1 settings UI', () => {
     page,
     auth,
   }) => {
-    await openAs(page, auth.onboarded, '/settings');
-    await expect(page.getByText('Linked with your Google account')).toBeVisible();
+    await openAs(page, auth.onboarded, '/settings/calendars');
+    await expect(page.getByText(/Linked with your Google account/)).toBeVisible();
     await expect(page.getByRole('button', { name: /disconnect|unlink/i })).toHaveCount(0);
   });
 
@@ -148,7 +148,7 @@ test.describe('P1 settings UI', () => {
       });
     });
 
-    await openAs(page, auth.onboarded, '/settings');
+    await openAs(page, auth.onboarded, '/settings/account');
     await page.getByRole('button', { name: 'Delete account' }).click();
     await expect(page.getByRole('dialog', { name: 'Remove calendar data' })).toBeVisible();
     await page.getByRole('button', { name: 'Continue' }).click();

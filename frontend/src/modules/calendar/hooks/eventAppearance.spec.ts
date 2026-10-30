@@ -1,6 +1,6 @@
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 import {
-  PAST_APP_EVENT_COLOR,
+  EXTERNAL_EVENT_COLOR,
   getEventColor,
   isPastAppEvent,
 } from './eventAppearance';
@@ -49,29 +49,11 @@ describe('isPastAppEvent', () => {
 });
 
 describe('getEventColor', () => {
-  it('uses gray for past app events and the Google color otherwise', () => {
-    expect(
-      getEventColor(
-        event({
-          isAppGenerated: true,
-          colorId: '7',
-          end: { dateTime: '2026-04-20T10:00:00.000Z' },
-        }),
-      ),
-    ).toBe(PAST_APP_EVENT_COLOR);
-
-    const futureApp = event({
-      isAppGenerated: true,
-      colorId: '7',
-      end: { dateTime: '2099-01-01T10:00:00.000Z' },
-    });
-    expect(getEventColor(futureApp)).toBe('#039be5');
-
-    const pastExternal = event({
-      isAppGenerated: false,
-      colorId: '4',
-      end: { dateTime: '2026-04-20T10:00:00.000Z' },
-    });
-    expect(getEventColor(pastExternal)).toBe('#e67c73');
+  it('maps our events to the phase palette and keeps external events neutral', () => {
+    const app = event({ isAppGenerated: true, colorId: '9', end: { dateTime: '2026-04-20T10:00:00.000Z' } });
+    expect(getEventColor(app)).toBe('rgb(var(--ph-blue))');
+    expect(getEventColor(event({ isAppGenerated: true, colorId: '10' }))).toBe('rgb(var(--ph-green))');
+    expect(getEventColor(event({ isAppGenerated: true }))).toBe('rgb(var(--ph-blue))');
+    expect(getEventColor(event({ isAppGenerated: false, colorId: '4' }))).toBe(EXTERNAL_EVENT_COLOR);
   });
 });

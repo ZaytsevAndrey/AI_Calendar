@@ -1,5 +1,6 @@
 import { Suspense, useEffect } from 'react';
 import { useSelector } from 'react-redux';
+import { useTranslation } from 'react-i18next';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import ProtectedRoute from 'modules/common/hocs/ProtectedRoute';
@@ -8,10 +9,11 @@ import type { RootState } from 'store';
 import { routeChunks, type RouteChunk } from './routeChunks';
 
 function PageLoading() {
+    const { t } = useTranslation();
     return (
         <div className="page-shell-fill">
             <div className="flex flex-1 items-center justify-center text-sm text-ide-muted">
-                Loading…
+                {t('common.loadingPage')}
             </div>
         </div>
     );
@@ -62,9 +64,10 @@ const AppRoutes = () => {
                 <Route path="/tasks" element={<LazyRoute chunk={routeChunks.tasks} access="protected" />} />
                 <Route path="/events" element={<Navigate to="/tasks" replace />} />
                 <Route path="/schedule" element={<Navigate to="/calendar" replace />} />
-                <Route path="/phases" element={<LazyRoute chunk={routeChunks.phases} access="protected" />} />
+                <Route path="/phases" element={<Navigate to="/settings/day" replace />} />
                 <Route path="/habits" element={<Navigate to="/calendar" replace />} />
                 <Route path="/settings" element={<LazyRoute chunk={routeChunks.settings} access="protected" />} />
+                <Route path="/settings/:section" element={<LazyRoute chunk={routeChunks.settings} access="protected" />} />
                 <Route
                     path="/setup/phases"
                     element={<LazyRoute chunk={routeChunks.phaseSetup} access="protected" />}

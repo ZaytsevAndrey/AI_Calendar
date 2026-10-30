@@ -1,10 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X } from 'lucide-react';
 import type { TaskDTO } from 'api/tasks.api';
 import { Modal } from '../../../ui/Modal';
-import { Button } from 'ui/Button';
-import { dialogButtonSize } from 'ui/controlSize';
 import { formatCivilYmd } from '../../../utils/formatDate';
 import type { ParkDayHint } from '../parkDayHints';
 import { todayYmdInZone } from '../problematicDays';
@@ -16,6 +13,7 @@ import {
 } from '../problematicItems';
 import { MoveOccurrenceSheet } from './MoveOccurrenceSheet';
 import { ProblematicItemCard } from './ProblematicItemCard';
+import { useMotionPresence } from '../../calendar/motion/useMotionPresence';
 
 type Props = {
   open: boolean;
@@ -47,6 +45,10 @@ export function ProblematicInboxSheet({
     [tasks, dayHints, todayYmd],
   );
 
+  // A card that gets a slot flies from this list to the grid (calendar/motion).
+  const listRef = useRef<HTMLDivElement>(null);
+  useMotionPresence(listRef, { resetKey: open ? 'open' : 'closed' });
+
   const edit = (item: ProblematicItem) => {
     // A new clock saved from the form seats it: the user's own doing.
     markProblematicHandled(item.task.id);
@@ -61,35 +63,23 @@ export function ProblematicInboxSheet({
         onClose={onClose}
         title={t('schedule.problematicTitle')}
         maxWidthClass="max-w-md"
-        footer={
-          <Button
-            type="button"
-            variant="secondary"
-            size={dialogButtonSize}
-            className="w-full sm:w-auto"
-            onClick={onClose}
-            icon={X}
-          >
-            {t('common.close')}
-          </Button>
-        }
       >
         {groups.length === 0 ? (
-          <p className="py-8 text-center text-sm text-ide-muted">
+          <p className="py-8 text-center text-body-sm text-ide-muted">
             {t('schedule.problematicEmpty')}
           </p>
         ) : (
           <>
-            <p className="mb-4 text-sm text-ide-muted">{t('schedule.problematicIntro')}</p>
-            <div className="flex flex-col gap-5">
+            <p className="mb-4 text-body-sm text-ide-muted">{t('schedule.problematicIntro')}</p>
+            <div ref={listRef} className="flex flex-col gap-5" data-motion-scroll>
               {groups.map((group) => (
                 <section key={group.ymd ?? 'none'}>
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ide-muted">
+                  <h3 className="mb-2 text-body-sm font-medium text-ide-muted">
                     {group.ymd
                       ? formatCivilYmd(group.ymd) ?? group.ymd
                       : t('schedule.problematicNoDayGroup')}
                   </h3>
-                  <ul className="flex flex-col gap-3">
+                  <ul className="flex flex-col gap-2">
                     {group.items.map((item) => (
                       <ProblematicItemCard
                         key={item.key}

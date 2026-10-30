@@ -42,6 +42,7 @@ import { readDismissedTypes, TaskTypeInfo } from './TaskTypeInfo';
 import { Input } from 'ui/Input';
 import { Select } from 'ui/Select';
 import { Textarea } from 'ui/Textarea';
+import { phaseColor } from 'theme/phasePalette';
 
 const labelText = 'block text-xs font-medium text-ide-text';
 const DURATION_CHIPS = [15, 30, 60, 90] as const;
@@ -177,7 +178,9 @@ const TaskForm: React.FC<TaskFormProps> = ({
   } = useForm<TaskFormValues>({
     resolver: zodResolver(taskFormSchema),
     defaultValues,
-    mode: 'onTouched',
+    // Validate on submit: a blur error would shift the form under the next tap.
+    mode: 'onSubmit',
+    reValidateMode: 'onChange',
   });
 
   const isDirtyRef = useRef(isDirty);
@@ -302,7 +305,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
   // Hide / show is per tab: closing Fixed's block leaves Flexible's alone.
   const showInfo =
     !!activePreset &&
-    (infoVisible[activePreset] ?? !dismissedTypes.includes(activePreset));
+    (infoVisible[activePreset] ?? false);
   const setInfoShown = (shown: boolean) => {
     if (!activePreset) return;
     setInfoVisible((prev) => ({ ...prev, [activePreset]: shown }));
@@ -376,7 +379,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
       />
       <Select
         id="task-form-recurrence"
-        size="sm"
+
         value={isRecurring ? recurrencePattern || 'DAILY' : 'NONE'}
         onChange={(e) => chooseRepeat(e.target.value)}
       >
@@ -413,7 +416,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
               key={value}
               type="button"
               variant="secondary"
-              size="sm"
+
               pressed={selectedDays.includes(value)}
               className="min-w-9 px-2"
               onClick={() => toggleDay(value)}
@@ -448,53 +451,60 @@ const TaskForm: React.FC<TaskFormProps> = ({
           formRef.current?.requestSubmit();
         }
       }}
+      id="task-form"
       className="task-form"
     >
-      <div className="space-y-3">
-        <div className="flex items-center gap-1">
-          <div className="inline-flex max-w-full flex-wrap rounded-lg border border-ide-border p-0.5">
+      <div className="space-y-4">
+        <div className="flex gap-2 max-md:flex-col md:items-center">
+          <div
+            role="group"
+            aria-label={t('tasks.form.type')}
+            className="-mx-4 flex min-w-0 flex-1 gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:flex-wrap md:px-0 [&::-webkit-scrollbar]:hidden"
+          >
             {TASK_PRESETS.map((preset) => {
               const active = preset.id === activePreset;
               return (
                 <button
                   key={preset.id}
                   type="button"
-                  title={`${preset.label}: ${preset.hint}`}
+                  title={preset.hint}
                   aria-label={preset.label}
                   aria-pressed={active}
                   onClick={() => applyPreset(preset.id)}
-                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium ${
+                  className={`inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-body-sm font-medium transition md:h-8 md:px-3 ${
                     active
-                      ? 'bg-ide-link text-white'
-                      : 'text-ide-muted hover:text-ide-text'
+                      ? 'border-transparent bg-ide-accentBlue text-white'
+                      : 'border-ide-border text-ide-muted hover:text-ide-text'
                   }`}
                 >
-                  <KindIcon kind={preset.id} className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">{preset.label}</span>
+                  <KindIcon kind={preset.id} className="h-4 w-4" />
+                  {preset.label}
                 </button>
               );
             })}
             {onPickReminder ? (
               <button
                 type="button"
-                title={`${t('tasks.preset.reminder')}: ${t('tasks.preset.reminderHint')}`}
+                title={t('tasks.preset.reminderHint')}
                 aria-label={t('tasks.preset.reminder')}
                 onClick={onPickReminder}
-                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-ide-muted hover:text-ide-text"
+                className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-ide-border px-3.5 text-body-sm font-medium text-ide-muted transition hover:text-ide-text md:h-8 md:px-3"
               >
-                <Bell className="h-3.5 w-3.5" aria-hidden />
-                <span className="hidden sm:inline">{t('tasks.preset.reminder')}</span>
+                <Bell className="h-4 w-4" aria-hidden />
+                {t('tasks.preset.reminder')}
               </button>
             ) : null}
           </div>
           {activePreset && !showInfo ? (
-            <IconButton
-              label={t('tasks.typeInfo.show')}
-              size="sm"
+            <button
+              type="button"
               onClick={() => setInfoShown(true)}
+              className="inline-flex shrink-0 items-center gap-1 self-start rounded-full text-body-sm text-ide-link hover:underline md:h-8 md:self-auto md:px-2"
+              aria-label={t('tasks.typeInfo.show')}
             >
-              <Info className="h-3.5 w-3.5" aria-hidden />
-            </IconButton>
+              <Info className="h-4 w-4" aria-hidden />
+              <span>{t('tasks.typeInfo.whatIs')}</span>
+            </button>
           ) : null}
         </div>
 
@@ -526,13 +536,13 @@ const TaskForm: React.FC<TaskFormProps> = ({
                 autoComplete="off"
                 autoFocus={mode === 'create'}
                 placeholder={t('tasks.form.namePlaceholder')}
-                size="sm"
+
                 error={!!errors.name}
               />
             )}
           />
           {errors.name ? (
-            <p className="mt-0.5 text-xs text-ide-error" role="alert">
+            <p className="mt-1 text-body-sm text-ide-error" role="alert">
               {errors.name.message}
             </p>
           ) : null}
@@ -552,7 +562,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                 <Select
                   {...field}
                   id="task-form-status"
-                  size="sm"
+
                   value={field.value ?? 'todo'}
                 >
                   {STATUS_OPTIONS.map((option) => (
@@ -577,7 +587,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                   {...field}
                   id="task-form-description"
                   rows={2}
-                  size="sm"
+
                   placeholder={t('tasks.form.descriptionPlaceholder')}
                 />
               )}
@@ -586,7 +596,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
         ) : (
           <button
             type="button"
-            className="text-xs text-ide-link hover:underline"
+            className="flex min-h-11 items-center text-body-sm text-ide-link hover:underline md:min-h-0"
             onClick={() => setShowDescription(true)}
           >
             {t('tasks.form.addDescription')}
@@ -627,7 +637,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                   </button>
                   {schedulingPhases.map((phase) => {
                     const on = selected === phase.id;
-                    const color = phase.color || '#808080';
+                    const color = phase.color || null;
                     return (
                       <button
                         type="button"
@@ -635,18 +645,18 @@ const TaskForm: React.FC<TaskFormProps> = ({
                         role="option"
                         aria-selected={on}
                         title={`${phase.name} (${phase.startTime}–${phase.endTime})`}
-                        className={`filter-chip h-8 max-w-full px-2.5 text-xs ${
+                        className={`filter-chip h-10 max-w-full px-3 text-body-sm md:h-8 md:px-2.5 ${
                           on ? 'filter-chip-on' : ''
                         }`}
                         style={
                           on
                             ? {
-                                borderColor: color,
-                                backgroundColor: `${color}33`,
+                                borderColor: phaseColor(color),
+                                backgroundColor: phaseColor(color, 0.2),
                               }
                             : {
-                                borderColor: `${color}88`,
-                                boxShadow: `inset 3px 0 0 ${color}`,
+                                borderColor: phaseColor(color, 0.55),
+                                boxShadow: `inset 3px 0 0 ${phaseColor(color)}`,
                               }
                         }
                         onClick={() => field.onChange(phase.id)}
@@ -754,7 +764,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                       type="number"
                       min={1}
                       max={1440}
-                      size="sm"
+
                       className="w-20"
                       error={!!errors.estimatedTimeInMinutes}
                       onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
@@ -805,7 +815,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                   return (
                     <Select
                       id="task-form-preferred-start"
-                      size="sm"
+
                       value={displayValue}
                       onChange={(e) => field.onChange(e.target.value)}
                       onBlur={field.onBlur}
@@ -873,7 +883,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                       key={value}
                       type="button"
                       variant="secondary"
-                      size="sm"
+
                       pressed={selectedEligibleDays.includes(value)}
                       className="min-w-8 px-2"
                       onClick={() => toggleEligibleDay(value)}
@@ -902,7 +912,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                 name="priority"
                 control={control}
                 render={({ field }) => (
-                  <Select {...field} id="task-form-priority" size="sm">
+                  <Select {...field} id="task-form-priority">
                     {PRIORITY_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
@@ -939,7 +949,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
         ) : (
           <button
             type="button"
-            className="text-xs text-ide-link hover:underline"
+            className="inline-flex min-h-11 items-center text-body-sm text-ide-link hover:underline md:min-h-0"
             onClick={() => setShowMore(true)}
           >
             {t('tasks.form.moreOptions')}
@@ -976,7 +986,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
           type="button"
           variant="secondary"
           onClick={onCancel}
-          className="w-full sm:w-auto"
+          className="w-full max-md:!hidden sm:w-auto"
           disabled={isSubmitting || isDeleting}
           icon={X}
         >

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   CalendarCheck,
@@ -19,6 +19,7 @@ import {
 import { useGetAllPhasesQuery } from 'api/phasesApi';
 import { Button } from 'ui/Button';
 import { IconButton } from 'ui/IconButton';
+import { ActionMenu, type ActionMenuItem } from 'ui/ActionMenu';
 import { Spinner } from '../../../ui/Spinner';
 import { formatMinutes } from '../../../utils/formatDate';
 import { isoToHm } from '../../../utils/ianaDateTime';
@@ -28,6 +29,8 @@ import { markProblematicHandled } from '../problematicSeatWatch';
 import type { ProblematicItem } from '../problematicItems';
 import { preferredMsOnDay, suggestedStarts } from '../slotPickMath';
 import { phaseIdForMovedSlot, phaseWindowsForDay } from '../slotPickPhases';
+import { phaseColor } from 'theme/phasePalette';
+import { cardMotionState } from '../../calendar/motion/cardMotion';
 
 type Props = {
   item: ProblematicItem;
@@ -39,8 +42,6 @@ type Props = {
 
 type Suggestion = { start: string; end: string } | null;
 
-const pill =
-  'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium leading-none';
 
 function reasonKey(reason: string | null | undefined): string {
   switch (reason) {
@@ -69,6 +70,7 @@ export function ProblematicItemCard({ item, timeZone, todayYmd, onMove, onEdit }
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLButtonElement>(null);
   const [suggestion, setSuggestion] = useState<Suggestion>(null);
   const [suggesting, setSuggesting] = useState(kind !== 'seriesNoDay');
 
@@ -181,171 +183,124 @@ export function ProblematicItemCard({ item, timeZone, todayYmd, onMove, onEdit }
   const placeAtKey =
     placeDay === ymd ? 'schedule.problematicPlaceAt' : 'schedule.problematicPlaceAtToday';
 
+  const series = kind === 'seriesDay' || kind === 'seriesCopy' || kind === 'seriesNoDay';
+  const meta = [
+    formatMinutes(duration),
+    series ? t('tasks.item.repeats') : null,
+  ].filter(Boolean);
+  const menu: ActionMenuItem[] = [
+    ...(canPlaceOnTop
+      ? [{ id: 'top', label: t('schedule.problematicResolve'), icon: Layers, disabled, onSelect: placeOnTop }]
+      : []),
+    ...(canSkip
+      ? [{ id: 'skip', label: t('schedule.problematicSkipDay'), icon: SkipForward, disabled, onSelect: skipDay }]
+      : []),
+    { id: 'edit', label: t('schedule.problematicEdit'), icon: Pencil, disabled, onSelect: () => onEdit(item) },
+    ...(kind === 'oneOff'
+      ? [{ id: 'delete', label: t('schedule.problematicDelete'), icon: Trash2, danger: true, disabled, onSelect: remove }]
+      : []),
+  ];
+
   return (
     <li
-      className="task-item flex flex-col gap-2.5 border-l-4"
-      style={{
-        borderLeftColor: phase?.color || '#808080',
-        backgroundColor: '#3C3F41',
-        backgroundImage: `linear-gradient(135deg, ${phase?.color || '#808080'}38, ${phase?.color || '#808080'}14 46%, transparent)`,
-      }}
+      data-motion-id={item.key}
+      data-motion-keys={task.id}
+      data-motion={cardMotionState([task.id]) ?? undefined}
+      className="motion-row task-item relative flex flex-col gap-2 overflow-hidden rounded-control border border-ide-border bg-ide-panel p-3 pl-4"
       aria-busy={disabled}
     >
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="line-clamp-2 text-base font-semibold leading-snug text-ide-text">
-          {task.name}
-        </h3>
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-[3px]"
+        style={{ backgroundColor: phaseColor(phase?.color) }}
+      />
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <h3 className="line-clamp-2 text-heading font-semibold text-ide-text">{task.name}</h3>
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-body-sm tabular-nums text-ide-muted">
+            <span>{meta.join(' · ')}</span>
+            {phase ? (
+              <span className="inline-flex items-center gap-1">
+                <span aria-hidden>·</span>
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: phaseColor(phase.color) }} aria-hidden />
+                {phase.name}
+              </span>
+            ) : null}
+          </p>
+        </div>
         <IconButton
+          ref={moreRef}
           label={t('schedule.problematicMore')}
           size="sm"
+          aria-haspopup="menu"
           aria-expanded={moreOpen}
-          onClick={() => setMoreOpen((open) => !open)}
+          onClick={() => setMoreOpen(true)}
         >
           <MoreHorizontal className="h-4 w-4" aria-hidden />
         </IconButton>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {kind === 'seriesDay' || kind === 'seriesCopy' || kind === 'seriesNoDay' ? (
-          <span className={`${pill} border-ide-link/40 bg-ide-link/15 text-ide-link`}>
-            {t('tasks.item.repeats')}
-          </span>
-        ) : null}
-        {phase ? (
-          <span
-            className={pill}
-            style={{
-              borderColor: `${phase.color || '#808080'}88`,
-              backgroundColor: `${phase.color || '#808080'}24`,
-              color: phase.color || undefined,
-            }}
-          >
-            {phase.name}
-          </span>
-        ) : null}
-        <span className={`${pill} border-ide-text/10 bg-ide-text/5 text-ide-text`}>
-          {formatMinutes(duration)}
-        </span>
-        <span className={`${pill} border-ide-warn/50 bg-ide-warn/15 text-ide-warn`}>
-          {t(reasonKey(task.problematicReason))}
-        </span>
-      </div>
-
-      {originalLine ? <p className="text-sm text-ide-muted">{originalLine}</p> : null}
+      <p className="text-body-sm text-ide-warn">
+        {t(reasonKey(task.problematicReason))}
+        {originalLine ? <span className="text-ide-muted"> · {originalLine}</span> : null}
+      </p>
       {kind === 'seriesNoDay' ? (
-        <p className="text-sm text-ide-muted">{t('schedule.problematicNoDay')}</p>
+        <p className="text-body-sm text-ide-muted">{t('schedule.problematicNoDay')}</p>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
         {canMove ? (
           suggesting ? (
-            <Button type="button" size="sm" disabled>
+            <Button type="button" size={{ base: 'md', md: 'sm' }} disabled>
               <Spinner className="h-4 w-4" />
               {t('schedule.problematicFinding')}
             </Button>
           ) : suggestion ? (
             <Button
               type="button"
-              size="sm"
+              size={{ base: 'md', md: 'sm' }}
               icon={busy === 'place' ? undefined : CalendarCheck}
               disabled={disabled}
               onClick={placeSuggestion}
+
             >
               {busy === 'place' ? <Spinner className="h-4 w-4" /> : null}
               {t(placeAtKey, { start: hm(suggestion.start) })}
             </Button>
           ) : (
-            <span className="text-sm text-ide-warn">{t('schedule.problematicNoRoomDay')}</span>
+            <span className="text-body-sm text-ide-muted">{t('schedule.problematicNoRoomDay')}</span>
           )
         ) : null}
         {canMove ? (
           <Button
             type="button"
-            variant={suggestion ? 'ghost' : 'secondary'}
-            size="sm"
+            variant="secondary"
+            size={{ base: 'md', md: 'sm' }}
             icon={CalendarPlus}
             disabled={disabled}
             onClick={() => onMove(item, placeDay)}
+
           >
             {t('schedule.problematicOtherTime')}
           </Button>
-        ) : null}
-        {canSkip ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            icon={busy === 'skip' ? undefined : SkipForward}
-            disabled={disabled}
-            onClick={skipDay}
-          >
-            {busy === 'skip' ? <Spinner className="h-4 w-4" /> : null}
-            {t('schedule.problematicSkipDay')}
-          </Button>
-        ) : null}
-        {kind === 'seriesNoDay' ? (
+        ) : (
           <Button
             type="button"
             variant="secondary"
-            size="sm"
+            size={{ base: 'md', md: 'sm' }}
             icon={Pencil}
             disabled={disabled}
             onClick={() => onEdit(item)}
           >
             {t('schedule.problematicEdit')}
           </Button>
-        ) : null}
+        )}
       </div>
 
-      {moreOpen ? (
-        <div className="flex flex-col gap-2 border-t border-ide-text/10 pt-2.5">
-          {canPlaceOnTop ? (
-            <div className="flex flex-col items-start gap-0.5">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                icon={busy === 'top' ? undefined : Layers}
-                disabled={disabled}
-                onClick={placeOnTop}
-              >
-                {busy === 'top' ? <Spinner className="h-4 w-4" /> : null}
-                {t('schedule.problematicResolve')}
-              </Button>
-              <p className="pl-2 text-xs text-ide-muted">{t('schedule.problematicResolveHint')}</p>
-            </div>
-          ) : null}
-          {kind !== 'seriesNoDay' ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              icon={Pencil}
-              disabled={disabled}
-              onClick={() => onEdit(item)}
-            >
-              {t('schedule.problematicEdit')}
-            </Button>
-          ) : null}
-          {kind === 'oneOff' ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              icon={busy === 'delete' ? undefined : Trash2}
-              className="text-ide-error"
-              disabled={disabled}
-              onClick={remove}
-            >
-              {busy === 'delete' ? <Spinner className="h-4 w-4" /> : null}
-              {t('schedule.problematicDelete')}
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
+      <ActionMenu open={moreOpen} onClose={() => setMoreOpen(false)} anchorRef={moreRef} title={task.name} items={menu} />
 
       {error ? (
-        <p className="text-sm text-ide-error" role="alert">
+        <p className="text-body-sm text-ide-error" role="alert">
           {error}
         </p>
       ) : null}

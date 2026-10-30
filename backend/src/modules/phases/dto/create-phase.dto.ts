@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsArray, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsArray, IsIn } from 'class-validator';
 
 export class CreatePhaseDto {
   @ApiProperty()
@@ -34,6 +34,8 @@ export class CreatePhaseDto {
   parentPhaseId?: string;
 
   @ApiProperty({ default: 'time_phase', enum: ['time_phase', 'sleep_time'] })
-  @IsEnum(['time_phase', 'sleep_time'])
+  // Optional: the client omits it for an ordinary phase (the column defaults to time_phase).
+  @IsOptional()
+  @IsIn(['time_phase', 'sleep_time'])
   type?: string;
 } 

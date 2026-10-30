@@ -22,3 +22,12 @@ describe('orderYmdRange', () => {
     expect(ymdInRange('2026-10-27', '2026-10-24', '2026-10-26')).toBe(false);
   });
 });
+
+describe('addDaysYmd', () => {
+    it('crosses months and years', () => {
+        const { addDaysYmd } = require('./dateRange');
+        expect(addDaysYmd('2026-10-30', 3)).toBe('2026-11-02');
+        expect(addDaysYmd('2026-12-31', 1)).toBe('2027-01-01');
+        expect(addDaysYmd('2026-03-01', -1)).toBe('2026-02-28');
+    });
+});

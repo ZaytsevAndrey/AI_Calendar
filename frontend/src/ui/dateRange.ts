@@ -28,3 +28,11 @@ export function formatYmd(date: Date): string {
   const day = String(date.getDate()).padStart(2, '0');
   return `${date.getFullYear()}-${month}-${day}`;
 }
+
+/** `YYYY-MM-DD` plus `days` civil days. */
+export function addDaysYmd(ymd: string, days: number): string {
+    const date = parseYmd(ymd);
+    if (!date) return ymd;
+    date.setDate(date.getDate() + days);
+    return formatYmd(date);
+}

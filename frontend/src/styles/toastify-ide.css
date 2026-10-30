@@ -68,6 +68,28 @@
     min-width: 0;
 }
 
+.app-toast-undo-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.app-toast-undo {
+    flex-shrink: 0;
+    min-height: 2.25rem;
+    padding: 0 0.75rem;
+    border-radius: 0.625rem;
+    font-weight: 600;
+    color: rgb(var(--ide-link));
+}
+
+.app-toast-undo:hover,
+.app-toast-undo:focus-visible {
+    background: rgb(var(--ide-link) / 0.12);
+    outline: none;
+}
+
 .app-toast-title {
     margin: 0;
     font-size: 0.875rem;
@@ -96,22 +118,7 @@
     height: 3px;
 }
 
-/* Task mutation progress stages (save → place → sync → done) */
-.app-toast-stage-saving {
-    background: linear-gradient(90deg, rgb(var(--ide-warn) / 0.2), rgb(var(--ide-panel)) 36%) !important;
-    border-left-color: rgb(var(--ide-warn)) !important;
-}
-
-.app-toast-stage-placing {
-    background: linear-gradient(90deg, rgb(var(--ide-link) / 0.2), rgb(var(--ide-panel)) 36%) !important;
-    border-left-color: rgb(var(--ide-link)) !important;
-}
-
-.app-toast-stage-syncing {
-    background: linear-gradient(90deg, rgba(167, 139, 250, 0.22), rgb(var(--ide-panel)) 36%) !important;
-    border-left-color: #a78bfa !important;
-}
-
+/* Task write result (the stages show on the calendar card). */
 .app-toast-stage-done {
     background: linear-gradient(90deg, rgb(var(--ide-accent) / 0.2), rgb(var(--ide-panel)) 36%) !important;
     border-left-color: rgb(var(--ide-accent)) !important;
@@ -122,93 +129,70 @@
     border-left-color: rgb(var(--ide-error)) !important;
 }
 
-/* Timed / month calendar chips — translucent fill + left accent.
-   No position: this file loads after Tailwind; relative would override absolute timed chips. */
+/* Calendar chips — design-system.md «Чіп події».
+   Fill = phase tint (18 % dark / 12 % light), 3 px left bar in the phase color, text in the text token.
+   External events are neutral (muted bar). Past events fade. Done adds a check, not a second color.
+   No position here: this file loads after Tailwind; relative would override absolute timed chips. */
 .calendar-chip {
-    --chip-color: #039be5;
+    --chip-color: rgb(var(--ph-blue));
     overflow: hidden;
-    border-radius: 0.375rem;
-    border: 1px solid color-mix(in srgb, var(--chip-color) 42%, transparent);
-    background:
-        linear-gradient(
-            180deg,
-            color-mix(in srgb, var(--chip-color) 38%, transparent),
-            color-mix(in srgb, var(--chip-color) 22%, transparent)
-        );
-    box-shadow:
-        inset 3px 0 0 0 var(--chip-color),
-        inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
-    color: #fff;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+    border-radius: 6px;
+    border: 1px solid color-mix(in srgb, var(--chip-color) 28%, transparent);
+    background: color-mix(in srgb, var(--chip-color) var(--phase-tint, 18%), rgb(var(--ide-panel)));
+    box-shadow: inset 3px 0 0 0 var(--chip-color);
+    color: rgb(var(--ide-text));
     transition:
-        transform 140ms ease,
         border-color 140ms ease,
         box-shadow 140ms ease,
         background 140ms ease,
-        filter 140ms ease;
+        opacity 140ms ease;
 }
 
 .calendar-chip:hover,
 .calendar-chip:focus-within {
     z-index: 6;
-    border-color: color-mix(in srgb, var(--chip-color) 72%, transparent);
-    background:
-        linear-gradient(
-            180deg,
-            color-mix(in srgb, var(--chip-color) 55%, transparent),
-            color-mix(in srgb, var(--chip-color) 34%, transparent)
-        );
+    border-color: color-mix(in srgb, var(--chip-color) 60%, transparent);
+    background: color-mix(in srgb, var(--chip-color) calc(var(--phase-tint, 18%) + 8%), rgb(var(--ide-panel)));
     box-shadow:
         inset 3px 0 0 0 var(--chip-color),
-        inset 0 1px 0 0 rgba(255, 255, 255, 0.18),
-        0 6px 16px color-mix(in srgb, var(--chip-color) 28%, transparent);
-    transform: translateY(-1px);
+        0 4px 12px rgb(0 0 0 / 0.18);
 }
 
-/* Done = success (green accent + check), not cancelled/strikethrough */
-.calendar-chip--done {
-    border-color: color-mix(in srgb, #4e9f4e 55%, transparent);
-    background:
-        linear-gradient(
-            105deg,
-            color-mix(in srgb, #4e9f4e 34%, transparent) 0%,
-            color-mix(in srgb, var(--chip-color) 28%, transparent) 42%,
-            color-mix(in srgb, var(--chip-color) 18%, transparent) 100%
-        );
-    box-shadow:
-        inset 3px 0 0 0 #4e9f4e,
-        inset 0 1px 0 0 rgba(255, 255, 255, 0.14);
+.calendar-chip--external {
+    --chip-color: rgb(var(--ide-muted));
+    background: rgb(var(--ide-surface));
+    border-color: rgb(var(--ide-border));
 }
 
-.calendar-chip--done:hover,
-.calendar-chip--done:focus-within {
-    border-color: color-mix(in srgb, #4e9f4e 78%, transparent);
-    background:
-        linear-gradient(
-            105deg,
-            color-mix(in srgb, #4e9f4e 48%, transparent) 0%,
-            color-mix(in srgb, var(--chip-color) 42%, transparent) 45%,
-            color-mix(in srgb, var(--chip-color) 28%, transparent) 100%
-        );
-    box-shadow:
-        inset 3px 0 0 0 #4e9f4e,
-        inset 0 1px 0 0 rgba(255, 255, 255, 0.2),
-        0 6px 16px color-mix(in srgb, #4e9f4e 28%, transparent);
+.calendar-chip--external:hover,
+.calendar-chip--external:focus-within {
+    background: rgb(var(--ide-elevated));
+    border-color: rgb(var(--ide-muted) / 0.6);
+}
+
+.calendar-chip--past:not(:hover):not(:focus-within) {
+    opacity: 0.55;
+}
+
+.calendar-chip--done .calendar-chip__title {
+    color: rgb(var(--ide-muted));
 }
 
 .calendar-chip__check {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 0.85rem;
-    height: 0.85rem;
-    margin-right: 0.2rem;
+    width: 12px;
+    height: 12px;
+    margin-right: 4px;
     border-radius: 999px;
-    background: color-mix(in srgb, #4e9f4e 85%, #0f0f0f);
-    font-size: 0.55rem;
+    background: rgb(var(--ide-accent));
+    color: rgb(var(--ide-panel));
+    font-size: 8px;
     font-weight: 700;
     line-height: 1;
-    vertical-align: 0.05em;
+    vertical-align: -1px;
+    flex: none;
 }
 
 .calendar-chip__handle {
@@ -218,8 +202,19 @@
     z-index: 3;
     opacity: 0;
     pointer-events: none;
-    background: color-mix(in srgb, #000 18%, transparent);
-    transition: opacity 140ms ease, background 140ms ease;
+    transition: opacity 140ms ease;
+}
+
+.calendar-chip__handle::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 16px;
+    height: 2px;
+    border-radius: 2px;
+    transform: translate(-50%, -50%);
+    background: rgb(var(--ide-text) / 0.45);
 }
 
 .calendar-chip__handle--start {
@@ -234,362 +229,214 @@
 .calendar-chip:focus-within .calendar-chip__handle {
     opacity: 1;
     pointer-events: auto;
-    background: color-mix(in srgb, #000 28%, transparent);
 }
 
 .calendar-chip__delete {
     position: absolute;
-    top: 50%;
+    top: 2px;
     right: 2px;
-    z-index: 2;
+    z-index: 4;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 0.75rem;
-    height: 0.75rem;
+    width: 18px;
+    height: 18px;
     padding: 0;
     border: 0;
-    border-radius: 0.15rem;
+    border-radius: 4px;
     line-height: 0;
     opacity: 0;
-    transform: translateY(-50%) scale(0.92);
-    transition: opacity 140ms ease, transform 140ms ease, color 140ms ease;
-    background: transparent;
-    color: rgba(255, 255, 255, 0.9);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+    transition: opacity 140ms ease, background 140ms ease;
+    background: rgb(var(--ide-panel) / 0.85);
+    color: rgb(var(--ide-muted));
     cursor: pointer;
 }
 
 .calendar-chip__delete svg {
     display: block;
-    width: 0.65rem;
-    height: 0.65rem;
-    flex-shrink: 0;
+    width: 12px;
+    height: 12px;
 }
 
 .calendar-chip:hover .calendar-chip__delete,
 .calendar-chip:focus-within .calendar-chip__delete {
     opacity: 1;
-    transform: translateY(-50%) scale(1);
 }
 
 .calendar-chip__delete:hover {
-    background: transparent;
-    color: #fff;
-}
-
-.calendar-chip__badge {
-    display: inline-flex;
-    align-items: center;
-    height: 0.9rem;
-    margin-top: 0;
-    border-radius: 0.2rem;
-    padding: 0 0.25rem;
-    font-size: 0.5rem;
-    font-weight: 500;
-    line-height: 1;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    text-decoration: none;
-    background: color-mix(in srgb, #4e9f4e 55%, transparent);
-    color: rgba(255, 255, 255, 0.95);
+    color: rgb(var(--ide-error));
 }
 
 .calendar-chip__title {
-    font-size: 0.8125rem;
+    min-width: 0;
+    font-size: 13px;
     font-weight: 600;
-    line-height: 1.25;
-    letter-spacing: 0;
-}
-
-.calendar-chip--stacked .calendar-chip__title {
+    line-height: 16px;
     overflow: hidden;
-    white-space: normal;
-    word-break: break-word;
 }
 
-.calendar-chip--stacked .calendar-chip__body {
-    gap: 0.125rem;
-    padding: 0.125rem 0.375rem 0.125rem 0.5rem;
-}
-
-/* Half-hour card is 24px. Border is 2px, plaques 11px, title 11px. */
-.calendar-chip--fit .calendar-chip__body,
-.calendar-chip--micro:hover .calendar-chip__body,
-.calendar-chip--micro:focus-within .calendar-chip__body {
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
-    gap: 0;
-    padding: 0 2px 0 4px;
-    min-height: 0;
-    overflow: hidden;
-    line-height: 0;
-}
-
-.calendar-chip--fit .calendar-chip__lead,
-.calendar-chip--micro:hover .calendar-chip__lead,
-.calendar-chip--micro:focus-within .calendar-chip__lead {
+.calendar-chip__sub {
     display: flex;
     align-items: center;
-    height: 11px;
-    max-height: 11px;
-    overflow: hidden;
-    flex: none;
-    line-height: 0;
-}
-
-.calendar-chip--fit .calendar-chip__meta,
-.calendar-chip--micro:hover .calendar-chip__meta,
-.calendar-chip--micro:focus-within .calendar-chip__meta {
-    display: flex;
-    align-items: center;
-    height: 11px;
-    max-height: 11px;
-    max-width: 100%;
-    gap: 2px;
-    line-height: 0;
-}
-
-.calendar-chip--fit .calendar-chip__icon-btn,
-.calendar-chip--fit .calendar-chip__cal,
-.calendar-chip--fit .calendar-chip__badge,
-.calendar-chip--micro:hover .calendar-chip__icon-btn,
-.calendar-chip--micro:focus-within .calendar-chip__icon-btn,
-.calendar-chip--micro:hover .calendar-chip__cal,
-.calendar-chip--micro:focus-within .calendar-chip__cal,
-.calendar-chip--micro:hover .calendar-chip__badge,
-.calendar-chip--micro:focus-within .calendar-chip__badge {
-    height: 11px;
-    min-height: 0;
-    padding: 0 3px;
-    border-radius: 2px;
-    font-size: 8px;
-    line-height: 11px;
-}
-
-.calendar-chip--fit .calendar-chip__icon-btn,
-.calendar-chip--micro:hover .calendar-chip__icon-btn,
-.calendar-chip--micro:focus-within .calendar-chip__icon-btn {
-    width: 11px;
-    padding: 0;
-}
-
-.calendar-chip--fit .calendar-chip__cal,
-.calendar-chip--micro:hover .calendar-chip__cal,
-.calendar-chip--micro:focus-within .calendar-chip__cal {
-    width: auto;
-    max-width: 70%;
-    gap: 2px;
-    background: color-mix(in srgb, #000 42%, transparent);
-}
-
-.calendar-chip--fit .calendar-chip__icon-btn svg,
-.calendar-chip--fit .calendar-chip__cal svg,
-.calendar-chip--micro:hover .calendar-chip__icon-btn svg,
-.calendar-chip--micro:focus-within .calendar-chip__icon-btn svg,
-.calendar-chip--micro:hover .calendar-chip__cal svg,
-.calendar-chip--micro:focus-within .calendar-chip__cal svg {
-    width: 9px;
-    height: 9px;
-}
-
-.calendar-chip--fit .calendar-chip__cal-name,
-.calendar-chip--micro:hover .calendar-chip__cal-name,
-.calendar-chip--micro:focus-within .calendar-chip__cal-name {
-    display: block;
-    height: 11px;
-    max-width: 72px;
-    font-size: 8px;
-    line-height: 11px;
-}
-
-.calendar-chip--fit .calendar-chip__check,
-.calendar-chip--micro:hover .calendar-chip__check,
-.calendar-chip--micro:focus-within .calendar-chip__check {
-    width: 9px;
-    height: 9px;
-    margin-right: 2px;
-    font-size: 7px;
-}
-
-.calendar-chip--fit .calendar-chip__title,
-.calendar-chip--micro:hover .calendar-chip__title,
-.calendar-chip--micro:focus-within .calendar-chip__title {
-    flex: none;
-    min-height: 0;
-    height: 11px;
-    max-height: 11px;
-    font-size: 10px;
-    font-weight: 600;
-    line-height: 11px;
+    gap: 4px;
+    min-width: 0;
+    font-size: 12px;
+    line-height: 16px;
+    color: rgb(var(--ide-muted));
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    overflow: hidden;
+}
+
+.calendar-chip__time {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-/* Under half an hour: one line with the title. Hover opens the half-hour stack. */
+/* Tall card: title (wraps) above «icon · 11:00–11:30». */
+.calendar-chip__body {
+    min-height: 0;
+}
+
+.calendar-chip--stacked .calendar-chip__body {
+    flex-direction: column;
+    gap: 1px;
+    padding: 3px 6px 3px 8px;
+}
+
+.calendar-chip--stacked .calendar-chip__title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: var(--chip-lines, 2);
+    white-space: normal;
+    overflow-wrap: break-word;
+    hyphens: auto;
+}
+
+/* 30–49 min: one line «Title  11:00». */
+.calendar-chip--fit .calendar-chip__body,
+.calendar-chip--micro .calendar-chip__body {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    padding: 0 4px 0 7px;
+}
+
+.calendar-chip--fit .calendar-chip__title,
+.calendar-chip--micro .calendar-chip__title {
+    flex: 0 1 auto;
+    font-size: 12px;
+    line-height: 14px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.calendar-chip--fit .calendar-chip__sub {
+    flex: 1 1 0;
+    font-size: 12px;
+}
+
+.calendar-chip--fit .calendar-chip__meta,
+.calendar-chip--fit .calendar-chip__delete {
+    display: none;
+}
+
+/* Under 30 min: the title alone; hover opens a 36 px card with the time. */
 .calendar-chip--micro {
     height: var(--chip-slot);
     overflow: hidden;
 }
 
-.calendar-chip--micro .calendar-chip__body {
-    flex-direction: row;
-    align-items: center;
-    gap: 0.15rem;
-    padding: 0 0.15rem 0 0.3rem;
-    min-height: 0;
-}
-
-.calendar-chip--micro .calendar-chip__meta {
-    max-width: none;
-    flex-shrink: 0;
-}
-
-.calendar-chip--micro .calendar-chip__cal-name,
-.calendar-chip--micro .calendar-chip__badge,
-.calendar-chip--micro .calendar-chip__delete {
-    display: none;
-}
-
-.calendar-chip--micro .calendar-chip__icon-btn,
-.calendar-chip--micro .calendar-chip__cal {
-    width: min(0.7rem, calc(var(--chip-slot) - 4px));
-    height: min(0.7rem, calc(var(--chip-slot) - 4px));
-    padding: 0;
-    background: transparent;
-}
-
-.calendar-chip--micro .calendar-chip__icon-btn svg,
-.calendar-chip--micro .calendar-chip__cal svg {
-    width: 70%;
-    height: 70%;
-}
-
-.calendar-chip--micro .calendar-chip__check {
-    width: 0.55rem;
-    height: 0.55rem;
-    font-size: 0.45rem;
-}
-
 .calendar-chip--micro .calendar-chip__title {
-    flex: 1;
-    min-width: 0;
-    font-size: min(0.6875rem, calc(var(--chip-slot) - 2px));
+    font-size: min(12px, calc(var(--chip-slot) - 2px));
     line-height: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+}
+
+.calendar-chip--micro .calendar-chip__sub,
+.calendar-chip--micro .calendar-chip__delete,
+.calendar-chip--micro .calendar-chip__handle {
+    display: none;
 }
 
 .calendar-chip--micro:hover,
 .calendar-chip--micro:focus-within {
     z-index: 8;
     height: max(var(--chip-slot), var(--chip-open));
-    transform: none;
-    overflow: hidden;
 }
 
-/* Open state is 36px: 14px plaques, 2px gap, 16px title, 2px border, 2px padding. */
 .calendar-chip--micro:hover .calendar-chip__body,
 .calendar-chip--micro:focus-within .calendar-chip__body {
-    gap: 2px;
-    padding: 1px 2px 1px 4px;
-}
-
-.calendar-chip--micro:hover .calendar-chip__lead,
-.calendar-chip--micro:focus-within .calendar-chip__lead,
-.calendar-chip--micro:hover .calendar-chip__meta,
-.calendar-chip--micro:focus-within .calendar-chip__meta,
-.calendar-chip--micro:hover .calendar-chip__icon-btn,
-.calendar-chip--micro:focus-within .calendar-chip__icon-btn,
-.calendar-chip--micro:hover .calendar-chip__cal,
-.calendar-chip--micro:focus-within .calendar-chip__cal,
-.calendar-chip--micro:hover .calendar-chip__badge,
-.calendar-chip--micro:focus-within .calendar-chip__badge,
-.calendar-chip--micro:hover .calendar-chip__cal-name,
-.calendar-chip--micro:focus-within .calendar-chip__cal-name {
-    height: 14px;
-    max-height: 14px;
-    line-height: 14px;
-}
-
-.calendar-chip--micro:hover .calendar-chip__icon-btn,
-.calendar-chip--micro:focus-within .calendar-chip__icon-btn {
-    width: 14px;
-}
-
-.calendar-chip--micro:hover .calendar-chip__icon-btn svg,
-.calendar-chip--micro:focus-within .calendar-chip__icon-btn svg,
-.calendar-chip--micro:hover .calendar-chip__cal svg,
-.calendar-chip--micro:focus-within .calendar-chip__cal svg {
-    width: 11px;
-    height: 11px;
-}
-
-.calendar-chip--micro:hover .calendar-chip__cal-name,
-.calendar-chip--micro:focus-within .calendar-chip__cal-name {
-    font-size: 9px;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 0;
 }
 
 .calendar-chip--micro:hover .calendar-chip__title,
 .calendar-chip--micro:focus-within .calendar-chip__title {
-    height: 16px;
-    max-height: 16px;
-    font-size: 13px;
+    font-size: 12px;
     line-height: 16px;
 }
 
-.calendar-chip--micro:hover .calendar-chip__cal-name,
-.calendar-chip--micro:focus-within .calendar-chip__cal-name {
-    display: block;
+.calendar-chip--micro:hover .calendar-chip__sub,
+.calendar-chip--micro:focus-within .calendar-chip__sub {
+    display: flex;
+    font-size: 11px;
+    line-height: 14px;
 }
 
-.calendar-chip--micro:hover .calendar-chip__badge,
-.calendar-chip--micro:focus-within .calendar-chip__badge,
-.calendar-chip--micro:hover .calendar-chip__delete,
-.calendar-chip--micro:focus-within .calendar-chip__delete {
-    display: inline-flex;
+/* Month and all-day chips: one line. */
+.calendar-chip--line {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px 2px 8px;
+    font-size: 12px;
+    line-height: 16px;
 }
 
-.calendar-chip--stacked .calendar-chip__meta {
-    max-width: 100%;
+.calendar-chip--line .calendar-chip__time {
+    flex: none;
+    color: rgb(var(--ide-muted));
+    font-variant-numeric: tabular-nums;
 }
 
-.calendar-chip--stacked .calendar-chip__delete,
-.calendar-chip--stacked:hover .calendar-chip__delete,
-.calendar-chip--stacked:focus-within .calendar-chip__delete {
-    top: 0.15rem;
-    transform: none;
-}
-
+/* Meta: kind icon (button when the kind can change) and provider logo for external events. */
 .calendar-chip__meta {
     display: inline-flex;
     flex-wrap: nowrap;
     align-items: center;
-    gap: 0.2rem;
-    margin-top: 0;
+    gap: 3px;
     position: relative;
     z-index: 3;
     flex-shrink: 0;
-    max-width: 55%;
 }
 
 .calendar-chip__icon-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 0.9rem;
-    height: 0.9rem;
+    width: 14px;
+    height: 14px;
     padding: 0;
     border: 0;
-    border-radius: 0.2rem;
-    background: color-mix(in srgb, #000 42%, transparent);
-    color: rgba(255, 255, 255, 0.98);
+    border-radius: 3px;
+    background: transparent;
+    color: rgb(var(--ide-muted));
     cursor: pointer;
     flex-shrink: 0;
     line-height: 0;
+}
+
+.calendar-chip__icon-btn:hover {
+    background: rgb(var(--ide-text) / 0.1);
+    color: rgb(var(--ide-text));
+}
+
+.calendar-chip__icon-btn svg {
+    width: 12px;
+    height: 12px;
 }
 
 .calendar-chip__icon-btn--static {
@@ -600,32 +447,15 @@
 .calendar-chip__cal {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    gap: 0.15rem;
-    min-width: 0;
-    max-width: 100%;
-    height: 0.9rem;
-    padding: 0 0.28rem;
-    border-radius: 0.2rem;
-    background: color-mix(in srgb, #000 42%, transparent);
-    color: rgba(255, 255, 255, 0.98);
+    width: 12px;
+    height: 12px;
+    flex: none;
     pointer-events: none;
-    line-height: 0;
 }
 
-.calendar-chip__cal-name {
-    display: block;
-    height: 0.9rem;
-    min-width: 0;
-    max-width: 8rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 0.5rem;
-    font-weight: 500;
-    letter-spacing: 0;
-    line-height: 0.9rem;
-    text-shadow: none;
+.calendar-chip__cal svg {
+    width: 12px;
+    height: 12px;
 }
 
 .calendar-chip__kind-menu {
@@ -668,25 +498,218 @@
     color: rgb(var(--ide-text));
 }
 
-.calendar-event-stage-saving {
-    box-shadow: inset 3px 0 0 0 rgb(var(--ide-warn)), inset 0 0 0 1px rgb(var(--ide-warn) / 0.55) !important;
-    filter: saturate(1.15);
+/* Card motion (calendar/motion, design-system.md «Анімації карток»).
+   Color stays the phase; the action reads as shape and fill:
+   busy = the left bar fills bottom-up with the server stages,
+   forming = a dashed card whose content shows up as it fills,
+   emptying = the old card fading out while the new one fills,
+   erasing = hatched and faded until the eraser sweeps it away.
+   --motion-p is 0…1 (saving .3, placing .6, syncing .85). */
+:root {
+    --motion-lift-shadow: var(--ide-shadow-md);
 }
 
-.calendar-event-stage-placing {
-    box-shadow: inset 3px 0 0 0 rgb(var(--ide-link)), inset 0 0 0 1px rgb(var(--ide-link) / 0.55) !important;
-    filter: saturate(1.15);
+.motion-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    overflow: hidden;
+    pointer-events: none;
 }
 
-.calendar-event-stage-syncing {
-    box-shadow: inset 3px 0 0 0 #a78bfa, inset 0 0 0 1px rgba(167, 139, 250, 0.55) !important;
-    filter: saturate(1.15);
+.motion-ghost {
+    pointer-events: none !important;
 }
 
-.calendar-event-stage-done {
-    box-shadow: inset 3px 0 0 0 rgb(var(--ide-accent)), inset 0 0 0 1px rgb(var(--ide-accent) / 0.55) !important;
+.motion-ghost.calendar-chip:hover {
+    box-shadow: inset 3px 0 0 0 var(--chip-color);
 }
 
-.calendar-event-stage-error {
-    box-shadow: inset 3px 0 0 0 rgb(var(--ide-error)), inset 0 0 0 1px rgb(var(--ide-error) / 0.55) !important;
+.motion-row {
+    position: relative;
+    overflow: hidden;
+}
+
+.calendar-chip[data-motion] .calendar-chip__title,
+.calendar-chip[data-motion] .calendar-chip__sub,
+.calendar-chip[data-motion] .calendar-chip__time {
+    transition: opacity 320ms ease, filter 320ms ease;
+}
+
+.calendar-chip[data-motion='busy'],
+.calendar-chip[data-motion='forming'],
+.calendar-chip[data-motion='emptying'] {
+    box-shadow: inset 3px 0 0 0 color-mix(in srgb, var(--chip-color) 30%, transparent);
+}
+
+.calendar-chip[data-motion='busy']::before,
+.calendar-chip[data-motion='forming']::before,
+.calendar-chip[data-motion='emptying']::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 3px;
+    height: 100%;
+    background: var(--chip-color);
+    transform: scaleY(var(--motion-p, 0.3));
+    transform-origin: bottom;
+    transition: transform 480ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    pointer-events: none;
+}
+
+.calendar-chip[data-motion='emptying']::before {
+    transform: scaleY(calc(1 - var(--motion-p, 0.3)));
+    transform-origin: top;
+}
+
+.calendar-chip[data-motion='busy']::after,
+.calendar-chip[data-motion='forming']::after,
+.motion-row[data-motion='busy']::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        100deg,
+        transparent 30%,
+        rgb(var(--ide-text) / 0.07) 50%,
+        transparent 70%
+    );
+    background-size: 220% 100%;
+    animation: motion-shimmer 1.4s linear infinite;
+    pointer-events: none;
+}
+
+.calendar-chip[data-motion='forming'] {
+    border-style: dashed;
+    border-color: color-mix(in srgb, var(--chip-color) 70%, transparent);
+    background: color-mix(in srgb, var(--chip-color) calc(var(--phase-tint, 18%) * 0.5), rgb(var(--ide-panel)));
+}
+
+.calendar-chip[data-motion='forming'] .calendar-chip__title,
+.calendar-chip[data-motion='forming'] .calendar-chip__sub {
+    opacity: calc(0.2 + var(--motion-p, 0.3) * 0.8);
+}
+
+.calendar-chip[data-motion='emptying'] {
+    /* The shell sits in the layer above the grid: let an overlapping new card show through. */
+    opacity: calc(0.9 - var(--motion-p, 0.3) * 0.45);
+    border-style: dashed;
+    background: color-mix(in srgb, var(--chip-color) calc(var(--phase-tint, 18%) * 0.5), rgb(var(--ide-panel)));
+}
+
+.calendar-chip[data-motion='emptying'] .calendar-chip__title,
+.calendar-chip[data-motion='emptying'] .calendar-chip__sub {
+    opacity: calc(1 - var(--motion-p, 0.3) * 0.85);
+    filter: saturate(calc(1 - var(--motion-p, 0.3) * 0.7));
+}
+
+.calendar-chip[data-motion='flying'] {
+    border-style: solid;
+}
+
+/* Only the shell flies over; its content already moved to the new card. */
+.calendar-chip[data-motion='flying'] .calendar-chip__title,
+.calendar-chip[data-motion='flying'] .calendar-chip__sub {
+    opacity: 0.15;
+}
+
+/* Two classes deep so it beats the chip's :hover / :focus-within fill. */
+.calendar-chip[data-motion='erasing'],
+.motion-row[data-motion='erasing'] {
+    border-style: dashed;
+    background-image: repeating-linear-gradient(
+        135deg,
+        transparent 0 5px,
+        rgb(var(--ide-text) / 0.1) 5px 10px
+    );
+}
+
+.calendar-chip[data-motion='erasing'] > *,
+.motion-row[data-motion='erasing'] > * {
+    opacity: 0.45;
+    transition: opacity 240ms ease;
+}
+
+.motion-row[data-motion='busy']::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 2px;
+    width: 100%;
+    background: rgb(var(--ide-link));
+    transform: scaleX(var(--motion-p, 0.3));
+    transform-origin: left;
+    transition: transform 480ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    pointer-events: none;
+}
+
+.motion-pulse {
+    animation: motion-pulse 640ms cubic-bezier(0.3, 0.7, 0.4, 1);
+}
+
+.motion-edge-label {
+    position: absolute;
+    padding: 4px 10px;
+    border: 1px solid rgb(var(--ide-border));
+    border-radius: 999px;
+    background: rgb(var(--ide-elevated));
+    box-shadow: var(--ide-shadow-md);
+    color: rgb(var(--ide-text));
+    font-size: 12px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+@keyframes motion-shimmer {
+    from {
+        background-position: 120% 0;
+    }
+    to {
+        background-position: -120% 0;
+    }
+}
+
+@keyframes motion-pulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgb(var(--ide-link) / 0.45);
+    }
+    35% {
+        transform: scale(1.12);
+    }
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 10px rgb(var(--ide-link) / 0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .calendar-chip[data-motion]::after,
+    .motion-row[data-motion]::after {
+        animation: none;
+    }
+
+    .motion-pulse {
+        animation: none;
+    }
+}
+
+/* Phone: toasts sit above the tab bar, where the thumb is, not over the app bar. */
+@media (max-width: 767px) {
+    .Toastify__toast-container.Toastify__toast-container--top-right {
+        top: auto;
+        bottom: calc(var(--phone-tab-offset, 0px) + 0.5rem);
+        left: 0.5rem;
+        right: 0.5rem;
+        width: auto;
+        padding: 0;
+    }
+
+    .Toastify__toast-container--top-right .Toastify__toast {
+        margin-bottom: 0.5rem;
+        border-radius: 12px;
+    }
 }

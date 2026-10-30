@@ -76,7 +76,7 @@ function TimeColumn({
 }) {
   return (
     <div className={cx('flex min-h-0 flex-col', bordered && 'border-r border-ide-border')}>
-      <div className="flex h-8 items-center justify-center gap-1 whitespace-nowrap border-b border-ide-border px-1 text-[11px] font-medium text-ide-muted">
+      <div className="flex h-8 items-center justify-center gap-1 whitespace-nowrap border-b border-ide-border px-1 text-caption font-medium text-ide-muted">
         <Icon aria-hidden className="h-3.5 w-3.5" />
         {label}
       </div>

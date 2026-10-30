@@ -1,19 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
-import { CalendarClock } from 'lucide-react';
+import { CalendarClock, CalendarDays } from 'lucide-react';
 import { dateFnsLocale } from '../i18n/dateLocale';
-import { Button } from './Button';
-import { orderYmdRange, parseYmd, ymdInRange } from './dateRange';
-import {
-  CalendarMonth,
-  DateFieldTrigger,
-  calendarPopoverClassName,
-  startOfMonth,
-  useCalendarPopover,
-} from './CalendarMonth';
+import { cx } from './cx';
+import { addDaysYmd, formatYmd, orderYmdRange, parseYmd, ymdInRange } from './dateRange';
+import { CalendarMonth, DateFieldTrigger, startOfMonth } from './CalendarMonth';
+import { PickerShell } from './PickerShell';
 import { TimeColumns } from './TimeColumns';
+import { TimeWheel } from './TimeWheel';
+import { DateStrip } from './DateStrip';
+import { DurationChips } from './DurationChips';
+import { formatDurationShort } from './durationLabel';
+import { useIsPhone } from './useViewport';
 import {
   rangeDurationMinutes,
   withDates,
@@ -24,7 +23,7 @@ import {
   type DateTimeRangeValue,
 } from './dateTimeRange';
 
-const DURATION_CHIPS = [30, 60, 120] as const;
+const DURATIONS = [15, 30, 45, 60, 90, 120];
 
 type Props = {
   id?: string;
@@ -48,17 +47,11 @@ function rangeKey(value: DateTimeRangeValue): string {
   return `${value.startDate}|${value.endDate}|${value.start}|${value.end}`;
 }
 
-function durationLabel(
-  minutes: number,
-  t: (key: string, options?: Record<string, number>) => string,
-): string {
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  if (hours && rest) return t('common.hoursMinutesShort', { hours, minutes: rest });
-  if (hours) return t('common.hoursShort', { count: hours });
-  return t('common.minutesShort', { count: rest });
-}
-
+/**
+ * Day (or day range) plus start/end clocks.
+ * Desktop: popover with the month on the left and clocks + durations on the right.
+ * Phone: sheet with a day strip, «Інша дата» for the month, start/end tabs, a time wheel and duration chips.
+ */
 export function DateTimeRangeField({
   id,
   labelledBy,
@@ -77,22 +70,23 @@ export function DateTimeRangeField({
 }: Props) {
   const { t } = useTranslation();
   const dateLocale = dateFnsLocale();
+  const phone = useIsPhone();
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   const [side, setSide] = useState<'start' | 'end'>('start');
+  const [showMonth, setShowMonth] = useState(false);
   const [linkedMinutes, setLinkedMinutes] = useState<number | null>(null);
   const linkedRef = useRef<number | null>(null);
   const [cursor, setCursor] = useState(() => startOfMonth(parseYmd(startDate) ?? new Date()));
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
   const wasOpen = useRef(false);
   const echo = useRef(rangeKey({ startDate, endDate, start, end }));
-  const pos = useCalendarPopover(open, buttonRef, panelRef);
   const durationDefault =
     Number.isFinite(defaultDurationMinutes) && defaultDurationMinutes >= 5
       ? Math.trunc(defaultDurationMinutes)
       : 30;
+  const today = formatYmd(new Date());
 
   useEffect(() => {
     const next = rangeKey({ startDate, endDate, start, end });
@@ -108,30 +102,12 @@ export function DateTimeRangeField({
       setHover(null);
       setCursor(startOfMonth(parseYmd(startDate || endDate) ?? new Date()));
       setSide('start');
+      const multiDay = Boolean(startDate && endDate && startDate !== endDate);
+      const offStrip = Boolean(startDate && (startDate < today || startDate > addDaysYmd(today, 13)));
+      setShowMonth(multiDay || offStrip);
     }
     wasOpen.current = open;
-  }, [open, startDate, endDate]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (buttonRef.current?.contains(target) || panelRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
+  }, [open, startDate, endDate, today]);
 
   const apply = (edit: DateTimeRangeEdit) => {
     linkedRef.current = edit.linkedMinutes;
@@ -165,23 +141,81 @@ export function DateTimeRangeField({
 
   const from = parseYmd(startDate);
   const to = parseYmd(endDate || startDate);
-  const pattern = 'd MMM yyyy';
+  const pattern = phone ? 'EEEEEE, d MMM' : 'd MMM yyyy';
   const caption = from
     ? !to || startDate === (endDate || startDate)
       ? format(from, pattern, { locale: dateLocale })
       : `${format(from, pattern, { locale: dateLocale })} – ${format(to, pattern, { locale: dateLocale })}`
     : '';
+  const clocks = start && end ? `${start}–${end}` : start;
   const text = caption
-    ? start && end
-      ? `${caption} · ${start}–${end}`
-      : start
-        ? `${caption} · ${start}`
-        : caption
+    ? clocks
+      ? `${caption} · ${clocks}`
+      : caption
     : start || end
       ? `${start || '--:--'}–${end || '--:--'}`
       : emptyLabel;
   const hasValue = Boolean(caption || start || end);
   const duration = rangeDurationMinutes({ startDate, endDate, start, end });
+
+  const setClock = (hm: string) =>
+    apply(side === 'end' ? withEnd(current(), hm) : withStart(current(), hm, durationDefault));
+
+  const month = (
+    <CalendarMonth
+      cursor={cursor}
+      onCursorChange={setCursor}
+      markDay={(ymd) => ({
+        selected: preview ? ymd === preview.start || ymd === preview.end : false,
+        inRange: preview ? ymdInRange(ymd, preview.start, preview.end) : false,
+      })}
+      onDayEnter={anchor ? setHover : undefined}
+      onDayClick={pickDay}
+    />
+  );
+
+  const sides = (
+    <div role="tablist" aria-label={t('common.time')} className="grid grid-cols-2 gap-1 rounded-control bg-ide-surface p-1">
+      {(['start', 'end'] as const).map((key) => {
+        const on = side === key;
+        const value = key === 'start' ? start : end;
+        return (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={on}
+            onClick={() => setSide(key)}
+            className={cx(
+              'flex min-h-11 flex-col items-center justify-center rounded-[8px] px-2 py-1 transition md:min-h-9',
+              'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ide-link',
+              on ? 'bg-ide-panel text-ide-text shadow-ide' : 'text-ide-muted hover:text-ide-text',
+            )}
+          >
+            <span className="text-caption">{key === 'start' ? startLabel : endLabel}</span>
+            <span className="text-heading font-semibold tabular-nums">{value || '--:--'}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const durations = (
+    <div>
+      <p className="mb-1.5 text-caption text-ide-muted">
+        {t('common.duration')}
+        {duration != null ? <span className="ml-1 tabular-nums text-ide-text">· {formatDurationShort(duration, t)}</span> : null}
+      </p>
+      <DurationChips
+        value={linkedMinutes ?? null}
+        options={DURATIONS}
+        allowCustom={phone}
+        disabled={!start}
+        label={t('common.duration')}
+        onChange={(minutes) => apply(withDuration(current(), minutes))}
+      />
+    </div>
+  );
 
   return (
     <>
@@ -205,87 +239,74 @@ export function DateTimeRangeField({
           });
         }}
       />
-      {open && typeof document !== 'undefined'
-        ? createPortal(
-            <div
-              ref={panelRef}
-              role="dialog"
-              aria-label={t('common.openDateTime')}
-              className={calendarPopoverClassName}
-              style={{ top: pos.top, left: pos.left }}
-            >
-              <CalendarMonth
-                cursor={cursor}
-                onCursorChange={setCursor}
-                markDay={(ymd) => ({
-                  selected: preview ? ymd === preview.start || ymd === preview.end : false,
-                  inRange: preview ? ymdInRange(ymd, preview.start, preview.end) : false,
-                })}
-                onDayEnter={anchor ? setHover : undefined}
-                onDayClick={pickDay}
+      <PickerShell
+        open={open}
+        onClose={() => setOpen(false)}
+        anchorRef={buttonRef}
+        title={t('calendar.chooseDateTime')}
+        width={560}
+      >
+        {phone ? (
+          <div className="flex flex-col gap-4">
+            <p className="text-center text-heading font-semibold tabular-nums">{hasValue ? text : emptyLabel}</p>
+            {showMonth ? (
+              <div>
+                <p className="mb-2 text-caption text-ide-muted">
+                  {anchor ? t('common.pickEndDay') : t('common.pickStartDay')}
+                </p>
+                {month}
+              </div>
+            ) : (
+              <DateStrip
+                startYmd={today}
+                value={startDate}
+                todayYmd={today}
+                label={t('calendar.chooseDate')}
+                onChange={(ymd) => apply(withDates(current(), ymd, ymd))}
+                trailing={
+                  <button
+                    type="button"
+                    onClick={() => setShowMonth(true)}
+                    className="flex min-h-[56px] w-16 shrink-0 flex-col items-center justify-center gap-0.5 rounded-control bg-ide-surface px-1 text-caption text-ide-link hover:bg-ide-elevated"
+                  >
+                    <CalendarDays aria-hidden className="h-4 w-4" />
+                    {t('common.otherDate')}
+                  </button>
+                }
               />
-              <div className="mt-3 grid grid-cols-2 gap-2 border-t border-ide-border pt-3">
-                <div>
-                  <span className="mb-0.5 block text-[11px] font-medium text-ide-muted">{startLabel}</span>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    pressed={side === 'start'}
-                    className="w-full"
-                    onClick={() => setSide('start')}
-                  >
-                    {start || '--:--'}
-                  </Button>
-                </div>
-                <div>
-                  <span className="mb-0.5 block text-[11px] font-medium text-ide-muted">{endLabel}</span>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    pressed={side === 'end'}
-                    className="w-full"
-                    onClick={() => setSide('end')}
-                  >
-                    {end || '--:--'}
-                  </Button>
-                </div>
-              </div>
-              <p className="mt-2 text-center text-xs text-ide-muted">
-                {duration != null ? durationLabel(duration, t) : t('common.duration')}
+            )}
+            {sides}
+            <TimeWheel
+              value={side === 'end' ? end : start}
+              minuteStep={minuteStep > 1 ? minuteStep : 5}
+              label={side === 'end' ? endLabel : startLabel}
+              onChange={setClock}
+            />
+            {durations}
+          </div>
+        ) : (
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-4">
+            <div>
+              <p className="mb-2 text-caption text-ide-muted">
+                {anchor ? t('common.pickEndDay') : t('common.chooseDayOrRange')}
               </p>
-              <div className="mt-2 flex gap-1">
-                {DURATION_CHIPS.map((minutes) => (
-                  <Button
-                    key={minutes}
-                    variant="secondary"
-                    size="sm"
-                    pressed={linkedMinutes === minutes}
-                    disabled={!start}
-                    className="flex-1"
-                    onClick={() => apply(withDuration(current(), minutes))}
-                  >
-                    {durationLabel(minutes, t)}
-                  </Button>
-                ))}
-              </div>
-              <div className="mt-2 overflow-hidden rounded-lg border border-ide-border">
+              {month}
+            </div>
+            <div className="flex min-w-0 flex-col gap-3 border-l border-ide-border pl-4">
+              {sides}
+              <div className="overflow-hidden rounded-control border border-ide-border">
                 <TimeColumns
                   value={side === 'end' ? end : start}
                   minuteStep={minuteStep}
-                  listClassName="max-h-36"
-                  onChange={(hm) =>
-                    apply(
-                      side === 'end'
-                        ? withEnd(current(), hm)
-                        : withStart(current(), hm, durationDefault),
-                    )
-                  }
+                  listClassName="max-h-40"
+                  onChange={setClock}
                 />
               </div>
-            </div>,
-            document.body,
-          )
-        : null}
+              {durations}
+            </div>
+          </div>
+        )}
+      </PickerShell>
     </>
   );
 }

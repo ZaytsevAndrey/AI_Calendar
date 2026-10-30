@@ -5,10 +5,10 @@ import {
 } from '../../../api/eventsApi';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 import { useGetUserSettingsQuery } from '../../../api/userSettingsApi';
-import { eventStartDate, eventsQueryRange, sameLocalDay, SleepWindow } from '../calendarView';
+import { eventStartDate, eventsQueryRange, sameLocalDay, SleepWindow, threeDayQueryRange } from '../calendarView';
 
 export {
-  PAST_APP_EVENT_COLOR,
+  EXTERNAL_EVENT_COLOR,
   eventEndMs,
   getEventColor,
   isPastAppEvent,
@@ -47,6 +47,13 @@ export const useEventsForDay = (
     },
     { skip },
   );
+};
+
+/** Phone «3 дні»: the focused day and the next two. */
+export const useEventsForThreeDays = (date: Date, skip = false) => {
+  const sleep = useSleepWindow();
+  const { timeMin, timeMax } = threeDayQueryRange(date, sleep);
+  return useGetEventsQuery({ timeMin, timeMax }, { skip });
 };
 
 export const useEventsForWeek = (

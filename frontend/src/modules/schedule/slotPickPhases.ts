@@ -1,3 +1,4 @@
+import { PHASE_PALETTE } from 'theme/phasePalette';
 import type { PhaseDTO } from '../../api/phases.api';
 import { localDateTimeIso, normalizeClockHm } from '../../utils/ianaDateTime';
 import { resolveIanaTimeZone } from '../user-settings/ianaTimeZones';
@@ -55,7 +56,7 @@ export function phaseWindowsForDay(
     out.push({
       id: p.id,
       name: p.name,
-      color: p.color || '#4a90e2',
+      color: p.color || PHASE_PALETTE[0].hex,
       startMs,
       endMs,
     });

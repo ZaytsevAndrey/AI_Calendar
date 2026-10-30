@@ -46,8 +46,9 @@ test.describe('P2 chrome and empty states', () => {
 
     await openAs(page, auth.onboarded, '/tasks');
     await expect(page.getByText('Loading tasks…')).toHaveCount(0);
-    await expect(page.getByText('No unscheduled tasks.')).toBeVisible();
     await expect(page.getByText('No scheduled tasks in this filter.')).toBeVisible();
+    await page.getByRole('tab', { name: 'Later' }).click();
+    await expect(page.getByText('No tasks for later.')).toBeVisible();
   });
 
   test.skip('U-HAB-005 empty habits state (habits disabled for MVP)', async () => {});
@@ -68,11 +69,14 @@ test.describe('P2 chrome and empty states', () => {
     try {
       await openAs(page, auth.onboarded);
       await page.getByRole('button', { name: 'Day', exact: true }).click();
-      await expect(page.getByText(`${name} (22:00-02:00)`)).toBeVisible();
-      const slot = page.locator('div').filter({ has: page.getByText('22:00', { exact: true }) }).filter({
-        hasText: name,
-      });
-      await expect(slot.first()).toBeVisible();
+      // The legend lists phases with their hours in a popover.
+      await page.getByRole('button', { name: 'Phases of this day' }).click();
+      const legend = page.getByRole('dialog', { name: 'Phases of this day' });
+      await expect(legend.getByText(name)).toBeVisible();
+      await expect(legend.getByText('22:00–02:00')).toBeVisible();
+      await page.keyboard.press('Escape');
+      // The grid tints the 22:00 hour with the phase color; the hour row itself is there.
+      await expect(page.getByText('22:00', { exact: true }).first()).toBeAttached();
     } finally {
       await apiJson(request, auth.onboarded.access_token, 'delete', `/phases/${created.body.id}`);
     }

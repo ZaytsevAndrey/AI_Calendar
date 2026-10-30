@@ -1,6 +1,5 @@
 import {
     CalendarDays,
-    Layers,
     ListTodo,
     Settings,
     type LucideIcon,
@@ -27,16 +26,10 @@ export const mainNavItems: readonly MainNavItem[] = [
         match: (path) => path === '/tasks' || path === '/events',
     },
     {
-        to: '/phases',
-        labelKey: 'nav.phases',
-        icon: Layers,
-        match: (path) => path === '/phases' || path.startsWith('/setup'),
-    },
-    {
         to: '/settings',
         labelKey: 'nav.settings',
         icon: Settings,
-        match: (path) => path === '/settings',
+        match: (path) => path === '/settings' || path.startsWith('/settings/') || path.startsWith('/setup'),
     },
 ];
 

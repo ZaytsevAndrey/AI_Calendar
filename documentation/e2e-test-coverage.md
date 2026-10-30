@@ -289,7 +289,7 @@ Mutation jobs: POST/PATCH tasks return a `jobId` for place + Google sync progres
 | ID | Layer | P | Given | When | Then |
 |----|-------|---|-------|------|------|
 | U-TSK-001 | U | P0 | `/tasks` | Open create | Wizard; default Flexible |
-| U-TSK-002 | U | P0 | Flexible | Name + duration submit | Mutation progress toast (title = name; Saving…→Done); appears in list; calendar refresh after job |
+| U-TSK-002 | U | P0 | Flexible | Name + duration submit | Result toast (title = name); appears in list; calendar refresh after job |
 | U-TSK-003 | U | P0 | Fixed | Missing end | Client error; no POST |
 | U-TSK-004 | U | P0 | Fixed | Valid slot | Created; Google stub event if connected |
 | U-TSK-026 | U | P1 | Fixed tab | Pick a date range and a start/end clock | `scheduledStartTime` is the first day plus the start clock; `scheduledEndTime` is the last day plus the end clock; no native datetime input |
@@ -302,7 +302,7 @@ Mutation jobs: POST/PATCH tasks return a `jobId` for place + Google sync progres
 | U-TSK-011 | U | P0 | Inbox **Skip** | Cancels | `canceled`; disappears from active inbox |
 | U-TSK-012 | U | P0 | Inbox **Edit** | Opens editor | Prefills name; edit form |
 | U-TSK-024 | U | P0 | Inbox **Schedule** | Opens schedule form | Title Schedule task; phase fields visible; name prefilled |
-| U-TSK-025 | U | P0 | Edit modal **Delete** (one-off) | Confirm then delete | Task leaves inbox; progress toast |
+| U-TSK-025 | U | P0 | Edit modal **Delete** (one-off) | Confirm then delete | Task leaves inbox; result toast |
 | U-TSK-011 | U | P1 | Uncheck Fixed | Form | Allow split restored (preset rules) |
 | U-TSK-012 | U | P1 | Clear phase / date range on edit | Phase chips → **Any time**; clear the date range; Save | PATCH `phaseIds: []` / `deadline: null`. Window end clears. **Current:** GET still returns previous `phaseId` after `phaseIds: []` |
 | U-TSK-023 | U | P1 | Completed/canceled Unscheduled | Status filter completed / all | Not listed in Unscheduled; no local-completed calendar chip (unit: `taskListFilters`, `completedTaskEvents`) |
@@ -313,7 +313,7 @@ Mutation jobs: POST/PATCH tasks return a `jobId` for place + Google sync progres
 | U-TSK-021 | U | P1 | Two+ tasks same `seriesGroupId` on `/tasks` | Open Scheduled list | Primary series uses a full task card; expand shows nested One-off / Problematic / siblings; parent Delete removes all members with no confirm (unit: `groupTasksBySeriesGroup`) |
 | U-TSK-022 | U | P1 | Detached one-off with `seriesGroupId` | Recurring schedule filter | Member listed (unit: `taskListFilters`) |
 | U-TSK-016 | U | P1 | Delete confirm | Cancel | Still there |
-| U-TSK-017 | U | P1 | Delete confirm | Confirm | Mutation progress toast (title = name); gone |
+| U-TSK-017 | U | P1 | Delete confirm | Confirm | Result toast (title = name); gone |
 | U-TSK-018 | U | P1 | API error on save | Fail POST | Toast `Could not create task` + API detail |
 | U-TSK-019 | U | P2 | Empty list | No tasks | Empty state, not a spinner forever |
 
@@ -580,7 +580,7 @@ Personal-day hour order (wake until sleep, 00:00–sleep at the end of that day,
 | U-CAL-025p | U | P1 | Parked task, free day | Inbox **Place at HH:MM** | Task seats in one tap; leaves problematic |
 | U-SCH-001 | U | P0 | Fixed wall + UI create preferred on it | Real placement job (JWT `openAs`, no Google OAuth) | Conflict sheet; dismiss / Park → Problematic banner (`p1.scheduling-conflict.spec.ts`) |
 | U-SCH-002 | U | P0 | Same setup | Conflict → Place elsewhere | Task seats off the wall; not problematic |
-| U-SCH-003 | U | P0 | Fixed in Now window | Done on Now strip | Progress toast; strip drops the card |
+| U-SCH-003 | U | P0 | Fixed in Now window | Done on Now strip | Result toast; strip drops the card |
 
 `canCompleteNowBlock`: has linked task, not recurring, not `isFixedExternal`, not completed/canceled.
 

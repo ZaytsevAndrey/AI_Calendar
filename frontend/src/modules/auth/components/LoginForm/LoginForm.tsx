@@ -30,17 +30,17 @@ const LoginForm: React.FC<LoginFormProps> = ({
         <div className="auth-form-card my-0 w-full">
             <img src="/icon-192.png" alt="luefy" className="mx-auto mb-4 h-16 w-16 rounded-2xl" />
             <h2 className="auth-form-title">{t('auth.signIn')}</h2>
-            <p className="mb-6 text-sm text-ide-muted">
+            <p className="mb-6 text-body-sm text-ide-muted">
                 {t('auth.signInLead')}
             </p>
             {errorMessage ? <p className="auth-form-error mb-4">{errorMessage}</p> : null}
             <div className="flex flex-col gap-2">
-              <Button type="button" className="mt-2 w-full" disabled={pending} onClick={onGoogleSignIn}>
+              <Button type="button" variant="secondary" size="lg" className="mt-2 w-full" disabled={pending} onClick={onGoogleSignIn}>
                   <ProviderLogo provider="google" className="h-4 w-4" />
                   {pending ? t('auth.redirecting') : t('auth.continueGoogle')}
               </Button>
               {microsoftAvailable && onMicrosoftSignIn ? (
-                <Button type="button" className="w-full" disabled={pending} onClick={onMicrosoftSignIn}>
+                <Button type="button" variant="secondary" size="lg" className="w-full" disabled={pending} onClick={onMicrosoftSignIn}>
                   <ProviderLogo provider="microsoft" className="h-4 w-4" />
                   {t('auth.continueMicrosoft')}
                 </Button>

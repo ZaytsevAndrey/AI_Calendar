@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { useTranslation } from 'react-i18next';
 import type { AppDispatch } from '../../../store';
-import { Calendar, ChevronDown, Eye } from 'lucide-react';
+import { Calendar, ChevronDown } from 'lucide-react';
+import { PickerShell } from 'ui/PickerShell';
 import { eventsApi } from '../../../api/eventsApi';
 import {
   getAuthProvidersStatus,
@@ -30,13 +31,12 @@ export function CalendarVisibilityMenu({ compact = false }: { compact?: boolean 
   const dispatch = useDispatch<AppDispatch>();
   const [open, setOpen] = useState(false);
   const [pendingHidden, setPendingHidden] = useState<string[] | null>(null);
-  const [panelTop, setPanelTop] = useState(0);
   const [calendars, setCalendars] = useState<ProviderCalendarItem[]>([]);
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'error' | 'ready'>(
     'idle',
   );
   const [anyConnected, setAnyConnected] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     void getAuthProvidersStatus()
@@ -64,15 +64,7 @@ export function CalendarVisibilityMenu({ compact = false }: { compact?: boolean 
         setLoadState('ready');
       })
       .catch(() => setLoadState('error'));
-    if (compact && rootRef.current) {
-      setPanelTop(rootRef.current.getBoundingClientRect().bottom + 6);
-    }
-    const onDoc = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [open, compact]);
+  }, [open]);
 
   const linked =
     anyConnected || !!settings?.googleCalendarLinked || calendars.length > 0;
@@ -104,72 +96,68 @@ export function CalendarVisibilityMenu({ compact = false }: { compact?: boolean 
   };
 
   return (
-    <div className="relative" ref={rootRef}>
+    <>
       <button
+        ref={buttonRef}
         type="button"
         className={
           compact
-            ? 'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ide-text hover:bg-ide-text/5'
-            : 'ui-btn-secondary px-4'
+            ? 'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-control border border-ide-border bg-ide-panel text-ide-text hover:bg-ide-surface'
+            : 'inline-flex h-9 shrink-0 items-center gap-2 rounded-control border border-ide-border bg-ide-panel px-3 text-body-sm text-ide-text transition hover:bg-ide-surface'
         }
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label={t('calendar.calendars')}
         onClick={() => setOpen((value) => !value)}
       >
-        {compact ? (
-          <Eye className="h-4 w-4" aria-hidden />
-        ) : (
+        <Calendar className="h-4 w-4" aria-hidden />
+        {compact ? null : (
           <>
-            <Calendar className="h-4 w-4" aria-hidden />
             {t('calendar.calendars')}
-            <ChevronDown className="h-4 w-4" aria-hidden />
+            <ChevronDown className="h-4 w-4 text-ide-muted" aria-hidden />
           </>
         )}
       </button>
-      {open ? (
-        <div
-          role="dialog"
-          aria-label={t('calendar.visibleCalendars')}
-          className={
-            compact
-              ? 'fixed z-[1400] w-[min(20rem,calc(100vw-1rem))] rounded-lg border border-ide-border bg-ide-panel p-2'
-              : 'absolute right-0 z-20 mt-1 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-ide-border bg-ide-panel p-2'
-          }
-          style={compact ? { top: panelTop, left: 8 } : undefined}
-        >
+      <PickerShell
+        open={open}
+        onClose={() => setOpen(false)}
+        anchorRef={buttonRef}
+        title={t('calendar.visibleCalendars')}
+        width={320}
+      >
+        <div>
           {loadState === 'loading' || loadState === 'idle' ? (
-            <p className="px-2 py-2 text-sm text-ide-muted">{t('calendar.loadingCalendars')}</p>
+            <p className="px-2 py-2 text-body-sm text-ide-muted">{t('calendar.loadingCalendars')}</p>
           ) : loadState === 'error' ? (
-            <p className="px-2 py-2 text-sm text-ide-error">{t('calendar.loadCalendarsFailed')}</p>
+            <p className="px-2 py-2 text-body-sm text-ide-error">{t('calendar.loadCalendarsFailed')}</p>
           ) : rows.length === 0 ? (
-            <p className="px-2 py-2 text-sm text-ide-muted">{t('calendar.noCalendars')}</p>
+            <p className="px-2 py-2 text-body-sm text-ide-muted">{t('calendar.noCalendars')}</p>
           ) : (
             <>
-              <div className="max-h-72 space-y-2 overflow-y-auto">
+              <div className="space-y-2 md:max-h-72 md:overflow-y-auto">
                 {SECTION_ORDER.map((provider) => {
                   const sectionRows = rows.filter((r) => r.provider === provider);
                   if (!sectionRows.length) return null;
                   return (
                     <div key={provider}>
-                      <p className="flex items-center gap-1.5 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-ide-muted">
+                      <p className="flex items-center gap-1.5 px-2 py-1 text-caption font-medium text-ide-muted">
                         <ProviderLogo provider={provider} className="h-3 w-3" />
                         {t(`calendar.providerSection.${provider}`)}
                       </p>
                       <ul className="space-y-1">
                         {sectionRows.map((row) => (
                           <li key={row.id}>
-                            <label className="flex min-h-[44px] items-center gap-2 rounded px-2 text-sm text-ide-text hover:bg-ide-surface">
+                            <label className="flex min-h-[44px] items-center gap-2 rounded-lg px-2 text-body text-ide-text hover:bg-ide-surface md:min-h-9 md:text-body-sm">
                               <input
                                 type="checkbox"
-                                className="h-4 w-4"
+                                className="h-5 w-5 accent-ide-accentBlue md:h-4 md:w-4"
                                 checked={row.checked}
                                 disabled={row.disabled || isSaving}
                                 onChange={() => void onToggle(row.id, !row.checked)}
                               />
                               <span className="min-w-0 flex-1 truncate">{row.label}</span>
                               {row.disabled ? (
-                                <span className="shrink-0 text-xs text-ide-muted">
+                                <span className="shrink-0 text-caption text-ide-muted">
                                   {t('calendar.alwaysShown')}
                                 </span>
                               ) : null}
@@ -181,11 +169,11 @@ export function CalendarVisibilityMenu({ compact = false }: { compact?: boolean 
                   );
                 })}
               </div>
-              <p className="px-2 pb-1 pt-2 text-xs text-ide-muted">{t('calendar.calendarsHint')}</p>
+              <p className="px-2 pb-1 pt-2 text-caption text-ide-muted">{t('calendar.calendarsHint')}</p>
             </>
           )}
         </div>
-      ) : null}
-    </div>
+      </PickerShell>
+    </>
   );
 }

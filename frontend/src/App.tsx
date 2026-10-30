@@ -4,7 +4,6 @@ import { useAuth } from './modules/auth/hooks/useAuth';
 import { showsAppShell } from './pages/PhaseSetupPage/phaseSetupStep';
 import Header from './modules/common/components/Header';
 import BottomNav from './modules/common/components/BottomNav';
-import BuildFooter from './modules/common/components/BuildFooter';
 import AppRoutes from './AppRoutes';
 import { PwaInstallBanner } from './modules/pwa/PwaInstallBanner';
 import { ConflictChoiceHost } from './modules/schedule/components/ConflictChoiceHost';
@@ -27,7 +26,6 @@ const App: React.FC = () => {
             {isAuthenticated && shell ? <PwaInstallBanner /> : null}
             {isAuthenticated && shell ? <BottomNav /> : null}
             {isAuthenticated && shell ? <ConflictChoiceHost /> : null}
-            <BuildFooter />
         </div>
     );
 };

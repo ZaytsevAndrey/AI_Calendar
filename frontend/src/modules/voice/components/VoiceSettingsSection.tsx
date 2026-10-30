@@ -4,8 +4,9 @@ import { useUpdateUserSettingsMutation } from 'api/userSettingsApi';
 import { showErrorToast, showSuccessToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
 import { isAppLanguage, type AppLanguage } from 'i18n';
-import { Input } from 'ui/Input';
-import { Select } from 'ui/Select';
+import { Segmented } from 'ui/Segmented';
+import { Switch } from 'ui/Switch';
+import { SettingRow, SettingsGroup } from 'modules/user-settings/settings/SettingsUi';
 
 export function VoiceSettingsSection({
   speakVoiceReplies,
@@ -71,39 +72,31 @@ export function VoiceSettingsSection({
   };
 
   return (
-    <section className="border-t border-ide-border pt-10">
-      <h2 className="mb-2 text-lg font-semibold text-ide-text">{t('voice.title')}</h2>
-      <p className="mb-4 text-sm text-ide-muted">{t('voice.sectionHint')}</p>
-      <div className="space-y-4">
-        <div>
-          <label htmlFor="voice-language" className="ui-label">
-            {t('voice.communicationLanguage')}
-          </label>
-          <Select
-            id="voice-language"
-            className="mt-1 max-w-xs"
-            value={voiceLang}
-            disabled={busy !== null}
-            onChange={(event) => void changeSpeechLanguage(event.target.value as AppLanguage)}
-          >
-            {(['en', 'uk'] as const).map((code) => (
-              <option key={code} value={code}>
-                {code === 'en' ? t('settings.languageEn') : t('settings.languageUk')}
-              </option>
-            ))}
-          </Select>
-          <p className="mt-1 max-w-md text-xs text-ide-muted">{t('voice.communicationLanguageHint')}</p>
-        </div>
-        <label className="flex items-center gap-2 text-sm text-ide-text">
-          <Input
-            type="checkbox"
-            checked={speakEnabled}
-            disabled={busy !== null}
-            onChange={(event) => void toggleSpeak(event.target.checked)}
-          />
-          {t('voice.speakReplies')}
-        </label>
-      </div>
-    </section>
+    <SettingsGroup>
+      <SettingRow
+        label={t('voice.communicationLanguage')}
+        hint={t('voice.communicationLanguageHint')}
+        stack
+      >
+        <Segmented<AppLanguage>
+          label={t('voice.communicationLanguage')}
+          value={voiceLang}
+          onChange={(next) => void changeSpeechLanguage(next)}
+          options={[
+            { value: 'uk', label: 'Українська' },
+            { value: 'en', label: 'English' },
+          ]}
+        />
+      </SettingRow>
+      <SettingRow label={t('voice.speakReplies')} htmlFor="voice-speak" hint={t('voice.sectionHint')}>
+        <Switch
+          id="voice-speak"
+          label={t('voice.speakReplies')}
+          checked={speakEnabled}
+          disabled={busy !== null}
+          onChange={(next) => void toggleSpeak(next)}
+        />
+      </SettingRow>
+    </SettingsGroup>
   );
 }

@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
-import { CalendarDays, ChevronLeft, ChevronRight, X, type LucideIcon } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, X, type LucideIcon } from 'lucide-react';
 import { dateFnsLocale } from '../i18n/dateLocale';
 import { IconButton } from './IconButton';
-import { Select } from './Select';
 import { fieldClassName } from './fieldChrome';
+import type { ResponsiveSize } from './controlSize';
 import { cx } from './cx';
 import { formatYmd } from './dateRange';
 
@@ -76,100 +76,121 @@ export function CalendarMonth({
 }: CalendarMonthProps) {
   const { t } = useTranslation();
   const dateLocale = dateFnsLocale();
-  const years = useMemo(() => {
-    const current = new Date().getFullYear();
-    const values = new Set(Array.from({ length: 31 }, (_, index) => current - 20 + index));
-    values.add(cursor.getFullYear());
-    return Array.from(values).sort((left, right) => left - right);
-  }, [cursor]);
+  const [picking, setPicking] = useState(false);
   const cells = useMemo(() => monthCells(cursor), [cursor]);
   const today = formatYmd(new Date());
+  const swipeFrom = React.useRef<number | null>(null);
 
   const shiftMonth = (delta: number) => {
     onCursorChange(new Date(cursor.getFullYear(), cursor.getMonth() + delta, 1));
   };
+  const title = `${t(MONTH_KEYS[cursor.getMonth()])} ${cursor.getFullYear()}`;
 
   return (
-    <>
-      <div className="mb-3 flex items-center gap-1.5">
-        <IconButton label={t('calendar.previousMonth')} size="sm" onClick={() => shiftMonth(-1)}>
+    <div
+      onTouchStart={(e) => {
+        swipeFrom.current = e.touches[0]?.clientX ?? null;
+      }}
+      onTouchEnd={(e) => {
+        const from = swipeFrom.current;
+        swipeFrom.current = null;
+        const to = e.changedTouches[0]?.clientX;
+        if (from == null || to == null || picking) return;
+        if (Math.abs(to - from) > 56) shiftMonth(to < from ? 1 : -1);
+      }}
+    >
+      <div className="mb-2 flex items-center gap-1">
+        <IconButton label={t('calendar.previousMonth')} size="sm" variant="ghost" onClick={() => shiftMonth(picking ? -12 : -1)}>
           <ChevronLeft className="h-4 w-4" aria-hidden />
         </IconButton>
-        <Select
-          size="sm"
-          aria-label={t('common.month')}
-          value={cursor.getMonth()}
-          onChange={(event) =>
-            onCursorChange(new Date(cursor.getFullYear(), Number(event.target.value), 1))
-          }
+        <button
+          type="button"
+          aria-expanded={picking}
+          onClick={() => setPicking((v) => !v)}
+          className="flex h-11 min-w-0 flex-1 items-center justify-center gap-1 rounded-control text-heading font-semibold hover:bg-ide-surface md:h-8"
         >
-          {MONTH_KEYS.map((key, index) => (
-            <option key={key} value={index}>
-              {t(key)}
-            </option>
-          ))}
-        </Select>
-        <Select
-          size="sm"
-          aria-label={t('common.year')}
-          className="!w-[5.5rem]"
-          value={cursor.getFullYear()}
-          onChange={(event) =>
-            onCursorChange(new Date(Number(event.target.value), cursor.getMonth(), 1))
-          }
-        >
-          {years.map((year) => (
-            <option key={year} value={year}>
-              {year}
-            </option>
-          ))}
-        </Select>
-        <IconButton label={t('calendar.nextMonth')} size="sm" onClick={() => shiftMonth(1)}>
+          {picking ? cursor.getFullYear() : title}
+          <ChevronDown className={cx('h-4 w-4 text-ide-muted transition', picking && 'rotate-180')} aria-hidden />
+        </button>
+        <IconButton label={t('calendar.nextMonth')} size="sm" variant="ghost" onClick={() => shiftMonth(picking ? 12 : 1)}>
           <ChevronRight className="h-4 w-4" aria-hidden />
         </IconButton>
       </div>
-      <div className="mb-1 grid grid-cols-7 gap-0.5 text-center text-[11px] font-medium text-ide-muted">
-        {WEEKDAY_KEYS.map((key) => (
-          <div key={key} className="py-1">
-            {t(key)}
+      {picking ? (
+        <div className="grid grid-cols-3 gap-1.5" role="listbox" aria-label={t('common.month')}>
+          {MONTH_KEYS.map((key, index) => {
+            const on = index === cursor.getMonth();
+            return (
+              <button
+                key={key}
+                type="button"
+                role="option"
+                aria-selected={on}
+                onClick={() => {
+                  onCursorChange(new Date(cursor.getFullYear(), index, 1));
+                  setPicking(false);
+                }}
+                className={cx(
+                  'h-11 rounded-control text-body transition',
+                  on ? 'bg-ide-accentBlue font-medium text-white' : 'hover:bg-ide-surface',
+                )}
+              >
+                {t(key)}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <>
+          <div className="mb-1 grid grid-cols-7 text-center text-caption text-ide-muted">
+            {WEEKDAY_KEYS.map((key) => (
+              <div key={key} className="py-1">
+                {t(key)}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-0.5">
-        {cells.map((day) => {
-          const ymd = formatYmd(day);
-          const outside = day.getMonth() !== cursor.getMonth();
-          const mark = markDay(ymd);
-          const isToday = ymd === today;
-          return (
-            <button
-              key={ymd}
-              type="button"
-              data-ymd={ymd}
-              disabled={mark.disabled}
-              className={cx(
-                'min-h-[36px] rounded-md text-sm',
-                mark.disabled
-                  ? 'cursor-not-allowed text-ide-muted/40'
-                  : mark.selected
-                  ? 'bg-ide-selection text-ide-text'
-                  : mark.inRange
-                    ? 'bg-ide-selection/35 text-ide-text'
-                    : isToday
-                      ? 'text-ide-link hover:bg-ide-surface'
-                      : outside
-                        ? 'text-ide-muted/60 hover:bg-ide-surface'
-                        : 'text-ide-text hover:bg-ide-surface',
-              )}
-              onMouseEnter={() => onDayEnter?.(ymd)}
-              onClick={() => onDayClick(ymd)}
-            >
-              {format(day, 'd', { locale: dateLocale })}
-            </button>
-          );
-        })}
-      </div>
-    </>
+          <div className="grid grid-cols-7 gap-0.5">
+            {cells.map((day) => {
+              const ymd = formatYmd(day);
+              const outside = day.getMonth() !== cursor.getMonth();
+              const mark = markDay(ymd);
+              const isToday = ymd === today;
+              return (
+                <button
+                  key={ymd}
+                  type="button"
+                  data-ymd={ymd}
+                  disabled={mark.disabled}
+                  aria-pressed={mark.selected || undefined}
+                  aria-label={format(day, 'EEEE, d MMMM yyyy', { locale: dateLocale })}
+                  className={cx(
+                    'relative h-11 rounded-control text-body tabular-nums transition md:h-9',
+                    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ide-link',
+                    mark.disabled
+                      ? 'cursor-not-allowed text-ide-subtle/50'
+                      : mark.selected
+                        ? 'bg-ide-accentBlue font-semibold text-white'
+                        : mark.inRange
+                          ? 'rounded-none bg-ide-selection text-ide-text'
+                          : outside
+                            ? 'text-ide-subtle hover:bg-ide-surface'
+                            : 'text-ide-text hover:bg-ide-surface',
+                    isToday && !mark.selected && 'font-semibold text-ide-link',
+                  )}
+                  onMouseEnter={() => onDayEnter?.(ymd)}
+                  onClick={() => onDayClick(ymd)}
+                >
+                  {format(day, 'd', { locale: dateLocale })}
+                  {isToday && !mark.selected ? (
+                    <span aria-hidden className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-ide-link" />
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -185,6 +206,7 @@ type DateFieldTriggerProps = {
   onToggle: () => void;
   onClear: () => void;
   icon?: LucideIcon;
+  size?: ResponsiveSize;
 };
 
 export function DateFieldTrigger({
@@ -199,6 +221,7 @@ export function DateFieldTrigger({
   onToggle,
   onClear,
   icon: Icon = CalendarDays,
+  size = 'md',
 }: DateFieldTriggerProps) {
   return (
     <div className="relative">
@@ -207,7 +230,7 @@ export function DateFieldTrigger({
         id={id}
         type="button"
         className={fieldClassName({
-          size: 'sm',
+          size,
           error,
           extra: cx('flex w-full items-center gap-2 text-left', hasValue && clearLabel && 'pr-9'),
         })}

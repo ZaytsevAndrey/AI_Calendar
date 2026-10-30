@@ -1,16 +1,20 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { format } from 'date-fns';
 import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatClock } from '../../../utils/formatDate';
 import { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 import { dateFnsOptions } from '../../../i18n/dateLocale';
-import {
-  getTaskMutationStage,
-  MUTATION_STAGE_COLORS,
-} from '../../schedule/taskMutationProgress';
 import { useTaskMutationStagesTick } from '../../schedule/useTaskMutationStage';
-import { getEventColor } from '../hooks/useCalendar';
+import {
+  beginMove,
+  cardMotionStage,
+  cardMotionState,
+  isMotionLocked,
+} from '../motion/cardMotion';
+import { joinKeys, stageProgress } from '../motion/motionMath';
+import { useMotionPresence } from '../motion/useMotionPresence';
+import { getEventColor, eventEndMs } from '../hooks/useCalendar';
 import {
   chipLabel,
   eventEndDate,
@@ -27,21 +31,47 @@ import {
   pointerMinutes,
 } from '../eventDrag';
 import { timedCardBox, timedCardClass } from '../timedCardLayout';
+import { layoutAllDay } from '../allDayLayout';
 import { applyTimeSelection } from '../timeSelection';
+import { phaseColor } from 'theme/phasePalette';
+import { cx } from 'ui/cx';
 
 const PX_PER_HOUR = 48;
-const HANDLE_PX = 4;
+const HANDLE_PX = 6;
+const LONG_PRESS_MS = 420;
+const LONG_PRESS_SLOP_PX = 8;
+/** Long-press on empty time creates a task this long. */
+const TOUCH_CREATE_MIN = 60;
 
-/** Hour digits for a band, sized so they stay inside a short strip and stay quiet in a tall one. */
-function hourMark(label: string, heightPx: number): { text: string; fontSize: number; opacity: number } | null {
-  if (heightPx < 14 || !label) return null;
-  const onTheHour = /^\d{2}:00$/.test(label);
-  const text = onTheHour ? label.slice(0, 2) : label;
-  const fontSize = Math.round(
-    Math.min(onTheHour ? 52 : 18, Math.max(10, (heightPx - 4) * (onTheHour ? 0.62 : 0.4))),
-  );
-  const t = Math.min(1, Math.max(0, (fontSize - 10) / 42));
-  return { text, fontSize, opacity: 0.4 - t * 0.26 };
+/** Fire `onFire` when a touch holds still; a move or lift before that cancels (tap and scroll stay native). */
+function holdToStart(e: React.PointerEvent, onFire: () => void) {
+  const x = e.clientX;
+  const y = e.clientY;
+  const id = e.pointerId;
+  const cleanup = () => {
+    window.clearTimeout(timer);
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', cleanup);
+    window.removeEventListener('pointercancel', cleanup);
+  };
+  const move = (ev: PointerEvent) => {
+    if (ev.pointerId === id && Math.hypot(ev.clientX - x, ev.clientY - y) > LONG_PRESS_SLOP_PX) cleanup();
+  };
+  const timer = window.setTimeout(() => {
+    cleanup();
+    navigator.vibrate?.(12);
+    onFire();
+  }, LONG_PRESS_MS);
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', cleanup);
+  window.addEventListener('pointercancel', cleanup);
+}
+
+/** While a touch drag runs, stop the page from scrolling under the finger. */
+function blockTouchScroll(): () => void {
+  const prevent = (ev: TouchEvent) => ev.preventDefault();
+  document.addEventListener('touchmove', prevent, { passive: false });
+  return () => document.removeEventListener('touchmove', prevent);
 }
 
 type Placement = {
@@ -79,6 +109,8 @@ interface CalendarTimeGridProps {
   isEventCompleted?: (event: GoogleCalendarEvent) => boolean;
   renderDayExtra?: (day: Date) => React.ReactNode;
   renderEventMeta?: (event: GoogleCalendarEvent, completed: boolean) => React.ReactNode;
+  /** Ids an action on this card is known by (event id, its task id); default: the event id. */
+  motionKeys?: (event: GoogleCalendarEvent) => string[];
 }
 
 function eventMinutes(
@@ -115,8 +147,11 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
   isEventCompleted,
   renderDayExtra,
   renderEventMeta,
+  motionKeys,
 }) => {
   const { t } = useTranslation();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const keysFor = (event: GoogleCalendarEvent) => motionKeys?.(event) ?? [event.id];
   const daySpanMin = Math.max(dayEndMin - dayStartMin, 60);
   const gridHeightPx = (daySpanMin / 60) * PX_PER_HOUR;
   const colRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -164,11 +199,14 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
     grabOffsetMin: number,
     originX: number,
     originY: number,
+    touch = false,
   ) => {
     const originCol = colRefs.current[origin.dayIndex];
     if (!originCol || !onChangeRef.current) return;
     let current = origin;
     let moved = false;
+    const releaseScroll = touch ? blockTouchScroll() : null;
+    if (touch) setLive({ eventId: event.id, ...origin });
 
     const readColumns = () =>
       colRefs.current.map((col) => {
@@ -206,6 +244,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
       window.removeEventListener('pointermove', handleMove);
       window.removeEventListener('pointerup', handleUp);
       window.removeEventListener('pointercancel', handleUp);
+      releaseScroll?.();
       setLive(null);
       const unchanged =
         current.dayIndex === origin.dayIndex &&
@@ -221,6 +260,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
       if (!(end > start)) return;
       skipClickRef.current = true;
       const placed = current;
+      const motion = startMoveMotion(event, origin);
       setPending((prev) => ({ ...prev, [event.id]: placed }));
       // Keep pending until events refetch matches (or error / timeout) to avoid snap-back.
       const clearPending = () => {
@@ -237,9 +277,11 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
       const safety = window.setTimeout(clearPending, 12_000);
       void onChangeRef.current(event, start, end)
         .then(() => {
+          motion?.settle('done');
           window.setTimeout(clearPending, 400);
         })
         .catch(() => {
+          motion?.settle('error');
           clearPending();
         })
         .finally(() => {
@@ -252,6 +294,30 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
     window.addEventListener('pointercancel', handleUp);
   };
 
+  /** Leave the card's old self at `origin` while the server works; the new place fills up. */
+  const startMoveMotion = (event: GoogleCalendarEvent, origin: Placement) => {
+    const root = rootRef.current;
+    const originCol = colRefs.current[origin.dayIndex];
+    const card = root?.querySelector<HTMLElement>(`[data-motion-id="${CSS.escape(event.id)}"]`);
+    const cardCol = card?.parentElement;
+    if (!card || !cardCol || !originCol) return null;
+    const cardRect = card.getBoundingClientRect();
+    const fromCol = originCol.getBoundingClientRect();
+    const box = timedCardBox(origin.endMin - origin.startMin);
+    const day = days[origin.dayIndex];
+    return beginMove(
+      keysFor(event),
+      card,
+      {
+        left: cardRect.left - cardCol.getBoundingClientRect().left + fromCol.left,
+        top: fromCol.top + yFor(origin.startMin),
+        width: cardRect.width,
+        height: box.heightPx,
+      },
+      day ? `${clockAt(day, origin.startMin)}–${clockAt(day, origin.endMin)}` : undefined,
+    );
+  };
+
   const startDrag = (
     e: React.PointerEvent,
     event: GoogleCalendarEvent,
@@ -259,13 +325,24 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
     place: Placement,
   ) => {
     if (!onEventTimeChange) return;
-    e.preventDefault();
+    if (isMotionLocked(keysFor(event))) {
+      e.stopPropagation();
+      return;
+    }
     e.stopPropagation();
     const col = colRefs.current[place.dayIndex];
     if (!col) return;
     const rect = col.getBoundingClientRect();
     const pointerMin = pointerMinutes(e.clientY, rect.top, rect.height, dayStartMin, daySpanMin);
     const anchorMin = mode === 'resize-end' ? place.endMin : place.startMin;
+    if (e.pointerType === 'touch') {
+      // Tap opens the preview, a swipe scrolls; holding still picks the event up.
+      if (mode !== 'move') return;
+      const { clientX, clientY } = e;
+      holdToStart(e, () => bindDrag(event, mode, place, pointerMin - anchorMin, clientX, clientY, true));
+      return;
+    }
+    e.preventDefault();
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     bindDrag(
       event,
@@ -278,11 +355,30 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
   };
 
   const startSelection = (e: React.PointerEvent, dayIndex: number) => {
-    if (!onCreateRangeRef.current || e.button !== 0 || e.pointerType === 'touch') return;
+    if (!onCreateRangeRef.current || e.button !== 0) return;
     const target = e.target as HTMLElement | null;
     if (target?.closest('.calendar-chip, button, a, input, textarea')) return;
     const col = colRefs.current[dayIndex];
     if (!col) return;
+    if (e.pointerType === 'touch') {
+      const rect = col.getBoundingClientRect();
+      const at = pointerMinutes(e.clientY, rect.top, rect.height, dayStartMin, daySpanMin);
+      holdToStart(e, () => {
+        const startMin = Math.max(dayStartMin, Math.floor(at / 15) * 15);
+        const endMin = Math.min(dayEndMin, startMin + TOUCH_CREATE_MIN);
+        const day = days[dayIndex];
+        if (!day || !onCreateRangeRef.current || endMin <= startMin) return;
+        skipClickRef.current = true;
+        window.setTimeout(() => {
+          skipClickRef.current = false;
+        }, 400);
+        setDraft({ dayIndex, startMin, endMin });
+        window.setTimeout(() => setDraft(null), 300);
+        const toDate = minutesToDate ?? dateOnDayAtMinutes;
+        onCreateRangeRef.current(day, toDate(day, startMin), toDate(day, endMin));
+      });
+      return;
+    }
 
     const originRect = col.getBoundingClientRect();
     const anchorMin = pointerMinutes(
@@ -388,78 +484,122 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
     return { day, dayIndex, items, lanes };
   });
 
+  const allDayBars = layoutAllDay(allDayEvents, days);
+  const allDayRows = allDayBars.reduce((max, bar) => Math.max(max, bar.row + 1), 0);
+
   const nowMinutes = days.map((day) => nowDisplayMin?.(day) ?? null);
   const gutterNow = nowMinutes.find((value): value is number => value != null) ?? null;
+
+  // Open on the current time (or the start of the day), a third from the top.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const daysKey = days.map((day) => day.toDateString()).join('|');
+  useMotionPresence(rootRef, {
+    resetKey: daysKey,
+    skipIds: live ? new Set([live.eventId]) : undefined,
+  });
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const target = gutterNow != null ? yFor(gutterNow) - el.clientHeight / 3 : 0;
+    el.scrollTop = Math.max(0, target);
+    // Only when the visible days change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daysKey]);
 
   const columns = `56px repeat(${days.length}, minmax(${days.length > 1 ? '88px' : '0px'}, 1fr))`;
   const gridMinWidth = days.length > 1 ? 56 + days.length * 88 : undefined;
 
   return (
     <div
+      ref={rootRef}
       className="flex w-full max-w-full min-h-0 flex-1 flex-col overflow-x-auto overflow-y-hidden overscroll-x-contain [-webkit-overflow-scrolling:touch] lg:min-h-0 lg:flex-1"
       data-testid="calendar-time-grid"
     >
       <div className="flex min-h-0 w-full flex-1 flex-col" style={{ minWidth: gridMinWidth }}>
-      {allDayEvents.length > 0 && (
-        <div
-          className="mb-2 grid gap-1"
-          style={{ gridTemplateColumns: `56px repeat(${days.length}, minmax(0, 1fr))` }}
-        >
-          <div />
-          {days.map((day) => (
-            <div key={day.toDateString()} className="flex flex-col gap-1">
-              {allDayEvents
-                .filter((event) => {
-                  const start = eventStartDate(event);
-                  return start ? sameLocalDay(start, day) : false;
-                })
-                .map((event) => {
-                  const completed = isEventCompleted?.(event) ?? false;
-                  return (
-                    <button
-                      key={event.id}
-                      type="button"
-                      title={tooltipText(event)}
-                      className={`calendar-chip flex w-full items-center gap-0.5 px-1.5 py-1 text-left text-xs font-medium ${
-                        completed ? 'calendar-chip--done' : ''
-                      }`}
-                      style={
-                        { ['--chip-color']: getEventColor(event) } as React.CSSProperties
-                      }
-                      onClick={() => onEditEvent?.(event.id)}
-                    >
-                      <span className="min-w-0 flex-1 truncate">{chipLabel(event)}</span>
-                      {renderEventMeta?.(event, completed)}
-                    </button>
-                  );
-                })}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="grid shrink-0" style={{ gridTemplateColumns: columns, minWidth: gridMinWidth }}>
+      {/* A phone day already has the week strip above; its own header would repeat the date. */}
+      <div
+        className={cx('grid shrink-0', days.length === 1 && 'max-md:hidden')}
+        style={{ gridTemplateColumns: columns, minWidth: gridMinWidth }}
+      >
         <div />
         {days.map((day) => {
           const today = day.toDateString() === new Date().toDateString();
           return (
             <div
               key={`head-${day.toDateString()}`}
-              className={`border-b border-l border-ide-border bg-ide-panel px-1 py-1 text-center text-xs ${
-                today
-                  ? 'font-bold text-ide-link ring-1 ring-inset ring-ide-link'
-                  : 'text-ide-text'
-              }`}
+              aria-current={today ? 'date' : undefined}
+              className="flex items-center justify-center gap-1.5 border-b border-l border-ide-border bg-ide-panel px-1 py-1.5 text-body-sm"
             >
-              {days.length === 1
-                ? format(day, 'EEEE d', dateFnsOptions())
-                : format(day, 'EEE d', dateFnsOptions())}
+              <span className={cx('capitalize', today ? 'font-medium text-ide-link' : 'text-ide-muted')}>
+                {format(day, days.length === 1 ? 'EEEE' : 'EEE', dateFnsOptions())}
+              </span>
+              <span
+                className={cx(
+                  'inline-flex h-7 min-w-7 items-center justify-center rounded-full px-1 font-semibold tabular-nums',
+                  today ? 'bg-ide-accentBlue text-white' : 'text-ide-text',
+                )}
+              >
+                {format(day, 'd', dateFnsOptions())}
+              </span>
               {renderDayExtra?.(day)}
             </div>
           );
         })}
       </div>
-      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto" data-testid="calendar-hour-scroll">
+      {allDayBars.length > 0 && (
+        <div
+          className="grid shrink-0 gap-y-1 border-b border-ide-border py-1"
+          style={{ gridTemplateColumns: columns, minWidth: gridMinWidth }}
+        >
+          <div
+            className="px-1.5 text-caption leading-tight text-ide-muted"
+            style={{ gridColumn: 1, gridRow: `1 / span ${allDayRows}` }}
+          >
+            {t('common.allDay')}
+          </div>
+          {allDayBars.map(({ event, from, to, row }) => {
+            const completed = isEventCompleted?.(event) ?? false;
+            return (
+              <button
+                key={event.id}
+                type="button"
+                data-motion-id={event.id}
+                data-motion-keys={joinKeys(keysFor(event))}
+                data-motion={cardMotionState(keysFor(event)) ?? undefined}
+                title={tooltipText(event)}
+                className={cx(
+                  'calendar-chip calendar-chip--line mx-0.5 min-w-0 text-left font-medium',
+                  completed && 'calendar-chip--done',
+                  !event.isAppGenerated && 'calendar-chip--external',
+                )}
+                style={
+                  {
+                    '--chip-color': getEventColor(event),
+                    gridColumn: `${from + 2} / ${to + 3}`,
+                    gridRow: row + 1,
+                  } as React.CSSProperties
+                }
+                onClick={() => onEditEvent?.(event.id)}
+              >
+                {completed ? (
+                  <span className="calendar-chip__check" aria-hidden>
+                    ✓
+                  </span>
+                ) : null}
+                <span className="min-w-0 flex-1 truncate">{chipLabel(event)}</span>
+                {renderEventMeta?.(event, completed)}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+        data-testid="calendar-hour-scroll"
+        data-motion-scroll
+      >
       <div className="grid" style={{ gridTemplateColumns: columns, minWidth: gridMinWidth }}>
         <div className="relative border-r border-ide-border" style={{ height: gridHeightPx }}>
           {hourBands.map((band, index) => {
@@ -472,32 +612,31 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                 style={{
                   top,
                   height,
-                  backgroundColor: index % 2 === 1 ? 'rgba(0,0,0,0.16)' : undefined,
                 }}
               >
                 {days.length === 1 ? (
                   <button
                     type="button"
-                    className="absolute left-0 right-0 top-0 px-1 text-left text-[0.65rem] leading-none text-ide-muted"
+                    className="absolute left-0 right-0 top-0.5 px-1.5 text-left text-caption leading-none tabular-nums text-ide-muted"
                     onClick={() => onCreateForDate?.(days[0])}
                   >
                     {band.label}
                   </button>
                 ) : (
-                  <span className="absolute left-1 top-0 text-[0.65rem] leading-none text-ide-muted">
+                  <span className="absolute left-1.5 top-0.5 text-caption leading-none tabular-nums text-ide-muted">
                     {band.label}
                   </span>
                 )}
               </div>
             );
           })}
-          {days.length === 1 && gutterNow != null && now ? (
+          {gutterNow != null && now ? (
             <div
-              className="pointer-events-none absolute inset-x-0 z-[3] h-4 -translate-y-1/2"
+              className="pointer-events-none absolute inset-x-0 z-[3] h-5 -translate-y-1/2"
               style={{ top: yFor(gutterNow) }}
               aria-hidden
             >
-              <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[0.65rem] font-medium leading-none text-ide-error">
+              <span className="absolute right-1 top-1/2 -translate-y-1/2 rounded-[4px] bg-ide-error px-1 py-0.5 text-caption font-semibold leading-none tabular-nums text-white">
                 {formatClock(now)}
               </span>
             </div>
@@ -520,50 +659,33 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
             {hourBands.map((band, index) => {
               const top = yFor(band.minutes);
               const height = ((band.durationMin ?? 60) / daySpanMin) * gridHeightPx;
-              const mark = hourMark(band.label, height);
               return (
                 <div
                   key={band.label}
-                  className="absolute left-0 right-0 overflow-hidden border-t border-ide-border/80"
+                  className="absolute left-0 right-0 overflow-hidden border-t border-ide-border/70"
                   style={{
                     top,
                     height,
-                    backgroundColor: index % 2 === 1 ? 'rgba(0,0,0,0.16)' : undefined,
-                    backgroundImage: band.color
-                      ? `linear-gradient(${band.color}1c, ${band.color}1c)`
-                      : undefined,
+                    backgroundColor: band.color ? phaseColor(band.color, 0.06) : undefined,
                   }}
                   onClick={() => {
                     if (skipClickRef.current) return;
                     onCreateForDate?.(day);
                   }}
                 >
-                  {mark ? (
-                    <span
-                      aria-hidden
-                      className="pointer-events-none absolute inset-0 flex select-none items-center justify-center font-medium tabular-nums tracking-tight text-ide-text blur-[1px]"
-                      style={{ fontSize: mark.fontSize, opacity: mark.opacity }}
-                    >
-                      {mark.text}
-                    </span>
-                  ) : null}
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0 bg-ide-bg/40"
-                  />
                 </div>
               );
             })}
             {draft && draft.dayIndex === dayIndex ? (
               <div
                 data-testid="calendar-time-selection"
-                className="pointer-events-none absolute left-0.5 right-0.5 z-[1] overflow-hidden rounded border border-ide-link bg-ide-link/25"
+                className="pointer-events-none absolute left-0.5 right-0.5 z-[1] overflow-hidden rounded-chip border border-ide-link bg-ide-link/20"
                 style={{
                   top: yFor(draft.startMin),
                   height: Math.max(2, yFor(draft.endMin) - yFor(draft.startMin)),
                 }}
               >
-                <span className="block truncate px-1 pt-0.5 text-[10px] font-medium leading-tight text-ide-text">
+                <span className="block truncate px-1.5 pt-0.5 text-caption font-medium tabular-nums text-ide-text">
                   {`${clockAt(day, draft.startMin)}–${clockAt(day, draft.endMin)}`}
                 </span>
               </div>
@@ -574,21 +696,32 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
               const box = timedCardBox(place.endMin - place.startMin);
               const micro = box.mode === 'micro';
               const width = 100 / lane.laneCount;
-              const mutationStage =
-                getTaskMutationStage(event.id) ??
-                getTaskMutationStage(event.recurringEventId);
+              const keys = keysFor(event);
+              const motionState = cardMotionState(keys);
+              const motionStage = motionState ? cardMotionStage(keys) : null;
+              const locked = isMotionLocked(keys);
               const completed = isEventCompleted?.(event) ?? false;
-              const chipColor = mutationStage
-                ? MUTATION_STAGE_COLORS[mutationStage]
-                : getEventColor(event);
+              const endMs = eventEndMs(event);
+              const past = !!now && endMs != null && endMs <= now.getTime() && !live;
+              const timeText = `${clockAt(day, place.startMin)}–${clockAt(day, place.endMin)}`;
+              const chipColor = getEventColor(event);
               return (
                 <div
                   key={event.id}
                   data-testid={`calendar-event-${event.id}`}
                   data-card-mode={box.mode}
-                  className={`calendar-chip calendar-chip--stacked group absolute z-[2] flex flex-col ${timedCardClass(box.mode)}${
-                    mutationStage ? ` calendar-event-stage-${mutationStage}` : ''
-                  }${completed ? ' calendar-chip--done' : ''}`}
+                  data-motion-id={event.id}
+                  data-motion-keys={joinKeys(keys)}
+                  data-motion={motionState ?? undefined}
+                  data-motion-stage={motionStage ?? undefined}
+                  aria-busy={motionState ? true : undefined}
+                  className={cx(
+                    'calendar-chip group absolute z-[2] flex flex-col',
+                    box.mode === 'stacked' ? 'calendar-chip--stacked' : timedCardClass(box.mode),
+                    completed && 'calendar-chip--done',
+                    past && !motionState && 'calendar-chip--past',
+                    !event.isAppGenerated && 'calendar-chip--external',
+                  )}
                   style={
                     {
                       top,
@@ -598,12 +731,15 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                       '--chip-color': chipColor,
                       '--chip-slot': `${box.heightPx}px`,
                       '--chip-open': `${box.openPx}px`,
-                      touchAction: 'none',
+                      '--chip-lines': Math.max(1, Math.floor((box.heightPx - 26) / 16)),
+                      '--motion-p': stageProgress(motionStage),
+                      touchAction: live?.eventId === event.id ? 'none' : 'pan-y',
                     } as React.CSSProperties
                   }
-                  title={tooltipText(event)}
+                  // While an action runs, the tooltip says which server step it is on.
+                  title={motionStage ? t(`tasks.toast.progress.${motionStage}`) : tooltipText(event)}
                 >
-                  {onEventTimeChange ? (
+                  {onEventTimeChange && !locked ? (
                     <div
                       onPointerDown={(e) => startDrag(e, event, 'resize-start', place)}
                       className="calendar-chip__handle calendar-chip__handle--start cursor-ns-resize"
@@ -614,7 +750,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                     role="button"
                     tabIndex={0}
                     className={`calendar-chip__body relative flex min-h-0 flex-1 flex-col items-stretch ${
-                      onEventTimeChange ? 'cursor-grab' : 'cursor-pointer'
+                      !onEventTimeChange ? 'cursor-pointer' : locked ? 'cursor-not-allowed' : 'cursor-grab'
                     }`}
                     onPointerDown={(e) => startDrag(e, event, 'move', place)}
                     onClick={(e) => {
@@ -629,22 +765,17 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                       }
                     }}
                   >
-                    {renderEventMeta ? (
-                      <span className="calendar-chip__lead order-1 min-w-0 max-w-full pr-3">
-                        {renderEventMeta(event, completed)}
-                      </span>
-                    ) : completed ? (
-                      <span className="calendar-chip__badge order-1">
-                        {t('calendar.completedBadge')}
-                      </span>
-                    ) : null}
-                    <span className="calendar-chip__title order-2 min-w-0">
+                    <span className="calendar-chip__title pr-4">
                       {completed ? (
                         <span className="calendar-chip__check" aria-hidden>
                           ✓
                         </span>
                       ) : null}
                       {chipLabel(event)}
+                    </span>
+                    <span className="calendar-chip__sub">
+                      {renderEventMeta ? renderEventMeta(event, completed) : null}
+                      <span className="calendar-chip__time">{timeText}</span>
                     </span>
                     {onDeleteEvent ? (
                       <button
@@ -661,7 +792,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                       </button>
                     ) : null}
                   </div>
-                  {onEventTimeChange ? (
+                  {onEventTimeChange && !locked ? (
                     <div
                       onPointerDown={(e) => startDrag(e, event, 'resize-end', place)}
                       className="calendar-chip__handle calendar-chip__handle--end cursor-ns-resize"
@@ -679,13 +810,7 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                 className="pointer-events-none absolute inset-x-0 z-[3] h-0.5 -translate-y-1/2 bg-ide-error"
                 style={{ top: yFor(nowMinutes[dayIndex] as number) }}
               >
-                {days.length > 1 && now ? (
-                  <span className="absolute left-1 top-1/2 -translate-y-1/2 rounded-sm bg-ide-error px-1 py-0.5 text-[0.65rem] font-medium leading-none text-white">
-                    {formatClock(now)}
-                  </span>
-                ) : (
-                  <span className="absolute left-0 top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ide-error" />
-                )}
+                <span className="absolute left-0 top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ide-error" />
               </div>
             ) : null}
           </div>

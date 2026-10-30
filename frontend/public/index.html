@@ -5,6 +5,9 @@
     <script>
         try {
             var storedTheme = localStorage.getItem('luefy.theme');
+            if (storedTheme !== 'light' && storedTheme !== 'dark') {
+                storedTheme = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+            }
             if (storedTheme === 'light' || storedTheme === 'dark') {
                 document.documentElement.setAttribute('data-theme', storedTheme);
             }
@@ -12,7 +15,7 @@
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="robots" content="noindex, nofollow" />
-    <meta name="theme-color" content="#2B2B2B" />
+    <meta name="theme-color" content="#0E121A" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

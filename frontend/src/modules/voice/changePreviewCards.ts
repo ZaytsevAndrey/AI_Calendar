@@ -49,10 +49,11 @@ const PLAN_SOURCE_KIND: Record<DayPlanProposalItem['source'], ChangePreviewKind>
   unscheduled: 'window',
 };
 
-const DEFAULT_COLOR = '#039be5';
-const DELETE_COLOR = '#e67c73';
-const COMPLETE_COLOR = '#33b679';
-const SKIP_COLOR = '#f6c026';
+// Card accents follow the semantic tokens: neutral change, delete, done, skip.
+const DEFAULT_COLOR = 'rgb(var(--ide-link))';
+const DELETE_COLOR = 'rgb(var(--ide-error))';
+const COMPLETE_COLOR = 'rgb(var(--ide-accent))';
+const SKIP_COLOR = 'rgb(var(--ide-warn))';
 
 const KIND_LABEL_KEY: Record<ChangePreviewKind, string> = {
   create: 'voice.previewCreate',

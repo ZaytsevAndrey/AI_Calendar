@@ -2,6 +2,7 @@ import React from 'react';
 import { RotateCcw } from 'lucide-react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import { useTranslation } from 'react-i18next';
 import { RootState } from '../../../store';
 import { useCheckRequiredSettingsQuery } from 'api/userSettingsApi';
 
@@ -10,6 +11,7 @@ type ProtectedRouteProps = {
 };
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+    const { t } = useTranslation();
     const location = useLocation();
     const authState = useSelector((state: RootState) => state.auth);
     const isAuthenticated = !!authState?.accessToken;
@@ -26,7 +28,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         return (
             <div className="page-shell-fill">
                 <div className="flex flex-1 items-center justify-center text-sm text-ide-muted">
-                    Loading…
+                    {t('common.loadingPage')}
                 </div>
             </div>
         );
@@ -37,11 +39,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
             <div className="page-shell-fill">
                 <div className="mx-auto flex max-w-md flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
                     <p className="text-sm text-ide-muted">
-                        Could not reach the API. The production instance may still be waking up.
+                        {t('common.apiUnreachable')}
                     </p>
                     <button type="button" className="ui-btn-primary" onClick={() => void refetch()}>
                         <RotateCcw className="h-4 w-4" aria-hidden />
-                        Retry
+                        {t('common.retry')}
                     </button>
                 </div>
             </div>
@@ -51,7 +53,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     const requiredFilled = data ? data.requiredFilled : false;
     const hasPhases = data ? data.hasPhases : true;
 
-    if (!requiredFilled && location.pathname !== '/settings') {
+    if (!requiredFilled && !location.pathname.startsWith('/settings')) {
         return <Navigate to="/settings" replace />;
     }
 

@@ -1,9 +1,11 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus } from 'lucide-react';
+import { Button } from 'ui/Button';
 import { TaskDTO } from '../../../api/tasks.api';
 import { groupTasksBySeriesGroup } from '../utils/groupTasksBySeriesGroup';
 import EventItem from './EventItem';
+import { ListSkeleton } from 'ui/ListSkeleton';
 import SeriesGroupRow from './SeriesGroupRow';
 
 interface EventListProps {
@@ -40,17 +42,16 @@ const EventList: React.FC<EventListProps> = ({
   const { t } = useTranslation();
 
   if (isLoading) {
-    return <div className="loading">{t('tasks.list.loading')}</div>;
+    return <ListSkeleton label={t('tasks.list.loading')} />;
   }
 
   if (events.length === 0) {
     return (
-      <div className="empty-list">
-        <p>{emptyTitle || t('tasks.list.empty')}</p>
-        <button type="button" onClick={onCreate} className="ui-btn-primary mt-4">
-          <Plus className="h-4 w-4" aria-hidden />
+      <div className="rounded-control border border-dashed border-ide-border px-4 py-10 text-center">
+        <p className="text-body-sm text-ide-muted">{emptyTitle || t('tasks.list.empty')}</p>
+        <Button variant="secondary" icon={Plus} onClick={onCreate} className="mt-4">
           {t('tasks.list.createTask')}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -58,7 +59,7 @@ const EventList: React.FC<EventListProps> = ({
   const entries = groupTasksBySeriesGroup(events);
 
   return (
-    <div className="task-list space-y-4">
+    <div className="task-list flex flex-col gap-2">
       {entries.map((entry) =>
         entry.kind === 'group' ? (
           <SeriesGroupRow

@@ -61,6 +61,7 @@ describePg('versioned migrations (Postgres)', () => {
       'CreateRequestIdempotency1761780000000',
       'GoogleWriteQueueUniqueness1761790000000',
       'AdminConsoleSchema1761800000000',
+      'PhasePaletteColors1761810000000',
     ]);
     expect(await drift(ds)).toEqual([]);
     expect(await ds.runMigrations()).toEqual([]);

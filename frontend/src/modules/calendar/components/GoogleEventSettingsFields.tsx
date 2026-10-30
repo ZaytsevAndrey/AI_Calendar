@@ -106,7 +106,6 @@ export function GoogleEventSettingsFields({
           </label>
           <Select
             id="google-event-visibility"
-            size="sm"
             value={value.visibility}
             onChange={(e) => patch({ visibility: e.target.value })}
           >
@@ -123,7 +122,6 @@ export function GoogleEventSettingsFields({
           </label>
           <Select
             id="google-event-show-as"
-            size="sm"
             value={value.transparency || 'opaque'}
             onChange={(e) => patch({ transparency: e.target.value })}
           >
@@ -149,7 +147,6 @@ export function GoogleEventSettingsFields({
           ? value.reminders.map((rem, idx) => (
               <div key={idx} className="mb-2 flex flex-wrap items-center gap-2">
                 <Select
-                  size="sm"
                   className="w-auto min-w-[100px]"
                   value={rem.method}
                   onChange={(e) =>
@@ -168,7 +165,6 @@ export function GoogleEventSettingsFields({
                 <Input
                   type="number"
                   min={0}
-                  size="sm"
                   className="w-24"
                   value={rem.minutes}
                   onChange={(e) =>

@@ -262,6 +262,21 @@ describe('Settings and phases API e2e', () => {
     expect([200, 201]).toContain(overlap.statusCode);
   });
 
+  it('A-PH-018 create without type is an ordinary phase; an unknown type is 400', async () => {
+    const { token } = await seedOnboardedUser(ctx.app);
+    const created = await api(ctx.app, 'POST', '/phases', {
+      token,
+      payload: { name: 'No type', color: '#e74c3c', startTime: '13:00', endTime: '14:00' },
+    });
+    expect([200, 201]).toContain(created.statusCode);
+    expect((created.json() as { type: string }).type).toBe('time_phase');
+    const bad = await api(ctx.app, 'POST', '/phases', {
+      token,
+      payload: { name: 'Bad', color: '#e74c3c', startTime: '15:00', endTime: '16:00', type: 'lunch' },
+    });
+    expect(bad.statusCode).toBe(400);
+  });
+
   it('A-PH-012 / A-PH-017 empty and duplicate weekDays', async () => {
     const { token } = await seedOnboardedUser(ctx.app);
     const created = await createTimePhase(ctx.app, token, {

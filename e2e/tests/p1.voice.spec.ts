@@ -195,7 +195,7 @@ test.describe('P1 voice UI', () => {
     const sheet = page.getByRole('dialog');
     await expect(sheet.getByText(/Listening/)).toBeVisible();
     await expect(sheet.getByRole('img', { name: 'Microphone level' })).toBeVisible();
-    await sheet.getByRole('button', { name: 'Done' }).click();
+    await sheet.getByRole('button', { name: 'Done', exact: true }).click();
     await expect(sheet.getByTestId('change-preview').getByText('Equalizer task')).toBeVisible();
     await sheet.getByRole('button', { name: 'Apply' }).click();
     await expectMutationProgressToast(page, 'Equalizer task');
@@ -252,7 +252,7 @@ test.describe('P1 voice UI', () => {
     const sheet = page.getByRole('dialog');
     await expect(sheet.getByText(/Listening/)).toBeVisible();
     await turnMicOff(page);
-    await expect(sheet.getByRole('button', { name: 'Done' })).toHaveCount(0);
+    await expect(sheet.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0);
     await typeOnce(page, 'create from keyboard');
     await expect(sheet.getByTestId('change-preview').getByText('Mic off typed')).toBeVisible();
     await sheet.getByRole('button', { name: 'Apply' }).click();
@@ -261,8 +261,8 @@ test.describe('P1 voice UI', () => {
   });
 
   test('U-VOI-010 Speak replies toggle is in Settings', async ({ page, auth }) => {
-    await openAs(page, auth.onboarded, '/settings');
-    const speak = page.getByRole('checkbox', { name: 'Speak replies' });
+    await openAs(page, auth.onboarded, '/settings/assistant');
+    const speak = page.getByRole('switch', { name: 'Speak replies' });
     await expect(speak).toBeVisible();
     // Shared e2e user may already be off from a prior run — normalize via UI.
     if (!(await speak.isChecked())) {

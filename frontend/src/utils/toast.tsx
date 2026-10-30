@@ -56,3 +56,48 @@ export const showInfoToast = (payload: ToastPayload, options?: ToastOptions) => 
 export const showWarningToast = (payload: ToastPayload, options?: ToastOptions) => {
   show('warning', payload, options);
 };
+
+function UndoBody({ title, undoLabel, onUndo }: { title: string; undoLabel: string; onUndo: () => void }) {
+  return (
+    <div className="app-toast-undo-row">
+      <p className="app-toast-title min-w-0 flex-1">{title}</p>
+      <button type="button" className="app-toast-undo" onClick={onUndo}>
+        {undoLabel}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Show «Deleted · Undo» and run `commit` when the toast closes, unless the person pressed Undo.
+ * The caller hides the item right away and shows it again from `onUndo`.
+ */
+export function runWithUndo(options: {
+  title: string;
+  undoLabel: string;
+  commit: () => void | Promise<void>;
+  onUndo?: () => void;
+  delayMs?: number;
+}) {
+  let undone = false;
+  const id = toast.info(
+    <UndoBody
+      title={options.title}
+      undoLabel={options.undoLabel}
+      onUndo={() => {
+        undone = true;
+        options.onUndo?.();
+        toast.dismiss(id);
+      }}
+    />,
+    {
+      ...defaultOptions,
+      autoClose: options.delayMs ?? 5000,
+      closeOnClick: false,
+      draggable: false,
+      onClose: () => {
+        if (!undone) void options.commit();
+      },
+    },
+  );
+}

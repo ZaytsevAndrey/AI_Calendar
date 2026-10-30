@@ -14,10 +14,3 @@ export function overdueTone(days: number): OverdueTone {
   if (days < 7) return 'mid';
   return 'strong';
 }
-
-export const OVERDUE_ROW_CLASS: Record<OverdueTone, string> = {
-  none: 'border-ide-border bg-ide-surface/60',
-  mild: 'border-red-400/45 bg-red-500/[0.06]',
-  mid: 'border-red-500/70 bg-red-500/10',
-  strong: 'border-red-600 bg-red-500/20',
-};

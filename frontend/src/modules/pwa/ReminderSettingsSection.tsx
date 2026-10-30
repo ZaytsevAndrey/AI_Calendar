@@ -5,14 +5,22 @@ import { showErrorToast, showSuccessToast } from 'utils/toast';
 import { extractApiErrorMessage } from 'utils/extractApiErrorMessage';
 import { Bell } from 'lucide-react';
 import { Button } from 'ui/Button';
-import { Input } from 'ui/Input';
+import { Switch } from 'ui/Switch';
+import { SettingRow, SettingsGroup } from 'modules/user-settings/settings/SettingsUi';
 import {
   browserHasPushSubscription,
   disableBrowserReminders,
   enableBrowserReminders,
 } from './browserReminders';
 
-export function ReminderSettingsSection({ remindersEnabled }: { remindersEnabled: boolean }) {
+export function ReminderSettingsSection({
+  remindersEnabled,
+  children,
+}: {
+  remindersEnabled: boolean;
+  /** More rows in the same card (default reminder time). */
+  children?: React.ReactNode;
+}) {
   const { t } = useTranslation();
   const [updateUserSettings] = useUpdateUserSettingsMutation();
   const [enabled, setEnabled] = useState(remindersEnabled);
@@ -85,37 +93,24 @@ export function ReminderSettingsSection({ remindersEnabled }: { remindersEnabled
   };
 
   return (
-    <section className="border-t border-ide-border pt-10">
-      <h2 className="mb-2 text-lg font-semibold text-ide-text">{t('reminders.title')}</h2>
-      <p className="mb-4 text-sm text-ide-muted">{t('reminders.hint')}</p>
-
-      <label className="flex items-center gap-2 text-sm text-ide-text">
-        <Input
-          type="checkbox"
+    <SettingsGroup>
+      <SettingRow label={t('reminders.enable')} htmlFor="reminders-enabled" hint={t('reminders.hint')}>
+        <Switch
+          id="reminders-enabled"
           checked={enabled}
           disabled={busy}
-          onChange={(event) => {
-            if (event.target.checked) void turnOn();
-            else void turnOff();
-          }}
+          onChange={(next) => (next ? void turnOn() : void turnOff())}
         />
-        {t('reminders.enable')}
-      </label>
-
+      </SettingRow>
       {enabled && !browserReady ? (
-        <Button
-          type="button"
-          variant="secondary"
-          className="mt-4"
-          disabled={busy}
-          onClick={() => void turnOn()}
-          icon={Bell}
-        >
-          {t('reminders.allowBrowser')}
-        </Button>
+        <SettingRow label={t('reminders.allowBrowser')}>
+          <Button type="button" variant="secondary" disabled={busy} onClick={() => void turnOn()} icon={Bell}>
+            {t('reminders.allowBrowser')}
+          </Button>
+        </SettingRow>
       ) : null}
-
-      {message ? <p className="mt-3 text-sm text-ide-error">{message}</p> : null}
-    </section>
+      {children}
+      {message ? <p className="px-4 py-3 text-body-sm text-ide-error md:px-5">{message}</p> : null}
+    </SettingsGroup>
   );
 }

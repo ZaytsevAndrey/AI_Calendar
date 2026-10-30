@@ -217,7 +217,7 @@ test.describe('P0 calendar UI', () => {
     await openAs(page, auth.onboarded);
     const nowCard = stripBlock(page, nowName);
     await expect(nowCard).toBeVisible();
-    await expect(nowCard.getByRole('button', { name: 'Done' })).toHaveCount(1);
+    await expect(nowCard.getByRole('button', { name: 'Done', exact: true })).toHaveCount(1);
 
     const nextCard = stripBlock(page, nextName);
     await expect(nextCard).toBeVisible();
@@ -249,11 +249,7 @@ test.describe('P0 calendar UI', () => {
     await waitForScheduleJob(request, auth.onboarded.access_token, created.body?.jobId);
 
     await openAs(page, auth.onboarded);
-    const inbox = page
-      .locator('div')
-      .filter({ has: page.getByText('Unscheduled', { exact: true }) })
-      .filter({ hasText: name })
-      .first();
+    const inbox = page.locator('#today-later').filter({ hasText: name });
     await expect(inbox).toBeVisible({ timeout: 15_000 });
   });
 
@@ -268,11 +264,7 @@ test.describe('P0 calendar UI', () => {
 
     await openAs(page, auth.onboarded);
     await expect(page.getByLabel('Tasks waiting for a time slot')).toHaveCount(0);
-    const inbox = page
-      .locator('div')
-      .filter({ has: page.getByText('Unscheduled', { exact: true }) })
-      .filter({ hasText: name })
-      .first();
+    const inbox = page.locator('#today-later').filter({ hasText: name });
     await expect(inbox).toBeVisible({ timeout: 15_000 });
   });
 
@@ -330,12 +322,12 @@ test.describe('P0 calendar UI', () => {
     await openAs(page, auth.onboarded);
     const recurringBlock = stripBlock(page, recurringName);
     await expect(recurringBlock).toBeVisible();
-    await expect(recurringBlock.getByRole('button', { name: 'Done' })).toHaveCount(0);
+    await expect(recurringBlock.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0);
 
     const externalBlock = stripBlock(page, 'External dentist');
     await expect(externalBlock).toBeVisible();
-    await expect(externalBlock.getByRole('button', { name: 'Done' })).toHaveCount(0);
-    await expect(externalBlock.getByRole('button', { name: 'Skip' })).toHaveCount(0);
+    await expect(externalBlock.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0);
+    await expect(externalBlock.getByRole('button', { name: 'Skip', exact: true })).toHaveCount(0);
   });
 
   test('U-CAL-019 Now Skip drops a movable timed slot without completing', async ({
@@ -382,7 +374,7 @@ test.describe('P0 calendar UI', () => {
       const skipCard = skippableStripCard(page, name);
       await expect(skipCard).toBeVisible({ timeout: 15_000 });
       await skipCard.hover();
-      await skipCard.getByRole('button', { name: 'Skip' }).click();
+      await skipCard.getByRole('button', { name: 'Skip', exact: true }).click();
       await expectMutationProgressToast(page, name);
       await expect(skipCard).toHaveCount(0);
 
@@ -429,8 +421,8 @@ test.describe('P0 calendar UI', () => {
       await openAs(page, auth.onboarded);
       const nowCard = skippableStripCard(page, name);
       await expect(nowCard).toBeVisible({ timeout: 15_000 });
-      await expect(nowCard.getByRole('button', { name: 'Done' })).toHaveCount(0);
-      await expect(nowCard.getByRole('button', { name: 'Skip' })).toHaveCount(1);
+      await expect(nowCard.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0);
+      await expect(nowCard.getByRole('button', { name: 'Skip', exact: true })).toHaveCount(1);
     } finally {
       await restoreAwake();
     }

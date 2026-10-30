@@ -48,7 +48,7 @@ export function TaskTypeInfo({ type, onHide }: Props) {
   return (
     <section
       aria-label={t(`tasks.typeInfo.${type}.title`)}
-      className="relative rounded-md border-l-2 border-ide-link bg-ide-link/5 py-2 pl-3 pr-9 text-xs leading-snug text-ide-muted"
+      className="relative rounded-control bg-ide-surface py-3 pl-4 pr-11 text-body-sm leading-snug text-ide-muted"
     >
       <p className="flex items-center gap-1.5 font-medium text-ide-text">
         <Info className="h-3.5 w-3.5 shrink-0 text-ide-link" aria-hidden />
@@ -59,24 +59,16 @@ export function TaskTypeInfo({ type, onHide }: Props) {
         <ul className="mt-1 space-y-0.5">
           {(points as string[]).map((point) => (
             <li key={point} className="flex gap-1.5">
-              <span className="mt-[0.45rem] h-1 w-1 shrink-0 rounded-full bg-ide-muted" aria-hidden />
+              <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-ide-muted" aria-hidden />
               <span>{point}</span>
             </li>
           ))}
         </ul>
       ) : null}
-      <label className="mt-1.5 inline-flex cursor-pointer items-center gap-1.5 text-[11px]">
-        <Input
-          type="checkbox"
-          checked={dismissed.includes(type)}
-          onChange={(e) => toggleDismissed(e.target.checked)}
-        />
-        {t('tasks.typeInfo.dontShowAgain')}
-      </label>
       <IconButton
         label={t('tasks.typeInfo.hide')}
         size="sm"
-        className="absolute right-0.5 top-0.5"
+        className="absolute right-1 top-1"
         onClick={onHide}
       >
         <X className="h-3.5 w-3.5" aria-hidden />

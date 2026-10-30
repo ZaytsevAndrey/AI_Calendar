@@ -1,9 +1,13 @@
 /** Space-separated RGB channels, so Tailwind opacity modifiers can use `rgb(var(--ide-*) / <alpha>)`. */
 export type ThemeId = 'dark' | 'light';
+/** What the person picked. `system` follows the device. */
+export type ThemePreference = ThemeId | 'system';
 
 export const THEME_IDS: readonly ThemeId[] = ['dark', 'light'];
 
-export const DEFAULT_THEME: ThemeId = 'dark';
+export const THEME_PREFERENCES: readonly ThemePreference[] = ['system', 'light', 'dark'];
+
+export const DEFAULT_THEME_PREFERENCE: ThemePreference = 'system';
 
 export const THEME_STORAGE_KEY = 'luefy.theme';
 
@@ -25,6 +29,12 @@ export const THEME_COLOR_NAMES = [
     'warn',
     'selection',
     'input',
+    'subtle',
+    'overlay',
+    'successTint',
+    'warnTint',
+    'errorTint',
+    'errorFill',
 ] as const;
 
 export type ThemeColorName = (typeof THEME_COLOR_NAMES)[number];
@@ -42,58 +52,74 @@ export type ThemeChrome = {
  */
 export const THEME_COLORS: Record<ThemeId, ThemePalette> = {
     dark: {
-        bg: '#2B2B2B',
-        panel: '#3C3F41',
-        surface: '#323232',
-        elevated: '#45494A',
-        border: '#515151',
-        line: '#313335',
-        text: '#A9B7C6',
-        muted: '#808080',
-        dim: '#6A8759',
-        link: '#589DF6',
-        accent: '#4E9F4E',
-        accentBlue: '#287BDE',
-        keyword: '#CC7832',
-        error: '#BC3F3C',
-        warn: '#BBB529',
-        selection: '#214283',
-        input: '#45494A',
+        bg: '#0E121A',
+        panel: '#151A24',
+        surface: '#1A2030',
+        elevated: '#232A3A',
+        border: '#2C3446',
+        line: '#202736',
+        text: '#E7EBF3',
+        muted: '#9AA5B8',
+        dim: '#3DCB8A',
+        link: '#4C8DFF',
+        accent: '#3DCB8A',
+        accentBlue: '#2F6BF0',
+        keyword: '#F5B544',
+        error: '#FF6B66',
+        warn: '#F5B544',
+        selection: '#18264A',
+        input: '#0F141D',
+        subtle: '#6E7A90',
+        overlay: '#232A3A',
+        successTint: '#16302A',
+        warnTint: '#33291A',
+        errorTint: '#3A1D22',
+        errorFill: '#C93338',
     },
     light: {
-        bg: '#F4F5F7',
+        bg: '#F6F7FA',
         panel: '#FFFFFF',
-        surface: '#EEF1F4',
-        elevated: '#E2E6EB',
-        border: '#D0D5DC',
-        line: '#E4E7EC',
-        text: '#1C2128',
-        muted: '#5C6770',
-        dim: '#3E6B35',
-        link: '#1565C0',
-        accent: '#2E7D32',
-        accentBlue: '#1565C0',
-        keyword: '#A34D00',
-        error: '#B42318',
-        warn: '#8A6500',
-        selection: '#D6E4F7',
+        surface: '#F0F2F6',
+        elevated: '#E6EAF0',
+        border: '#DCE1EA',
+        line: '#E8EBF0',
+        text: '#121826',
+        muted: '#566173',
+        dim: '#18794E',
+        link: '#2458D3',
+        accent: '#18794E',
+        accentBlue: '#2458D3',
+        keyword: '#A35A00',
+        error: '#C62D29',
+        warn: '#A35A00',
+        selection: '#E7EDFB',
         input: '#FFFFFF',
+        subtle: '#6B7588',
+        overlay: '#FFFFFF',
+        successTint: '#E6F2EC',
+        warnTint: '#F8EEDF',
+        errorTint: '#FBE7E6',
+        errorFill: '#C62D29',
     },
 };
 
 export const THEME_CHROME: Record<ThemeId, ThemeChrome> = {
     dark: {
-        shadow: '0 1px 3px rgba(0,0,0,0.45)',
-        shadowMd: '0 4px 12px rgba(0,0,0,0.5)',
+        shadow: '0 1px 2px rgba(0,0,0,0.35)',
+        shadowMd: '0 8px 24px rgba(0,0,0,0.45)',
     },
     light: {
-        shadow: '0 1px 3px rgba(15,23,42,0.08)',
-        shadowMd: '0 4px 12px rgba(15,23,42,0.12)',
+        shadow: '0 1px 2px rgba(16,24,40,0.06)',
+        shadowMd: '0 8px 24px rgba(16,24,40,0.12)',
     },
 };
 
 export function isThemeId(value: unknown): value is ThemeId {
     return value === 'dark' || value === 'light';
+}
+
+export function isThemePreference(value: unknown): value is ThemePreference {
+    return value === 'system' || isThemeId(value);
 }
 
 export function hexToRgbChannels(hex: string): string {

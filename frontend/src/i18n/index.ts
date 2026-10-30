@@ -54,4 +54,11 @@ void i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
+// Screen readers and CSS hyphenation read the page language from <html lang>.
+const syncHtmlLang = (lng: string) => {
+  if (typeof document !== 'undefined') document.documentElement.lang = lng.split('-')[0];
+};
+syncHtmlLang(i18n.language || 'uk');
+i18n.on('languageChanged', syncHtmlLang);
+
 export default i18n;

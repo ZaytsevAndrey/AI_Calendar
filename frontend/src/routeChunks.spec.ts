@@ -13,7 +13,6 @@ describe('routeChunks', () => {
         expect(names).toEqual([
             'page-calendar',
             'page-tasks',
-            'page-phases',
             'page-settings',
             'page-phase-setup',
             'page-login',

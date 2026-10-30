@@ -59,3 +59,5 @@ frontend/.env.production
 backend/benchmark/**/*.json
 docs/voice-vnext/runs/
 /*.zip
+
+e2e/design/.out/

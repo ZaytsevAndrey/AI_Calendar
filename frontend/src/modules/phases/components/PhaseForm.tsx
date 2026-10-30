@@ -13,6 +13,7 @@ import { Check, Plus, Trash2, X } from 'lucide-react';
 import { Button } from 'ui/Button';
 import { Input } from 'ui/Input';
 import { Textarea } from 'ui/Textarea';
+import { PHASE_PALETTE } from 'theme/phasePalette';
 
 export type PhaseFormData = {
   name: string;
@@ -25,6 +26,8 @@ export type PhaseFormData = {
 
 interface PhaseFormProps {
   initialData?: PhaseDTO;
+  /** New phase: start values (a free gap the user tapped). */
+  defaults?: Partial<Pick<PhaseFormData, 'startTime' | 'endTime' | 'weekDays'>>;
   onSubmit: (data: CreatePhaseDTO | UpdatePhaseDTO) => void;
   isSubmitting: boolean;
   onCancel?: () => void;
@@ -34,6 +37,7 @@ interface PhaseFormProps {
 
 const PhaseForm = ({
   initialData,
+  defaults,
   onSubmit,
   isSubmitting,
   onCancel,
@@ -42,7 +46,9 @@ const PhaseForm = ({
 }: PhaseFormProps) => {
   const { t } = useTranslation();
   const { data: userSettings } = useGetUserSettingsQuery();
-  const [selectedDays, setSelectedDays] = useState<number[]>(initialData?.weekDays || [1,2,3,4,5]);
+  const [selectedDays, setSelectedDays] = useState<number[]>(
+    initialData?.weekDays || defaults?.weekDays || [1, 2, 3, 4, 5],
+  );
 
   const phaseSchema = useMemo(
     () =>
@@ -66,11 +72,11 @@ const PhaseForm = ({
       weekDays: initialData.weekDays || [1, 2, 3, 4, 5],
     } : {
       name: '',
-      color: `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`,
+      color: PHASE_PALETTE[Math.floor(Math.random() * PHASE_PALETTE.length)].hex,
       description: '',
-      startTime: '09:00',
-      endTime: '22:00',
-      weekDays: [1, 2, 3, 4, 5],
+      startTime: defaults?.startTime ?? '09:00',
+      endTime: defaults?.endTime ?? '12:00',
+      weekDays: defaults?.weekDays ?? [1, 2, 3, 4, 5],
     }
   });
 
@@ -98,69 +104,59 @@ const PhaseForm = ({
   };
 
   return (
-    <form onSubmit={handleSubmit(submitHandler)} className="phase-form space-y-1">
-      <div className="form-group">
-        <label htmlFor="name">{t('phases.name')}</label>
-        <Input {...register('name')} id="name" error={!!errors.name} />
+    <form onSubmit={handleSubmit(submitHandler)} className="flex flex-col gap-5">
+      <div>
+        <label htmlFor="name" className="mb-1.5 block text-body-sm font-medium text-ide-muted">
+          {t('phases.name')}
+        </label>
+        <Input {...register('name')} id="name" error={!!errors.name} autoComplete="off" />
         {errors.name && <span className="error-message">{errors.name.message}</span>}
       </div>
 
-      <ColorField 
-        errors={errors} 
+      <ColorField
+        errors={errors}
         colorValue={watchedValues.color}
         setColor={(value) => setValue('color', value, { shouldDirty: true, shouldValidate: true })}
       />
 
-      <div className="form-group">
-        <label htmlFor="description">{t('phases.description')}</label>
-        <Textarea {...register('description')} id="description" rows={3} />
-      </div>
+      <WeekDaysSelector selectedDays={selectedDays} setSelectedDays={setSelectedDays} errors={errors} />
 
       <TimeRangeField<PhaseFormData> control={control} errors={errors} />
+      {sleepError ? (
+        <p className="-mt-3 text-body-sm text-ide-error" role="alert">
+          {sleepError}
+        </p>
+      ) : null}
 
-      {/* Field errors */}
-      {sleepError && (
-        <div className="form-group">
-          <span className="error-message validation-error">
-            ⚠️ {sleepError}
-          </span>
-        </div>
-      )}
-      <WeekDaysSelector 
-        selectedDays={selectedDays}
-        setSelectedDays={setSelectedDays}
-        errors={errors}
-      />
+      <div>
+        <label htmlFor="description" className="mb-1.5 block text-body-sm font-medium text-ide-muted">
+          {t('phases.description')}
+        </label>
+        <Textarea {...register('description')} id="description" rows={2} />
+      </div>
 
-      <div className="form-actions">
+      <div className="flex flex-col-reverse gap-2 border-t border-ide-border pt-4 sm:flex-row sm:items-center">
         {initialData && onDelete ? (
           <Button
             type="button"
             variant="danger"
             onClick={onDelete}
             disabled={isDeleting || isSubmitting}
-            className="w-full sm:mr-auto sm:w-auto"
+            className="sm:mr-auto"
             icon={Trash2}
           >
             {isDeleting ? t('common.deleting') : t('common.delete')}
           </Button>
-        ) : null}
+        ) : (
+          <span className="sm:mr-auto" />
+        )}
         {onCancel ? (
-          <Button type="button" variant="secondary" onClick={onCancel} className="w-full sm:w-40" icon={X}>
+          <Button type="button" variant="secondary" onClick={onCancel} className="max-md:hidden" icon={X}>
             {t('common.cancel')}
           </Button>
         ) : null}
-        <Button
-          type="submit"
-          disabled={isSubmitting || !!sleepError}
-          className="w-full sm:w-40"
-          icon={initialData ? Check : Plus}
-        >
-          {isSubmitting
-            ? t('common.saving')
-            : initialData
-              ? t('phases.update')
-              : t('phases.create')}
+        <Button type="submit" disabled={isSubmitting || !!sleepError} icon={initialData ? Check : Plus}>
+          {isSubmitting ? t('common.saving') : initialData ? t('phases.update') : t('phases.create')}
         </Button>
       </div>
     </form>

@@ -33,8 +33,13 @@ Single source of truth for the project. Keep these files in sync with code chang
 | [Scheduling refactor progress](scheduling-refactor-progress.md) | Oct 2026 scheduling-domain refactor: stages, commits, decisions, test results, open risks (handoff file) |
 | [Placement engine review](placement-engine-review.md) | Oct 2026 review: 30 defects (PE-01…PE-30), test gaps, fix order. Roadmap §50 |
 | [Task scheduling test matrix](task-scheduling-test-matrix.md) | Given/When/Then cases mapped to unit tests |
+| [Design audit](design/design-audit.md) | Oct 2026 UI review: every page, dialog and theme; P0 bugs, structure, consistency |
+| [Design system](design/design-system.md) | Brand, color tokens (both themes), phase palette, type, spacing, components, layout, settings IA, copy rules |
+| [Design fix plan](design/design-fix-plan.md) | Staged fixes: P0, tokens, calendar, settings + phases, tasks, dialogs; files and done criteria |
+| [Mobile plan](design/mobile-plan.md) | Phone components: what is there, what replaces it (Today sheet, slot sheet, pickers, swipe rows), steps M0–M8 |
+| [Screen inventory](design/screen-inventory.md) | Every screen, dialog and state to redesign and check on desktop and phone |
 | [E2E test coverage plan](e2e-test-coverage.md) | All live API/UI cases and edge cases, layers, P0 smoke, implementation waves |
 
 **Swagger (live schema):** after starting the backend — `http://localhost:3001/api` (if `PORT` is unchanged).
 
-**Last documentation update:** 27 October 2026. Voice contract: [spec-voice-agent.md](spec-voice-agent.md). Experimental Planner C2 is not the production planner. C3 is rejected. Record: [voice-prompt-next.md](voice-prompt-next.md).
+**Last documentation update:** 30 October 2026. Voice contract: [spec-voice-agent.md](spec-voice-agent.md). Experimental Planner C2 is not the production planner. C3 is rejected. Record: [voice-prompt-next.md](voice-prompt-next.md).

@@ -19,10 +19,11 @@ test.describe('P1 auth and phases UI', () => {
     await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
   });
 
-  test('U-PH-001 phases list hides Focus hours', async ({ page, auth }) => {
+  test('U-PH-001 /phases opens Settings → My day; Focus hours stays hidden', async ({ page, auth }) => {
     await openAs(page, auth.onboarded, '/phases');
+    await expect(page).toHaveURL(/\/settings\/day/);
     await expect(page.getByRole('heading', { name: 'Phases' })).toBeVisible();
-    await expect(page.getByText('Sleep', { exact: true })).toBeVisible();
+    await expect(page.getByText('Bedtime', { exact: true })).toBeVisible();
     await expect(page.getByText('Focus hours', { exact: true })).toHaveCount(0);
   });
 
@@ -61,9 +62,7 @@ test.describe('P1 auth and phases UI', () => {
     await nav.getByRole('link', { name: 'Tasks' }).click();
     await expect(page).toHaveURL(/\/tasks/);
     await expect(page.getByRole('heading', { name: 'Tasks' })).toBeVisible();
-    await nav.getByRole('link', { name: 'Phases' }).click();
-    await expect(page).toHaveURL(/\/phases/);
-    await expect(page.getByRole('heading', { name: 'Phases' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Phases' })).toHaveCount(0);
     await expect(nav.getByRole('link', { name: 'Habits' })).toHaveCount(0);
     await nav.getByRole('link', { name: 'Settings' }).click();
     await expect(page).toHaveURL(/\/settings/);

@@ -1,3 +1,5 @@
+import { PHASE_PALETTE } from '../phases/phase-palette';
+
 /** Google Calendar API event colorId → RGB (approximate brand colors). */
 const GOOGLE_EVENT_COLOR_RGB: Record<string, [number, number, number]> = {
   '1': [121, 134, 203], // Lavender
@@ -45,6 +47,8 @@ function colorDistance(
 export function phaseHexToGoogleColorId(
   hex: string | null | undefined,
 ): string | undefined {
+  const palette = PHASE_PALETTE.find((p) => p.hex.toLowerCase() === (hex ?? '').trim().toLowerCase());
+  if (palette) return palette.googleColorId;
   const rgb = parseHexRgb(hex ?? '');
   if (!rgb) return undefined;
   let bestId = '1';

@@ -11,7 +11,8 @@ export function formatLongDate(date: Date): string {
 }
 
 export function formatMonthYear(date: Date): string {
-  return format(date, 'MMMM yyyy', loc());
+  const text = format(date, 'LLLL yyyy', loc());
+  return text ? text[0].toLocaleUpperCase() + text.slice(1) : text;
 }
 
 export function formatWeekRange(start: Date, end: Date): string {
@@ -207,4 +208,33 @@ export function toLocalDateTimeInput(value?: string | Date): string {
   const hh = String(date.getHours()).padStart(2, '0');
   const min = String(date.getMinutes()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+}
+
+/** Day and clock without the year when it is this year: «пт 30 жовт., 10:00». For dense rows. */
+export function formatDateTimeCompact(value?: string | null, now: Date = new Date()): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  const pattern = d.getFullYear() === now.getFullYear() ? 'EEEEEE d MMM, HH:mm' : 'd MMM yyyy, HH:mm';
+  return format(d, pattern, loc());
+}
+
+/** A slot without the year when it is this year: «пт 30 жовт., 10:00–11:00». */
+export function formatSlotCompact(
+  start?: string | null,
+  end?: string | null,
+  now: Date = new Date(),
+): string | null {
+  const s = start ? new Date(start) : null;
+  const e = end ? new Date(end) : null;
+  const sOk = Boolean(s && !Number.isNaN(s.getTime()));
+  const eOk = Boolean(e && !Number.isNaN(e.getTime()));
+  if (!sOk && !eOk) return null;
+  if (sOk && !eOk) return formatDateTimeCompact(start, now);
+  if (!sOk && eOk) return formatDateTimeCompact(end, now);
+  if (isSameLocalDay(s!, e!)) {
+    const day = s!.getFullYear() === now.getFullYear() ? 'EEEEEE d MMM' : 'd MMM yyyy';
+    return `${format(s!, day, loc())}, ${format(s!, 'HH:mm', loc())}–${format(e!, 'HH:mm', loc())}`;
+  }
+  return `${formatDateTimeCompact(start, now)} – ${formatDateTimeCompact(end, now)}`;
 }
