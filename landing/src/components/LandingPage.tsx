@@ -38,25 +38,13 @@ export default function LandingPage({ locale }: { locale: Locale }) {
                     </div>
                 </section>
 
-                <section className="problem" aria-labelledby="problem-title">
-                    <div className="wrap problem-inner">
-                        <div className="problem-head">
-                            <h2 id="problem-title">{t.problem.title}</h2>
-                            <p className="pull">{t.problem.pull}</p>
-                        </div>
-                        <div className="prose">
-                            {t.problem.paras.map((p) => (
-                                <p key={p}>{p}</p>
-                            ))}
-                        </div>
-                    </div>
-                </section>
-
-                <section id="how" className="how" aria-labelledby="how-title">
+                <section className="how" aria-labelledby="how-title">
                     <div className="wrap">
-                        <h2 id="how-title">{t.how.title}</h2>
+                        <h2 id="how-title" className="sr-only">
+                            {t.steps.title}
+                        </h2>
                         <ol className="steps">
-                            {t.how.steps.map((s, i) => (
+                            {t.steps.items.map((s, i) => (
                                 <li key={s.title} className="step">
                                     <span className="step-n" aria-hidden="true">
                                         {i + 1}
@@ -66,84 +54,7 @@ export default function LandingPage({ locale }: { locale: Locale }) {
                                 </li>
                             ))}
                         </ol>
-                        <p className="how-summary">{t.how.summary}</p>
-                    </div>
-                </section>
-
-                <section className="principles" aria-labelledby="principles-title">
-                    <div className="wrap principles-inner">
-                        <div>
-                            <h2 id="principles-title">{t.principles.title}</h2>
-                            <p className="section-lead">{t.principles.lead}</p>
-                            <dl className="principle-list">
-                                {t.principles.items.map((p) => (
-                                    <div key={p.title} className="principle">
-                                        <dt>{p.title}</dt>
-                                        <dd>{p.body}</dd>
-                                    </div>
-                                ))}
-                            </dl>
-                        </div>
-                        <figure className="chat" aria-label={t.principles.dialogLabel}>
-                            {t.principles.dialog.map((line) => (
-                                <p key={line.text} className={`bubble bubble-${line.from}`}>
-                                    {line.text}
-                                </p>
-                            ))}
-                        </figure>
-                    </div>
-                </section>
-
-                <section id="who" className="audience" aria-labelledby="who-title">
-                    <div className="wrap">
-                        <h2 id="who-title">{t.audience.title}</h2>
-                        <div className="audience-grid">
-                            {t.audience.groups.map((g) => (
-                                <article key={g.title} className="group">
-                                    <h3>{g.title}</h3>
-                                    <p>{g.body}</p>
-                                    {g.bullets ? (
-                                        <ul>
-                                            {g.bullets.map((b) => (
-                                                <li key={b}>{b}</li>
-                                            ))}
-                                        </ul>
-                                    ) : null}
-                                </article>
-                            ))}
-                        </div>
-                        <p className="audience-note">{t.audience.note}</p>
-                    </div>
-                </section>
-
-                <section className="vision" aria-labelledby="vision-title">
-                    <div className="wrap vision-inner">
-                        <h2 id="vision-title">{t.vision.title}</h2>
-                        <div className="prose">
-                            <p>{t.vision.body}</p>
-                            <ul>
-                                {t.vision.bullets.map((b) => (
-                                    <li key={b}>{b}</li>
-                                ))}
-                            </ul>
-                            <p>{t.vision.closing}</p>
-                        </div>
-                    </div>
-                </section>
-
-                <section id="faq" className="faq" aria-labelledby="faq-title">
-                    <div className="wrap faq-inner">
-                        <h2 id="faq-title">{t.faq.title}</h2>
-                        <div className="faq-list">
-                            {t.faq.items.map((item, i) => (
-                                <details key={item.q} open={i === 0}>
-                                    <summary>
-                                        <h3>{item.q}</h3>
-                                    </summary>
-                                    <p>{item.a}</p>
-                                </details>
-                            ))}
-                        </div>
+                        <p className="why">{t.why}</p>
                     </div>
                 </section>
 

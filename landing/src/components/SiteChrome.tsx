@@ -17,13 +17,6 @@ export function SiteHeader({ locale, page = '/', sections = true }: { locale: Lo
                     <img src="/favicon.svg" alt="" width="28" height="28" />
                     <span>{BRAND}</span>
                 </a>
-                {sections ? (
-                    <nav className="top-nav" aria-label={BRAND}>
-                        <a href="#how">{t.nav.how}</a>
-                        <a href="#who">{t.nav.who}</a>
-                        <a href="#faq">{t.nav.faq}</a>
-                    </nav>
-                ) : null}
                 <div className="top-actions">
                     <a className="lang" href={localePath(other, page)} hrefLang={other} lang={other} title={t.nav.langLabel}>
                         {getDictionary(other).htmlLang.toUpperCase()}

@@ -74,7 +74,7 @@ export function buildMetadata(
     };
 }
 
-/** schema.org graph: Organization + WebSite + WebApplication + FAQPage. */
+/** schema.org graph: Organization + WebSite + WebApplication. */
 export function buildJsonLd(locale: Locale) {
     const t = getDictionary(locale);
     const pageUrl = absoluteUrl(localePath(locale));
@@ -110,19 +110,8 @@ export function buildJsonLd(locale: Locale) {
                 browserRequirements: 'Requires JavaScript and a modern browser',
                 inLanguage: t.htmlLang,
                 image: absoluteUrl(OG_IMAGE[locale]),
-                featureList: t.principles.items.map((f) => f.title),
+                featureList: t.steps.items.map((f) => f.title),
                 publisher: { '@id': orgId },
-            },
-            {
-                '@type': 'FAQPage',
-                '@id': `${pageUrl}#faq`,
-                url: pageUrl,
-                inLanguage: t.htmlLang,
-                mainEntity: t.faq.items.map((item) => ({
-                    '@type': 'Question',
-                    name: item.q,
-                    acceptedAnswer: { '@type': 'Answer', text: item.a },
-                })),
             },
         ],
     };
