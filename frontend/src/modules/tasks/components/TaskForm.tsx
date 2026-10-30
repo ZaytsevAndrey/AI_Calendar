@@ -379,7 +379,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
       />
       <Select
         id="task-form-recurrence"
-       
+
         value={isRecurring ? recurrencePattern || 'DAILY' : 'NONE'}
         onChange={(e) => chooseRepeat(e.target.value)}
       >
@@ -416,7 +416,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
               key={value}
               type="button"
               variant="secondary"
-             
+
               pressed={selectedDays.includes(value)}
               className="min-w-9 px-2"
               onClick={() => toggleDay(value)}
@@ -536,7 +536,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                 autoComplete="off"
                 autoFocus={mode === 'create'}
                 placeholder={t('tasks.form.namePlaceholder')}
-               
+
                 error={!!errors.name}
               />
             )}
@@ -562,7 +562,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                 <Select
                   {...field}
                   id="task-form-status"
-                 
+
                   value={field.value ?? 'todo'}
                 >
                   {STATUS_OPTIONS.map((option) => (
@@ -587,7 +587,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                   {...field}
                   id="task-form-description"
                   rows={2}
-                 
+
                   placeholder={t('tasks.form.descriptionPlaceholder')}
                 />
               )}
@@ -637,7 +637,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                   </button>
                   {schedulingPhases.map((phase) => {
                     const on = selected === phase.id;
-                    const color = phase.color || '#808080';
+                    const color = phase.color || null;
                     return (
                       <button
                         type="button"
@@ -645,13 +645,13 @@ const TaskForm: React.FC<TaskFormProps> = ({
                         role="option"
                         aria-selected={on}
                         title={`${phase.name} (${phase.startTime}–${phase.endTime})`}
-                        className={`filter-chip h-8 max-w-full px-2.5 text-xs ${
+                        className={`filter-chip h-10 max-w-full px-3 text-body-sm md:h-8 md:px-2.5 ${
                           on ? 'filter-chip-on' : ''
                         }`}
                         style={
                           on
                             ? {
-                                borderColor: color,
+                                borderColor: phaseColor(color),
                                 backgroundColor: phaseColor(color, 0.2),
                               }
                             : {
@@ -764,7 +764,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                       type="number"
                       min={1}
                       max={1440}
-                     
+
                       className="w-20"
                       error={!!errors.estimatedTimeInMinutes}
                       onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
@@ -815,7 +815,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                   return (
                     <Select
                       id="task-form-preferred-start"
-                     
+
                       value={displayValue}
                       onChange={(e) => field.onChange(e.target.value)}
                       onBlur={field.onBlur}
@@ -883,7 +883,7 @@ const TaskForm: React.FC<TaskFormProps> = ({
                       key={value}
                       type="button"
                       variant="secondary"
-                     
+
                       pressed={selectedEligibleDays.includes(value)}
                       className="min-w-8 px-2"
                       onClick={() => toggleEligibleDay(value)}

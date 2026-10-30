@@ -535,3 +535,20 @@
 .calendar-event-stage-error {
     box-shadow: inset 3px 0 0 0 rgb(var(--ide-error)), inset 0 0 0 1px rgb(var(--ide-error) / 0.55) !important;
 }
+
+/* Phone: toasts sit above the tab bar, where the thumb is, not over the app bar. */
+@media (max-width: 767px) {
+    .Toastify__toast-container.Toastify__toast-container--top-right {
+        top: auto;
+        bottom: calc(var(--phone-tab-offset, 0px) + 0.5rem);
+        left: 0.5rem;
+        right: 0.5rem;
+        width: auto;
+        padding: 0;
+    }
+
+    .Toastify__toast-container--top-right .Toastify__toast {
+        margin-bottom: 0.5rem;
+        border-radius: 12px;
+    }
+}

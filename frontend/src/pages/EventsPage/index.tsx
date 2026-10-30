@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { cx } from 'ui/cx';
+import { ListSkeleton } from 'ui/ListSkeleton';
 import { localYmd } from 'utils/ianaDateTime';
 import { useGetDayRemindersQuery } from 'api/dayReminders.api';
 import { MoveOccurrenceSheet } from 'modules/schedule/components/MoveOccurrenceSheet';
@@ -304,7 +305,7 @@ const TasksPage: React.FC = () => {
               overdueAriaLabel={t('tasks.overdueUnscheduled')}
             />
             {isLoadingEvents ? (
-              <div className="loading">{t('common.loading')}</div>
+              <ListSkeleton label={t('common.loading')} />
             ) : unscheduledInbox.length === 0 ? (
               <p className="rounded-control border border-dashed border-ide-border px-4 py-8 text-center text-body-sm text-ide-muted">
                 {inboxFiltersNarrow ? t('tasks.noUnscheduledMatch') : t('tasks.noUnscheduled')}

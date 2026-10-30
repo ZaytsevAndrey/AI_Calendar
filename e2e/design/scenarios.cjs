@@ -141,6 +141,24 @@ const scenarios = [
       await page.waitForTimeout(800);
     },
   },
+  {
+    name: 'voice',
+    route: '/',
+    run: async (page) => {
+      await page.getByRole('button', { name: L('Відкрити Помічника', 'Open Companion') }).first().click();
+      await page.waitForTimeout(800);
+    },
+  },
+  {
+    name: 'reminder-form',
+    route: '/',
+    run: async (page) => {
+      await openFirst(page, '[data-testid="create-task"], button:has-text("Створити"), button:has-text("Create")');
+      await page.getByRole('button', { name: L('Нагадування', 'Reminder') }).last().click();
+      await page.waitForTimeout(500);
+    },
+  },
+  { name: 'settings-day-empty', route: '/settings/day', scenario: 'empty' },
   { name: 'tasks', route: '/tasks' },
   { name: 'tasks-later', route: '/tasks?tab=later' },
   { name: 'tasks-reminders', route: '/tasks?tab=reminders' },

@@ -69,11 +69,11 @@ export function ChangePreviewCards({
                 <p className="min-w-0 truncate font-medium text-ide-text">{card.name}</p>
                 <span className="flex shrink-0 items-center gap-1">
                   {card.changed ? (
-                    <span className="rounded-md bg-ide-accentBlue/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ide-accentBlue">
+                    <span className="rounded-md bg-ide-accentBlue/15 px-1.5 py-0.5 text-caption font-medium text-ide-accentBlue">
                       {t('voice.previewChanged')}
                     </span>
                   ) : null}
-                  <span className="rounded-md bg-ide-bg px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ide-muted">
+                  <span className="rounded-md bg-ide-bg px-1.5 py-0.5 text-caption font-medium text-ide-muted">
                     {t(changePreviewKindLabelKey(card.kind))}
                   </span>
                 </span>

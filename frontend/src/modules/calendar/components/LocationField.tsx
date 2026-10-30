@@ -169,7 +169,7 @@ export function LocationField({ id, value, onChange, placeholder }: Props) {
                   </li>
                 ) : null}
               </ul>
-              <p className="border-t border-ide-border px-3 py-1 text-[10px] text-ide-muted">
+              <p className="border-t border-ide-border px-3 py-1 text-caption text-ide-muted">
                 © OpenStreetMap
               </p>
             </div>,

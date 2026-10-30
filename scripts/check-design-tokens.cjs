@@ -16,6 +16,10 @@ const ALLOW = [
   /^pages\/HabitsPage\//,
   /^modules\/now\/components\/HabitNowStrip\.tsx$/,
   /\.spec\.tsx?$/,
+  // Provider brand marks keep their own colors; dev logger; preview mock data.
+  /^modules\/calendar\/components\/ProviderLogo\.tsx$/,
+  /^store\/middlewares\/logger\.ts$/,
+  /^modules\/calendar\/previewMockEvents\.ts$/,
 ];
 const RULES = [
   { name: 'hex color', re: /#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b(?![0-9a-fA-F])/g, ext: /\.(tsx?|css)$/ },

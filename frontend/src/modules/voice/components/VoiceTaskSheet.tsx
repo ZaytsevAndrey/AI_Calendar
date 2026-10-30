@@ -346,7 +346,7 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
                 : 'mr-8 rounded-xl border border-ide-border bg-ide-surface px-3 py-2 text-ide-text'
             }
           >
-            <p className="text-[10px] font-medium uppercase tracking-wide text-ide-muted">
+            <p className="text-caption font-medium text-ide-muted">
               {row.role === 'user' ? t('voice.you') : t('voice.agent')}
             </p>
             <p className="mt-0.5 whitespace-pre-wrap">{row.text}</p>
