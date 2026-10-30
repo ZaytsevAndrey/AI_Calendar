@@ -5,6 +5,7 @@
  * placement is still queued, and a DST gap. Each test checks the engine
  * invariants: no overlap, fixed anchors stay, every task seated or parked.
  */
+import { Repository } from 'typeorm';
 import { TaskEventType } from '../scheduling/event-type.enum';
 import { ScheduleState, Task } from '../tasks/entities/task.entity';
 import { ScheduleJob } from './entities/schedule-job.entity';
@@ -331,6 +332,66 @@ describe('placement edge cases', () => {
     }
 
     expect(await kit.slotsOf(series.id)).toEqual(before);
+  });
+
+  describe('AUD-015: series day writes are atomic (fault injection)', () => {
+    it('parking a series day: a failing copy insert leaves the skip and the day\'s row untouched', async () => {
+      kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
+      const series = await create({
+        name: 'Daily',
+        eventType: TaskEventType.ADMIN,
+        isRecurring: true,
+        recurrencePattern: 'DAILY',
+        scheduledStartTime: kit.at('2026-11-05', '09:00').toISOString(),
+        estimatedTimeInMinutes: 30,
+      });
+      const save = Repository.prototype.save;
+      jest.spyOn(Repository.prototype, 'save').mockImplementation(function (this: Repository<Task>, entity: unknown, ...rest: unknown[]) {
+        const row = entity as Partial<Task>;
+        if (row?.scheduleState === ScheduleState.PROBLEMATIC && row.originalOccurrenceYmd) {
+          return Promise.reject(new Error('disk full'));
+        }
+        return (save as (...a: unknown[]) => Promise<unknown>).call(this, entity, ...rest) as never;
+      });
+      const park = (kit.service as unknown as {
+        parkFailedSeriesDay: (...args: unknown[]) => Promise<void>;
+      }).parkFailedSeriesDay.bind(kit.service);
+
+      await expect(
+        park(kit.user.id, await kit.reload(series.id), '2026-11-06', 'no_slot', 'UTC', null, 30),
+      ).rejects.toThrow('disk full');
+
+      expect((await kit.reload(series.id)).skippedOccurrenceYmds ?? []).toEqual([]);
+      expect(await kit.slotsOf(series.id)).toContain('2026-11-06 09:00-09:30');
+    });
+
+    it('appending a day on another clock: a failing sibling leaves no orphan row or skip', async () => {
+      kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 2 });
+      const series = await create({
+        name: 'Daily',
+        eventType: TaskEventType.ADMIN,
+        isRecurring: true,
+        recurrencePattern: 'DAILY',
+        scheduledStartTime: kit.at('2026-11-05', '09:00').toISOString(),
+        estimatedTimeInMinutes: 30,
+      });
+      // The next appended day's clock is taken by a fixed event: it seats elsewhere (a sibling).
+      await create({
+        name: 'Wall',
+        eventType: TaskEventType.FIXED,
+        scheduledStartTime: kit.at('2026-11-07', '09:00').toISOString(),
+        scheduledEndTime: kit.at('2026-11-07', '09:30').toISOString(),
+      });
+      jest.setSystemTime(new Date('2026-11-06T07:00:00.000Z'));
+      jest
+        .spyOn(kit.service as never, 'createSeriesClockSibling' as never)
+        .mockRejectedValue(new Error('disk full') as never);
+
+      await expect(kit.service.appendMissingSeriesDays(kit.user.id)).rejects.toThrow('disk full');
+
+      expect((await kit.reload(series.id)).skippedOccurrenceYmds ?? []).not.toContain('2026-11-07');
+      expect((await kit.slotsOf(series.id)).filter((row) => row.startsWith('2026-11-07'))).toEqual([]);
+    });
   });
 
   describe('re-merging a detached copy (AUD-017, AUD-021)', () => {
