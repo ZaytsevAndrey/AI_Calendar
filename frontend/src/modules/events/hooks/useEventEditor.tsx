@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   useCreateEventMutation,
@@ -29,6 +29,12 @@ import { Button } from 'ui/Button';
 import { dialogButtonSize } from 'ui/controlSize';
 import { showErrorToast } from '../../../utils/toast';
 import { extractApiErrorMessage } from '../../../utils/extractApiErrorMessage';
+import {
+  keyAfterFailure,
+  keyForSubmission,
+  newRequestKey,
+  type SubmissionKey,
+} from '../../../utils/requestKey';
 import { planEditorDelete } from '../planEditorDelete';
 
 const TaskForm = lazy(
@@ -87,8 +93,21 @@ export function useEventEditor() {
     updateReminderState.isLoading;
   const isReminderDeleting = deleteReminderState.isLoading;
 
+  // One create operation per opened form and content: a retry after an error
+  // or a lost response reuses the key, so the server returns the first task.
+  const createKeyRef = useRef<SubmissionKey>({ key: newRequestKey(), body: null });
+  /** Key of `createFromPayload`: the same payload again is a retry (AUD-024). */
+  const payloadKeyRef = useRef<SubmissionKey>({ key: newRequestKey(), body: null });
+  const formDirtyRef = useRef(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const handleDirtyChange = useCallback((dirty: boolean) => {
+    formDirtyRef.current = dirty;
+  }, []);
+
   const close = () => {
     if (isSubmitting || isDeleting || isReminderDeleting) return;
+    formDirtyRef.current = false;
+    setDiscardOpen(false);
     setOpen(false);
     setEditingEvent(null);
     setEditingReminder(null);
@@ -102,6 +121,7 @@ export function useEventEditor() {
   };
 
   const openCreate = (defaults?: CreateTaskDefaults) => {
+    createKeyRef.current = { key: newRequestKey(), body: null };
     setEditingEvent(null);
     setEditingReminder(null);
     setCreatingReminder(false);
@@ -129,6 +149,7 @@ export function useEventEditor() {
     payload: CreateTaskDTO,
     options?: { afterCreate?: () => Promise<void> },
   ) => {
+    createKeyRef.current = { key: newRequestKey(), body: null };
     setEditingEvent(null);
     setEditingReminder(null);
     setCreatingReminder(false);
@@ -183,7 +204,10 @@ export function useEventEditor() {
     setLocalSubmitting(true);
     const request = editing
       ? updateEvent({ id: editing.id, body: cleanData as UpdateTaskDTO }).unwrap()
-      : createEvent(cleanData as CreateTaskDTO).unwrap();
+      : createEvent({
+          ...(cleanData as CreateTaskDTO),
+          idempotencyKey: (createKeyRef.current = keyForSubmission(createKeyRef.current, cleanData)).key,
+        }).unwrap();
     void request
       .then(async () => {
         // Progress toast (save → place → sync) comes from eventTasksApi.onQueryStarted.
@@ -201,6 +225,7 @@ export function useEventEditor() {
       })
       .catch((err) => {
         setLocalSubmitting(false);
+        if (!editing) createKeyRef.current = keyAfterFailure(createKeyRef.current, err);
         showErrorToast({
           title: editing ? t('tasks.toast.updateFailed') : t('tasks.toast.createFailed'),
           detail: extractApiErrorMessage(err),
@@ -210,14 +235,23 @@ export function useEventEditor() {
 
   const createFromPayload = async (data: CreateTaskDTO) => {
     const cleanData = cleanPayload(data) as CreateTaskDTO;
-    // Progress toast from eventTasksApi.onQueryStarted.
-    await createEvent(cleanData).unwrap();
+    // AUD-024: a retry of the same payload keeps its key (one task, not two);
+    // after a success the next payload is a new operation.
+    payloadKeyRef.current = keyForSubmission(payloadKeyRef.current, cleanData);
+    try {
+      // Progress toast from eventTasksApi.onQueryStarted.
+      await createEvent({ ...cleanData, idempotencyKey: payloadKeyRef.current.key }).unwrap();
+      payloadKeyRef.current = { key: newRequestKey(), body: null };
+    } catch (err) {
+      payloadKeyRef.current = keyAfterFailure(payloadKeyRef.current, err);
+      throw err;
+    }
   };
 
   const canSkipOccurrence = ((): boolean => {
     if (!editingEvent || !occurrence?.startIso) return false;
     if (editingEvent.isFixedExternal || editingEvent.isUnscheduled) return false;
-    if (editingEvent.eventType === 'fixed') return false;
+    if (editingEvent.eventType === 'fixed' && !editingEvent.isRecurring) return false;
     if (editingEvent.status === 'completed' || editingEvent.status === 'canceled') {
       return false;
     }
@@ -387,6 +421,16 @@ export function useEventEditor() {
     : undefined;
   const showingReminder = creatingReminder || !!editingReminder;
 
+  /** Backdrop and Cancel ask first when the task form holds unsaved input. */
+  const requestClose = () => {
+    if (isSubmitting || isDeleting || isReminderDeleting) return;
+    if (!showingReminder && formDirtyRef.current) {
+      setDiscardOpen(true);
+      return;
+    }
+    close();
+  };
+
   const editorTitle = showingReminder
     ? editingReminder
       ? t('dayReminders.edit')
@@ -403,7 +447,7 @@ export function useEventEditor() {
     <>
       <Modal
         open={open}
-        onClose={close}
+        onClose={requestClose}
         title={editorTitle}
         maxWidthClass="max-w-xl"
         footer={null}
@@ -440,7 +484,8 @@ export function useEventEditor() {
             phases={phases}
             onSubmit={submit}
             isSubmitting={isSubmitting}
-            onCancel={close}
+            onCancel={requestClose}
+            onDirtyChange={handleDirtyChange}
             onSkipOccurrence={
               actionsMode === 'full' && canSkipOccurrence
                 ? handleSkipOccurrence
@@ -502,6 +547,36 @@ export function useEventEditor() {
                 name: editingEvent?.name ?? t('tasks.thisTask'),
               })}
         </p>
+      </Modal>
+      <Modal
+        open={discardOpen}
+        onClose={() => setDiscardOpen(false)}
+        title={t('tasks.form.discardTitle')}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size={dialogButtonSize}
+              onClick={() => setDiscardOpen(false)}
+              className="w-full sm:w-auto"
+            >
+              {t('tasks.form.keepEditing')}
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              size={dialogButtonSize}
+              onClick={close}
+              className="w-full sm:w-auto"
+              icon={X}
+            >
+              {t('tasks.form.discard')}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-ide-text">{t('tasks.form.discardBody')}</p>
       </Modal>
       <SeriesDeleteHost />
     </>

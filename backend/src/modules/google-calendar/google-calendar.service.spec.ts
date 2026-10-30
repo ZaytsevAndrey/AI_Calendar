@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { GoogleCalendarService } from './google-calendar.service';
+import {
+  GOOGLE_REQUEST_TIMEOUT_MS,
+  GoogleCalendarService,
+  GoogleEventMissingError,
+  isGoogleEventMissing,
+} from './google-calendar.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { User } from '../users/user.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
@@ -13,6 +18,7 @@ declare global {
   // eslint-disable-next-line no-var
   var __gcalApiTestMocks: {
     eventsInsert: jest.Mock;
+    eventsGet: jest.Mock;
     eventsUpdate: jest.Mock;
     eventsDelete: jest.Mock;
     eventsList: jest.Mock;
@@ -25,6 +31,7 @@ declare global {
 jest.mock('googleapis', () => {
   const m = {
     eventsInsert: jest.fn(),
+    eventsGet: jest.fn(),
     eventsUpdate: jest.fn(),
     eventsDelete: jest.fn(),
     eventsList: jest.fn(),
@@ -35,6 +42,7 @@ jest.mock('googleapis', () => {
   globalThis.__gcalApiTestMocks = m;
   return {
     google: {
+      options: jest.fn(),
       auth: {
         OAuth2: jest.fn().mockImplementation(() => ({
           generateAuthUrl: jest.fn().mockReturnValue('mock-auth-url'),
@@ -60,7 +68,7 @@ jest.mock('googleapis', () => {
           insert: m.eventsInsert,
           update: m.eventsUpdate,
           delete: m.eventsDelete,
-          get: jest.fn().mockResolvedValue({
+          get: m.eventsGet.mockResolvedValue({
             data: {
               start: { dateTime: '2024-01-01T10:00:00Z', timeZone: 'UTC' },
               end: { dateTime: '2024-01-01T11:00:00Z', timeZone: 'UTC' },
@@ -169,6 +177,35 @@ describe('GoogleCalendarService', () => {
     expect(service).toBeDefined();
   });
 
+  it('never lets concurrent calls for two users share OAuth credentials', async () => {
+    const { google } = jest.requireMock('googleapis');
+    const tokens: Record<string, string> = { a: 'token-a', b: 'token-b' };
+    jest.spyOn(userRepo, 'findOne').mockImplementation(async (opts: any) => {
+      // B answers first so the two calls interleave.
+      if (opts.where.id === 'a') await new Promise((r) => setTimeout(r, 5));
+      return { googleAccessToken: tokens[opts.where.id] } as User;
+    });
+    (google.calendar as jest.Mock).mockClear();
+
+    await Promise.all([service.getCalendars('a'), service.getCalendars('b')]);
+
+    const auths = (google.calendar as jest.Mock).mock.calls.map(([opts]) => opts.auth);
+    expect(auths).toHaveLength(2);
+    expect(auths[0]).not.toBe(auths[1]);
+    for (const auth of auths) {
+      const seen = new Set(
+        (auth.setCredentials as jest.Mock).mock.calls.map(([c]) => c.access_token ?? c.refresh_token),
+      );
+      expect(seen.size).toBe(1);
+    }
+  });
+
+  it('AUD-007: sets a Google request timeout below the queue leases', () => {
+    const { google } = jest.requireMock('googleapis');
+    expect(google.options).toHaveBeenCalledWith({ timeout: GOOGLE_REQUEST_TIMEOUT_MS });
+    expect(GOOGLE_REQUEST_TIMEOUT_MS).toBeLessThan(2 * 60_000);
+  });
+
   it('should generate auth url', () => {
     expect(service.getAuthUrl()).toBe('mock-auth-url');
     expect(service.getLoginAuthUrl()).toBe('mock-auth-url');
@@ -199,6 +236,63 @@ describe('GoogleCalendarService', () => {
     const session = service.redeemLoginTicket(ticket);
     expect(session.access_token).toBe('jwt-token');
     expect(session.refresh_token).toBe('jwt-token');
+  });
+
+  describe('AUD-013: disconnect and reconnect', () => {
+    const ok = { affected: 1, raw: [], generatedMaps: [] };
+    const { google } = jest.requireMock('googleapis');
+
+    it('disconnect revokes the grant at Google, then clears it', async () => {
+      jest.spyOn(userRepo, 'findOne').mockResolvedValue({
+        id: 'u1',
+        googleAccessToken: 'token',
+        googleRefreshToken: 'refresh',
+      } as User);
+      const update = jest.spyOn(userRepo, 'update').mockResolvedValue(ok);
+      jest.spyOn(userSettingsRepo, 'update').mockResolvedValue(ok);
+      const revokeToken = jest.fn().mockResolvedValue({});
+      (google.auth.OAuth2 as jest.Mock).mockImplementationOnce(() => ({ revokeToken }));
+
+      await service.disconnectCalendar('u1');
+
+      expect(revokeToken).toHaveBeenCalledWith('refresh');
+      expect(update).toHaveBeenCalledWith('u1', {
+        googleAccessToken: null,
+        googleRefreshToken: null,
+        googleTokenExpiry: null,
+      });
+    });
+
+    it('a failed revoke still disconnects', async () => {
+      jest.spyOn(userRepo, 'findOne').mockResolvedValue({ id: 'u1', googleAccessToken: 'token' } as User);
+      const update = jest.spyOn(userRepo, 'update').mockResolvedValue(ok);
+      jest.spyOn(userSettingsRepo, 'update').mockResolvedValue(ok);
+      (google.auth.OAuth2 as jest.Mock).mockImplementationOnce(() => ({
+        revokeToken: jest.fn().mockRejectedValue(new Error('network')),
+      }));
+
+      await expect(service.disconnectCalendar('u1')).resolves.toMatchObject({ success: true });
+      expect(update).toHaveBeenCalledWith('u1', expect.objectContaining({ googleRefreshToken: null }));
+    });
+
+    it('reports a reconnect after a disconnect as such; a routine sign-in is not', async () => {
+      const seen: boolean[] = [];
+      service.onReconnected((_userId, opts) => seen.push(opts.wasDisconnected));
+      jest.spyOn(userRepo, 'update').mockResolvedValue(ok);
+      jest.spyOn(userSettingsRepo, 'update').mockResolvedValue(ok);
+      jest.spyOn(userSettingsRepo, 'findOne').mockResolvedValue({
+        appGoogleCalendarId: null,
+        appGoogleCalendarName: 'luefy',
+      } as UserSettings);
+      const findOne = jest.spyOn(userRepo, 'findOne');
+
+      findOne.mockResolvedValue({ id: 'u1', googleAccessToken: null, googleRefreshToken: null } as User);
+      await service.saveToken('code', 'u1');
+      findOne.mockResolvedValue({ id: 'u1', googleAccessToken: 'old', googleRefreshToken: 'refresh' } as User);
+      await service.saveToken('code', 'u1');
+
+      expect(seen).toEqual([true, false]);
+    });
   });
 
   it('should save token', async () => {
@@ -245,6 +339,23 @@ describe('GoogleCalendarService', () => {
 
     const result = await service.checkConnection(userId);
     expect(result).toEqual({ connected: false });
+  });
+
+  it('reports not connected when the refresh token is rejected, and keeps the stored tokens', async () => {
+    const { google } = jest.requireMock('googleapis');
+    (google.auth.OAuth2 as jest.Mock).mockImplementationOnce(() => ({
+      setCredentials: jest.fn(),
+      refreshAccessToken: jest.fn().mockRejectedValue(new Error('invalid_grant')),
+    }));
+    jest.spyOn(userRepo, 'findOne').mockResolvedValue({
+      googleAccessToken: 'old',
+      googleRefreshToken: 'revoked',
+      googleTokenExpiry: new Date(Date.now() - 1000),
+    } as User);
+    const update = jest.spyOn(userRepo, 'update').mockResolvedValue({ affected: 1, raw: [], generatedMaps: [] });
+
+    expect(await service.checkConnection('u1')).toEqual({ connected: false });
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('should get events', async () => {
@@ -436,6 +547,61 @@ describe('GoogleCalendarService', () => {
     );
   });
 
+  it('returns the event a lost insert created when its own id comes back 409', async () => {
+    jest.spyOn(userRepo, 'findOne').mockResolvedValue({
+      googleAccessToken: 'valid-token',
+      googleTokenExpiry: new Date(Date.now() + 10000),
+    } as User);
+    jest.spyOn(userSettingsRepo, 'findOne').mockResolvedValue({
+      appGoogleCalendarId: 'app-calendar@test.google.com',
+    } as UserSettings);
+    g().eventsInsert.mockRejectedValueOnce(Object.assign(new Error('The requested identifier already exists.'), { code: 409 }));
+    g().eventsGet.mockResolvedValueOnce({ data: { id: 'own0000000000000000000000000000', status: 'confirmed' } });
+
+    const result = await service.createEvent('123', { summary: 'Retry', id: 'own0000000000000000000000000000' });
+
+    expect(result).toMatchObject({ id: 'own0000000000000000000000000000', appCalendarId: 'app-calendar@test.google.com' });
+    expect(g().eventsGet).toHaveBeenCalledWith({
+      calendarId: 'app-calendar@test.google.com',
+      eventId: 'own0000000000000000000000000000',
+    });
+  });
+
+  it('still fails an insert conflict when the client sent no id of its own', async () => {
+    jest.spyOn(userRepo, 'findOne').mockResolvedValue({
+      googleAccessToken: 'valid-token',
+      googleTokenExpiry: new Date(Date.now() + 10000),
+    } as User);
+    jest.spyOn(userSettingsRepo, 'findOne').mockResolvedValue({
+      appGoogleCalendarId: 'app-calendar@test.google.com',
+    } as UserSettings);
+    g().eventsInsert.mockRejectedValueOnce(Object.assign(new Error('conflict'), { code: 409 }));
+
+    await expect(service.createEvent('123', { summary: 'No id' })).rejects.toThrow('could not create');
+    expect(g().eventsGet).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [404, true],
+    [410, true],
+    [503, false],
+    [429, false],
+    [401, false],
+  ])('AUD-001: getEvent maps Google %s to missing=%s, keeping the status', async (code, missing) => {
+    jest.spyOn(userRepo, 'findOne').mockResolvedValue({
+      googleAccessToken: 'valid-token',
+      googleTokenExpiry: new Date(Date.now() + 10000),
+    } as User);
+    jest.spyOn(userSettingsRepo, 'findOne').mockResolvedValue({ appGoogleCalendarId: 'app-cal' } as UserSettings);
+    g().eventsGet.mockRejectedValueOnce(Object.assign(new Error('Google says no'), { code }));
+
+    const error = await service.getEvent('123', 'evt-1', 'app-cal').catch((e: unknown) => e);
+
+    expect(error instanceof GoogleEventMissingError).toBe(missing);
+    expect(isGoogleEventMissing(error)).toBe(missing);
+    if (!missing) expect((error as { status?: number }).status).toBe(code);
+  });
+
   it('should update event', async () => {
     const userId = '123';
     const eventId = 'event123';
@@ -455,6 +621,75 @@ describe('GoogleCalendarService', () => {
     expect(result).toMatchObject({
       id: 'eventId',
       appCalendarId: 'app-cal@test.google.com',
+    });
+  });
+
+  describe('H-2 / H-3: updating an event Google already holds', () => {
+    beforeEach(() => {
+      jest.spyOn(userRepo, 'findOne').mockResolvedValue({
+        googleAccessToken: 'valid-token',
+        googleTokenExpiry: new Date(Date.now() + 10000),
+      } as User);
+      jest.spyOn(userSettingsRepo, 'findOne').mockResolvedValue({ appGoogleCalendarId: 'app-cal' } as UserSettings);
+    });
+    const remote = (extra: Record<string, unknown> = {}) => ({
+      data: {
+        id: 'evt-1',
+        status: 'confirmed',
+        summary: 'Old name',
+        description: 'Old notes',
+        start: { dateTime: '2026-11-05T10:00:00Z' },
+        end: { dateTime: '2026-11-05T11:00:00Z' },
+        attendees: [{ email: 'guest@example.com' }],
+        conferenceData: { conferenceId: 'abc-defg-hij' },
+        ...extra,
+      },
+    });
+    const sentBody = () => g().eventsUpdate.mock.calls[0][0].requestBody as Record<string, unknown>;
+
+    it('H-3: guests and conferencing added in Google survive; a field the app cleared is cleared', async () => {
+      g().eventsGet.mockResolvedValueOnce(remote());
+
+      await service.updateEvent('123', 'evt-1', {
+        summary: 'New name',
+        start: { dateTime: '2026-11-05T12:00:00Z' },
+        end: { dateTime: '2026-11-05T13:00:00Z' },
+      }, { calendarId: 'app-cal' });
+
+      expect(sentBody()).toMatchObject({
+        summary: 'New name',
+        attendees: [{ email: 'guest@example.com' }],
+        conferenceData: { conferenceId: 'abc-defg-hij' },
+      });
+      expect(sentBody()).not.toHaveProperty('description');
+      expect(g().eventsUpdate.mock.calls[0][0].conferenceDataVersion).toBe(1);
+    });
+
+    it('a partial edit (provider patch) keeps every other field', async () => {
+      g().eventsGet.mockResolvedValueOnce(remote());
+
+      await service.updateEvent('123', 'evt-1', { summary: 'Renamed' }, { calendarId: 'app-cal', partial: true });
+
+      expect(sentBody()).toMatchObject({ summary: 'Renamed', description: 'Old notes', start: { dateTime: '2026-11-05T10:00:00Z' } });
+    });
+
+    it('H-2: an event deleted in Google (cancelled) is reported missing, never restored', async () => {
+      g().eventsGet.mockResolvedValueOnce(remote({ status: 'cancelled' }));
+
+      const error = await service
+        .updateEvent('123', 'evt-1', { summary: 'New name' }, { calendarId: 'app-cal' })
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(GoogleEventMissingError);
+      expect(g().eventsUpdate).not.toHaveBeenCalled();
+    });
+
+    it('H-2: reading a cancelled event reports it missing', async () => {
+      g().eventsGet.mockResolvedValueOnce(remote({ status: 'cancelled' }));
+
+      const error = await service.getEvent('123', 'evt-1', 'app-cal').catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(GoogleEventMissingError);
     });
   });
 

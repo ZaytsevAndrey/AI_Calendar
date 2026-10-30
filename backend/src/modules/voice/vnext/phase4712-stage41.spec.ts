@@ -753,7 +753,8 @@ describe('stage 4.1 V1 bridge isolation', () => {
       { kind: 'recurrence', pattern: 'DAILY' },
       { kind: 'day_bound', edge: 'sleep', role: 'deadline' },
       { kind: 'clock', value: '18:00', role: 'deadline' },
-      { kind: 'unresolved' },
+      // Scheduling refactor: a preferred clock is carried (flexible preferred start), not unresolved.
+      { kind: 'clock', value: '15:00', role: 'preferred' },
       { kind: 'all_day' },
       { kind: 'relative', direction: 'after', amount: 2, unit: 'hour' },
       { kind: 'unresolved' },

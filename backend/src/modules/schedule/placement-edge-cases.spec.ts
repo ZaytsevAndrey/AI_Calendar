@@ -1,0 +1,711 @@
+/**
+ * Placement edge cases through the real services on SQLite: chain depth,
+ * cross-midnight, very long tasks, full windows, repeated placement,
+ * preferred-time conflicts, horizon boundary, a series edit while its
+ * placement is still queued, and a DST gap. Each test checks the engine
+ * invariants: no overlap, fixed anchors stay, every task seated or parked.
+ */
+import { Repository } from 'typeorm';
+import { TaskEventType } from '../scheduling/event-type.enum';
+import { ScheduleState, Task } from '../tasks/entities/task.entity';
+import { ScheduleJob } from './entities/schedule-job.entity';
+import { UserSettings } from '../user-settings/entities/user-settings.entity';
+import { createPlacementKit, type PlacementKit } from '../../../test/helpers/placement-sqlite.kit';
+
+describe('placement edge cases', () => {
+  let kit: PlacementKit;
+
+  afterEach(async () => {
+    jest.restoreAllMocks();
+    await kit?.destroy();
+    kit = undefined as unknown as PlacementKit;
+  });
+
+  const create = async (body: Record<string, unknown>) => {
+    const created = await kit.tasksService.create(kit.user.id, {
+      timeZone: kit.settings.timeZone,
+      priority: 'medium',
+      allowSplit: false,
+      ...body,
+    } as never);
+    await kit.jobs.settle();
+    return created as Task & { jobId: string };
+  };
+  const fixed = (name: string, ymd: string, from: string, to: string) =>
+    create({
+      name,
+      eventType: TaskEventType.FIXED,
+      scheduledStartTime: kit.at(ymd, from).toISOString(),
+      scheduledEndTime: kit.at(ymd, to).toISOString(),
+    });
+  /** Conflicts the create job reported (the conflict sheet the SPA shows). */
+  const jobConflicts = async (jobId: string) => {
+    const job = await kit.ds.getRepository(ScheduleJob).findOneByOrFail({ id: jobId });
+    return (JSON.parse(job.resultDiffJson ?? '{}') as { conflicts?: unknown[] }).conflicts ?? [];
+  };
+  const flexible = (name: string, minutes: number, extra: Record<string, unknown> = {}) =>
+    create({ name, estimatedTimeInMinutes: minutes, ...extra });
+
+  /**
+   * Engine invariants over every slot of the user. `awaitingChoice`: tasks whose
+   * job returned a conflict sheet wait unseated for the user (by design).
+   */
+  async function expectInvariants(awaitingChoice: string[] = []) {
+    const tasks = await kit.taskRepo.find({ where: { userId: kit.user.id } });
+    const slots = await kit.slotRepo.find();
+    const spans = slots
+      .map((row) => ({
+        taskId: row.taskId,
+        start: new Date(row.scheduledStartTime).getTime(),
+        end: new Date(row.scheduledEndTime).getTime(),
+      }))
+      .sort((a, b) => a.start - b.start);
+    const fixedIds = new Set(tasks.filter((t) => t.eventType === TaskEventType.FIXED).map((t) => t.id));
+    for (let i = 1; i < spans.length; i += 1) {
+      // Only an explicit fixed-on-fixed may overlap; flexible work never does.
+      const overlap = spans[i].start < spans[i - 1].end;
+      if (overlap) expect(fixedIds.has(spans[i].taskId) && fixedIds.has(spans[i - 1].taskId)).toBe(true);
+    }
+    for (const task of tasks) {
+      const seated = spans.some((span) => span.taskId === task.id);
+      const parked =
+        task.scheduleState === ScheduleState.PROBLEMATIC || task.isUnscheduled || awaitingChoice.includes(task.id);
+      expect({ name: task.name, placedOrParked: seated || parked }).toEqual({ name: task.name, placedOrParked: true });
+    }
+    return { tasks, spans };
+  }
+
+  it('a chain longer than the pull limit still ends consistent (fixed wins, nobody overlaps)', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', wakeTime: '08:00', sleepTime: '12:00', horizonDays: 3 });
+    // Eight 30-min flexibles pack 08:00–12:00: displacing the first needs 8 pulls (> 6).
+    for (let i = 0; i < 8; i += 1) await flexible(`F${i}`, 30);
+    const before = await expectInvariants();
+    expect(before.spans).toHaveLength(8);
+
+    const anchor = await fixed('Anchor', '2026-11-05', '08:00', '08:30');
+
+    expect(await kit.slotsOf(anchor.id)).toEqual(['2026-11-05 08:00-08:30']);
+    const after = await expectInvariants();
+    // Nobody vanished: 8 flexibles + the anchor are each seated or parked.
+    expect(after.tasks).toHaveLength(9);
+  });
+
+  it('a fixed event across midnight is stored whole and blocks both days', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', wakeTime: '00:00', sleepTime: '23:59', horizonDays: 3 });
+    const night = await fixed('Evening shift', '2026-11-05', '20:00', '22:00');
+    const late = await create({
+      name: 'Night shift 2',
+      eventType: TaskEventType.FIXED,
+      scheduledStartTime: kit.at('2026-11-05', '23:30').toISOString(),
+      scheduledEndTime: kit.at('2026-11-06', '01:30').toISOString(),
+    });
+    const rows = await kit.slotRepo.find({ where: { taskId: late.id } });
+    expect(rows).toHaveLength(1);
+    expect(new Date(rows[0].scheduledEndTime).getTime() - new Date(rows[0].scheduledStartTime).getTime()).toBe(
+      120 * 60_000,
+    );
+    // A flexible task asking for 00:30 on the next day hits the shift: a
+    // conflict, never a seat inside it.
+    const early = await flexible('Early', 30, { scheduledStartTime: kit.at('2026-11-06', '00:30').toISOString() });
+    expect((await jobConflicts(early.jobId)).length).toBeGreaterThan(0);
+    for (const row of await kit.slotRepo.find({ where: { taskId: early.id } })) {
+      expect(new Date(row.scheduledStartTime).getTime()).toBeGreaterThanOrEqual(kit.at('2026-11-06', '01:30').getTime());
+    }
+    expect(await kit.slotsOf(night.id)).toHaveLength(1);
+    await expectInvariants([early.id]);
+  });
+
+  it('a very long task is placed whole; one longer than any window parks instead of splitting or overlapping', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', wakeTime: '08:00', sleepTime: '20:00', horizonDays: 3 });
+    const long = await flexible('Long', 600);
+    const [slot] = await kit.slotRepo.find({ where: { taskId: long.id } });
+    expect(new Date(slot.scheduledEndTime).getTime() - new Date(slot.scheduledStartTime).getTime()).toBe(600 * 60_000);
+
+    const huge = await flexible('Huge', 13 * 60);
+    expect(await kit.slotsOf(huge.id)).toEqual([]);
+    expect((await kit.reload(huge.id)).scheduleState).toBe(ScheduleState.PROBLEMATIC);
+    await expectInvariants();
+  });
+
+  it('a full window over the whole horizon parks a new flexible task', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', wakeTime: '08:00', sleepTime: '10:00', horizonDays: 2 });
+    for (const ymd of ['2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08']) await fixed(`Wall ${ymd}`, ymd, '08:00', '10:00');
+    const extra = await flexible('Extra', 60, { deadline: kit.at('2026-11-06', '10:00').toISOString() });
+    expect(await kit.slotsOf(extra.id)).toEqual([]);
+    expect((await kit.reload(extra.id)).scheduleState).toBe(ScheduleState.PROBLEMATIC);
+    await expectInvariants();
+  });
+
+  it('placing the same task again is idempotent (same slot, one row)', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z' });
+    const task = await flexible('Once', 45);
+    const first = await kit.slotsOf(task.id);
+    for (let i = 0; i < 3; i += 1) {
+      await kit.service.place(kit.user.id, task.id, {});
+    }
+    expect(await kit.slotsOf(task.id)).toEqual(first);
+    expect(await kit.slotRepo.count({ where: { taskId: task.id } })).toBe(1);
+  });
+
+  it('a preferred time that hits a fixed event asks (conflict), never sits on top', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z' });
+    const meeting = await fixed('Meeting', '2026-11-05', '10:00', '11:00');
+    const task = await flexible('Prefers 10', 60, { scheduledStartTime: kit.at('2026-11-05', '10:00').toISOString() });
+    // An explicit time on an anchor is the user's call (engine doc 6.2.1): a
+    // conflict sheet, and the task never sits on the meeting.
+    expect((await jobConflicts(task.jobId)).length).toBeGreaterThan(0);
+    for (const slot of await kit.slotsOf(task.id)) expect(slot).not.toContain('10:00-11:00');
+    expect(await kit.slotsOf(meeting.id)).toEqual(['2026-11-05 10:00-11:00']);
+    await expectInvariants([task.id]);
+  });
+
+  it('a series covers exactly its horizon, and a later append adds days without duplicates', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
+    const series = await create({
+      name: 'Daily',
+      eventType: TaskEventType.ADMIN,
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      scheduledStartTime: kit.at('2026-11-05', '09:00').toISOString(),
+      estimatedTimeInMinutes: 30,
+    });
+    const days = (await kit.slotsOf(series.id)).map((row) => row.slice(0, 10));
+    expect(days).toEqual(['2026-11-05', '2026-11-06', '2026-11-07']);
+
+    jest.setSystemTime(new Date('2026-11-07T07:00:00.000Z'));
+    await kit.service.appendMissingSeriesDays(kit.user.id);
+    await kit.service.appendMissingSeriesDays(kit.user.id);
+    const later = (await kit.slotsOf(series.id)).map((row) => row.slice(0, 10));
+    expect(new Set(later).size).toBe(later.length);
+    expect(later).toEqual(expect.arrayContaining(['2026-11-08', '2026-11-09']));
+    expect(later.every((row) => row <= '2026-11-09')).toBe(true);
+  });
+
+  it.each([
+    ['flexible', TaskEventType.ADMIN],
+    ['fixed', TaskEventType.FIXED],
+  ])(
+    'AUD-002: append after today\'s %s occurrence ended keeps exactly one occurrence today, no copy',
+    async (_label, eventType) => {
+      kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
+      const series = await create({
+        name: 'Daily',
+        eventType,
+        isRecurring: true,
+        recurrencePattern: 'DAILY',
+        scheduledStartTime: kit.at('2026-11-05', '08:00').toISOString(),
+        ...(eventType === TaskEventType.FIXED ? { scheduledEndTime: kit.at('2026-11-05', '08:30').toISOString() } : {}),
+        estimatedTimeInMinutes: 30,
+      });
+      // The 08:00 occurrence is over; the background append runs at 12:00.
+      jest.setSystemTime(new Date('2026-11-05T12:00:00.000Z'));
+      await kit.service.appendMissingSeriesDays(kit.user.id);
+
+      const group = (await kit.taskRepo.find()).filter((t) => t.id === series.id || t.seriesGroupId === series.id);
+      const today: string[] = [];
+      for (const member of group) {
+        for (const slot of await kit.slotsOf(member.id)) if (slot.startsWith('2026-11-05')) today.push(slot);
+      }
+      expect(today).toEqual(['2026-11-05 08:00-08:30']);
+      const master = await kit.reload(series.id);
+      expect(master.skippedOccurrenceYmds ?? []).not.toContain('2026-11-05');
+      expect((await kit.taskRepo.find()).filter((t) => t.problematicDay === '2026-11-05')).toEqual([]);
+    },
+  );
+
+  it('AUD-003: editing a series created on an earlier day keeps its history (no past park, no copy)', async () => {
+    kit = await createPlacementKit({ now: '2026-11-01T07:00:00.000Z', horizonDays: 3 });
+    const series = await create({
+      name: 'Daily',
+      eventType: TaskEventType.ADMIN,
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      scheduledStartTime: kit.at('2026-11-01', '09:00').toISOString(),
+      estimatedTimeInMinutes: 30,
+    });
+    jest.setSystemTime(new Date('2026-11-03T07:00:00.000Z'));
+    await kit.service.appendMissingSeriesDays(kit.user.id);
+    const before = await kit.slotsOf(series.id);
+
+    for (const patch of [{ estimatedTimeInMinutes: 45 }, { deadline: kit.at('2026-12-31', '23:00').toISOString() }]) {
+      await kit.tasksService.update(series.id, kit.user.id, patch as never);
+      await kit.jobs.settle();
+    }
+
+    const master = await kit.reload(series.id);
+    expect(master.skippedOccurrenceYmds ?? []).toEqual([]);
+    // History kept; per the engine doc a duration edit does not rewrite seated days.
+    expect(await kit.slotsOf(series.id)).toEqual(expect.arrayContaining(before));
+    expect((await kit.taskRepo.find()).filter((t) => t.id !== series.id)).toEqual([]);
+  });
+
+  it('AUD-014: "this and following" from a spring-forward Sunday keeps Sundays, and a retry adds no second tail', async () => {
+    kit = await createPlacementKit({
+      now: '2027-03-06T12:00:00.000Z',
+      timeZone: 'America/New_York',
+      wakeTime: '07:00',
+      sleepTime: '23:00',
+      horizonDays: 21,
+    });
+    const series = await create({
+      name: 'Sunday',
+      eventType: TaskEventType.ADMIN,
+      isRecurring: true,
+      recurrencePattern: 'WEEKLY',
+      scheduledStartTime: kit.at('2027-03-07', '10:00').toISOString(),
+      estimatedTimeInMinutes: 60,
+    });
+    const move = kit.moveService as unknown as { moveSeriesTail: (...args: unknown[]) => Promise<void> };
+    const drag = async () =>
+      move.moveSeriesTail(
+        kit.user.id,
+        await kit.reload(series.id),
+        {
+          googleEventId: 'evt-14',
+          originalStart: kit.at('2027-03-14', '10:00').toISOString(),
+          originalEnd: kit.at('2027-03-14', '11:00').toISOString(),
+          start: kit.at('2027-03-14', '15:00').toISOString(),
+          end: kit.at('2027-03-14', '16:00').toISOString(),
+        },
+        kit.at('2027-03-14', '15:00'),
+        kit.at('2027-03-14', '16:00'),
+        60,
+        [],
+      );
+    await drag();
+    await drag();
+
+    const tails = (await kit.taskRepo.find()).filter((t) => t.isRecurring && t.id !== series.id);
+    expect(tails).toHaveLength(1);
+    expect(kit.ymdOf(tails[0].earliestStartTime!)).toBe('2027-03-14');
+    const days = (await kit.slotsOf(tails[0].id)).map((row) => row.slice(0, 10));
+    expect(days.length).toBeGreaterThan(0);
+    for (const ymd of days) expect(new Date(`${ymd}T12:00:00Z`).getUTCDay()).toBe(0);
+  });
+
+  it('AUD-022: a 02:30 series whose first upcoming day is a spring-forward day keeps 02:30 on later days', async () => {
+    kit = await createPlacementKit({
+      // 23:00 on 13 March: today's 02:30 is over, so the first series day is the switch day.
+      now: '2027-03-14T04:00:00.000Z',
+      timeZone: 'America/New_York',
+      wakeTime: '00:00',
+      sleepTime: '23:59',
+      horizonDays: 3,
+    });
+    const series = await create({
+      name: 'Pills',
+      eventType: TaskEventType.ADMIN,
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      // The clock the user chose (02:30), on a day where it exists.
+      scheduledStartTime: kit.at('2027-03-13', '02:30').toISOString(),
+      estimatedTimeInMinutes: 15,
+    });
+    jest.setSystemTime(new Date('2027-03-17T05:00:00.000Z'));
+    await kit.service.appendMissingSeriesDays(kit.user.id);
+
+    const rows = await kit.slotsOf(series.id);
+    expect(rows[0]).toBe('2027-03-14 03:30-03:45'); // the skipped clock, shifted forward that day only
+    for (const row of rows.slice(1)) expect(row.slice(11)).toBe('02:30-02:45');
+    expect(rows.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('AUD-027: a dry run of a series edit writes nothing, even when days are missing', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
+    const series = await create({
+      name: 'Daily',
+      eventType: TaskEventType.ADMIN,
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      scheduledStartTime: kit.at('2026-11-05', '09:00').toISOString(),
+      estimatedTimeInMinutes: 30,
+    });
+    // Two days later the horizon has days the series does not hold yet.
+    jest.setSystemTime(new Date('2026-11-07T07:00:00.000Z'));
+    const before = await kit.slotsOf(series.id);
+
+    for (const opts of [
+      { commit: 'keep' as const, expandSeries: true, dryRun: true },
+      { expandSeries: true, dryRun: true },
+      { expandSeries: true, dryRun: true, preferredStart: kit.at('2026-11-07', '09:00') },
+    ]) {
+      await kit.service.place(kit.user.id, series.id, opts);
+    }
+
+    expect(await kit.slotsOf(series.id)).toEqual(before);
+  });
+
+  it('AUD-016: a master and its recurring clock sibling never both hold a civil day past the horizon', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 7 });
+    const groupId = '22222222-2222-4222-8222-222222222222';
+    // Master: daily 09:00; Tuesday 11-10 moved to the sibling (skipped here).
+    const master = await kit.addTask({
+      name: 'Daily',
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      seriesGroupId: groupId,
+      skippedOccurrenceYmds: ['2026-11-10'],
+      scheduledStartTime: kit.at('2026-11-05', '09:00'),
+      scheduledEndTime: kit.at('2026-11-05', '09:30'),
+      estimatedTimeInMinutes: 30,
+    });
+    for (const ymd of ['2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08', '2026-11-09', '2026-11-11']) {
+      await kit.addSlot(master.id, kit.at(ymd, '09:00'), kit.at(ymd, '09:30'));
+    }
+    // Clock sibling: weekly Tuesday 10:00, recurring without an end (as created).
+    const sibling = await kit.addTask({
+      name: 'Daily',
+      isRecurring: true,
+      recurrencePattern: 'WEEKLY',
+      recurrenceWeekDays: [2],
+      seriesGroupId: groupId,
+      scheduledStartTime: kit.at('2026-11-10', '10:00'),
+      scheduledEndTime: kit.at('2026-11-10', '10:30'),
+      estimatedTimeInMinutes: 30,
+    });
+    await kit.addSlot(sibling.id, kit.at('2026-11-10', '10:00'), kit.at('2026-11-10', '10:30'));
+
+    // Three weeks later: the background append, and an edit that expands the sibling directly.
+    jest.setSystemTime(new Date('2026-11-24T07:00:00.000Z'));
+    await kit.service.appendMissingSeriesDays(kit.user.id);
+    await (kit.service as unknown as { expandSeriesDays: (u: string, id: string) => Promise<void> }).expandSeriesDays(
+      kit.user.id,
+      sibling.id,
+    );
+
+    const perDay = new Map<string, number>();
+    for (const member of [master, sibling]) {
+      for (const row of await kit.slotsOf(member.id)) {
+        perDay.set(row.slice(0, 10), (perDay.get(row.slice(0, 10)) ?? 0) + 1);
+      }
+    }
+    expect([...perDay.entries()].filter(([, n]) => n > 1)).toEqual([]);
+  });
+
+  describe('AUD-015: series day writes are atomic (fault injection)', () => {
+    it('parking a series day: a failing copy insert leaves the skip and the day\'s row untouched', async () => {
+      kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
+      const series = await create({
+        name: 'Daily',
+        eventType: TaskEventType.ADMIN,
+        isRecurring: true,
+        recurrencePattern: 'DAILY',
+        scheduledStartTime: kit.at('2026-11-05', '09:00').toISOString(),
+        estimatedTimeInMinutes: 30,
+      });
+      const save = Repository.prototype.save;
+      jest.spyOn(Repository.prototype, 'save').mockImplementation(function (this: Repository<Task>, entity: unknown, ...rest: unknown[]) {
+        const row = entity as Partial<Task>;
+        if (row?.scheduleState === ScheduleState.PROBLEMATIC && row.originalOccurrenceYmd) {
+          return Promise.reject(new Error('disk full'));
+        }
+        return (save as (...a: unknown[]) => Promise<unknown>).call(this, entity, ...rest) as never;
+      });
+      const park = (kit.service as unknown as {
+        parkFailedSeriesDay: (...args: unknown[]) => Promise<void>;
+      }).parkFailedSeriesDay.bind(kit.service);
+
+      await expect(
+        park(kit.user.id, await kit.reload(series.id), '2026-11-06', 'no_slot', 'UTC', null, 30),
+      ).rejects.toThrow('disk full');
+
+      expect((await kit.reload(series.id)).skippedOccurrenceYmds ?? []).toEqual([]);
+      expect(await kit.slotsOf(series.id)).toContain('2026-11-06 09:00-09:30');
+    });
+
+    it('appending a day on another clock: a failing sibling leaves no orphan row or skip', async () => {
+      kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 2 });
+      const series = await create({
+        name: 'Daily',
+        eventType: TaskEventType.ADMIN,
+        isRecurring: true,
+        recurrencePattern: 'DAILY',
+        scheduledStartTime: kit.at('2026-11-05', '09:00').toISOString(),
+        estimatedTimeInMinutes: 30,
+      });
+      // The next appended day's clock is taken by a fixed event: it seats elsewhere (a sibling).
+      await create({
+        name: 'Wall',
+        eventType: TaskEventType.FIXED,
+        scheduledStartTime: kit.at('2026-11-07', '09:00').toISOString(),
+        scheduledEndTime: kit.at('2026-11-07', '09:30').toISOString(),
+      });
+      jest.setSystemTime(new Date('2026-11-06T07:00:00.000Z'));
+      jest
+        .spyOn(kit.service as never, 'createSeriesClockSibling' as never)
+        .mockRejectedValue(new Error('disk full') as never);
+
+      await expect(kit.service.appendMissingSeriesDays(kit.user.id)).rejects.toThrow('disk full');
+
+      expect((await kit.reload(series.id)).skippedOccurrenceYmds ?? []).not.toContain('2026-11-07');
+      expect((await kit.slotsOf(series.id)).filter((row) => row.startsWith('2026-11-07'))).toEqual([]);
+    });
+  });
+
+  describe('re-merging a detached copy (AUD-017, AUD-021)', () => {
+    const groupFixture = async () => {
+      kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 7 });
+      const groupId = '11111111-1111-4111-8111-111111111111';
+      // A same-clock series of the group that never held 11-06 (created first, found first).
+      const other = await kit.addTask({
+        name: 'Daily',
+        isRecurring: true,
+        recurrencePattern: 'DAILY',
+        seriesGroupId: groupId,
+        earliestStartTime: kit.at('2026-11-09', '00:00'),
+        scheduledStartTime: kit.at('2026-11-09', '09:00'),
+        scheduledEndTime: kit.at('2026-11-09', '09:30'),
+        estimatedTimeInMinutes: 30,
+      });
+      // The series the copy was detached from: 11-06 is skipped on it.
+      const owner = await kit.addTask({
+        name: 'Daily',
+        isRecurring: true,
+        recurrencePattern: 'DAILY',
+        seriesGroupId: groupId,
+        skippedOccurrenceYmds: ['2026-11-06'],
+        scheduledStartTime: kit.at('2026-11-05', '09:00'),
+        scheduledEndTime: kit.at('2026-11-05', '09:30'),
+        estimatedTimeInMinutes: 30,
+      });
+      await kit.addSlot(owner.id, kit.at('2026-11-05', '09:00'), kit.at('2026-11-05', '09:30'));
+      // Seated copy: parentSeriesId already cleared (as persist does on seat).
+      const copy = await kit.addTask({
+        name: 'Daily',
+        seriesGroupId: groupId,
+        originalOccurrenceYmd: '2026-11-06',
+        parentSeriesId: null,
+        scheduledStartTime: kit.at('2026-11-06', '14:00'),
+        scheduledEndTime: kit.at('2026-11-06', '14:30'),
+        estimatedTimeInMinutes: 30,
+      });
+      await kit.addSlot(copy.id, kit.at('2026-11-06', '14:00'), kit.at('2026-11-06', '14:30'));
+      return { other, owner, copy };
+    };
+    const dragHome = (copyId: string) =>
+      kit.service.place(kit.user.id, copyId, { preferredStart: kit.at('2026-11-06', '09:00'), drag: true });
+
+    it('AUD-021: the copy rejoins the series that skipped its day, not another same-clock series', async () => {
+      const { other, owner, copy } = await groupFixture();
+      await dragHome(copy.id);
+      expect(await kit.taskRepo.findOneBy({ id: copy.id })).toBeNull();
+      expect((await kit.reload(owner.id)).skippedOccurrenceYmds ?? []).not.toContain('2026-11-06');
+      expect(await kit.slotsOf(owner.id)).toContain('2026-11-06 09:00-09:30');
+      expect(await kit.slotsOf(other.id)).not.toContain('2026-11-06 09:00-09:30');
+    });
+
+    it('AUD-017: when the series cannot take the day back, the copy is kept (the day is never lost)', async () => {
+      const { owner, copy } = await groupFixture();
+      // Series duration 60 while its block is 30, and a fixed event right after the home slot.
+      await kit.taskRepo.update({ id: owner.id }, { estimatedTimeInMinutes: 60 });
+      await create({
+        name: 'Wall',
+        eventType: TaskEventType.FIXED,
+        scheduledStartTime: kit.at('2026-11-06', '09:30').toISOString(),
+        scheduledEndTime: kit.at('2026-11-06', '10:30').toISOString(),
+      });
+      await dragHome(copy.id);
+      const copySlots = (await kit.taskRepo.findOneBy({ id: copy.id })) ? await kit.slotsOf(copy.id) : [];
+      const ownerDay = (await kit.slotsOf(owner.id)).filter((row) => row.startsWith('2026-11-06'));
+      expect(copySlots.length + ownerDay.length).toBe(1);
+    });
+  });
+
+  describe('AUD-008: task edits wait for a running placement (no stale overwrite)', () => {
+    /**
+     * Pause the next placement right after it loaded the task (at its settings
+     * read) until `release()`; `paused` resolves once it waits.
+     */
+    const pausePersist = () => {
+      let release!: () => void;
+      let reached!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const paused = new Promise<void>((resolve) => (reached = resolve));
+      const settings = (kit.service as unknown as { userSettingsService: { getSettings: jest.Mock } })
+        .userSettingsService;
+      const read = settings.getSettings.getMockImplementation()!;
+      settings.getSettings.mockImplementationOnce(async (...args: unknown[]) => {
+        reached();
+        await gate;
+        return read(...args);
+      });
+      return { release, paused };
+    };
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+    it('a rename during placement survives the placement write', async () => {
+      kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 2 });
+      const task = await flexible('Draft', 30);
+      const { release, paused } = pausePersist();
+      const placing = kit.service.place(kit.user.id, task.id);
+      await paused;
+      const renaming = kit.tasksService.update(task.id, kit.user.id, { name: 'Final' } as never);
+      await tick();
+      release();
+      await Promise.all([placing, renaming]);
+      await kit.jobs.settle();
+
+      expect((await kit.reload(task.id)).name).toBe('Final');
+    });
+
+    it('marking done during placement stays done', async () => {
+      kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 2 });
+      const task = await flexible('Draft', 30);
+      const { release, paused } = pausePersist();
+      const placing = kit.service.place(kit.user.id, task.id);
+      await paused;
+      const completing = kit.tasksService.updateStatus(task.id, kit.user.id, 'completed' as never);
+      await tick();
+      release();
+      await Promise.all([placing, completing]);
+
+      expect((await kit.reload(task.id)).status).toBe('completed');
+    });
+
+    /** Pause the next task edit right after it loaded the task (at its settings read). */
+    const pauseEdit = () => {
+      let release!: () => void;
+      let reached!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const paused = new Promise<void>((resolve) => (reached = resolve));
+      const repo = (kit.tasksService as unknown as { userSettingsRepository: Repository<UserSettings> })
+        .userSettingsRepository;
+      const findOne = repo.findOne.bind(repo);
+      jest.spyOn(repo, 'findOne').mockImplementationOnce(async (...args: unknown[]) => {
+        reached();
+        await gate;
+        return findOne(...(args as [never]));
+      });
+      return { release, paused };
+    };
+    const series = () =>
+      create({
+        name: 'Daily',
+        eventType: TaskEventType.ADMIN,
+        isRecurring: true,
+        recurrencePattern: 'DAILY',
+        scheduledStartTime: kit.at('2026-11-05', '09:00').toISOString(),
+        estimatedTimeInMinutes: 30,
+      });
+
+    it('a rename while a series day is being skipped survives the skip', async () => {
+      kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
+      const daily = await series();
+      const { release, paused } = pauseEdit();
+      const skipping = kit.tasksService.skipOccurrence(daily.id, kit.user.id, {
+        occurrenceStart: kit.at('2026-11-06', '09:00').toISOString(),
+      } as never);
+      await paused;
+      const renaming = kit.tasksService.update(daily.id, kit.user.id, { name: 'Standup' } as never);
+      await tick();
+      release();
+      await Promise.all([skipping, renaming]);
+      await kit.jobs.settle();
+
+      const after = await kit.reload(daily.id);
+      expect(after.name).toBe('Standup');
+      expect(after.skippedOccurrenceYmds).toContain('2026-11-06');
+    });
+
+    it('a rename while a series is being ended survives the end', async () => {
+      kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
+      const daily = await series();
+      const { release, paused } = pauseEdit();
+      const ending = kit.tasksService.endSeriesFrom(daily.id, kit.user.id, {
+        occurrenceStart: kit.at('2026-11-06', '09:00').toISOString(),
+      } as never);
+      await paused;
+      const renaming = kit.tasksService.update(daily.id, kit.user.id, { name: 'Standup' } as never);
+      await tick();
+      release();
+      await Promise.all([ending, renaming]);
+      await kit.jobs.settle();
+
+      const after = await kit.reload(daily.id);
+      expect(after.name).toBe('Standup');
+      expect(after.deadline).not.toBeNull();
+    });
+  });
+
+  it('AUD-018: an older drag that runs after a newer one does not move the task back', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
+    const task = await flexible('Focus', 60);
+    const slot = await kit.slotRepo.findOneByOrFail({ taskId: task.id });
+    const drag = (from: string) =>
+      kit.moveService.move(kit.user.id, {
+        slotId: slot.id,
+        originalStart: new Date(slot.scheduledStartTime).toISOString(),
+        originalEnd: new Date(slot.scheduledEndTime).toISOString(),
+        start: kit.at('2026-11-06', from).toISOString(),
+        end: kit.at('2026-11-06', `${Number(from.slice(0, 2)) + 1}:00`).toISOString(),
+      } as never);
+    // The first drop's in-request run is lost (crash); its job waits in the queue.
+    jest.spyOn(kit.jobs, 'runNow').mockResolvedValueOnce(undefined as never);
+    await drag('14:00');
+    await drag('16:00');
+    await kit.jobs.settle();
+    expect(await kit.slotsOf(task.id)).toEqual(['2026-11-06 16:00-17:00']);
+
+    await kit.jobs.processDue();
+    await kit.jobs.settle();
+
+    expect(await kit.slotsOf(task.id)).toEqual(['2026-11-06 16:00-17:00']);
+  });
+
+  it('a series clock edit while its create placement is still queued ends on the new clock only', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
+    // The create's in-request run is lost (crash); the job waits in the queue.
+    jest.spyOn(kit.jobs, 'runNow').mockResolvedValueOnce(undefined as never);
+    const series = (await kit.tasksService.create(kit.user.id, {
+      name: 'Standup',
+      eventType: TaskEventType.ADMIN,
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      scheduledStartTime: kit.at('2026-11-05', '09:00').toISOString(),
+      estimatedTimeInMinutes: 30,
+      timeZone: 'UTC',
+    } as never)) as Task;
+    expect(await kit.slotsOf(series.id)).toEqual([]);
+
+    await kit.tasksService.update(series.id, kit.user.id, {
+      scheduledStartTime: kit.at('2026-11-05', '14:00').toISOString(),
+    } as never);
+    await kit.jobs.settle();
+    await kit.jobs.processDue();
+    await kit.jobs.settle();
+
+    expect(await kit.slotsOf(series.id)).toEqual([
+      '2026-11-05 14:00-14:30',
+      '2026-11-06 14:00-14:30',
+      '2026-11-07 14:00-14:30',
+    ]);
+  });
+
+  it('a daily series at 02:30 New York keeps one occurrence on the spring-forward day', async () => {
+    kit = await createPlacementKit({
+      now: '2027-03-13T05:00:00.000Z',
+      timeZone: 'America/New_York',
+      wakeTime: '00:00',
+      sleepTime: '23:59',
+      horizonDays: 3,
+    });
+    const series = await create({
+      name: 'Pills',
+      eventType: TaskEventType.ADMIN,
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      scheduledStartTime: kit.at('2027-03-13', '02:30').toISOString(),
+      estimatedTimeInMinutes: 15,
+    });
+    const rows = await kit.slotsOf(series.id);
+    const days = rows.map((row) => row.slice(0, 10));
+    // 02:30 does not exist on 14 March: that day is 03:30 (RFC 5545, as Google
+    // renders the RRULE) and stays in the series — no detached copy.
+    expect(days).toEqual(['2027-03-13', '2027-03-14', '2027-03-15']);
+    expect(rows).toEqual(['2027-03-13 02:30-02:45', '2027-03-14 03:30-03:45', '2027-03-15 02:30-02:45']);
+    const all = await kit.taskRepo.find();
+    expect(all).toHaveLength(1);
+    expect(all[0].skippedOccurrenceYmds ?? []).toEqual([]);
+    await expectInvariants();
+  });
+});

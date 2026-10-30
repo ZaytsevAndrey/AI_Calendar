@@ -3,6 +3,7 @@ import {
   followWindowToDrop,
   PlacementStepService,
   seriesBlockMinutes,
+  seriesStartYmd,
 } from './placement-step.service';
 import { TaskEventType } from '../scheduling/event-type.enum';
 import { ScheduleState, Task, TaskStatus } from '../tasks/entities/task.entity';
@@ -385,6 +386,72 @@ describe('PlacementStepService.place (dryRun crowded day)', () => {
       windowYmd: ymd,
     });
     expect(plan.outcome).toBe('conflict');
+  });
+
+  const fixedSeries = {
+    id: 'fixed-series',
+    name: 'Standup',
+    eventType: TaskEventType.FIXED,
+    isRecurring: true,
+    recurrencePattern: 'DAILY',
+    // Stored first seat: 14:00–15:30. Each series day keeps that length.
+    scheduledStartTime: wall('14:00'),
+    scheduledEndTime: wall('15:30'),
+    estimatedTimeInMinutes: 30,
+  };
+  const planSeriesDay = (service: PlacementStepService, exactClock: boolean) =>
+    (service as unknown as {
+      planOneSeriesDayDry: (...args: unknown[]) => Promise<unknown>;
+    }).planOneSeriesDayDry(
+      'user-1',
+      'fixed-series',
+      ymd,
+      '09:00',
+      TZ,
+      'pass1',
+      [],
+      undefined,
+      exactClock,
+    ) as ReturnType<PlacementStepService['place']>;
+
+  it('FX01 a fixed series day takes its clock and slot length, shifting a flexible', async () => {
+    const { service } = build({
+      claim: fixedSeries,
+      peerSlots: [
+        {
+          id: 'slot-a',
+          start: '09:00',
+          end: '10:00',
+          task: { id: 'peer-a', name: 'Peer A', eventType: TaskEventType.ADMIN },
+        },
+      ],
+      linked: false,
+    });
+
+    const plan = await planSeriesDay(service, true);
+    expect(plan.outcome).toBe('seated');
+    if (plan.outcome !== 'seated') return;
+    expect(plan.start).toBe(wall('09:00').getTime());
+    expect(plan.end).toBe(wall('10:30').getTime());
+    expect(plan.moves.map((move) => move.taskId)).toContain('peer-a');
+  });
+
+  it('FX02 a fixed series day on another fixed item parks instead of finding a hole', async () => {
+    const { service } = build({
+      claim: fixedSeries,
+      peerSlots: [
+        {
+          id: 'slot-f',
+          start: '09:00',
+          end: '10:00',
+          task: { id: 'fixed-1', name: 'Fixed A', eventType: TaskEventType.FIXED },
+        },
+      ],
+      linked: false,
+    });
+
+    const plan = await planSeriesDay(service, true);
+    expect(plan.outcome).not.toBe('seated');
   });
 
   it('CD04 preferred on Google busy returns conflict', async () => {
@@ -848,5 +915,24 @@ describe('series re-merge duration', () => {
         seriesBlockMinutes(series),
       ),
     ).toBe(false);
+  });
+});
+
+describe('seriesStartYmd', () => {
+  const now = new Date('2026-10-29T10:00:00.000Z');
+
+  it('starts today without a From day', () => {
+    expect(seriesStartYmd({ earliestStartTime: null }, now, 'Europe/Kyiv')).toBe('2026-10-29');
+  });
+
+  it('starts on a later From day in the Settings zone', () => {
+    // 22:00 UTC on 1 Nov is already 2 Nov in Kyiv.
+    const task = { earliestStartTime: new Date('2026-11-01T22:00:00.000Z') };
+    expect(seriesStartYmd(task, now, 'Europe/Kyiv')).toBe('2026-11-02');
+  });
+
+  it('ignores a From day that has passed', () => {
+    const task = { earliestStartTime: new Date('2026-10-01T00:00:00.000Z') };
+    expect(seriesStartYmd(task, now, 'Europe/Kyiv')).toBe('2026-10-29');
   });
 });

@@ -29,12 +29,24 @@ describe('createTypeOrmOptions', () => {
     const options = createTypeOrmOptions({
       DATABASE_URL: 'postgres://user:pass@host/db?sslmode=require',
     });
+    // Stabilization G: Postgres schema comes from versioned migrations run on
+    // boot; synchronize is off unless TYPEORM_SYNC=true is set explicitly.
     expect(options).toMatchObject({
       type: 'postgres',
       url: 'postgres://user:pass@host/db?sslmode=require',
       ssl: { rejectUnauthorized: false },
-      synchronize: true,
+      synchronize: false,
+      migrationsRun: true,
     });
+  });
+
+  it('keeps synchronize as an explicit opt-in on Postgres', () => {
+    expect(
+      createTypeOrmOptions({ DATABASE_URL: 'postgres://localhost/db', TYPEORM_SYNC: 'true' }),
+    ).toMatchObject({ synchronize: true });
+    expect(
+      createTypeOrmOptions({ DATABASE_URL: 'postgres://localhost/db', TYPEORM_MIGRATIONS: 'false' }),
+    ).toMatchObject({ migrationsRun: false });
   });
 
   it('can disable SSL and synchronize via env', () => {

@@ -5,7 +5,8 @@
 import type { OperationChangesV1, RecurrencePatternV1, SemanticActionV1, TimeOfDayLabelV1 } from './types';
 
 /** Which part of a recurring series a command touches. from_day is that occurrence and the ones after it. */
-export const CLOCK_ROLES = ['start', 'end', 'earliest', 'deadline'] as const;
+/** `preferred`: a wish the engine may move away from (flexible); `start`: a promised clock. */
+export const CLOCK_ROLES = ['start', 'end', 'preferred', 'earliest', 'deadline'] as const;
 export type ClockRole = (typeof CLOCK_ROLES)[number];
 
 export type SeriesScope = 'occurrence' | 'from_day' | 'all';

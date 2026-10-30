@@ -13,6 +13,7 @@ import { VoiceModule } from './modules/voice/voice.module';
 import { HabitsModule } from './modules/habits/habits.module';
 import { RemindersModule } from './modules/reminders/reminders.module';
 import { DayRemindersModule } from './modules/day-reminders/day-reminders.module';
+import { PlacesModule } from './modules/places/places.module';
 import { CalendarOverlaysModule } from './modules/calendar-overlays/calendar-overlays.module';
 import { CalendarProvidersModule } from './modules/calendar-providers/calendar-providers.module';
 import { AdminDataModule } from './modules/admin-data/admin-data.module';
@@ -20,6 +21,8 @@ import { InternalModule } from './modules/internal/internal.module';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { migrateLegacyScheduleState } from './database/migrate-schedule-state';
 import { createTypeOrmOptions } from './database/typeorm.config';
+import { initializeDataSource } from './database/migration-lock';
+import type { DataSourceOptions } from 'typeorm';
 
 @Module({
   imports: [
@@ -39,6 +42,8 @@ import { createTypeOrmOptions } from './database/typeorm.config';
         await migrateLegacyScheduleState(env);
         return createTypeOrmOptions(env);
       },
+      // AUD-026: pending migrations run under a boot lock, not in initialize().
+      dataSourceFactory: (options) => initializeDataSource(options as DataSourceOptions),
     }),
     AuthModule,
     UsersModule,
@@ -56,6 +61,7 @@ import { createTypeOrmOptions } from './database/typeorm.config';
     DayRemindersModule,
     AdminDataModule,
     InternalModule,
+    PlacesModule,
   ],
 })
 export class AppModule implements NestModule {

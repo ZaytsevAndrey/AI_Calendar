@@ -3,6 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import { closeTestApp, createTestApp, E2eApp } from './helpers/create-test-app';
 import { createTimePhase, seedOnboardedUser } from './helpers/auth';
 import { api, jsonBody } from './helpers/http';
+import { seedSlot } from './helpers/slots';
 
 describe('Google, event-phases, and isolation API e2e', () => {
   let ctx: E2eApp;
@@ -163,22 +164,15 @@ describe('Google, event-phases, and isolation API e2e', () => {
       }),
     );
     await ctx.drainJobs();
-    const slot = jsonBody(
-      await api(ctx.app, 'POST', '/schedule', {
-        token: b.token,
-        payload: {
-          taskId: task.id,
-          scheduledStartTime: '2026-09-23T10:00:00.000Z',
-          scheduledEndTime: '2026-09-23T10:30:00.000Z',
-        },
-      }),
+    const slot = await seedSlot(
+      ctx.app,
+      task.id,
+      '2026-09-23T10:00:00.000Z',
+      '2026-09-23T10:30:00.000Z',
     );
-    const job = jsonBody(
-      await api(ctx.app, 'POST', '/schedule/generate', {
-        token: b.token,
-        payload: {},
-      }),
-    );
+    // B's own mutation job from the create above (POST /schedule/generate is gone).
+    const job = { jobId: task.jobId as string };
+    expect(job.jobId).toBeTruthy();
     await ctx.drainJobs();
 
     expect(
@@ -210,15 +204,13 @@ describe('Google, event-phases, and isolation API e2e', () => {
     expect(stealPhase.statusCode).toBe(400);
   });
 
-  it('X-ISO-006 / X-ISO-007 generate does not leak user B data', async () => {
+  it('X-ISO-006 / X-ISO-007 task lists do not leak user B data', async () => {
     const a = await seedOnboardedUser(ctx.app);
     const b = await seedOnboardedUser(ctx.app);
     await api(ctx.app, 'POST', '/tasks', {
       token: b.token,
       payload: { name: 'Only B', estimatedTimeInMinutes: 30 },
     });
-    await ctx.drainJobs();
-    await api(ctx.app, 'POST', '/schedule/generate', { token: a.token, payload: {} });
     await ctx.drainJobs();
 
     const aTasks = (await api(ctx.app, 'GET', '/tasks', { token: a.token })).json() as Array<{

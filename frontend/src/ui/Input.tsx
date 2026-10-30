@@ -14,6 +14,8 @@ import { controlWidth, fieldClassName } from './fieldChrome';
 export type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> & {
     size?: ResponsiveSize;
     error?: boolean;
+    /** Glyph before the text, e.g. a map pin for a place field. Email and search draw their own. */
+    leadingIcon?: LucideIcon;
 };
 
 const leadingIcon: Partial<Record<string, LucideIcon>> = {
@@ -44,13 +46,13 @@ function openNativePicker(input: HTMLInputElement | null) {
 }
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Input(
-    { size, error, className, type = 'text', disabled, ...props },
+    { size, error, className, type = 'text', disabled, leadingIcon: customLeading, ...props },
     ref,
 ) {
     const { t } = useTranslation();
     const [passwordVisible, setPasswordVisible] = useState(false);
     const innerRef = React.useRef<HTMLInputElement | null>(null);
-    const Leading = leadingIcon[type];
+    const Leading = leadingIcon[type] ?? customLeading;
     const Picker = pickerIcon[type];
     const isPassword = type === 'password';
     const adorned = Boolean(Leading || Picker || isPassword);

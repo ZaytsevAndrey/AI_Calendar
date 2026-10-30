@@ -14,6 +14,20 @@ jobs:
   build-and-test:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # Real Postgres for the .pg specs (locks, claims, migrations, placement).
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: luefy
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,6 +45,18 @@ jobs:
       - name: Backend tests
         run: npm test --workspace=backend
 
+      # Fails (instead of skipping) if the Postgres env is missing.
+      - name: Backend Postgres tests
+        run: npm run test:pg --workspace=backend
+        env:
+          PG_TEST_URL: postgres://postgres:test@localhost:5432/luefy
+          DATABASE_URL: postgres://postgres:test@localhost:5432/luefy
+
+      # Active voice gate (structured pipeline). The 13 historical vnext suites
+      # are excluded from `npm test`; see documentation/scheduling-stabilization-progress.md.
+      - name: Voice structured tests
+        run: npm run test:vnext:structured --workspace=backend
+
       - name: Backend e2e
         run: npm run test:e2e --workspace=backend
         env:
@@ -41,6 +67,10 @@ jobs:
         run: npm run build
         env:
           REACT_APP_API_BASE_URL: http://localhost:3001
+
+      # start:prod runs node dist/main; a file outside src in the build moves it to dist/src/main.js.
+      - name: Backend entry point exists
+        run: test -f backend/dist/main.js && test -f backend/dist/database/migrations/1761750000000-Baseline.js
 
       - name: Install Playwright Chromium
         run: npm run playwright:install

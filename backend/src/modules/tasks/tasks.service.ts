@@ -5,12 +5,18 @@ import {
   Inject,
   forwardRef,
   Logger,
+  OnModuleInit,
+  GoneException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, LessThan, Not, Repository } from 'typeorm';
+import { RequestIdempotency } from './entities/request-idempotency.entity';
 import { isValidIanaTimeZone, resolveIanaTimeZone } from '../../common/iana-time-zone';
 import {
   clearParkMetadata,
+  clearedParkColumns,
   isProblematicSchedule,
   parkedDays,
   rememberSingleProblematicDay,
@@ -30,7 +36,7 @@ import {
   type PlaceOptions,
 } from '../schedule/placement-step.service';
 import type { PlacementPlan } from '../schedule/placement-step.util';
-import type { SchedulingConflict } from '../schedule/intelligent-scheduling.engine';
+import type { SchedulingConflict } from '../schedule/scheduling-conflict.types';
 import { ScheduledTask } from '../schedule/schedule.entity';
 import { hasFullyEnded } from '../schedule/google-segment-sync.util';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
@@ -38,7 +44,7 @@ import { PendingGoogleWriteService } from '../google-calendar/pending-google-wri
 import {
   localDateTimeIso,
   localYmd,
-  startOfLocalDayIso,
+  civilDayStartIso,
 } from '../voice/voice-local-date.util';
 import {
   addSkippedOccurrenceYmd,
@@ -46,9 +52,35 @@ import {
   matchScheduledSlotIndex,
 } from './skipped-occurrence.util';
 import { breaksSeriesMembership } from '../schedule/series-group.util';
+import { isUniqueViolation } from '../../database/unique-violation';
+import { noteGoogleSync, recordGoogleWrite } from '../google-calendar/google-sync-outbox';
+import { withoutIdentityKeys } from '../../common/scheduling-validation.pipe';
+import { PendingGoogleWrite } from '../google-calendar/entities/pending-google-write.entity';
+
+/** Idempotency record operation for task creation. */
+const CREATE_OPERATION = 'task.create';
+/** How long an Idempotency-Key is remembered (a later replay creates again). */
+export const IDEMPOTENCY_RETENTION_MS = 30 * 24 * 60 * 60_000;
+
+/** SHA-256 of the body with sorted keys: the same request always hashes the same. */
+export function createRequestHash(body: unknown): string {
+  const canonical = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === 'object' && !(value instanceof Date)) {
+      return Object.fromEntries(
+        Object.keys(value as Record<string, unknown>)
+          .filter((key) => (value as Record<string, unknown>)[key] !== undefined)
+          .sort()
+          .map((key) => [key, canonical((value as Record<string, unknown>)[key])]),
+      );
+    }
+    return value;
+  };
+  return createHash('sha256').update(JSON.stringify(canonical(body))).digest('hex');
+}
 
 @Injectable()
-export class TasksService {
+export class TasksService implements OnModuleInit {
   private readonly logger = new Logger(TasksService.name);
 
   constructor(
@@ -223,6 +255,8 @@ export class TasksService {
       return {
         searchHole:
           !task.scheduledStartTime && task.eventType !== TaskEventType.FIXED,
+        // Schedule / Do now from an inbox: a free gap, seated tasks stay put.
+        rawHole: leftInbox,
         expandSeries: !!task.isRecurring,
       };
     }
@@ -283,16 +317,27 @@ export class TasksService {
         this.logger.log(
           `Resolved "${task.name}" rescheduled to ${new Date(task.scheduledStartTime).toISOString()}–${new Date(task.scheduledEndTime).toISOString()}; clearing resolved`,
         );
-        task.scheduleState = ScheduleState.NONE;
-        clearParkMetadata(task);
-        await this.tasksRepository.save(task);
+        // Columns only: `task` was loaded before place and is stale now.
+        await this.tasksRepository.update(
+          { id: task.id },
+          { ...clearedParkColumns(), scheduleState: ScheduleState.NONE },
+        );
+        await noteGoogleSync(this.tasksRepository.manager, task.id, userId);
       }
       return null;
     }
     const opts = this.placeOptions(before, task);
     if (!opts) return null;
     const plan = await this.placementStep.place(userId, task.id, opts);
-    if (opts.commit === 'preferred' && !preferredHonored(plan, opts)) {
+    // A series horizon rewrite commits every open day and the master itself.
+    const seriesRewrite =
+      !!task.isRecurring && !!opts.expandSeries && opts.commit !== 'keep';
+    const missed =
+      plan.outcome === 'conflict' ||
+      (opts.commit === 'preferred' &&
+        !seriesRewrite &&
+        !preferredHonored(plan, opts));
+    if (missed) {
       // Keep an explicit FIXED clock when the previous snapshot had no seat
       // (Problematic / Unscheduled → Place). Reverting to null left FIXED
       // without times and the Move sheet looked stuck.
@@ -303,44 +348,54 @@ export class TasksService {
           !before.scheduledStartTime
         )
       ) {
-        task.scheduledStartTime = before.scheduledStartTime
-          ? new Date(before.scheduledStartTime)
-          : null;
-        task.scheduledEndTime = before.scheduledEndTime
-          ? new Date(before.scheduledEndTime)
-          : null;
-        task.estimatedTimeInMinutes = before.estimatedTimeInMinutes;
+        const revert: Partial<Task> = {
+          scheduledStartTime: before.scheduledStartTime
+            ? new Date(before.scheduledStartTime)
+            : null,
+          scheduledEndTime: before.scheduledEndTime
+            ? new Date(before.scheduledEndTime)
+            : null,
+          estimatedTimeInMinutes: before.estimatedTimeInMinutes,
+        };
         if (
           before.scheduleState === ScheduleState.PROBLEMATIC &&
           task.scheduleState === ScheduleState.NONE &&
-          !task.scheduledStartTime
+          !revert.scheduledStartTime
         ) {
           // The new clock did not seat: back to the inbox, not a task with no slot.
-          task.scheduleState = ScheduleState.PROBLEMATIC;
+          revert.scheduleState = ScheduleState.PROBLEMATIC;
         }
-        await this.tasksRepository.save(task);
+        // Columns only: a full save of the stale `task` would overwrite what
+        // place wrote (skipped days, park state).
+        Object.assign(task, revert);
+        await this.tasksRepository.update({ id: task.id }, revert);
+        await noteGoogleSync(this.tasksRepository.manager, task.id, userId);
       }
       return plan.outcome === 'conflict' ? plan.conflict : null;
     }
     if (freedAHole(before, plan, opts)) {
       await this.placementStep.seatOpenHoles(userId);
     }
-    return plan.outcome === 'conflict' ? plan.conflict : null;
+    return null;
   }
 
-  /** Seat a resolved copy as a second layer on its original interval. */
-  private async seatResolvedLayer(task: Task): Promise<void> {
+  /**
+   * Seat a resolved copy as a second layer on its original interval, in the
+   * caller's transaction (with the task save and its job).
+   */
+  private async seatResolvedLayer(task: Task, manager: EntityManager): Promise<void> {
     if (!task.scheduledStartTime || !task.scheduledEndTime) return;
+    const slots = manager.getRepository(ScheduledTask);
     const now = Date.now();
-    const rows = await this.scheduledTaskRepository.find({
+    const rows = await slots.find({
       where: { taskId: task.id },
     });
     const open = rows.filter(
       (row) => new Date(row.scheduledEndTime).getTime() > now,
     );
-    if (open.length) await this.scheduledTaskRepository.remove(open);
-    await this.scheduledTaskRepository.save(
-      this.scheduledTaskRepository.create({
+    if (open.length) await slots.remove(open);
+    await slots.save(
+      slots.create({
         taskId: task.id,
         scheduledStartTime: task.scheduledStartTime,
         scheduledEndTime: task.scheduledEndTime,
@@ -434,32 +489,54 @@ export class TasksService {
    * After the HTTP save returns, place + Google sync continue on a polled job
    * so the client can show real progress stages.
    */
-  private queuePlaceAndSync(
-    userId: string,
-    taskId: string,
-    jobId: string,
-    before: ScheduleSnapshot | null,
-  ): void {
-    void this.runPlaceAndSyncJob(userId, taskId, jobId, before).catch(
-      (err: unknown) => {
-        this.logger.error(
-          `Mutation job ${jobId} failed for task ${taskId}`,
-          err instanceof Error ? err.stack : undefined,
-        );
-      },
+  /**
+   * Durable follow-ups of task writes (stabilization A). Each runs from its
+   * schedule_jobs row — now in this process, or later from the recovery sweep
+   * after a crash or a retry — so every handler is idempotent.
+   */
+  onModuleInit(): void {
+    this.scheduleJobService.registerHandler('create', (job) =>
+      this.placeAndSync(job, null),
     );
+    this.scheduleJobService.registerHandler('update', (job) =>
+      this.placeAndSync(
+        job,
+        (job.payload.before as ScheduleSnapshot | undefined) ?? null,
+      ),
+    );
+    this.scheduleJobService.registerHandler('park', async (job) => {
+      await this.scheduleJobService.setMutationStage(job.id, 'syncing');
+      await this.pendingGoogleWrites.syncTask(job.userId, String(job.payload.taskId));
+      await this.placementStep.seatOpenHoles(
+        job.userId,
+        typeof job.payload.exceptTaskId === 'string' ? job.payload.exceptTaskId : undefined,
+      );
+    });
+    this.scheduleJobService.registerHandler('sync', async (job) => {
+      await this.scheduleJobService.setMutationStage(job.id, 'syncing');
+      await this.pendingGoogleWrites.syncTask(job.userId, String(job.payload.taskId));
+    });
   }
 
-  private async runPlaceAndSyncJob(
-    userId: string,
-    taskId: string,
-    jobId: string,
+  /**
+   * Place a saved task (create: `before` null) and sync it. A retry after a
+   * failed sync only syncs: placing again later would move the task.
+   */
+  private async placeAndSync(
+    job: { id: string; userId: string; payload: Record<string, unknown> },
     before: ScheduleSnapshot | null,
-  ): Promise<void> {
-    try {
+  ): Promise<Record<string, unknown> | void> {
+    const { id: jobId, userId } = job;
+    const taskId = String(job.payload.taskId);
+    const row = await this.tasksRepository.findOne({
+      where: { id: taskId, userId },
+      relations: ['phase', 'phases'],
+    });
+    // Deleted meanwhile: nothing left to place.
+    if (!row) return { gone: true };
+    let conflicts = job.payload.conflicts as SchedulingConflict[] | undefined;
+    if (job.payload.placed !== true) {
       await this.scheduleJobService.setMutationStage(jobId, 'placing');
-      const row = await this.findOne(taskId, userId);
-      let conflicts: SchedulingConflict[] | undefined;
       if (before) {
         const conflict = await this.placeSavedTask(userId, before, row);
         if (conflict) conflicts = [conflict];
@@ -470,17 +547,14 @@ export class TasksService {
           if (plan.outcome === 'conflict') conflicts = [plan.conflict];
         }
       }
-      await this.scheduleJobService.setMutationStage(jobId, 'syncing');
-      await this.pendingGoogleWrites.syncTask(userId, taskId);
-      await this.scheduleJobService.completeMutationJob(
-        jobId,
-        conflicts?.length ? { conflicts } : undefined,
-      );
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'Task mutation follow-up failed';
-      await this.scheduleJobService.failMutationJob(jobId, message);
+      await this.scheduleJobService.mergeMutationPayload(jobId, {
+        placed: true,
+        ...(conflicts ? { conflicts } : {}),
+      });
     }
+    await this.scheduleJobService.setMutationStage(jobId, 'syncing');
+    await this.pendingGoogleWrites.syncTask(userId, taskId);
+    return conflicts?.length ? { conflicts } : undefined;
   }
 
   private async releaseOpenSlots(taskId: string): Promise<void> {
@@ -502,17 +576,8 @@ export class TasksService {
     // second concurrent createEvent (duplicate Google series on recurring create).
     if (opts?.syncGoogle !== false) {
       if (jobId) {
-        void (async () => {
-          try {
-            await this.scheduleJobService.setMutationStage(jobId, 'syncing');
-            await this.pendingGoogleWrites.syncTask(userId, task.id);
-            await this.scheduleJobService.completeMutationJob(jobId);
-          } catch (err: unknown) {
-            const message =
-              err instanceof Error ? err.message : 'Google sync failed';
-            await this.scheduleJobService.failMutationJob(jobId, message);
-          }
-        })();
+        // The job row (op create / sync) does the Google sync durably.
+        void this.scheduleJobService.runNow(jobId);
       } else {
         this.pendingGoogleWrites.syncTaskSoon(userId, task.id);
       }
@@ -522,10 +587,24 @@ export class TasksService {
     return Object.assign(task, { jobId });
   }
 
+  /**
+   * `requestKey` (HTTP Idempotency-Key) names one create operation, recorded
+   * in `request_idempotency` with a hash of the body and the task it made.
+   * The same key again: the same body returns that task (and its job); another
+   * body is refused (422); a task deleted since stays deleted (410). Two
+   * creates with identical content but different keys (or none) are two tasks.
+   */
   async create(
     userId: string,
     createTaskDto: CreateTaskDto,
+    opts?: { requestKey?: string | null },
   ): Promise<Task & { jobId: string | null; conflicts?: SchedulingConflict[] }> {
+    const requestKey = opts?.requestKey ?? null;
+    const requestHash = requestKey ? createRequestHash(createTaskDto) : '';
+    if (requestKey) {
+      const replay = await this.replayCreate(userId, requestKey, requestHash);
+      if (replay) return replay;
+    }
     const isUnscheduled = !!createTaskDto.isUnscheduled;
     const eventType = isUnscheduled
       ? TaskEventType.ADMIN
@@ -543,9 +622,20 @@ export class TasksService {
       }
     }
 
+    // A fixed slot is its own length; a stale estimate would shorten series days.
+    const fixedMinutes =
+      eventType === TaskEventType.FIXED
+        ? Math.round(
+            (new Date(createTaskDto.scheduledEndTime!).getTime() -
+              new Date(createTaskDto.scheduledStartTime!).getTime()) /
+              60_000,
+          )
+        : 0;
     const estimatedTimeInMinutes =
-      createTaskDto.estimatedTimeInMinutes ??
-      (await this.defaultTaskDurationMinutes(userId));
+      fixedMinutes > 0
+        ? fixedMinutes
+        : createTaskDto.estimatedTimeInMinutes ??
+          (await this.defaultTaskDurationMinutes(userId));
 
     const {
       phaseIds,
@@ -567,7 +657,7 @@ export class TasksService {
     const scheduleTimeZone = await this.resolveTaskTimeZone(userId, timeZone);
 
     const task = this.tasksRepository.create({
-      ...rest,
+      ...withoutIdentityKeys(rest),
       userId,
       eventType,
       isUnscheduled,
@@ -614,24 +704,84 @@ export class TasksService {
       }
     }
 
-    const saved = await this.placementStep.runExclusive(userId, () =>
-      this.tasksRepository.save(task),
-    );
-    const row = await this.findOne(saved.id, userId);
-    const job = await this.scheduleJobService.beginMutationJob(userId, {
-      taskId: row.id,
-      op: 'create',
-    });
-    const opts = this.placeOptions(null, row);
-    if (opts) {
-      this.queuePlaceAndSync(userId, row.id, job.id, null);
-      return this.withConflicts(row, undefined, job.id);
+    // The task and the job that places it commit together: a crash after
+    // this point leaves durable work for the recovery sweep, not a lost task.
+    // Under the user lock a replay of the same request finds the first task.
+    let created: { saved: Task; job: { id: string } } | { replay: Task & { jobId: string | null } };
+    try {
+      created = await this.placementStep.runExclusive(userId, async () => {
+        const replay = requestKey ? await this.replayCreate(userId, requestKey, requestHash) : null;
+        if (replay) return { replay };
+        return this.tasksRepository.manager.transaction(async (manager) => {
+          const saved = await manager.save(task);
+          if (requestKey) {
+            // The operation record commits with the task (unique per user + key).
+            await manager.getRepository(RequestIdempotency).insert({
+              userId,
+              operation: CREATE_OPERATION,
+              key: requestKey,
+              requestHash,
+              resourceId: saved.id,
+            });
+          }
+          const job = await this.scheduleJobService.beginMutationJob(
+            userId,
+            { taskId: saved.id, op: 'create' },
+            { manager },
+          );
+          return { saved, job };
+        });
+      });
+    } catch (err) {
+      // The unique (userId, operation, key) index caught a concurrent replay.
+      const replay =
+        requestKey && isUniqueViolation(err) ? await this.replayCreate(userId, requestKey, requestHash) : null;
+      if (replay) return replay;
+      throw err;
     }
-    const finished = await this.finishSaved(userId, row, {
-      syncGoogle: true,
-      jobId: job.id,
+    if ('replay' in created) return created.replay;
+    const { saved, job } = created;
+    void this.scheduleJobService.runNow(job.id);
+    const row = await this.findOne(saved.id, userId);
+    return this.withConflicts(row, undefined, job.id);
+  }
+
+  /**
+   * The task an earlier request with this Idempotency-Key created, with its
+   * create job (the client may still be waiting on it), or null for a new key.
+   */
+  private async replayCreate(
+    userId: string,
+    requestKey: string,
+    requestHash: string,
+  ): Promise<(Task & { jobId: string | null }) | null> {
+    const operations = this.tasksRepository.manager.getRepository(RequestIdempotency);
+    // Retention: keys older than the window are forgotten (lazily, per user).
+    await operations.delete({
+      userId,
+      createdAt: LessThan(new Date(Date.now() - IDEMPOTENCY_RETENTION_MS)),
     });
-    return this.withConflicts(finished, undefined, job.id);
+    const record = await operations.findOne({
+      where: { userId, operation: CREATE_OPERATION, key: requestKey },
+    });
+    if (!record) return null;
+    if (record.requestHash !== requestHash) {
+      throw new UnprocessableEntityException(
+        'This Idempotency-Key was already used for a different request.',
+      );
+    }
+    const existing = record.resourceId
+      ? await this.tasksRepository.findOne({
+          where: { id: record.resourceId, userId },
+          relations: ['phase', 'phases'],
+        })
+      : null;
+    if (!existing) {
+      throw new GoneException('The task this request created has been deleted.');
+    }
+    this.logger.log(`create replay for key ${requestKey}: task ${existing.id}`);
+    const job = await this.scheduleJobService.findLatestMutationJob(userId, existing.id, 'create');
+    return this.withConflicts(existing, undefined, job?.id ?? null);
   }
 
   async findAll(userId: string): Promise<Task[]> {
@@ -691,7 +841,22 @@ export class TasksService {
     return tasks;
   }
 
-  async update(
+  /**
+   * AUD-008: edits load, change and save the whole task, so they run under the
+   * user's placement lock; a placement in flight cannot write a stale copy
+   * over them (or they over it). Placement continues on the job, unlocked here.
+   */
+  update(
+    id: string,
+    userId: string,
+    updateTaskDto: UpdateTaskDto,
+  ): Promise<Task & { jobId: string | null; conflicts?: SchedulingConflict[] }> {
+    return this.placementStep.runExclusive(userId, () =>
+      this.updateUnlocked(id, userId, updateTaskDto),
+    );
+  }
+
+  private async updateUnlocked(
     id: string,
     userId: string,
     updateTaskDto: UpdateTaskDto,
@@ -730,6 +895,7 @@ export class TasksService {
     ) {
       task.seriesGroupId = null;
       task.parentSeriesId = null;
+      task.originalOccurrenceYmd = null;
     }
 
     const {
@@ -743,7 +909,7 @@ export class TasksService {
       problematicOriginalEnd,
       ...rest
     } = dto;
-    this.tasksRepository.merge(task, rest);
+    this.tasksRepository.merge(task, withoutIdentityKeys(rest));
 
     if (deadline !== undefined) {
       task.deadline = deadline ? new Date(deadline) : null;
@@ -821,51 +987,50 @@ export class TasksService {
     if (enteredResolved) {
       await this.ensureResolvedInterval(task, userId);
     }
-    const saved = await this.tasksRepository.save(task);
-    const job = await this.scheduleJobService.beginMutationJob(userId, {
-      taskId: saved.id,
-      op: 'update',
-    });
-    if (enteredUnscheduled || enteredProblematic) {
-      await this.releaseOpenSlots(saved.id);
-      if (enteredProblematic) {
-        if (!saved.problematicOriginalStart && before.scheduledStartTime) {
-          saved.problematicOriginalStart = new Date(before.scheduledStartTime);
-          saved.problematicOriginalEnd = before.scheduledEndTime
-            ? new Date(before.scheduledEndTime)
-            : null;
-        }
-        saved.scheduledStartTime = null;
-        saved.scheduledEndTime = null;
-        await this.tasksRepository.save(saved);
+    const parks = enteredUnscheduled || enteredProblematic;
+    if (enteredProblematic) {
+      if (!task.problematicOriginalStart && before.scheduledStartTime) {
+        task.problematicOriginalStart = new Date(before.scheduledStartTime);
+        task.problematicOriginalEnd = before.scheduledEndTime
+          ? new Date(before.scheduledEndTime)
+          : null;
       }
-      void (async () => {
-        try {
-          await this.scheduleJobService.setMutationStage(job.id, 'syncing');
-          await this.pendingGoogleWrites.syncTask(userId, saved.id);
-          await this.placementStep.seatOpenHoles(
-            userId,
-            enteredProblematic ? saved.id : undefined,
-          );
-          await this.scheduleJobService.completeMutationJob(job.id);
-        } catch (err: unknown) {
-          const message =
-            err instanceof Error ? err.message : 'Park sync failed';
-          await this.scheduleJobService.failMutationJob(job.id, message);
-        }
-      })();
+      task.scheduledStartTime = null;
+      task.scheduledEndTime = null;
+    }
+    // The task, the slots a park drops, and the follow-up job commit together.
+    const payload = parks
+      ? { taskId: task.id, op: 'park', ...(enteredProblematic ? { exceptTaskId: task.id } : {}) }
+      : enteredResolved
+        ? { taskId: task.id, op: 'sync' }
+        : { taskId: task.id, op: 'update', before };
+    const { saved, job } = await this.tasksRepository.manager.transaction(async (manager) => {
+      const saved = await manager.save(task);
+      if (parks) {
+        const now = Date.now();
+        const open = (await manager.find(ScheduledTask, { where: { taskId: saved.id } })).filter(
+          (row) => new Date(row.scheduledEndTime).getTime() > now,
+        );
+        if (open.length) await manager.remove(open);
+      }
+      if (enteredResolved) await this.seatResolvedLayer(saved, manager);
+      const job = await this.scheduleJobService.beginMutationJob(userId, payload, { manager });
+      return { saved, job };
+    });
+
+    if (parks) {
+      void this.scheduleJobService.runNow(job.id);
       const parked = await this.findOne(saved.id, userId);
       return this.withConflicts(parked, undefined, job.id);
     }
 
     if (enteredResolved) {
-      await this.seatResolvedLayer(saved);
       const row = await this.findOne(saved.id, userId);
       return this.finishSaved(userId, row, { jobId: job.id });
     }
 
-    // Place + Google sync continue on the job so the client can poll stages.
-    this.queuePlaceAndSync(userId, saved.id, job.id, before);
+    // Place + Google sync continue on the durable job so the client can poll stages.
+    void this.scheduleJobService.runNow(job.id);
     const row = await this.findOne(saved.id, userId);
     return this.withConflicts(row, undefined, job.id);
   }
@@ -880,21 +1045,36 @@ export class TasksService {
     }
 
     const task = await this.findOne(id, userId);
-    // Stop retries / in-flight sync from recreating the Google event after delete.
-    await this.pendingGoogleWrites.discardPendingUpserts(userId, id);
+    // An in-process send may still create the event; let it finish first (it
+    // deletes what it created if the task is gone by then).
     await this.pendingGoogleWrites.waitForInflight(userId, id);
-    if (task.googleEventId || task.eventType !== TaskEventType.FIXED) {
-      try {
-        await this.scheduleJobService.deleteSyncedGoogleEventsForTask(userId, task);
-      } catch (e: any) {
-        this.logger.warn(
-          `Failed to delete Google event for removed task ${task.id}: ${e?.message ?? e}`,
-        );
-      }
-    }
+    const refs = await this.scheduleJobService.googleEventRefsForTask(task);
     const freed = !task.isUnscheduled;
-    await this.tasksRepository.remove(task);
-    await this.pendingGoogleWrites.discardPendingUpserts(userId, id);
+    // The removal and the Google deletes it owes commit together (outbox);
+    // Google is called only after the commit, and a failure retries.
+    const deleteRows = await this.tasksRepository.manager.transaction(async (manager) => {
+      const rowIds: string[] = [];
+      for (const ref of refs) {
+        const row = await recordGoogleWrite(manager, {
+          userId,
+          operation: 'delete',
+          googleEventId: ref.eventId,
+          googleCalendarId: ref.calendarId ?? null,
+        });
+        rowIds.push(row.id);
+      }
+      await manager.delete(PendingGoogleWrite, {
+        userId,
+        taskId: id,
+        operation: 'upsert',
+        status: Not('running'),
+      });
+      await manager.getRepository(Task).remove(task);
+      return rowIds;
+    });
+    void this.pendingGoogleWrites.kickRows(deleteRows).catch((e: unknown) => {
+      this.logger.warn(`Google delete for removed task ${id} queued: ${e instanceof Error ? e.message : String(e)}`);
+    });
     if (freed) await this.placementStep.seatOpenHoles(userId);
   }
 
@@ -926,15 +1106,7 @@ export class TasksService {
     dto: SkipOccurrenceDto,
   ): Promise<Task & { jobId: string | null }> {
     const task = await this.findOne(id, userId);
-    if (task.isUnscheduled) {
-      throw new BadRequestException('Unscheduled tasks have no occurrence to skip');
-    }
-    if (task.isFixedExternal || task.eventType === TaskEventType.FIXED) {
-      throw new BadRequestException('Fixed events cannot be skipped');
-    }
-    if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.CANCELED) {
-      throw new BadRequestException('Completed or canceled tasks cannot be skipped');
-    }
+    this.assertSkippable(task);
 
     // Problematic copy: record the series skip, then delete the copy (and its Google event).
     if (isProblematicSchedule(task) && !task.isRecurring) {
@@ -954,6 +1126,56 @@ export class TasksService {
       } as Task & { jobId: string | null; deleted: true };
     }
 
+    // AUD-008: the skip is read, changed and saved under the placement lock;
+    // Google and hole seating follow after it (they take the lock themselves).
+    const { saved, googleEventId, googleCalendarId, openSlot, leavesInbox } =
+      await this.placementStep.runExclusive(userId, () =>
+        this.recordSkip(id, userId, dto),
+      );
+    if (googleEventId) {
+      await this.deleteSkippedGoogleEvent(userId, googleEventId, googleCalendarId);
+    }
+    // Rewrite the Google series (new DTSTART + EXDATE) before the client refetches.
+    if (saved.isRecurring) {
+      await this.pendingGoogleWrites.syncTask(userId, saved.id);
+    }
+    if (openSlot) await this.placementStep.seatOpenHoles(userId);
+    if (leavesInbox) {
+      return this.update(saved.id, userId, { scheduleState: ScheduleState.NONE });
+    }
+    const row = await this.findOne(saved.id, userId);
+    return Object.assign(row, { jobId: null });
+  }
+
+  private assertSkippable(task: Task): void {
+    if (task.isUnscheduled) {
+      throw new BadRequestException('Unscheduled tasks have no occurrence to skip');
+    }
+    // A fixed one-off has no day to skip; a day of a fixed series does.
+    if (
+      task.isFixedExternal ||
+      (task.eventType === TaskEventType.FIXED && !task.isRecurring)
+    ) {
+      throw new BadRequestException('Fixed events cannot be skipped');
+    }
+    if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.CANCELED) {
+      throw new BadRequestException('Completed or canceled tasks cannot be skipped');
+    }
+  }
+
+  private async recordSkip(
+    id: string,
+    userId: string,
+    dto: SkipOccurrenceDto,
+  ): Promise<{
+    saved: Task;
+    googleEventId: string | null;
+    googleCalendarId: string | null | undefined;
+    openSlot: ScheduledTask | null;
+    leavesInbox: boolean;
+  }> {
+    const task = await this.findOne(id, userId);
+    this.assertSkippable(task);
     const occurrenceStart = new Date(dto.occurrenceStart);
     if (Number.isNaN(occurrenceStart.getTime())) {
       throw new BadRequestException('occurrenceStart must be a valid ISO date');
@@ -1001,17 +1223,13 @@ export class TasksService {
       }
     }
 
-    if (openSlot) {
-      await this.scheduledTaskRepository.remove(openSlot);
-    }
-
-    const remaining = (await this.scheduledTaskRepository.find({
-      where: { taskId: task.id },
-    })).sort(
-      (a, b) =>
-        new Date(a.scheduledStartTime).getTime() -
-        new Date(b.scheduledStartTime).getTime(),
-    );
+    const remaining = rows
+      .filter((row) => row !== openSlot)
+      .sort(
+        (a, b) =>
+          new Date(a.scheduledStartTime).getTime() -
+          new Date(b.scheduledStartTime).getTime(),
+      );
     this.refreshTaskScheduleAfterSkip(task, remaining);
 
     const googleEventId = this.googleEventIdToSkip(
@@ -1020,33 +1238,23 @@ export class TasksService {
       openSlot ?? slot,
       occurrenceStart,
     );
-    if (googleEventId) {
-      await this.deleteSkippedGoogleEvent(
-        userId,
-        googleEventId,
-        dto.googleEventCalendarId ||
-          slot?.googleEventCalendarId ||
-          task.googleEventCalendarId,
-      );
-      if (!task.isRecurring && googleEventId === task.googleEventId) {
-        const leftover = remaining.find((row) => row.googleEventId);
-        task.googleEventId = leftover?.googleEventId ?? null;
-        task.googleEventCalendarId =
-          leftover?.googleEventCalendarId ?? null;
-      }
+    const googleCalendarId =
+      dto.googleEventCalendarId ||
+      slot?.googleEventCalendarId ||
+      task.googleEventCalendarId;
+    if (googleEventId && !task.isRecurring && googleEventId === task.googleEventId) {
+      const leftover = remaining.find((row) => row.googleEventId);
+      task.googleEventId = leftover?.googleEventId ?? null;
+      task.googleEventCalendarId = leftover?.googleEventCalendarId ?? null;
     }
 
-    const saved = await this.tasksRepository.save(task);
-    // Rewrite the Google series (new DTSTART + EXDATE) before the client refetches.
-    if (task.isRecurring) {
-      await this.pendingGoogleWrites.syncTask(userId, saved.id);
-    }
-    if (openSlot) await this.placementStep.seatOpenHoles(userId);
-    if (leavesInbox) {
-      return this.update(saved.id, userId, { scheduleState: ScheduleState.NONE });
-    }
-    const row = await this.findOne(saved.id, userId);
-    return Object.assign(row, { jobId: null });
+    // Stabilization B2: the dropped slot and the recorded skip commit together;
+    // Google is told only after the commit (a failure there is queued for retry).
+    const saved = await this.tasksRepository.manager.transaction(async (manager) => {
+      if (openSlot) await manager.remove(openSlot);
+      return manager.save(task);
+    });
+    return { saved, googleEventId, googleCalendarId, openSlot, leavesInbox };
   }
 
   private pickSkipSlot(
@@ -1148,9 +1356,30 @@ export class TasksService {
     userId: string,
     status: TaskStatus,
   ): Promise<Task> {
-    const task = await this.findOne(id, userId);
-    task.status = status;
-    const saved = await this.tasksRepository.save(task);
+    // AUD-008: read and save under the placement lock (see update).
+    const { saved, wasDone } = await this.placementStep.runExclusive(userId, async () => {
+      const task = await this.findOne(id, userId);
+      const wasDone =
+        task.status === TaskStatus.COMPLETED || task.status === TaskStatus.CANCELED;
+      task.status = status;
+      return { saved: await this.tasksRepository.save(task), wasDone };
+    });
+    // Back from done / canceled: its time was free meanwhile. Keep the slot
+    // when it is still valid, else seat only this task in a free hole (§40).
+    if (
+      wasDone &&
+      !saved.isRecurring &&
+      saved.scheduledStartTime &&
+      this.canPlace(saved)
+    ) {
+      await this.placementStep.place(userId, saved.id, {
+        commit: 'keep',
+        revalidate: true,
+        rawHole: true,
+      });
+      this.pendingGoogleWrites.syncTaskSoon(userId, saved.id);
+      return this.findOne(saved.id, userId);
+    }
     this.pendingGoogleWrites.syncTaskSoon(userId, saved.id);
     return saved;
   }
@@ -1164,6 +1393,21 @@ export class TasksService {
     userId: string,
     dto: SkipOccurrenceDto,
   ): Promise<Task & { jobId: string | null }> {
+    // AUD-008: read, change and save under the placement lock (see update).
+    const { saved, tail } = await this.placementStep.runExclusive(userId, () =>
+      this.recordSeriesEnd(id, userId, dto),
+    );
+    await this.pendingGoogleWrites.syncTask(userId, saved.id);
+    if (tail.length) await this.placementStep.seatOpenHoles(userId);
+    const row = await this.findOne(saved.id, userId);
+    return Object.assign(row, { jobId: null as string | null });
+  }
+
+  private async recordSeriesEnd(
+    id: string,
+    userId: string,
+    dto: SkipOccurrenceDto,
+  ): Promise<{ saved: Task; tail: ScheduledTask[] }> {
     const task = await this.findOne(id, userId);
     if (!task.isRecurring) {
       throw new BadRequestException('Only recurring tasks can end from a day');
@@ -1178,7 +1422,7 @@ export class TasksService {
     const settings = await this.userSettingsRepository.findOne({ where: { userId } });
     const timeZone = resolveIanaTimeZone(settings?.timeZone || task.scheduleTimeZone);
     const splitYmd = localYmd(occurrenceStart.toISOString(), timeZone);
-    const splitStart = new Date(startOfLocalDayIso(splitYmd, timeZone));
+    const splitStart = new Date(civilDayStartIso(splitYmd, timeZone));
     if (!task.deadline || new Date(task.deadline).getTime() > splitStart.getTime()) {
       task.deadline = splitStart;
     }
@@ -1201,10 +1445,7 @@ export class TasksService {
     );
     this.refreshTaskScheduleAfterSkip(task, remaining);
     const saved = await this.tasksRepository.save(task);
-    await this.pendingGoogleWrites.syncTask(userId, saved.id);
-    if (tail.length) await this.placementStep.seatOpenHoles(userId);
-    const row = await this.findOne(saved.id, userId);
-    return Object.assign(row, { jobId: null as string | null });
+    return { saved, tail };
   }
 }
 

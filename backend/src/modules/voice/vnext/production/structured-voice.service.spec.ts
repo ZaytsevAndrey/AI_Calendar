@@ -657,6 +657,25 @@ describe('structured recurring tasks and occurrence scope', () => {
     expect(stale.intents).toEqual([]);
   });
 
+  it('moves the future part of a series with the "from this day" scope', async () => {
+    const transcript = 'move all gyms from wednesday to 15:00';
+    const w = world({
+      ...series(),
+      model: [op(transcript, {
+        action: 'move',
+        seriesScope: 'from_day',
+        occurrence: '2026-10-21',
+        constraints: [{ kind: 'date', value: '2026-10-21', precision: 'day' }, { kind: 'clock', value: '15:00', role: 'start' }],
+      })],
+    });
+    const preview = await build(w).service.turn(USER, dto({ transcript }));
+    // Same command as a calendar drag with "this and following" (moveSeriesTail).
+    expect(preview.intents[0]).toMatchObject({
+      type: 'command',
+      command: { kind: 'move', recurringEventId: 'master-gym', originalStart: '2026-10-21T07:00:00.000Z', start: '2026-10-21T12:00:00.000Z', seriesScope: 'series' },
+    });
+  });
+
   it('completes one occurrence by clearing that day, and refuses it from a day on', async () => {
     const complete = await run('done with gym today', { action: 'complete', seriesScope: 'occurrence', occurrence: '2026-10-19' });
     expect(complete.intents[0]).toMatchObject({
@@ -686,6 +705,81 @@ describe('structured recurring tasks and occurrence scope', () => {
     })).service.turn(USER, dto({ transcript }));
     expect(wordsOnly.outcome).toBe('clarify');
     expect(wordsOnly.intents).toEqual([]);
+  });
+});
+
+describe('scheduling behavior is independent of recurrence (scheduling refactor)', () => {
+  // NOW is Sunday 18 Oct 2026, 09:00 Kyiv. Monday is 19 Oct.
+  const create = async (transcript: string, constraints: SemanticConstraintV1[], spanRole?: 'event' | 'window') =>
+    build(world({ model: [envelope(transcript, [{
+      opId: 'op-1',
+      action: 'create',
+      target: { kind: 'new', localId: 'n' },
+      changes: { title: 'Item', ...(spanRole ? { spanRole } : {}) },
+      constraints,
+    }])] })).service.turn(USER, dto({ transcript }));
+  const task = (result: VoiceTurnResponse) => (result.intents[0]?.type === 'create' ? result.intents[0].task : null);
+  const weekly: SemanticConstraintV1 = { kind: 'recurrence', expression: 'every monday', pattern: 'WEEKLY', weekDays: [1] };
+
+  it('fixed recurring: a repeating event with its own span', async () => {
+    expect(task(await create('standup every monday 10 to 11', [
+      weekly,
+      { kind: 'clock', value: '10:00', role: 'start' },
+      { kind: 'clock', value: '11:00', role: 'end' },
+    ], 'event'))).toMatchObject({
+      eventType: 'fixed',
+      isRecurring: true,
+      recurrencePattern: 'WEEKLY',
+      recurrenceWeekDays: [1],
+      scheduledStartTime: '2026-10-19T07:00:00.000Z',
+      scheduledEndTime: '2026-10-19T08:00:00.000Z',
+      estimatedTimeInMinutes: 60,
+    });
+  });
+
+  it('flexible recurring: find time every week, no clock', async () => {
+    const t = task(await create('every monday find an hour for exercise', [
+      weekly,
+      { kind: 'duration', minutes: 60 },
+    ]));
+    expect(t).toMatchObject({ eventType: 'admin', isRecurring: true, estimatedTimeInMinutes: 60 });
+    expect(t?.scheduledStartTime).toBeUndefined();
+  });
+
+  it('flexible recurring with a series clock: a repeat with only a clock stays movable', async () => {
+    expect(task(await create('gym every monday at 18', [
+      weekly,
+      { kind: 'clock', value: '18:00', role: 'start' },
+    ]))).toMatchObject({ eventType: 'admin', isRecurring: true, scheduledStartTime: '2026-10-19T15:00:00.000Z' });
+  });
+
+  it('flexible single with a preferred time: "at 18, move it if needed"', async () => {
+    const t = task(await create('exercise at 18 tomorrow, move it if needed', [
+      { kind: 'date', value: '2026-10-19', precision: 'day' },
+      { kind: 'clock', value: '18:00', role: 'preferred' },
+    ]));
+    expect(t).toMatchObject({ eventType: 'admin', scheduledStartTime: '2026-10-19T15:00:00.000Z' });
+    expect(t?.isRecurring).toBeUndefined();
+  });
+
+  it('fixed single: a promised clock gets its own end', async () => {
+    expect(task(await create('meeting tomorrow at 10', [
+      { kind: 'date', value: '2026-10-19', precision: 'day' },
+      { kind: 'clock', value: '10:00', role: 'start' },
+    ]))).toMatchObject({
+      eventType: 'fixed',
+      scheduledStartTime: '2026-10-19T07:00:00.000Z',
+      scheduledEndTime: '2026-10-19T07:30:00.000Z',
+    });
+  });
+
+  it('refuses a promised and a wished clock on the same create', async () => {
+    const result = await create('meeting at 10 or around 11', [
+      { kind: 'date', value: '2026-10-19', precision: 'day' },
+      { kind: 'clock', value: '10:00', role: 'start' },
+      { kind: 'clock', value: '11:00', role: 'preferred' },
+    ]);
+    expect(result.intents).toEqual([]);
   });
 });
 
@@ -728,8 +822,20 @@ describe('structured all-day, bounds, and relative time', () => {
     expect(noDay.assistantMessage).toBe('Which day?');
   });
 
-  it('asks instead of guessing for a wish clock, a delay with a date, or a delay from another task', async () => {
-    expect((await create('report around 15', [tomorrow, { kind: 'clock', value: '15:00', role: 'preferred' }])).intents).toEqual([]);
+  it('a wish clock is a flexible preferred start on that day (scheduling refactor, spec rule 3)', async () => {
+    // Before the refactor a preferred clock was refused. The domain now keeps
+    // "preferred" (movable) apart from "start" (promised): it is a flexible task.
+    const task = created(await create('report around 15', [tomorrow, { kind: 'clock', value: '15:00', role: 'preferred' }]));
+    expect(task).toMatchObject({
+      eventType: 'admin',
+      scheduledStartTime: '2026-10-19T12:00:00.000Z',
+      earliestStartTime: '2026-10-19T08:00:00+03:00',
+      deadline: '2026-10-19T23:00:00+03:00',
+    });
+    expect(task?.scheduledEndTime).toBeUndefined();
+  });
+
+  it('asks instead of guessing for a delay with a date, or a delay from another task', async () => {
     expect((await create('report tomorrow in two hours', [tomorrow, { kind: 'relative_time', anchor: 'now', direction: 'after', amount: 2, unit: 'hour' }])).intents).toEqual([]);
     expect((await create('report an hour after the meeting', [{ kind: 'relative_time', anchor: 'referenced_task', direction: 'after', amount: 1, unit: 'hour' }])).intents).toEqual([]);
   });

@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, Logger } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { Task } from './entities/task.entity';
+import { PendingGoogleWrite } from '../google-calendar/entities/pending-google-write.entity';
 import { Phase } from '../phases/entities/phase.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
 import { ScheduleJobService } from '../schedule/schedule-job.service';
@@ -26,10 +27,53 @@ describe('TasksService', () => {
       lastSaved = { ...entity, id: entity.id ?? 'task-1' };
       return lastSaved;
     }),
+    update: jest.fn(async (_where, patch) => {
+      lastSaved = { ...lastSaved, ...patch };
+    }),
     find: jest.fn(),
     findOne: jest.fn(async () => lastSaved),
     merge: jest.fn((entity, dto) => Object.assign(entity, dto)),
     remove: jest.fn(),
+    // Task + job writes run in one transaction; the fake manager reuses the repo mocks.
+    manager: {
+      // Outbox note outside a transaction: the test user has no Google grant.
+      getRepository: (entity: unknown) =>
+        entity === PendingGoogleWrite ? pendingRows : { find: async () => [] },
+      transaction: jest.fn(async (run: (manager: unknown) => Promise<unknown>) =>
+        run({
+          save: (entity: Record<string, unknown>) => tasksRepository.save(entity),
+          find: (_entity: unknown, opts: unknown) => scheduledTaskRepository.find(opts),
+          remove: (rows: unknown) => scheduledTaskRepository.remove(rows),
+          // Entity-aware: slots, the task itself, and Google outbox rows.
+          getRepository: (entity: unknown) =>
+            entity === PendingGoogleWrite
+              ? pendingRows
+              : entity === Task
+                ? tasksRepository
+                : scheduledTaskRepository,
+          delete: (entity: unknown, criteria: unknown) =>
+            entity === PendingGoogleWrite ? pendingRows.delete(criteria) : undefined,
+        }),
+      ),
+    },
+  };
+  /** Google outbox rows written inside the task transaction. */
+  const pendingRows = {
+    // No existing row; the read-back after an insert finds the new id.
+    findOne: jest.fn(async (opts: { where?: { id?: string } }) => (opts?.where?.id ? { id: opts.where.id } : null)),
+    insert: jest.fn().mockResolvedValue({}),
+    // recordGoogleWrite inserts with INSERT … ON CONFLICT DO NOTHING.
+    createQueryBuilder: () => {
+      const builder = {
+        insert: () => builder,
+        values: (values: unknown) => (pendingRows.insert(values), builder),
+        orIgnore: () => builder,
+        execute: async () => ({ identifiers: [] }),
+      };
+      return builder;
+    },
+    update: jest.fn().mockResolvedValue({ affected: 1 }),
+    delete: jest.fn().mockResolvedValue({ affected: 0 }),
   };
   const phasesRepository = {
     findBy: jest.fn(),
@@ -44,12 +88,32 @@ describe('TasksService', () => {
     create: jest.fn((value) => value),
     save: jest.fn(async (entity) => entity),
   };
+  const jobHandlers = new Map<string, (job: unknown) => Promise<unknown>>();
+  const jobPayloads = new Map<string, Record<string, unknown>>();
   const scheduleJobService = {
     enqueueReplan: jest.fn().mockResolvedValue({ id: 'job-1' }),
     processNextPendingForUser: jest.fn(),
-    deleteSyncedGoogleEventsForTask: jest.fn().mockResolvedValue(undefined),
-    beginMutationJob: jest.fn().mockResolvedValue({ id: 'job-mut-1' }),
+    googleEventRefsForTask: jest.fn().mockResolvedValue([]),
+    beginMutationJob: jest.fn(async (_userId: string, payload: Record<string, unknown>) => {
+      jobPayloads.set('job-mut-1', JSON.parse(JSON.stringify(payload)));
+      return { id: 'job-mut-1' };
+    }),
+    // Durable queue fake: runNow calls the registered handler with the stored
+    // payload and completes the job like ScheduleJobService.execute.
+    registerHandler: jest.fn((op: string, handler: (job: unknown) => Promise<unknown>) => {
+      jobHandlers.set(op, handler);
+    }),
+    runNow: jest.fn(async (id: string) => {
+      const payload = jobPayloads.get(id)!;
+      try {
+        const result = await jobHandlers.get(String(payload.op))!({ id, userId: 'user-1', payload });
+        await scheduleJobService.completeMutationJob(id, result ?? undefined);
+      } catch (err) {
+        await scheduleJobService.failMutationJob(id, (err as Error).message);
+      }
+    }),
     setMutationStage: jest.fn().mockResolvedValue(undefined),
+    mergeMutationPayload: jest.fn().mockResolvedValue(undefined),
     completeMutationJob: jest.fn().mockResolvedValue(undefined),
     failMutationJob: jest.fn().mockResolvedValue(undefined),
   };
@@ -71,6 +135,7 @@ describe('TasksService', () => {
     }),
     discardPendingUpserts: jest.fn().mockResolvedValue(undefined),
     waitForInflight: jest.fn().mockResolvedValue(undefined),
+    kickRows: jest.fn().mockResolvedValue(0),
   };
   const placementStep = {
     place: jest.fn().mockImplementation(async (_userId: string, _taskId: string, opts) => {
@@ -138,6 +203,7 @@ describe('TasksService', () => {
     }).compile();
 
     service = module.get<TasksService>(TasksService);
+    service.onModuleInit();
   });
 
   it('should be defined', () => {
@@ -941,20 +1007,27 @@ describe('TasksService', () => {
 
     it('seats problematic tasks after a scheduled task is deleted', async () => {
       lastSaved = { ...seated };
+      scheduleJobService.googleEventRefsForTask.mockResolvedValueOnce([
+        { eventId: 'g-1', calendarId: 'app-cal' },
+      ]);
       await service.remove('task-1', 'user-1');
       expect(scheduleJobService.enqueueReplan).not.toHaveBeenCalled();
       expect(placementStep.seatOpenHoles).toHaveBeenCalledWith('user-1');
-      expect(pendingGoogleWrites.discardPendingUpserts).toHaveBeenCalledWith(
-        'user-1',
-        'task-1',
-      );
       expect(pendingGoogleWrites.waitForInflight).toHaveBeenCalledWith(
         'user-1',
         'task-1',
       );
-      expect(
-        scheduleJobService.deleteSyncedGoogleEventsForTask,
-      ).toHaveBeenCalled();
+      // The Google delete is a queue row written with the removal, sent after it;
+      // queued upserts of the removed task are dropped in the same transaction.
+      expect(pendingRows.insert).toHaveBeenCalledWith(
+        expect.objectContaining({ operation: 'delete', googleEventId: 'g-1', googleCalendarId: 'app-cal' }),
+      );
+      expect(pendingRows.delete).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-1', taskId: 'task-1', operation: 'upsert' }),
+      );
+      expect(tasksRepository.remove).toHaveBeenCalled();
+      expect(pendingGoogleWrites.kickRows).toHaveBeenCalledWith([expect.any(String)]);
+      expect(googleCalendarService.deleteEvent).not.toHaveBeenCalled();
     });
 
     it('deletes Problematic park copies when the parent series is removed', async () => {

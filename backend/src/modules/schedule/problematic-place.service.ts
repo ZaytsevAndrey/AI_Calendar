@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { TaskEventType } from '../scheduling/event-type.enum';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import { PhasesService } from '../phases/phases.service';
 import type { Phase } from '../phases/entities/phase.entity';
@@ -16,34 +15,15 @@ import {
   Task,
   TaskStatus,
 } from '../tasks/entities/task.entity';
-import { TasksService } from '../tasks/tasks.service';
 import { UserSettingsService } from '../user-settings/user-settings.service';
-import { localDateTimeIso, localYmd } from '../voice/voice-local-date.util';
 import type {
   PlaceProblematicDto,
   PlaceProblematicResult,
 } from './dto/place-problematic.dto';
-import { PlacementStepService } from './placement-step.service';
+import { PlacementStepService, type PlaceOptions } from './placement-step.service';
+import { findOrCreateDayCopy, skipSeriesDay } from './series-exception.util';
+import { PendingGoogleWriteService } from '../google-calendar/pending-google-write.service';
 import type { PlacementPlan } from './placement-step.util';
-
-/** Park columns restored when the chosen slot does not seat. */
-type ParkSnapshot = Pick<
-  Task,
-  | 'scheduleState'
-  | 'problematicReason'
-  | 'problematicDay'
-  | 'problematicOccurrenceYmds'
-  | 'problematicOriginalStart'
-  | 'problematicOriginalEnd'
-  | 'parentSeriesId'
-  | 'phaseId'
-  | 'phases'
-  | 'scheduledStartTime'
-  | 'scheduledEndTime'
-  | 'earliestStartTime'
-  | 'deadline'
-  | 'isUnscheduled'
->;
 
 /**
  * Problematic Move: seat one parked task (or one parked series day) on the
@@ -57,10 +37,10 @@ export class ProblematicPlaceService {
   constructor(
     @InjectRepository(Task)
     private readonly taskRepo: Repository<Task>,
-    private readonly tasksService: TasksService,
     private readonly placementStep: PlacementStepService,
     private readonly phasesService: PhasesService,
     private readonly userSettingsService: UserSettingsService,
+    private readonly pendingGoogleWrites: PendingGoogleWriteService,
   ) {}
 
   async place(
@@ -112,27 +92,27 @@ export class ProblematicPlaceService {
     task: Task,
     slot: SlotChoice,
   ): Promise<PlaceProblematicResult> {
-    const snapshot = parkSnapshot(task);
-    task.phases = slot.phases;
-    task.phaseId = slot.phases[0]?.id ?? null;
-    task.isUnscheduled = false;
-    // Park metadata stays until the seat is written (persist clears it).
-    task.scheduleState = ScheduleState.NONE;
-    await this.taskRepo.save(task);
-
-    const plan = await this.placeAt(userId, task.id, slot);
-    if (seatedAt(plan, slot.start)) {
-      return result(plan.mergedIntoTaskId ?? task.id, slot);
-    }
-    const fresh = await this.taskRepo.findOne({
-      where: { id: task.id, userId },
-      relations: ['phases'],
-    });
-    if (fresh) {
-      Object.assign(fresh, snapshot);
-      await this.taskRepo.save(fresh);
-    }
-    throw this.missed(task, slot, plan);
+    // PE-18: the new phase / state and the seat are one transaction; a miss
+    // rolls both back, so the task stays parked exactly as it was.
+    const out = await this.placementStep.writeAndPlace(
+      userId,
+      async ({ tasks }) => {
+        const fresh = await tasks.findOneOrFail({
+          where: { id: task.id, userId },
+          relations: ['phases'],
+        });
+        fresh.phases = slot.phases;
+        fresh.phaseId = slot.phases[0]?.id ?? null;
+        fresh.isUnscheduled = false;
+        // Park metadata stays until the seat is written (persist clears it).
+        fresh.scheduleState = ScheduleState.NONE;
+        await tasks.save(fresh);
+        return { taskId: fresh.id, opts: placeAtOptions(slot) };
+      },
+      (plan) => seatedAt(plan, slot.start),
+    );
+    if (!out.committed) throw this.missed(task, slot, out.plan);
+    return result(seatedTaskId(out.plan, task.id), slot);
   }
 
   private async placeSeriesDay(
@@ -141,97 +121,30 @@ export class ProblematicPlaceService {
     occurrenceYmd: string,
     slot: SlotChoice,
   ): Promise<PlaceProblematicResult> {
-    const copy = await this.taskRepo.save(
-      this.taskRepo.create({
-        userId,
-        name: series.name,
-        description: series.description,
-        phaseId: slot.phases[0]?.id ?? null,
-        phases: slot.phases,
-        // A series is never fixed; keep its own movable type for the copy.
-        eventType:
-          series.eventType === TaskEventType.FIXED
-            ? TaskEventType.ADMIN
-            : series.eventType,
-        estimatedTimeInMinutes: slot.minutes,
-        isRecurring: false,
-        recurrencePattern: null,
-        recurrenceWeekDays: null,
-        allowSplit: series.allowSplit,
-        priority: series.priority,
-        scheduleTimeZone: series.scheduleTimeZone,
-        status: TaskStatus.TODO,
-        scheduledStartTime: null,
-        scheduledEndTime: null,
-        location: series.location,
-        googleColorId: series.googleColorId,
-        googleVisibility: series.googleVisibility,
-        googleTransparency: series.googleTransparency,
-        googleReminders: series.googleReminders,
-        scheduleState: ScheduleState.NONE,
-        isUnscheduled: false,
-        parentSeriesId: series.id,
-        seriesGroupId: series.seriesGroupId ?? series.id,
-      }),
-    );
-
-    const plan = await this.placeAt(userId, copy.id, slot);
-    if (!seatedAt(plan, slot.start)) {
-      await this.taskRepo.delete({ id: copy.id, userId });
-      throw this.missed(series, slot, plan);
-    }
-
     const settings = await this.userSettingsService.getSettings(userId);
     const timeZone = resolveIanaTimeZone(
       settings.timeZone || series.scheduleTimeZone,
     );
-    if (plan.mergedIntoTaskId) {
-      // The copy landed back on the series clock and merged into it: that
-      // day is part of the series again, so it is answered, not skipped.
-      await this.dropParkedDay(userId, series.id, occurrenceYmd, timeZone);
-    } else {
-      // Skipping a parked series day also drops it from the inbox.
-      await this.tasksService.skipOccurrence(series.id, userId, {
-        occurrenceStart: localDateTimeIso(occurrenceYmd, '12:00', timeZone),
-      });
-    }
-    return result(plan.mergedIntoTaskId ?? copy.id, slot);
-  }
-
-  /** Remove one day from a parked series; the last day leaves the inbox. */
-  private async dropParkedDay(
-    userId: string,
-    seriesId: string,
-    occurrenceYmd: string,
-    timeZone: string,
-  ): Promise<void> {
-    const series = await this.taskRepo.findOne({
-      where: { id: seriesId, userId },
-    });
-    if (!series || series.scheduleState !== ScheduleState.PROBLEMATIC) return;
-    const today = localYmd(new Date().toISOString(), timeZone);
-    const remaining = parkedDays(series).filter(
-      (ymd) => ymd !== occurrenceYmd && ymd >= today,
+    // PE-18: skip the day (which also answers it in the inbox), make or reuse
+    // its copy, and seat the copy — one transaction. Taken slot: nothing stays.
+    // A copy that lands back on the series clock re-merges and un-skips the day.
+    const out = await this.placementStep.writeAndPlace(
+      userId,
+      async (repos) => {
+        const fresh = await repos.tasks.findOneOrFail({
+          where: { id: series.id, userId },
+        });
+        if (!fresh.seriesGroupId) fresh.seriesGroupId = fresh.id;
+        await skipSeriesDay(repos, fresh, occurrenceYmd, timeZone, new Date());
+        const copy = await findOrCreateDayCopy(repos, fresh, occurrenceYmd, slot);
+        return { taskId: copy.id, opts: placeAtOptions(slot) };
+      },
+      (plan) => seatedAt(plan, slot.start),
     );
-    if (remaining.length) {
-      series.problematicOccurrenceYmds = remaining;
-      series.problematicDay = remaining[0];
-      await this.taskRepo.save(series);
-      return;
-    }
-    await this.tasksService.update(series.id, userId, {
-      scheduleState: ScheduleState.NONE,
-    });
-  }
-
-  private placeAt(userId: string, taskId: string, slot: SlotChoice) {
-    // Same step as a calendar drag onto a free interval.
-    return this.placementStep.place(userId, taskId, {
-      preferredStart: slot.start,
-      durationMinutes: slot.minutes,
-      commit: 'preferred',
-      drag: true,
-    });
+    if (!out.committed) throw this.missed(series, slot, out.plan);
+    // New EXDATE / DTSTART for the series on Google, after the commit.
+    await this.pendingGoogleWrites.syncTask(userId, series.id);
+    return result(seatedTaskId(out.plan, out.taskId), slot);
   }
 
   private async phasesFor(userId: string, phaseIds: string[]): Promise<Phase[]> {
@@ -277,21 +190,17 @@ function result(taskId: string, slot: SlotChoice): PlaceProblematicResult {
   };
 }
 
-function parkSnapshot(task: Task): ParkSnapshot {
+/** Same step as a calendar drag onto a free interval. */
+function placeAtOptions(slot: SlotChoice): PlaceOptions {
   return {
-    scheduleState: task.scheduleState,
-    problematicReason: task.problematicReason,
-    problematicDay: task.problematicDay,
-    problematicOccurrenceYmds: task.problematicOccurrenceYmds,
-    problematicOriginalStart: task.problematicOriginalStart,
-    problematicOriginalEnd: task.problematicOriginalEnd,
-    parentSeriesId: task.parentSeriesId,
-    phaseId: task.phaseId,
-    phases: task.phases,
-    scheduledStartTime: task.scheduledStartTime,
-    scheduledEndTime: task.scheduledEndTime,
-    earliestStartTime: task.earliestStartTime,
-    deadline: task.deadline,
-    isUnscheduled: task.isUnscheduled,
+    preferredStart: slot.start,
+    durationMinutes: slot.minutes,
+    commit: 'preferred',
+    drag: true,
   };
+}
+
+/** The task that ended up on the slot (the series, when the copy re-merged). */
+function seatedTaskId(plan: PlacementPlan, fallback: string): string {
+  return plan.outcome === 'seated' ? plan.mergedIntoTaskId ?? fallback : fallback;
 }

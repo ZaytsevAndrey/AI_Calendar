@@ -27,13 +27,14 @@ import { AdminAuthController, AdminController } from './admin.controller';
 /**
  * The admin API: a separate process (src/admin-main.ts) with its own port, CORS
  * origin and signing key. It shares only the database with the client API and
- * never changes the schema; the client API owns TYPEORM_SYNC.
+ * never changes the schema: the client API owns migrations (run at its boot
+ * under the migration lock) and TYPEORM_SYNC.
  */
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
-      useFactory: () => ({ ...createTypeOrmOptions(process.env), synchronize: false }),
+      useFactory: () => ({ ...createTypeOrmOptions(process.env), synchronize: false, migrationsRun: false }),
     }),
     TypeOrmModule.forFeature([
       User,

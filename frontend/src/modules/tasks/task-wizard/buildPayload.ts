@@ -17,23 +17,45 @@ export function windowSpansMultipleDays(from?: string, until?: string): boolean 
   return startYmd !== endYmd;
 }
 
+/**
+ * Day for the preferred clock: the seated slot's day while it is still inside
+ * the window, so saving an untouched task never moves it to today.
+ */
+function preferredDayYmd(
+  zone: string,
+  seatedStartTime?: string,
+  earliestStartTime?: string,
+  deadline?: string,
+): string {
+  const from = dateTimeLocalYmd(earliestStartTime);
+  const until = dateTimeLocalYmd(deadline);
+  const seated = seatedStartTime?.trim() ? localYmd(seatedStartTime, zone) : null;
+  if (seated && (!from || seated >= from) && (!until || seated <= until)) {
+    return seated;
+  }
+  return from || until || localYmd(new Date().toISOString(), zone);
+}
+
 function preferredWindowIso(
   preferredStartTime: string,
   estimatedTimeInMinutes: number,
   timeZone: string,
   deadline?: string,
   earliestStartTime?: string,
+  seatedStartTime?: string,
 ): { start: string; end: string } {
   const zone = resolveIanaTimeZone(timeZone);
-  const windowYmd =
-    dateTimeLocalYmd(earliestStartTime) ||
-    dateTimeLocalYmd(deadline) ||
-    localYmd(new Date().toISOString(), zone);
+  const windowYmd = preferredDayYmd(zone, seatedStartTime, earliestStartTime, deadline);
   const start = localDateTimeIso(windowYmd, preferredStartTime, zone);
   const end = new Date(
     new Date(start).getTime() + estimatedTimeInMinutes * 60 * 1000,
   ).toISOString();
   return { start, end };
+}
+
+function fixedSeriesFrom(scheduledStartTime?: string): string | undefined {
+  const ymd = dateTimeLocalYmd(scheduledStartTime);
+  return ymd ? `${ymd}T00:00` : undefined;
 }
 
 function minutesBetween(
@@ -57,9 +79,11 @@ export function buildTaskPayload(
   const zone = resolveIanaTimeZone(timeZone);
   const isUnscheduled = !!data.isUnscheduled;
   const isFixed = !isUnscheduled && !!data.isFixed;
+  const isSeries = !isUnscheduled && !!data.isRecurring;
+  // Fixed: the slot is the duration. The form always holds a number, so the slot must win.
   const estimatedTimeInMinutes =
-    data.estimatedTimeInMinutes ??
     (isFixed ? minutesBetween(data.scheduledStartTime, data.scheduledEndTime, zone) : undefined) ??
+    data.estimatedTimeInMinutes ??
     30;
 
   const primaryPhaseId = data.phaseId?.trim();
@@ -71,16 +95,24 @@ export function buildTaskPayload(
     eventType: isFixed ? 'fixed' : 'admin',
     isUnscheduled,
     estimatedTimeInMinutes,
-    isRecurring: !isUnscheduled && !isFixed && !!data.isRecurring,
-    recurrencePattern:
-      !isUnscheduled && !isFixed && data.isRecurring ? data.recurrencePattern || undefined : undefined,
-    recurrenceWeekDays:
-      !isUnscheduled && !isFixed && data.isRecurring ? data.recurrenceWeekDays ?? [] : [],
+    isRecurring: isSeries,
+    recurrencePattern: isSeries ? data.recurrencePattern || undefined : undefined,
+    recurrenceWeekDays: isSeries ? data.recurrenceWeekDays ?? [] : [],
     allowSplit: isFixed || isUnscheduled ? false : !!data.allowSplit,
     priority: data.priority,
-    deadline: isFixed || isUnscheduled ? null : dateTimeLocalToIso(data.deadline, zone),
-    earliestStartTime:
-      isFixed || isUnscheduled ? null : dateTimeLocalToIso(data.earliestStartTime, zone),
+    // A fixed series starts on its first slot's day and may end on an Until day.
+    deadline:
+      isUnscheduled || (isFixed && !isSeries) ? null : dateTimeLocalToIso(data.deadline, zone),
+    earliestStartTime: isUnscheduled
+      ? null
+      : isFixed
+        ? isSeries
+          ? dateTimeLocalToIso(
+              fixedSeriesFrom(data.scheduledStartTime),
+              zone,
+            )
+          : null
+        : dateTimeLocalToIso(data.earliestStartTime, zone),
     timeZone: zone,
     eligibleWeekDays:
       !isUnscheduled &&
@@ -125,6 +157,7 @@ export function buildTaskPayload(
       zone,
       data.deadline,
       data.earliestStartTime,
+      data.seatedStartTime,
     );
     payload.scheduledStartTime = window.start;
     payload.scheduledEndTime = window.end;
@@ -247,6 +280,7 @@ export function initialFormValues(
       scheduledStartTime: '',
       scheduledEndTime: '',
       preferredStartTime: '',
+      seatedStartTime: '',
       ...googleFormFields(),
       isUnscheduled: !!defaults?.unscheduled,
     };
@@ -269,12 +303,15 @@ export function initialFormValues(
     allowSplit: isUnscheduled ? true : data.allowSplit,
     priority: data.priority,
     status: data.status ?? 'todo',
-    deadline: isFixed || isUnscheduled ? '' : isoToDateTimeLocal(data.deadline, zone),
+    // A fixed series keeps its Until day; its From is the slot day itself.
+    deadline:
+      isUnscheduled || (isFixed && !data.isRecurring) ? '' : isoToDateTimeLocal(data.deadline, zone),
     earliestStartTime: isFixed || isUnscheduled ? '' : isoToDateTimeLocal(data.earliestStartTime, zone),
     eligibleWeekDays: data.eligibleWeekDays ?? [],
     scheduledStartTime: isFixed ? isoToDateTimeLocal(data.scheduledStartTime, zone) : '',
     scheduledEndTime: isFixed ? isoToDateTimeLocal(data.scheduledEndTime, zone) : '',
     preferredStartTime: isFixed || isUnscheduled ? '' : isoToHm(data.scheduledStartTime, zone),
+    seatedStartTime: isFixed || isUnscheduled ? '' : data.scheduledStartTime ?? '',
     ...googleFormFields(data),
     isUnscheduled,
   };

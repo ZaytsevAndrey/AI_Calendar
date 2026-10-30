@@ -1,6 +1,6 @@
 # Specification: Intelligent scheduling & unified items
 
-**Status:** implemented in codebase (engine, jobs, diff); see [overview](overview.md) and [api-reference](api-reference.md) for HTTP/UI.  
+**Status: partly obsolete (30 Oct 2026).** The full-replan engine (`IntelligentSchedulingEngine`, Generate, diff/undo jobs) described here was removed (PE-30). Placement, durable mutation jobs, the Google outbox and series rules as implemented today: [placement-engine.md](placement-engine.md). The unified-items, settings and phases parts still describe the data model; anything about Generate, replan or undo does not apply.  
 **Placement write-set (target):** [spec-incremental-placement.md](spec-incremental-placement.md). Inboxes and option ids: [spec-conflict-rules.md](spec-conflict-rules.md).  
 **Language:** English (implementation reference)  
 **Last updated:** October 2026
@@ -79,6 +79,8 @@ Legacy `eventType` strings (`daily_routine`, `learning`, …) may still exist in
 
 ## 4. Scheduling algorithm (high level)
 
+> **Historical.** This section describes the removed full-replan engine (`IntelligentSchedulingEngine.run`); it no longer runs. Live placement — who moves, holes, series days — is [spec-incremental-placement.md](spec-incremental-placement.md). The settings, phases and deadline rules below still hold.
+
 **Input:** user id, trigger (new/updated item), horizon = **30 days** from **today at midnight in settings `timeZone`** (fallback `UTC`; length configurable via `recurringScheduleHorizonDays`).
 
 **Output:** new assignment for all **non-fixed** internal items in scope + **diff** list + optional **undo snapshot**.
@@ -122,12 +124,10 @@ One optional phase. Preferred-first behavior and when to ask vs dodge are define
 
 ## 5. Triggers and UX
 
-**Target write-set:** [spec-incremental-placement.md](spec-incremental-placement.md). Create and geometric edit seat the claimant through `PlacementStepService.place` and do not enqueue a full replan. Generate and `POST /schedule-jobs/replan` still run `engine.run`.
+**Write-set:** [spec-incremental-placement.md](spec-incremental-placement.md). Every write (create, edit, drag, voice, Problematic Move, background extend) seats one claimant through `PlacementStepService`. There is no full replan: `IntelligentSchedulingEngine.run`, Generate and the replan endpoint no longer run. Only `captureAutoSegmentsSnapshot` and shared helpers of that file are live.
 
-- **Generate / Review and undo-last-generate are not part of the target.** Tasks receive a seat when they are created or when a later claim overlaps them. The live Calendar button still exists until that UI is removed.
-- **Clear** is not part of the target either. The live Calendar action remains until that UI is removed.
+- **Generate / Review, undo-last-generate and Clear are gone.** Tasks receive a seat when they are created or when a later claim overlaps them.
 - Fully ended app-generated slots (`scheduledEndTime <= now`) stay. Past app-calendar events render **gray**; other Google calendars keep their colors.
-- The live worker may still rewrite every open flexible slot until the incremental contract is implemented.
 
 ### 5.1 Diff
 

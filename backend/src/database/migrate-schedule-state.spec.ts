@@ -78,6 +78,43 @@ describe('migrateLegacyScheduleState', () => {
     expect(rows).toEqual([{ id: 'parked', scheduleState: 'problematic' }]);
   });
 
+  it('backfills the occurrence day of parked series copies only, idempotently', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sched-state-'));
+    const sqlitePath = join(dir, 'db.sqlite');
+    const setup = await sqlite(sqlitePath);
+    await setup.query(
+      `CREATE TABLE tasks (
+        id varchar PRIMARY KEY,
+        isRecurring boolean NOT NULL DEFAULT 0,
+        parentSeriesId varchar,
+        problematicDay varchar(10)
+      )`,
+    );
+    await setup.query(
+      `INSERT INTO tasks (id, isRecurring, parentSeriesId, problematicDay) VALUES
+        ('parked-copy', 0, 'series', '2026-11-06'),
+        ('seated-copy', 0, NULL, NULL),
+        ('parked-series', 1, NULL, '2026-11-07'),
+        ('parked-one-off', 0, NULL, '2026-11-08')`,
+    );
+    await setup.destroy();
+
+    await migrateLegacyScheduleState(env(sqlitePath));
+    await migrateLegacyScheduleState(env(sqlitePath));
+
+    const check = await sqlite(sqlitePath);
+    const rows = await check.query(
+      `SELECT id, originalOccurrenceYmd FROM tasks ORDER BY id`,
+    );
+    await check.destroy();
+    expect(rows).toEqual([
+      { id: 'parked-copy', originalOccurrenceYmd: '2026-11-06' },
+      { id: 'parked-one-off', originalOccurrenceYmd: null },
+      { id: 'parked-series', originalOccurrenceYmd: null },
+      { id: 'seated-copy', originalOccurrenceYmd: null },
+    ]);
+  });
+
   it('does nothing when there is no tasks table', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'sched-state-'));
     const sqlitePath = join(dir, 'empty.sqlite');

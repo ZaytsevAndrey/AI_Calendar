@@ -14,7 +14,7 @@ import { UserSettingsService } from '../user-settings/user-settings.service';
 import {
   addDaysToYmd,
   normalizeClockHm,
-  startOfLocalDayIso,
+  civilDayStartIso,
 } from '../voice/voice-local-date.util';
 import { ScheduledTask } from './schedule.entity';
 import { providerEventsToBusyIntervals } from './external-calendar-busy.util';
@@ -80,8 +80,8 @@ export class FreeSlotsService {
     const taskPhases = this.resolvePhases(task, allPhases, phaseId);
     const durationMinutes = Math.max(1, task.estimatedTimeInMinutes || 30);
 
-    const dayStart = new Date(startOfLocalDayIso(ymd, timeZone));
-    const dayEnd = new Date(startOfLocalDayIso(addDaysToYmd(ymd, 1), timeZone));
+    const dayStart = new Date(civilDayStartIso(ymd, timeZone));
+    const dayEnd = new Date(civilDayStartIso(addDaysToYmd(ymd, 1), timeZone));
 
     const busy = await this.collectBusy(
       userId,

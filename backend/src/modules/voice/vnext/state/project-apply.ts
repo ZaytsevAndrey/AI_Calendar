@@ -138,6 +138,13 @@ export function projectApply(input: {
     // A reminder asks for its own missing fields first; projectRemind then rejects what it cannot carry.
     const labels = operation.action === 'remind' ? { ok: true as const, labels: [] } : keptLabels(resolved.operation);
     if (!labels.ok) return labels;
+    // A preferred clock only means something on a create; elsewhere it would be dropped silently.
+    if (
+      operation.action !== 'create'
+      && resolved.operation.constraints.some((constraint) => constraint.kind === 'clock' && constraint.role === 'preferred')
+    ) {
+      return { ok: false, code: 'unrepresented_constraint', detail: `${operation.pendingId}:clock_preferred` };
+    }
     const projected = operation.action === 'create'
       ? projectCreate(resolved.operation, clock, labels.labels, input.language ?? 'uk')
       : operation.action === 'remind'
@@ -377,7 +384,11 @@ function projectCreate(
   const summary = labels.length ? preservedLabel(language, title, labels.join(', ')) : title;
   const start = findClock(operation, 'start');
   const end = findClock(operation, 'end');
-  const date = find(operation, 'date');
+  const preferred = findClock(operation, 'preferred');
+  const recurrence = find(operation, 'recurrence');
+  // A repeat with a clock but no date starts on its first day from today.
+  const date = find(operation, 'date')
+    ?? (recurrence && (start || end || preferred) ? firstSeriesDay(recurrence.weekDays, clock) : undefined);
   const duration = find(operation, 'duration');
   const interval = find(operation, 'interval');
   const task: Record<string, unknown> = {
@@ -387,11 +398,13 @@ function projectCreate(
     allowSplit: false,
     isUnscheduled: true,
     estimatedTimeInMinutes: duration ? duration.minutes : clock.defaultDuration,
+    // Scheduling behavior is explicit and independent of recurrence: flexible
+    // unless a clause below fixes the event on its clock.
+    eventType: 'admin',
   };
   if (operation.changes.notes !== undefined) task.description = operation.changes.notes;
   if (operation.changes.location !== undefined) task.location = operation.changes.location;
   if (operation.changes.status) task.status = operation.changes.status;
-  const recurrence = find(operation, 'recurrence');
   if (recurrence) {
     task.isRecurring = true;
     task.recurrencePattern = recurrence.pattern;
@@ -401,7 +414,8 @@ function projectCreate(
   const bounded = hasBounds(operation);
   const order = orderingBounds(operation, clock);
   if (!order.ok) return order;
-  if ((start || end || interval || allDay || bounded) && !date) return { ok: false, code: 'unrepresentable_schedule', detail: operation.pendingId };
+  if ((start || end || preferred || interval || allDay || bounded) && !date) return { ok: false, code: 'unrepresentable_schedule', detail: operation.pendingId };
+  if (preferred && start) return { ok: false, code: 'contradictory_constraints', detail: operation.pendingId };
   if (!date) {
     if (order.earliest || order.deadline) {
       mergeBounds(task, order, operation.pendingId);
@@ -440,6 +454,17 @@ function projectCreate(
         task.scheduledEndTime = endIso.iso;
         task.estimatedTimeInMinutes = minutes;
       }
+      // Fixed: a one-off at a promised clock, or any event with its own span
+      // ("every Monday standup 10 to 11"). A repeat with only a clock keeps it
+      // as the series clock and stays flexible.
+      if (!recurrence || endIso) {
+        task.eventType = 'fixed';
+        if (!endIso) {
+          task.scheduledEndTime = new Date(
+            Date.parse(startIso.iso) + Number(task.estimatedTimeInMinutes) * 60_000,
+          ).toISOString();
+        }
+      }
     }
   } else if (end) {
     const endIso = zoned(date.value, end.value, clock.timeZone);
@@ -451,10 +476,30 @@ function projectCreate(
   } else if (!bounded) {
     Object.assign(task, dayWindow(date.value, clock));
   }
+  if (preferred) {
+    // A wish, not a promise: flexible, may be moved ("at 18, but move it if needed").
+    const preferredIso = zoned(date.value, preferred.value, clock.timeZone);
+    if (!preferredIso.ok) return preferredIso;
+    task.scheduledStartTime = preferredIso.iso;
+    task.eventType = 'admin';
+  }
   const merged = mergeBounds(task, bounds, operation.pendingId) ?? mergeBounds(task, order, operation.pendingId);
   if (merged) return merged;
   task.isUnscheduled = false;
   return { ok: true, intent: { type: 'create', summary, task } };
+}
+
+/** First day of a new series from today: today, or the next listed weekday. */
+function firstSeriesDay(
+  weekDays: readonly number[] | undefined,
+  clock: Clock,
+): (Extract<TemporalProposal, { kind: 'date' }> & { constraintId: string }) | undefined {
+  if (!clock.nowIso) return undefined;
+  const today = localYmd(clock.nowIso, clock.timeZone);
+  const value = weekDays?.length
+    ? weekDays.map((day) => nextWeekdayYmd(today, day)).sort()[0]
+    : today;
+  return { kind: 'date', value, constraintId: 'series-first-day' };
 }
 
 /** Reminder commands use the production remind_* shapes. A missing clock stays null for the user setting. */

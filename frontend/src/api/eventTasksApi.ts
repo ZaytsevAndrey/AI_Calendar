@@ -73,8 +73,14 @@ export const eventTasksApi = createApi({
       query: (id) => ({ url: `/tasks/${id}` }),
       providesTags: (_r, _e, id) => [{ type: 'EventTask' as const, id }],
     }),
-    createEvent: builder.mutation<TaskWriteResult, CreateTaskDTO>({
-      query: (body) => ({ url: '/tasks', method: 'POST', data: body }),
+    createEvent: builder.mutation<TaskWriteResult, CreateTaskDTO & { idempotencyKey?: string }>({
+      // The key names this create operation: a retry of it returns the same task.
+      query: ({ idempotencyKey, ...body }) => ({
+        url: '/tasks',
+        method: 'POST',
+        data: body,
+        headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      }),
       invalidatesTags: [{ type: 'EventTask', id: 'LIST' }],
       async onQueryStarted(arg, { dispatch, queryFulfilled }) {
         const tempId = `temp-${Date.now()}`;
@@ -100,17 +106,19 @@ export const eventTasksApi = createApi({
           createdAt: nowIso,
           updatedAt: nowIso,
         } satisfies TaskDTO;
-        const patch = dispatch(
+        dispatch(
           eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) => {
             draft.unshift(optimistic);
           }),
         );
+        let accepted = false;
         try {
           await runTaskMutationProgress({
             taskKey: tempId,
             title: arg.name,
             run: async (progress) => {
               const { data } = await queryFulfilled;
+              accepted = true;
               progress.retarget(data.id);
               dispatch(
                 eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) => {
@@ -131,7 +139,19 @@ export const eventTasksApi = createApi({
               }) || undefined,
           });
         } catch {
-          patch.undo();
+          // AUD-019: never undo by patch — it removes by position, and the
+          // list may have been refetched meanwhile (the real task, or another
+          // row, would go). Drop only the optimistic row; an accepted create
+          // whose job poll failed stays, and the list is refetched.
+          dispatch(
+            eventTasksApi.util.updateQueryData('getEvents', undefined, (draft) => {
+              const index = draft.findIndex((row) => row.id === tempId);
+              if (index >= 0) draft.splice(index, 1);
+            }),
+          );
+          if (accepted) {
+            dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));
+          }
         }
       },
     }),

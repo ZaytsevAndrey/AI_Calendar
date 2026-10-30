@@ -1,15 +1,18 @@
 import {
   BadRequestException,
+  HttpException,
   Injectable,
   Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { PendingGoogleWriteService } from '../google-calendar/pending-google-write.service';
 import { CalendarProvidersRegistry } from '../calendar-providers/calendar-providers.registry';
 import type { CalendarProviderId } from '../calendar-providers/calendar-provider.types';
 import { PhasesService } from '../phases/phases.service';
+import { TaskEventType } from '../scheduling/event-type.enum';
 import { ScheduleState, Task, TaskStatus } from '../tasks/entities/task.entity';
 import { TasksService } from '../tasks/tasks.service';
 import { UserSettingsService } from '../user-settings/user-settings.service';
@@ -19,15 +22,20 @@ import {
   localHm,
   localYmd,
   normalizeClockHm,
-  startOfLocalDayIso,
+  civilDayStartIso,
 } from '../voice/voice-local-date.util';
 import { MoveDisplayedEventDto } from './dto/move-displayed-event.dto';
 import { phaseIdAtFocus, phaseWindowsForDay } from './free-slots.util';
-import { planDisplayedEventMove } from './move-displayed-event.util';
+import {
+  planDisplayedEventMove,
+  SLOT_MATCH_MS,
+  type DisplayedMovePlan,
+} from './move-displayed-event.util';
 import { PlacementStepService } from './placement-step.service';
 import type { PlacementPlan } from './placement-step.util';
 import { ScheduleJobService } from './schedule-job.service';
 import { ScheduledTask } from './schedule.entity';
+import { findOrCreateDayCopy, skipSeriesDay } from './series-exception.util';
 
 export type MoveDisplayedEventResult = {
   kind: 'fixed' | 'slot' | 'google' | 'series-choice';
@@ -35,8 +43,19 @@ export type MoveDisplayedEventResult = {
   taskName?: string;
 };
 
+/** What a durable move job stores (dates as ISO strings). */
+type MovePayload = {
+  taskId: string;
+  dto: MoveDisplayedEventDto;
+  start: string;
+  end: string;
+  minutes: number;
+  phaseIds?: string[];
+  timeZone?: string;
+};
+
 @Injectable()
-export class DisplayedEventMoveService {
+export class DisplayedEventMoveService implements OnModuleInit {
   private readonly logger = new Logger(DisplayedEventMoveService.name);
 
   constructor(
@@ -64,31 +83,84 @@ export class DisplayedEventMoveService {
       throw new BadRequestException('Event end must be after start.');
     }
 
-    const tasks = await this.tasksService.findAll(userId);
-    const slots = await this.scheduledRepo
-      .createQueryBuilder('st')
-      .innerJoin('st.task', 'task')
-      .where('task.userId = :userId', { userId })
-      .getMany();
+    // PE-27: load only what this drop can mean — the slot with its event id,
+    // the voice slot, or a slot starting within the match window of the
+    // dragged block — and the tasks behind them; not the user's whole history.
+    const eventIds = [dto.googleEventId, dto.recurringEventId].filter(
+      (id): id is string => !!id,
+    );
+    const origin = dto.originalStart ? new Date(dto.originalStart).getTime() : NaN;
+    const match: string[] = [];
+    const params: Record<string, unknown> = {};
+    if (dto.googleEventId) {
+      match.push('st.googleEventId = :gid');
+      params.gid = dto.googleEventId;
+    }
+    if (dto.slotId) {
+      match.push('st.id = :slotId');
+      params.slotId = dto.slotId;
+    }
+    if (Number.isFinite(origin)) {
+      match.push('st.scheduledStartTime BETWEEN :from AND :to');
+      params.from = new Date(origin - SLOT_MATCH_MS);
+      params.to = new Date(origin + SLOT_MATCH_MS);
+    }
+    const slots = match.length
+      ? await this.scheduledRepo
+          .createQueryBuilder('st')
+          .innerJoin('st.task', 'task')
+          .where('task.userId = :userId', { userId })
+          .andWhere(`(${match.join(' OR ')})`, params)
+          .getMany()
+      : [];
+    const taskIds = [...new Set(slots.map((slot) => slot.taskId))];
+    const taskWhere = [
+      ...(taskIds.length ? [{ userId, id: In(taskIds) }] : []),
+      ...(eventIds.length ? [{ userId, googleEventId: In(eventIds) }] : []),
+    ];
+    const tasks = taskWhere.length
+      ? await this.taskRepo.find({ where: taskWhere, relations: ['phase', 'phases'] })
+      : [];
 
-    const plan = planDisplayedEventMove({
-      googleEventId: dto.googleEventId,
-      recurringEventId: dto.recurringEventId,
-      originalStartIso: dto.originalStart,
-      isHabit: false,
-      tasks: tasks.map((task) => ({
-        id: task.id,
-        eventType: task.eventType,
-        isRecurring: task.isRecurring,
-        googleEventId: task.googleEventId,
-      })),
-      slots: slots.map((slot) => ({
-        id: slot.id,
-        taskId: slot.taskId,
-        googleEventId: slot.googleEventId,
-        scheduledStartTime: new Date(slot.scheduledStartTime).toISOString(),
-      })),
-    });
+    // Voice names the app slot: same path as a drag of that block.
+    const named = dto.slotId ? slots.find((row) => row.id === dto.slotId) : null;
+    if (dto.slotId && !named) {
+      throw new BadRequestException('Task slot not found');
+    }
+    const namedTask = named ? tasks.find((task) => task.id === named.taskId) : null;
+    if (named && namedTask) {
+      dto.googleEventId =
+        named.googleEventId ?? namedTask.googleEventId ?? dto.googleEventId ?? '';
+      dto.originalStart = new Date(named.scheduledStartTime).toISOString();
+      dto.originalEnd = new Date(named.scheduledEndTime).toISOString();
+    }
+    const plan: DisplayedMovePlan = named && namedTask
+      ? namedTask.eventType === TaskEventType.FIXED && !namedTask.isRecurring
+        ? { kind: 'fixed', taskId: namedTask.id }
+        : {
+            kind: 'slot',
+            slotId: named.id,
+            taskId: namedTask.id,
+            updateTaskWindow: !namedTask.isRecurring,
+          }
+      : planDisplayedEventMove({
+          googleEventId: dto.googleEventId,
+          recurringEventId: dto.recurringEventId,
+          originalStartIso: dto.originalStart,
+          isHabit: false,
+          tasks: tasks.map((task) => ({
+            id: task.id,
+            eventType: task.eventType,
+            isRecurring: task.isRecurring,
+            googleEventId: task.googleEventId,
+          })),
+          slots: slots.map((slot) => ({
+            id: slot.id,
+            taskId: slot.taskId,
+            googleEventId: slot.googleEventId,
+            scheduledStartTime: new Date(slot.scheduledStartTime).toISOString(),
+          })),
+        });
 
     if (plan.kind === 'rejected') {
       throw new BadRequestException('Habit blocks cannot be moved from the calendar.');
@@ -155,54 +227,84 @@ export class DisplayedEventMoveService {
           dto,
           minutes,
           phaseIds,
+          fromYmd,
         );
         // Client must poll the one-off create job before refetching Google.
         return { kind: 'slot', jobId };
       }
+      // Durable: the job row carries everything the move needs (stabilization A).
       const job = await this.scheduleJobs.beginMutationJob(userId, {
-        op: 'move-series',
+        op: 'move_series',
         taskId: owner.id,
         seriesScope: dto.seriesScope,
-      });
-      void this.runSeriesMoveJob(
-        job.id,
-        userId,
-        owner,
         dto,
-        start,
-        end,
+        start: start.toISOString(),
+        end: end.toISOString(),
         minutes,
         phaseIds,
         timeZone,
-      ).catch((err: unknown) => {
-        this.logger.error(
-          `Series move job ${job.id} failed`,
-          err instanceof Error ? err.stack : undefined,
-        );
       });
+      void this.scheduleJobs.runNow(job.id);
       return { kind: 'slot', jobId: job.id };
     }
 
     const job = await this.scheduleJobs.beginMutationJob(userId, {
-      op: 'move-slot',
+      op: 'move_slot',
       taskId: plan.taskId,
-    });
-    void this.runFlexibleMoveJob(
-      job.id,
-      userId,
-      plan.taskId,
       dto,
-      start,
-      end,
+      start: start.toISOString(),
+      end: end.toISOString(),
       minutes,
       phaseIds,
-    ).catch((err: unknown) => {
-      this.logger.error(
-        `Move job ${job.id} failed`,
-        err instanceof Error ? err.stack : undefined,
+    });
+    void this.scheduleJobs.runNow(job.id);
+    return { kind: 'slot', jobId: job.id };
+  }
+
+  /**
+   * Move jobs run from their schedule_jobs row; a retry repeats the same drop.
+   * A drop is an absolute clock: once a newer change to the task was asked
+   * for, the old drop is skipped instead of moving the task back (AUD-018).
+   */
+  onModuleInit(): void {
+    this.scheduleJobs.registerHandler('move_slot', async (job) => {
+      const p = job.payload as MovePayload;
+      if (await this.scheduleJobs.isSuperseded(job.id, job.userId, String(p.taskId))) {
+        return { superseded: true };
+      }
+      await this.runFlexibleMoveJob(
+        job.id,
+        job.userId,
+        String(p.taskId),
+        p.dto,
+        new Date(p.start),
+        new Date(p.end),
+        p.minutes,
+        p.phaseIds ?? [],
       );
     });
-    return { kind: 'slot', jobId: job.id };
+    this.scheduleJobs.registerHandler('move_series', async (job) => {
+      const p = job.payload as MovePayload;
+      if (await this.scheduleJobs.isSuperseded(job.id, job.userId, String(p.taskId))) {
+        return { superseded: true };
+      }
+      const owner = await this.taskRepo.findOne({
+        where: { id: String(p.taskId), userId: job.userId },
+        relations: ['phase', 'phases'],
+      });
+      if (!owner) return { gone: true };
+      await this.runSeriesMoveJob(
+        job.id,
+        job.userId,
+        owner,
+        p.dto,
+        new Date(p.start),
+        new Date(p.end),
+        p.minutes,
+        p.phaseIds ?? [],
+        String(p.timeZone),
+      );
+    });
   }
 
   private async runSeriesMoveJob(
@@ -237,8 +339,9 @@ export class DisplayedEventMoveService {
       // Series helpers already awaited syncTask; mark complete.
       await this.scheduleJobs.completeMutationJob(jobId);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Series move failed';
-      await this.scheduleJobs.failMutationJob(jobId, message);
+      // A refusal is final; anything else goes back to the queue for a retry.
+      if (!(err instanceof HttpException)) throw err;
+      await this.scheduleJobs.failMutationJob(jobId, err.message);
     }
   }
 
@@ -254,21 +357,35 @@ export class DisplayedEventMoveService {
   ): Promise<void> {
     try {
       await this.scheduleJobs.setMutationStage(jobId, 'placing');
-      const task = await this.taskRepo.findOne({
-        where: { id: taskId, userId },
-        relations: ['phases'],
-      });
-      if (!task) {
-        throw new BadRequestException('Task not found');
-      }
       const nextPhases = phaseIds.length
         ? (await this.phasesService.findAllForScheduling(userId)).filter((p) =>
             phaseIds.includes(p.id),
           )
         : [];
-      task.phaseId = nextPhases[0]?.id ?? null;
-      task.phases = nextPhases;
-      await this.taskRepo.save(task);
+      // AUD-008: phase writes read and save the task under the placement lock,
+      // so a placement in flight cannot overwrite them with a stale copy.
+      const setPhases = (phaseId: string | null, phases: typeof nextPhases) =>
+        this.placementStep.runExclusive(userId, async () => {
+          const fresh = await this.taskRepo.findOne({
+            where: { id: taskId, userId },
+            relations: ['phases'],
+          });
+          if (!fresh) return null;
+          const previous = { phaseId: fresh.phaseId, phases: fresh.phases ?? [] };
+          fresh.phaseId = phaseId;
+          fresh.phases = phases;
+          await this.taskRepo.save(fresh);
+          return { task: fresh, previous };
+        });
+      const changed = await setPhases(nextPhases[0]?.id ?? null, nextPhases);
+      if (!changed) {
+        throw new BadRequestException('Task not found');
+      }
+      const { task, previous } = changed;
+      // The task stays on its old slot: give it back its old phase too.
+      const restorePhase = async () => {
+        await setPhases(previous.phaseId, previous.phases);
+      };
 
       const placed = await this.placementStep.place(userId, taskId, {
         preferredStart: start,
@@ -278,6 +395,7 @@ export class DisplayedEventMoveService {
       });
       if (!seatedAt(placed, start)) {
         if (placed.outcome === 'conflict') {
+          await restorePhase();
           await this.scheduleJobs.completeMutationJob(jobId, {
             conflicts: [placed.conflict],
           });
@@ -303,6 +421,7 @@ export class DisplayedEventMoveService {
             `plan=${JSON.stringify(summarizeMovePlan(placed))} ` +
             `detail=preferred-miss`,
         );
+        await restorePhase();
         throw new BadRequestException('That time is already taken.');
       }
       await this.scheduleJobs.setMutationStage(jobId, 'syncing');
@@ -311,6 +430,9 @@ export class DisplayedEventMoveService {
       if (mergedIntoTaskId) {
         // One-off was deleted and re-merged; do not patch its Google event.
         await this.pendingGoogleWrites.syncTask(userId, mergedIntoTaskId);
+      } else if (!dto.googleEventId) {
+        // A voice move of a slot with no Google event yet: create it via sync.
+        await this.pendingGoogleWrites.syncTask(userId, taskId);
       } else {
         try {
           await this.googleCalendarService.patchEventTimes(
@@ -331,8 +453,9 @@ export class DisplayedEventMoveService {
       await this.placementStep.seatOpenHoles(userId);
       await this.scheduleJobs.completeMutationJob(jobId);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Move failed';
-      await this.scheduleJobs.failMutationJob(jobId, message);
+      // A refusal ("time is taken") is final; anything else is retried by the queue.
+      if (!(err instanceof HttpException)) throw err;
+      await this.scheduleJobs.failMutationJob(jobId, err.message);
     }
   }
 
@@ -343,35 +466,62 @@ export class DisplayedEventMoveService {
     dto: MoveDisplayedEventDto,
     minutes: number,
     phaseIds: string[],
+    occurrenceYmd: string,
   ): Promise<string | null> {
-    await this.tasksService.skipOccurrence(series.id, userId, {
-      occurrenceStart: dto.originalStart,
-      googleEventId: dto.googleEventId,
-      googleEventCalendarId: dto.calendarId,
-    });
-    const created = await this.tasksService.create(userId, {
-      name: series.name,
-      description: series.description ?? undefined,
-      ...(phaseIds.length
-        ? { phaseIds, phaseId: phaseIds[0] }
-        : { phaseIds: [] }),
-      eventType: series.eventType,
-      estimatedTimeInMinutes: minutes,
-      isRecurring: false,
-      allowSplit: series.allowSplit,
-      priority: series.priority,
-      scheduledStartTime: dto.start,
-      scheduledEndTime: dto.end,
-      location: series.location ?? undefined,
-      googleColorId: series.googleColorId ?? undefined,
-      googleVisibility: series.googleVisibility ?? undefined,
-      googleTransparency: series.googleTransparency ?? undefined,
-      googleReminders: series.googleReminders ?? undefined,
-      parentSeriesId: series.id,
-      seriesGroupId: series.seriesGroupId ?? series.id,
-      timeZone: series.scheduleTimeZone ?? undefined,
-    });
-    return created.jobId ?? null;
+    const settings = await this.userSettingsService.getSettings(userId);
+    const timeZone = resolveIanaTimeZone(settings.timeZone || series.scheduleTimeZone);
+    const start = new Date(dto.start);
+    const end = new Date(dto.end);
+    const phases = phaseIds.length
+      ? (await this.phasesService.findAllForScheduling(userId)).filter((p) =>
+          phaseIds.includes(p.id),
+        )
+      : [];
+    // Finished inside this request (one transaction below), so no handler.
+    const job = await this.scheduleJobs.beginMutationJob(
+      userId,
+      { op: 'move_series_day', taskId: series.id, seriesScope: 'occurrence' },
+      { inline: true },
+    );
+    // PE-18: skip the day, make (or reuse) its copy and seat the copy in one
+    // transaction. A conflict rolls everything back; a full day parks the copy.
+    const out = await this.placementStep.writeAndPlace(
+      userId,
+      async (repos) => {
+        const fresh = await repos.tasks.findOneOrFail({
+          where: { id: series.id, userId },
+        });
+        if (!fresh.seriesGroupId) fresh.seriesGroupId = fresh.id;
+        await skipSeriesDay(repos, fresh, occurrenceYmd, timeZone, new Date());
+        const copy = await findOrCreateDayCopy(repos, fresh, occurrenceYmd, {
+          start,
+          end,
+          minutes,
+          phases,
+        });
+        return {
+          taskId: copy.id,
+          opts: { preferredStart: start, durationMinutes: minutes, drag: true },
+        };
+      },
+      (plan) => plan.outcome !== 'conflict',
+    );
+    if (!out.committed) {
+      await this.scheduleJobs.completeMutationJob(
+        job.id,
+        out.plan.outcome === 'conflict' ? { conflicts: [out.plan.conflict] } : undefined,
+      );
+      return job.id;
+    }
+    await this.scheduleJobs.setMutationStage(job.id, 'syncing');
+    await this.pendingGoogleWrites.syncTask(userId, series.id);
+    await this.pendingGoogleWrites.syncTask(
+      userId,
+      out.plan.outcome === 'seated' ? out.plan.mergedIntoTaskId ?? out.taskId : out.taskId,
+    );
+    await this.placementStep.seatOpenHoles(userId);
+    await this.scheduleJobs.completeMutationJob(job.id);
+    return job.id;
   }
 
   /**
@@ -390,75 +540,95 @@ export class DisplayedEventMoveService {
     const settings = await this.userSettingsService.getSettings(userId);
     const timeZone = resolveIanaTimeZone(settings.timeZone || series.scheduleTimeZone);
     const splitYmd = localYmd(new Date(dto.originalStart).toISOString(), timeZone);
-    const splitStart = new Date(startOfLocalDayIso(splitYmd, timeZone));
-    const previousDeadline = series.deadline ? new Date(series.deadline) : null;
-    if (!previousDeadline || previousDeadline.getTime() > splitStart.getTime()) {
-      series.deadline = splitStart;
-      await this.taskRepo.save(series);
-    }
-
-    const rows = await this.scheduledRepo.find({ where: { taskId: series.id } });
-    const now = Date.now();
-    const tail = rows.filter((row) => {
-      if (new Date(row.scheduledEndTime).getTime() <= now) return false;
-      const ymd = localYmd(new Date(row.scheduledStartTime).toISOString(), timeZone);
-      return ymd >= splitYmd;
-    });
-    if (tail.length) await this.scheduledRepo.remove(tail);
-
-    const keptDeadline =
-      previousDeadline && previousDeadline.getTime() > splitStart.getTime()
-        ? previousDeadline
-        : null;
+    const splitStart = new Date(civilDayStartIso(splitYmd, timeZone));
     const nextPhases = phaseIds.length
       ? (await this.phasesService.findAllForScheduling(userId)).filter((p) =>
           phaseIds.includes(p.id),
         )
       : [];
-    const created = await this.taskRepo.save(
-      this.taskRepo.create({
-        userId,
-        name: series.name,
-        description: series.description,
-        phaseId: nextPhases[0]?.id ?? null,
-        phases: nextPhases,
-        eventType: series.eventType,
-        estimatedTimeInMinutes: minutes,
-        isRecurring: true,
-        recurrencePattern: series.recurrencePattern,
-        recurrenceWeekDays: series.recurrenceWeekDays,
-        allowSplit: series.allowSplit,
-        priority: series.priority,
-        deadline: keptDeadline,
-        scheduledStartTime: start,
-        scheduledEndTime: end,
-        scheduleTimeZone: timeZone,
-        location: series.location,
-        googleColorId: series.googleColorId,
-        googleVisibility: series.googleVisibility,
-        googleTransparency: series.googleTransparency,
-        googleReminders: series.googleReminders,
-        status: TaskStatus.TODO,
-        scheduleState: ScheduleState.NONE,
-        isUnscheduled: false,
-        seriesGroupId: series.seriesGroupId ?? series.id,
-        parentSeriesId: series.id,
-      }),
-    );
-    if (!series.seriesGroupId) {
-      series.seriesGroupId = series.id;
-      await this.taskRepo.save(series);
-    }
-    await this.placementStep.place(userId, created.id, {
-      preferredStart: start,
-      durationMinutes: minutes,
-      commit: 'always',
-      expandSeries: true,
+
+    // PE-18: end the old series, drop its tail, create (or reuse) the new
+    // series and seat it — one transaction. Google runs after the commit.
+    const out = await this.placementStep.writeAndPlace(userId, async ({ tasks, slots }) => {
+      const old = await tasks.findOneOrFail({ where: { id: series.id, userId } });
+      const groupId = old.seriesGroupId ?? old.id;
+      const previousDeadline = old.deadline ? new Date(old.deadline) : null;
+      if (!previousDeadline || previousDeadline.getTime() > splitStart.getTime()) {
+        old.deadline = splitStart;
+      }
+      old.seriesGroupId = groupId;
+      await tasks.save(old);
+
+      const rows = await slots.find({ where: { taskId: old.id } });
+      const now = Date.now();
+      const tail = rows.filter((row) => {
+        if (new Date(row.scheduledEndTime).getTime() <= now) return false;
+        const ymd = localYmd(new Date(row.scheduledStartTime).toISOString(), timeZone);
+        return ymd >= splitYmd;
+      });
+      if (tail.length) await slots.remove(tail);
+
+      // A retry finds the tail it already made: same group, starts on the split day.
+      const siblings = await tasks.find({
+        where: { userId, seriesGroupId: groupId, isRecurring: true },
+      });
+      const existing = siblings.find(
+        (row) =>
+          row.id !== old.id &&
+          !!row.earliestStartTime &&
+          localYmd(new Date(row.earliestStartTime).toISOString(), timeZone) === splitYmd,
+      );
+      const keptDeadline =
+        previousDeadline && previousDeadline.getTime() > splitStart.getTime()
+          ? previousDeadline
+          : null;
+      const next =
+        existing ??
+        tasks.create({
+          userId,
+          name: old.name,
+          description: old.description,
+          eventType: old.eventType,
+          isRecurring: true,
+          recurrencePattern: old.recurrencePattern,
+          recurrenceWeekDays: old.recurrenceWeekDays,
+          allowSplit: old.allowSplit,
+          priority: old.priority,
+          deadline: keptDeadline,
+          // The tail starts on the split day; earlier days stay with the old series.
+          earliestStartTime: splitStart,
+          scheduleTimeZone: timeZone,
+          location: old.location,
+          googleColorId: old.googleColorId,
+          googleVisibility: old.googleVisibility,
+          googleTransparency: old.googleTransparency,
+          googleReminders: old.googleReminders,
+          status: TaskStatus.TODO,
+          scheduleState: ScheduleState.NONE,
+          isUnscheduled: false,
+          seriesGroupId: groupId,
+          parentSeriesId: old.id,
+        });
+      next.phaseId = nextPhases[0]?.id ?? null;
+      next.phases = nextPhases;
+      next.estimatedTimeInMinutes = minutes;
+      next.scheduledStartTime = start;
+      next.scheduledEndTime = end;
+      const saved = await tasks.save(next);
+      return {
+        taskId: saved.id,
+        opts: {
+          preferredStart: start,
+          durationMinutes: minutes,
+          commit: 'always',
+          expandSeries: true,
+        },
+      };
     });
     // Old series may have no open seats left; sync deletes its Google master.
     // New series must land on Google before the calendar refetch.
     await this.pendingGoogleWrites.syncTask(userId, series.id);
-    await this.pendingGoogleWrites.syncTask(userId, created.id);
+    await this.pendingGoogleWrites.syncTask(userId, out.taskId);
     await this.placementStep.seatOpenHoles(userId);
   }
 
@@ -494,17 +664,25 @@ export class DisplayedEventMoveService {
     const anchorStart = new Date(localDateTimeIso(anchorYmd, hm, timeZone));
     const anchorEnd = new Date(anchorStart.getTime() + durationMs);
 
-    series.scheduledStartTime = anchorStart;
-    series.scheduledEndTime = anchorEnd;
-    series.estimatedTimeInMinutes = minutes;
     const nextPhases = phaseIds.length
       ? (await this.phasesService.findAllForScheduling(userId)).filter((p) =>
           phaseIds.includes(p.id),
         )
       : [];
-    series.phaseId = nextPhases[0]?.id ?? null;
-    series.phases = nextPhases;
-    await this.taskRepo.save(series);
+    // AUD-008: re-read and save under the placement lock (no stale overwrite).
+    await this.placementStep.runExclusive(userId, async () => {
+      const fresh = await this.taskRepo.findOne({
+        where: { id: series.id, userId },
+        relations: ['phases'],
+      });
+      if (!fresh) throw new BadRequestException('Task not found');
+      fresh.scheduledStartTime = anchorStart;
+      fresh.scheduledEndTime = anchorEnd;
+      fresh.estimatedTimeInMinutes = minutes;
+      fresh.phaseId = nextPhases[0]?.id ?? null;
+      fresh.phases = nextPhases;
+      await this.taskRepo.save(fresh);
+    });
     // Do not wipe open seats before place: an empty seat list makes syncTask
     // delete the Google series mid-move. place + expandSeries rewrite days.
 

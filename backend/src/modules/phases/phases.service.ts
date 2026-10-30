@@ -19,6 +19,8 @@ import {
 } from './lifestyle-presets';
 import { isAppLanguage, t, type AppLanguage } from '../../i18n';
 
+import { withoutIdentityKeys } from '../../common/scheduling-validation.pipe';
+
 @Injectable()
 export class PhasesService {
   private static readonly LEGACY_MAIN_PHASE_NAME = 'Focus hours';
@@ -225,7 +227,7 @@ export class PhasesService {
     createPhaseDto: CreatePhaseDto,
   ): Promise<Phase> {
     const phase = this.phasesRepository.create({
-      ...createPhaseDto,
+      ...withoutIdentityKeys(createPhaseDto),
       userId,
       weekDays: this.normalizeWeekDays(createPhaseDto.weekDays ?? null),
     });
@@ -266,7 +268,7 @@ export class PhasesService {
     updatePhaseDto: UpdatePhaseDto,
   ): Promise<Phase> {
     const phase = await this.findOne(id, userId);
-    const updatedPhase = this.phasesRepository.merge(phase, updatePhaseDto);
+    const updatedPhase = this.phasesRepository.merge(phase, withoutIdentityKeys(updatePhaseDto));
     if (
       updatePhaseDto.weekDays !== undefined &&
       (!updatePhaseDto.weekDays || updatePhaseDto.weekDays.length === 0)

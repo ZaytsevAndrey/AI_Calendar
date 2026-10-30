@@ -21,10 +21,10 @@ export class UserSettings {
   @JoinColumn({ name: 'userId' })
   user: User;
 
-  @Column({ type: 'time', default: '08:00' })
+  @Column({ type: 'time', default: '08:00:00' })
   wakeTime: string;
 
-  @Column({ type: 'time', default: '23:00' })
+  @Column({ type: 'time', default: '23:00:00' })
   sleepTime: string;
 
   @Column({ default: 25 })
@@ -40,7 +40,7 @@ export class UserSettings {
   @Column({ type: 'int', default: 30 })
   defaultTaskDurationMinutes: number;
 
-  @Column({ type: 'time', default: '12:00' })
+  @Column({ type: 'time', default: '12:00:00' })
   preferredLunchTime: string;
 
   @Column({ default: false })

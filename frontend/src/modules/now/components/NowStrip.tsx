@@ -12,6 +12,7 @@ import {
   schedulingKindForEvent,
   type SchedulingKind,
 } from 'modules/calendar/schedulingKind';
+import { taskTraits } from 'modules/tasks/schedulingTraits';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { buildDoNowPatch } from 'modules/events/unscheduledActions';
 import { localHm } from 'utils/ianaDateTime';
@@ -91,12 +92,18 @@ function kindForBlock(block: NowBlock): SchedulingKind {
     });
   }
   if (block.task) {
-    if (block.task.isUnscheduled) return 'unscheduled';
-    if (block.task.isRecurring) return 'recurring';
-    if (block.task.eventType === 'fixed') return 'fixed';
-    return 'flexible';
+    const traits = taskTraits(block.task);
+    return traits.unscheduled ? 'unscheduled' : traits.behavior;
   }
   return 'flexible';
+}
+
+/** Behavior label, plus "recurring" for a series member (fixed series = both). */
+function kindTitle(block: NowBlock, kind: SchedulingKind): string {
+  const label = i18n.t(KIND_I18N_KEY[kind]);
+  return block.task && taskTraits(block.task).seriesMember
+    ? `${label} · ${i18n.t(KIND_I18N_KEY.recurring)}`
+    : label;
 }
 
 function KindBadge({ kind, title }: { kind: SchedulingKind; title: string }) {
@@ -230,7 +237,7 @@ function BlockRow({
             }
           }}
         >
-          <KindBadge kind={kind} title={t(KIND_I18N_KEY[kind])} />
+          <KindBadge kind={kind} title={kindTitle(block, kind)} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-ide-text">{block.title}</p>
             <p className="text-xs text-ide-muted">{formatRange(block, timeZone)}</p>

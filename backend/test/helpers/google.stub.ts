@@ -12,6 +12,8 @@ export function createGoogleCalendarStub() {
 
   const stub = {
     checkConnection: jest.fn().mockResolvedValue({ connected: false }),
+    // The Google write queue registers for reconnects on boot.
+    onReconnected: jest.fn(),
     getStoredAppCalendarId: jest.fn().mockResolvedValue('app-cal'),
     getEvents: jest.fn().mockResolvedValue({
       events: [],

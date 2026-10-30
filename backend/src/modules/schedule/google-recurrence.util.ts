@@ -1,3 +1,5 @@
+import { localYmd, weekdayIndex } from '../voice/voice-local-date.util';
+
 const RRULE_BYDAY = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const;
 
 export function toRruleUntilUtc(date: Date): string {
@@ -45,10 +47,18 @@ export function buildGoogleRecurrenceRules(opts: {
   lastStart: Date;
   weekDays?: number[] | null;
   excludeStarts?: Date[] | null;
+  /** Civil weekday and month day are read in this zone (else the server's). */
+  timeZone?: string | null;
+  /** Series start (DTSTART); MONTHLY keeps its day of month. Defaults to `firstStart`. */
+  anchorStart?: Date | null;
 }): string[] {
   const until = toRruleUntilUtc(opts.lastStart);
   const pattern = (opts.pattern || 'DAILY').toUpperCase();
-  const weekdayFallback = [opts.firstStart.getDay()];
+  const civilYmd = (date: Date) =>
+    opts.timeZone
+      ? localYmd(date.toISOString(), opts.timeZone)
+      : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const weekdayFallback = [weekdayIndex(civilYmd(opts.firstStart))];
   const fromPhase = opts.weekDays?.length ? opts.weekDays : null;
   const ex = opts.excludeStarts;
 
@@ -64,7 +74,14 @@ export function buildGoogleRecurrenceRules(opts: {
     );
   }
   if (pattern === 'MONTHLY') {
-    return withExdates([`RRULE:FREQ=MONTHLY;UNTIL=${until}`], ex);
+    // Same day as the series start; a 29th–31st falls back to the month end
+    // (matches the local series days).
+    const day = Number(civilYmd(opts.anchorStart ?? opts.firstStart).slice(8, 10));
+    const byMonthDay =
+      day <= 28
+        ? `BYMONTHDAY=${day}`
+        : `BYMONTHDAY=${Array.from({ length: day - 27 }, (_, i) => 28 + i).join(',')};BYSETPOS=-1`;
+    return withExdates([`RRULE:FREQ=MONTHLY;${byMonthDay};UNTIL=${until}`], ex);
   }
   if (fromPhase?.length) {
     const by = byDayList(fromPhase);

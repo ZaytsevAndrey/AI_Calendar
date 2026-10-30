@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { closeTestApp, createTestApp, E2eApp } from './helpers/create-test-app';
 import { createTimePhase, seedOnboardedUser } from './helpers/auth';
 import { api, jsonBody } from './helpers/http';
+import { seedSlot } from './helpers/slots';
 
 async function createFlexible(
   ctx: E2eApp,
@@ -26,6 +27,86 @@ describe('Tasks API e2e', () => {
 
   afterAll(async () => {
     await closeTestApp(ctx);
+  });
+
+  it('A-TSK-031 a replayed create (same Idempotency-Key) returns the first task', async () => {
+    const { token } = await seedOnboardedUser(ctx.app);
+    const post = (key?: string, name = 'Twice') =>
+      api(ctx.app, 'POST', '/tasks', {
+        token,
+        payload: { name, estimatedTimeInMinutes: 30 },
+        headers: key ? { 'idempotency-key': key } : undefined,
+      });
+    const first = await post('submit-1');
+    const replay = await post('submit-1');
+    const other = await post('submit-2');
+    await ctx.drainJobs();
+    expect([first.statusCode, replay.statusCode, other.statusCode]).toEqual([201, 201, 201]);
+    expect(jsonBody(replay).id).toBe(jsonBody(first).id);
+    expect(jsonBody(other).id).not.toBe(jsonBody(first).id);
+    const list = jsonBody(await api(ctx.app, 'GET', '/tasks', { token })).value as Array<{ name: string }>;
+    expect(list.filter((task) => task.name === 'Twice')).toHaveLength(2);
+    expect((await post('bad key!')).statusCode).toBe(400);
+    // One key, another body: refused, nothing written.
+    expect((await post('submit-1', 'Different')).statusCode).toBe(422);
+    // Deleted since: a late retry does not bring it back.
+    expect((await api(ctx.app, 'DELETE', `/tasks/${jsonBody(first).id}`, { token })).statusCode).toBeLessThan(300);
+    await ctx.drainJobs();
+    expect((await post('submit-1')).statusCode).toBe(410);
+    const after = jsonBody(await api(ctx.app, 'GET', '/tasks', { token })).value as Array<{ name: string }>;
+    expect(after.filter((task) => task.name === 'Twice')).toHaveLength(1);
+    expect(after.some((task) => task.name === 'Different')).toBe(false);
+  });
+
+  it('A-TSK-032 (AUD-006) clients cannot write internal columns or another user\'s task', async () => {
+    const alice = await seedOnboardedUser(ctx.app);
+    const mallory = await seedOnboardedUser(ctx.app);
+    const own = await api(ctx.app, 'POST', '/tasks', {
+      token: alice.token,
+      payload: { name: 'Alice task', estimatedTimeInMinutes: 30 },
+    });
+    await ctx.drainJobs();
+    const aliceTask = jsonBody(own);
+
+    // Create with another user's task id and internal columns.
+    const hijack = await api(ctx.app, 'POST', '/tasks', {
+      token: mallory.token,
+      payload: {
+        name: 'Hijack',
+        estimatedTimeInMinutes: 30,
+        id: aliceTask.id,
+        userId: alice.user.id,
+        googleEventId: 'forged-event',
+        googleInsertEventId: 'forged-insert',
+      },
+    });
+    await ctx.drainJobs();
+    expect(hijack.statusCode).toBe(201);
+    expect(jsonBody(hijack).id).not.toBe(aliceTask.id);
+    expect(jsonBody(hijack).googleEventId ?? null).toBeNull();
+
+    // Patch own task with another user's id and internal columns.
+    const malloryTask = jsonBody(hijack);
+    const patch = await api(ctx.app, 'PATCH', `/tasks/${malloryTask.id}`, {
+      token: mallory.token,
+      payload: { name: 'Patched', id: aliceTask.id, userId: alice.user.id, googleEventId: 'forged' },
+    });
+    await ctx.drainJobs();
+    expect(patch.statusCode).toBe(200);
+    expect(jsonBody(patch)).toMatchObject({ id: malloryTask.id, name: 'Patched' });
+    expect(jsonBody(patch).googleEventId ?? null).toBeNull();
+
+    const aliceAfter = jsonBody(await api(ctx.app, 'GET', `/tasks/${aliceTask.id}`, { token: alice.token }));
+    expect(aliceAfter).toMatchObject({ id: aliceTask.id, name: 'Alice task' });
+    const aliceList = jsonBody(await api(ctx.app, 'GET', '/tasks', { token: alice.token })).value as unknown[];
+    expect(aliceList).toHaveLength(1);
+
+    // Invalid input is a 400, not a 500.
+    const invalid = await api(ctx.app, 'POST', '/tasks', {
+      token: alice.token,
+      payload: { estimatedTimeInMinutes: 'soon' },
+    });
+    expect(invalid.statusCode).toBe(400);
   });
 
   it('A-TSK-002 missing name is recorded as current status', async () => {
@@ -366,16 +447,7 @@ describe('Tasks API e2e', () => {
     const created = await createFlexible(ctx, token, 'Skip me');
     const start = '2026-12-01T10:00:00.000Z';
     const end = '2026-12-01T10:30:00.000Z';
-    const slot = await api(ctx.app, 'POST', '/schedule', {
-      token,
-      payload: {
-        taskId: created.body.id,
-        scheduledStartTime: start,
-        scheduledEndTime: end,
-      },
-    });
-    expect(slot.statusCode).toBe(201);
-    const slotId = jsonBody(slot).id;
+    const slotId = (await seedSlot(ctx.app, created.body.id, start, end)).id;
 
     const skipped = await api(ctx.app, 'POST', `/tasks/${created.body.id}/skip-occurrence`, {
       token,

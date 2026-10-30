@@ -19,6 +19,7 @@ Before adding a button, icon button, text field, select, textarea, date picker, 
 | Inclusive civil-day range | `ui/DateRangeField` |
 | One day plus a clock range | `ui/DateTimeRangeField` — calendar is a date range; clocks sit on the first and last day |
 | Clock time (`HH:mm`) | `ui/TimeField` |
+| `?` help beside a label | `ui/HelpTip` — `label` is the accessible name, children are the tooltip |
 | Dialog | `ui/Modal` |
 | Spinner | `ui/Spinner` |
 

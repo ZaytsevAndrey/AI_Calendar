@@ -4,12 +4,11 @@ import {
   Post,
   Body,
   HttpCode,
-  Patch,
   Param,
-  Delete,
   Query,
   UseGuards,
   Request,
+  UsePipes,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -32,19 +31,21 @@ import {
 } from './free-slots.service';
 import { ConflictOptionPhrase } from './conflict-option-phrases.util';
 import {
-  CreateScheduleDto,
-  UpdateScheduleDto,
   ScheduleQueryDto,
   MoveDisplayedEventDto,
 } from './dto';
 import { PhraseConflictOptionsDto } from './dto/phrase-conflict-options.dto';
 import { ScheduledTask } from './schedule.entity';
-import { SchedulingConflict } from './intelligent-scheduling.engine';
+import type { SchedulingConflict } from './scheduling-conflict.types';
+
+import { schedulingValidationPipe } from '../../common/scheduling-validation.pipe';
 
 @ApiTags('schedule')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('schedule')
+// AUD-006: DTO whitelist; undeclared body keys (id, userId, …) are stripped.
+@UsePipes(schedulingValidationPipe)
 export class ScheduleController {
   constructor(
     private readonly scheduleService: ScheduleService,
@@ -53,20 +54,6 @@ export class ScheduleController {
     private readonly freeSlotsService: FreeSlotsService,
     private readonly problematicPlaceService: ProblematicPlaceService,
   ) {}
-
-  @Post()
-  @ApiOperation({ summary: 'Create a new scheduled item' })
-  @ApiResponse({
-    status: 201,
-    description: 'Created successfully',
-    type: ScheduledTask,
-  })
-  async create(
-    @Request() req,
-    @Body() createScheduleDto: CreateScheduleDto,
-  ): Promise<ScheduledTask> {
-    return this.scheduleService.create(req.user.userId, createScheduleDto);
-  }
 
   @Get()
   @ApiOperation({ summary: 'List all scheduled items' })
@@ -115,30 +102,6 @@ export class ScheduleController {
     @Param('id') id: string,
   ): Promise<ScheduledTask> {
     return this.scheduleService.findOne(id, req.user.userId);
-  }
-
-  @Patch(':id')
-  @ApiOperation({ summary: 'Update a scheduled item' })
-  @ApiResponse({
-    status: 200,
-    description: 'Updated item',
-    type: ScheduledTask,
-  })
-  @ApiResponse({ status: 404, description: 'Not found' })
-  async update(
-    @Request() req,
-    @Param('id') id: string,
-    @Body() updateScheduleDto: UpdateScheduleDto,
-  ): Promise<ScheduledTask> {
-    return this.scheduleService.update(id, req.user.userId, updateScheduleDto);
-  }
-
-  @Delete(':id')
-  @ApiOperation({ summary: 'Delete a scheduled item' })
-  @ApiResponse({ status: 200, description: 'Deleted successfully' })
-  @ApiResponse({ status: 404, description: 'Not found' })
-  async remove(@Request() req, @Param('id') id: string): Promise<void> {
-    return this.scheduleService.remove(id, req.user.userId);
   }
 
   @Post('problematic/:taskId/place')

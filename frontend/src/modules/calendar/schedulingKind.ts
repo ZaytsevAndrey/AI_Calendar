@@ -1,6 +1,6 @@
 import type { GoogleCalendarEvent } from 'api/google-calendar.api';
 import type { TaskDTO } from 'api/tasks.api';
-import { scheduleModeOf } from 'modules/events/utils/taskListFilters';
+import { taskTraits } from 'modules/tasks/schedulingTraits';
 
 export type CalendarProviderId = 'google' | 'microsoft' | 'apple';
 
@@ -19,7 +19,11 @@ export type CalendarEventOverlayDTO = {
   schedulingMode: 'fixed' | 'flexible';
 };
 
-/** Kind shown on a calendar chip (icons; habit/recurring are read-only). */
+/**
+ * Scheduling behavior shown on a calendar chip: fixed, flexible, habit or
+ * unscheduled. Never `recurring` — repeating is a separate marker
+ * (`schedulingBadgeForEvent`), so a fixed series reads as fixed + repeats.
+ */
 export function schedulingKindForEvent(input: {
   event: GoogleCalendarEvent;
   task?: TaskDTO | null;
@@ -29,16 +33,34 @@ export function schedulingKindForEvent(input: {
   if (input.isHabit) return 'habit';
   const task = input.task;
   if (task) {
-    if (task.isUnscheduled) return 'unscheduled';
-    const mode = scheduleModeOf(task);
-    if (mode === 'recurring') return 'recurring';
-    if (mode === 'fixed') return 'fixed';
-    return 'flexible';
+    const traits = taskTraits(task);
+    if (traits.unscheduled) return 'unscheduled';
+    return traits.behavior;
   }
   if (input.overlay?.schedulingMode === 'flexible') return 'flexible';
   if (input.overlay?.schedulingMode === 'fixed') return 'fixed';
   // Untouched external / app event without a linked task → fixed anchor
   return 'fixed';
+}
+
+/**
+ * Chip badge: behavior plus a repeat marker for an app series, its clock
+ * siblings and its day copies. A series member's kind is not switched from
+ * the chip (that is a series-level edit in the form).
+ */
+export function schedulingBadgeForEvent(input: {
+  event: GoogleCalendarEvent;
+  task?: TaskDTO | null;
+  overlay?: CalendarEventOverlayDTO | null;
+  isHabit?: boolean;
+}): { kind: SchedulingKind; repeats: boolean; editable: boolean } {
+  const kind = schedulingKindForEvent(input);
+  const repeats = !input.isHabit && !!input.task && taskTraits(input.task).seriesMember;
+  return {
+    kind,
+    repeats,
+    editable: kindIsEditable(kind) && !input.isHabit && !repeats,
+  };
 }
 
 export function overlayForEvent(

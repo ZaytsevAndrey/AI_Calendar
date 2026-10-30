@@ -1,4 +1,5 @@
 import type { TaskDTO } from '../../../api/tasks.api';
+import { taskTraits } from '../../tasks/schedulingTraits';
 import { deadlineTone } from './deadlineTone';
 import { hasTaskAlreadyEnded, isCurrentTask } from './isCurrentTask';
 
@@ -57,12 +58,19 @@ export function taskPhaseIds(task: Pick<TaskDTO, 'phaseId' | 'phase' | 'phases'>
   return [...ids];
 }
 
-export function scheduleModeOf(
-  task: Pick<TaskDTO, 'isRecurring' | 'eventType' | 'seriesGroupId'>,
-): Exclude<ScheduleModeFilter, 'any'> {
-  if (task.isRecurring || !!task.seriesGroupId) return 'recurring';
-  if (task.eventType === 'fixed') return 'fixed';
-  return 'flexible';
+/**
+ * Behavior and recurrence are independent filters: Fixed / Flexible match the
+ * behavior (a fixed series is in Fixed), Recurring matches any series member
+ * (series, clock sibling, day copy) whatever its behavior.
+ */
+export function matchesScheduleMode(
+  task: Pick<TaskDTO, 'isRecurring' | 'eventType' | 'seriesGroupId' | 'isFixedExternal'>,
+  mode: ScheduleModeFilter,
+): boolean {
+  if (mode === 'any') return true;
+  const traits = taskTraits(task);
+  if (mode === 'recurring') return traits.seriesMember;
+  return traits.behavior === mode;
 }
 
 function matchesNameStatus(task: TaskDTO, filters: TaskNameStatusFilters, now: Date): boolean {
@@ -93,7 +101,7 @@ export function filterScheduledTasks(
   return tasks.filter((task) => {
     if (task.isUnscheduled) return false;
     if (!matchesNameStatus(task, filters, now)) return false;
-    if (filters.mode !== 'any' && scheduleModeOf(task) !== filters.mode) return false;
+    if (!matchesScheduleMode(task, filters.mode)) return false;
     if (filters.phaseId === 'any') return true;
     const phaseIds = taskPhaseIds(task);
     if (filters.phaseId === 'none') return phaseIds.length === 0;

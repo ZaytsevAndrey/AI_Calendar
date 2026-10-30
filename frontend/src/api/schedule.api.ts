@@ -42,8 +42,39 @@ export interface ScheduleJobStatusResponse {
   progressStage?: string | null;
   progressCurrent?: number | null;
   progressTotal?: number | null;
+  /** Set while a failed attempt waits for its retry (`progressStage: retrying`). */
+  attempts?: number;
+  nextRunAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
+}
+
+/** How long a running job keeps the poll alive past each answer. */
+export const RUNNING_JOB_GRACE_MS = 30_000;
+/** A poll never outlives this, whatever the job says. */
+export const JOB_POLL_HARD_CAP_MS = 10 * 60_000;
+
+/**
+ * A job waiting for a scheduled retry is still alive: wait past its retry
+ * time. A running job is alive too (AUD-019): its worker renews the lease, and
+ * a dead worker's job is taken over after it — reporting a timeout while the
+ * backend still works showed an error for a change that then succeeded. Both
+ * stop at `hardDeadline`.
+ */
+export function jobPollDeadline(
+  deadline: number,
+  job: Pick<ScheduleJobStatusResponse, 'status' | 'nextRunAt'>,
+  now = Date.now(),
+  hardDeadline = Number.POSITIVE_INFINITY,
+): number {
+  let next = deadline;
+  if (job.status === 'running') {
+    next = Math.max(deadline, now + RUNNING_JOB_GRACE_MS);
+  } else if (job.status === 'pending' && job.nextRunAt) {
+    const retryAt = new Date(job.nextRunAt).getTime();
+    if (Number.isFinite(retryAt)) next = Math.max(deadline, retryAt + 30_000);
+  }
+  return Math.min(next, Math.max(deadline, hardDeadline));
 }
 
 async function pollJobUntilDone(
@@ -51,7 +82,8 @@ async function pollJobUntilDone(
   timeoutMs = 120_000,
   onProgress?: (job: ScheduleJobStatusResponse) => void,
 ): Promise<ScheduleJobStatusResponse> {
-  const deadline = Date.now() + timeoutMs;
+  const startedAt = Date.now();
+  let deadline = startedAt + timeoutMs;
   let status = 'pending';
   let last: ScheduleJobStatusResponse | null = null;
   let first = true;
@@ -61,12 +93,15 @@ async function pollJobUntilDone(
       throw new Error('Schedule job timed out');
     }
     if (!first) {
-      await new Promise((r) => setTimeout(r, 350));
+      // Waiting for a retry (seconds to minutes away): poll slower.
+      const waiting = last?.progressStage === 'retrying';
+      await new Promise((r) => setTimeout(r, waiting ? 2_000 : 350));
     }
     first = false;
     const { data } = await axios.get<ScheduleJobStatusResponse>(`/schedule-jobs/${jobId}`);
     last = data;
     status = data.status;
+    deadline = jobPollDeadline(deadline, data, Date.now(), startedAt + JOB_POLL_HARD_CAP_MS);
     onProgress?.(data);
     if (status === 'failed') {
       throw new Error(data.errorMessage || 'Schedule job failed');
@@ -127,6 +162,13 @@ export type ScheduleRecommendations = {
   suggestions: ScheduleRecommendation[];
 };
 
+export type MoveEventOptions = {
+  /** Called after the user picks a series scope, before the write request. */
+  onSeriesScopeChosen?: (scope: 'occurrence' | 'series' | 'all') => void;
+  /** Called right before the POST that actually mutates (not the series-choice probe). */
+  onMutationStart?: () => void;
+};
+
 export const ScheduleApi = {
   getFreeSlots: async (
     taskId: string,
@@ -175,6 +217,8 @@ export const ScheduleApi = {
 
   moveDisplayedEvent: async (
     body: {
+      /** App slot (voice); the server then ignores the event id and original interval. */
+      slotId?: string;
       googleEventId: string;
       calendarId?: string;
       /** google | microsoft | apple — required for external events */
@@ -186,12 +230,7 @@ export const ScheduleApi = {
       end: string;
       seriesScope?: 'occurrence' | 'series' | 'all';
     },
-    opts?: {
-      /** Called after the user picks a series scope, before the write request. */
-      onSeriesScopeChosen?: (scope: 'occurrence' | 'series' | 'all') => void;
-      /** Called right before the POST that actually mutates (not the series-choice probe). */
-      onMutationStart?: () => void;
-    },
+    opts?: MoveEventOptions,
   ): Promise<{ kind: 'fixed' | 'slot' | 'google'; jobId: string | null }> => {
     const post = async (payload: typeof body) => {
       const response = await axios.post('/schedule/move-event', payload);
@@ -219,13 +258,21 @@ export const ScheduleApi = {
     return { kind: second.kind === 'series-choice' ? 'slot' : second.kind, jobId: second.jobId };
   },
 
-  rescheduleTask: async (id: string, startTime: string, endTime: string): Promise<ScheduledTaskDTO> => {
-    const response = await axios.patch(`/schedule/${id}`, {
-      scheduledStartTime: startTime,
-      scheduledEndTime: endTime,
-    });
-    return response.data as ScheduledTaskDTO;
-  },
+  /**
+   * Voice move of one app slot: the same engine path as a calendar drag
+   * (displace peers, conflicts, series scope, Google sync). The server reads
+   * the slot's event id and original interval from `slotId`.
+   */
+  moveSlot: (
+    slotId: string,
+    start: string,
+    end: string,
+    opts?: MoveEventOptions,
+  ) =>
+    ScheduleApi.moveDisplayedEvent(
+      { slotId, googleEventId: '', originalStart: start, originalEnd: end, start, end },
+      opts,
+    ),
 
   getLatestDoneJob: async (): Promise<{
     job: ScheduleJobStatusResponse | null;

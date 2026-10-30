@@ -8,6 +8,7 @@ import {
   Delete,
   Request,
   UseGuards,
+  UsePipes,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -22,10 +23,14 @@ import { SetupDefaultPhasesDto } from './dto/setup-default-phases.dto';
 import { ApplyPhasePresetDto } from './dto/apply-phase-preset.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+import { schedulingValidationPipe } from '../../common/scheduling-validation.pipe';
+
 @ApiTags('phases')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('phases')
+// AUD-006: DTO whitelist; undeclared body keys (id, userId, …) are stripped.
+@UsePipes(schedulingValidationPipe)
 export class PhasesController {
   constructor(private readonly phasesService: PhasesService) {}
 

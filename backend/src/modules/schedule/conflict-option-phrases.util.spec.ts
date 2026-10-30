@@ -2,7 +2,7 @@ import {
   fallbackConflictOptionPhrases,
   parseConflictOptionPhrases,
 } from './conflict-option-phrases.util';
-import type { SchedulingConflict } from './intelligent-scheduling.engine';
+import type { SchedulingConflict } from './scheduling-conflict.types';
 
 describe('conflict-option-phrases.util', () => {
   const conflict: SchedulingConflict = {

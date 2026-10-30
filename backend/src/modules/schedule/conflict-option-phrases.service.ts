@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { GroqClient } from '../voice/groq.client';
-import type { SchedulingConflict } from './intelligent-scheduling.engine';
+import type { SchedulingConflict } from './scheduling-conflict.types';
 import {
   ConflictOptionPhrase,
   conflictPhrasingSystemPrompt,

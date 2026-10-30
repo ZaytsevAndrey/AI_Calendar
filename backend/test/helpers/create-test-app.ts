@@ -84,7 +84,8 @@ export async function createTestApp(): Promise<E2eApp> {
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline) {
       try {
-        await jobs.processNextPending();
+        await jobs.drain();
+        await jobs.processDue();
       } catch {
         break;
       }

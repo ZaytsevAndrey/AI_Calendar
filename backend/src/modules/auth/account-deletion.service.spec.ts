@@ -17,6 +17,7 @@ describe('AccountDeletionService', () => {
   let dataSource: {
     options: { type: string };
     query: jest.Mock;
+    getRepository: jest.Mock;
     transaction: jest.Mock;
   };
   let service: AccountDeletionService;
@@ -41,12 +42,16 @@ describe('AccountDeletionService', () => {
     dataSource = {
       options: { type: 'sqlite' },
       query: jest.fn().mockResolvedValue(undefined),
+      // Day reminders read for the Google purge.
+      getRepository: jest.fn(() => ({ find: jest.fn().mockResolvedValue([]) })),
       transaction: jest.fn(async (fn) => {
         const manager = {
           delete: jest.fn().mockResolvedValue(undefined),
+          update: jest.fn().mockResolvedValue(undefined),
+          find: jest.fn().mockResolvedValue([]),
           query: jest.fn().mockResolvedValue(undefined),
           getRepository: jest.fn((entity: { name: string }) => ({
-            metadata: { tableName: entity.name.toLowerCase() },
+            metadata: { tableName: entity.name.toLowerCase(), manyToManyRelations: [] },
           })),
         };
         await fn(manager);

@@ -46,6 +46,26 @@ describe('Settings and phases API e2e', () => {
     expect(body.recurringScheduleHorizonDays).toBe(10);
   });
 
+  it('A-SET-011 (NEW-02) a settings PATCH cannot write another user\'s settings row', async () => {
+    const alice = await seedUser(ctx.app);
+    const mallory = await seedUser(ctx.app);
+    const aliceSettings = jsonBody(await api(ctx.app, 'GET', '/user-settings', { token: alice.token }));
+    const mallorySettings = jsonBody(await api(ctx.app, 'GET', '/user-settings', { token: mallory.token }));
+
+    const res = await api(ctx.app, 'PATCH', '/user-settings', {
+      token: mallory.token,
+      payload: { id: aliceSettings.id, userId: alice.user.id, wakeTime: '05:00' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const repo = ctx.app.get<Repository<UserSettings>>(getRepositoryToken(UserSettings));
+    const aliceRow = await repo.findOneByOrFail({ id: String(aliceSettings.id) });
+    expect(aliceRow.userId).toBe(alice.user.id);
+    expect(aliceRow.wakeTime).toBe(aliceSettings.wakeTime);
+    const malloryRow = await repo.findOneByOrFail({ id: String(mallorySettings.id) });
+    expect(malloryRow.userId).toBe(mallory.user.id);
+  });
+
   it('A-SET-004 minSplitMinutes above max bumps max', async () => {
     const { token } = await seedUser(ctx.app);
     await api(ctx.app, 'GET', '/user-settings', { token });

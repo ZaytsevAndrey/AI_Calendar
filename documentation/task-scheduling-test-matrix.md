@@ -7,7 +7,7 @@ Format is aimed at direct transfer into unit/integration tests.
 **Markers**
 
 - **Covered** — green on the **placement** path (`placement-step.util.spec.ts`, `placement-step.service.spec.ts`, and/or Nest/Playwright e2e that call `place`).
-- **Covered (engine only)** — still proven on `IntelligentSchedulingEngine.run` but not yet on the live write path; do not treat as CI proof of seating.
+- **Not covered on the live path** — was proven only on the removed `IntelligentSchedulingEngine.run` (PE-30); needs a placement-step test.
 - **Target** — product does not claim this yet, or UI/notify glue is unfinished.
 
 Crowded-day user families (**CD\***) are the §22 priority: free hole, pack/shift, immovable walls, no capacity, deadline → Unscheduled, fixed vs fixed, conflict apply/dismiss, series under load.
@@ -186,7 +186,7 @@ These describe a busy phase day. Prefer Nest e2e + Playwright for the HTTP/UI lo
 - No overlap after writes.
 - No conflict UI (peers are movable).
 
-## T11 — Two new flexibles, same preferred, same create pass (**Covered (engine only)**)
+## T11 — Two new flexibles, same preferred, same create pass (**Not covered on the live path** — its only proof was the removed engine; see PE-30)
 
 **Given**
 
@@ -291,7 +291,7 @@ Live product seats one create at a time via `place`; sequential creates cover th
 
 ---
 
-## T20 — Two recurring, same preferred, enough capacity (**Covered (engine only)**; Nest A-SCH covers sequential create)
+## T20 — Two recurring, same preferred, enough capacity (**Partly covered**: Nest A-SCH covers sequential create; the same-pass proof was the removed engine)
 
 **Given**
 
@@ -597,7 +597,7 @@ Generate / full replan write path removed. Ended-slot keep semantics no longer a
 
 - No segment starts on `2026-09-07` UTC.
 - Placement on local 8 Sep.
-- Covered by `intelligent-scheduling.engine.spec.ts`.
+- Covered by `placement-bounds.util.spec.ts` ("raises the floor to earliestStartTime for flexible day windows": day-only 00:00 snaps to wake in the settings zone). The engine spec that covered it before was removed with the dead engine (PE-30).
 
 ## W02 — From 00:01 is an instant (not snapped)
 
@@ -645,7 +645,7 @@ Generate / full replan write path removed. Ended-slot keep semantics no longer a
 **Then**
 
 - First slot `2026-04-20T06:00:00.000Z`–`07:00:00.000Z` (09:00–10:00 Nicosia).
-- Covered by `intelligent-scheduling.engine.spec.ts`.
+- Partly covered: `planning-horizon.util.spec.ts` (horizon starts at midnight in the settings zone, also across DST). Placement in a non-UTC zone has no dedicated live test yet (the engine spec that covered it was removed, PE-30).
 
 ## B01 — Buffer around fixed events
 
@@ -665,7 +665,7 @@ Generate / full replan write path removed. Ended-slot keep semantics no longer a
 - Beside a habit block `10:00`–`10:30`, same 60 minutes can stay `09:00`–`10:00` (habits not padded).
 - Gap usable when only way to finish before same-day deadline.
 - `0` leaves placement unchanged. Drag not rejected for buffer alone.
-- Covered by `intelligent-scheduling.engine.spec.ts`.
+- Covered by `placement-step.util.spec.ts` ("avoids a fixed buffer and uses it only when nothing else fits").
 
 ---
 
@@ -698,6 +698,84 @@ Generate / full replan write path removed. Ended-slot keep semantics no longer a
 
 - Options use ids: `place_on_top`, `move_other`, `move_new`, `skip_occurrence`, `leave_problematic` (subset allowed; fixed blockers omit `move_other`).
 - Groq/copy only phrases labels; apply uses existing APIs.
+
+## PE — Placement engine review regressions (**Covered**)
+
+From [placement-engine-review.md](placement-engine-review.md). Tests: `placement-engine-regressions.spec.ts` (pure `planPlacement` and SQLite with the real `PlacementStepService` / `TasksService`, kit in `backend/test/helpers/placement-sqlite.kit.ts`); PE-20 / PE-21 in `displayed-event-move.service.spec.ts`; PE-09 / PE-25 RRULE in `google-recurrence.util.spec.ts`.
+
+| ID | Given | When | Then |
+|----|-------|------|------|
+| PE-01 | Daily series at 10:00, open days seated | Clock edited to 11:00 with an earlier form date | Master and every open day on 11:00; skipped days kept |
+| PE-02 | Daily series, days 5–9 Nov at 10:00 | Drag 8 Nov to 15:00, "this and following" | One slot per day; old series keeps 5–7 Nov |
+| PE-03 | Resolved layer 10:00–11:00 | Fixed claim 10:00–11:00 | Fixed seats on 10:00 on top; nobody moves |
+| PE-04 | Another series day 10:00 | Fixed series day claims 10:00 | Keeps 10:00 (that day is displaced) or conflict; never another hole |
+| PE-05 | Weekly Monday series; 9 Nov detached into a copy | Copy dragged to Wednesday 10:00 | Copy stays on Wednesday; series not changed; 9 Nov still skipped |
+| PE-06 | Fixed A 10:00, fixed B 14:00 | B edited onto 10:00 (conflict) | B's task clock equals its slot (14:00) |
+| PE-07 | Daily series 10:00 | A fixed claim displaces one day | That day becomes a copy; new horizon days stay at 10:00 |
+| PE-08 | Mon/Fri every 2 weeks from Fri 30 Oct | Horizon days | 30 Oct, 9, 13, 23, 27 Nov (weeks from Monday) |
+| PE-09 | Monthly from 31 Jan | Horizon days / Google RRULE | 31 Jan, 28 Feb, 31 Mar, 30 Apr, 31 May; `BYMONTHDAY=28,29,30,31;BYSETPOS=-1` |
+| PE-10 | Weekly series from Monday 2 Nov | Clock edited on Thursday | Days stay on Mondays |
+| PE-11 | No free hour, flexibles packable | Auto-seat / Schedule / Do now (`rawHole`) | Problematic; seated tasks not packed |
+| PE-12 | Canceled task on 10:00 | Fixed claim 10:00 | Claim seats; canceled slot and state untouched |
+| PE-13 | Peer From 10:00, holes at 09:00 and 13:00 | Peer displaced | Peer to 13:00, never before its From |
+| PE-15 | Unphased peer; the only phase is full | Peer displaced | Peer searches wake/sleep (11:00), not the phase union |
+| PE-17 | 14:00, new daily series without a clock | Create | Today gets a hole after now (clock sibling if needed); nothing in the past |
+| PE-18 | Series rewrite shifts a peer, then fails | Write throws part-way | Peer and old series rows unchanged; no Google sync |
+| PE-19 | No free day in the horizon | New series | One Problematic copy per day; master not parked |
+| PE-20 | Flexible drag with a new phase | Drop is a conflict | Old slot and old phase kept |
+| PE-21 | Voice `shift` of a slot | Apply | Goes through `move-event` with `slotId` (drag path) |
+| PE-23 | Flexible at 15:00 in 09–17 | Claim takes 15:00 | Flexible to 14:00 (nearest), not 09:00 |
+| PE-25 | Weekly at 00:30 Kyiv (Sunday in UTC) | Google RRULE | `BYDAY=MO` |
+| PE-26 | Done task's hour taken meanwhile; canceled task's hour free | Back to `todo` | First moves to a free hole; second keeps its slot |
+| PE-29 | Many future parks, one past copy | Purge with a small batch | Past copy removed |
+
+## SD — Scheduling domain scenarios (scheduling refactor, Oct 2026)
+
+Behavior (`eventType`: fixed / flexible) and recurrence (single / series) are independent. Invariants checked by `scheduling-invariants.spec.ts` after every step of a seeded random sequence (3 seeds): **I1** no open one-off is lost (it is seated, in an inbox, or waiting on a conflict answer); **I2** at most one slot per task per civil day; **I3** a fixed task's slots sit on its own clock; **I4** flexible slots stay inside wake/sleep; **I5** no flexible slot overlaps a fixed slot (unless resolved); **I6** a day copy's day is skipped on its series.
+
+| ID | Initial state | Action | Expected | Invariants | Test |
+|----|---------------|--------|----------|------------|------|
+| SD-01 | Empty day | Create fixed single 10:00–10:45 | Slot 10:00–10:45 | I3 | invariants; `placement-step.service.spec.ts` CD04/CD07 |
+| SD-02 | Empty days | Create fixed series daily 10:00–10:30 | One slot per day at 10:00 | I2, I3 | invariants; `placement-step.service.spec.ts` FX01 |
+| SD-03 | Fixed series at 10:00 | Create flexible series daily, clock 10:00 | Flexible days move off the anchor, fixed stays | I3, I5 | invariants (seeded step 2) |
+| SD-04 | Flexible at 15:00 | Fixed claim 15:00 | Fixed seats, flexible to the nearest hole | I3, I5 | regressions PE-23 |
+| SD-05 | Series day on an anchor clock | Drag one day onto a fixed event | Everything rolled back, conflict reported | I2, I6 | `series-exception.spec.ts` |
+| SD-06 | Daily series 5–7 Nov | Drag 6 Nov to 15:00, this day only | Skip + copy (fixed stays fixed) + seat, atomic; retry adds nothing | I2, I6 | `series-exception.spec.ts`, regressions PE-24 |
+| SD-07 | Daily series | Drag "this and following" | Old series ends before the split; new series from the split; retry reuses it | I2 | `series-exception.spec.ts`, regressions PE-02 |
+| SD-08 | Parked series day | Problematic Move to a free slot / a taken slot | Copy + skip + seat / nothing changes | I6 | `series-exception.spec.ts`, `problematic-place.service.spec.ts` |
+| SD-09 | Detached copy | Moved back to its own day and clock | Re-merges, day un-skipped; on another day stays a copy | I2, I6 | regressions PE-05 |
+| SD-10 | Fixed series | Skip one day | Day skipped, slot removed; a fixed one-off refuses skip | I2 | `series-exception.spec.ts` |
+| SD-11 | Monthly from the 31st / biweekly / weekly edited midweek | Horizon days | Days count from the series start | I2 | regressions PE-08…PE-10 |
+| SD-12 | Series near the horizon edge | Background append | Only missing days, on the series clock | I2 | regressions PE-07, PE-16 |
+| SD-13 | No free day | New series | One Problematic copy per day, master not parked | I1 | regressions PE-19 |
+| SD-14 | Window already over | Create flexible with a past Until | Unscheduled | I1 | `placement-step.service.spec.ts` CD06 |
+| SD-15 | Resolved layer | Fixed claim on top | Both stay | I3 | regressions PE-03 |
+| SD-16 | Series rewrite | Crash part-way | No peer moved, old rows intact, no Google sync | — | regressions PE-18 |
+| SD-17 | Committed series exception | Google fails after commit | DB keeps the commit; retry idempotent | I2, I6 | `series-exception.spec.ts` |
+| SD-18 | Auto-seat with 3 parked tasks | One pass | One external-calendar read | I1 | `placement-load.spec.ts` |
+| SD-19 | Many old slots | Drag one block | Only candidates loaded | — | `placement-load.spec.ts` |
+| SD-20 | Kyiv, last Sunday of October | Horizon range | Midnights on both sides of the DST switch | — | `planning-horizon.util.spec.ts` |
+| SD-21 | Voice: "standup every Monday 10 to 11" | Preview | `fixed`, weekly, first Monday | — | `structured-voice.service.spec.ts` |
+| SD-22 | Voice: "find an hour for exercise every Monday" | Preview | flexible series, no clock | — | `structured-voice.service.spec.ts` |
+| SD-23 | Voice: "at 18, move it if needed" | Preview | flexible, preferred 18:00 | — | `structured-voice.service.spec.ts` |
+| SD-24 | Voice: one day / all future days of a series | Preview | move with scope occurrence / series | — | `structured-voice.service.spec.ts` |
+| SD-25 | Fixed series in the UI | Chip, preview facts, voice card, task list, filters | Fixed + repeats everywhere; in Fixed and Recurring filters | — | `schedulingTraits.spec.ts`, `schedulingKind.spec.ts`, `eventPreviewFacts.spec.ts`, `changePreviewCards.spec.ts`, `taskListFilters.spec.ts` |
+| SD-26 | Old parked copies | Startup migration / versioned migration | `originalOccurrenceYmd` from `problematicDay`, twice = same | — | `migrate-schedule-state.spec.ts`, `migrations.pg.spec.ts` |
+| SD-27 | Task saved, process dies before placement | Recovery sweep | Placed once; job done | I1 | `mutation-jobs.spec.ts`, `placement.pg.spec.ts` (Postgres) |
+| SD-28 | Placement committed, sync step fails | Job retry | Only the sync is retried; the slot does not move | — | `scheduling-workflows.spec.ts` E2 |
+| SD-29 | Six creates for one user at once | Concurrent placement | All placed, no overlap | I5 | `placement.pg.spec.ts` (Postgres) |
+| SD-30 | Same create sent twice (same Idempotency-Key), concurrently or later | Create | One task; replay returns it and its job; different keys → two tasks | I1 | `task-create-idempotency.spec.ts`, e2e A-TSK-030 |
+| SD-31 | Eight packed 30-min tasks | Fixed claim on the first (chain > 6 pulls) | Fixed wins; nobody overlaps or vanishes | I1, I5 | `placement-edge-cases.spec.ts` |
+| SD-32 | Fixed 23:30–01:30 | Flexible asking 00:30 next day | Fixed stored whole; flexible gets a conflict, never inside | I5 | `placement-edge-cases.spec.ts` |
+| SD-33 | 12 h day | 10 h task / 13 h task | Placed whole / parked (no split, no overlap) | I1, I4 | `placement-edge-cases.spec.ts` |
+| SD-34 | Series create queued (crash) | Series clock edited before it runs | Ends on the new clock only | I2 | `placement-edge-cases.spec.ts` |
+| SD-35 | Daily 02:30, New York, spring-forward day | Horizon | That day at 03:30, still in the series (no copy) | I2 | `placement-edge-cases.spec.ts`, `dst-clock.spec.ts` |
+| SD-36 | Flexible series → fixed conflict → one day dragged → change the future → restart | Whole workflow | One occurrence per civil day; meeting unmoved; no job left | I2, I6 | `scheduling-workflows.spec.ts` I1 |
+| SD-37 | Google insert succeeded but its answer was lost | Retry | Same event id → no second event | — | `pending-google-write.queue.spec.ts` |
+| SD-38 | One user's Google writes keep failing | Queue passes | Others still sent each pass; failing rows back off, end `failed` | — | `pending-google-write.queue.spec.ts`, `pending-google-write.pg.spec.ts` |
+| SD-39 | Process killed during a post-placement Google sync | Next instance | Recorded write sent once | — | `pending-google-write.queue.spec.ts` |
+
+**Known gaps (not covered by an automated test):** voice preview vs execution on a live model; frontend drag-and-drop interaction (only the drag helpers are unit-tested); the real Google API (all Google tests use a fake; 409 / `cancelled` follow Google's documented behavior); Neon itself (Postgres specs run on Postgres 16 in Docker / CI).
 
 ---
 

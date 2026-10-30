@@ -1,90 +1,69 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-  ConflictException,
-  Logger,
-} from '@nestjs/common';
+import { HttpException, Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { isUUID } from 'class-validator';
+import { EntityManager, In, LessThan, Repository } from 'typeorm';
 import { ScheduleJob } from './entities/schedule-job.entity';
-import {
-  DiffItem,
-  IntelligentSchedulingEngine,
-  SchedulingConflict,
-  SchedulingWarning,
-  SegmentSnapshot,
-} from './intelligent-scheduling.engine';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
-import {
-  clearedParkColumns,
-  isProblematicSchedule,
-  rememberSingleProblematicDay,
-  ScheduleState,
-  Task,
-  TaskStatus,
-} from '../tasks/entities/task.entity';
-import { TaskEventType } from '../scheduling/event-type.enum';
+import { Task } from '../tasks/entities/task.entity';
 import { ScheduledTask } from './schedule.entity';
-import { phaseHexToGoogleColorId } from '../google-calendar/phase-hex-to-google-color-id.util';
-import { applyTaskGoogleEventFields } from '../google-calendar/task-google-event-fields.util';
-import { effectiveRecurrenceWeekDays } from './recurrence-from-phases.util';
-import { buildGoogleRecurrenceRules } from './google-recurrence.util';
-import { pickMajorityClockSlot } from './series-group.util';
-import {
-  excludeStartsForSkippedYmds,
-  isOccurrenceYmdSkipped,
-} from '../tasks/skipped-occurrence.util';
-import { localHm, localYmd } from '../voice/voice-local-date.util';
-import { resolveIanaTimeZone } from '../../common/iana-time-zone';
-import {
-  GoogleEventRef,
-  hasFullyEnded,
-  partitionEnded,
-  planGoogleMasterEventSync,
-  planGoogleSegmentSync,
-  uniqueGoogleEventRefs,
-} from './google-segment-sync.util';
-import {
-  isGenerateJobPayload,
-  parseUndoSnapshot,
-  UndoSnapshot,
-} from './schedule-undo.util';
-import {
-  collectParkDayHints,
-  collectProblematicParks,
-  collectProblematicTaskIds,
-} from './problematic-from-warnings.util';
-import { collectUnscheduledTaskIds } from './unscheduled-from-warnings.util';
-function googleListedEventEndMs(ev: {
-  end?: { dateTime?: string | null; date?: string | null };
-}): number | null {
-  if (ev.end?.dateTime) {
-    const t = new Date(ev.end.dateTime).getTime();
-    return Number.isNaN(t) ? null : t;
+import { GoogleEventRef, uniqueGoogleEventRefs } from './google-segment-sync.util';
+
+/** A running job belongs to its claimer this long; a dead process loses it after. */
+export const MUTATION_LEASE_MS = 2 * 60_000;
+/** Infrastructure failures are retried this many times in total, then the job fails. */
+export const MUTATION_MAX_ATTEMPTS = 5;
+export const MUTATION_BACKOFF_BASE_MS = 15_000;
+export const MUTATION_BACKOFF_MAX_MS = 10 * 60_000;
+/**
+ * AUD-025: finished (done / failed) jobs are kept this long — polls, create
+ * replays and diagnostics read them — then purged. A replay after that gets
+ * its task without a job id.
+ */
+export const FINISHED_JOB_RETENTION_MS = 7 * 24 * 60 * 60_000;
+
+export type MutationHandler = (job: {
+  id: string;
+  userId: string;
+  payload: Record<string, unknown>;
+}) => Promise<Record<string, unknown> | void>;
+
+function parsePayload(json: string | null): Record<string, unknown> {
+  try {
+    const value = json ? JSON.parse(json) : {};
+    return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+  } catch {
+    return {};
   }
-  if (ev.end?.date) {
-    const t = Date.parse(`${ev.end.date}T00:00:00.000Z`);
-    return Number.isNaN(t) ? null : t;
-  }
-  return null;
 }
 
-/** Latest done job that slides the planning horizon (extend or silent replan). */
-function mergeUniqueSortedYmds(
-  existing: string[] | null | undefined,
-  extra: string[],
-): string[] {
-  const set = new Set(existing ?? []);
-  for (const ymd of extra) {
-    if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) set.add(ymd);
-  }
-  return [...set].sort();
+function isMutationPayload(json: string | null): boolean {
+  return parsePayload(json).type === 'task_mutation';
+}
+
+/**
+ * When a job was asked for: the app-stamped `requestedAt` (ms). DB timestamps
+ * are second-precision on SQLite and zone-shifted on Postgres (H-4); rows
+ * older than the stamp fall back to `createdAt`.
+ */
+let lastStamp = 0;
+/** Strictly increasing in this process, so two requests in one ms keep their order. */
+function nextStamp(): number {
+  lastStamp = Math.max(Date.now(), lastStamp + 1);
+  return lastStamp;
+}
+
+function requestedAt(job: ScheduleJob): number {
+  const at = parsePayload(job.payloadJson).requestedAt;
+  return typeof at === 'number' ? at : new Date(job.createdAt).getTime();
 }
 
 @Injectable()
 export class ScheduleJobService {
   private readonly logger = new Logger(ScheduleJobService.name);
+  private readonly handlers = new Map<string, MutationHandler>();
+  /** Claim lease; renewed by a heartbeat while the handler runs. Tests shorten it. */
+  leaseMs = MUTATION_LEASE_MS;
+  private readonly inflight = new Set<Promise<void>>();
 
   constructor(
     @InjectRepository(ScheduleJob)
@@ -93,45 +72,269 @@ export class ScheduleJobService {
     private readonly taskRepo: Repository<Task>,
     @InjectRepository(ScheduledTask)
     private readonly scheduledRepo: Repository<ScheduledTask>,
-    private readonly engine: IntelligentSchedulingEngine,
     private readonly googleCalendarService: GoogleCalendarService,
   ) {}
 
-  /** Generate / replan / extend jobs no longer enqueue; horizon append uses placement. */
+  /**
+   * Register the code that finishes one kind of mutation job (`payload.op`).
+   * Handlers must be idempotent: a job can run again after a crash or a retry.
+   * They return the job result (conflicts, parked, …) or throw.
+   */
+  registerHandler(op: string, handler: MutationHandler): void {
+    this.handlers.set(op, handler);
+  }
 
   /**
-   * Start a task-mutation progress job (FE polls GET /schedule-jobs/:id).
+   * Durable intent for a mutation (FE polls GET /schedule-jobs/:id).
+   * Pass the transaction `manager` that saves the state change, so the row and
+   * the change commit together. `inline` marks work finished inside the
+   * request itself (no handler); a crash leaves it failed, never re-run.
    * Stages: saving → placing → syncing → done | error.
    */
   async beginMutationJob(
     userId: string,
     payload: Record<string, unknown>,
+    opts?: { manager?: EntityManager; inline?: boolean },
   ): Promise<ScheduleJob> {
-    return this.jobRepo.save(
-      this.jobRepo.create({
+    const repo = opts?.manager ? opts.manager.getRepository(ScheduleJob) : this.jobRepo;
+    const now = new Date();
+    return repo.save(
+      repo.create({
         userId,
-        status: 'running',
+        status: opts?.inline ? 'running' : 'pending',
         progressStage: 'saving',
         progressCurrent: null,
         progressTotal: null,
-        payloadJson: JSON.stringify({ type: 'task_mutation', ...payload }),
+        payloadJson: JSON.stringify({
+          type: 'task_mutation',
+          requestedAt: nextStamp(),
+          ...payload,
+          ...(opts?.inline ? { inline: true } : {}),
+        }),
+        attempts: opts?.inline ? 1 : 0,
+        nextRunAt: opts?.inline ? null : now,
+        leaseUntil: opts?.inline ? new Date(now.getTime() + MUTATION_LEASE_MS) : null,
       }),
     );
   }
 
-  async setMutationStage(jobId: string, stage: string): Promise<void> {
+  /**
+   * Run a just-committed job now in this process (fast path). Safe to call
+   * without awaiting: the row stays the source of truth, and the recovery
+   * sweep picks it up if this process dies first.
+   */
+  runNow(jobId: string): Promise<void> {
+    const run = (async () => {
+      if (await this.claim(jobId)) await this.execute(jobId);
+    })().catch((err: unknown) => {
+      this.logger.error(`Mutation job ${jobId} crashed: ${err}`);
+    });
+    this.inflight.add(run);
+    void run.finally(() => this.inflight.delete(run));
+    return run;
+  }
+
+  /** Wait for every job this process is running (tests, graceful shutdown). */
+  async drain(): Promise<void> {
+    while (this.inflight.size) {
+      await Promise.all([...this.inflight]);
+    }
+  }
+
+  /**
+   * Recovery sweep: run due `pending` rows (new or retry) and take over
+   * `running` rows whose lease expired (their process died). Legacy
+   * Generate/replan rows are failed as before.
+   */
+  async processDue(limit = 10): Promise<number> {
+    const now = new Date();
+    const candidates = await this.jobRepo
+      .createQueryBuilder('job')
+      .where(
+        '(job.status = :pending AND (job.nextRunAt IS NULL OR job.nextRunAt <= :now))' +
+          ' OR (job.status = :running AND job.leaseUntil IS NOT NULL AND job.leaseUntil < :now)',
+        { pending: 'pending', running: 'running', now },
+      )
+      .orderBy('job.createdAt', 'ASC')
+      .take(limit)
+      .getMany();
+    let ran = 0;
+    for (const job of candidates) {
+      if (!isMutationPayload(job.payloadJson)) {
+        await this.runPendingJob(job);
+        continue;
+      }
+      if (await this.claim(job.id)) {
+        await this.execute(job.id);
+        ran += 1;
+      }
+    }
+    return ran;
+  }
+
+  /**
+   * Take a job for this process: one conditional UPDATE, so two workers (or a
+   * fast path and the sweep) never run the same attempt.
+   */
+  private async claim(jobId: string): Promise<boolean> {
+    const now = new Date();
+    const qb = this.jobRepo.createQueryBuilder().update(ScheduleJob);
+    // Raw column names must be quoted: Postgres folds unquoted names to lower case.
+    const col = (name: string) => qb.escape(name);
+    const result = await qb
+      .set({
+        status: 'running',
+        leaseUntil: new Date(now.getTime() + this.leaseMs),
+        attempts: () => `${col('attempts')} + 1`,
+      })
+      .where(`${col('id')} = :id`, { id: jobId })
+      .andWhere(
+        `((${col('status')} = :pending AND (${col('nextRunAt')} IS NULL OR ${col('nextRunAt')} <= :now))` +
+          ` OR (${col('status')} = :running AND ${col('leaseUntil')} IS NOT NULL AND ${col('leaseUntil')} < :now))`,
+        { pending: 'pending', running: 'running', now },
+      )
+      .execute();
+    return (result.affected ?? 0) > 0;
+  }
+
+
+  private async execute(jobId: string): Promise<void> {
+    const job = await this.jobRepo.findOne({ where: { id: jobId } });
+    if (!job) return;
+    // This worker's claim: every outcome it writes is fenced on it, so a
+    // worker whose lease was taken over cannot overwrite the newer one (AUD-007).
+    const fence = { attempts: job.attempts };
+    const payload = parsePayload(job.payloadJson);
+    if (payload.inline) {
+      // Its request owned the work and never finished it (process died).
+      await this.failMutationJob(jobId, 'Interrupted before it finished. Check the item and try again.', fence);
+      return;
+    }
+    const handler = this.handlers.get(String(payload.op ?? ''));
+    if (!handler) {
+      await this.failMutationJob(jobId, `No handler for mutation "${String(payload.op)}"`, fence);
+      return;
+    }
+    // A live worker keeps its lease; a dead one stops renewing and is taken over.
+    const heartbeat = setInterval(() => {
+      void this.jobRepo
+        .update(
+          { id: jobId, status: 'running', attempts: fence.attempts },
+          { leaseUntil: new Date(Date.now() + this.leaseMs) },
+        )
+        .catch(() => undefined);
+    }, Math.max(50, Math.floor(this.leaseMs / 4)));
+    try {
+      const result = await handler({ id: job.id, userId: job.userId, payload });
+      // Some handlers finish their own job (with a result or a refusal).
+      const after = await this.jobRepo.findOne({ where: { id: jobId } });
+      if (after && (after.status === 'done' || after.status === 'failed')) return;
+      await this.completeMutationJob(jobId, result ?? undefined, fence);
+    } catch (err: unknown) {
+      await this.failOrRetry(job, err);
+    } finally {
+      clearInterval(heartbeat);
+    }
+  }
+
+  /**
+   * A refused request (4xx) is a final answer. Anything else is treated as an
+   * infrastructure failure: retry with backoff, then fail visibly.
+   */
+  private async failOrRetry(job: ScheduleJob, err: unknown): Promise<void> {
+    const message = err instanceof Error ? err.message : String(err);
+    const refused = err instanceof HttpException && err.getStatus() < 500;
+    const attempts = job.attempts ?? 1;
+    if (refused || attempts >= MUTATION_MAX_ATTEMPTS) {
+      if (!refused) {
+        this.logger.error(`Mutation job ${job.id} failed after ${attempts} attempts: ${message}`);
+      }
+      await this.failMutationJob(job.id, message, { attempts });
+      return;
+    }
+    const delay = Math.min(MUTATION_BACKOFF_MAX_MS, MUTATION_BACKOFF_BASE_MS * 2 ** (attempts - 1));
+    this.logger.warn(`Mutation job ${job.id} attempt ${attempts} failed (${message}); retry in ${delay} ms`);
+    await this.jobRepo.update(
+      // Only while this attempt still owns the job (AUD-007).
+      { id: job.id, status: 'running', attempts },
+      {
+        status: 'pending',
+        progressStage: 'retrying',
+        nextRunAt: new Date(Date.now() + delay),
+        leaseUntil: null,
+        errorMessage: message.slice(0, 2000),
+      },
+    );
+  }
+
+  /** Newest mutation job of `op` for one task (payload holds the task id). */
+  async findLatestMutationJob(
+    userId: string,
+    taskId: string,
+    op: string,
+  ): Promise<ScheduleJob | null> {
+    // AUD-024: the op is matched in SQL too; taking the 10 newest jobs of the
+    // task and filtering here missed a create edited more than 10 times since.
+    // Payloads are JSON.stringify output, so both fragments appear exactly so.
+    const rows = await this.jobRepo
+      .createQueryBuilder('job')
+      .where('job.userId = :userId', { userId })
+      .andWhere('job.payloadJson LIKE :task', { task: `%${JSON.stringify({ taskId }).slice(1, -1)}%` })
+      .andWhere('job.payloadJson LIKE :op', { op: `%${JSON.stringify({ op }).slice(1, -1)}%` })
+      .orderBy('job.createdAt', 'DESC')
+      .take(10)
+      .getMany();
+    return rows.find((row) => parsePayload(row.payloadJson).op === op) ?? null;
+  }
+
+  /**
+   * AUD-018: true when a newer mutation job exists for the same task, so this
+   * one's absolute intent (a drop at a clock) is stale and must not be
+   * applied over the newer one. Ties on `requestedAt` go to the larger id.
+   */
+  async isSuperseded(jobId: string, userId: string, taskId: string): Promise<boolean> {
+    const own = await this.jobRepo.findOne({ where: { id: jobId } });
+    if (!own) return false;
+    const mine = requestedAt(own);
+    // Payloads are JSON.stringify output: the task id appears exactly so.
+    const needle = JSON.stringify({ taskId }).slice(1, -1);
+    const others = await this.jobRepo
+      .createQueryBuilder('job')
+      .where('job.userId = :userId', { userId })
+      .andWhere('job.id != :jobId', { jobId })
+      .andWhere('job.payloadJson LIKE :needle', { needle: `%${needle}%` })
+      .getMany();
+    return others.some((other) => {
+      const theirs = requestedAt(other);
+      return theirs > mine || (theirs === mine && other.id > own.id);
+    });
+  }
+
+  /** Record that a step committed, so a retry of this job skips it. */
+  async mergeMutationPayload(
+    jobId: string,
+    patch: Record<string, unknown>,
+  ): Promise<void> {
+    const job = await this.jobRepo.findOne({ where: { id: jobId } });
+    if (!job) return;
     await this.jobRepo.update(
       { id: jobId },
-      { progressStage: stage, status: 'running' },
+      { payloadJson: JSON.stringify({ ...parsePayload(job.payloadJson), ...patch }) },
     );
+  }
+
+  /** Progress only; never brings a finished job back to running (AUD-007). */
+  async setMutationStage(jobId: string, stage: string): Promise<void> {
+    await this.jobRepo.update({ id: jobId, status: 'running' }, { progressStage: stage });
   }
 
   async completeMutationJob(
     jobId: string,
     result?: Record<string, unknown>,
+    fence?: { attempts: number },
   ): Promise<void> {
     await this.jobRepo.update(
-      { id: jobId },
+      fence ? { id: jobId, status: 'running', attempts: fence.attempts } : { id: jobId },
       {
         status: 'done',
         progressStage: 'done',
@@ -141,9 +344,9 @@ export class ScheduleJobService {
     );
   }
 
-  async failMutationJob(jobId: string, message: string): Promise<void> {
+  async failMutationJob(jobId: string, message: string, fence?: { attempts: number }): Promise<void> {
     await this.jobRepo.update(
-      { id: jobId },
+      fence ? { id: jobId, status: 'running', attempts: fence.attempts } : { id: jobId },
       {
         status: 'failed',
         progressStage: 'error',
@@ -153,6 +356,8 @@ export class ScheduleJobService {
   }
 
   async getJob(jobId: string, userId: string): Promise<ScheduleJob> {
+    // AUD-025: a malformed id is no job (Postgres would fail the uuid cast: 500).
+    if (!isUUID(jobId)) throw new NotFoundException('Job not found');
     const job = await this.jobRepo.findOne({ where: { id: jobId } });
     if (!job || job.userId !== userId) {
       throw new NotFoundException('Job not found');
@@ -160,152 +365,25 @@ export class ScheduleJobService {
     return job;
   }
 
+  /** Delete finished jobs older than the retention window, a batch at a time. */
+  async purgeFinishedJobs(limit = 500): Promise<number> {
+    const cutoff = new Date(Date.now() - FINISHED_JOB_RETENTION_MS);
+    const finished = In(['done', 'failed']);
+    const rows = await this.jobRepo.find({
+      select: { id: true },
+      where: { status: finished, updatedAt: LessThan(cutoff) },
+      take: limit,
+    });
+    if (!rows.length) return 0;
+    await this.jobRepo.delete({ id: In(rows.map((row) => row.id)), status: finished });
+    return rows.length;
+  }
+
   async getLatestDoneJob(userId: string): Promise<ScheduleJob | null> {
     return this.jobRepo.findOne({
       where: { userId, status: 'done' },
       order: { updatedAt: 'DESC' },
     });
-  }
-
-  async getUndoAvailability(userId: string): Promise<{
-    available: boolean;
-    jobId: string | null;
-    generatedAt: string | null;
-  }> {
-    const job = await this.findUndoableGenerateJob(userId);
-    return {
-      available: Boolean(job),
-      jobId: job?.id ?? null,
-      generatedAt: job?.updatedAt ? job.updatedAt.toISOString() : null,
-    };
-  }
-
-  async invalidateGenerateUndo(userId: string): Promise<void> {
-    const jobs = await this.jobRepo.find({
-      where: { userId, status: 'done' },
-    });
-    const now = new Date();
-    for (const job of jobs) {
-      if (
-        !isGenerateJobPayload(job.payloadJson) ||
-        !job.undoSnapshotJson ||
-        job.undoConsumedAt
-      ) {
-        continue;
-      }
-      job.undoConsumedAt = now;
-      await this.jobRepo.save(job);
-    }
-  }
-
-  async undoLastGenerate(
-    userId: string,
-  ): Promise<{ jobId: string; status: string }> {
-    const active = await this.jobRepo.findOne({
-      where: { userId, status: In(['pending', 'running']) },
-    });
-    if (active) {
-      throw new ConflictException('A schedule job is already running');
-    }
-
-    const job = await this.findUndoableGenerateJob(userId);
-    const snapshot = parseUndoSnapshot(job?.undoSnapshotJson ?? null);
-    if (!job || !snapshot) {
-      throw new BadRequestException('Nothing to undo');
-    }
-
-    const liveSnapshot = await this.engine.captureAutoSegmentsSnapshot(userId);
-    await this.restoreUndoSnapshot(userId, snapshot);
-    await this.syncGoogleAfterReplan(userId, liveSnapshot);
-
-    job.undoConsumedAt = new Date();
-    await this.jobRepo.save(job);
-    return { jobId: job.id, status: 'undone' };
-  }
-
-  private async findUndoableGenerateJob(
-    userId: string,
-  ): Promise<ScheduleJob | null> {
-    const jobs = await this.jobRepo.find({
-      where: { userId, status: 'done' },
-      order: { updatedAt: 'DESC' },
-      take: 50,
-    });
-    return (
-      jobs.find(
-        (job) =>
-          isGenerateJobPayload(job.payloadJson) &&
-          Boolean(job.undoSnapshotJson) &&
-          !job.undoConsumedAt,
-      ) ?? null
-    );
-  }
-
-  private async restoreUndoSnapshot(
-    userId: string,
-    snapshot: UndoSnapshot,
-  ): Promise<void> {
-    const nowMs = Date.now();
-    const tasks = await this.taskRepo.find({ where: { userId } });
-    const taskById = new Map(tasks.map((task) => [task.id, task]));
-    const ids = tasks.map((task) => task.id);
-    if (ids.length) {
-      await this.scheduledRepo
-        .createQueryBuilder()
-        .delete()
-        .from(ScheduledTask)
-        .where('taskId IN (:...ids)', { ids })
-        .andWhere('isAutoGenerated = :ig', { ig: true })
-        .andWhere('scheduledEndTime > :now', { now: new Date(nowMs) })
-        .execute();
-    }
-
-    const kept = ids.length
-      ? await this.scheduledRepo.find({
-          where: { taskId: In(ids), isAutoGenerated: true },
-        })
-      : [];
-    const keptIds = new Set(kept.map((row) => row.id));
-
-    for (const seg of snapshot.segments) {
-      if (hasFullyEnded(seg.scheduledEndTime, nowMs)) continue;
-      const snapTask = taskById.get(seg.taskId);
-      if (!snapTask) continue;
-      if (snapTask.isRecurring) {
-        const tz = resolveIanaTimeZone(snapTask.scheduleTimeZone);
-        const ymd = localYmd(seg.scheduledStartTime, tz);
-        if (isOccurrenceYmdSkipped(snapTask.skippedOccurrenceYmds, ymd)) {
-          continue;
-        }
-      }
-      if (keptIds.has(seg.id)) continue;
-      await this.scheduledRepo.save(
-        this.scheduledRepo.create({
-          id: seg.id,
-          taskId: seg.taskId,
-          scheduledStartTime: new Date(seg.scheduledStartTime),
-          scheduledEndTime: new Date(seg.scheduledEndTime),
-          isAutoGenerated: true,
-          generationRun: 'undo',
-          googleEventId: seg.googleEventId ?? null,
-          googleEventCalendarId: seg.googleEventCalendarId ?? null,
-        }),
-      );
-    }
-
-    for (const snap of snapshot.tasks) {
-      const task = taskById.get(snap.id);
-      if (!task) continue;
-      task.scheduledStartTime = snap.scheduledStartTime
-        ? new Date(snap.scheduledStartTime)
-        : null;
-      task.scheduledEndTime = snap.scheduledEndTime
-        ? new Date(snap.scheduledEndTime)
-        : null;
-      task.googleEventId = snap.googleEventId;
-      task.googleEventCalendarId = snap.googleEventCalendarId;
-      await this.taskRepo.save(task);
-    }
   }
 
   /**
@@ -338,129 +416,6 @@ export class ScheduleJobService {
     return true;
   }
 
-  private async setJobProgress(
-    job: ScheduleJob,
-    stage: string,
-    current?: number | null,
-    total?: number | null,
-  ): Promise<void> {
-    job.progressStage = stage;
-    job.progressCurrent = current ?? null;
-    job.progressTotal = total ?? null;
-    await this.jobRepo.save(job);
-  }
-
-  /**
-   * Persist Problematic inbox from engine overflow / unanswered-conflict hooks.
-   * Does not set isUnscheduled (deadline-no-fit stays separate).
-   * Also refreshes day/reason meta on tasks already parked when hints exist.
-   */
-  private async applyProblematicFromWarnings(
-    userId: string,
-    warnings: SchedulingWarning[],
-    conflicts: SchedulingConflict[],
-  ): Promise<void> {
-    const fallbackYmd = localYmd(new Date().toISOString(), 'UTC');
-    const parks = collectProblematicParks(warnings, conflicts, fallbackYmd);
-    const hints = collectParkDayHints(warnings, conflicts, fallbackYmd);
-
-    const parkIds = [...parks.keys()];
-    const hintIds = [...hints.keys()];
-    const alreadyParked = await this.taskRepo.find({
-      where: {
-        userId,
-        scheduleState: ScheduleState.PROBLEMATIC,
-        status: TaskStatus.TODO,
-      },
-    });
-    const alreadyIds = alreadyParked.map((t) => t.id);
-    const ids = [...new Set([...parkIds, ...hintIds, ...alreadyIds])];
-    if (!ids.length) return;
-
-    const tasks = await this.taskRepo.find({
-      where: {
-        userId,
-        id: In(ids),
-        status: TaskStatus.TODO,
-      },
-    });
-    if (!tasks.length) return;
-
-    let dirty = false;
-    for (const task of tasks) {
-      const park = parks.get(task.id);
-      const hint = hints.get(task.id);
-      if (park) {
-        task.scheduleState = ScheduleState.PROBLEMATIC;
-        task.isUnscheduled = false;
-        task.problematicOccurrenceYmds =
-          (hint?.occurrenceYmds?.length
-            ? hint.occurrenceYmds
-            : park.occurrenceYmds.length
-              ? park.occurrenceYmds
-              : task.problematicOccurrenceYmds) ?? null;
-        task.problematicReason =
-          hint?.reason ?? park.reason ?? task.problematicReason;
-        rememberSingleProblematicDay(task);
-        dirty = true;
-        continue;
-      }
-      // Already parked (or conflict hint only): refresh day/reason when missing.
-      if (isProblematicSchedule(task) && hint) {
-        if (
-          hint.occurrenceYmds.length &&
-          (!task.problematicOccurrenceYmds?.length ||
-            hint.occurrenceYmds.some(
-              (ymd) => !task.problematicOccurrenceYmds?.includes(ymd),
-            ))
-        ) {
-          task.problematicOccurrenceYmds = mergeUniqueSortedYmds(
-            task.problematicOccurrenceYmds,
-            hint.occurrenceYmds,
-          );
-          dirty = true;
-        }
-        if (!task.problematicReason && hint.reason) {
-          task.problematicReason = hint.reason;
-          dirty = true;
-        }
-        const dayBefore = task.problematicDay;
-        rememberSingleProblematicDay(task);
-        if (task.problematicDay !== dayBefore) dirty = true;
-      }
-    }
-    if (dirty) {
-      await this.taskRepo.save(tasks);
-    }
-  }
-
-  /**
-   * Persist Unscheduled inbox for deadline / window no-fit (not Problematic).
-   */
-  private async applyUnscheduledFromWarnings(
-    userId: string,
-    warnings: SchedulingWarning[],
-    conflicts: SchedulingConflict[],
-  ): Promise<void> {
-    const ids = collectUnscheduledTaskIds(warnings);
-    for (const id of collectProblematicTaskIds(warnings, conflicts)) {
-      ids.delete(id);
-    }
-    if (!ids.size) return;
-
-    await this.taskRepo
-      .createQueryBuilder()
-      .update(Task)
-      .set({
-        isUnscheduled: true,
-        ...clearedParkColumns(),
-      })
-      .where('userId = :userId', { userId })
-      .andWhere('id IN (:...ids)', { ids: [...ids] })
-      .andWhere('status = :status', { status: TaskStatus.TODO })
-      .execute();
-  }
-
   /**
    * Leftover queue rows from Generate / replan are drained without writing slots.
    * New seating goes through PlacementStepService only.
@@ -485,52 +440,6 @@ export class ScheduleJobService {
     return task.googleEventCalendarId ?? appCal ?? 'primary';
   }
 
-  private buildFlexibleSegmentPayload(
-    task: Task,
-    start: Date,
-    end: Date,
-  ): Record<string, unknown> {
-    const payload: Record<string, unknown> = {
-      summary: task.name,
-      description: task.description || undefined,
-      start: {
-        dateTime: start.toISOString(),
-        timeZone: task.scheduleTimeZone || 'UTC',
-      },
-      end: {
-        dateTime: end.toISOString(),
-        timeZone: task.scheduleTimeZone || 'UTC',
-      },
-    };
-    const phaseForColor =
-      task.phases?.length && task.phases[0] ? task.phases[0] : task.phase;
-    const fallbackColorId = phaseHexToGoogleColorId(phaseForColor?.color);
-    return applyTaskGoogleEventFields(payload, task, fallbackColorId);
-  }
-
-  private refsFromSnapshotAndTask(
-    task: Task,
-    snapshot: SegmentSnapshot[],
-  ): GoogleEventRef[] {
-    return uniqueGoogleEventRefs([
-      ...snapshot.map((s) =>
-        s.googleEventId
-          ? {
-              eventId: s.googleEventId,
-              calendarId:
-                s.googleEventCalendarId ?? this.fallbackCalendarId(task),
-            }
-          : null,
-      ),
-      task.googleEventId
-        ? {
-            eventId: task.googleEventId,
-            calendarId: this.fallbackCalendarId(task),
-          }
-        : null,
-    ]);
-  }
-
   private refsFromScheduledRows(
     task: Task,
     rows: ScheduledTask[],
@@ -552,481 +461,19 @@ export class ScheduleJobService {
             calendarId: this.fallbackCalendarId(task, appCal),
           }
         : null,
+      // AUD-012: an insert whose answer was lost may have created this event.
+      task.googleInsertEventId
+        ? {
+            eventId: task.googleInsertEventId,
+            calendarId: this.fallbackCalendarId(task, appCal),
+          }
+        : null,
     ]);
   }
 
-  private async deleteGoogleRef(
-    userId: string,
-    ref: GoogleEventRef,
-    taskId: string,
-  ): Promise<void> {
-    try {
-      await this.googleCalendarService.deleteEvent(
-        userId,
-        ref.eventId,
-        ref.calendarId,
-      );
-    } catch (e: any) {
-      this.logger.warn(
-        `Google delete skipped for task ${taskId} event ${ref.eventId}: ${e?.message ?? e}`,
-      );
-    }
-  }
-
-  /**
-   * Delete every Google event stored on the task or its scheduled segments.
-   */
-  async deleteSyncedGoogleEventsForTask(userId: string, task: Task): Promise<void> {
+  /** Every Google event stored on the task or its scheduled segments. */
+  async googleEventRefsForTask(task: Task): Promise<GoogleEventRef[]> {
     const rows = await this.scheduledRepo.find({ where: { taskId: task.id } });
-    for (const ref of this.refsFromScheduledRows(task, rows)) {
-      await this.deleteGoogleRef(userId, ref, task.id);
-    }
-  }
-
-  /**
-   * Recurring tasks: keep a capped historical series for ended occurrences,
-   * plus a new series for still-open slots. Other flexible tasks: one event per segment.
-   */
-  private async reconcileGoogleEventsForTask(
-    userId: string,
-    task: Task,
-    desiredRows: ScheduledTask[],
-    existingRefs: GoogleEventRef[],
-  ): Promise<void> {
-    if (
-      task.isUnscheduled ||
-      isProblematicSchedule(task) ||
-      task.eventType === TaskEventType.FIXED
-    ) {
-      return;
-    }
-
-    const desired = [...desiredRows].sort(
-      (a, b) =>
-        a.scheduledStartTime.getTime() - b.scheduledStartTime.getTime(),
-    );
-    const nowMs = Date.now();
-    const { ended: pastDesired, open: futureDesired } = partitionEnded(
-      desired,
-      (s) => s.scheduledEndTime,
-      nowMs,
-    );
-
-    if (task.isRecurring) {
-      await this.reconcileRecurringGoogleMaster(
-        userId,
-        task,
-        pastDesired,
-        futureDesired,
-        existingRefs,
-      );
-      return;
-    }
-
-    const pastIds = new Set(
-      pastDesired
-        .map((s) => s.googleEventId)
-        .filter((id): id is string => Boolean(id)),
-    );
-    const futureRefs = existingRefs.filter((r) => !pastIds.has(r.eventId));
-    const plan = planGoogleSegmentSync(futureDesired.length, futureRefs);
-
-    for (const ref of plan.deleteRefs) {
-      if (pastIds.has(ref.eventId)) continue;
-      await this.deleteGoogleRef(userId, ref, task.id);
-    }
-
-    const assigned: GoogleEventRef[] = [];
-    let reuseIdx = 0;
-    for (const seg of futureDesired) {
-      const payload = this.buildFlexibleSegmentPayload(
-        task,
-        seg.scheduledStartTime,
-        seg.scheduledEndTime,
-      );
-      try {
-        if (reuseIdx < plan.reuse.length) {
-          const ref = plan.reuse[reuseIdx++];
-          await this.googleCalendarService.updateEvent(
-            userId,
-            ref.eventId,
-            { ...payload, recurrence: [] },
-            { skipSleepWindowCheck: true, calendarId: ref.calendarId },
-          );
-          seg.googleEventId = ref.eventId;
-          seg.googleEventCalendarId = ref.calendarId;
-          assigned.push(ref);
-        } else {
-          const ev = await this.googleCalendarService.createEvent(userId, payload, {
-            skipSleepWindowCheck: true,
-          });
-          if (typeof ev?.id !== 'string') continue;
-          const cal =
-            (ev as { appCalendarId?: string }).appCalendarId ??
-            this.fallbackCalendarId(task);
-          seg.googleEventId = ev.id;
-          seg.googleEventCalendarId = cal;
-          assigned.push({ eventId: ev.id, calendarId: cal });
-        }
-        await this.scheduledRepo.save(seg);
-      } catch (e: any) {
-        this.logger.warn(
-          `Google sync skipped for task ${task.id} segment ${seg.id}: ${e?.message ?? e}`,
-        );
-      }
-    }
-
-    const firstFuture = assigned[0];
-    const firstPast = pastDesired.find((s) => s.googleEventId);
-    task.googleEventId =
-      firstFuture?.eventId ?? firstPast?.googleEventId ?? null;
-    task.googleEventCalendarId =
-      firstFuture?.calendarId ?? firstPast?.googleEventCalendarId ?? null;
-    await this.taskRepo.save(task);
-  }
-
-  private async capHistoricalSeries(
-    userId: string,
-    task: Task,
-    historical: GoogleEventRef | null,
-    pastDesired: ScheduledTask[],
-  ): Promise<void> {
-    if (!historical || !pastDesired.length) return;
-    const lastPast = pastDesired[pastDesired.length - 1];
-    try {
-      await this.googleCalendarService.capRecurringSeriesUntil(
-        userId,
-        historical.eventId,
-        lastPast.scheduledStartTime,
-        historical.calendarId,
-      );
-    } catch (e: any) {
-      this.logger.warn(
-        `Google series cap skipped for task ${task.id}: ${e?.message ?? e}`,
-      );
-    }
-    for (const seg of pastDesired) {
-      seg.googleEventId = historical.eventId;
-      seg.googleEventCalendarId = historical.calendarId;
-      await this.scheduledRepo.save(seg);
-    }
-  }
-
-  private async writeRecurringFutureMaster(
-    userId: string,
-    task: Task,
-    futureDesired: ScheduledTask[],
-    reuse: GoogleEventRef | null,
-  ): Promise<GoogleEventRef | null> {
-    if (!futureDesired.length) return null;
-    const timeZone = resolveIanaTimeZone(task.scheduleTimeZone);
-    const preferredHm = task.scheduledStartTime
-      ? localHm(new Date(task.scheduledStartTime).toISOString(), timeZone)
-      : null;
-    const first =
-      pickMajorityClockSlot(futureDesired, timeZone, preferredHm) ??
-      futureDesired[0];
-    const last = futureDesired[futureDesired.length - 1];
-    const phases =
-      task.phases?.length ? task.phases : task.phase ? [task.phase] : [];
-    const placedYmds = futureDesired.map((seg) =>
-      localYmd(seg.scheduledStartTime.toISOString(), timeZone),
-    );
-    const payload = {
-      ...this.buildFlexibleSegmentPayload(
-        task,
-        first.scheduledStartTime,
-        first.scheduledEndTime,
-      ),
-      recurrence: buildGoogleRecurrenceRules({
-        pattern: task.recurrencePattern,
-        firstStart: first.scheduledStartTime,
-        lastStart: last.scheduledStartTime,
-        weekDays: effectiveRecurrenceWeekDays(task.recurrenceWeekDays, phases),
-        excludeStarts: excludeStartsForSkippedYmds({
-          skippedYmds: task.skippedOccurrenceYmds,
-          firstStart: futureDesired[0].scheduledStartTime,
-          lastStart: last.scheduledStartTime,
-          timeZone,
-          placedYmds,
-        }),
-      }),
-    };
-
-    try {
-      let master: GoogleEventRef | null = null;
-      if (reuse) {
-        await this.googleCalendarService.updateEvent(
-          userId,
-          reuse.eventId,
-          payload,
-          { skipSleepWindowCheck: true, calendarId: reuse.calendarId },
-        );
-        master = reuse;
-      } else {
-        const ev = await this.googleCalendarService.createEvent(userId, payload, {
-          skipSleepWindowCheck: true,
-        });
-        if (typeof ev?.id !== 'string') return null;
-        master = {
-          eventId: ev.id,
-          calendarId:
-            (ev as { appCalendarId?: string }).appCalendarId ??
-            this.fallbackCalendarId(task),
-        };
-      }
-
-      for (const seg of futureDesired) {
-        seg.googleEventId = master.eventId;
-        seg.googleEventCalendarId = master.calendarId;
-        await this.scheduledRepo.save(seg);
-      }
-      return master;
-    } catch (e: any) {
-      this.logger.warn(
-        `Google recurring sync skipped for task ${task.id}: ${e?.message ?? e}`,
-      );
-      return null;
-    }
-  }
-
-  private async reconcileRecurringGoogleMaster(
-    userId: string,
-    task: Task,
-    pastDesired: ScheduledTask[],
-    futureDesired: ScheduledTask[],
-    existingRefs: GoogleEventRef[],
-  ): Promise<void> {
-    const unique = uniqueGoogleEventRefs(existingRefs);
-    const historical = unique[0] ?? null;
-    const extras = unique.slice(1);
-
-    const deleteExtras = async (keepId?: string) => {
-      for (const ref of extras) {
-        if (keepId && ref.eventId === keepId) continue;
-        await this.deleteGoogleRef(userId, ref, task.id);
-      }
-    };
-
-    if (pastDesired.length && futureDesired.length) {
-      await this.capHistoricalSeries(userId, task, historical, pastDesired);
-      await deleteExtras(historical?.eventId);
-      const created = await this.writeRecurringFutureMaster(
-        userId,
-        task,
-        futureDesired,
-        null,
-      );
-      task.googleEventId = created?.eventId ?? historical?.eventId ?? null;
-      task.googleEventCalendarId =
-        created?.calendarId ?? historical?.calendarId ?? null;
-      await this.taskRepo.save(task);
-      return;
-    }
-
-    if (futureDesired.length) {
-      const plan = planGoogleMasterEventSync(futureDesired.length, unique);
-      for (const ref of plan.deleteRefs) {
-        await this.deleteGoogleRef(userId, ref, task.id);
-      }
-      const master = await this.writeRecurringFutureMaster(
-        userId,
-        task,
-        futureDesired,
-        plan.reuse[0] ?? null,
-      );
-      task.googleEventId = master?.eventId ?? null;
-      task.googleEventCalendarId = master?.calendarId ?? null;
-      await this.taskRepo.save(task);
-      return;
-    }
-
-    if (pastDesired.length) {
-      await this.capHistoricalSeries(userId, task, historical, pastDesired);
-      await deleteExtras(historical?.eventId);
-      task.googleEventId = historical?.eventId ?? null;
-      task.googleEventCalendarId = historical?.calendarId ?? null;
-      await this.taskRepo.save(task);
-      return;
-    }
-
-    for (const ref of unique) {
-      await this.deleteGoogleRef(userId, ref, task.id);
-    }
-    task.googleEventId = null;
-    task.googleEventCalendarId = null;
-    await this.taskRepo.save(task);
-  }
-
-  /**
-   * After replan, rewrite Google events to match every auto segment (not the diff only:
-   * the engine recreates rows and would otherwise drop stored event ids).
-   */
-  private async syncGoogleAfterReplan(
-    userId: string,
-    snapshotRows: SegmentSnapshot[],
-    onTaskProgress?: (current: number, total: number) => Promise<void>,
-  ): Promise<void> {
-    const conn = await this.googleCalendarService.checkConnection(userId);
-    if (!conn.connected) {
-      this.logger.warn(
-        `Google Calendar not connected for user ${userId}; skipped post-replan sync.`,
-      );
-      return;
-    }
-
-    const tasks = await this.taskRepo.find({
-      where: { userId },
-      relations: ['phase', 'phases'],
-    });
-    const ids = tasks.map((t) => t.id);
-    const autoRows = ids.length
-      ? await this.scheduledRepo.find({
-          where: { taskId: In(ids), isAutoGenerated: true },
-          order: { scheduledStartTime: 'ASC' },
-        })
-      : [];
-    const afterByTask = new Map<string, ScheduledTask[]>();
-    for (const row of autoRows) {
-      const list = afterByTask.get(row.taskId) ?? [];
-      list.push(row);
-      afterByTask.set(row.taskId, list);
-    }
-    const snapByTask = new Map<string, SegmentSnapshot[]>();
-    for (const row of snapshotRows) {
-      const list = snapByTask.get(row.taskId) ?? [];
-      list.push(row);
-      snapByTask.set(row.taskId, list);
-    }
-
-    const toSync = tasks.filter((task) => {
-      if (task.isUnscheduled || isProblematicSchedule(task)) return false;
-      if (task.eventType === TaskEventType.FIXED) return false;
-      if (task.status !== TaskStatus.TODO) return false;
-      const after = afterByTask.get(task.id) ?? [];
-      const snap = snapByTask.get(task.id) ?? [];
-      return after.length > 0 || snap.length > 0 || Boolean(task.googleEventId);
-    });
-
-    let index = 0;
-    for (const task of toSync) {
-      index += 1;
-      if (onTaskProgress) {
-        await onTaskProgress(index, toSync.length);
-      }
-      const after = afterByTask.get(task.id) ?? [];
-      const snap = snapByTask.get(task.id) ?? [];
-      await this.reconcileGoogleEventsForTask(
-        userId,
-        task,
-        after,
-        this.refsFromSnapshotAndTask(task, snap),
-      );
-    }
-  }
-
-  /**
-   * Delete still-open app-calendar events in [start, end). Ended events stay.
-   * Recurring series with kept (ended) instances are capped via RRULE UNTIL
-   * instead of deleting the master.
-   */
-  async wipeAppCalendarEventsInRange(
-    userId: string,
-    start: Date,
-    end: Date,
-    opts?: {
-      now?: Date;
-      keepEventIds?: Set<string>;
-      untilByEventId?: Map<string, Date>;
-    },
-  ): Promise<number> {
-    const conn = await this.googleCalendarService.checkConnection(userId);
-    if (!conn.connected) {
-      this.logger.warn(
-        `Google Calendar not connected for user ${userId}; skipped app-calendar clear.`,
-      );
-      return 0;
-    }
-
-    const nowMs = (opts?.now ?? new Date()).getTime();
-    const keep = opts?.keepEventIds ?? new Set<string>();
-    const untilByEventId = opts?.untilByEventId ?? new Map<string, Date>();
-
-    const seriesToCap = new Set<string>();
-    const seriesToDelete = new Set<string>();
-    const singlesToDelete = new Set<string>();
-    let pageToken: string | undefined;
-    do {
-      const page = await this.googleCalendarService.getEvents(
-        userId,
-        start.toISOString(),
-        end.toISOString(),
-        250,
-        pageToken,
-      );
-      for (const ev of page.events ?? []) {
-        if (!ev?.id || ev.status === 'cancelled') continue;
-        const endMs = googleListedEventEndMs(ev);
-        if (endMs != null && endMs <= nowMs) continue;
-
-        const masterId =
-          typeof ev.recurringEventId === 'string' && ev.recurringEventId
-            ? ev.recurringEventId
-            : null;
-        if (masterId) {
-          if (keep.has(masterId)) seriesToCap.add(masterId);
-          else seriesToDelete.add(masterId);
-          continue;
-        }
-        if (!keep.has(ev.id)) singlesToDelete.add(ev.id);
-      }
-      pageToken = page.nextPageToken ?? undefined;
-    } while (pageToken);
-
-    for (const id of seriesToCap) {
-      seriesToDelete.delete(id);
-    }
-
-    let deleted = 0;
-    for (const eventId of seriesToCap) {
-      const until = untilByEventId.get(eventId);
-      if (!until) continue;
-      try {
-        await this.googleCalendarService.capRecurringSeriesUntil(
-          userId,
-          eventId,
-          until,
-        );
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        this.logger.warn(`Cap Google series ${eventId}: ${msg}`);
-      }
-    }
-
-    const deleteIds = [...seriesToDelete, ...singlesToDelete];
-    for (const eventId of deleteIds) {
-      try {
-        await this.googleCalendarService.deleteEvent(userId, eventId);
-        deleted += 1;
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        this.logger.warn(`Clear Google event ${eventId}: ${msg}`);
-      }
-    }
-
-    if (deleteIds.length > 0) {
-      await this.taskRepo
-        .createQueryBuilder()
-        .update(Task)
-        .set({ googleEventId: null, googleEventCalendarId: null })
-        .where('userId = :userId', { userId })
-        .andWhere('googleEventId IN (:...ids)', { ids: deleteIds })
-        .execute();
-    }
-
-    this.logger.log(
-      `Cleared ${deleted} upcoming app-calendar event(s) for user ${userId} from ${start.toISOString()} to ${end.toISOString()}.`,
-    );
-    return deleted;
+    return this.refsFromScheduledRows(task, rows);
   }
 }

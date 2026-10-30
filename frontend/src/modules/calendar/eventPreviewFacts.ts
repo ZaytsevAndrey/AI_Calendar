@@ -1,5 +1,6 @@
 import type { GoogleCalendarEvent } from '../../api/google-calendar.api';
 import type { TaskDTO } from '../../api/tasks.api';
+import { taskTraits } from '../tasks/schedulingTraits';
 import { looksLikeHtml, stripHtml } from './eventPreviewText';
 
 export type PreviewPerson = {
@@ -253,10 +254,11 @@ function taskFacts(task: TaskDTO, event: GoogleCalendarEvent): PreviewFact[] {
     facts.push({ kind: 'text', id, label, text: value });
   };
 
-  if (task.isUnscheduled) push('type', 'type', 'unscheduled');
-  else if (task.isRecurring) push('type', 'type', 'recurring');
-  else if (task.eventType === 'fixed' || task.isFixedExternal) push('type', 'type', 'fixed');
-  else if (task.eventType) push('type', 'type', task.eventType === 'admin' ? 'flexible' : task.eventType);
+  // Type is the scheduling behavior; repeating has its own recurrence row,
+  // so a fixed series reads "Fixed" + "Repeats …".
+  const traits = taskTraits(task);
+  if (traits.unscheduled) push('type', 'type', 'unscheduled');
+  else push('type', 'type', traits.behavior);
 
   const phases = (task.phases?.map((phase) => phase.name) ?? []).filter(Boolean);
   if (!phases.length && task.phase?.name) phases.push(task.phase.name);

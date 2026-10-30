@@ -6,9 +6,9 @@ export async function api(
   app: NestFastifyApplication,
   method: HttpMethod,
   url: string,
-  opts?: { token?: string; payload?: unknown },
+  opts?: { token?: string; payload?: unknown; headers?: Record<string, string> },
 ) {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...opts?.headers };
   if (opts?.token) {
     headers.authorization = `Bearer ${opts.token}`;
   }

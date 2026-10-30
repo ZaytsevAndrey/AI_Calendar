@@ -1,4 +1,4 @@
-import type { ConflictOptionId, SchedulingConflict } from './intelligent-scheduling.engine';
+import type { ConflictOptionId, SchedulingConflict } from './scheduling-conflict.types';
 import {
   candidateStartsInGaps,
   mergeIntervals,
@@ -7,7 +7,6 @@ import {
 } from './free-slots.util';
 import {
   addDaysToYmd,
-  addMonthsToYmd,
   weekdayIndex,
 } from '../voice/voice-local-date.util';
 
@@ -62,6 +61,8 @@ export type PlacementClaim = {
    * reason to slide the claimant onto another hole.
    */
   allowResolvedOverlap?: boolean;
+  /** `false`: a hole search takes a free gap only and never packs seated peers. */
+  allowPack?: boolean;
 };
 
 export type PlacementMove =
@@ -201,18 +202,9 @@ function moveFor(
   hole: MsInterval | null,
   reason: string,
 ): PlacementMove {
-  // Series: slide that day's slot in place when a hole exists. Only detach the
-  // overlapped day when it cannot reseat — never park the whole master.
+  // Series: the displaced day leaves the series as a one-off copy, seated in
+  // the hole or parked. The series keeps its clock; never park the master.
   if (seat.role === 'series') {
-    if (hole) {
-      return {
-        kind: 'shift',
-        seatId: seat.id,
-        taskId: seat.taskId,
-        start: hole.start,
-        end: hole.end,
-      };
-    }
     return {
       kind: 'detach',
       seatId: seat.id,
@@ -220,8 +212,8 @@ function moveFor(
       occurrenceYmd:
         seat.occurrenceYmd ||
         new Date(seat.start).toISOString().slice(0, 10),
-      start: null,
-      end: null,
+      start: hole ? hole.start : null,
+      end: hole ? hole.end : null,
       originalStart: seat.start,
       originalEnd: seat.end,
       reason,
@@ -269,6 +261,8 @@ function reseat(
       windows: person.windows,
       hard,
       soft,
+      // A displaced task stays as close as it can to where it was.
+      preferNearMs: person.homeStart ?? person.start,
     });
     if (hole) {
       pending.shift();
@@ -288,6 +282,8 @@ function reseat(
       windows: person.windows,
       hard: relaxedHard,
       soft,
+      // A displaced task stays as close as it can to where it was.
+      preferNearMs: person.homeStart ?? person.start,
     });
     if (!relaxed) return null;
     const blockers = seats.filter(
@@ -337,6 +333,8 @@ function reseatDirectOnly(
       windows: person.windows,
       hard,
       soft,
+      // A displaced task stays as close as it can to where it was.
+      preferNearMs: person.homeStart ?? person.start,
     });
     if (hole) assigned.set(person.id, hole);
   }
@@ -624,6 +622,7 @@ export function planPlacement(input: {
       }
     }
     for (const window of busyWindows) {
+      if (claim.allowPack === false) break;
       const packed = packMovablesForHole(claim, others, soft, window);
       if (packed?.outcome === 'seated') {
         return { ...packed, lane: 'busy' };
@@ -653,12 +652,15 @@ export function planPlacement(input: {
     return { outcome: 'conflict', conflict: conflictFor(claim, interval) };
   }
 
-  if (claim.mustFitWindow !== false && !fitsWindow(interval, claim.windows)) {
+  // A fixed claim keeps its own clock: no window check, no hole search.
+  const fixedClaim = claim.mustFitWindow === false;
+  if (!fixedClaim && !fitsWindow(interval, claim.windows)) {
     return { outcome: 'problematic', reason: 'phase_full' };
   }
 
   const resolvedHit =
     !claim.allowResolvedOverlap &&
+    !fixedClaim &&
     others.some((seat) => seat.role === 'resolved' && overlaps(seat, interval));
   if (resolvedHit) {
     const hole = findHole({
@@ -676,7 +678,8 @@ export function planPlacement(input: {
 
   // Recurring create/expand never displaces another series master — those seats
   // are walls. Prefer flex-only reseat/pack, else the next free hole in-phase.
-  if (claim.recurring) {
+  // A fixed series day displaces like a fixed one-off (below).
+  if (claim.recurring && !fixedClaim) {
     const seriesHits = others.filter(
       (seat) => seat.role === 'series' && overlaps(seat, interval),
     );
@@ -799,12 +802,15 @@ export function planPlacement(input: {
 }
 
 /**
- * Civil days after `anchorYmd` and before `horizonEndYmd` for one series.
- * The anchor day itself is already seated by the first placement.
+ * Civil days of one series, counted from its start day `anchorYmd` (DTSTART):
+ * DAILY, WEEKLY / BIWEEKLY (+7 / +14 days, or the listed weekdays with weeks
+ * starting Monday), MONTHLY (anchor + k months, clamped to the month end).
+ * Only days on or after `fromYmd` and before `horizonEndYmd` are returned.
  */
-export function seriesOccurrenceYmds(input: {
+function seriesDays(input: {
   anchorYmd: string;
   horizonEndYmd: string;
+  fromYmd?: string | null;
   pattern?: string | null;
   weekDays?: number[] | null;
   skippedYmds?: string[] | null;
@@ -812,54 +818,94 @@ export function seriesOccurrenceYmds(input: {
   const pattern = (input.pattern ?? 'DAILY').toUpperCase();
   const weekDays = input.weekDays?.length ? input.weekDays : null;
   const skipped = new Set(input.skippedYmds ?? []);
-  const stepDaily = !!weekDays && pattern !== 'MONTHLY';
+  const anchor = input.anchorYmd;
+  const from =
+    input.fromYmd && input.fromYmd > anchor ? input.fromYmd : anchor;
+  const keep = (ymd: string) =>
+    ymd >= from &&
+    (!weekDays || weekDays.includes(weekdayIndex(ymd))) &&
+    !skipped.has(ymd);
   const out: string[] = [];
-  let ymd = stepSeriesYmd(input.anchorYmd, pattern, stepDaily);
-  let guard = 0;
-  while (ymd < input.horizonEndYmd && guard++ < 400) {
-    const weekdayOk = !weekDays || weekDays.includes(weekdayIndex(ymd));
-    const biweeklyOk =
-      pattern !== 'BIWEEKLY' ||
-      !stepDaily ||
-      weeksBetweenYmd(input.anchorYmd, ymd) % 2 === 0;
-    if (weekdayOk && biweeklyOk && !skipped.has(ymd)) out.push(ymd);
-    ymd = stepSeriesYmd(ymd, pattern, stepDaily);
+
+  if (pattern === 'MONTHLY') {
+    for (let k = 0; k < 1200; k += 1) {
+      const ymd = addMonthsClampedYmd(anchor, k);
+      if (ymd >= input.horizonEndYmd) break;
+      if (keep(ymd)) out.push(ymd);
+    }
+    return out;
+  }
+
+  if (weekDays || pattern === 'DAILY') {
+    const anchorWeek = mondayOfYmd(anchor);
+    for (
+      let ymd = from, guard = 0;
+      ymd < input.horizonEndYmd && guard < 400;
+      ymd = addDaysToYmd(ymd, 1), guard += 1
+    ) {
+      const onWeek =
+        pattern !== 'BIWEEKLY' ||
+        (daysBetweenYmd(anchorWeek, mondayOfYmd(ymd)) / 7) % 2 === 0;
+      if (onWeek && keep(ymd)) out.push(ymd);
+    }
+    return out;
+  }
+
+  const step = pattern === 'BIWEEKLY' ? 14 : 7;
+  const skip = Math.max(0, Math.ceil(daysBetweenYmd(anchor, from) / step));
+  for (
+    let ymd = addDaysToYmd(anchor, skip * step), guard = 0;
+    ymd < input.horizonEndYmd && guard < 400;
+    ymd = addDaysToYmd(ymd, step), guard += 1
+  ) {
+    if (keep(ymd)) out.push(ymd);
   }
   return out;
+}
+
+/** Series days after `anchorYmd` (the anchor itself is seated by the first placement). */
+export function seriesOccurrenceYmds(input: {
+  anchorYmd: string;
+  horizonEndYmd: string;
+  fromYmd?: string | null;
+  pattern?: string | null;
+  weekDays?: number[] | null;
+  skippedYmds?: string[] | null;
+}): string[] {
+  return seriesDays(input).filter((ymd) => ymd > input.anchorYmd);
 }
 
 /** Horizon days including a valid `anchorYmd` (plan-all-days before write). */
 export function seriesHorizonYmds(input: {
   anchorYmd: string;
   horizonEndYmd: string;
+  fromYmd?: string | null;
   pattern?: string | null;
   weekDays?: number[] | null;
   skippedYmds?: string[] | null;
 }): string[] {
-  const pattern = (input.pattern ?? 'DAILY').toUpperCase();
-  const weekDays = input.weekDays?.length ? input.weekDays : null;
-  const skipped = new Set(input.skippedYmds ?? []);
-  const later = seriesOccurrenceYmds(input);
-  if (input.anchorYmd >= input.horizonEndYmd) return later;
-  if (skipped.has(input.anchorYmd)) return later;
-  const weekdayOk =
-    !weekDays || weekDays.includes(weekdayIndex(input.anchorYmd));
-  const biweeklyOk = pattern !== 'BIWEEKLY' || true;
-  if (!weekdayOk || !biweeklyOk) return later;
-  return [input.anchorYmd, ...later];
+  return seriesDays(input);
 }
 
-function stepSeriesYmd(ymd: string, pattern: string, stepDaily: boolean): string {
-  if (stepDaily || pattern === 'DAILY') return addDaysToYmd(ymd, 1);
-  if (pattern === 'WEEKLY') return addDaysToYmd(ymd, 7);
-  if (pattern === 'BIWEEKLY') return addDaysToYmd(ymd, 14);
-  return addMonthsToYmd(ymd, 1);
+/** `ymd` + `months`, with the day clamped to the last day of that month. */
+export function addMonthsClampedYmd(ymd: string, months: number): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const total = m - 1 + months;
+  const year = y + Math.floor(total / 12);
+  const month = ((total % 12) + 12) % 12;
+  const last = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const day = Math.min(d, last);
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-function weeksBetweenYmd(fromYmd: string, toYmd: string): number {
+function daysBetweenYmd(fromYmd: string, toYmd: string): number {
   const [fy, fm, fd] = fromYmd.split('-').map(Number);
   const [ty, tm, td] = toYmd.split('-').map(Number);
-  const start = Date.UTC(fy, fm - 1, fd);
-  const end = Date.UTC(ty, tm - 1, td);
-  return Math.round((end - start) / (7 * 24 * 60 * 60 * 1000));
+  return Math.round(
+    (Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / (24 * 60 * 60 * 1000),
+  );
+}
+
+function mondayOfYmd(ymd: string): string {
+  return addDaysToYmd(ymd, -((weekdayIndex(ymd) + 6) % 7));
 }

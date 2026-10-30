@@ -743,7 +743,7 @@ describe('planPlacement', () => {
     });
   });
 
-  it('shifts a series day onto the next hole', () => {
+  it('detaches a displaced series day into a copy in the next hole (PE-22)', () => {
     const plan = planPlacement({
       claim: claim({ start: DAY, end: DAY + HOUR }),
       seats: [
@@ -760,8 +760,9 @@ describe('planPlacement', () => {
       outcome: 'seated',
       moves: [
         {
-          kind: 'shift',
+          kind: 'detach',
           seatId: 'series-day',
+          occurrenceYmd: '2026-10-08',
           start: DAY + HOUR,
           end: DAY + 2 * HOUR,
         },

@@ -4,7 +4,7 @@
 **Language:** English  
 **Last updated:** September 2026  
 
-This document is the contract for **when to ask**, **option ids**, and **Unscheduled vs Problematic**. Who moves, and which edits write slots at all, live in [spec-incremental-placement.md](spec-incremental-placement.md) (target; the live engine still full-replans). [task-scheduling-test-matrix.md](task-scheduling-test-matrix.md) follows the live engine until that target ships. Queue, Google sync, diff/undo, and settings that are still accurate live in [spec-intelligent-scheduling.md](spec-intelligent-scheduling.md).
+This document is the contract for **when to ask**, **option ids**, and **Unscheduled vs Problematic**. Who moves, and which edits write slots at all, live in [spec-incremental-placement.md](spec-incremental-placement.md); that is the live engine (`PlacementStepService`), there is no full replan. [task-scheduling-test-matrix.md](task-scheduling-test-matrix.md) maps the cases to tests. Queue, Google sync, diff/undo, and settings that are still accurate live in [spec-intelligent-scheduling.md](spec-intelligent-scheduling.md).
 
 ---
 
@@ -45,7 +45,7 @@ Form create, drag, and Voice share this contract (same decision layer; implement
 | Situation | Outcome |
 |-----------|---------|
 | Free slot at preferred (or earliest if no preferred) | Place silently |
-| New **flexible** preferred collides with **already seated flexible** | Target: claimant takes the interval; only the overlapped task moves ([incremental placement](spec-incremental-placement.md)). Live engine until that ships: seated stays; new finds the next free slot |
+| New **flexible** preferred collides with **already seated flexible** | Claimant takes the interval; only the overlapped task moves, to the free hole nearest its old time ([incremental placement](spec-incremental-placement.md) §8) |
 | Flexible (or recurring) in the way of a placement that **wins** (e.g. after user picks `move_other`) | Move the flexible silently within phase |
 | **Recurring** occurrence moved to free a hole or dodge an anchor | Place + **notify** (in-app toast, not push) |
 | **Recurring** cannot fit in phase/horizon after moves | **Problematic** (not Unscheduled) |
@@ -56,7 +56,7 @@ Form create, drag, and Voice share this contract (same decision layer; implement
 | Deadline / From–Until with **no fit** (user intentional window) | Stay / land in **Unscheduled** (overdue tone as today); **not** Problematic |
 | User **dismisses** conflict UI or never answers (incl. Voice) | Target work → **Problematic** |
 
-The diagram is the live full-replan engine. The target flow is [spec-incremental-placement.md](spec-incremental-placement.md) §4.
+The diagram is the removed full-replan engine, kept for the ask / Problematic / Unscheduled outcomes. The live flow is [spec-incremental-placement.md](spec-incremental-placement.md) §4.
 
 ```mermaid
 flowchart TD
@@ -132,4 +132,4 @@ Which edits read or write seats is defined in [spec-incremental-placement.md](sp
 
 ## 9. Implementation note
 
-Roadmap **§2–§8** shipped the live full-replan engine, Problematic inbox, shared conflict sheet, Voice, and background extend. The target write-set is [spec-incremental-placement.md](spec-incremental-placement.md). Do not add priority-based displacement. A claimant overlapping a seated flexible is not a priority bump: only that overlapped task moves.
+Roadmap **§2–§8** shipped the Problematic inbox, shared conflict sheet, Voice, and background extend on a full-replan engine that has since been replaced. The live write-set is [spec-incremental-placement.md](spec-incremental-placement.md). Do not add priority-based displacement. A claimant overlapping a seated flexible is not a priority bump: only that overlapped task moves.

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { User } from '../users/user.entity';
 import { Task } from '../tasks/entities/task.entity';
 import { ScheduledTask } from '../schedule/schedule.entity';
@@ -14,10 +14,12 @@ import { PushSubscription } from '../reminders/entities/push-subscription.entity
 import { ReminderDelivery } from '../reminders/entities/reminder-delivery.entity';
 import { ScheduleJob } from '../schedule/entities/schedule-job.entity';
 import { PendingGoogleWrite } from '../google-calendar/entities/pending-google-write.entity';
+import { RequestIdempotency } from '../tasks/entities/request-idempotency.entity';
 import { CalendarEventOverlay } from '../calendar-overlays/entities/calendar-event-overlay.entity';
 import { VoiceDailyUsage } from '../voice/entities/voice-daily-usage.entity';
 import { VoiceTurnLog } from '../admin-data/entities/voice-turn-log.entity';
 import { ApiErrorLog } from '../admin-data/entities/api-error-log.entity';
+import { DayReminder } from '../day-reminders/entities/day-reminder.entity';
 import { GoogleCalendarService } from '../google-calendar/google-calendar.service';
 import { uniqueGoogleEventRefs } from '../schedule/google-segment-sync.util';
 import { ApiError } from '../common/types/errors';
@@ -117,6 +119,10 @@ export class AccountDeletionService {
             .select(['s.googleEventId', 's.googleEventCalendarId'])
             .where('s.taskId IN (:...taskIds)', { taskIds })
             .getMany();
+    const reminders = await this.dataSource.getRepository(DayReminder).find({
+      where: { userId },
+      select: { googleEventId: true, googleEventCalendarId: true },
+    });
     const habits = await this.habitsRepo.find({
       where: { userId },
       select: {
@@ -142,6 +148,11 @@ export class AccountDeletionService {
             }
           : null,
       ),
+      ...reminders.map((r) =>
+        r.googleEventId
+          ? { eventId: r.googleEventId, calendarId: r.googleEventCalendarId || 'primary' }
+          : null,
+      ),
       ...habits.map((h) =>
         h.googleEventId
           ? {
@@ -163,10 +174,8 @@ export class AccountDeletionService {
     }
     try {
       await this.dataSource.transaction(async (manager) => {
-        const table = (entity: { new (): unknown }) =>
-          manager.getRepository(entity).metadata.tableName;
-
         await manager.delete(PendingGoogleWrite, { userId });
+        await manager.delete(RequestIdempotency, { userId });
         await manager.delete(ScheduleJob, { userId });
         await manager.delete(ReminderDelivery, { userId });
         await manager.delete(PushSubscription, { userId });
@@ -176,44 +185,36 @@ export class AccountDeletionService {
         await manager.delete(CalendarEventOverlay, { userId });
         await manager.delete(EventPhase, { userId });
 
-        const tasks = table(Task);
-        const scheduled = table(ScheduledTask);
-        const habits = table(Habit);
-        const checkIns = table(HabitCheckIn);
-        const phases = table(Phase);
-        const settings = table(UserSettings);
-        const identities = table(UserIdentity);
-        const users = table(User);
-
-        await manager.query(
-          `DELETE FROM task_phases WHERE taskId IN (SELECT id FROM ${tasks} WHERE userId = ?)`,
-          [userId],
+        // Portable TypeORM deletes (the raw SQL here used SQLite-only `?` and
+        // unquoted camelCase names, so it failed on Postgres — AUD-004).
+        await manager.delete(DayReminder, { userId });
+        const taskIds = (await manager.find(Task, { select: { id: true }, where: { userId } })).map(
+          (task) => task.id,
         );
-        await manager.query(
-          `DELETE FROM ${scheduled} WHERE taskId IN (SELECT id FROM ${tasks} WHERE userId = ?)`,
-          [userId],
-        );
-        await manager.query(
-          `UPDATE ${tasks} SET phaseId = NULL WHERE userId = ?`,
-          [userId],
-        );
-        await manager.query(`DELETE FROM ${tasks} WHERE userId = ?`, [userId]);
-        await manager.query(`DELETE FROM ${checkIns} WHERE userId = ?`, [
-          userId,
-        ]);
-        await manager.query(`DELETE FROM ${habits} WHERE userId = ?`, [userId]);
-        await manager.query(
-          `UPDATE ${phases} SET parentPhaseId = NULL WHERE userId = ?`,
-          [userId],
-        );
-        await manager.query(`DELETE FROM ${phases} WHERE userId = ?`, [userId]);
-        await manager.query(`DELETE FROM ${settings} WHERE userId = ?`, [
-          userId,
-        ]);
-        await manager.query(`DELETE FROM ${identities} WHERE userId = ?`, [
-          userId,
-        ]);
-        await manager.query(`DELETE FROM ${users} WHERE id = ?`, [userId]);
+        const junction = manager.getRepository(Task).metadata.manyToManyRelations.find(
+          (relation) => relation.propertyName === 'phases',
+        )?.junctionEntityMetadata;
+        for (let i = 0; i < taskIds.length; i += 500) {
+          const ids = taskIds.slice(i, i + 500);
+          if (junction) {
+            const qb = manager.createQueryBuilder();
+            await qb
+              .delete()
+              .from(junction.target)
+              .where(`${qb.escape(junction.ownerColumns[0].databaseName)} IN (:...ids)`, { ids })
+              .execute();
+          }
+          await manager.delete(ScheduledTask, { taskId: In(ids) });
+        }
+        await manager.update(Task, { userId }, { phaseId: null });
+        await manager.delete(Task, { userId });
+        await manager.delete(HabitCheckIn, { userId });
+        await manager.delete(Habit, { userId });
+        await manager.update(Phase, { userId }, { parentPhaseId: null });
+        await manager.delete(Phase, { userId });
+        await manager.delete(UserSettings, { userId });
+        await manager.delete(UserIdentity, { userId });
+        await manager.delete(User, { id: userId });
       });
     } finally {
       if (sqlite) {

@@ -67,17 +67,55 @@ describe('DisplayedEventMoveService', () => {
     const taskRepo = {
       save: opts.saveTask ?? jest.fn(async (row) => ({ id: 'series-new', ...row })),
       create: jest.fn((row) => row),
-      find: opts.findSlots ?? jest.fn().mockResolvedValue([]),
+      // The drop loads its candidate tasks with one `find({ where: [...] })`.
+      find: jest.fn(async (query?: { where?: unknown }) =>
+        Array.isArray(query?.where)
+          ? tasks
+          : opts.findSlots
+            ? opts.findSlots(query)
+            : [],
+      ),
       findOne: jest.fn(async ({ where }: { where?: { id?: string } }) => {
         const id = where?.id;
         return tasks.find((row) => row.id === id) ?? null;
       }),
+    };
+    // Durable job queue fake: the payload goes through JSON like a stored row,
+    // runNow calls the registered handler, and the runner completes the job
+    // unless the handler already finished it (ScheduleJobService.execute).
+    const handlers = new Map<string, (job: unknown) => Promise<unknown>>();
+    const payloads = new Map<string, Record<string, unknown>>();
+    const finished = (id: string) =>
+      completeMutationJob.mock.calls.some((call: unknown[]) => call[0] === id) ||
+      failMutationJob.mock.calls.some((call: unknown[]) => call[0] === id);
+    const jobs = {
+      beginMutationJob: jest.fn(async (_userId: string, payload: Record<string, unknown>) => {
+        payloads.set('job-1', JSON.parse(JSON.stringify(payload)));
+        return { id: 'job-1' };
+      }),
+      registerHandler: jest.fn((op: string, handler: (job: unknown) => Promise<unknown>) => {
+        handlers.set(op, handler);
+      }),
+      runNow: jest.fn(async (id: string) => {
+        const payload = payloads.get(id)!;
+        try {
+          const result = await handlers.get(String(payload.op))!({ id, userId, payload });
+          if (!finished(id)) await completeMutationJob(id, result ?? undefined);
+        } catch (err) {
+          await failMutationJob(id, (err as Error).message);
+        }
+      }),
+      setMutationStage: jest.fn().mockResolvedValue(undefined),
+      isSuperseded: jest.fn().mockResolvedValue(false),
+      completeMutationJob,
+      failMutationJob,
     };
     const move = new DisplayedEventMoveService(
       {
         createQueryBuilder: () => ({
           innerJoin: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
           getMany: jest.fn().mockResolvedValue(slots),
         }),
         find: opts.findSlots ?? jest.fn().mockResolvedValue([]),
@@ -97,7 +135,11 @@ describe('DisplayedEventMoveService', () => {
         get: jest.fn().mockReturnValue({ updateEvent: providerUpdate }),
       } as never,
       { syncTask } as never,
-      { place, seatOpenHoles } as never,
+      {
+        place,
+        seatOpenHoles,
+        runExclusive: (_userId: string, run: () => Promise<unknown>) => run(),
+      } as never,
       {
         getSettings: jest.fn().mockResolvedValue({ timeZone: 'UTC' }),
       } as never,
@@ -106,13 +148,9 @@ describe('DisplayedEventMoveService', () => {
           .fn()
           .mockResolvedValue(opts.phases ?? []),
       } as never,
-      {
-        beginMutationJob: jest.fn().mockResolvedValue({ id: 'job-1' }),
-        setMutationStage: jest.fn().mockResolvedValue(undefined),
-        completeMutationJob,
-        failMutationJob,
-      } as never,
+      jobs as never,
     );
+    move.onModuleInit();
     return {
       move,
       patch,
@@ -219,6 +257,40 @@ describe('DisplayedEventMoveService', () => {
     });
   });
 
+  it('PE-20 gives the old phase back when a flexible drag cannot take the time', async () => {
+    const place = jest.fn().mockResolvedValue({
+      outcome: 'conflict',
+      conflict: { reason: 'preferred_on_fixed', options: ['leave_problematic'] },
+    });
+    const task = {
+      id: 'task-flex',
+      eventType: 'admin',
+      isRecurring: false,
+      googleEventId: 'evt-1',
+      phaseId: 'phase-old',
+      phases: [{ id: 'phase-old' }],
+    };
+    const { move, taskRepo } = service({
+      tasks: [task],
+      slots: [
+        {
+          id: 'slot-1',
+          taskId: 'task-flex',
+          googleEventId: 'evt-1',
+          scheduledStartTime: new Date('2026-09-22T09:00:00.000Z'),
+        },
+      ],
+      place,
+    });
+
+    await move.move(userId, dto);
+    await flushAsyncWork();
+
+    expect(taskRepo.save).toHaveBeenCalledTimes(2);
+    expect(task.phaseId).toBe('phase-old');
+    expect(task.phases).toEqual([{ id: 'phase-old' }]);
+  });
+
   it('skips Google patch when a flexible drag re-merges into a series', async () => {
     const place = jest.fn().mockResolvedValue({
       outcome: 'seated',
@@ -256,6 +328,49 @@ describe('DisplayedEventMoveService', () => {
     expect(patch).not.toHaveBeenCalled();
     expect(syncTask).toHaveBeenCalledWith(userId, 'series-1');
     expect(seatOpenHoles).toHaveBeenCalledWith(userId);
+  });
+
+  it('PE-21 a voice move by slot id runs the drag path, not a raw slot write', async () => {
+    const { move, place, patch, syncTask } = service({
+      tasks: [
+        {
+          id: 'task-flex',
+          eventType: 'admin',
+          isRecurring: false,
+          googleEventId: null,
+        },
+      ],
+      slots: [
+        {
+          id: 'slot-9',
+          taskId: 'task-flex',
+          googleEventId: null,
+          scheduledStartTime: new Date('2026-09-22T09:00:00.000Z'),
+          scheduledEndTime: new Date('2026-09-22T10:00:00.000Z'),
+        },
+      ],
+    });
+
+    await expect(
+      move.move(userId, {
+        slotId: 'slot-9',
+        start: '2026-09-22T11:00:00.000Z',
+        end: '2026-09-22T12:00:00.000Z',
+      } as never),
+    ).resolves.toEqual({ kind: 'slot', jobId: 'job-1' });
+    await flushAsyncWork();
+
+    expect(place).toHaveBeenCalledWith(
+      userId,
+      'task-flex',
+      expect.objectContaining({
+        preferredStart: new Date('2026-09-22T11:00:00.000Z'),
+        commit: 'preferred',
+        drag: true,
+      }),
+    );
+    expect(patch).not.toHaveBeenCalled();
+    expect(syncTask).toHaveBeenCalledWith(userId, 'task-flex');
   });
 
   it('seats a flexible drag through the placement step and does not replan', async () => {
@@ -413,44 +528,6 @@ describe('DisplayedEventMoveService', () => {
     expect(patch).not.toHaveBeenCalled();
   });
 
-  it('detaches one series day into a one-off', async () => {
-    const skipOccurrence = jest.fn().mockResolvedValue({});
-    const createTask = jest
-      .fn()
-      .mockResolvedValue({ id: 'copy-1', jobId: 'job-create' });
-    const { move, place } = service({
-      tasks: [seriesTask],
-      slots: [
-        {
-          id: 'slot-1',
-          taskId: 'series-1',
-          googleEventId: 'evt-1',
-          scheduledStartTime: new Date('2026-09-22T09:00:00.000Z'),
-        },
-      ],
-      skipOccurrence,
-      createTask,
-    });
-    await expect(
-      move.move(userId, { ...seriesDto, seriesScope: 'occurrence' }),
-    ).resolves.toEqual({ kind: 'slot', jobId: 'job-create' });
-    expect(skipOccurrence).toHaveBeenCalledWith('series-1', userId, {
-      occurrenceStart: seriesDto.originalStart,
-      googleEventId: 'evt-1',
-      googleEventCalendarId: 'primary',
-    });
-    expect(createTask).toHaveBeenCalledWith(
-      userId,
-      expect.objectContaining({
-        name: 'Gym',
-        isRecurring: false,
-        parentSeriesId: 'series-1',
-        scheduledStartTime: seriesDto.start,
-      }),
-    );
-    expect(place).not.toHaveBeenCalled();
-  });
-
   it('rejects a recurring drag that crosses a local day', async () => {
     const { move, place } = service({
       tasks: [seriesTask],
@@ -474,73 +551,6 @@ describe('DisplayedEventMoveService', () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(place).not.toHaveBeenCalled();
-  });
-
-  it('ends the old series before the dropped day and starts a new series', async () => {
-    const future = {
-      ...dto,
-      originalStart: futureUtc(4, 9),
-      originalEnd: futureUtc(4, 10),
-      start: futureUtc(4, 11),
-      end: futureUtc(4, 12),
-    };
-    const evening = {
-      id: 'phase-eve',
-      type: 'time_phase',
-      startTime: '11:00',
-      endTime: '17:00',
-      weekDays: null,
-    };
-    const saveTask = jest.fn(async (row) => ({ id: row.id ?? 'series-new', ...row }));
-    const removeSlots = jest.fn().mockResolvedValue(undefined);
-    const { move, place, seatOpenHoles } = service({
-      tasks: [seriesTask],
-      phases: [evening],
-      slots: [
-        {
-          id: 'slot-1',
-          taskId: 'series-1',
-          googleEventId: 'evt-1',
-          scheduledStartTime: new Date(future.originalStart),
-        },
-      ],
-      saveTask,
-      removeSlots,
-      findSlots: jest.fn().mockResolvedValue([
-        {
-          id: 'slot-prev',
-          taskId: 'series-1',
-          scheduledStartTime: new Date(futureUtc(2, 9)),
-          scheduledEndTime: new Date(futureUtc(2, 10)),
-        },
-        {
-          id: 'slot-1',
-          taskId: 'series-1',
-          scheduledStartTime: new Date(future.originalStart),
-          scheduledEndTime: new Date(future.originalEnd),
-        },
-      ]),
-    });
-    await expect(
-      move.move(userId, { ...future, seriesScope: 'series' }),
-    ).resolves.toEqual({ kind: 'slot', jobId: 'job-1' });
-    await flushAsyncWork();
-    expect(saveTask).toHaveBeenCalled();
-    expect(removeSlots).toHaveBeenCalled();
-    expect(place).toHaveBeenCalledWith(
-      userId,
-      'series-new',
-      expect.objectContaining({
-        commit: 'always',
-        expandSeries: true,
-        durationMinutes: 60,
-      }),
-    );
-    expect(seatOpenHoles).toHaveBeenCalledWith(userId);
-    const createdRow = saveTask.mock.calls
-      .map((c) => c[0])
-      .find((row) => row?.name === 'Gym' && row?.scheduledStartTime);
-    expect(createdRow?.phaseId).toBe('phase-eve');
   });
 
   it('treats series scope on the first open day as all', async () => {

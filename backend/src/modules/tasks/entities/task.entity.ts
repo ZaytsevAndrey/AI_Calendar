@@ -203,6 +203,14 @@ export class Task {
   @Column({ type: 'varchar', length: 255, nullable: true })
   googleEventCalendarId: string | null;
 
+  /**
+   * Event id sent with a Google insert before Google confirmed it. A retry after
+   * an unknown outcome (timeout) sends the same id, so Google answers 409
+   * instead of creating a second event. Cleared once the event is attached.
+   */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  googleInsertEventId: string | null;
+
   @Column({ default: false })
   isFixedExternal: boolean;
 
@@ -257,6 +265,13 @@ export class Task {
    */
   @Column({ type: 'uuid', nullable: true })
   seriesGroupId: string | null;
+
+  /**
+   * Detached series day only: the occurrence (YYYY-MM-DD) this copy stands for.
+   * Survives seating and park clear; re-merge needs the copy back on this day.
+   */
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  originalOccurrenceYmd: string | null;
 
   /**
    * Recurring only: civil days (YYYY-MM-DD in settings IANA) the user skipped.

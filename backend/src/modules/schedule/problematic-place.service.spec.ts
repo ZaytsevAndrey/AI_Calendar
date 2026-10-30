@@ -30,10 +30,17 @@ function parkedTask(partial: Partial<Task> = {}): Task {
 
 describe('ProblematicPlaceService', () => {
   let rows: Map<string, Task>;
+  const matches = (row: Task, where: Record<string, unknown>) =>
+    Object.entries(where).every(([key, value]) => (row as never)[key] === value);
   const taskRepo = {
     findOne: jest.fn(async ({ where }) => {
-      const row = rows.get(where.id);
+      const row = [...rows.values()].find((candidate) => matches(candidate, where));
       return row ? { ...row } : null;
+    }),
+    findOneOrFail: jest.fn(async ({ where }) => {
+      const row = [...rows.values()].find((candidate) => matches(candidate, where));
+      if (!row) throw new Error('not found');
+      return { ...row };
     }),
     save: jest.fn(async (row: Task) => {
       const id = row.id ?? 'copy-1';
@@ -42,15 +49,24 @@ describe('ProblematicPlaceService', () => {
       return saved;
     }),
     create: jest.fn((row) => row),
-    delete: jest.fn(async ({ id }) => {
-      rows.delete(id);
+  };
+  const slotRepo = { find: jest.fn().mockResolvedValue([]), remove: jest.fn() };
+  const pendingGoogleWrites = { syncTask: jest.fn().mockResolvedValue(undefined) };
+  // Same contract as PlacementStepService.writeAndPlace: one transaction that
+  // rolls back (here: restores the row snapshot) when `accept` refuses the plan.
+  const placementStep = {
+    place: jest.fn(),
+    writeAndPlace: jest.fn(async (userId: string, write, accept = () => true) => {
+      const snapshot = new Map([...rows].map(([id, row]) => [id, { ...row }]));
+      const { taskId, opts } = await write({ tasks: taskRepo, slots: slotRepo });
+      const plan = await placementStep.place(userId, taskId, opts);
+      if (!accept(plan)) {
+        rows = snapshot;
+        return { plan, taskId, committed: false };
+      }
+      return { plan, taskId, committed: true };
     }),
   };
-  const tasksService = {
-    skipOccurrence: jest.fn().mockResolvedValue(undefined),
-    update: jest.fn().mockResolvedValue(undefined),
-  };
-  const placementStep = { place: jest.fn() };
   const phasesService = {
     findAllForScheduling: jest.fn().mockResolvedValue([
       { id: 'evening', name: 'Evening' },
@@ -74,10 +90,10 @@ describe('ProblematicPlaceService', () => {
     placementStep.place.mockImplementation(seatedAtStart);
     service = new ProblematicPlaceService(
       taskRepo as never,
-      tasksService as never,
       placementStep as never,
       phasesService as never,
       userSettingsService as never,
+      pendingGoogleWrites as never,
     );
   });
 
@@ -100,7 +116,7 @@ describe('ProblematicPlaceService', () => {
     expect(saved.phaseId).toBe('evening');
   });
 
-  it('restores the park when the slot was taken meanwhile', async () => {
+  it('PE-18 keeps the park untouched when the slot was taken meanwhile (rollback)', async () => {
     rows.set('task-1', parkedTask());
     placementStep.place.mockResolvedValue({
       outcome: 'problematic',
@@ -115,7 +131,7 @@ describe('ProblematicPlaceService', () => {
     expect(saved.phaseId).toBeNull();
   });
 
-  it('moves one series day as a linked copy, then skips that day', async () => {
+  it('moves one series day as a linked copy and skips that day in one write', async () => {
     rows.set(
       'task-1',
       parkedTask({
@@ -132,15 +148,25 @@ describe('ProblematicPlaceService', () => {
     const copy = rows.get('copy-1')!;
     expect(copy.parentSeriesId).toBe('task-1');
     expect(copy.seriesGroupId).toBe('task-1');
+    expect(copy.originalOccurrenceYmd).toBe(FUTURE);
     expect(copy.isRecurring).toBe(false);
     expect(copy.eventType).toBe(TaskEventType.ADMIN);
-    expect(tasksService.skipOccurrence).toHaveBeenCalledWith('task-1', 'user-1', {
-      occurrenceStart: `${FUTURE}T12:00:00+00:00`,
-    });
-    expect(tasksService.update).not.toHaveBeenCalled();
+    const series = rows.get('task-1')!;
+    expect(series.skippedOccurrenceYmds).toEqual([FUTURE]);
+    expect(parkedDays(series)).toEqual(['2099-01-16']);
+    expect(pendingGoogleWrites.syncTask).toHaveBeenCalledWith('user-1', 'task-1');
   });
 
-  it('deletes the copy and skips nothing when the series day does not seat', async () => {
+  it('PE-24 a day of a fixed series moves as a fixed copy', async () => {
+    rows.set(
+      'task-1',
+      parkedTask({ isRecurring: true, eventType: TaskEventType.FIXED }),
+    );
+    await service.place('user-1', 'task-1', { start, end, occurrenceYmd: FUTURE });
+    expect(rows.get('copy-1')!.eventType).toBe(TaskEventType.FIXED);
+  });
+
+  it('PE-18 leaves no copy and no skip when the series day does not seat (rollback)', async () => {
     rows.set('task-1', parkedTask({ isRecurring: true }));
     placementStep.place.mockResolvedValue({
       outcome: 'problematic',
@@ -150,10 +176,26 @@ describe('ProblematicPlaceService', () => {
       service.place('user-1', 'task-1', { start, end, occurrenceYmd: FUTURE }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(rows.has('copy-1')).toBe(false);
-    expect(tasksService.skipOccurrence).not.toHaveBeenCalled();
+    expect(rows.get('task-1')!.skippedOccurrenceYmds ?? []).toEqual([]);
+    expect(parkedDays(rows.get('task-1')!)).toEqual([FUTURE]);
+    expect(pendingGoogleWrites.syncTask).not.toHaveBeenCalled();
   });
 
-  it('a copy that merged back answers the day without skipping it', async () => {
+  it('PE-18 a retry reuses the copy it already made for that day', async () => {
+    rows.set('task-1', parkedTask({ isRecurring: true }));
+    rows.set('copy-1', {
+      ...parkedTask({ id: 'copy-1', scheduleState: ScheduleState.NONE }),
+      seriesGroupId: 'task-1',
+      parentSeriesId: 'task-1',
+      originalOccurrenceYmd: FUTURE,
+    } as Task);
+    taskRepo.save.mockClear();
+    const out = await service.place('user-1', 'task-1', { start, end, occurrenceYmd: FUTURE });
+    expect(out.taskId).toBe('copy-1');
+    expect([...rows.values()].filter((row) => row.originalOccurrenceYmd === FUTURE)).toHaveLength(1);
+  });
+
+  it('a copy that merged back answers the day in the inbox', async () => {
     rows.set(
       'task-1',
       parkedTask({
@@ -171,20 +213,13 @@ describe('ProblematicPlaceService', () => {
       occurrenceYmd: FUTURE,
     });
     expect(out.taskId).toBe('task-1');
-    expect(tasksService.skipOccurrence).not.toHaveBeenCalled();
     expect(rows.get('task-1')!.problematicOccurrenceYmds).toEqual(['2099-01-16']);
   });
 
-  it('the last merged-back day leaves the inbox', async () => {
+  it('the last answered day leaves the inbox', async () => {
     rows.set('task-1', parkedTask({ isRecurring: true }));
-    placementStep.place.mockImplementation(async () => ({
-      ...(await seatedAtStart()),
-      mergedIntoTaskId: 'task-1',
-    }));
     await service.place('user-1', 'task-1', { start, end, occurrenceYmd: FUTURE });
-    expect(tasksService.update).toHaveBeenCalledWith('task-1', 'user-1', {
-      scheduleState: ScheduleState.NONE,
-    });
+    expect(rows.get('task-1')!.scheduleState).toBe(ScheduleState.NONE);
   });
 
   it('rejects a slot in the past and a task that is not parked', async () => {
@@ -204,9 +239,26 @@ describe('ProblematicPlaceService', () => {
 describe('autoSeatOptions', () => {
   const today = '2099-01-10';
 
+  it('PE-24 a fixed copy only takes its own clock back, never another hole', () => {
+    expect(
+      autoSeatOptions(parkedTask({ eventType: TaskEventType.FIXED }), today),
+    ).toEqual({
+      preferredStart: new Date(`${FUTURE}T18:00:00.000Z`),
+      commit: 'preferred',
+      windowYmd: FUTURE,
+    });
+    expect(
+      autoSeatOptions(
+        parkedTask({ eventType: TaskEventType.FIXED, problematicOriginalStart: null }),
+        today,
+      ),
+    ).toBeNull();
+  });
+
   it('keeps a parked day on that day, nearest its old clock', () => {
     expect(autoSeatOptions(parkedTask(), today)).toEqual({
       searchHole: true,
+      rawHole: true,
       windowYmd: FUTURE,
       preferredStart: new Date(`${FUTURE}T18:00:00.000Z`),
     });
@@ -226,7 +278,7 @@ describe('autoSeatOptions', () => {
   it('a park with no day searches the whole horizon', () => {
     expect(
       autoSeatOptions(parkedTask({ problematicDay: null }), today),
-    ).toEqual({ searchHole: true });
+    ).toEqual({ searchHole: true, rawHole: true });
   });
 });
 

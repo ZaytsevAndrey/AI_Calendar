@@ -29,8 +29,10 @@ export type ChangePreviewCard = {
   id: string;
   name: string;
   kind: ChangePreviewKind;
-  /** Stored task kind. Null when this change does not say it. */
+  /** Scheduling behavior (or Later). Null when this change does not say it. */
   taskType: PreviewTaskType | null;
+  /** The task repeats. Independent of `taskType`: a fixed series is fixed + repeats. */
+  repeats?: boolean;
   startIso: string | null;
   endIso: string | null;
   durationMinutes: number | null;
@@ -114,14 +116,12 @@ function taskTypeOf(fields: {
   eventType?: string | null;
 }, fallbackFlexible: boolean): PreviewTaskType | null {
   if (fields.isUnscheduled) return 'unscheduled';
-  if (fields.isRecurring) return 'recurring';
   if (fields.eventType === 'fixed') return 'fixed';
   if (fields.eventType === 'admin' || fallbackFlexible) return 'flexible';
   return null;
 }
 
 function typeFromPatch(patch: VoiceTaskPatch): PreviewTaskType | null {
-  if (patch.isRecurring) return 'recurring';
   if (patch.eventType === 'fixed') return 'fixed';
   if (patch.eventType === 'admin') return 'flexible';
   return null;
@@ -195,6 +195,7 @@ function cardFromIntent(intent: VoiceWriteIntent, index: number): ChangePreviewC
       name: task.name || intent.summary,
       kind: 'create',
       taskType: taskTypeOf(task, true),
+      repeats: !!task.isRecurring,
       startIso,
       endIso,
       durationMinutes: duration,
@@ -237,6 +238,7 @@ function cardFromIntent(intent: VoiceWriteIntent, index: number): ChangePreviewC
       name: command.taskName || intent.summary,
       kind,
       taskType: typeFromPatch(patch),
+      ...(patch.isRecurring ? { repeats: true } : {}),
       startIso,
       endIso,
       durationMinutes: duration,
