@@ -4,6 +4,7 @@
  * writes queued during a send, and a lost insert answer (no duplicate event).
  */
 import { PendingGoogleWrite } from './entities/pending-google-write.entity';
+import { GoogleEventMissingError } from './google-calendar.service';
 import {
   GOOGLE_WRITE_BACKOFF_BASE_MS,
   GOOGLE_WRITE_BACKOFF_MAX_MS,
@@ -188,7 +189,8 @@ describe('Google write queue', () => {
     it('an event deleted in Google while its update was queued is unlinked, the task and slot stay', async () => {
       const task = await seatedTask({ googleEventId: 'gone-1', googleEventCalendarId: 'app-cal' });
       await writes.enqueue(kit.user.id, 'upsert', { taskId: task.id, googleEventId: 'gone-1', error: 'timeout' });
-      google.getEvent.mockRejectedValue(new Error('Google 404 Not Found'));
+      // What GoogleCalendarService.getEvent throws for a 404/410.
+      google.getEvent.mockRejectedValue(new GoogleEventMissingError('gone-1'));
       jest.setSystemTime(Date.now() + 2 * 60_000);
 
       await writes.processQueue();
@@ -198,6 +200,48 @@ describe('Google write queue', () => {
       expect(await kit.slotsOf(task.id)).toEqual(['2026-11-05 10:00-11:00']);
       expect(await repo().count()).toBe(0);
     });
+
+    it('a confirmed 404 with "sync Google deletions" on removes the task and its slots together', async () => {
+      await kit.ds.getRepository(UserSettings).update({ userId: kit.user.id }, { syncGoogleDeletions: true } as never);
+      const task = await seatedTask({ googleEventId: 'gone-2', googleEventCalendarId: 'app-cal' });
+      await writes.enqueue(kit.user.id, 'upsert', { taskId: task.id, googleEventId: 'gone-2', error: 'timeout' });
+      google.getEvent.mockRejectedValue(new GoogleEventMissingError('gone-2'));
+      jest.setSystemTime(Date.now() + 3 * 60_000);
+
+      await writes.processQueue();
+
+      expect(await kit.taskRepo.findOneBy({ id: task.id })).toBeNull();
+      expect(await kit.slotRepo.countBy({ taskId: task.id })).toBe(0);
+    });
+
+    it.each([
+      [429, 'Rate Limit Exceeded'],
+      [503, 'Backend Error'],
+      [401, 'Invalid Credentials'],
+      [403, 'Forbidden'],
+      [null, 'socket hang up'],
+    ])(
+      'AUD-001: a %s from Google is a retry, never "event deleted" (task, link and slot stay)',
+      async (status, text) => {
+        await kit.ds.getRepository(UserSettings).update({ userId: kit.user.id }, { syncGoogleDeletions: true } as never);
+        const task = await seatedTask({ googleEventId: 'live-1', googleEventCalendarId: 'app-cal' });
+        await writes.enqueue(kit.user.id, 'upsert', { taskId: task.id, googleEventId: 'live-1', error: 'timeout' });
+        // Exactly what GoogleCalendarService.getEvent threw before the fix.
+        google.getEvent.mockRejectedValue(
+          Object.assign(new Error(`Failed to fetch event: ${text}`), status ? { status } : {}),
+        );
+        jest.setSystemTime(Date.now() + 3 * 60_000);
+
+        await writes.processQueue();
+
+        const after = await kit.taskRepo.findOneBy({ id: task.id });
+        expect(after).not.toBeNull();
+        expect(after!.googleEventId).toBe('live-1');
+        expect(await kit.slotsOf(task.id)).toEqual(['2026-11-05 10:00-11:00']);
+        const row = await repo().findOneByOrFail({ taskId: task.id });
+        expect(row).toMatchObject({ status: 'pending', attempts: 1 });
+      },
+    );
 
     it('two instances syncing one new task at once create one Google event', async () => {
       const task = await seatedTask();

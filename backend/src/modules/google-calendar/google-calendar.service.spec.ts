@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { GoogleCalendarService } from './google-calendar.service';
+import { GoogleCalendarService, GoogleEventMissingError, isGoogleEventMissing } from './google-calendar.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { User } from '../users/user.entity';
 import { UserSettings } from '../user-settings/entities/user-settings.entity';
@@ -510,6 +510,27 @@ describe('GoogleCalendarService', () => {
 
     await expect(service.createEvent('123', { summary: 'No id' })).rejects.toThrow('could not create');
     expect(g().eventsGet).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [404, true],
+    [410, true],
+    [503, false],
+    [429, false],
+    [401, false],
+  ])('AUD-001: getEvent maps Google %s to missing=%s, keeping the status', async (code, missing) => {
+    jest.spyOn(userRepo, 'findOne').mockResolvedValue({
+      googleAccessToken: 'valid-token',
+      googleTokenExpiry: new Date(Date.now() + 10000),
+    } as User);
+    jest.spyOn(userSettingsRepo, 'findOne').mockResolvedValue({ appGoogleCalendarId: 'app-cal' } as UserSettings);
+    g().eventsGet.mockRejectedValueOnce(Object.assign(new Error('Google says no'), { code }));
+
+    const error = await service.getEvent('123', 'evt-1', 'app-cal').catch((e: unknown) => e);
+
+    expect(error instanceof GoogleEventMissingError).toBe(missing);
+    expect(isGoogleEventMissing(error)).toBe(missing);
+    if (!missing) expect((error as { status?: number }).status).toBe(code);
   });
 
   it('should update event', async () => {

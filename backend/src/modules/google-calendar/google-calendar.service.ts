@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   Logger,
+  NotFoundException,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -37,8 +38,25 @@ function stubExternalApis(): boolean {
   return process.env.E2E_STUB_EXTERNAL === '1';
 }
 
+/**
+ * The event does not exist in Google (HTTP 404/410). Only this means "deleted
+ * in Google"; every other failure (401/403/429/5xx, timeouts) is a retry.
+ */
+export class GoogleEventMissingError extends NotFoundException {
+  constructor(readonly eventId: string) {
+    super(`Google event ${eventId} does not exist`);
+  }
+}
+
+/** True only for a confirmed missing event: the typed error or a raw 404/410. */
+export function isGoogleEventMissing(err: unknown): boolean {
+  if (err instanceof GoogleEventMissingError) return true;
+  const status = googleErrorStatus(err);
+  return status === 404 || status === 410;
+}
+
 /** HTTP status of a googleapis error, wherever the client put it. */
-function googleErrorStatus(err: unknown): number | null {
+export function googleErrorStatus(err: unknown): number | null {
   const e = (err ?? {}) as {
     status?: number | string;
     code?: number | string;
@@ -1082,7 +1100,11 @@ export class GoogleCalendarService {
       this.logger.error(
         `Error fetching event ${eventId} for user ${userId}: ${error.message}`,
       );
-      throw new Error(`Failed to fetch event: ${error.message}`);
+      if (this.isGoogleNotFound(error)) throw new GoogleEventMissingError(eventId);
+      // Keep the HTTP status: callers must not read a 503 as "deleted".
+      throw Object.assign(new Error(`Failed to fetch event: ${error.message}`), {
+        status: googleErrorStatus(error),
+      });
     }
   }
 
@@ -1434,6 +1456,7 @@ export class GoogleCalendarService {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Google Calendar update failed: ${msg}`);
+      if (this.isGoogleNotFound(err)) throw new GoogleEventMissingError(eventId);
       throw new ServiceUnavailableException(
         'Google Calendar could not update the event.',
       );

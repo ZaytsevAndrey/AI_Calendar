@@ -6,7 +6,7 @@ import { recordGoogleWrite, setGoogleOutboxKick } from './google-sync-outbox';
 import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import { phaseHexToGoogleColorId } from './phase-hex-to-google-color-id.util';
 import { applyTaskGoogleEventFields } from './task-google-event-fields.util';
-import { GoogleCalendarService } from './google-calendar.service';
+import { GoogleCalendarService, isGoogleEventMissing } from './google-calendar.service';
 import {
   PendingGoogleWrite,
   type PendingGoogleWriteOperation,
@@ -410,7 +410,8 @@ export class PendingGoogleWriteService implements OnModuleInit, OnModuleDestroy 
         return;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        if (/404|not found|Failed to fetch event/i.test(message)) {
+        // Only a confirmed 404/410 means deleted in Google; anything else retries.
+        if (isGoogleEventMissing(err)) {
           await this.handleMissingGoogleEvent(row.userId, task, eventId);
           return;
         }
@@ -523,7 +524,7 @@ export class PendingGoogleWriteService implements OnModuleInit, OnModuleDestroy 
       await this.google.deleteEvent(userId, eventId, calendarId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (/404|not found|Gone/i.test(message)) return;
+      if (isGoogleEventMissing(err)) return;
       await this.enqueue(userId, 'delete', {
         googleEventId: eventId,
         googleCalendarId: calendarId,
@@ -547,7 +548,7 @@ export class PendingGoogleWriteService implements OnModuleInit, OnModuleDestroy 
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (/404|not found|Gone/i.test(message)) return;
+      if (isGoogleEventMissing(err)) return;
       throw err;
     }
   }
@@ -559,8 +560,11 @@ export class PendingGoogleWriteService implements OnModuleInit, OnModuleDestroy 
   ): Promise<void> {
     const settings = await this.settingsRepo.findOne({ where: { userId } });
     if (settings?.syncGoogleDeletions) {
-      await this.scheduledRepo.delete({ taskId: task.id });
-      await this.taskRepo.remove(task);
+      // Confirmed 404/410 only (AUD-001). Slots and task go together.
+      await this.taskRepo.manager.transaction(async (manager) => {
+        await manager.getRepository(ScheduledTask).delete({ taskId: task.id });
+        await manager.getRepository(Task).delete({ id: task.id, userId });
+      });
       return;
     }
     // Unlink only if the task still points at that event (no stale overwrite).
@@ -608,7 +612,7 @@ export class PendingGoogleWriteService implements OnModuleInit, OnModuleDestroy 
         await this.google.deleteEvent(userId, eventId, calendarId);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        if (/404|not found|Gone/i.test(message)) continue;
+        if (isGoogleEventMissing(err)) continue;
         await this.enqueue(userId, 'delete', {
           taskId: task.id,
           googleEventId: eventId,
