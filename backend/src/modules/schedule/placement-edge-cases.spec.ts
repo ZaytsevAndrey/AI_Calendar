@@ -334,6 +334,53 @@ describe('placement edge cases', () => {
     expect(await kit.slotsOf(series.id)).toEqual(before);
   });
 
+  it('AUD-016: a master and its recurring clock sibling never both hold a civil day past the horizon', async () => {
+    kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 7 });
+    const groupId = '22222222-2222-4222-8222-222222222222';
+    // Master: daily 09:00; Tuesday 11-10 moved to the sibling (skipped here).
+    const master = await kit.addTask({
+      name: 'Daily',
+      isRecurring: true,
+      recurrencePattern: 'DAILY',
+      seriesGroupId: groupId,
+      skippedOccurrenceYmds: ['2026-11-10'],
+      scheduledStartTime: kit.at('2026-11-05', '09:00'),
+      scheduledEndTime: kit.at('2026-11-05', '09:30'),
+      estimatedTimeInMinutes: 30,
+    });
+    for (const ymd of ['2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08', '2026-11-09', '2026-11-11']) {
+      await kit.addSlot(master.id, kit.at(ymd, '09:00'), kit.at(ymd, '09:30'));
+    }
+    // Clock sibling: weekly Tuesday 10:00, recurring without an end (as created).
+    const sibling = await kit.addTask({
+      name: 'Daily',
+      isRecurring: true,
+      recurrencePattern: 'WEEKLY',
+      recurrenceWeekDays: [2],
+      seriesGroupId: groupId,
+      scheduledStartTime: kit.at('2026-11-10', '10:00'),
+      scheduledEndTime: kit.at('2026-11-10', '10:30'),
+      estimatedTimeInMinutes: 30,
+    });
+    await kit.addSlot(sibling.id, kit.at('2026-11-10', '10:00'), kit.at('2026-11-10', '10:30'));
+
+    // Three weeks later: the background append, and an edit that expands the sibling directly.
+    jest.setSystemTime(new Date('2026-11-24T07:00:00.000Z'));
+    await kit.service.appendMissingSeriesDays(kit.user.id);
+    await (kit.service as unknown as { expandSeriesDays: (u: string, id: string) => Promise<void> }).expandSeriesDays(
+      kit.user.id,
+      sibling.id,
+    );
+
+    const perDay = new Map<string, number>();
+    for (const member of [master, sibling]) {
+      for (const row of await kit.slotsOf(member.id)) {
+        perDay.set(row.slice(0, 10), (perDay.get(row.slice(0, 10)) ?? 0) + 1);
+      }
+    }
+    expect([...perDay.entries()].filter(([, n]) => n > 1)).toEqual([]);
+  });
+
   describe('AUD-015: series day writes are atomic (fault injection)', () => {
     it('parking a series day: a failing copy insert leaves the skip and the day\'s row untouched', async () => {
       kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });

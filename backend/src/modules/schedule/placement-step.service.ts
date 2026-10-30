@@ -1912,6 +1912,21 @@ export class PlacementStepService {
         localYmd(new Date(row.scheduledStartTime).toISOString(), timeZone),
       ),
     );
+    // A day held by another member of the series group (clock sibling,
+    // detached copy) is that day's occurrence: one per civil day (AUD-016).
+    if (task.seriesGroupId) {
+      const members = await this.taskRepo.find({
+        select: { id: true },
+        where: { userId, seriesGroupId: task.seriesGroupId },
+      });
+      const otherIds = members.map((member) => member.id).filter((id) => id !== task.id);
+      if (otherIds.length) {
+        const held = await this.scheduledRepo.find({ where: { taskId: In(otherIds) } });
+        for (const row of held) {
+          seatedYmds.add(localYmd(new Date(row.scheduledStartTime).toISOString(), timeZone));
+        }
+      }
+    }
     // Count days from the series start (DTSTART); today only drops the past.
     const anchorYmd = seriesAnchorYmd(task, timeZone);
     const horizonEndYmd = localYmd(horizon.end.toISOString(), timeZone);
