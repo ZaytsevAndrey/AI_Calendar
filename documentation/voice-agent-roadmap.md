@@ -2,7 +2,11 @@
 
 Authoritative Voice Agent backlog after the scheduling stabilization (30 October 2026). It replaces the lost `docs/voice-vnext/LUEFY-VOICE-AGENT-ROADMAP.md` (phases 4.7.6–5.0; never in git, deleted 29 Oct) and details roadmap items §39–§43 and §48–§49 of the [product roadmap](roadmap.md). Product contract: [spec-voice-agent.md](spec-voice-agent.md). Scheduling contract the agent must follow: [placement-engine.md](placement-engine.md) (§7.6, §13). Open risks: [security-and-residual-risks.md](security-and-residual-risks.md) (R-20, G-6), [known-issues.md](known-issues.md) KI-04, KI-10, KI-19.
 
+**Detailed backlog:** [voice-agent-backlog.md](voice-agent-backlog.md) — every task with status, priority, complexity, acceptance criteria, required tests, MVP classification, the decisions D-01…D-11 and the critical path. This file keeps the architecture, the compatibility matrix, the phase plan and the next task. Both files share identifiers (VC, VR, VN, VB, D); a task is edited in the backlog and only summarized here.
+
 **Evidence levels used below.** *Verified* — read in code during this review (file:line given). *Confirmed* — both sides of a conflict cited in code by the compatibility analysis; the four marked ✔ were re-checked by hand. *Suspected* — inferred, needs a test. *Reported* — stated in a transcript or deleted report, not re-measured.
+
+**Verification pass (30 Oct 2026, second session).** Re-read in code and still true: VC-01 (`project-apply.ts:465-490`, `dayWindow` `:363-369`), VC-02 (`executeVoiceCommand.ts:107-146`; only the legacy `window` command forwards `isUnscheduled`, `:240`), VC-03 (`project-apply.ts:706, 804`), VC-05 (`project-apply.ts:506-549` sends `description: null`, `recurrencePattern: null`; `day-reminders.service.ts:64-74` replaces), VC-07 (no group fields in `production/catalog.ts`), VC-11 (noon-offset helpers still called from six voice files), VC-12 (`structured-state.ts:742-765`), VC-13 (`project-apply.ts:399, 419-426`), VC-14 (`useVoiceTask.ts:316-330`), VR-23 (`prompts.ts:108-143` lists every owned record, history is the last 6 turns), VR-26 (`session-registry.ts` in-memory `Map`), VR-30 (`dto.mode` only logged, `structured-voice.service.ts:151`, while the panel sends it on every turn, `useVoiceTask.ts:541`), dead code (no non-test caller of `alignEnvelope`, `routeOpenDraft`, `operationsTurn`, `dayPlanTurn`). No voice source file changed since the roadmap commit `4b7e4e4` (the design merges touched only `VoiceTaskSheet` layout). **Corrected:** VR-24 — prompt, transcript and model-output bodies are already gated by `VOICE_TRACE_BODY` (and `VOICE_TRACE_BODY_PRODUCTION` in production, `common/voice-trace.ts:165-173`; `turn-log.ts` writes `transcriptChars` only), so the earlier "logs raw prompts" wording was wrong; the dev log on this machine has bodies because the flag is on locally; the open part of VR-24 is token / cost metrics (`inputTokens: 0`). VR-28 — `WorldName` is exported and imported (`phase477-fixtures.ts:3`, `phase47-generalization.ts:8`); the §42 error line is stale. **Latest live evidence:** the last structured turn in `backend/logs/voice-agent.log` is 2026-10-29 05:03 (11 structured turns in total); the F2 run of 29 Oct (5/12, multi-turn 0/5) is still the latest live result. **Gate run from a Linux shell against the Windows `node_modules`:** 84/84 tests in the suites that could load (`contracts`, `state`, `search`, `phase4712*`); `read-broker.spec.ts` and `phase4712-stage41.spec.ts` could not load the native `bcrypt` binary — an environment limit, not a failure (VN-03). The 232/232 figure stands from the 30 Oct Windows run and CI (`.github/workflows/ci.yml:58`). New findings: VN-02, VN-03, VN-06 in §C.4; MVP definition and open decisions in §G.
 
 **Working rules (user decisions, kept):** finish the structured pipeline, do not redesign it; small diffs with focused tests; never edit historical tests to raise pass counts; run the structured gate (`npm run test:vnext:structured`) at each checkpoint; terse commits, one per slice; no lexical crutches (`.claude/rules/voice-no-lexical-crutches.md`).
 
@@ -106,13 +110,13 @@ Sources: transcripts `1e1b2f43`, `400b5cbf`, `2c8a4c6e`, `ab1768c0`, current ses
 | VR-21 | §40 preference profile: reuse settings; "remember that…" only after confirm; preferences are soft, never an entity id | handoff P1; 4.7.11 "memory must not become a trusted entity id" | Partial — settings reused; no remember operation or store | — |
 | VR-22 | Learned preference profile | roadmap "Later — decide before building" | Outstanding, shape open | — |
 | VR-23 | §41 bounded context (targeted reads instead of every record in the prompt) | handoff; roadmap §41 | Outstanding | `buildTurnUser` lists every row (`prompts.ts:108`); ~4k tokens/turn reported |
-| VR-24 | Token / cost / latency per turn without raw content | roadmap §41 | Outstanding; **privacy**: turn log writes raw prompt and output, `voice-agent.log` holds transcripts | `structured-voice.service.ts:314` returns 0 tokens |
+| VR-24 | Token / cost / latency per turn without raw content | roadmap §41 | Partial — bodies (prompt, transcript, model output) are gated by `VOICE_TRACE_BODY` / `VOICE_TRACE_BODY_PRODUCTION` (`common/voice-trace.ts:165-173`, verified 30 Oct); token and cost counts are missing | `structured-voice.service.ts:314` returns `inputTokens: 0`; quota still counts via `groq.client.ts` `recordTokens` |
 | VR-25 | §42 revision / ETag preconditions on Apply | roadmap §42 | Outstanding — revalidation at confirm only | — |
 | VR-26 | §42 shared session store or a documented single instance | roadmap §42 | Outstanding — process-local `Map` (`production/session-registry.ts`) | Render runs one instance |
 | VR-27 | §42 idempotent Apply / unknown-outcome reconciliation | roadmap §42 | Partial — server blocks resend of an unknown outcome; client commands other than create send no key | — |
-| VR-28 | §42 runnable lint; WorldName typecheck error | roadmap §42 | Lint not verified; WorldName reported fixed (roadmap entry stale) | `400b5cbf` |
+| VR-28 | §42 runnable lint; WorldName typecheck error | roadmap §42 | Lint not run in either review; `WorldName` verified present (`phase477-fixtures.ts:3`, imported by `phase47-generalization.ts:8`) — the §42 line is stale | `400b5cbf` |
+| VR-30 | Fast create on the structured engine | roadmap §43, §48 | Defect: `dto.mode` ignored by the structured engine; the panel toggle is a silent no-op in production (see also D-05) | `structured-voice.service.ts:151`; `useVoiceTask.ts:541` |
 | VR-29 | §43 polish: short clarifications, before → after diff, plan uses §40 preferences, fast create under an explicit confirm policy | roadmap §43 | Outstanding | — |
-| VR-30 | Fast create on the structured engine | roadmap §43, §48 | Defect: `dto.mode` ignored by the structured engine | `structured-voice.service.ts:151` |
 | VR-31 | **[USER]** §49 remove the legacy engine (full switch) | roadmap §49 (`ab1768c0`) | Outstanding — after §39 | blockers: rollback switch, legacy e2e specs |
 | VR-32 | Port historical vNext suites (13 suites, 215 pass / 77 fail) | KI-10 | Outstanding | `jest.vnext-historical.config.js` |
 | VR-33 | **[USER]** §48 Companion panel rework (draft layout, Fast create toggle) | roadmap §48 (`ab1768c0`) | Outstanding | — |
@@ -129,7 +133,18 @@ Sources: transcripts `1e1b2f43`, `400b5cbf`, `2c8a4c6e`, `ab1768c0`, current ses
 | 4.7.7 … 4.7.11 (27–28 Oct; reports deleted) | single-turn 63/89 → 88/89; conversations 18/38 → 38/38; unsafe 1 → 0; independent holdout 29/30, 15/15 |
 | 4.7 generalization stress (28 Oct) | 65/100 scenarios (natural 36/50, complex 16/30, adversarial 13/20), 5 unsafe previews (g-b-11 rebind) |
 | F2 live run (29 Oct, `deepseek-flash`, 12 Ukrainian scenarios) | 5/12; multi-turn 0/5; 7 unnecessary clarifications, 4 intent errors; 0 unsafe, 0 writes; p50 1.0 s |
-| Offline structured gate | 178 → 232/232 (30 Oct) |
+| Offline structured gate | 178 → 232/232 (30 Oct, Windows run and CI); 84/84 in the suites loadable from a Linux shell (second session, see the verification note) |
+
+Offline results are never evidence of live model quality. Live runs after 29 Oct: none (`logs/voice-agent.log`).
+
+### C.4 Findings of the verification pass (new, 30 Oct 2026, second session)
+
+| ID | Finding | Level | Priority | Required change | Required tests |
+|----|---------|-------|----------|-----------------|----------------|
+| VN-02 | A spoken confirmation or refusal is model-interpreted only: the prompt asks for a `confirm_pending` / `cancel_pending` control (`interpreters/prompts.ts:28-30`); `interpreterFor` (`structured-voice.service.ts:279-286`) maps only UI `actionId`s and noise deterministically. A misread "так" costs a model call and can re-ask — a plausible contributor to the F2 "7 unnecessary clarifications" | Verified in code; effect Suspected | P1 | With a preview or question open, a bare yes / no in uk / en resolves as a control without a model call; anything longer still goes to the model. Needs D-10 (a closed list of control words is not a lexical crutch for interpretation; confirm with the owner against `.claude/rules/voice-no-lexical-crutches.md`) | unit on `interpreterFor`; fixtures "так" → `act`, "так, але о 18" → model |
+| VN-03 | The structured gate and `npm test` are not runnable from a shell whose OS differs from the one that installed `node_modules` (native `bcrypt`), and `--runInBand` needs about 1.5 GB of heap | Verified (this session) | P2 | Document in `setup-and-build.md`: run on Windows or in CI; `NODE_OPTIONS=--max-old-space-size=3000` | — |
+| VN-06 | Documentation disagrees on what is production: `spec-voice-agent.md` §3 / §11 describe the legacy planner split and legacy read tools (`get_now_next`, `match_task`, …) as the turn; `voice-prompt-next.md` calls `buildPlannerSystemPrompt` production; `BUGS-AND-IMPROVEMENTS.md` "Зараз" lists §37 / §38 while `roadmap.md` puts the Voice MVP first; `jest.vnext-structured.config.js` cites the deleted STAGE-4.1-REPORT | Verified | P2 | Mark §3 / §11 legacy-only or rewrite for the structured engine; mark `voice-prompt-next.md` frozen; align the BUGS file; fix the config comment | — |
+| — | `POST /voice/parse-task` has no UI caller (`frontend/src/api/voice.api.ts:280` `parseTask` is unused); only the legacy engine and the Playwright voice specs (`e2e/helpers/voice.ts:79`, `e2e/tests/p1.voice.spec.ts:305`) use it | Verified | — | Folded into VR-31 (removal) and listed as a VR-31 blocker | — |
 
 ---
 
@@ -154,39 +169,39 @@ Order: contract correctness → security and trusted resolution → multi-turn �
 - **Risk:** move-event `slotId` path for series (verify with `displayed-event-move.service.spec.ts`).
 
 ### V3 — Reminders, series groups, occurrences, DST (P1/P2)
-- **Scope:** VC-05 (reminder update merges stored fields), VC-07 (needs a product decision on group semantics first), VC-08 (parked / beyond-horizon occurrences), VC-11 (`civilDayStartIso` in voice day bounds), VC-16 (`find_tasks` filters).
+- **Scope:** VC-05 (reminder update merges stored fields), VC-07 split by D-03 into VB-02 (MVP stopgap: refuse a series-wide write when the series has parked or detached copies, and say why) and VB-03 (full group support, post-MVP), VC-08 (parked / beyond-horizon occurrences, post-MVP), VC-11 (`civilDayStartIso` in voice day bounds, post-MVP), VC-16 (`find_tasks` filters, post-MVP). MVP core of this phase: VC-05 + VB-02.
 - **Files:** `project-apply.ts` (`projectRemind`, `pickOccurrence`), `production/catalog.ts` (reminder fields, group key, per-day clocks), `structured-voice.service.ts:466, 498`, `voice-agent.tools.ts:131-164`, `voice-agent.plan-draft.ts:491`, `search/find-tasks.ts`.
 - **Depends on:** V2; VC-07 decision.
 - **Tests:** `remind_update` cases; group fixtures; DST-day reads (America/New_York, 14 Mar 2027); parked-day skip.
 - **Done when:** a reminder move keeps its repeat, notes and clock; group behavior matches the agreed decision; DST-day events are found.
 
 ### V4 — Security and trusted resolution (P1)
-- **Scope:** VC-12 decision (document reliance on preview + confirm, or add a description match); VR-04 per-action rights (rename / move / delete) instead of one `writable` flag; VR-27 Idempotency-Key or equivalent for non-create Apply commands; VR-25 revision preconditions on Apply (`If-Match` or a revision field checked by the task endpoints); VR-24 privacy — stop logging raw prompts / outputs / transcripts by default (count tokens instead); VR-26 decide: shared session store or a documented single-instance constraint.
+- **Scope:** VC-12 decision (document reliance on preview + confirm, or add a description match); VR-04 per-action rights (rename / move / delete) instead of one `writable` flag; VR-27 Idempotency-Key or equivalent for non-create Apply commands; VR-25 revision preconditions on Apply (`If-Match` or a revision field checked by the task endpoints); VR-24 token / cost / latency per call in `TurnLog` and `voice_turn_logs` (body gating already exists — keep it); VR-26 decide: shared session store or a documented single-instance constraint (D-04). Classification: VC-12 and VR-24 are MVP; VR-25, VR-26, VR-27 are rollout gates (G-6); VR-04 is post-MVP. This phase runs in parallel with V2–V5.
 - **Files:** `structured-state.ts`, `project-apply.ts`, `production/catalog.ts`, `production/session-registry.ts`, voice logging (`TurnLog`, `voice.trace`), tasks controller (revision check, if chosen).
 - **Depends on:** V1–V2.
-- **Tests:** adversarial wrong-target cases; stale-revision Apply refused; logs contain no transcript text.
+- **Tests:** adversarial wrong-target cases; stale-revision Apply refused; token counts present in the turn log; `voice-trace.spec.ts` body gating stays green.
 - **Done when:** G-6 items in [security-and-residual-risks.md](security-and-residual-risks.md) that belong to voice are closed or explicitly accepted.
 
 ### V5 — Multi-turn and draft continuity (P1)
-- **Scope:** VR-13 (more than one active clarification; corrections to pending previews), VR-38 (rename during preview keeps its target), VR-03 (re-run g-b-11 / g-b-10 offline as fixtures), VR-06 (deterministic routing to an open day-plan draft when the model returns no draft edit).
-- **Files:** `run-structured-turn.ts`, `state/structured-state.ts`, `day-plan/structured-day-plan.ts`.
+- **Scope:** VR-13 (more than one active clarification; corrections to pending previews), VR-38 (rename during preview keeps its target), VR-03 (re-run g-b-11 / g-b-10 offline as fixtures), VR-06 (deterministic routing to an open day-plan draft when the model returns no draft edit), VN-02 (deterministic bare yes / no while a preview or question is open; after D-10).
+- **Files:** `run-structured-turn.ts`, `state/structured-state.ts`, `day-plan/structured-day-plan.ts`, `production/structured-voice.service.ts` (`interpreterFor`).
 - **Tests:** scripted multi-turn fixtures for each F2 failure (B and C bands).
 - **Done when:** the F2 multi-turn scenarios pass with the fixture model.
 
 ### V6 — Deterministic tests and evaluation harness (P1)
-- **Scope:** frontend executor coverage for every intent kind; port or retire the 13 historical suites (VR-32, KI-10); an independent adversarial set (VR-12); fix the scorer blind spot for `type: "create"`; keep run outputs (summary JSON committed or archived) so results are reproducible (VR-11).
-- **Files:** `frontend/src/modules/voice/*.spec.ts`, `backend/jest.vnext-historical.config.js`, `vnext/eval/`.
+- **Scope:** frontend executor coverage for every intent kind (VB-01; written red during V2, completed here); port or retire the 13 historical suites (VR-32, KI-10); an independent adversarial set (VR-12); fix the scorer blind spot for `type: "create"`; keep run outputs (summary JSON committed or archived) so results are reproducible (VR-11); document how the gate runs (VN-03). Runs in parallel with V3–V5.
+- **Files:** `frontend/src/modules/voice/*.spec.ts`, `backend/jest.vnext-historical.config.js`, `vnext/eval/`, `documentation/setup-and-build.md`.
 - **Done when:** historical suites are either green on the 4.1 contract or deleted with a note; the adversarial set runs offline in the gate.
 
 ### V7 — Live LLM quality (§39)
-- **Scope:** VR-14 live P0 run with a real Google test calendar (also part of KI-03); reduce unnecessary clarifications (F2: 7); English live set (KI-19); VR-23 bounded context (targeted reads); token / cost / latency metrics (VR-24).
-- **Depends on:** V1–V6 (fixes first, then measure).
+- **Scope:** VR-14 live P0 run with a real Google test calendar (also part of KI-03), including VR-15–19 and VR-35; replay the 29 Oct dialogues and measure the cold agenda read (VR-08.6); reduce unnecessary clarifications (F2: 7); English live set (VR-09 / KI-19). VR-23 bounded context moves after this phase: measure tokens with VR-24 first, then shrink the prompt (post-MVP unless the measurement forces it).
+- **Depends on:** V1–V5 and VR-24 (fixes first, then measure); a Google test account (external). This is the MVP sign-off.
 - **Done when:** an agreed live bar (proposal: ≥ 10/12 F2 scenarios, 0 unsafe, multi-turn ≥ 4/5) on Ukrainian and a first English set; results stored with prompt hash and model.
 
 ### V8 — End-to-end product integration (§43, §48, §49)
-- **Scope:** VR-30 Fast create honored by the structured engine (or removed); VR-31 remove the legacy engine and the dead vNext code (`pipeline.ts` V1 body, `adapter/`, `utterance-policy.ts`, `corrections.ts`, reference stemmer), legacy e2e specs moved to the structured engine; VR-33 Companion panel rework; VR-29 polish.
-- **Depends on:** V7 live confirmation (§49 rule).
-- **Done when:** `VOICE_TURN_ENGINE` is gone; docs updated (spec-voice-agent, voice-prompt-next, voice-fix-flow, dialogue test plan, voice rule).
+- **Scope:** VR-30 Fast create honored by the structured engine, after D-05 (until then the toggle is hidden — an S task that can land in any earlier phase); VR-31 remove the legacy engine, `POST /voice/parse-task` (no UI caller) and the dead vNext code (VR-05: `pipeline.ts` V1 body, `adapter/`, `utterance-policy.ts`, `corrections.ts`, reference stemmer), legacy e2e specs (`e2e/helpers/voice.ts`, `p1.voice.spec.ts`) rewritten to script `/voice/turn`; VR-33 Companion panel rework; VR-29 polish; VN-06 documentation alignment (can start earlier, S); VR-28 lint.
+- **Depends on:** V7 live confirmation (§49 rule, D-01).
+- **Done when:** `VOICE_TURN_ENGINE` is gone; docs updated (spec-voice-agent §3 / §11, voice-prompt-next, voice-fix-flow, dialogue test plan, voice rule, BUGS file, jest config comment).
 
 ### V9 — Personalization (§40, later)
 - **Scope:** VR-21 confirmed "remember that…" preferences as soft constraints (never ids); day plan uses them; VR-22 learned profile only after its shape is agreed; VR-37 contacts.
@@ -234,9 +249,38 @@ Order: contract correctness → security and trusted resolution → multi-turn �
 
 ---
 
+## G. MVP definition, open decisions, critical path
+
+Full text in [voice-agent-backlog.md](voice-agent-backlog.md) §1, §4, §5. Summary:
+
+**MVP** = the Companion as a trustworthy task controller for one user's own calendar: quick capture (W1), routines (W2), move / postpone including Later and no-Google tasks (W3), natural edits with visible series scope (W4), reminders (W5), calendar state (W6), day plan (W7), multi-turn answer / correct / confirm (W8), confirm destructive actions and explain failures (W9), same pipeline for voice and text (W10). Not MVP: preference memory, contacts, panel rework, before → after diff, multi-slot moves, habits, more languages. Proposed live bar (D-08): F2 Ukrainian ≥ 10/12, multi-turn ≥ 4/5, 0 unsafe, 0 unconfirmed writes; a first English set ≥ 10/12.
+
+**Decisions that need approval before the phase that uses them** (options, tradeoffs and recommendation in the backlog §4):
+
+| ID | Decision | Needed by | Recommendation |
+|----|----------|-----------|----------------|
+| D-01 | Legacy engine: remove now or after the live bar | V8 | keep as rollback, freeze now (VC-15), remove in V8 |
+| D-02 | Trust in the model's `proposedId` (VC-12) | V4 | rely on owned-id check + preview + explicit confirm; document; adversarial set |
+| D-03 | Series group semantics for voice (VC-07) | V3 | whole-group semantics as target; refusal stopgap (VB-02) for the MVP |
+| D-04 | Session persistence | V4 | in-memory, single instance documented; shared store before a second instance |
+| D-05 | Fast create on the structured engine (VR-30) | any time | hide the toggle now; implement as a prompt policy in V8 |
+| D-06 | Several writes from one utterance | — | keep: one preview, one confirm, stop on first error |
+| D-07 | History passed to the model | V7 | keep last 6 turns + pending operations; measure before changing |
+| D-08 | Production model and live bar | V7 | one named model per run with the fallback chain recorded; bar above |
+| D-09 | Voice and typed chat share one pipeline | — | yes, keep |
+| D-10 | Deterministic bare yes / no as a control (VN-02) | V5 | yes; a closed list of control words is not a lexical crutch |
+| D-11 | Series / occurrence representation | V3 | series + civil day stays; occurrences from the rule and parked days after VC-07 |
+
+**Critical path:** V1 → V2 → V3 core (VC-05, VB-02) → V5 → V7 live (MVP sign-off) → V8. V4 and V6 run in parallel from V2 on. Must stay sequential: V1 before V2; VC-02 before VC-03; D-03 before VC-07; all fixes before the live run; V7 before VR-31.
+
+**Overall complexity:** MVP about L–XL as one program (roughly 9 M, 4 S, 3 L tasks plus one external dependency — a Google test account); the full plan with gates, suite porting and legacy removal is XL.
+
+---
+
 ## Missing historical context
 
 - `docs/voice-vnext/` (about 132 reports and raw runs, including PHASE-4.7.6 SECURITY / MATCHING / REMINDER-PERSISTENCE / RELIABILITY / REMAINING-GAPS, PHASE-4.7.11-REMAINING-GAPS, PHASE-4.7-CLOSURE-REPORT, STAGE-4.1-REPORT) was deleted on 29 Oct and never committed. Only file names and the roadmap text (transcript `ab1768c0`) survive; their findings could not be read. `jest.vnext-structured.config.js` still cites the deleted STAGE-4.1-REPORT.
 - ChatGPT conversations that produced the architecture are not accessible beyond what was pasted into transcripts.
 - No surviving source calls `alignEnvelope` unsafe; it is dead code either way.
-- Stale statements found: roadmap §39 "on branch voice-mvp-p0" (merged since); roadmap §42 WorldName error (reported fixed); `voice-prompt-next.md` names the legacy planner as production.
+- Stale statements found: roadmap §39 "on branch voice-mvp-p0" (merged since); roadmap §42 WorldName error (verified fixed, 30 Oct); `voice-prompt-next.md` names the legacy planner as production; `spec-voice-agent.md` §3 / §11 describe the legacy split (VN-06); `BUGS-AND-IMPROVEMENTS.md` "Зараз" disagrees with the roadmap priority (VN-06).
+- Deleted run outputs: no phase 4.7.x or F2 result file survives in the repository; `backend/.tmp/` holds only legacy-planner probes and dialogue reports from 17–27 Oct (not the structured engine). The F2 numbers rest on the transcript and KI-04.
