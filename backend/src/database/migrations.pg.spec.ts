@@ -112,7 +112,7 @@ describePg('versioned migrations (Postgres)', () => {
     const ds = await open(dbUrl);
     const ran = await ds.runMigrations();
     // Baseline is recorded, not re-run; the admin tables made by synchronize are kept (IF NOT EXISTS).
-    expect(ran).toHaveLength(6);
+    expect(ran).toHaveLength(ds.migrations.length);
     expect(await drift(ds)).toEqual([]);
     const copies = await ds.query(
       `SELECT name, "originalOccurrenceYmd" FROM "tasks" WHERE "isRecurring" IS FALSE ORDER BY name`,
@@ -155,7 +155,8 @@ describePg('versioned migrations (Postgres)', () => {
     const sources = await Promise.all([boot(), boot(), boot()]);
     try {
       const rows = await sources[0].query(`SELECT name FROM migrations ORDER BY id`);
-      expect(rows).toHaveLength(6);
+      // Each migration recorded exactly once, however many there are.
+      expect(rows.map((row: { name: string }) => row.name).sort()).toEqual(sources[0].migrations.map((m) => m.name).sort());
       expect(await drift(sources[0])).toEqual([]);
     } finally {
       for (const ds of sources) await ds.destroy();
