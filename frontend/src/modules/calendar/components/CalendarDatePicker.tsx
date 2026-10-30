@@ -1,34 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
-import { format } from 'date-fns';
-import { dateFnsLocale } from '../../../i18n/dateLocale';
-
-const WEEKDAY_KEYS = [
-    'calendar.weekdayMon',
-    'calendar.weekdayTue',
-    'calendar.weekdayWed',
-    'calendar.weekdayThu',
-    'calendar.weekdayFri',
-    'calendar.weekdaySat',
-    'calendar.weekdaySun',
-] as const;
-
-const MONTH_KEYS = [
-    'calendar.monthJanuary',
-    'calendar.monthFebruary',
-    'calendar.monthMarch',
-    'calendar.monthApril',
-    'calendar.monthMay',
-    'calendar.monthJune',
-    'calendar.monthJuly',
-    'calendar.monthAugust',
-    'calendar.monthSeptember',
-    'calendar.monthOctober',
-    'calendar.monthNovember',
-    'calendar.monthDecember',
-] as const;
+import { CalendarDays, ChevronDown } from 'lucide-react';
+import { cx } from '../../../ui/cx';
+import { CalendarMonth, startOfMonth } from '../../../ui/CalendarMonth';
+import { PickerShell } from '../../../ui/PickerShell';
+import { chipClass } from '../../../ui/DurationChips';
+import { addDaysYmd, formatYmd, parseYmd } from '../../../ui/dateRange';
 
 type Props = {
     value: Date;
@@ -39,111 +16,27 @@ type Props = {
     compact?: boolean;
 };
 
-function startOfMonth(date: Date): Date {
-    return new Date(date.getFullYear(), date.getMonth(), 1);
-}
-
-function isSameDay(a: Date, b: Date): boolean {
-    return (
-        a.getFullYear() === b.getFullYear() &&
-        a.getMonth() === b.getMonth() &&
-        a.getDate() === b.getDate()
-    );
-}
-
-function monthCells(cursor: Date): Date[] {
-    const first = startOfMonth(cursor);
-    const mondayOffset = (first.getDay() + 6) % 7;
-    const start = new Date(first);
-    start.setDate(first.getDate() - mondayOffset);
-    return Array.from({ length: 42 }, (_, i) => {
-        const day = new Date(start);
-        day.setDate(start.getDate() + i);
-        return day;
-    });
-}
-
+/** «Go to date» in the calendar toolbar: popover on desktop, sheet with «Сьогодні / Завтра» on a phone. */
 export function CalendarDatePicker({ value, label, caption, onChange, compact = false }: Props) {
     const { t } = useTranslation();
-    const dateLocale = dateFnsLocale();
     const [open, setOpen] = useState(false);
     const [cursor, setCursor] = useState(() => startOfMonth(value));
-    const [pos, setPos] = useState({ top: 0, left: 0 });
     const buttonRef = useRef<HTMLButtonElement>(null);
-    const panelRef = useRef<HTMLDivElement>(null);
-
-    const years = useMemo(() => {
-        const current = new Date().getFullYear();
-        const from = current - 20;
-        const to = current + 10;
-        return Array.from({ length: to - from + 1 }, (_, i) => from + i);
-    }, []);
-
-    const cells = useMemo(() => monthCells(cursor), [cursor]);
-    const today = useMemo(() => new Date(), [open]);
+    const selected = formatYmd(value);
+    const today = formatYmd(new Date());
 
     useEffect(() => {
-        if (open) {
-            setCursor(startOfMonth(value));
-        }
-    }, [open, value]);
-
-    useEffect(() => {
-        if (!open || !buttonRef.current) return;
-
-        const place = () => {
-            const rect = buttonRef.current?.getBoundingClientRect();
-            if (!rect) return;
-            const width = Math.min(300, window.innerWidth - 16);
-            const height = panelRef.current?.offsetHeight ?? 340;
-            let left = rect.right - width;
-            if (left < 8) left = 8;
-            if (left + width > window.innerWidth - 8) {
-                left = Math.max(8, window.innerWidth - width - 8);
-            }
-            let top = rect.bottom + 6;
-            if (top + height > window.innerHeight - 8) {
-                top = Math.max(8, rect.top - height - 6);
-            }
-            setPos({ top, left });
-        };
-
-        place();
-        window.addEventListener('resize', place);
-        return () => window.removeEventListener('resize', place);
+        if (open) setCursor(startOfMonth(value));
+        // Only when it opens.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
-    useEffect(() => {
-        if (!open) return;
-
-        const onDoc = (event: MouseEvent) => {
-            const target = event.target as Node;
-            if (buttonRef.current?.contains(target) || panelRef.current?.contains(target)) {
-                return;
-            }
-            setOpen(false);
-        };
-        const onKey = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') setOpen(false);
-        };
-
-        document.addEventListener('mousedown', onDoc);
-        document.addEventListener('keydown', onKey);
-        return () => {
-            document.removeEventListener('mousedown', onDoc);
-            document.removeEventListener('keydown', onKey);
-        };
-    }, [open]);
-
-    const pick = (day: Date) => {
-        const next = new Date(day);
-        next.setHours(value.getHours(), value.getMinutes(), 0, 0);
-        onChange(next);
+    const pick = (ymd: string) => {
+        const day = parseYmd(ymd);
+        if (!day) return;
+        day.setHours(value.getHours(), value.getMinutes(), 0, 0);
+        onChange(day);
         setOpen(false);
-    };
-
-    const shiftMonth = (delta: number) => {
-        setCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
     };
 
     return (
@@ -151,11 +44,11 @@ export function CalendarDatePicker({ value, label, caption, onChange, compact = 
             <button
                 ref={buttonRef}
                 type="button"
-                className={
+                className={cx(
                     compact
-                        ? 'inline-flex h-7 w-full min-h-0 min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-md border border-ide-border bg-ide-surface px-2 text-xs text-ide-text'
-                        : 'ui-btn-secondary min-w-0 max-w-[16rem] px-3 sm:max-w-xs'
-                }
+                        ? 'inline-flex h-9 w-full min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-control border border-ide-border bg-ide-surface px-2 text-body-sm text-ide-text'
+                        : 'ui-btn-secondary min-w-0 max-w-[16rem] px-3 sm:max-w-xs',
+                )}
                 aria-haspopup="dialog"
                 aria-expanded={open}
                 aria-label={t('calendar.goToDate', { label })}
@@ -165,103 +58,26 @@ export function CalendarDatePicker({ value, label, caption, onChange, compact = 
                 <span className="truncate">{caption ?? label}</span>
                 <ChevronDown className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
             </button>
-            {open && typeof document !== 'undefined'
-                ? createPortal(
-                      <div
-                          ref={panelRef}
-                          role="dialog"
-                          aria-label={t('calendar.chooseDate')}
-                          className="fixed z-[1400] w-[min(300px,calc(100vw-1rem))] rounded-xl border border-ide-border bg-ide-panel p-3 shadow-ide-md"
-                          style={{ top: pos.top, left: pos.left }}
-                      >
-                          <div className="mb-3 flex items-center gap-2">
-                              <button
-                                  type="button"
-                                  className="ui-btn-ghost min-h-[40px] min-w-[40px] px-0"
-                                  aria-label={t('calendar.previousMonth')}
-                                  onClick={() => shiftMonth(-1)}
-                              >
-                                  <ChevronLeft className="mx-auto h-4 w-4" aria-hidden />
-                              </button>
-                              <label className="sr-only" htmlFor="calendar-month">
-                                  {t('common.month')}
-                              </label>
-                              <select
-                                  id="calendar-month"
-                                  className="ui-select min-h-[40px] flex-1 py-1 text-sm"
-                                  value={cursor.getMonth()}
-                                  onChange={(event) =>
-                                      setCursor(new Date(cursor.getFullYear(), Number(event.target.value), 1))
-                                  }
-                              >
-                                  {MONTH_KEYS.map((key, index) => (
-                                      <option key={key} value={index}>
-                                          {t(key)}
-                                      </option>
-                                  ))}
-                              </select>
-                              <label className="sr-only" htmlFor="calendar-year">
-                                  {t('common.year')}
-                              </label>
-                              <select
-                                  id="calendar-year"
-                                  className="ui-select !w-[5.75rem] min-h-[40px] shrink-0 py-1 text-sm"
-                                  value={cursor.getFullYear()}
-                                  onChange={(event) =>
-                                      setCursor(new Date(Number(event.target.value), cursor.getMonth(), 1))
-                                  }
-                              >
-                                  {years.map((year) => (
-                                      <option key={year} value={year}>
-                                          {year}
-                                      </option>
-                                  ))}
-                              </select>
-                              <button
-                                  type="button"
-                                  className="ui-btn-ghost min-h-[40px] min-w-[40px] px-0"
-                                  aria-label={t('calendar.nextMonth')}
-                                  onClick={() => shiftMonth(1)}
-                              >
-                                  <ChevronRight className="mx-auto h-4 w-4" aria-hidden />
-                              </button>
-                          </div>
-                          <div className="mb-1 grid grid-cols-7 gap-0.5 text-center text-[11px] font-medium text-ide-muted">
-                              {WEEKDAY_KEYS.map((key) => (
-                                  <div key={key} className="py-1">
-                                      {t(key)}
-                                  </div>
-                              ))}
-                          </div>
-                          <div className="grid grid-cols-7 gap-0.5">
-                              {cells.map((day) => {
-                                  const outside = day.getMonth() !== cursor.getMonth();
-                                  const selected = isSameDay(day, value);
-                                  const isToday = isSameDay(day, today);
-                                  return (
-                                      <button
-                                          key={`${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`}
-                                          type="button"
-                                          className={`min-h-[36px] rounded-md text-sm transition ${
-                                              selected
-                                                  ? 'bg-ide-selection text-ide-text'
-                                                  : isToday
-                                                    ? 'text-ide-link hover:bg-ide-surface'
-                                                    : outside
-                                                      ? 'text-ide-muted/60 hover:bg-ide-surface'
-                                                      : 'text-ide-text hover:bg-ide-surface'
-                                          }`}
-                                          onClick={() => pick(day)}
-                                      >
-                                          {format(day, 'd', { locale: dateLocale })}
-                                      </button>
-                                  );
-                              })}
-                          </div>
-                      </div>,
-                      document.body
-                  )
-                : null}
+            <PickerShell open={open} onClose={() => setOpen(false)} anchorRef={buttonRef} title={t('calendar.chooseDate')} width={300}>
+                <div className="mb-3 flex flex-wrap gap-1.5">
+                    <button type="button" className={chipClass(selected === today)} onClick={() => pick(today)}>
+                        {t('common.today')}
+                    </button>
+                    <button
+                        type="button"
+                        className={chipClass(selected === addDaysYmd(today, 1))}
+                        onClick={() => pick(addDaysYmd(today, 1))}
+                    >
+                        {t('common.tomorrow')}
+                    </button>
+                </div>
+                <CalendarMonth
+                    cursor={cursor}
+                    onCursorChange={setCursor}
+                    markDay={(ymd) => ({ selected: ymd === selected })}
+                    onDayClick={pick}
+                />
+            </PickerShell>
         </>
     );
 }

@@ -1,16 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
 import { dateFnsLocale } from '../i18n/dateLocale';
-import { parseYmd } from './dateRange';
-import {
-  CalendarMonth,
-  DateFieldTrigger,
-  calendarPopoverClassName,
-  startOfMonth,
-  useCalendarPopover,
-} from './CalendarMonth';
+import { addDaysYmd, formatYmd, parseYmd } from './dateRange';
+import { CalendarMonth, DateFieldTrigger, startOfMonth } from './CalendarMonth';
+import { PickerShell } from './PickerShell';
+import { chipClass } from './DurationChips';
+import { useIsPhone } from './useViewport';
+import type { ResponsiveSize } from './controlSize';
 
 type Props = {
   id?: string;
@@ -23,58 +20,43 @@ type Props = {
   clearLabel?: string;
   /** Earliest selectable civil day, `YYYY-MM-DD`. */
   minYmd?: string;
+  size?: ResponsiveSize;
 };
 
-export function DatePicker({
-  id,
-  labelledBy,
-  value,
-  onChange,
-  error,
-  emptyLabel,
-  clearLabel,
-  minYmd,
-}: Props) {
+function nextMonday(ymd: string): string {
+  const date = parseYmd(ymd)!;
+  const shift = ((8 - date.getDay()) % 7) || 7;
+  return addDaysYmd(ymd, shift);
+}
+
+/** One civil day. Popover on desktop; sheet with «Сьогодні / Завтра / Пн» chips on a phone. */
+export function DatePicker({ id, labelledBy, value, onChange, error, emptyLabel, clearLabel, minYmd, size }: Props) {
   const { t } = useTranslation();
   const dateLocale = dateFnsLocale();
+  const phone = useIsPhone();
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(() => startOfMonth(parseYmd(value) ?? new Date()));
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const wasOpen = useRef(false);
-  const pos = useCalendarPopover(open, buttonRef, panelRef);
   const selected = parseYmd(value) ? value : '';
+  const today = formatYmd(new Date());
 
   useEffect(() => {
-    if (open && !wasOpen.current) {
-      setCursor(startOfMonth(parseYmd(value) ?? new Date()));
-    }
-    wasOpen.current = open;
-  }, [open, value]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (buttonRef.current?.contains(target) || panelRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('keydown', onKey);
-    };
+    if (open) setCursor(startOfMonth(parseYmd(value) ?? new Date()));
+    // Only when it opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const day = parseYmd(selected);
-  const text = day ? format(day, 'd MMM yyyy', { locale: dateLocale }) : emptyLabel;
+  const text = day ? format(day, 'EEE, d MMM yyyy', { locale: dateLocale }) : emptyLabel;
+  const choose = (ymd: string) => {
+    onChange(ymd);
+    setOpen(false);
+  };
+  const quick = [
+    { ymd: today, label: t('common.today') },
+    { ymd: addDaysYmd(today, 1), label: t('common.tomorrow') },
+    { ymd: nextMonday(today), label: format(parseYmd(nextMonday(today))!, 'EEEEEE, d MMM', { locale: dateLocale }) },
+  ].filter((q) => !minYmd || q.ymd >= minYmd);
 
   return (
     <>
@@ -87,34 +69,27 @@ export function DatePicker({
         hasValue={Boolean(day)}
         text={text}
         clearLabel={clearLabel}
+        size={size}
         onToggle={() => setOpen((prev) => !prev)}
         onClear={() => onChange('')}
       />
-      {open && typeof document !== 'undefined'
-        ? createPortal(
-            <div
-              ref={panelRef}
-              role="dialog"
-              aria-label={t('calendar.chooseDate')}
-              className={calendarPopoverClassName}
-              style={{ top: pos.top, left: pos.left }}
-            >
-              <CalendarMonth
-                cursor={cursor}
-                onCursorChange={setCursor}
-                markDay={(ymd) => ({
-                  selected: ymd === selected,
-                  disabled: !!minYmd && ymd < minYmd,
-                })}
-                onDayClick={(ymd) => {
-                  onChange(ymd);
-                  setOpen(false);
-                }}
-              />
-            </div>,
-            document.body,
-          )
-        : null}
+      <PickerShell open={open} onClose={() => setOpen(false)} anchorRef={buttonRef} title={t('calendar.chooseDate')}>
+        {phone ? (
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {quick.map((q) => (
+              <button key={q.ymd} type="button" className={chipClass(q.ymd === selected)} onClick={() => choose(q.ymd)}>
+                {q.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <CalendarMonth
+          cursor={cursor}
+          onCursorChange={setCursor}
+          markDay={(ymd) => ({ selected: ymd === selected, disabled: !!minYmd && ymd < minYmd })}
+          onDayClick={choose}
+        />
+      </PickerShell>
     </>
   );
 }

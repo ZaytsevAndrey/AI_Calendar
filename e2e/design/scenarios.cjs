@@ -50,6 +50,29 @@ const scenarios = [
     run: async (page) => openFirst(page, '[data-testid="create-task"], button:has-text("Створити"), button:has-text("Create")'),
   },
   {
+    name: 'picker-datetime',
+    route: '/',
+    run: async (page) => {
+      await openFirst(page, '[data-testid="create-task"], button:has-text("Створити"), button:has-text("Create")');
+      await openFirst(page, '#task-form-slot');
+    },
+  },
+  {
+    name: 'picker-time',
+    route: '/',
+    run: async (page) => {
+      await openFirst(page, '[data-testid="create-task"], button:has-text("Створити"), button:has-text("Create")');
+      await openFirst(page, '#task-form-slot');
+      await page.getByRole('tab').nth(1).click();
+      await page.waitForTimeout(300);
+    },
+  },
+  {
+    name: 'picker-goto-date',
+    route: '/',
+    run: async (page) => openFirst(page, 'button[aria-haspopup="dialog"][aria-label*="дат"], button[aria-haspopup="dialog"][aria-label*="date"]'),
+  },
+  {
     name: 'problematic',
     route: '/',
     run: async (page) => openFirst(page, '[data-testid="open-problematic"], button:has-text("Переглянути"), button:has-text("Review")'),

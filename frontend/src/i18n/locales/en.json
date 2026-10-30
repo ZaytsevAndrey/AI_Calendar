@@ -63,7 +63,22 @@
     },
     "loadingPage": "Loading…",
     "apiUnreachable": "Cannot reach the server. If the app has not been opened for a while, the server can take up to a minute to wake up.",
-    "undo": "Undo"
+    "undo": "Undo",
+    "dialog": "Dialog",
+    "time": "Time",
+    "durationMinutes": "Duration in minutes",
+    "minutesUnit": "min",
+    "otherDuration": "Other",
+    "otherDate": "Other date",
+    "tomorrow": "Tomorrow",
+    "anyDates": "Any time",
+    "thisWeek": "This week",
+    "nextWeek": "Next week",
+    "pickStartDay": "Or pick the first day",
+    "pickEndDay": "Now pick the last day",
+    "start": "Start",
+    "end": "End",
+    "chooseDayOrRange": "Pick a day or several days"
   },
   "settings": {
     "title": "Settings",
@@ -448,7 +463,9 @@
     },
     "attendeeCount_few": "{{count}} attendees",
     "attendeeCount_many": "{{count}} attendees",
-    "attendeeCount": "{{count}} attendees"
+    "attendeeCount": "{{count}} attendees",
+    "chooseDates": "Choose dates",
+    "chooseDateTime": "When"
   },
   "schedule": {
     "generate": "Review schedule",

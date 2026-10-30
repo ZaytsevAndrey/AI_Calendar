@@ -63,7 +63,22 @@
     },
     "loadingPage": "Завантаження…",
     "apiUnreachable": "Не вдається підключитися до сервера. Якщо застосунок довго не відкривали, сервер може прокидатися до хвилини.",
-    "undo": "Скасувати"
+    "undo": "Скасувати",
+    "dialog": "Діалог",
+    "time": "Час",
+    "durationMinutes": "Тривалість у хвилинах",
+    "minutesUnit": "хв",
+    "otherDuration": "Інша",
+    "otherDate": "Інша дата",
+    "tomorrow": "Завтра",
+    "anyDates": "Будь-коли",
+    "thisWeek": "Цей тиждень",
+    "nextWeek": "Наступний тиждень",
+    "pickStartDay": "Або оберіть перший день",
+    "pickEndDay": "Тепер оберіть останній день",
+    "start": "Початок",
+    "end": "Кінець",
+    "chooseDayOrRange": "Оберіть день або кілька днів"
   },
   "settings": {
     "title": "Налаштування",
@@ -448,7 +463,9 @@
       "color10": "Базилік",
       "color11": "Томат"
     },
-    "attendeeCount": "{{count}} учасників"
+    "attendeeCount": "{{count}} учасників",
+    "chooseDates": "Оберіть дати",
+    "chooseDateTime": "Коли"
   },
   "schedule": {
     "generate": "Переглянути розклад",
