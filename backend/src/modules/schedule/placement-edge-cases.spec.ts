@@ -237,6 +237,50 @@ describe('placement edge cases', () => {
     expect((await kit.taskRepo.find()).filter((t) => t.id !== series.id)).toEqual([]);
   });
 
+  it('AUD-014: "this and following" from a spring-forward Sunday keeps Sundays, and a retry adds no second tail', async () => {
+    kit = await createPlacementKit({
+      now: '2027-03-06T12:00:00.000Z',
+      timeZone: 'America/New_York',
+      wakeTime: '07:00',
+      sleepTime: '23:00',
+      horizonDays: 21,
+    });
+    const series = await create({
+      name: 'Sunday',
+      eventType: TaskEventType.ADMIN,
+      isRecurring: true,
+      recurrencePattern: 'WEEKLY',
+      scheduledStartTime: kit.at('2027-03-07', '10:00').toISOString(),
+      estimatedTimeInMinutes: 60,
+    });
+    const move = kit.moveService as unknown as { moveSeriesTail: (...args: unknown[]) => Promise<void> };
+    const drag = async () =>
+      move.moveSeriesTail(
+        kit.user.id,
+        await kit.reload(series.id),
+        {
+          googleEventId: 'evt-14',
+          originalStart: kit.at('2027-03-14', '10:00').toISOString(),
+          originalEnd: kit.at('2027-03-14', '11:00').toISOString(),
+          start: kit.at('2027-03-14', '15:00').toISOString(),
+          end: kit.at('2027-03-14', '16:00').toISOString(),
+        },
+        kit.at('2027-03-14', '15:00'),
+        kit.at('2027-03-14', '16:00'),
+        60,
+        [],
+      );
+    await drag();
+    await drag();
+
+    const tails = (await kit.taskRepo.find()).filter((t) => t.isRecurring && t.id !== series.id);
+    expect(tails).toHaveLength(1);
+    expect(kit.ymdOf(tails[0].earliestStartTime!)).toBe('2027-03-14');
+    const days = (await kit.slotsOf(tails[0].id)).map((row) => row.slice(0, 10));
+    expect(days.length).toBeGreaterThan(0);
+    for (const ymd of days) expect(new Date(`${ymd}T12:00:00Z`).getUTCDay()).toBe(0);
+  });
+
   it('a series clock edit while its create placement is still queued ends on the new clock only', async () => {
     kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
     // The create's in-request run is lost (crash); the job waits in the queue.

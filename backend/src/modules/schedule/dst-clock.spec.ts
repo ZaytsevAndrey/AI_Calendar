@@ -2,7 +2,8 @@
  * Wall clock → instant on DST switch days (scheduling uses localDateTimeIso
  * for every series day and window edge).
  */
-import { localDateTimeIso } from '../voice/voice-local-date.util';
+import { civilDayStartIso, localDateTimeIso, localYmd } from '../voice/voice-local-date.util';
+import { planningHorizonRange } from './planning-horizon.util';
 import { seriesDayClockHm } from './series-group.util';
 
 const instant = (ymd: string, hm: string, zone: string) => new Date(localDateTimeIso(ymd, hm, zone)).toISOString();
@@ -37,5 +38,24 @@ describe('seriesDayClockHm', () => {
     // A real 03:30 series is still 03:30, and another clock stays itself.
     expect(seriesDayClockHm(shifted, 'America/New_York', '03:30')).toBe('03:30');
     expect(seriesDayClockHm(Date.parse('2027-03-14T13:00:00.000Z'), 'America/New_York', '02:30')).toBe('09:00');
+  });
+});
+
+describe('AUD-014: civil day bounds on DST switch days (scheduling)', () => {
+  it('civilDayStartIso is local midnight with the offset in effect at midnight', () => {
+    // New York springs forward at 02:00 on 14 Mar 2027: midnight is still EST (-05:00).
+    expect(new Date(civilDayStartIso('2027-03-14', 'America/New_York')).toISOString()).toBe('2027-03-14T05:00:00.000Z');
+    // Kyiv falls back at 04:00 on 25 Oct 2026: midnight is still EEST (+03:00).
+    expect(new Date(civilDayStartIso('2026-10-25', 'Europe/Kyiv')).toISOString()).toBe('2026-10-24T21:00:00.000Z');
+    expect(new Date(civilDayStartIso('2026-11-05', 'UTC')).toISOString()).toBe('2026-11-05T00:00:00.000Z');
+  });
+
+  it('the planning horizon starts at local midnight on a spring-forward day, not at 23:00 the day before', () => {
+    const range = planningHorizonRange(
+      { timeZone: 'America/New_York', recurringScheduleHorizonDays: 3 } as never,
+      new Date('2027-03-14T12:00:00.000Z'),
+    );
+    expect(localYmd(range.start.toISOString(), 'America/New_York')).toBe('2027-03-14');
+    expect(range.start.toISOString()).toBe('2027-03-14T05:00:00.000Z');
   });
 });

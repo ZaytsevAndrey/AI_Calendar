@@ -1,4 +1,4 @@
-import { startOfLocalDayIso } from '../voice/voice-local-date.util';
+import { civilDayStartIso } from '../voice/voice-local-date.util';
 import type { MsInterval } from './free-slots.util';
 
 export type ExternalEventLike = {
@@ -64,10 +64,10 @@ export function providerEventToBusyInterval(
   }
   if (!opts.includeAllDay || !ev.start?.date || !ev.end?.date) return null;
   const start = new Date(
-    startOfLocalDayIso(ev.start.date, opts.timeZone),
+    civilDayStartIso(ev.start.date, opts.timeZone),
   ).getTime();
   const end = new Date(
-    startOfLocalDayIso(ev.end.date, opts.timeZone),
+    civilDayStartIso(ev.end.date, opts.timeZone),
   ).getTime();
   if (!(end > start)) return null;
   return { start, end, ...(label ? { label } : {}) };

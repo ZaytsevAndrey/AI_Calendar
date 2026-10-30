@@ -28,7 +28,7 @@ import {
   localHm,
   localYmd,
   normalizeClockHm,
-  startOfLocalDayIso,
+  civilDayStartIso,
 } from '../voice/voice-local-date.util';
 import {
   dayWakeSleepMs,
@@ -2978,8 +2978,10 @@ function windowsOnCivilDay(
 }
 
 function civilDayBounds(ymd: string, timeZone: string): MsInterval {
-  const start = new Date(startOfLocalDayIso(ymd, timeZone)).getTime();
-  return { start, end: start + 24 * 60 * 60 * 1000 };
+  // Local midnight to next local midnight: a switch day has 23 or 25 hours (AUD-014).
+  const start = new Date(civilDayStartIso(ymd, timeZone)).getTime();
+  const end = new Date(civilDayStartIso(addDaysToYmd(ymd, 1), timeZone)).getTime();
+  return { start, end };
 }
 
 function overlapsMs(a: MsInterval, b: MsInterval): boolean {

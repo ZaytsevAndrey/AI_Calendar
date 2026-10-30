@@ -2,7 +2,7 @@ import { resolveIanaTimeZone } from '../../common/iana-time-zone';
 import {
   addDaysToYmd,
   localYmd,
-  startOfLocalDayIso,
+  civilDayStartIso,
 } from '../voice/voice-local-date.util';
 
 const DEFAULT_HORIZON_DAYS = 30;
@@ -34,8 +34,8 @@ export function planningHorizonRange(
   const startYmd = localYmd(now.toISOString(), timeZone);
   const endYmd = addDaysToYmd(startYmd, horizonDays);
   return {
-    start: new Date(startOfLocalDayIso(startYmd, timeZone)),
-    end: new Date(startOfLocalDayIso(endYmd, timeZone)),
+    start: new Date(civilDayStartIso(startYmd, timeZone)),
+    end: new Date(civilDayStartIso(endYmd, timeZone)),
     horizonDays,
   };
 }

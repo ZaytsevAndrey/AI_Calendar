@@ -44,7 +44,7 @@ import { PendingGoogleWriteService } from '../google-calendar/pending-google-wri
 import {
   localDateTimeIso,
   localYmd,
-  startOfLocalDayIso,
+  civilDayStartIso,
 } from '../voice/voice-local-date.util';
 import {
   addSkippedOccurrenceYmd,
@@ -1363,7 +1363,7 @@ export class TasksService implements OnModuleInit {
     const settings = await this.userSettingsRepository.findOne({ where: { userId } });
     const timeZone = resolveIanaTimeZone(settings?.timeZone || task.scheduleTimeZone);
     const splitYmd = localYmd(occurrenceStart.toISOString(), timeZone);
-    const splitStart = new Date(startOfLocalDayIso(splitYmd, timeZone));
+    const splitStart = new Date(civilDayStartIso(splitYmd, timeZone));
     if (!task.deadline || new Date(task.deadline).getTime() > splitStart.getTime()) {
       task.deadline = splitStart;
     }

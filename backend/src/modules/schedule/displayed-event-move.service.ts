@@ -22,7 +22,7 @@ import {
   localHm,
   localYmd,
   normalizeClockHm,
-  startOfLocalDayIso,
+  civilDayStartIso,
 } from '../voice/voice-local-date.util';
 import { MoveDisplayedEventDto } from './dto/move-displayed-event.dto';
 import { phaseIdAtFocus, phaseWindowsForDay } from './free-slots.util';
@@ -529,7 +529,7 @@ export class DisplayedEventMoveService implements OnModuleInit {
     const settings = await this.userSettingsService.getSettings(userId);
     const timeZone = resolveIanaTimeZone(settings.timeZone || series.scheduleTimeZone);
     const splitYmd = localYmd(new Date(dto.originalStart).toISOString(), timeZone);
-    const splitStart = new Date(startOfLocalDayIso(splitYmd, timeZone));
+    const splitStart = new Date(civilDayStartIso(splitYmd, timeZone));
     const nextPhases = phaseIds.length
       ? (await this.phasesService.findAllForScheduling(userId)).filter((p) =>
           phaseIds.includes(p.id),

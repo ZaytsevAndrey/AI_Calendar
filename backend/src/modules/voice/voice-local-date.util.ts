@@ -138,6 +138,15 @@ export function offsetForTimeZone(timeZone: string, ymd: string): string {
   return `${match[1]}${match[2].padStart(2, '0')}:${match[3] ?? '00'}`;
 }
 
+/**
+ * Local midnight of a civil day with the offset in effect at midnight (a
+ * skipped midnight moves forward). For scheduling day bounds; the older
+ * startOfLocalDayIso (noon offset) is kept unchanged for its voice callers.
+ */
+export function civilDayStartIso(ymd: string, timeZone: string): string {
+  return localDateTimeIso(ymd, '00:00', timeZone);
+}
+
 export function startOfLocalDayIso(ymd: string, timeZone: string): string {
   return `${ymd}T00:00:00${offsetForTimeZone(timeZone, ymd)}`;
 }
