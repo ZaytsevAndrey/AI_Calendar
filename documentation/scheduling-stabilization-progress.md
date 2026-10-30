@@ -49,6 +49,10 @@ Runtime assumptions found: production runs one Render instance, Neon Postgres, `
 | 12 | Phase 2: Google sync edge cases; durable post-placement sync | done | c7206f7 |
 | 13 | Phase 2: deployment rehearsal on a master-shaped database; docs; .env.example | done (Neon blocked) | 14a7ce0 |
 | 14 | Phase 2: resolved-layer atomicity; docs and cleanup | done | 198c150 |
+| 15 | Phase 3: transactional Google outbox; reconnect recovery; no stale overwrite | done | 3c1900b |
+| 16 | Phase 3: create idempotency outlives the task | done | f7a4f09 |
+| 17 | Phase 3: reliability sweep | done | 0706bfa |
+| 18 | Phase 3: known-issues register and documentation | done | (stage 18 commit) |
 
 ## Stage A — durable placement (done)
 
@@ -253,25 +257,61 @@ Not verified against the real Google API (no test account in this environment): 
 - Docs updated: `placement-engine.md` (§7.1 DST, §10 integrity, §11 tests, §12 open), `operations.md` (Google queue lifecycle, durable post-placement sync, API limits, no webhooks), `deploy.md` (four migrations, rehearsal, Neon steps, rollback), `api-reference.md` (Idempotency-Key, job retry fields), `task-scheduling-test-matrix.md` (SD-27…SD-39, known gaps), `.env.example` (`TYPEORM_SYNC`).
 - Roadmap: no open roadmap item matches the scheduling work done here (the "idempotent Apply / unknown outcome" items are under §42 Voice MVP hardening, out of scope for this phase), so `documentation/roadmap.md` — which also holds another chat's uncommitted restructure — was not changed.
 
+## Phase 3 (2026-10-30): final stabilization before the independent review
+
+Voice is out of scope; no voice code, prompt or test expectation changed.
+
+### Stage 15 — transactional Google outbox, reconnect recovery (done, 3c1900b)
+
+**Closed: post-placement Google intent written after the commit.** `GoogleSyncOutboxSubscriber` (`google-calendar/google-sync-outbox.subscriber.ts`, loaded by glob in the TypeORM options) notes every Task / ScheduledTask insert, update and remove on the transaction that makes it; in `beforeTransactionCommit` of the outermost transaction it writes the `pending_google_writes` rows (`recordGoogleWrite`, `google-sync-outbox.ts`): one `upsert` per changed task (displaced neighbours included), one `delete` per event of a removed task. Rollback drops changes and rows together; after the commit the rows are kicked (claim → send) through the existing queue (no second queue). Bookkeeping columns (Google links, insert id) never create rows (no loop). Criteria writes the subscriber cannot see call `noteGoogleSync` (`deleteOpenSlots`, two column updates in `TasksService`). Writes outside a transaction are recorded at once. Rows only for users with a stored Google grant.
+
+`syncTask` / `syncTaskSoon` now go through the same row (record → claim → send); the old direct path (`syncTaskUnlocked` + enqueue on failure) is gone, so the queue's send is the only Google writer for tasks. A row changed during its send is sent again at once (up to 5 rounds).
+
+**Closed: manual SQL after reconnect.** `GoogleCalendarService.onReconnected` (called after tokens are stored on connect and on Google sign-in) → `PendingGoogleWriteService.reviveForUser`: the user's `pending` rows become due now, `failed` rows get fresh attempts, then they are sent. While a user is not connected (or the grant is revoked) rows wait without spending attempts or calling Google (connection check cached 30 s up / 10 min down). Upserts always send the current task state; deletes are skipped when a task or slot uses the event again.
+
+**Found and fixed:**
+- **Lost update after a Google call:** `attachCreatedGoogleEvent` (and `handleMissingGoogleEvent`, `deleteTaskGoogle`, `pullGoogleOntoTask`, slot stamping) saved the whole task/slot object read *before* the Google call, overwriting any change made meanwhile (a rename during an insert came back as the old name). Now column-only updates (link columns; pulled columns). Found by the convergence test.
+- **Task delete swallowed Google failures:** `TasksService.remove` deleted the Google event first and only logged a failure (orphan events forever). Now the removal and its `delete` rows commit together; Google is called after; failures retry. The unused helper was removed (`0706bfa`).
+- **Failed deletes of one task collapsed:** delete rows were deduplicated by task, so several failing events of one task kept only the last one. Now one row per event.
+
+Tests: `google-calendar/google-sync-outbox.spec.ts` (16, real subscriber + queue on SQLite: displacement queues both tasks, rollback leaves nothing, crash right after commit recovered from the queue alone, no loop on link writes, no rows without Google, delete queued with the removal and retried, delete of an event in use skipped, skip and detach queue the series and the copy, two changes one row, change during send converges, kick after commit, revoked access waits without attempts, reconnect sends waiting and revives failed with current state, deletion intent kept, bounded failure after reconnect, two instances reviving send once); `placement.pg.spec.ts` (outbox commits and rolls back with real Postgres transactions). Unit specs adapted to the row-based path with an in-memory repository; their assertions on Google calls kept.
+
+### Stage 16 — create idempotency outlives the task (done, f7a4f09)
+
+**Closed: Idempotency-Key reusable after delete.** New table `request_idempotency` (user, operation, key, SHA-256 of the canonical body, created resource id), unique `(userId, operation, key)`, written in the create transaction. Replay: same body → first task + job; different body → 422; task deleted → 410 (never re-created). 30-day retention, purged lazily per user; account deletion removes the rows. `tasks.createRequestKey` removed: the stage-9 migration `TaskCreateRequestKey` was replaced by `1761780000000-CreateRequestIdempotency` (never deployed anywhere; decision recorded in the migration). SPA: one key per opened form **and content** (`keyForSubmission`): an identical resubmit reuses it, edited content gets a new key.
+
+Tests: `task-create-idempotency.spec.ts` (10: replay, separate keys, concurrent, race past the lock, deleted → 410 twice and no task, different body → 422, canonical hash, retention, per user, resolved layer atomicity), e2e A-TSK-031 (201/201/201, 400, 422, delete, 410), frontend `keyForSubmission`, `migrations.pg.spec.ts`.
+
+### Stage 17 — reliability sweep (done, 0706bfa)
+
+Checked: remaining direct Google calls in scheduling (skip fast path — covered by the series outbox row; move patch — inside a durable job with queue fallback; external-event moves — synchronous, user sees the error), cross-user isolation (queue rows and loads scoped by user; OAuth per call since stage 7), lock ordering (one advisory lock per user, never nested; queue sends take no user lock and write link columns only), stale jobs (`placed` flag; upserts read current state), queue starvation (fairness), reconciliation after interruption (leases, outbox). Removed the unused `deleteSyncedGoogleEventsForTask` (no consumers after stage 15). Remaining items are in [known-issues.md](known-issues.md).
+
+### Stage 18 — documentation (done)
+
+`known-issues.md` (new permanent register: 19 open issues classified, closed issues with evidence), `operations.md` (outbox lifecycle, reconnect recovery, idempotency), `placement-engine.md` §10–12 (transaction boundaries, outbox, idempotency), `deploy.md` (migration 4), `api-reference.md` (422 / 410), this file.
+
+Migrations re-verified on local Postgres 16 with the final set: fresh database → four migrations → no drift (`migrations.pg.spec`); a database built by `TYPEORM_SYNC` from `master`'s entities with sample rows → production build booted twice → baseline recorded, three migrations ran, no drift, rows kept, second boot ran nothing. Temporary files and database removed.
+
 ## Final status (2026-10-30)
 
-Verified at the last code commit of phase 2 (see the stage table for hashes): backend unit 1076 pass + 15 skipped (the `.pg` specs, run by `npm run test:pg`), 0 fail; Postgres 16 `.pg` specs 15/15; e2e 138/138; structured voice 232/232 (unchanged); historical voice suites unchanged (215 pass / 77 fail, off the gate since F1); frontend 308/308; backend and frontend builds ok; `dist/main.js` and four compiled migrations present. Nothing pushed or merged.
+Verified at the phase 3 code commits (hashes in the stage table):
 
-Not production-proven: no deploy of this branch was made. Migrations were verified on local Postgres 16 (fresh, upgrade from a `master`-shaped schema with data, rerun, interrupted), not on Neon (no access). The CI workflow change was not run on GitHub. Google behavior is tested against a fake, not the real API.
+| Check | Before phase 3 (198c150) | After phase 3 |
+|-------|--------------------------|---------------|
+| Backend unit (`npm test`) | 1076 pass, 15 skipped, 0 fail | **1094 pass**, 16 skipped (`.pg` specs), 0 fail |
+| Postgres 16 (`npm run test:pg`) | 15/15 | **16/16** |
+| API e2e | 138/138 | **138/138** |
+| Frontend | 308/308 | **309/309** |
+| Structured voice gate | 232/232 | **232/232** (unchanged) |
+| Historical voice suites (off the gate) | 215 pass / 77 fail | 215 / 77 (unchanged) |
+| Backend / frontend typecheck and build | ok | ok; `dist/main.js` + 4 migrations |
+
+Not verified (see known-issues KI-01…KI-03): Neon (no access), the CI workflow on GitHub (no push), the real Google API (fakes only). Nothing pushed or merged.
 
 ## Continuation (exact steps before merging)
 
-1. Push the branch (owner's decision) and confirm the CI job passes, including the new **Backend Postgres tests** step.
-2. Neon rehearsal (`deploy.md` → Database migrations → "Not verified: Neon", steps 1–5) on a branch of the production database; production untouched.
-3. In the Render dashboard, check `TYPEORM_SYNC` is `false` or unset (a dashboard value overrides `render.yaml`).
-4. Back up production (Neon branch), merge, deploy; check `SELECT name FROM migrations` lists four rows and the log has no `Mutation job … failed after` / `Pending Google … failed after` lines in the first hour.
-5. After the other chat commits `backend/.env.example` and `documentation/roadmap.md`, nothing here needs redoing (only one line of `.env.example` was committed from this branch).
-
-Open, documented:
-
-- Post-placement Google sync intent is written right after the commit, not inside it (one-INSERT window).
-- No Google push notifications; Google edits are read on display and when the queue sees a newer remote event.
-- `pending_google_writes` `failed` rows need a manual revive after the user reconnects Google (SQL in `operations.md`).
-- An Idempotency-Key is freed when its task is deleted; reusing a key with a different body returns the original task.
-- Local SQLite shares one connection: any background write while a request transaction is open can interleave (development only).
-- Voice (separate phase): port the 13 historical suites and the legacy e2e cases to the 4.1 contract; §39 live check; English live set; §49; voice confirm idempotency.
+1. Push the branch (owner's decision) and confirm CI passes, including **Backend Postgres tests** (KI-02).
+2. Neon branch rehearsal, `deploy.md` → Database migrations, steps 1–5 (KI-01).
+3. Manual Google check with a test account (KI-03): lost insert answer, delete + re-create, revoke + reconnect, DST series.
+4. In Render, `TYPEORM_SYNC` false or unset; back up production; merge; deploy; check four rows in `migrations` and no `failed after` log lines in the first hour.
+5. Open issues and their severity: [known-issues.md](known-issues.md).

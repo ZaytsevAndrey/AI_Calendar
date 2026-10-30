@@ -102,9 +102,9 @@ Render: `buildCommand` runs `npm run build:backend` (`nest build` → `backend/d
 | `1761750000000-Baseline` | Full schema, generated from the entities on an empty Postgres (`src/scripts/generate-baseline-migration.ts`). On a database that already has `tasks` (made by the old `TYPEORM_SYNC`) it is recorded without running. |
 | `1761760000000-SchedulingQueueAndOccurrenceIdentity` | Idempotent `ADD COLUMN IF NOT EXISTS`: `tasks.originalOccurrenceYmd`, `schedule_jobs.attempts / nextRunAt / leaseUntil` + index. Backfills the day of parked series copies from `problematicDay` (seated copies stay null: ambiguous). Fails jobs left `running` without a lease by the old in-process runner. |
 | `1761770000000-GoogleWriteQueueLifecycle` | Idempotent: `pending_google_writes.status / nextRunAt / leaseUntil / revision` + index (existing rows become `pending`, due now); `tasks.googleInsertEventId`. |
-| `1761780000000-TaskCreateRequestKey` | Idempotent: `tasks.createRequestKey` + unique index `(userId, createRequestKey)` (existing tasks null; NULLs never collide). |
+| `1761780000000-CreateRequestIdempotency` | Idempotent: table `request_idempotency` (user, operation, key, body hash, created resource) + unique index `(userId, operation, key)`. Replaces the unreleased `TaskCreateRequestKey` of the same branch (never deployed). |
 
-All four only add columns and indexes, backfill one column and fail stale queue rows; no column is dropped or retyped, no user data is deleted.
+All four only add columns, a table and indexes, backfill one column and fail stale queue rows; no column is dropped or retyped, no user data is deleted.
 
 **Verified (local Postgres 16, not Neon):** fresh database → four migrations → no drift against the entities; a database built by `TYPEORM_SYNC` from `master`'s entities with sample rows → the built app (`node dist/main.js`) booted, recorded the baseline, ran the other three, no drift, every row kept, the parked copy backfilled, the stale job failed, the queued Google write due; a second boot ran nothing; an interrupted upgrade reruns cleanly (`migrations.pg.spec`).
 
