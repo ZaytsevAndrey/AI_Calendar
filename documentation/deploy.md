@@ -15,6 +15,8 @@ Local development is unchanged: SQLite (`backend/db.sqlite`) and `npm start`.
 | CD | Render Blueprint (`render.yaml`) | Deploy on each commit to `master` |
 | Custom domain | Later | Attach CNAME on Render when you want a subdomain |
 
+**Voice sessions are in-process** (`StructuredVoiceSessions`, a `Map` per API instance, 6 h TTL). A restart drops every open preview and question; the client sees a stale claim and must preview again (fails closed, no write). This is accepted for the local MVP (decision D-04, 30 Oct 2026) and is **not production-ready**: before a second API instance, add a shared session store or pin a user to one instance. Tracked as VR-26 / G-6 in [voice-agent-backlog.md](voice-agent-backlog.md).
+
 Schedule **jobs** stay in-process (`setInterval` every 2s). They run only while the API instance is awake (user-triggered generate is fine). Render Cron Jobs are paid — not used.
 
 ## One-time setup
