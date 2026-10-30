@@ -28,6 +28,24 @@ export enum TaskStatus {
   CANCELED = 'canceled',
 }
 
+/**
+ * Keep `completedAt` in step with `status`: stamped when the task becomes
+ * completed, cleared when it stops being completed, untouched otherwise.
+ */
+export function stampCompletion(
+  task: { status: TaskStatus; completedAt: Date | null },
+  previousStatus: TaskStatus | null | undefined,
+  now: Date = new Date(),
+): void {
+  if (task.status === TaskStatus.COMPLETED) {
+    if (previousStatus !== TaskStatus.COMPLETED || !task.completedAt) {
+      task.completedAt = now;
+    }
+    return;
+  }
+  task.completedAt = null;
+}
+
 /** Where the task sits relative to placement. Distinct from `TaskStatus`. */
 export enum ScheduleState {
   NONE = 'none',
@@ -41,7 +59,11 @@ export function isProblematicSchedule(task: {
   return task.scheduleState === ScheduleState.PROBLEMATIC;
 }
 
-/** Columns cleared when a task leaves the problematic/resolved park (`scheduleState = none`). */
+/**
+ * Columns cleared when a task leaves the problematic/resolved park
+ * (`scheduleState = none`). Lineage (`parentSeriesId`, `seriesGroupId`,
+ * `originalOccurrenceYmd`) is not park metadata and stays (was KI-26).
+ */
 export function clearedParkColumns(): {
   scheduleState: ScheduleState.NONE;
   problematicOccurrenceYmds: null;
@@ -49,7 +71,6 @@ export function clearedParkColumns(): {
   problematicDay: null;
   problematicOriginalStart: null;
   problematicOriginalEnd: null;
-  parentSeriesId: null;
 } {
   return {
     scheduleState: ScheduleState.NONE,
@@ -58,7 +79,6 @@ export function clearedParkColumns(): {
     problematicDay: null,
     problematicOriginalStart: null,
     problematicOriginalEnd: null,
-    parentSeriesId: null,
   };
 }
 
@@ -69,7 +89,6 @@ export function clearParkMetadata(task: {
   problematicDay: string | null;
   problematicOriginalStart: Date | null;
   problematicOriginalEnd: Date | null;
-  parentSeriesId: string | null;
 }): void {
   Object.assign(task, clearedParkColumns());
 }
@@ -189,6 +208,14 @@ export class Task {
     default: TaskStatus.TODO,
   })
   status: TaskStatus;
+
+  /**
+   * When `status` became `completed`; null while not completed (and for rows
+   * completed before this column existed). A detached series day carries its
+   * own value, so one day's completion is never inferred from the series.
+   */
+  @Column({ type: timestampColumnType(), nullable: true })
+  completedAt: Date | null;
 
   @Column({ type: timestampColumnType(), nullable: true })
   scheduledStartTime: Date | null;

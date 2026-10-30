@@ -1,5 +1,6 @@
 import {
   breaksSeriesMembership,
+  contentDiffersFromSeries,
   groupYmdsByClockHm,
   pickMajorityClockSlot,
   pickPrimaryClockHm,
@@ -20,17 +21,19 @@ describe('series-group.util', () => {
       ).toBe(false);
     });
 
-    it('breaks on name or other meta', () => {
-      expect(breaksSeriesMembership({ name: 'Renamed' })).toBe(true);
+    it('content edits (name, notes) keep membership; structure edits break it', () => {
+      expect(breaksSeriesMembership({ name: 'Renamed' })).toBe(false);
       expect(
         breaksSeriesMembership({
           scheduledStartTime: '2026-04-20T10:00:00.000Z',
           description: 'x',
         }),
-      ).toBe(true);
+      ).toBe(false);
       expect(breaksSeriesMembership({ deadline: '2026-05-01T00:00:00.000Z' })).toBe(
         true,
       );
+      expect(breaksSeriesMembership({ isRecurring: true })).toBe(true);
+      expect(breaksSeriesMembership({ eventType: 'fixed' })).toBe(true);
     });
   });
 
@@ -92,5 +95,66 @@ describe('series-group.util', () => {
       );
       expect(pick).toBe(majorityA);
     });
+  });
+});
+
+describe('breaksSeriesMembership against the stored task', () => {
+  const current = {
+    name: 'Standup',
+    description: null,
+    priority: 'medium',
+    eventType: 'admin',
+    isRecurring: false,
+    recurrencePattern: null,
+    recurrenceWeekDays: null,
+    deadline: new Date('2026-05-01T00:00:00.000Z'),
+    earliestStartTime: null,
+    googleReminders: { useDefault: true },
+    location: null,
+  };
+
+  it('a field sent back with its current value is not a change', () => {
+    expect(
+      breaksSeriesMembership(
+        {
+          name: 'Standup',
+          description: '',
+          priority: 'medium',
+          eventType: 'admin',
+          isRecurring: false,
+          recurrencePattern: undefined,
+          recurrenceWeekDays: [],
+          deadline: '2026-05-01T00:00:00.000Z',
+          earliestStartTime: null,
+          googleReminders: { useDefault: true },
+          location: '',
+          scheduledStartTime: '2026-04-20T10:00:00.000Z',
+        },
+        current,
+      ),
+    ).toBe(false);
+  });
+
+  it('a real structural change still breaks membership', () => {
+    expect(breaksSeriesMembership({ deadline: '2026-05-02T00:00:00.000Z' }, current)).toBe(true);
+    expect(breaksSeriesMembership({ deadline: null }, current)).toBe(true);
+    expect(breaksSeriesMembership({ recurrenceWeekDays: [1] }, current)).toBe(true);
+    expect(breaksSeriesMembership({ eventType: 'fixed' }, current)).toBe(true);
+  });
+
+  it('content differences keep a copy from re-merging into its series', () => {
+    const series = { ...current, status: 'todo', phaseId: null };
+    expect(contentDiffersFromSeries({ ...series }, series)).toBe(false);
+    expect(contentDiffersFromSeries({ ...series, name: 'Standup 2' }, series)).toBe(true);
+    expect(contentDiffersFromSeries({ ...series, description: 'notes' }, series)).toBe(true);
+    expect(contentDiffersFromSeries({ ...series, status: 'completed' }, series)).toBe(true);
+    expect(contentDiffersFromSeries({ ...series, phaseId: 'p1' }, series)).toBe(true);
+    expect(contentDiffersFromSeries({ ...series, description: '' }, series)).toBe(false);
+  });
+
+  it('weekday order does not matter', () => {
+    expect(
+      breaksSeriesMembership({ recurrenceWeekDays: [3, 1] }, { ...current, recurrenceWeekDays: [1, 3] }),
+    ).toBe(false);
   });
 });

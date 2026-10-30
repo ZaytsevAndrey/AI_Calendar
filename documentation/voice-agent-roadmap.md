@@ -234,6 +234,16 @@ Order: contract correctness → security and trusted resolution → multi-turn �
 
 ---
 
+## G. Integration requirements from the scheduling UI alignment (30 Oct 2026, not implemented in voice)
+
+New domain capabilities the voice agent does not use yet (voice code was not changed in that work):
+
+- **`PATCH /tasks/:id/occurrence`** — one day of a series (`scope: occurrence`): `name`, `description`, `phaseIds`, `start` (same civil day), `durationMinutes`, `status` (`todo` | `completed`); or this day and the following (`scope: following`, no `status`). Voice "done with today's gym" should call it with `status: completed` and the occurrence start instead of `PATCH /tasks/:id/status` (which completes the whole series). Voice "rename today's standup" / "move today's standup to 15:00" fit `scope: occurrence`; "from today, standup at 9" fits `scope: following`.
+- **Series → single:** `PATCH /tasks/:id` with `isRecurring: false` keeps the nearest upcoming occurrence and answers 400 when there is none; the voice summary should say which day stays.
+- **Repeat rule changes** (`recurrencePattern`, `recurrenceWeekDays`) now rewrite the open horizon on PATCH; a voice "only Mon and Wed from now on" works through plain PATCH.
+- **`completedAt`** on tasks and **`originalOccurrenceYmd`** on day copies are available for summaries ("done at 12:10", "changed occurrence of …").
+- `changePreviewCards.ts` already separates behaviour (`taskType`) from `repeats`; a per-day completion card (`kind: done` with a day) is still to be designed.
+
 ## Missing historical context
 
 - `docs/voice-vnext/` (about 132 reports and raw runs, including PHASE-4.7.6 SECURITY / MATCHING / REMINDER-PERSISTENCE / RELIABILITY / REMAINING-GAPS, PHASE-4.7.11-REMAINING-GAPS, PHASE-4.7-CLOSURE-REPORT, STAGE-4.1-REPORT) was deleted on 29 Oct and never committed. Only file names and the roadmap text (transcript `ab1768c0`) survive; their findings could not be read. `jest.vnext-structured.config.js` still cites the deleted STAGE-4.1-REPORT.

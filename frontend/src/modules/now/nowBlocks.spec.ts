@@ -199,7 +199,8 @@ describe('pickNowAndNext', () => {
     );
     const { now, next } = pickNowAndNext(blocks, nowMs, todayEndMs);
     expect(now?.task?.id).toBe('r1');
-    expect(canCompleteNowBlock(now!)).toBe(false);
+    // A series day can be completed on its own (per-occurrence completion).
+    expect(canCompleteNowBlock(now!)).toBe(true);
     expect(canSkipNowBlock(now!)).toBe(true);
     expect(next?.title).toBe('Doctor');
     expect(canCompleteNowBlock(next!)).toBe(false);

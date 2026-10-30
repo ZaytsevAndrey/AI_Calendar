@@ -42,9 +42,11 @@ import {
     resolveTaskForCalendarEvent,
 } from 'modules/calendar/completedTaskEvents';
 import { isCalendarVisible } from 'modules/calendar/calendarVisibility';
+import { planEventPreviewEditTarget } from 'modules/calendar/planEventPreviewActions';
 import {
     eventTasksApi,
     useDeleteEventMutation as useDeleteTaskMutation,
+    useEditOccurrenceMutation,
     useEndSeriesFromMutation,
     useGetEventsQuery as useGetTasksQuery,
     useSkipOccurrenceMutation,
@@ -266,6 +268,7 @@ const CalendarPage: React.FC = () => {
     const [deleteTaskTrigger] = useDeleteTaskMutation();
     const [skipOccurrenceTrigger] = useSkipOccurrenceMutation();
     const [endSeriesFromTrigger] = useEndSeriesFromMutation();
+    const [editOccurrenceTrigger] = useEditOccurrenceMutation();
     const [updateTaskTrigger] = useUpdateTaskMutation();
     const [previewBusy, setPreviewBusy] = useState(false);
     const { parkDayHints } = useScheduleActions();
@@ -547,13 +550,22 @@ const CalendarPage: React.FC = () => {
         setEventPreview({ open: false, event: null });
     };
 
-    const openEditorFromPreview = (_scope?: SeriesDragScope) => {
+    const openEditorFromPreview = (scope?: SeriesDragScope) => {
         const event = eventPreview.event;
         if (!event) return;
-        closeEventPreview();
         const linkedTask = resolveTaskForCalendarEvent(tasks, event);
         if (linkedTask) {
             const start = eventStartDate(event);
+            const target = planEventPreviewEditTarget({
+                taskIsRecurring: linkedTask.isRecurring,
+                scope,
+                hasOccurrence: !!start,
+            });
+            if (target.kind === 'unsupported') {
+                showErrorToast({ title: t('tasks.occurrence.noDay') });
+                return;
+            }
+            closeEventPreview();
             openEdit(
                 linkedTask,
                 start
@@ -564,10 +576,19 @@ const CalendarPage: React.FC = () => {
                           calendarId: event.calendarId,
                       }
                     : undefined,
-                { actionsMode: 'editOnly' },
+                {
+                    actionsMode: 'editOnly',
+                    scope:
+                        target.kind === 'occurrence'
+                            ? target.scope
+                            : target.kind === 'series'
+                              ? 'series'
+                              : undefined,
+                },
             );
             return;
         }
+        closeEventPreview();
         setEventFormDialog({ open: true, event });
     };
 
@@ -577,7 +598,34 @@ const CalendarPage: React.FC = () => {
         const linked = resolveTaskForCalendarEvent(tasks, event);
         if (!linked) return;
         setPreviewBusy(true);
-        void updateTaskTrigger({ id: linked.id, body: { status: 'completed' } })
+        const start = eventStartDate(event);
+        // A series day gets its own completion; the series and its other days stay to do.
+        const request =
+            linked.isRecurring && start
+                ? editOccurrenceTrigger({
+                      id: linked.id,
+                      body: { occurrenceStart: start.toISOString(), status: 'completed' },
+                  })
+                : updateTaskTrigger({ id: linked.id, body: { status: 'completed' } });
+        void request
+            .unwrap()
+            .then(() => closeEventPreview())
+            .catch((err) => {
+                showErrorToast({
+                    title: t('tasks.completeFailed'),
+                    detail: extractApiErrorMessage(err),
+                });
+            })
+            .finally(() => setPreviewBusy(false));
+    };
+
+    const undoDoneFromPreview = () => {
+        const event = eventPreview.event;
+        if (!event) return;
+        const linked = resolveTaskForCalendarEvent(tasks, event);
+        if (!linked) return;
+        setPreviewBusy(true);
+        void updateTaskTrigger({ id: linked.id, body: { status: 'todo' } })
             .unwrap()
             .then(() => closeEventPreview())
             .catch((err) => {
@@ -1206,6 +1254,7 @@ const CalendarPage: React.FC = () => {
                 onEdit={openEditorFromPreview}
                 onDelete={deleteFromPreview}
                 onDone={doneFromPreview}
+                onUndoDone={undoDoneFromPreview}
                 busy={previewBusy}
             />
 

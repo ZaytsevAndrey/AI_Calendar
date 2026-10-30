@@ -261,17 +261,17 @@ export function initialFormValues(
   const zone = resolveIanaTimeZone(timeZone);
   if (!data) {
     const later = !!defaults?.unscheduled;
-    const dayWindow = !later && !!(defaults?.deadline || defaults?.earliestStartTime);
+    // Flexible is the default: a name is enough, the planner finds the time.
     return {
       name: '',
       description: '',
-      isFixed: !later && !dayWindow,
+      isFixed: false,
       phaseId: '',
       estimatedTimeInMinutes:
         defaultTaskDurationMinutes >= 5 ? defaultTaskDurationMinutes : 30,
       isRecurring: false,
       recurrenceWeekDays: [],
-      allowSplit: later || dayWindow,
+      allowSplit: true,
       priority: 'medium',
       status: 'todo',
       deadline: isoToDateTimeLocal(defaults?.deadline, zone),

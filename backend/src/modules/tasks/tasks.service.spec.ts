@@ -428,7 +428,8 @@ describe('TasksService', () => {
       scheduleState: 'none',
     } as any);
     expect(cleared.scheduleState).toBe('none');
-    expect(cleared.parentSeriesId).toBeNull();
+    // Lineage is not park metadata: the copy still knows its series.
+    expect(cleared.parentSeriesId).toBe('11111111-1111-4111-8111-111111111111');
     expect(cleared.problematicDay).toBeNull();
     expect(cleared.problematicReason).toBeNull();
   });
@@ -860,7 +861,7 @@ describe('TasksService', () => {
       await flushMutationFollowUp();
 
       expect(lastSaved?.scheduleState).toBe('none');
-      expect(lastSaved?.parentSeriesId).toBeNull();
+      expect(lastSaved?.parentSeriesId).toBe('series-1');
       expect(lastSaved?.problematicDay).toBeNull();
       expect(lastSaved?.scheduledStartTime).toEqual(
         new Date('2026-10-08T12:00:00.000Z'),

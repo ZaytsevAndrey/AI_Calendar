@@ -1,12 +1,12 @@
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, Clock, Pencil, Trash2 } from 'lucide-react';
+import { Check, Clock, Pencil, Trash2, Undo2 } from 'lucide-react';
 import type { GoogleCalendarEvent } from 'api/google-calendar.api';
 import type { TaskDTO } from 'api/tasks.api';
 import type { SeriesDragScope } from 'modules/schedule/seriesDragChoice';
 import { Modal } from 'ui/Modal';
 import { Button } from 'ui/Button';
-import { formatDateTime, formatDateTimeRange } from 'utils/formatDate';
+import { formatCivilYmd, formatDateTime, formatDateTimeRange } from 'utils/formatDate';
 import { eventEndDate, eventStartDate } from '../calendarView';
 import { getEventColor, googleColorCss } from '../hooks/eventAppearance';
 import { formatMinutes } from 'utils/formatDate';
@@ -22,6 +22,7 @@ import {
 import { isHttpUrl, linkify, sanitizeEventHtml } from '../eventPreviewText';
 import {
   canCompleteFromPreview,
+  canUndoDoneFromPreview,
   planEventPreviewDelete,
   planEventPreviewEdit,
 } from '../planEventPreviewActions';
@@ -38,6 +39,8 @@ type Props = {
   onDelete: (scope?: SeriesDragScope) => void;
   /** Mark the linked app task completed (non-recurring / non-external). */
   onDone?: () => void;
+  /** «Не виконано» on a completed one-off or day copy. */
+  onUndoDone?: () => void;
   busy?: boolean;
 };
 
@@ -95,7 +98,7 @@ const SECTIONS: { id: string; title: string; ids: string[] }[] = [
   {
     id: 'when',
     title: 'sectionWhen',
-    ids: ['recurrence', 'repeatDays', 'reminders', 'duration', 'deadline', 'windowFrom', 'eligibleDays', 'timeZone', 'originalTime'],
+    ids: ['recurrence', 'repeatDays', 'occurrenceOf', 'reminders', 'duration', 'deadline', 'windowFrom', 'eligibleDays', 'timeZone', 'originalTime', 'completedAt'],
   },
   { id: 'people', title: 'sectionPeople', ids: ['organizer', 'attendees'] },
   {
@@ -163,10 +166,12 @@ export function EventPreview({
   onEdit,
   onDelete,
   onDone,
+  onUndoDone,
   busy = false,
 }: Props) {
   const { t } = useTranslation();
   const showDone = !!onDone && canCompleteFromPreview(task);
+  const showUndoDone = !!onUndoDone && canUndoDoneFromPreview(task);
 
   const title = useMemo(() => {
     if (!event) return '';
@@ -231,7 +236,10 @@ export function EventPreview({
         .map((day) => t(`tasks.weekday.${day}`))
         .join(', ');
     }
-    if (fact.id === 'deadline' || fact.id === 'windowFrom' || fact.id === 'created' || fact.id === 'updated' || fact.id === 'problematicDay') {
+    if (fact.id === 'occurrenceOf') {
+      return t('tasks.occurrence.editedDayValue', { when: formatCivilYmd(fact.text) ?? fact.text });
+    }
+    if (fact.id === 'deadline' || fact.id === 'windowFrom' || fact.id === 'created' || fact.id === 'updated' || fact.id === 'problematicDay' || fact.id === 'completedAt') {
       return formatDateTime(fact.text) || fact.text;
     }
     if (fact.id === 'originalTime') {
@@ -283,7 +291,19 @@ export function EventPreview({
                 onClick={() => onDone?.()}
                 icon={Check}
               >
-                {t('tasks.item.done')}
+                {task?.isRecurring ? t('tasks.occurrence.markDone') : t('tasks.item.done')}
+              </Button>
+            ) : null}
+            {showUndoDone ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full sm:w-auto"
+                disabled={busy}
+                onClick={() => onUndoDone?.()}
+                icon={Undo2}
+              >
+                {t('tasks.item.undoDone')}
               </Button>
             ) : null}
             {editPlan === 'series_menu' ? (

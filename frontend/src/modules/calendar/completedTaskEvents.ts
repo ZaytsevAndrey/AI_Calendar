@@ -25,12 +25,13 @@ export function previewEventFromTask(
   task: TaskDTO,
   range?: { startMs: number; endMs: number },
 ): GoogleCalendarEvent {
-  const startIso =
-    task.scheduledStartTime ||
-    (range ? new Date(range.startMs).toISOString() : undefined);
-  const endIso =
-    task.scheduledEndTime ||
-    (range ? new Date(range.endMs).toISOString() : undefined);
+  // A series block is one day of the series: its own interval, not the
+  // master clock (the first day), so per-day actions target that day.
+  const rangeFirst = !!range && task.isRecurring;
+  const rangeStart = range ? new Date(range.startMs).toISOString() : undefined;
+  const rangeEnd = range ? new Date(range.endMs).toISOString() : undefined;
+  const startIso = rangeFirst ? rangeStart : task.scheduledStartTime || rangeStart;
+  const endIso = rangeFirst ? rangeEnd : task.scheduledEndTime || rangeEnd;
   return {
     id: `${LOCAL_TASK_PREFIX}${task.id}`,
     summary: task.name,

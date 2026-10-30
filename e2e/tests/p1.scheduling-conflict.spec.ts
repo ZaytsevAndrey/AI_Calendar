@@ -11,7 +11,22 @@ import {
   expectMutationProgressToast,
   stripBlock,
   problematicRegion,
+  pickDayRange,
 } from '../helpers/fixtures';
+
+/** Europe/Kyiv offset (`+02:00` / `+03:00`) in effect at that wall clock — DST-aware. */
+function kyivOffset(ymd: string, hm: string): string {
+  const guess = new Date(`${ymd}T${hm}:00Z`);
+  const name = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Kyiv', timeZoneName: 'longOffset' })
+    .formatToParts(guess)
+    .find((part) => part.type === 'timeZoneName')?.value;
+  const match = name?.match(/GMT([+-]\d{2}):?(\d{2})?/);
+  return match ? `${match[1]}:${match[2] ?? '00'}` : '+02:00';
+}
+
+function kyivWallIso(ymd: string, hm: string): string {
+  return `${ymd}T${hm}:00${kyivOffset(ymd, hm)}`;
+}
 
 /** First Europe/Kyiv civil day whose 09:00 is still in the future. */
 function kyivFirstFreeMorningYmd(): string {
@@ -24,18 +39,9 @@ function kyivFirstFreeMorningYmd(): string {
   const now = Date.now();
   for (let offset = 0; offset < 14; offset += 1) {
     const ymd = fmt.format(new Date(now + offset * 24 * 60 * 60 * 1000));
-    // 09:00 Kyiv ≈ 06:00 UTC (winter) / 06:00–07:00 depending on DST.
-    const probe = new Date(`${ymd}T09:00:00+03:00`).getTime();
-    if (probe > now) return ymd;
+    if (new Date(kyivWallIso(ymd, '09:00')).getTime() > now) return ymd;
   }
   throw new Error('no free Kyiv morning in the next 14 days');
-}
-
-function kyivWallIso(ymd: string, hm: string): string {
-  const [h, m] = hm.split(':').map(Number);
-  // Build offset-aware local via Intl: prefer +03 for e2e stability with onboarded TZ.
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${ymd}T${pad(h)}:${pad(m)}:00+03:00`;
 }
 
 test.describe('P1 scheduling conflict (real placement, JWT openAs)', () => {
@@ -81,8 +87,10 @@ test.describe('P1 scheduling conflict (real placement, JWT openAs)', () => {
       .locator('#task-form-phase')
       .getByRole('option', { name: phaseName })
       .click();
+    // Preferred clock and dates live behind «Refine»; the window is that one day.
+    await dialog.getByRole('button', { name: /Refine/ }).click();
     await dialog.locator('#task-form-preferred-start').selectOption('09:00');
-    await dialog.locator('#task-form-from').fill(`${day}T08:00`);
+    await pickDayRange(page, dialog, 'task-form-dates', day);
     await dialog.getByRole('button', { name: 'Create task' }).click();
 
     const conflict = page.getByRole('dialog').filter({ hasText: 'Schedule conflict' });
@@ -146,8 +154,10 @@ test.describe('P1 scheduling conflict (real placement, JWT openAs)', () => {
       .locator('#task-form-phase')
       .getByRole('option', { name: phaseName })
       .click();
+    // Preferred clock and dates live behind «Refine»; the window is that one day.
+    await dialog.getByRole('button', { name: /Refine/ }).click();
     await dialog.locator('#task-form-preferred-start').selectOption('09:00');
-    await dialog.locator('#task-form-from').fill(`${day}T08:00`);
+    await pickDayRange(page, dialog, 'task-form-dates', day);
     await dialog.getByRole('button', { name: 'Create task' }).click();
 
     const conflict = page.getByRole('dialog').filter({ hasText: 'Schedule conflict' });

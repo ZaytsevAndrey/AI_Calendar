@@ -333,7 +333,9 @@
         "WEEKLY": "Weekly",
         "BIWEEKLY": "Bi-weekly",
         "MONTHLY": "Monthly"
-      }
+      },
+      "occurrenceOf": "Series day",
+      "completedAt": "Done"
     },
     "seriesDeleteTitle": "Delete repeating task",
     "seriesDeleteBody": "How should “{{name}}” be deleted?",
@@ -770,7 +772,14 @@
         "repeatFixed": "Every occurrence keeps this exact time and length; the planner never moves it. A day where another fixed item already sits goes to Problematic.",
         "seriesUntil": "Last day of the series. Empty = no end date. Days use {{timeZone}}."
       },
-      "type": "Task type"
+      "type": "Task type",
+      "refine": "Refine: time and dates",
+      "refineHide": "Hide",
+      "seriesDatesEmpty": "From now, no end date",
+      "repeatOffTitle": "Turn repeat off?",
+      "repeatOffBody": "«{{name}}» becomes a single task on {{when}}. Its other upcoming days leave the calendar; days already past stay as they were, and days you changed separately stay as separate tasks.",
+      "repeatOffNoUpcoming": "This series has no upcoming day to keep. To stop it, delete the series or end it from a day instead.",
+      "repeatOffConfirm": "Keep only {{when}}"
     },
     "typeInfo": {
       "dontShowAgain": "Don't show again",
@@ -782,7 +791,7 @@
         "points": [
           "The planner never moves it. Other tasks are placed around it.",
           "No phase and no date window: the time you pick is the time.",
-          "Can repeat: each occurrence keeps the same time.",
+          "Repeat is a separate setting: every occurrence keeps the same time. A day where another fixed item already sits goes to Problematic.",
           "Syncs to Google Calendar as a regular event.",
           "If it overlaps another fixed item, you are asked what to do."
         ]
@@ -793,18 +802,9 @@
         "points": [
           "Placed in a free gap inside the phase and the dates you allow.",
           "A preferred start is a wish: it takes that time and shifts only the flexible task it overlaps.",
-          "If nothing fits in the dates, it goes to Later with a warning.",
+          "Repeat is a separate setting: every occurrence is placed on its own. A day with no room goes to Problematic.",
+          "A one-off whose dates have already passed goes to Later; one that fits nowhere goes to Problematic.",
           "Syncs to Google Calendar once it has a slot."
-        ]
-      },
-      "recurring": {
-        "title": "Recurring: a habit or routine",
-        "body": "Something that repeats on a pattern.",
-        "points": [
-          "Every occurrence up to the planning horizon is placed when you save.",
-          "Runs only on the days you pick and the phase's days.",
-          "A day that doesn't fit is skipped. The rest of the series stays.",
-          "Syncs to Google Calendar as one repeating series."
         ]
       },
       "unscheduled": {
@@ -820,11 +820,9 @@
     },
     "preset": {
       "flexible": "Flexible",
-      "flexibleHint": "Planner picks a slot. You can still set a preferred start.",
+      "flexibleHint": "The planner finds a free slot. A name is enough; add a preferred time, dates or a repeat if you like.",
       "fixed": "Fixed",
-      "fixedHint": "Exact start and end; planner will not move it.",
-      "recurring": "Recurring",
-      "recurringHint": "Repeats on a pattern. Planner may move occurrences.",
+      "fixedHint": "Exact start and end; the planner never moves it. Can repeat.",
       "unscheduled": "Later",
       "unscheduledHint": "Left for later, when you have time.",
       "reminder": "Reminder",
@@ -916,7 +914,8 @@
       "overduePrefix": "Overdue · ",
       "dueSoonPrefix": "Due soon · ",
       "approachingPrefix": "Approaching · ",
-      "overdueUntil": "Overdue · due {{when}}"
+      "overdueUntil": "Overdue · due {{when}}",
+      "undoDone": "Not done"
     },
     "filters": {
       "clearSearch": "Clear {{section}} search",
@@ -957,6 +956,28 @@
     "tabs": {
       "done": "Done",
       "doneEmpty": "Done and skipped tasks show up here."
+    },
+    "occurrence": {
+      "doneDetail": "This day is done. The series stays as it was.",
+      "undoneDetail": "This day is back to do.",
+      "oneDetail": "Only this day changed. The series stays as it was.",
+      "followingDetail": "This day and the following ones changed. Earlier days stay as they were.",
+      "editThisDay": "This day",
+      "editFollowing": "This and following",
+      "editSeries": "Entire series",
+      "thisDayTitle": "Change this day",
+      "followingTitle": "Change this day and the following",
+      "thisDayNotice": "Only {{when}} changes. The rest of the series stays as it is.",
+      "followingNotice": "Changes apply from {{when}} on. Earlier days stay as they are.",
+      "seriesNotice": "Changes apply to the whole series, including its past days.",
+      "startTime": "Start",
+      "duration": "Duration",
+      "sameDay": "Stays on {{when}}. To move it to another day, drag it in the calendar.",
+      "markDone": "Mark this day done",
+      "markUndone": "Mark this day not done",
+      "save": "Save",
+      "noDay": "This day cannot be told apart from the series here. Open it from the calendar.",
+      "editedDayValue": "Occurrence of the series for {{when}}"
     }
   },
   "habits": {

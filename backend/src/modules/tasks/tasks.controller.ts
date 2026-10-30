@@ -26,6 +26,8 @@ import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { SkipOccurrenceDto } from './dto/skip-occurrence.dto';
+import { EditOccurrenceDto } from './dto/edit-occurrence.dto';
+import { OccurrenceEditService } from '../schedule/occurrence-edit.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TaskStatus } from './entities/task.entity';
 
@@ -38,7 +40,10 @@ import { schedulingValidationPipe } from '../../common/scheduling-validation.pip
 // AUD-006: DTO whitelist; undeclared body keys (id, userId, …) are stripped.
 @UsePipes(schedulingValidationPipe)
 export class TasksController {
-  constructor(private readonly tasksService: TasksService) {}
+  constructor(
+    private readonly tasksService: TasksService,
+    private readonly occurrenceEdit: OccurrenceEditService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new task' })
@@ -119,6 +124,22 @@ export class TasksController {
     @Request() req,
   ) {
     return this.tasksService.skipOccurrence(id, req.user.userId, dto);
+  }
+
+  @Patch(':id/occurrence')
+  @ApiOperation({
+    summary:
+      'Change one occurrence of a series (name, notes, phase, start, duration, completion) or this and the following ones, leaving the rest of the series alone',
+  })
+  @ApiResponse({ status: 200, description: 'The task that now holds the changed occurrence(s).' })
+  @ApiResponse({ status: 400, description: 'Not a series, no occurrence on that day, or an unsupported change.' })
+  @ApiResponse({ status: 404, description: 'Task not found.' })
+  editOccurrence(
+    @Param('id') id: string,
+    @Body() dto: EditOccurrenceDto,
+    @Request() req,
+  ) {
+    return this.occurrenceEdit.edit(id, req.user.userId, dto);
   }
 
   @Post(':id/end-series-from')
