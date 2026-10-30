@@ -1859,11 +1859,10 @@ export class PlacementStepService {
     );
     const openRows = await this.scheduledRepo.find({ where: { taskId } });
     const now = Date.now();
-    const openFuture = openRows.filter(
-      (row) => new Date(row.scheduledEndTime).getTime() > now,
-    );
+    // A day with any row of this task — finished ones included — is seated:
+    // today's ended occurrence must not be planned again (AUD-002).
     const seatedYmds = new Set(
-      openFuture.map((row) =>
+      openRows.map((row) =>
         localYmd(new Date(row.scheduledStartTime).toISOString(), timeZone),
       ),
     );
@@ -1890,6 +1889,8 @@ export class PlacementStepService {
       const startMs = new Date(
         localDateTimeIso(ymd, preferredHm, timeZone),
       ).getTime();
+      // That day's occurrence is already over: nothing to append.
+      if (startMs + durationMs <= now) return false;
       return startMs + durationMs <= untilMs;
     });
 

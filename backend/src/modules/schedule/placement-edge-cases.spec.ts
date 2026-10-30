@@ -179,6 +179,38 @@ describe('placement edge cases', () => {
     expect(later.every((row) => row <= '2026-11-09')).toBe(true);
   });
 
+  it.each([
+    ['flexible', TaskEventType.ADMIN],
+    ['fixed', TaskEventType.FIXED],
+  ])(
+    'AUD-002: append after today\'s %s occurrence ended keeps exactly one occurrence today, no copy',
+    async (_label, eventType) => {
+      kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
+      const series = await create({
+        name: 'Daily',
+        eventType,
+        isRecurring: true,
+        recurrencePattern: 'DAILY',
+        scheduledStartTime: kit.at('2026-11-05', '08:00').toISOString(),
+        ...(eventType === TaskEventType.FIXED ? { scheduledEndTime: kit.at('2026-11-05', '08:30').toISOString() } : {}),
+        estimatedTimeInMinutes: 30,
+      });
+      // The 08:00 occurrence is over; the background append runs at 12:00.
+      jest.setSystemTime(new Date('2026-11-05T12:00:00.000Z'));
+      await kit.service.appendMissingSeriesDays(kit.user.id);
+
+      const group = (await kit.taskRepo.find()).filter((t) => t.id === series.id || t.seriesGroupId === series.id);
+      const today: string[] = [];
+      for (const member of group) {
+        for (const slot of await kit.slotsOf(member.id)) if (slot.startsWith('2026-11-05')) today.push(slot);
+      }
+      expect(today).toEqual(['2026-11-05 08:00-08:30']);
+      const master = await kit.reload(series.id);
+      expect(master.skippedOccurrenceYmds ?? []).not.toContain('2026-11-05');
+      expect((await kit.taskRepo.find()).filter((t) => t.problematicDay === '2026-11-05')).toEqual([]);
+    },
+  );
+
   it('a series clock edit while its create placement is still queued ends on the new clock only', async () => {
     kit = await createPlacementKit({ now: '2026-11-05T07:00:00.000Z', horizonDays: 3 });
     // The create's in-request run is lost (crash); the job waits in the queue.
