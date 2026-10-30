@@ -84,12 +84,15 @@ export class GoogleSyncOutboxSubscriber implements EntitySubscriberInterface {
       if (!id) return;
       const collected = collectedOn(runner);
       collected.removed.add(id);
-      if (task.googleEventId && task.userId) {
-        collected.deletes.set(task.googleEventId, {
+      // AUD-012: an insert whose answer was lost may have created its event
+      // under googleInsertEventId; delete that one too (404 if it never landed).
+      for (const eventId of [task.googleEventId, task.googleInsertEventId]) {
+        if (!eventId || !task.userId) continue;
+        collected.deletes.set(eventId, {
           userId: task.userId,
           operation: 'delete',
           taskId: null,
-          googleEventId: task.googleEventId,
+          googleEventId: eventId,
           googleCalendarId: task.googleEventCalendarId ?? null,
         });
       }

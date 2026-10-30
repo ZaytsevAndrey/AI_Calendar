@@ -278,6 +278,46 @@ describe('Google write queue', () => {
     expect(await repo().count()).toBe(0);
   });
 
+  describe('AUD-012: an event whose insert answer was lost is not left behind', () => {
+    const lostInsert = async () => {
+      const task = await kit.addTask({
+        name: 'Report',
+        scheduledStartTime: kit.at('2026-11-05', '10:00'),
+        scheduledEndTime: kit.at('2026-11-05', '11:00'),
+      });
+      await kit.addSlot(task.id, kit.at('2026-11-05', '10:00'), kit.at('2026-11-05', '11:00'));
+      // Google created the event under our id; the answer never arrived.
+      google.createEvent.mockRejectedValue(new Error('socket hang up'));
+      await writes.syncTask(kit.user.id, task.id);
+      const insertId = (await kit.taskRepo.findOneByOrFail({ id: task.id })).googleInsertEventId;
+      expect(insertId).toBeTruthy();
+      return { task, insertId: insertId! };
+    };
+
+    it('deleting the task deletes that event', async () => {
+      const { task, insertId } = await lostInsert();
+
+      await kit.tasksService.remove(task.id, kit.user.id);
+      // The post-commit kick is a fake here: the sweep takes the rows after the grace.
+      const due = Math.max(...(await repo().find()).map((row) => row.nextRunAt!.getTime()));
+      jest.setSystemTime(due);
+      await writes.processQueue();
+
+      expect(google.deleteEvent.mock.calls.map((call) => call[1])).toContain(insertId);
+    });
+
+    it('a task that leaves the calendar (canceled) deletes that event and forgets the id', async () => {
+      const { task, insertId } = await lostInsert();
+      await kit.taskRepo.update({ id: task.id }, { status: 'canceled' as never });
+      jest.setSystemTime((await repo().findOneByOrFail({ taskId: task.id })).nextRunAt!);
+
+      await writes.processQueue();
+
+      expect(google.deleteEvent.mock.calls.map((call) => call[1])).toContain(insertId);
+      expect((await kit.taskRepo.findOneByOrFail({ id: task.id })).googleInsertEventId).toBeNull();
+    });
+  });
+
   describe('Google-side failures never corrupt the local schedule', () => {
     const seatedTask = async (extra: Record<string, unknown> = {}) => {
       const task = await kit.addTask({

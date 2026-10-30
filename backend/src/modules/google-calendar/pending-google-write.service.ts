@@ -668,6 +668,8 @@ export class PendingGoogleWriteService implements OnModuleInit, OnModuleDestroy 
     const rows = await this.scheduledRepo.find({ where: { taskId: task.id } });
     const ids = new Set<string>();
     if (task.googleEventId) ids.add(task.googleEventId);
+    // AUD-012: an insert whose answer was lost may have created this event.
+    if (task.googleInsertEventId) ids.add(task.googleInsertEventId);
     for (const row of rows) {
       if (row.googleEventId) ids.add(row.googleEventId);
     }
@@ -686,10 +688,14 @@ export class PendingGoogleWriteService implements OnModuleInit, OnModuleDestroy 
         });
       }
     }
-    if (task.googleEventId || task.googleEventCalendarId) {
+    if (task.googleEventId || task.googleEventCalendarId || task.googleInsertEventId) {
       task.googleEventId = null;
       task.googleEventCalendarId = null;
-      await this.taskRepo.update({ id: task.id }, { googleEventId: null, googleEventCalendarId: null });
+      task.googleInsertEventId = null;
+      await this.taskRepo.update(
+        { id: task.id },
+        { googleEventId: null, googleEventCalendarId: null, googleInsertEventId: null },
+      );
     }
     for (const row of rows) {
       if (row.googleEventId) {

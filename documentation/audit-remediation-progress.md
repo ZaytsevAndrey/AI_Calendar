@@ -33,7 +33,7 @@ Evidence rule: a finding is **fixed** only with a regression test that failed be
 | AUD-023 | Low | fixed | 356cebe | queue spec "AUD-023…" (a newer change was marked failed before) | A final failure is terminal only for the revision that was sent; a newer revision is re-queued with attempts 0. |
 | AUD-024 | Low | pending | | | |
 | AUD-025 | Low | pending | | | |
-| AUD-026 | Low | pending | | | |
+| AUD-026 | Low | confirmed, fixed | 19fe86b | `migrations.pg.spec` "AUD-026…" (real boot path, three at once; fails with `duplicate key … pg_class_relname_nsp_index` when the lock is a pass-through) | Reproduced on Postgres 16 (scratch run, 5/5 rounds: 2 of 3 boots crashed). Boot pre-step runs migrations + legacy fixes under session advisory lock `luefy:migrations` (unbounded wait; freed with a crashed holder's connection); the app DataSource runs migrations under the same lock via `dataSourceFactory`, not in `initialize()`. |
 | AUD-027 | Low | fixed | d4f2157 | `placement-edge-cases.spec` "AUD-027…" (dry run wrote 2 days before) | All expand calls check `dryRun`; the search-hole recursion keeps dryRun/duration/extraSeats/ignoreTaskIds. |
 | H-1 | — | pending | | | |
 | H-2 | — | pending | | | |
@@ -49,4 +49,4 @@ Evidence rule: a finding is **fixed** only with a regression test that failed be
 
 ## Checkpoint
 
-Phases A and B done. Next: Phase C (AUD-007, 008, 011, 018, 020, 023, 026), then D (012, 013, 019, 024, 025), then H-1, H-2, H-3, H-5.
+Phases A, B and C done (HEAD 19fe86b; unit 1128 pass / 29 skipped, e2e 139, Postgres 29). Next: D (012, 013, 019, 024, 025), then H-1, H-2, H-3, H-5, then known-issues, full verification, migration rehearsal.

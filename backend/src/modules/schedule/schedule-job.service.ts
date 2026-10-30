@@ -434,6 +434,13 @@ export class ScheduleJobService {
             calendarId: this.fallbackCalendarId(task, appCal),
           }
         : null,
+      // AUD-012: an insert whose answer was lost may have created this event.
+      task.googleInsertEventId
+        ? {
+            eventId: task.googleInsertEventId,
+            calendarId: this.fallbackCalendarId(task, appCal),
+          }
+        : null,
     ]);
   }
 
