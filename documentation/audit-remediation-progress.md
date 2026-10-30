@@ -21,20 +21,20 @@ Evidence rule: a finding is **fixed** only with a regression test that failed be
 | AUD-011 | Medium | pending | | | |
 | AUD-012 | Medium | pending | | | |
 | AUD-013 | Medium | pending | | | |
-| AUD-014 | Medium | pending | | | |
-| AUD-015 | Medium | pending | | | |
-| AUD-016 | Medium | pending | | | |
-| AUD-017 | Medium | pending | | | |
+| AUD-014 | Medium | fixed | d26220c | `dst-clock.spec` AUD-014 (horizon starts at local midnight on a spring-forward day); `placement-edge-cases.spec` "AUD-014: this and following…" (2 tails, Saturday anchor before) | New `civilDayStartIso` (offset at midnight) for scheduling day bounds (move tail, end series, free slots, external all-day, horizon, `civilDayBounds` end = next midnight). `startOfLocalDayIso` unchanged for voice callers. |
+| AUD-015 | Medium | fixed | c4b1191 | `placement-edge-cases.spec` AUD-015 (fault injection: copy insert / sibling creation fail) | `parkFailedSeriesDay` and each appended day write through `inOneTransaction`; planning and the external-calendar read stay outside. Residual: `placeUnlocked` still runs persist, expand and re-merge as separate transactions (each atomic). |
+| AUD-016 | Medium | fixed | 486c45c | `placement-edge-cases.spec` "AUD-016…" (a Tuesday held twice before) | `expandSeriesDays` treats a day held by any group member as seated. Sibling stays recurring without end (its Google RRULE ends at its last slot). |
+| AUD-017 | Medium | fixed | 8d7a0f4 | `placement-edge-cases.spec` "AUD-017…" (day lost before) | Re-merge plans the series day as a dry run first and merges only on an exact seat. |
 | AUD-018 | Medium | pending | | | |
 | AUD-019 | Medium | pending | | | |
 | AUD-020 | Medium | pending | | | |
-| AUD-021 | Low | pending | | | |
-| AUD-022 | Low | pending | | | |
+| AUD-021 | Low | fixed | 8d7a0f4 | `placement-edge-cases.spec` "AUD-021…" (merged into the wrong series before) | Owner = the group series that skips the day (preferring `parentSeriesId`). `parentSeriesId` is still cleared on seat (changing that would change series-delete scope; not needed for identity). |
+| AUD-022 | Low | fixed (residual) | 35cd614 | `placement-edge-cases.spec` "AUD-022…" (later days at 03:30 before) | Master clock taken from the first series day DST did not shift. Residual: 1-day horizon; a series created *on* the switch day at 02:30 arrives as 03:30 (ISO instant) — not distinguishable server-side. |
 | AUD-023 | Low | pending | | | |
 | AUD-024 | Low | pending | | | |
 | AUD-025 | Low | pending | | | |
 | AUD-026 | Low | pending | | | |
-| AUD-027 | Low | pending | | | |
+| AUD-027 | Low | fixed | d4f2157 | `placement-edge-cases.spec` "AUD-027…" (dry run wrote 2 days before) | All expand calls check `dryRun`; the search-hole recursion keeps dryRun/duration/extraSeats/ignoreTaskIds. |
 | H-1 | — | pending | | | |
 | H-2 | — | pending | | | |
 | H-3 | — | pending | | | |
@@ -49,4 +49,4 @@ Evidence rule: a finding is **fixed** only with a regression test that failed be
 
 ## Checkpoint
 
-Phase A done (AUD-006, 001, 004, 005). Phase B: AUD-002, 003, 009 done; AUD-010 and H-4 done early. Next: AUD-014, 015, 016, 017, 021, 022, 027; then Phase C. Note: commit cc113dc wrote this file wrongly (rows on line 1); fixed in the next commit.
+Phases A and B done. Next: Phase C (AUD-007, 008, 011, 018, 020, 023, 026), then D (012, 013, 019, 024, 025), then H-1, H-2, H-3, H-5.
