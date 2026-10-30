@@ -85,6 +85,30 @@ describePg('Google write queue on Postgres', () => {
     expect(await one.getRepository(PendingGoogleWrite).count()).toBe(0);
   });
 
+  it('AUD-005: 120 rows of a disconnected user do not starve a connected user', async () => {
+    const gone = '00000000-0000-4000-8000-0000000000aa';
+    const live = '00000000-0000-4000-8000-0000000000bb';
+    google.checkConnection.mockImplementation(async (userId: string) => ({ connected: userId !== gone }));
+    const repo = one.getRepository(PendingGoogleWrite);
+    await repo.save(
+      Array.from({ length: 120 }, (_, i) => ({
+        userId: gone,
+        taskId: null,
+        googleEventId: `stuck-${i}`,
+        operation: 'delete' as const,
+      })) as never,
+    );
+    await repo.save({ userId: live, taskId: null, googleEventId: 'live-retry', operation: 'delete', attempts: 2 } as never);
+
+    expect(await serviceOn(one).processQueue(20)).toBe(1);
+
+    expect(sent).toEqual(['live-retry']);
+    const waiting = await repo.findBy({ userId: gone });
+    expect(waiting).toHaveLength(120);
+    expect(waiting.every((row) => row.attempts === 0 && row.status === 'pending' && row.nextRunAt)).toBe(true);
+    google.checkConnection.mockImplementation(async () => ({ connected: true }));
+  });
+
   it('takes over a row left running by a crashed instance once its lease expires', async () => {
     const repo = one.getRepository(PendingGoogleWrite);
     await repo.save({

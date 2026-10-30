@@ -110,6 +110,23 @@ describe('Google write queue', () => {
     expect(tried).toHaveLength(GOOGLE_WRITE_PER_USER);
   });
 
+  it('AUD-005: rows of a disconnected user cannot starve a connected user', async () => {
+    google.checkConnection.mockImplementation(async (userId: string) => ({ connected: userId !== 'gone-user' }));
+    for (let i = 0; i < 120; i += 1) await queueDelete('gone-user', `stuck-${i}`);
+    // A connected user's retry, already one attempt in (sorts after attempts = 0).
+    await queueDelete('live-user', 'retry-1', { attempts: 2 });
+
+    const sentFirstPass = await writes.processQueue(20);
+
+    expect(sentFirstPass).toBe(1);
+    expect(await repo().findOneBy({ googleEventId: 'retry-1' })).toBeNull();
+    // The disconnected user's rows wait, unspent, for a reconnect.
+    const waiting = await repo().findBy({ userId: 'gone-user' });
+    expect(waiting).toHaveLength(120);
+    expect(waiting.every((row) => row.status === 'pending' && row.attempts === 0)).toBe(true);
+    expect(google.deleteEvent).not.toHaveBeenCalledWith('gone-user', expect.anything(), expect.anything());
+  });
+
   it('a failure queued while the row is being sent is not lost', async () => {
     await queueDelete('u1', 'g-1');
     google.deleteEvent.mockImplementationOnce(async () => {

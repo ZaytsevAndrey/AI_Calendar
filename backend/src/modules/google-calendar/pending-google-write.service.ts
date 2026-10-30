@@ -246,26 +246,51 @@ export class PendingGoogleWriteService implements OnModuleInit, OnModuleDestroy 
    * starve the others. No database transaction is open during a Google call.
    */
   async processQueue(limit = 20): Promise<number> {
-    const now = new Date();
-    const due = await this.pendingRepo.find({
-      where: [
-        { status: 'pending', nextRunAt: IsNull() },
-        { status: 'pending', nextRunAt: LessThanOrEqual(now) },
-        { status: 'running', leaseUntil: LessThan(now) },
-      ],
-      order: { attempts: 'ASC', enqueuedAt: 'ASC' },
-      take: limit * 5,
-    });
     let done = 0;
-    for (const row of fairBatch(due, limit, GOOGLE_WRITE_PER_USER)) {
-      // Disconnected / revoked: the row waits untouched (no attempt spent)
-      // until the user reconnects (reviveForUser) or the grant works again.
-      if (!(await this.connected(row.userId))) continue;
-      await this.serialized(row, async () => {
-        if ((await this.claim(row)) && (await this.send(row)) !== 'failed') done += 1;
+    // A pass that only met disconnected users fetches again (they are moved
+    // out of the due window first), so they cannot fill every pass (AUD-005).
+    for (let round = 0; round < 3 && done < limit; round += 1) {
+      const now = new Date();
+      const due = await this.pendingRepo.find({
+        where: [
+          { status: 'pending', nextRunAt: IsNull() },
+          { status: 'pending', nextRunAt: LessThanOrEqual(now) },
+          { status: 'running', leaseUntil: LessThan(now) },
+        ],
+        order: { attempts: 'ASC', enqueuedAt: 'ASC' },
+        take: limit * 5,
       });
+      if (!due.length) break;
+      const deferred = new Set<string>();
+      for (const row of fairBatch(due, limit - done, GOOGLE_WRITE_PER_USER)) {
+        if (deferred.has(row.userId)) continue;
+        // Disconnected / revoked: the rows wait (no attempt spent) until a
+        // reconnect revives them, or the next check after the down TTL.
+        if (!(await this.connected(row.userId))) {
+          await this.deferUser(row.userId, now);
+          deferred.add(row.userId);
+          continue;
+        }
+        await this.serialized(row, async () => {
+          if ((await this.claim(row)) && (await this.send(row)) !== 'failed') done += 1;
+        });
+      }
+      if (!deferred.size) break;
     }
     return done;
+  }
+
+  /** Move a disconnected user's due pending rows out of the due window, attempts untouched. */
+  private async deferUser(userId: string, now: Date): Promise<void> {
+    const later = new Date(now.getTime() + GOOGLE_CONNECTION_DOWN_TTL_MS);
+    await this.pendingRepo.update(
+      { userId, status: 'pending', nextRunAt: IsNull() },
+      { nextRunAt: later },
+    );
+    await this.pendingRepo.update(
+      { userId, status: 'pending', nextRunAt: LessThanOrEqual(now) },
+      { nextRunAt: later },
+    );
   }
 
   /** Compare-and-set on the row as read: of two workers, one wins. */
