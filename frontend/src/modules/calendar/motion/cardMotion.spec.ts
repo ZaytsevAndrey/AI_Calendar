@@ -1,8 +1,9 @@
 import {
   cardMotionStage,
   cardMotionState,
-  isCreatePending,
   isMotionLocked,
+  pendingPlacements,
+  placeholderKeys,
   resetMotionForTests,
   setMotionStageSource,
   trackMotion,
@@ -54,14 +55,38 @@ describe('cardMotion intents', () => {
     expect(cardMotionState(['ev-day-3'])).toBeNull();
   });
 
-  it('follows a created task from its temp id to the real one', () => {
-    const create = trackMotion({ keys: ['temp-1'], kind: 'create' });
-    expect(isCreatePending('temp-1')).toBe(true);
+  it('stands a placeholder for a create and follows the temp id to the real one', () => {
+    const create = trackMotion({
+      keys: ['temp-1'],
+      kind: 'create',
+      title: 'Dentist',
+      targetMs: 1_000,
+      durationMs: 60_000,
+    });
+    const [placement] = pendingPlacements();
+    expect(placement).toMatchObject({ title: 'Dentist', startMs: 1_000, durationMs: 60_000 });
     create.addKey('task-9');
-    expect(isCreatePending('task-9')).toBe(true);
-    expect(cardMotionState(['local-task:task-9', 'task-9'])).toBe('forming');
+    expect(placeholderKeys(placement.id)).toEqual([placement.id, 'temp-1', 'task-9']);
+    expect(cardMotionState(placeholderKeys(placement.id) ?? [])).toBe('forming');
+    // The server is done but Google has not returned the event: the placeholder stays.
     create.settle('done');
-    expect(isCreatePending('task-9')).toBe(false);
+    expect(pendingPlacements()).toHaveLength(1);
+  });
+
+  it('takes the placeholder away when placing fails', () => {
+    const place = trackMotion({ keys: ['task-2'], kind: 'place', from: 'later', targetMs: 5_000 });
+    expect(pendingPlacements()).toHaveLength(1);
+    place.settle('error');
+    expect(pendingPlacements()).toHaveLength(0);
+  });
+
+  it('keeps a placeholder alive while Google is slow, then lets it go', () => {
+    const place = trackMotion({ keys: ['task-3'], kind: 'place', targetMs: 5_000 });
+    place.settle('done');
+    jest.advanceTimersByTime(30_000);
+    expect(pendingPlacements()).toHaveLength(1);
+    jest.advanceTimersByTime(70_000);
+    expect(pendingPlacements()).toHaveLength(0);
   });
 
   it('reads the stage of any of the action keys', () => {
@@ -80,7 +105,7 @@ describe('cardMotion intents', () => {
 
   it('gives up on an action the server never answers', () => {
     trackMotion({ keys: ['task-1'], kind: 'edit' });
-    jest.advanceTimersByTime(21_000);
+    jest.advanceTimersByTime(31_000);
     expect(isMotionLocked(['task-1'])).toBe(false);
   });
 });

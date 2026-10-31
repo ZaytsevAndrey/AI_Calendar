@@ -58,6 +58,81 @@ export function travelTransform(from: Box, to: Box, min = 0.4, max = 1.2): strin
   return `translate(${round(dx)}px, ${round(dy)}px) scale(${round(scale, 3)})`;
 }
 
+type Point = { x: number; y: number };
+
+function center(box: Box): Point {
+  return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+}
+
+function uniformScale(of: Box, base: Box, min: number, max: number): number {
+  if (base.width <= 0 || base.height <= 0) return 1;
+  return Math.min(max, Math.max(min, Math.min(of.width / base.width, of.height / base.height)));
+}
+
+/**
+ * Control point of a flight arc: off the straight line by `bow` of its length,
+ * always bulging upward (a thrown card rises); a straight vertical move bulges
+ * toward the screen middle so it never leaves the screen edge.
+ */
+export function arcControl(from: Point, to: Point, bow = 0.28, viewportWidth = 1440): Point {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy);
+  const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+  if (length < 1) return mid;
+  let nx = -dy / length;
+  let ny = dx / length;
+  if (Math.abs(ny) < 0.2) {
+    // Mostly vertical: bulge sideways, toward the middle of the screen.
+    const towardRight = mid.x < viewportWidth / 2;
+    if ((nx > 0) !== towardRight) {
+      nx = -nx;
+      ny = -ny;
+    }
+  } else if (ny > 0) {
+    nx = -nx;
+    ny = -ny;
+  }
+  const lift = Math.min(160, Math.max(18, length * bow));
+  return { x: mid.x + nx * lift, y: mid.y + ny * lift };
+}
+
+/**
+ * Transforms (origin: center) for an element laid out at `base` that travels
+ * from `start` to `end` along a quadratic arc. Scale moves uniformly between
+ * the two sizes with a small lift in the middle. One transform per sample; the
+ * effect's easing then drives progress along the path.
+ */
+export function arcTransforms(options: {
+  start: Box;
+  end: Box;
+  base: Box;
+  bow?: number;
+  lift?: number;
+  samples?: number;
+  minScale?: number;
+  maxScale?: number;
+  viewportWidth?: number;
+}): string[] {
+  const { start, end, base, bow = 0.28, lift = 0.05, samples = 16, minScale = 0.15, maxScale = 1.25 } = options;
+  const p0 = center(start);
+  const p2 = center(end);
+  const p1 = arcControl(p0, p2, bow, options.viewportWidth);
+  const c = center(base);
+  const s0 = uniformScale(start, base, minScale, maxScale);
+  const s1 = uniformScale(end, base, minScale, maxScale);
+  const out: string[] = [];
+  for (let i = 0; i <= samples; i += 1) {
+    const t = i / samples;
+    const u = 1 - t;
+    const x = u * u * p0.x + 2 * u * t * p1.x + t * t * p2.x;
+    const y = u * u * p0.y + 2 * u * t * p1.y + t * t * p2.y;
+    const scale = (s0 + (s1 - s0) * t) * (1 + lift * Math.sin(Math.PI * t));
+    out.push(`translate(${round(x - c.x)}px, ${round(y - c.y)}px) scale(${round(scale, 3)})`);
+  }
+  return out;
+}
+
 /** Changes smaller than this are layout jitter, not a move worth animating. */
 export function boxMoved(a: Box, b: Box, threshold = 1.5): boolean {
   return (

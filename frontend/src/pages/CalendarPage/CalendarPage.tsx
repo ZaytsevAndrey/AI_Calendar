@@ -106,11 +106,16 @@ import { overlayForEvent } from 'modules/calendar/schedulingKind';
 import {
     configureMotion,
     getMotionEpoch,
-    isCreatePending,
+    pendingPlacements,
+    placementsWaitingForGoogle,
     subscribeMotion,
     trackMotion,
 } from 'modules/calendar/motion/cardMotion';
-import { motionDestination, motionKeysForEvent, overlayPendingCreates } from 'modules/calendar/motion/calendarMotionData';
+import {
+    motionDestination,
+    motionKeysForEvent,
+    overlayPendingPlacements,
+} from 'modules/calendar/motion/calendarMotionData';
 
 const CALENDAR_VIEW_KEY = 'calendar-view';
 
@@ -293,9 +298,15 @@ const CalendarPage: React.FC = () => {
         );
         if (!previous) return;
         for (const task of autoSeatedFromPark(previous, tasks)) {
-            // Its card lands on the grid from the problem list.
-            trackMotion({ keys: [task.id, task.googleEventId], kind: 'place', from: 'problems' }).settle('done');
             const start = task.scheduledStartTime!;
+            // Its card lands on the grid from the problem list.
+            trackMotion({
+                keys: [task.id, task.googleEventId],
+                kind: 'place',
+                from: 'problems',
+                title: task.name,
+                targetMs: Date.parse(start),
+            }).settle('done');
             const day = localYmd(start, timeZone);
             showInfoToast({
                 title: t('schedule.problematicAutoSeated', { name: task.name }),
@@ -368,6 +379,21 @@ const CalendarPage: React.FC = () => {
     const gridView: CalendarView = currentView;
     // Placeholders for tasks being created re-render with the motion store.
     useSyncExternalStore(subscribeMotion, getMotionEpoch, () => 0);
+    // Google can return a new event after the replan job is done: while a
+    // placeholder waits for it, look again every few seconds (up to 45 s).
+    const waitingForGoogle = placementsWaitingForGoogle() > 0;
+    useEffect(() => {
+        if (!waitingForGoogle) return;
+        const started = Date.now();
+        const id = window.setInterval(() => {
+            if (Date.now() - started > 45_000) {
+                window.clearInterval(id);
+                return;
+            }
+            dispatch(eventsApi.util.invalidateTags([{ type: 'Event', id: 'LIST' }]));
+        }, 3_000);
+        return () => window.clearInterval(id);
+    }, [waitingForGoogle, dispatch]);
     const tasksRef = React.useRef(tasks);
     tasksRef.current = tasks;
     useEffect(() => {
@@ -385,7 +411,7 @@ const CalendarPage: React.FC = () => {
         });
     }, [i18n.language]);
     const hiddenCalendarIds = userSettings?.hiddenGoogleCalendarIds ?? [];
-    const displayEvents = overlayPendingCreates(overlayCompletedTaskEvents(
+    const displayEvents = overlayPendingPlacements(overlayCompletedTaskEvents(
         visibleGoogleEvents(eventsForRange || []).filter(
             (event) => {
                 if (reminderEventIds.has(event.id)) return false;
@@ -405,7 +431,7 @@ const CalendarPage: React.FC = () => {
             },
         ),
         tasks,
-    ), tasks, isCreatePending);
+    ), tasks, pendingPlacements());
     const occurrenceStartIso = (event: GoogleCalendarEvent): string | null => {
         if (event.start.dateTime) return event.start.dateTime;
         if (event.start.date) {

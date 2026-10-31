@@ -26,7 +26,9 @@ export type TaskMutationProgressOptions = {
    * How the card animates (see calendar/motion). Defaults to an edit; `false`
    * when the caller drives the motion itself.
    */
-  motion?: { kind?: MotionKind; from?: MotionFrom; targetMs?: number } | false;
+  motion?:
+    | { kind?: MotionKind; from?: MotionFrom; title?: string; targetMs?: number; durationMs?: number }
+    | false;
 };
 
 type Listener = () => void;
@@ -121,7 +123,9 @@ export function startTaskMutationProgress(
           keys,
           kind: opts.motion?.kind ?? 'edit',
           from: opts.motion?.from,
+          title: opts.motion?.title ?? opts.title,
           targetMs: opts.motion?.targetMs,
+          durationMs: opts.motion?.durationMs,
         });
 
   const report = (next: FinalStage, detail?: string) => {

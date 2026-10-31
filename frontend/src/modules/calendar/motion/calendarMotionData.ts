@@ -1,9 +1,7 @@
 import type { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 import type { TaskDTO } from '../../../api/tasks.api';
 import { resolveTaskForCalendarEvent } from '../completedTaskEvents';
-import type { MotionDestination } from './cardMotion';
-
-const PENDING_PREFIX = 'local-task:';
+import { placeholderKeys, type MotionDestination, type PendingPlacement } from './cardMotion';
 
 /**
  * Ids an action on this card is known by. A series day is known only by its
@@ -11,12 +9,10 @@ const PENDING_PREFIX = 'local-task:';
  * mark every day of the series.
  */
 export function motionKeysForEvent(tasks: TaskDTO[], event: GoogleCalendarEvent): string[] {
+  const placeholder = placeholderKeys(event.id);
+  if (placeholder) return placeholder;
   const keys = [event.id];
   if (event.recurringEventId) keys.push(event.recurringEventId);
-  if (event.id.startsWith(PENDING_PREFIX)) {
-    keys.push(event.id.slice(PENDING_PREFIX.length));
-    return keys;
-  }
   const task = resolveTaskForCalendarEvent(tasks, event);
   if (task && !event.recurringEventId && !task.isRecurring) keys.push(task.id);
   return keys;
@@ -38,27 +34,39 @@ export function motionDestination(tasks: TaskDTO[], keys: string[]): MotionDesti
 }
 
 /**
- * A fixed task being created stands on the grid right away as a placeholder
- * that fills up while the server places it; the real event replaces it.
+ * A task being placed (created, scheduled from «На потім», a problem put on a
+ * slot) stands on the grid right away as a placeholder that fills up; the real
+ * event replaces it when Google returns it. Times come from the task once the
+ * server seated it, else from the slot the user picked.
  */
-export function overlayPendingCreates(
+export function overlayPendingPlacements(
   events: GoogleCalendarEvent[],
   tasks: TaskDTO[],
-  isPending: (taskId: string) => boolean,
+  placements: PendingPlacement[],
 ): GoogleCalendarEvent[] {
   const extras: GoogleCalendarEvent[] = [];
-  for (const task of tasks) {
-    if (!task.scheduledStartTime || !task.scheduledEndTime || task.isRecurring) continue;
-    if (!isPending(task.id)) continue;
-    const covered = events.some(
-      (event) => resolveTaskForCalendarEvent([task], event)?.id === task.id,
-    );
+  for (const placement of placements) {
+    const task = tasks.find((item) => placement.keys.includes(item.id));
+    if (task?.scheduleState === 'problematic' && !placement.startMs) continue;
+    const covered = events.some((event) => {
+      if (placement.keys.includes(event.id)) return true;
+      const linked = resolveTaskForCalendarEvent(tasks, event);
+      return !!linked && placement.keys.includes(linked.id) && !event.recurringEventId;
+    });
     if (covered) continue;
+    const seated = task?.scheduledStartTime && task.scheduledEndTime && !task.isUnscheduled;
+    const startMs = seated ? Date.parse(task.scheduledStartTime as string) : placement.startMs;
+    const endMs = seated
+      ? Date.parse(task.scheduledEndTime as string)
+      : startMs != null
+        ? startMs + (placement.durationMs ?? (task?.estimatedTimeInMinutes ?? 30) * 60_000)
+        : undefined;
+    if (startMs == null || endMs == null || !Number.isFinite(startMs) || !(endMs > startMs)) continue;
     extras.push({
-      id: `${PENDING_PREFIX}${task.id}`,
-      summary: task.name,
-      start: { dateTime: task.scheduledStartTime },
-      end: { dateTime: task.scheduledEndTime },
+      id: placement.id,
+      summary: task?.name || placement.title,
+      start: { dateTime: new Date(startMs).toISOString() },
+      end: { dateTime: new Date(endMs).toISOString() },
       status: 'confirmed',
       isAppGenerated: true,
     });

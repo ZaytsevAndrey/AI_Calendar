@@ -1,6 +1,7 @@
 import type { GoogleCalendarEvent } from '../../../api/google-calendar.api';
 import type { TaskDTO } from '../../../api/tasks.api';
-import { motionDestination, motionKeysForEvent, overlayPendingCreates } from './calendarMotionData';
+import { motionDestination, motionKeysForEvent, overlayPendingPlacements } from './calendarMotionData';
+import { resetMotionForTests, trackMotion, pendingPlacements } from './cardMotion';
 
 const task = (patch: Partial<TaskDTO>): TaskDTO =>
   ({
@@ -37,8 +38,12 @@ describe('motionKeysForEvent', () => {
     expect(motionKeysForEvent(tasks, day)).toEqual(['ge-series-3', 'ge-series']);
   });
 
-  it('knows a placeholder by the task it stands for', () => {
-    expect(motionKeysForEvent([], event({ id: 'local-task:t-7' }))).toEqual(['local-task:t-7', 't-7']);
+  it('knows a placeholder by the action behind it', () => {
+    resetMotionForTests();
+    trackMotion({ keys: ['t-7'], kind: 'place', targetMs: 1 });
+    const [placement] = pendingPlacements();
+    expect(motionKeysForEvent([], event({ id: placement.id }))).toEqual([placement.id, 't-7']);
+    resetMotionForTests();
   });
 });
 
@@ -65,26 +70,32 @@ describe('motionDestination', () => {
   });
 });
 
-describe('overlayPendingCreates', () => {
-  const fixed = task({
-    id: 'temp-1',
-    scheduledStartTime: '2026-10-29T10:00:00.000Z',
-    scheduledEndTime: '2026-10-29T11:00:00.000Z',
-  });
+describe('overlayPendingPlacements', () => {
+  const slot = Date.parse('2026-10-29T10:00:00.000Z');
+  const placement = { id: 'local-motion:1', keys: ['local-motion:1', 't-1'], title: 'Report', startMs: slot, durationMs: 3_600_000 };
 
-  it('stands a fixed task being created on the grid', () => {
-    const out = overlayPendingCreates([], [fixed], () => true);
+  it('stands the task at the picked slot right away', () => {
+    const out = overlayPendingPlacements([], [task({ isUnscheduled: true })], [placement]);
     expect(out).toHaveLength(1);
-    expect(out[0].id).toBe('local-task:temp-1');
+    expect(out[0]).toMatchObject({ id: 'local-motion:1', summary: 'Report' });
+    expect(out[0].end.dateTime).toBe('2026-10-29T11:00:00.000Z');
   });
 
-  it('steps aside once the real event is there or the create is over', () => {
-    const real = task({ ...fixed, googleEventId: 'ge-new' });
-    expect(overlayPendingCreates([event({ id: 'ge-new' })], [real], () => true)).toHaveLength(1);
-    expect(overlayPendingCreates([], [fixed], () => false)).toHaveLength(0);
+  it('moves to where the server seated the task', () => {
+    const seated = task({
+      scheduledStartTime: '2026-10-29T12:00:00.000Z',
+      scheduledEndTime: '2026-10-29T13:00:00.000Z',
+    });
+    const [card] = overlayPendingPlacements([], [seated], [placement]);
+    expect(card.start.dateTime).toBe('2026-10-29T12:00:00.000Z');
   });
 
-  it('skips tasks without a clock', () => {
-    expect(overlayPendingCreates([], [task({ id: 'temp-2' })], () => true)).toHaveLength(0);
+  it('steps aside once the real event is there', () => {
+    const linked = task({ googleEventId: 'ge-new' });
+    expect(overlayPendingPlacements([event({ id: 'ge-new' })], [linked], [placement])).toHaveLength(1);
+  });
+
+  it('draws nothing without a slot', () => {
+    expect(overlayPendingPlacements([], [task({})], [{ ...placement, startMs: undefined }])).toHaveLength(0);
   });
 });

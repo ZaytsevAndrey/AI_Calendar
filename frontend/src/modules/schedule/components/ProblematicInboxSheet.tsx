@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TaskDTO } from 'api/tasks.api';
 import { Modal } from '../../../ui/Modal';
@@ -48,6 +48,22 @@ export function ProblematicInboxSheet({
   // A card that gets a slot flies from this list to the grid (calendar/motion).
   const listRef = useRef<HTMLDivElement>(null);
   useMotionPresence(listRef, { resetKey: open ? 'open' : 'closed' });
+  // The last problem got a slot: say «all placed» for a moment and close, so
+  // the card's flight to the grid is not hidden under this sheet.
+  const hadItems = useRef(false);
+  useEffect(() => {
+    if (!open) {
+      hadItems.current = false;
+      return;
+    }
+    if (groups.length > 0) {
+      hadItems.current = true;
+      return;
+    }
+    if (!hadItems.current) return;
+    const id = window.setTimeout(onClose, 700);
+    return () => window.clearTimeout(id);
+  }, [open, groups.length, onClose]);
 
   const edit = (item: ProblematicItem) => {
     // A new clock saved from the form seats it: the user's own doing.
