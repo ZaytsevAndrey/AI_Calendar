@@ -67,6 +67,28 @@ export type VoiceCommand =
       googleEventCalendarId: string | null;
     }
   | {
+      /**
+       * Change one day of a series (`scope: occurrence`) or this day and the following ones
+       * (`scope: following`) through PATCH /tasks/:id/occurrence. Only the fields present change (WP-B).
+       */
+      kind: 'edit_occurrence';
+      taskId: string;
+      taskName: string;
+      summary: string;
+      occurrenceStart: string;
+      scope: 'occurrence' | 'following';
+      name?: string;
+      description?: string | null;
+      /** New start instant on the same day. */
+      start?: string;
+      durationMinutes?: number;
+      /** Completion of this one day; `occurrence` scope only. */
+      status?: 'todo' | 'completed';
+      googleEventId: string | null;
+      googleEventCalendarId: string | null;
+      seriesScope?: VoiceSeriesScope;
+    }
+  | {
       kind: 'move';
       taskId: string;
       taskName: string;

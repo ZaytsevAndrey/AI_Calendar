@@ -110,6 +110,29 @@ describe('executeVoiceCommand — occurrences and reminders', () => {
     });
   });
 
+  // WP-B: one day of a series, or this day and the following ones, through the occurrence endpoint.
+  it('edits one occurrence through PATCH /tasks/:id/occurrence with only the fields given', async () => {
+    const d = deps();
+    await executeVoiceCommand({
+      kind: 'edit_occurrence', ...base, occurrenceStart: '2026-10-21T15:00:00.000Z', scope: 'occurrence', name: 'Yoga', start: '2026-10-21T16:00:00.000Z', durationMinutes: 45,
+      googleEventId: 'g1', googleEventCalendarId: 'primary', seriesScope: 'occurrence',
+    }, d);
+    expect(apiCallMock).toHaveBeenCalledWith({
+      url: '/tasks/t1/occurrence', method: 'PATCH',
+      data: { occurrenceStart: '2026-10-21T15:00:00.000Z', scope: 'occurrence', name: 'Yoga', start: '2026-10-21T16:00:00.000Z', durationMinutes: 45, googleEventId: 'g1', googleEventCalendarId: 'primary' },
+    });
+  });
+
+  it('completes one day and changes the following days with their own scopes', async () => {
+    const d = deps();
+    await executeVoiceCommand({ kind: 'edit_occurrence', ...base, occurrenceStart: '2026-10-21T15:00:00.000Z', scope: 'occurrence', status: 'completed', googleEventId: null, googleEventCalendarId: null }, d);
+    await executeVoiceCommand({ kind: 'edit_occurrence', ...base, occurrenceStart: '2026-10-22T15:00:00.000Z', scope: 'following', description: null, googleEventId: null, googleEventCalendarId: null }, d);
+    expect(apiCallMock.mock.calls.map((call) => call[0].data)).toEqual([
+      { occurrenceStart: '2026-10-21T15:00:00.000Z', scope: 'occurrence', status: 'completed' },
+      { occurrenceStart: '2026-10-22T15:00:00.000Z', scope: 'following', description: null },
+    ]);
+  });
+
   it('creates, updates, resolves and deletes a reminder with every field', async () => {
     const d = deps();
     const fields = { dueYmd: '2026-11-01', notificationTime: '18:30', description: 'rent', recurrencePattern: 'MONTHLY' as const, recurrenceWeekDays: null };

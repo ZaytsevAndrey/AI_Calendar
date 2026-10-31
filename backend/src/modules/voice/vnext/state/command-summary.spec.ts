@@ -48,7 +48,10 @@ describe('commandSummary', () => {
 
     it('says this day only, this day and following, or every open day', () => {
       expect(commandSummary('en', 'skip', series('occurrence'), { timeZone: TZ }, { occurrence: '2026-10-20T06:00:00.000Z' })).toBe('Skip “Gym” on 2026-10-20 — this day only');
-      expect(commandSummary('uk', 'complete_occurrence', series('occurrence'), { timeZone: TZ }, { occurrence: '2026-10-20T06:00:00.000Z' })).toBe('Позначити виконаним і прибрати з календаря «Gym» за 2026-10-20 — лише цей день');
+      // WP-B: one day is completed in place through the occurrence endpoint, no longer cleared from the calendar.
+      expect(commandSummary('uk', 'complete_occurrence', series('occurrence'), { timeZone: TZ }, { occurrence: '2026-10-20T06:00:00.000Z' })).toBe('Позначити виконаним «Gym» за 2026-10-20 — лише цей день');
+      expect(commandSummary('en', 'edit_occurrence', series('occurrence', { title: 'Yoga' }), { timeZone: TZ }, { occurrence: '2026-10-20T06:00:00.000Z' })).toBe('Rename “Gym” to “Yoga” on 2026-10-20 — this day only');
+      expect(commandSummary('uk', 'edit_occurrence', series('from_day'), { timeZone: TZ }, { occurrence: '2026-10-20T06:00:00.000Z' })).toBe('Змінити «Gym» з 2026-10-20 — цей день і наступні');
       expect(commandSummary('en', 'end_series', series('from_day'), { timeZone: TZ }, { occurrence: '2026-10-20T06:00:00.000Z' })).toBe('End the series “Gym” from 2026-10-20 — this day and following');
       expect(commandSummary('uk', 'move', series('from_day'), { timeZone: TZ }, { start: '2026-10-20T12:00:00.000Z' })).toBe('Перенести «Gym» на 2026-10-20 15:00 — цей день і наступні');
       expect(commandSummary('en', 'move', series('all'), { timeZone: TZ }, { start: '2026-10-20T12:00:00.000Z' })).toBe('Move “Gym” to 2026-10-20 15:00 — every open day');

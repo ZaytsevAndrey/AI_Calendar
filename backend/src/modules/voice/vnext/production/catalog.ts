@@ -71,8 +71,14 @@ function taskStatus(status: TaskStatus): EntityRecord['status'] {
  * One owned task. Placement and calendar-event identity are given only when exactly one slot
  * exists and the task is not a series, the same rule the client move command needs.
  */
-export function taskRecord(task: Task, allSlots: readonly ScheduledTask[]): EntityRecord {
+export function taskRecord(task: Task, allSlots: readonly ScheduledTask[], allTasks: readonly Task[] = []): EntityRecord {
   const slots = allSlots.filter((slot) => slot.taskId === task.id);
+  // D-03 / VB-02: a series whose group holds a detached copy (an edited or moved day) or a parked day is not
+  // one row; a series-wide rename / end / delete would miss those days, so the projection refuses it.
+  const seriesCopies = task.isRecurring && (
+    (task.problematicOccurrenceYmds?.length ?? 0) > 0
+    || allTasks.some((other) => other.id !== task.id && other.userId === task.userId
+      && (other.parentSeriesId === task.id || (task.seriesGroupId != null && other.seriesGroupId === task.seriesGroupId))));
   const single = slots.length === 1 ? slots[0] : null;
   const calendarId = single?.googleEventCalendarId || task.googleEventCalendarId || undefined;
   const googleEventId = single && !task.isRecurring ? (single.googleEventId || task.googleEventId || null) : null;
@@ -85,6 +91,7 @@ export function taskRecord(task: Task, allSlots: readonly ScheduledTask[]): Enti
     revision: taskRevision(task, slots),
     ...(calendarId ? { calendarId } : {}),
     ...(task.isRecurring ? { recurring: true, occurrences: occurrencesOf(task, slots), seriesEventId: task.googleEventId ?? null } : {}),
+    ...(seriesCopies ? { seriesCopies: true } : {}),
     scheduledStart: single ? iso(single.scheduledStartTime) : null,
     scheduledEnd: single ? iso(single.scheduledEndTime) : null,
     // The app slot moves through the same path as a drag of that block; no calendar id needed (VC-03).
@@ -124,7 +131,7 @@ export function buildCatalog(
   reminders: readonly DayReminder[],
 ): EntityRecord[] {
   return [
-    ...tasks.filter((task) => task.userId === userId).map((task) => taskRecord(task, slots)),
+    ...tasks.filter((task) => task.userId === userId).map((task) => taskRecord(task, slots, tasks)),
     ...reminders.filter((row) => row.userId === userId).map(reminderRecord),
   ];
 }

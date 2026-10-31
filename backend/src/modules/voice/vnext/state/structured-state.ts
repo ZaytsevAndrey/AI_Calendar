@@ -37,6 +37,7 @@ export type KnownEntity = {
   provider?: 'google' | 'microsoft' | 'apple';
   occurrences?: EntityOccurrence[];
   seriesEventId?: string | null;
+  seriesCopies?: boolean;
   name?: string;
   fixed?: boolean;
   reminder?: StoredReminderFields;
@@ -667,6 +668,7 @@ function entityReference(entity: KnownEntity): Extract<PendingOperation['target'
     ...(entity.provider ? { provider: entity.provider } : {}),
     ...(entity.occurrences ? { occurrences: entity.occurrences } : {}),
     ...(entity.seriesEventId != null ? { seriesEventId: entity.seriesEventId } : {}),
+    ...(entity.seriesCopies ? { seriesCopies: true } : {}),
     ...(entity.name ? { name: entity.name } : {}),
     ...(entity.fixed ? { fixed: true } : {}),
     ...(entity.reminder ? { reminder: entity.reminder } : {}),

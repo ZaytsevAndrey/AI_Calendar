@@ -141,6 +141,8 @@ export type ResolvedEntityReference = {
   /** Recurring rows: placed occurrences and the series event id. */
   occurrences?: EntityOccurrence[];
   seriesEventId?: string | null;
+  /** The series group holds detached copies or parked days: a series-wide rename / end / delete is refused (D-03). */
+  seriesCopies?: boolean;
   /** Stored title of the row, for preview copy. Never a match key. */
   name?: string;
   fixed?: boolean;

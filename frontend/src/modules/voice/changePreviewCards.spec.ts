@@ -123,6 +123,23 @@ describe('buildChangePreviewCards', () => {
     expect(cards[6].repeats).toBeFalsy();
   });
 
+  // WP-B: a per-day edit shows the day it touches and its scope; a per-day completion is a done card.
+  it('shows an occurrence edit as an edit of that day, and a per-day completion as done', () => {
+    const cards = buildChangePreviewCards({
+      intents: [
+        { type: 'command', summary: 'Rename', command: { kind: 'edit_occurrence', taskId: 'g', taskName: 'Gym', summary: 'Rename', occurrenceStart: '2026-10-21T15:00:00.000Z', scope: 'occurrence', name: 'Yoga', start: '2026-10-21T16:00:00.000Z', durationMinutes: 45, googleEventId: null, googleEventCalendarId: null, seriesScope: 'occurrence' } },
+        { type: 'command', summary: 'Done', command: { kind: 'edit_occurrence', taskId: 'g', taskName: 'Gym', summary: 'Done', occurrenceStart: '2026-10-22T15:00:00.000Z', scope: 'occurrence', status: 'completed', googleEventId: null, googleEventCalendarId: null, seriesScope: 'occurrence' } },
+        { type: 'command', summary: 'From', command: { kind: 'edit_occurrence', taskId: 'g', taskName: 'Gym', summary: 'From', occurrenceStart: '2026-10-22T15:00:00.000Z', scope: 'following', start: '2026-10-22T06:00:00.000Z', googleEventId: null, googleEventCalendarId: null, seriesScope: 'series' } },
+      ],
+    });
+    expect(cards.map((card) => [card.kind, card.scope, card.startIso, card.durationMinutes, card.name])).toEqual([
+      ['edit', 'occurrence', '2026-10-21T16:00:00.000Z', 45, 'Yoga'],
+      ['complete', 'occurrence', '2026-10-22T15:00:00.000Z', null, 'Gym'],
+      ['edit', 'series', '2026-10-22T06:00:00.000Z', null, 'Gym'],
+    ]);
+    expect(cards.every((card) => card.repeats)).toBe(true);
+  });
+
   it('maps a reminder create to a reminder card without a duration', () => {
     const intents: VoiceWriteIntent[] = [
       {

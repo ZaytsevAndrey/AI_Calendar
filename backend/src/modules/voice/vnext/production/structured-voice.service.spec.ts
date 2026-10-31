@@ -1063,11 +1063,12 @@ describe('structured recurring tasks and occurrence scope', () => {
     });
   });
 
-  it('completes one occurrence by clearing that day, and refuses it from a day on', async () => {
+  // WP-B: one day is completed in place through PATCH /tasks/:id/occurrence (before WP-B it was cleared by a skip).
+  it('completes one occurrence in place, and refuses it from a day on', async () => {
     const complete = await run('done with gym today', { action: 'complete', seriesScope: 'occurrence', occurrence: '2026-10-19' });
     expect(complete.intents[0]).toMatchObject({
-      summary: 'Mark done and clear from the calendar “Gym” on 2026-10-19 — this day only',
-      command: { kind: 'skip', taskId: 'gym', occurrenceStart: '2026-10-19T07:00:00.000Z' },
+      summary: 'Mark done “Gym” on 2026-10-19 — this day only',
+      command: { kind: 'edit_occurrence', scope: 'occurrence', status: 'completed', taskId: 'gym', occurrenceStart: '2026-10-19T07:00:00.000Z' },
     });
     const tail = await run('done with gym from today', { action: 'complete', seriesScope: 'from_day', occurrence: '2026-10-19' });
     expect(tail.intents).toEqual([]);

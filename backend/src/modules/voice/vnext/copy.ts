@@ -50,6 +50,7 @@ const UK: Record<string, string> = {
   same_day_series: 'День повторюваної задачі можна пересунути лише в межах того ж дня. Назвіть нову годину на той день або скажіть пропустити цей день.',
   fixed_skip: 'Це фіксована подія, її день не можна пропустити. Можу перенести або видалити.',
   nothing_to_skip: 'У цієї задачі немає запланованого дня, який можна пропустити.',
+  series_copies: 'У цієї серії є окремо змінені або відкладені дні, тому зміну всієї серії я не роблю. Скажіть про конкретний день або змініть серію в застосунку.',
 };
 
 const EN: Record<string, string> = {
@@ -102,6 +103,7 @@ const EN: Record<string, string> = {
   same_day_series: 'A day of a repeating task can only move within that same day. Give a new time on that day, or say to skip it.',
   fixed_skip: 'That is a fixed event; its day cannot be skipped. I can move or delete it.',
   nothing_to_skip: 'That task has no scheduled day to skip.',
+  series_copies: 'Some days of that series were changed or parked separately, so I will not change the whole series. Name one day, or change the series in the app.',
 };
 
 export function voiceCopy(language: VNextLanguage, code: string): string {

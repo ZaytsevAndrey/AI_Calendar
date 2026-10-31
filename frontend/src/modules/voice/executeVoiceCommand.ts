@@ -85,6 +85,26 @@ export async function executeVoiceCommand(
     return;
   }
 
+  if (command.kind === 'edit_occurrence') {
+    // One day of a series, or this day and the following ones: the same path as the occurrence editor.
+    // Only the fields the preview promised are sent; the server leaves the rest of the series alone.
+    const data: Record<string, unknown> = { occurrenceStart: command.occurrenceStart, scope: command.scope };
+    if (command.name !== undefined) data.name = command.name;
+    if (command.description !== undefined) data.description = command.description;
+    if (command.start !== undefined) data.start = command.start;
+    if (command.durationMinutes !== undefined) data.durationMinutes = command.durationMinutes;
+    if (command.status !== undefined) data.status = command.status;
+    if (command.googleEventId) data.googleEventId = command.googleEventId;
+    if (command.googleEventCalendarId) data.googleEventCalendarId = command.googleEventCalendarId;
+    const response = (await apiCall({ url: `/tasks/${command.taskId}/occurrence`, method: 'PATCH', data })) as
+      | { data?: { jobId?: string | null } }
+      | undefined;
+    await settleReplanJob(response?.data?.jobId ?? null);
+    refreshCalendar(deps.dispatch);
+    deps.dispatch(eventTasksApi.util.invalidateTags([{ type: 'EventTask', id: 'LIST' }]));
+    return;
+  }
+
   if (command.kind === 'end_series') {
     await apiCall({
       url: `/tasks/${command.taskId}/end-series-from`,

@@ -25,6 +25,8 @@ export type EntityRecord = {
   /** Recurring rows: each placed occurrence with its calendar event id, and the series event id. */
   occurrences?: Array<{ start: string; end: string; googleEventId: string | null; slotId?: string | null }>;
   seriesEventId?: string | null;
+  /** The series group holds detached copies or parked days (D-03 stopgap, VB-02). */
+  seriesCopies?: boolean;
   /** A fixed Luefy task keeps its slot until a clock moves it; a window does not reseat it. */
   fixed?: boolean;
   /** Stored fields of a day reminder, so an update can keep what the user did not restate (VC-05). */

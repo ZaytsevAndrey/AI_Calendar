@@ -247,6 +247,24 @@ function cardFromIntent(intent: VoiceWriteIntent, index: number): ChangePreviewC
       color: colorForKind(command.kind === 'remind_delete' ? 'delete' : 'remind'),
     };
   }
+  if (command.kind === 'edit_occurrence') {
+    // WP-B: one day of a series (or this day and following). Completion of the day is a done card; any
+    // other change is an edit of that day. The card shows the new start when there is one, else the day.
+    const kind: ChangePreviewKind = command.status === 'completed' ? 'complete' : 'edit';
+    const scope: PreviewSeriesScope = command.scope === 'following' ? 'series' : 'occurrence';
+    return {
+      id: `command-${index}-${command.taskId}-${kind}-${command.occurrenceStart}`,
+      name: command.name || command.taskName || intent.summary,
+      kind,
+      taskType: null,
+      repeats: true,
+      scope,
+      startIso: command.start ?? command.occurrenceStart,
+      endIso: null,
+      durationMinutes: typeof command.durationMinutes === 'number' && command.durationMinutes > 0 ? command.durationMinutes : null,
+      color: colorForKind(kind),
+    };
+  }
   const kind = kindFromCommand(String(command.kind || ''));
   if (command.kind === 'update') {
     const patch = command.patch;

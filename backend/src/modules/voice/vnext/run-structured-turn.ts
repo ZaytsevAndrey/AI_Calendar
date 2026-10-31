@@ -81,6 +81,7 @@ export function entitiesToKnown(entities: EntityRecord[], userId: string): Known
       ...(entity.provider ? { provider: entity.provider } : {}),
       ...(entity.occurrences ? { occurrences: entity.occurrences } : {}),
       ...(entity.seriesEventId != null ? { seriesEventId: entity.seriesEventId } : {}),
+      ...(entity.seriesCopies ? { seriesCopies: true } : {}),
       ...(entity.name ? { name: entity.name } : {}),
       ...(entity.fixed ? { fixed: true } : {}),
       ...(entity.reminder ? { reminder: entity.reminder } : {}),
@@ -109,6 +110,7 @@ function blockedCopy(code: string): Parameters<typeof voiceCopy>[1] {
   if (code === 'cross_day_series_move') return 'same_day_series';
   if (code === 'fixed_skip') return 'fixed_skip';
   if (code === 'nothing_to_skip') return 'nothing_to_skip';
+  if (code === 'series_has_copies') return 'series_copies';
   if (code === 'unrepresented_constraint' || code === 'unsupported_series_scope' || code === 'unrepresentable_move' || code === 'unrepresentable_delete' || code === 'unrepresentable_update') {
     return 'unrepresented';
   }

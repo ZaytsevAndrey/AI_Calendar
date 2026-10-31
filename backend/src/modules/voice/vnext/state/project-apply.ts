@@ -577,7 +577,8 @@ const COMMAND_VERBS: Record<VNextLanguage, Record<string, string>> = {
     move: 'Перенести',
     update: 'Змінити',
     end_series: 'Завершити серію',
-    complete_occurrence: 'Позначити виконаним і прибрати з календаря',
+    complete_occurrence: 'Позначити виконаним',
+    edit_occurrence: 'Змінити',
   },
   en: {
     delete: 'Delete',
@@ -587,7 +588,8 @@ const COMMAND_VERBS: Record<VNextLanguage, Record<string, string>> = {
     move: 'Move',
     update: 'Change',
     end_series: 'End the series',
-    complete_occurrence: 'Mark done and clear from the calendar',
+    complete_occurrence: 'Mark done',
+    edit_occurrence: 'Change',
   },
 };
 
@@ -630,22 +632,21 @@ function commandText(
   const stored = operation.target.kind === 'entity' ? operation.target.name : undefined;
   const title = stored || operation.changes.title || operation.sourceText || kind;
   const verb = COMMAND_VERBS[language][kind] ?? COMMAND_VERBS[language].update;
-  const renamed = kind === 'update' && stored && operation.changes.title && operation.changes.title !== stored;
-  if (renamed) {
-    return language === 'uk' ? `Перейменувати «${stored}» на «${operation.changes.title}»` : `Rename “${stored}” to “${operation.changes.title}”`;
-  }
-  const quoted = language === 'uk' ? `«${title}»` : `“${title}”`;
+  const renamed = (kind === 'update' || kind === 'edit_occurrence') && stored && operation.changes.title && operation.changes.title !== stored;
   const when = (iso: string, withClock: boolean) => {
     const ymd = localYmd(iso, clock.timeZone);
     return withClock ? `${ymd} ${localHm(iso, clock.timeZone)}` : ymd;
   };
+  // An edit from a day on reads "from <day>", like ending a series there; one day reads "on <day>".
+  const fromDay = kind === 'end_series' || (kind === 'edit_occurrence' && operation.seriesScope === 'from_day');
+  const onDay = at?.occurrence ? ` ${language === 'uk' ? (fromDay ? 'з' : 'за') : (fromDay ? 'from' : 'on')} ${when(at.occurrence, false)}` : '';
+  if (renamed) {
+    return (language === 'uk' ? `Перейменувати «${stored}» на «${operation.changes.title}»` : `Rename “${stored}” to “${operation.changes.title}”`) + onDay;
+  }
+  const quoted = language === 'uk' ? `«${title}»` : `“${title}”`;
   if (at?.start) return `${verb} ${quoted} ${language === 'uk' ? 'на' : 'to'} ${when(at.start, true)}`;
   if (at?.day) return `${verb} ${quoted} ${language === 'uk' ? 'на' : 'to'} ${at.day}`;
-  if (at?.occurrence) {
-    const day = when(at.occurrence, false);
-    if (kind === 'end_series') return `${verb} ${quoted} ${language === 'uk' ? 'з' : 'from'} ${day}`;
-    return `${verb} ${quoted} ${language === 'uk' ? 'за' : 'on'} ${day}`;
-  }
+  if (at?.occurrence) return `${verb} ${quoted}${onDay}`;
   return `${verb} ${quoted}`;
 }
 
@@ -868,6 +869,12 @@ function projectSeriesCommand(operation: PendingOperation, clock: Clock, languag
       },
     };
   };
+  // D-03 / VB-02: a series whose group holds detached copies or parked days is not one row. A rename of the
+  // whole series, a delete of it, or an end from a day would miss those days, so they are refused with the
+  // reason; one day at a time still works, and so do skip, per-day moves and series-wide status changes.
+  const wholeSeriesWrite = (operation.action === 'update' && scope === 'all')
+    || (operation.action === 'delete' && (scope === 'all' || scope === 'from_day'));
+  if (wholeSeriesWrite && target.seriesCopies) return { ok: false, code: 'series_has_copies', detail: taskId };
   if (operation.action === 'skip') {
     return scope === 'occurrence' ? occurrenceCommand('skip') : { ok: false, code: 'unsupported_series_scope', detail: `skip:${scope}` };
   }
@@ -875,9 +882,13 @@ function projectSeriesCommand(operation: PendingOperation, clock: Clock, languag
     if (scope === 'occurrence') return occurrenceCommand('skip');
     if (scope === 'from_day') return occurrenceCommand('end_series');
   }
-  // Done on one day of a series clears that day, as Done on a repeating task does in the app.
+  // Done on one day marks that day complete in place (PATCH /tasks/:id/occurrence); the series keeps its rule.
   if (operation.action === 'complete' && scope === 'occurrence') {
-    return occurrenceCommand('skip', 'complete_occurrence', operation.changes.status === 'completed' ? ['status'] : []);
+    return occurrenceEdit(operation, clock, language, 'complete_occurrence');
+  }
+  // A change to one day, or to this day and the following ones, is an occurrence edit (WP-B).
+  if (operation.action === 'update' && (scope === 'occurrence' || scope === 'from_day')) {
+    return occurrenceEdit(operation, clock, language, 'edit_occurrence');
   }
   if (operation.action === 'move') {
     const rejected = onlyKinds(operation, ['date', 'clock', 'duration']) ?? placementOnly(operation) ?? onlyChanges(operation, []);
@@ -935,6 +946,84 @@ function projectSeriesCommand(operation: PendingOperation, clock: Clock, languag
     return { ok: true, intent: { type: 'command', summary, command: { kind: 'update', taskId, taskName, summary, patch: patch.patch, seriesScope: 'all' } } };
   }
   return { ok: false, code: 'unsupported_action', detail: `${operation.action}:series` };
+}
+
+const OCCURRENCE_SCOPE: Record<'occurrence' | 'from_day', 'occurrence' | 'following'> = { occurrence: 'occurrence', from_day: 'following' };
+
+/**
+ * One day of a series, or this day and the following ones, through the occurrence endpoint (WP-B).
+ * It carries a title, notes, a start on the same day, a length and, for one day only, completion. Anything
+ * else the endpoint cannot hold (priority, location, a window, another day) is refused, never dropped.
+ */
+function occurrenceEdit(
+  operation: PendingOperation,
+  clock: Clock,
+  language: VNextLanguage,
+  copy: 'edit_occurrence' | 'complete_occurrence',
+): { ok: true; intent: VoiceWriteIntent } | ProjectError {
+  if (operation.target.kind !== 'entity') return { ok: false, code: 'draft_command', detail: operation.action };
+  const target = operation.target;
+  const scope = operation.seriesScope === 'occurrence' || operation.seriesScope === 'from_day' ? operation.seriesScope : null;
+  if (!scope) return { ok: false, code: 'unsupported_series_scope', detail: `${operation.action}:${operation.seriesScope}` };
+  const completion = copy === 'complete_occurrence';
+  const rejected = onlyKinds(operation, completion ? [] : ['date', 'clock', 'duration'])
+    ?? onlyChanges(operation, completion ? ['status'] : scope === 'occurrence' ? ['notes', 'status'] : ['notes']);
+  if (rejected) return rejected;
+  if (operation.changes.status && operation.changes.status !== 'completed') return { ok: false, code: 'unrepresented_constraint', detail: `${operation.pendingId}:status` };
+  const picked = pickOccurrence(operation, clock.timeZone);
+  if (!picked.ok) return picked;
+  const day = find(operation, 'date')?.value;
+  if (day && localYmd(picked.occurrence.start, clock.timeZone) !== day) return { ok: false, code: 'cross_day_series_move', detail: `${target.entityId}:${day}` };
+  const startClock = findClock(operation, 'start');
+  const endClock = findClock(operation, 'end');
+  const duration = find(operation, 'duration');
+  const occurrenceYmd = localYmd(picked.occurrence.start, clock.timeZone);
+  let start: string | undefined;
+  if (startClock) {
+    const zonedStart = zoned(occurrenceYmd, startClock.value, clock.timeZone);
+    if (!zonedStart.ok) return zonedStart;
+    start = zonedStart.iso;
+  }
+  let durationMinutes: number | undefined = duration?.minutes;
+  if (endClock) {
+    const zonedEnd = zoned(occurrenceYmd, endClock.value, clock.timeZone);
+    if (!zonedEnd.ok) return zonedEnd;
+    const minutes = Math.round((Date.parse(zonedEnd.iso) - Date.parse(start ?? picked.occurrence.start)) / 60_000);
+    if (minutes <= 0) return { ok: false, code: 'contradictory_constraints', detail: operation.pendingId };
+    if (durationMinutes != null && durationMinutes !== minutes) return { ok: false, code: 'contradictory_constraints', detail: operation.pendingId };
+    durationMinutes = minutes;
+  }
+  const title = operation.changes.title && operation.changes.title !== target.name ? operation.changes.title : undefined;
+  const fields = {
+    ...(title ? { name: title } : {}),
+    ...(operation.changes.notes !== undefined ? { description: operation.changes.notes } : {}),
+    ...(start ? { start } : {}),
+    ...(durationMinutes != null ? { durationMinutes } : {}),
+    ...(completion ? { status: 'completed' as const } : {}),
+  };
+  if (!Object.keys(fields).length) return { ok: false, code: 'empty_patch', detail: operation.pendingId };
+  const taskId = target.entityId;
+  const taskName = target.name || operation.changes.title || operation.sourceText || operation.action;
+  const text = commandSummary(language, copy, operation, clock, { occurrence: picked.occurrence.start });
+  return {
+    ok: true,
+    intent: {
+      type: 'command',
+      summary: text,
+      command: {
+        kind: 'edit_occurrence',
+        taskId,
+        taskName,
+        summary: text,
+        occurrenceStart: picked.occurrence.start,
+        scope: OCCURRENCE_SCOPE[scope],
+        ...fields,
+        googleEventId: picked.occurrence.googleEventId,
+        googleEventCalendarId: target.calendarId,
+        seriesScope: CLIENT_SERIES_SCOPE[scope],
+      },
+    },
+  };
 }
 
 /** The production update command carries fields and a schedule. An update that changes nothing is not a preview. */
