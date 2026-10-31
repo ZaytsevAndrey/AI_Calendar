@@ -164,8 +164,10 @@ export function cleanupVoiceTranscript(raw: string, language?: string | null): s
  * interpretation of speech: it fires only on these exact words with nothing else said, so the
  * no-lexical-crutches rule is respected — anything longer still goes to the model.
  */
-const SPOKEN_CONFIRM = new Set(['так', 'да', 'добре', 'гаразд', 'ок', 'окей', 'підтверджую', 'застосуй', 'застосувати', 'yes', 'yeah', 'yep', 'ok', 'okay', 'confirm', 'apply', 'sure']);
-const SPOKEN_CANCEL = new Set(['ні', 'нет', 'скасуй', 'скасувати', 'відміна', 'відмінити', 'no', 'nope', 'cancel', 'stop']);
+// Product decision (31 Oct 2026): exactly these four. "ok", "добре" and the like are what speech
+// recognition also hears as filler, and they must never apply a write on their own.
+const SPOKEN_CONFIRM = new Set(['так', 'yes']);
+const SPOKEN_CANCEL = new Set(['ні', 'no']);
 
 export function spokenControl(raw: string): 'confirm' | 'cancel' | null {
   const words = raw

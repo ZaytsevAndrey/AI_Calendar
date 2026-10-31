@@ -65,7 +65,12 @@ describe('spokenControl', () => {
     expect(spokenControl('yes')).toBe('confirm');
     expect(spokenControl('Ні')).toBe('cancel');
     expect(spokenControl('no')).toBe('cancel');
-    expect(spokenControl('скасуй')).toBe('cancel');
+  });
+
+  it('accepts only the four words: fillers and synonyms go to the model and apply nothing', () => {
+    for (const word of ['ok', 'okay', 'окей', 'добре', 'sure', 'yeah', 'скасуй', 'cancel', 'nope', 'да', 'нет']) {
+      expect(spokenControl(word)).toBeNull();
+    }
   });
 
   it('leaves anything that says more to the model', () => {

@@ -24,7 +24,7 @@ Other voice files do not add product rules. [spec-voice-commander.md](spec-voice
 | `act` | The client runs `intents[]`. |
 | `refuse` | The agent cannot do this. |
 
-Every write waits for Apply or a spoken yes. Spoken yes and `confirm` are the same. Spoken no and `cancel` are the same. While a preview is open and no question is pending, a bare yes or no (`так`, `ні`, `yes`, `no`, and the like, with nothing else said) is that button: the server resolves it without a model call (D-10). Anything longer is speech for the model. A correction of the open preview keeps it open; a reply the server cannot read keeps the preview on screen unchanged. After a successful write the panel stays open.
+Every write waits for Apply or a spoken yes. Spoken yes and `confirm` are the same. Spoken no and `cancel` are the same. While a preview is open and no question is pending, a bare yes or no — exactly `так`, `ні`, `yes` or `no`, with nothing else said — is that button; `ok`, `добре` and other fillers are speech for the model and never apply a write on their own: the server resolves it without a model call (D-10). Anything longer is speech for the model. A correction of the open preview keeps it open; a reply the server cannot read keeps the preview on screen unchanged. After a successful write the panel stays open.
 
 The preview names a stored task or event by its stored title, not by the words of the transcript: `Delete «Report»`, `Rename «A» to «B»`, `Move «Report» to 2026-10-30 18:00`. After a spoken yes the reply starts with `Applying:` and repeats those lines.
 
