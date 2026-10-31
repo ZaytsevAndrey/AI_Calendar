@@ -150,6 +150,34 @@ describe('executeVoiceCommand — occurrences and reminders', () => {
   });
 });
 
+describe('executeVoiceIntents — a confirmed preview of several kinds', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('applies a create, a Later-task patch, an occurrence edit and a slot move in order, each through its own API', async () => {
+    apiCallMock.mockClear();
+    const move = jest.spyOn(ScheduleApi, 'moveDisplayedEvent').mockResolvedValue({ jobId: null } as never);
+    const order: string[] = [];
+    const onCreate = jest.fn(async () => { order.push('create'); notifyScheduleJobSettled(); });
+    const d = deps();
+    d.updateTask.mockImplementation(() => ({ unwrap: async () => { order.push('update'); return undefined; } }));
+    apiCallMock.mockImplementation(async () => { order.push('occurrence'); return {}; });
+    move.mockImplementation(async () => { order.push('move'); return { jobId: null } as never; });
+    const intents: VoiceWriteIntent[] = [
+      { type: 'create', summary: 'Tea', task: { name: 'Tea', eventType: 'admin', estimatedTimeInMinutes: 30, isRecurring: false, allowSplit: false, priority: 'medium', scheduledStartTime: '2026-10-19T06:00:00.000Z' } },
+      { type: 'command', summary: 'Bank', command: { kind: 'update', taskId: 'bank', taskName: 'Call bank', summary: 'Bank', patch: { isUnscheduled: false, scheduledStartTime: '2026-10-19T11:00:00.000Z' } } },
+      { type: 'command', summary: 'Gym', command: { kind: 'edit_occurrence', taskId: 'gym', taskName: 'Gym', summary: 'Gym', occurrenceStart: '2026-10-19T07:00:00.000Z', scope: 'occurrence', name: 'Yoga', googleEventId: null, googleEventCalendarId: null, seriesScope: 'occurrence' } },
+      { type: 'command', summary: 'Report', command: { kind: 'move', taskId: 'report', taskName: 'Report', summary: 'Report', slotId: 's-report', googleEventId: null, calendarId: null, recurringEventId: null, originalStart: '2026-10-19T08:00:00.000Z', originalEnd: '2026-10-19T08:30:00.000Z', start: '2026-10-19T12:00:00.000Z', end: '2026-10-19T12:30:00.000Z' } },
+    ];
+    const { report, error } = await executeVoiceIntents(intents, { ...d, onCreate });
+    expect(error).toBeNull();
+    expect(order).toEqual(['create', 'update', 'occurrence', 'move']);
+    expect(report.results.map((row) => row.status)).toEqual(['applied', 'applied', 'applied', 'applied']);
+    expect(d.updateTask.mock.calls[0][0]).toEqual({ id: 'bank', body: { isUnscheduled: false, scheduledStartTime: '2026-10-19T11:00:00.000Z' } });
+    expect(apiCallMock.mock.calls[0][0]).toMatchObject({ url: '/tasks/gym/occurrence', method: 'PATCH', data: { scope: 'occurrence', name: 'Yoga' } });
+    expect(move.mock.calls[0][0]).toMatchObject({ slotId: 's-report', googleEventId: '' });
+  });
+});
+
 describe('executeVoiceIntents — stop on the first error', () => {
   it('runs a create, then stops at the refused patch and skips the rest', async () => {
     // A create waits for a conflict sheet until the schedule job settles; the test settles it at once.

@@ -1523,3 +1523,139 @@ describe('structured voice catalog', () => {
     expect(rows[1]).toMatchObject({ googleEventId: null, recurring: true });
   });
 });
+
+/**
+ * Integration regression (V2 + WP-B): several pending operations of different kinds in one preview,
+ * a correction of one of them, confirmation only by the exact spoken controls or a tap with the shown
+ * claim, and the execution report feeding the next turn. The server never writes.
+ */
+describe('regression: several pending operations, corrections, confirmation, execution', () => {
+  // Today is Sunday 18 Oct 2026 (NOW). Report has one slot and no calendar event; Gym repeats on Mon 19 / Wed 21;
+  // Call bank is a Later task.
+  const mixedWorld = () => world({
+    tasks: [
+      task('report', 'Report', { isUnscheduled: false }),
+      task('gym', 'Gym', { isRecurring: true, isUnscheduled: false }),
+      task('bank', 'Call bank', { isUnscheduled: true }),
+    ],
+    slots: [
+      slot('s-report', 'report', '2026-10-19T08:00:00.000Z', '2026-10-19T08:30:00.000Z', { googleEventId: null, googleEventCalendarId: null }),
+      slot('s-gym-19', 'gym', '2026-10-19T07:00:00.000Z', '2026-10-19T08:00:00.000Z', { googleEventId: null, googleEventCalendarId: null }),
+      slot('s-gym-21', 'gym', '2026-10-21T07:00:00.000Z', '2026-10-21T08:00:00.000Z', { googleEventId: null, googleEventCalendarId: null }),
+    ],
+  });
+  const threeOps = envelope('tea, move the report to 15, rename monday gym to yoga', [
+    { opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'Tea' } },
+    { opId: 'op-2', action: 'move', target: { kind: 'existing', proposedId: 'report' }, constraints: [{ kind: 'date', value: '2026-10-19', precision: 'day' }, { kind: 'clock', value: '15:00', role: 'start' }] },
+    { opId: 'op-3', action: 'update', target: { kind: 'existing', proposedId: 'gym' }, seriesScope: 'occurrence', occurrence: '2026-10-19', changes: { title: 'Yoga' } },
+  ]);
+  const kinds = (response: VoiceTurnResponse) => response.intents.map((intent) => (intent.type === 'command' ? intent.command.kind : 'create'));
+
+  it('previews three operations of three kinds, corrects one, applies all on the exact spoken yes, and records the report', async () => {
+    const w = mixedWorld();
+    w.model.push(
+      threeOps,
+      envelope('tea tomorrow at 9', [{ opId: 'op-4', action: 'update', target: { kind: 'operation_result', opId: 'pop_1' }, constraints: [{ kind: 'date', value: '2026-10-19', precision: 'day' }, { kind: 'clock', value: '09:00', role: 'start' }] }]),
+      JSON.stringify({ version: '1', kind: 'answer', operations: [], answer: { text: 'Noted.' } }),
+    );
+    const { service, groq } = build(w);
+
+    const first = await service.turn(USER, dto({ transcript: 'tea, move the report to 15, rename monday gym to yoga' }));
+    expect(first.outcome).toBe('confirm');
+    expect(kinds(first).sort()).toEqual(['create', 'edit_occurrence', 'move']);
+    expect(first.intents.find((intent) => intent.type === 'command' && intent.command.kind === 'move')).toMatchObject({
+      command: { slotId: 's-report', googleEventId: null, originalStart: '2026-10-19T08:00:00.000Z', start: '2026-10-19T12:00:00.000Z', end: '2026-10-19T12:30:00.000Z' },
+    });
+    expect(first.intents.find((intent) => intent.type === 'command' && intent.command.kind === 'edit_occurrence')).toMatchObject({
+      summary: 'Rename “Gym” to “Yoga” on 2026-10-19 — this day only',
+      command: { scope: 'occurrence', occurrenceStart: '2026-10-19T07:00:00.000Z', name: 'Yoga' },
+    });
+
+    // A correction of the create keeps the two commands in the preview (WP-G extend boundary).
+    const corrected = await service.turn(USER, dto({ transcript: 'tea tomorrow at 9', ...claimOf(first) }));
+    expect(corrected.outcome).toBe('confirm');
+    expect(kinds(corrected).sort()).toEqual(['create', 'edit_occurrence', 'move']);
+    expect(corrected.intents.find((intent) => intent.type === 'create')).toMatchObject({ task: { name: 'Tea', scheduledStartTime: '2026-10-19T06:00:00.000Z' } });
+
+    // Only так / ні / yes / no are spoken controls. "ok" is noise (no model call, nothing applied);
+    // "okay, sure" goes through normal interpretation and never applies the writes by itself.
+    const calls = (groq.completeJson as jest.Mock).mock.calls.length;
+    const noise = await service.turn(USER, dto({ transcript: 'ok', ...claimOf(corrected) }));
+    expect(noise.outcome).not.toBe('act');
+    expect((groq.completeJson as jest.Mock).mock.calls.length).toBe(calls);
+    const notAControl = await service.turn(USER, dto({ transcript: 'okay, sure', ...claimOf(corrected) }));
+    expect(notAControl.outcome).not.toBe('act');
+    expect((groq.completeJson as jest.Mock).mock.calls.length).toBe(calls + 1);
+
+    // The stale claim of the first preview cannot apply the corrected one; the fresh one can, by a bare yes.
+    const stale = await service.turn(USER, dto({ transcript: 'yes', ...claimOf(first) }));
+    expect(stale.outcome).not.toBe('act');
+    const acted = await service.turn(USER, dto({ transcript: 'yes', ...claimOf(corrected) }));
+    expect(acted.outcome).toBe('act');
+    expect(kinds(acted).sort()).toEqual(['create', 'edit_occurrence', 'move']);
+    expect(acted.execution?.state).toBe('dispatched');
+
+    // The client stops at the first error and reports every row; a second confirm of the same claim is refused.
+    const report = await service.turn(USER, dto({
+      actionId: 'report',
+      executionReport: {
+        executionId: acted.execution!.executionId,
+        results: acted.intents.map((intent, index) => ({ summary: intent.summary, status: index === 0 ? 'applied' : index === 1 ? 'error' : 'skipped', ...(index === 1 ? { definite: true } : {}) })),
+      },
+    }));
+    expect(report.intents).toEqual([]);
+    const again = await service.turn(USER, dto({ actionId: 'confirm', executionId: acted.execution!.executionId, previewRevision: acted.execution!.previewRevision }));
+    expect(again.outcome).not.toBe('act');
+    expect(again.intents).toEqual([]);
+  });
+
+  it('a bare "ні" withdraws every pending operation and nothing is applied afterwards', async () => {
+    const w = mixedWorld();
+    w.model.push(threeOps);
+    const { service } = build(w);
+    const first = await service.turn(USER, dto({ transcript: 'tea, move the report to 15, rename monday gym to yoga' }));
+    const claim = claimOf(first);
+    const canceled = await service.turn(USER, dto({ transcript: 'Ні', ...claim }));
+    expect(canceled.outcome).toBe('answer');
+    expect(canceled.intents).toEqual([]);
+    const late = await service.turn(USER, dto({ actionId: 'confirm', ...claim }));
+    expect(late.outcome).not.toBe('act');
+    expect(late.intents).toEqual([]);
+  });
+
+  it('schedules a Later task by voice (VC-02) and completes one day of a series in place (WP-B) in one confirmed preview', async () => {
+    const w = mixedWorld();
+    w.model.push(envelope('bank tomorrow at 14 and done with gym monday', [
+      { opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'bank' }, constraints: [{ kind: 'date', value: '2026-10-19', precision: 'day' }, { kind: 'clock', value: '14:00', role: 'start' }] },
+      { opId: 'op-2', action: 'complete', target: { kind: 'existing', proposedId: 'gym' }, seriesScope: 'occurrence', occurrence: '2026-10-19', changes: { status: 'completed' } },
+    ]));
+    const { service } = build(w);
+    const preview = await service.turn(USER, dto({ transcript: 'bank tomorrow at 14 and done with gym monday' }));
+    expect(preview.outcome).toBe('confirm');
+    expect(preview.intents).toEqual([
+      expect.objectContaining({ command: expect.objectContaining({ kind: 'update', taskId: 'bank', patch: { isUnscheduled: false, scheduledStartTime: '2026-10-19T11:00:00.000Z' } }) }),
+      expect.objectContaining({ command: expect.objectContaining({ kind: 'edit_occurrence', taskId: 'gym', scope: 'occurrence', status: 'completed', occurrenceStart: '2026-10-19T07:00:00.000Z' }) }),
+    ]);
+    const acted = await service.turn(USER, dto({ actionId: 'confirm', ...claimOf(preview) }));
+    expect(acted.outcome).toBe('act');
+    expect(acted.intents).toHaveLength(2);
+  });
+
+  it('refuses a series-wide delete on a series with a detached day, but still previews that day alone', async () => {
+    const w = mixedWorld();
+    w.tasks.push(task('gym-copy', 'Gym', { isUnscheduled: false, parentSeriesId: 'gym' } as Partial<Task>));
+    w.slots.push(slot('s-copy', 'gym-copy', '2026-10-23T07:00:00.000Z', '2026-10-23T08:00:00.000Z', { googleEventId: null, googleEventCalendarId: null }));
+    w.model.push(
+      envelope('delete gym', [{ opId: 'op-1', action: 'delete', target: { kind: 'existing', proposedId: 'gym' }, seriesScope: 'all' }]),
+      envelope('skip gym on wednesday', [{ opId: 'op-2', action: 'delete', target: { kind: 'existing', proposedId: 'gym' }, seriesScope: 'occurrence', occurrence: '2026-10-21' }]),
+    );
+    const { service } = build(w);
+    const refused = await service.turn(USER, dto({ transcript: 'delete gym' }));
+    expect(refused.outcome).toBe('clarify');
+    expect(refused.intents).toEqual([]);
+    expect(refused.assistantMessage).toContain('changed or parked separately');
+    const oneDay = await service.turn(USER, dto({ transcript: 'skip gym on wednesday' }));
+    expect(oneDay.outcome).toBe('confirm');
+    expect(oneDay.intents[0]).toMatchObject({ command: { kind: 'skip', occurrenceStart: '2026-10-21T07:00:00.000Z' } });
+  });
+});
