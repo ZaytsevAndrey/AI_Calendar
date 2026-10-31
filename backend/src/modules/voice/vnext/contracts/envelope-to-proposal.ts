@@ -154,6 +154,7 @@ function mapOperation(given: SemanticOperationV1): SemanticOperationProposal | n
     ...(calendarId ? { calendarId } : {}),
     ...(operation.seriesScope ? { seriesScope: operation.seriesScope } : {}),
     ...(operation.occurrence ? { occurrenceDate: operation.occurrence } : {}),
+    ...(operation.replaces ? { replaces: { pendingId: operation.replaces } } : {}),
   };
 }
 

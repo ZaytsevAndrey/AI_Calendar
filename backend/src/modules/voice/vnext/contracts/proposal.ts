@@ -89,6 +89,8 @@ export type SemanticOperationProposal = {
   /** Recurring targets only: the part of the series, and the date of the occurrence meant. */
   seriesScope?: SeriesScope;
   occurrenceDate?: string;
+  /** The pending operation this proposal takes the place of; it is withdrawn when the group applies (V7). */
+  replaces?: { pendingId: string };
 };
 
 export type FieldPatch =

@@ -108,6 +108,12 @@ export type SemanticOperationV1 = {
   /** Current date (YYYY-MM-DD) of the occurrence the user means, for a recurring series. */
   occurrence?: string;
   /**
+   * The pending operation this one takes the place of (V7): the user corrected which record a pending
+   * operation applies to, or restated it for another record. The named operation is withdrawn; other
+   * pending operations stay. Without it a new operation is added beside what is pending.
+   */
+  replaces?: string;
+  /**
    * Runtime-only marker set by trusted bulk expansion.
    * The envelope parser does not copy this from model JSON.
    */

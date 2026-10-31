@@ -17,6 +17,9 @@
  * - g-d-03 / g-d-04 and en-d-02 (after fix2, recorded as such): with "Нарада з клієнтом" and "Нарада з клієнтом
  *   щодо бюджету" both open, a question is as acceptable as the move of the exact title — the frozen set holds
  *   the same standard for "закрий звіт" (g-c-18, g-c-14). The budget meeting must still never be the target.
+ * - g-b-27 turn 2 (after fix5, recorded as such): a bare "так" right after the user canceled has nothing to
+ *   refer to; a question back ("what does yes refer to?") is as acceptable as "nothing is pending". The turn
+ *   still forbids any write and the invariant (the review is never deleted) is unchanged.
  * - Category D added (g-d-*): V2 / WP-B / WP-G behaviour the A–C set did not cover — scheduling a Later
  *   task, slot moves within and across days, one day of a series (rename, done, skip, same-day move,
  *   cross-day refusal, scope question), a reminder update, several pending operations with a correction
@@ -470,7 +473,7 @@ const B: GenScenario[] = [
     turns: [
       { utterance: 'видали design review', expect: { outcomes: ['confirm'], taskId: 'task-review', forbidTaskId: 'task-review-2' } },
       { utterance: 'скасуй це', expect: { ...noWrite, pendingCount: 0 } },
-      { utterance: 'так', expect: noWrite },
+      { utterance: 'так', expect: { outcomes: ['answer', 'refuse', 'clarify'], intents: 0 }, note: 'changed 31 Oct (fix6): a bare yes after a cancel has no referent; asking what it refers to is as valid as saying nothing is pending. Still no write (see header).' },
       { utterance: 'додай задачу архівувати макети', expect: confirm('макет', { unscheduled: true, forbidTaskId: 'task-review' }) },
     ],
   },

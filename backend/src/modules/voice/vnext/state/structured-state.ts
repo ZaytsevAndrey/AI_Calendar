@@ -154,6 +154,9 @@ export function applyProposalGroup(input: {
   if (typeof boundary !== 'string') return fail(state, boundary.code, boundary.detail);
 
   const removed = removalSet(current, group, boundary);
+  // A proposal that takes the place of a pending operation withdraws it whatever the boundary (V7): the
+  // user corrected which record the operation applies to, so the old record's operation must not stay.
+  for (const proposal of group.proposals) if (proposal.replaces) removed.add(proposal.replaces.pendingId);
   const surviving = current.operations.filter((operation) => !removed.has(operation.pendingId));
   const patched = planPatches(surviving, group.patches, input.entities);
   if (!patched.ok) return fail(state, patched.code, patched.detail);

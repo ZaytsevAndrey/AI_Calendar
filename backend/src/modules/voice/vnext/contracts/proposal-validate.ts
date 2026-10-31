@@ -244,6 +244,13 @@ function parseProposal(value: unknown, path: string, context: ProposalContext, e
     if (typeof value.occurrenceDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.occurrenceDate)) occurrenceDate = value.occurrenceDate;
     else issue(errors, 'invalid_occurrence', path, String(value.occurrenceDate));
   }
+  let replaces: { pendingId: string } | undefined;
+  if (value.replaces !== undefined) {
+    const pendingId = isRecord(value.replaces) && typeof value.replaces.pendingId === 'string' ? value.replaces.pendingId.trim() : '';
+    if (!pendingId) issue(errors, 'invalid_type', `${path}.replaces`, 'replaces');
+    else if (!context.pendingIds.includes(pendingId)) issue(errors, 'unauthorized_pending', `${path}.replaces`, pendingId);
+    else replaces = { pendingId };
+  }
   if (!target || !localRef) return null;
   return {
     localRef,
@@ -259,6 +266,7 @@ function parseProposal(value: unknown, path: string, context: ProposalContext, e
     source: { text: isRecord(value.source) && typeof value.source.text === 'string' ? value.source.text : '' },
     ...(seriesScope ? { seriesScope } : {}),
     ...(occurrenceDate ? { occurrenceDate } : {}),
+    ...(replaces ? { replaces } : {}),
   };
 }
 

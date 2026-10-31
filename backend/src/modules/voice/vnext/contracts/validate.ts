@@ -426,7 +426,7 @@ function parseOperation(value: unknown, path: string, errors: ValidationIssue[],
     return null;
   }
   liftAllDay(value);
-  rejectUnknown(errors, value, ['opId', 'action', 'target', 'changes', 'constraints', 'dependsOn', 'source', 'scope', 'seriesScope', 'occurrence'], path);
+  rejectUnknown(errors, value, ['opId', 'action', 'target', 'changes', 'constraints', 'dependsOn', 'source', 'scope', 'seriesScope', 'occurrence', 'replaces'], path);
   const opId = typeof value.opId === 'string' ? value.opId.trim() : '';
   if (!/^op-[A-Za-z0-9-]{1,40}$/.test(opId)) issue(errors, 'invalid_op_id', path, opId || '(missing)');
   if (!(SEMANTIC_ACTIONS as readonly string[]).includes(String(value.action))) {
@@ -480,6 +480,11 @@ function parseOperation(value: unknown, path: string, errors: ValidationIssue[],
     if (typeof value.occurrence !== 'string' || !isYmd(value.occurrence)) issue(errors, 'invalid_occurrence', path, String(value.occurrence));
     else occurrence = value.occurrence;
   }
+  let replaces: string | undefined;
+  if (value.replaces !== undefined && value.replaces !== null) {
+    if (typeof value.replaces !== 'string' || !value.replaces.trim()) issue(errors, 'invalid_type', `${path}.replaces`, 'replaces');
+    else replaces = value.replaces.trim();
+  }
   if (!opId || !(SEMANTIC_ACTIONS as readonly string[]).includes(String(value.action)) || !target || !isRecord(value.source)) {
     return null;
   }
@@ -493,6 +498,7 @@ function parseOperation(value: unknown, path: string, errors: ValidationIssue[],
     ...(scope ? { scope } : {}),
     ...(seriesScope ? { seriesScope } : {}),
     ...(occurrence ? { occurrence } : {}),
+    ...(replaces ? { replaces } : {}),
     source: {
       text: String(value.source.text),
       ...(Array.isArray(value.source.span) ? { span: [value.source.span[0] as number, value.source.span[1] as number] } : {}),

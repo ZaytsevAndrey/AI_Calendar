@@ -438,3 +438,50 @@ describe('V7 hard set — a fixed event given only a day (h-18)', () => {
     expect(command(result)).toMatchObject({ kind: 'update', taskId: 'task-dentist', patch: { scheduledStartTime: '2026-10-19T12:00:00.000Z', scheduledEndTime: '2026-10-19T12:45:00.000Z' } });
   });
 });
+
+// ---- Round 7: the fix5 full rerun (g-b-22, g-c-11). -----------------------------------------------------
+
+describe('V7 live defects — a correction that names another record replaces the pending operation (g-b-22, g-c-11)', () => {
+  const work = task('task-zvit-work', 'Звіт', { unscheduled: true });
+  const home = task('task-zvit-home', 'Звіт домашній', { unscheduled: true });
+
+  it('"not the work one, the home one" moves the home report alone; the work report is withdrawn', async () => {
+    const session = createSession(USER, 'v7-28');
+    await runVNextTurn(base(session, [work, home], { transcript: 'перенеси робочий звіт на понеділок' }), interpreter(ops([
+      op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-zvit-work' }, constraints: [{ kind: 'date', value: '2026-10-19', precision: 'day' }] }),
+    ])));
+    const corrected = await runVNextTurn(base(session, [work, home], { transcript: 'ні, не робочий, домашній, і на 18:30 26 жовтня' }), interpreter(ops([
+      op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-zvit-home' }, replaces: 'pop_1', constraints: [{ kind: 'date', value: '2026-10-26', precision: 'day' }, { kind: 'clock', value: '18:30', role: 'start' }] }),
+    ])));
+    expect(outcome(corrected)).toMatch(/^confirm/);
+    expect(corrected.response.intents).toHaveLength(1);
+    expect(command(corrected)).toMatchObject({ kind: 'update', taskId: 'task-zvit-home' });
+    expect(JSON.stringify(corrected.response.intents)).not.toContain('task-zvit-work');
+  });
+
+  it('a replacement keeps the other pending operations and only swaps the one it names', async () => {
+    const finance = task('task-finance', 'Фінансовий звіт', { unscheduled: true });
+    const review = task('task-review-2', 'Design review follow-up', { unscheduled: true });
+    const session = createSession(USER, 'v7-29');
+    await runVNextTurn(base(session, [finance, review]), interpreter(ops([
+      op({ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'Чай' } }),
+      op({ opId: 'op-2', action: 'complete', target: { kind: 'existing', proposedId: 'task-finance' } }),
+    ])));
+    const corrected = await runVNextTurn(base(session, [finance, review]), interpreter(ops([
+      op({ opId: 'op-1', action: 'complete', target: { kind: 'existing', proposedId: 'task-review-2' }, replaces: 'pop_2' }),
+    ])));
+    expect(outcome(corrected)).toMatch(/^confirm/);
+    expect(corrected.response.intents).toHaveLength(2);
+    expect(JSON.stringify(corrected.response.intents)).toContain('task-review-2');
+    expect(JSON.stringify(corrected.response.intents)).not.toContain('task-finance');
+    expect(create(corrected, 0)).toMatchObject({ name: 'Чай' });
+  });
+
+  it('replaces naming an unknown pending id is rejected, not applied', async () => {
+    const session = createSession(USER, 'v7-30');
+    await runVNextTurn(base(session, [work, home]), interpreter(ops([op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-zvit-work' }, constraints: [{ kind: 'date', value: '2026-10-19', precision: 'day' }] })])));
+    const bad = await runVNextTurn(base(session, [work, home]), interpreter(ops([op({ opId: 'op-1', action: 'complete', target: { kind: 'existing', proposedId: 'task-zvit-home' }, replaces: 'pop_9' })])));
+    expect(bad.response.outcome).not.toBe('act');
+    expect(JSON.stringify(bad.response.intents)).not.toContain('task-zvit-home');
+  });
+});

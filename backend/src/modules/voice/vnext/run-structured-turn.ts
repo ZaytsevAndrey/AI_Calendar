@@ -282,6 +282,7 @@ function additiveToPreview(group: ProposalGroup, state: StructuredState): boolea
   const pendingRows = new Set(state.operations.flatMap((operation) => (operation.target.kind === 'entity' ? [operation.target.entityId] : [])));
   const pendingTitles = new Set(state.operations.filter((operation) => operation.target.kind === 'new').map((operation) => fold(operation.changes.title)));
   return group.proposals.every((proposal) => {
+    if (proposal.replaces) return true;
     if (proposal.target.kind === 'pending') return true;
     if (proposal.target.kind === 'entity') return !pendingRows.has(proposal.target.entityId);
     if (proposal.target.kind === 'new') return !pendingTitles.has(fold(proposal.changes.title));
