@@ -103,7 +103,7 @@ export function buildTurnUser(input: {
   weekdays: string;
   defaultDurationMinutes: number;
   language: 'uk' | 'en';
-  owned: Array<{ id: string; type: string; name: string; status: string; start?: string | null; access?: string }>;
+  owned: Array<{ id: string; type: string; name: string; status: string; start?: string | null; access?: string; days?: string[]; later?: boolean }>;
   openQuestion: string | null;
   pending: boolean;
   history?: Array<{ role: 'user' | 'assistant'; text: string }>;
@@ -118,7 +118,7 @@ export function buildTurnUser(input: {
     ? 'Write any user-facing question in Ukrainian.'
     : 'Write any user-facing question in English.';
   const owned = input.owned.length
-    ? input.owned.map((row) => `${row.type} ${row.id} ${row.status} ${row.name}${row.start ? ` start ${row.start}` : ''}${row.access ? ` ${row.access}` : ''}`).join('\n')
+    ? input.owned.map((row) => `${row.type} ${row.id} ${row.status} ${row.name}${row.start ? ` start ${row.start}` : ''}${row.days ? ` repeats, days ${row.days.join(', ')}` : ''}${row.later ? ' later (no time)' : ''}${row.access ? ` ${row.access}` : ''}`).join('\n')
     : '(none)';
   return [
     languageLine,

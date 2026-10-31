@@ -462,6 +462,11 @@ export class StructuredVoiceService {
           name: row.name,
           status: row.status,
           start: row.scheduledStart ? `${localYmd(row.scheduledStart, ctx.timeZone)} ${localHm(row.scheduledStart, ctx.timeZone)}` : null,
+          // A series shows its coming days, so "Monday's gym" is a day the model can name (V7, en-d-03).
+          ...(row.recurring && row.occurrences?.length
+            ? { days: row.occurrences.slice(0, 6).map((occurrence) => `${localYmd(occurrence.start, ctx.timeZone)} ${localHm(occurrence.start, ctx.timeZone)}`) }
+            : {}),
+          ...(row.type === 'task' && row.unscheduled ? { later: true } : {}),
           ...(row.type === 'external_event' && !row.writable ? { access: 'read-only' } : {}),
         })),
       openQuestion: session.openQuestion,

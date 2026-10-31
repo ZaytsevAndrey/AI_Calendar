@@ -1052,6 +1052,14 @@ describe('structured recurring tasks and occurrence scope', () => {
     expect(moved.intents[0]?.summary).toBe('Move “Gym” to 2026-10-21 15:00 — every open day');
   });
 
+  // V7 (en-d-03): the model could not name "Monday's gym" because the series row showed no days.
+  it('lists the coming days of a series and marks a Later task in the prompt', async () => {
+    const w = world({ ...series(), tasks: [...series().tasks, task('later', 'Call bank', { isUnscheduled: true })], model: [op('skip gym on monday', { action: 'skip', seriesScope: 'occurrence', occurrence: '2026-10-19' })] });
+    await build(w).service.turn(USER, dto({ transcript: 'skip gym on monday' }));
+    expect(w.prompts[0]).toContain('Gym repeats, days 2026-10-19 10:00, 2026-10-21 10:00');
+    expect(w.prompts[0]).toContain('Call bank later (no time)');
+  });
+
   it('skips one occurrence', async () => {
     const result = await run('skip gym on monday', { action: 'skip', seriesScope: 'occurrence', occurrence: '2026-10-19' });
     expect(result.outcome).toBe('confirm');

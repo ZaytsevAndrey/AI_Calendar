@@ -187,7 +187,7 @@ function keptLabels(operation: PendingOperation): { ok: true; labels: TimeOfDayL
     constraint.kind === 'unresolved');
   if (!unresolved.length) return { ok: true, labels: [] };
   // "In the evening, at 18:55": the clock is the time and the label only describes it (V7, g-a-50).
-  if (unresolved.every((constraint) => constraint.label) && operation.constraints.some((constraint) => constraint.kind === 'clock' && constraint.role === 'start')) {
+  if (unresolved.every((constraint) => constraint.label) && operation.constraints.some((constraint) => constraint.kind === 'clock' && (constraint.role === 'start' || constraint.role === 'preferred'))) {
     return { ok: true, labels: [] };
   }
   if (unresolved.some((constraint) => !constraint.label)) {
