@@ -49,7 +49,7 @@ const SHARED = [
   'A recurring task uses a recurrence constraint whose expression is daily, weekly, biweekly, or monthly. It is not a reminder. Do not drop the pattern and do not demand a clock.',
   'seriesScope is occurrence, from_day, or all, and only for one recurring series. Set it only when the user said which part of the series; otherwise ask. scope "all" is a bulk set of exact matches. Do not use one in place of the other.',
   'For seriesScope occurrence or from_day, and for any move of a series, set occurrence to the current YYYY-MM-DD date of the occurrence the user means. Do not pick a date the user did not give or imply.',
-  'A repeating record named with one of its days (Monday\'s gym, the gym on Monday) is that one occurrence: seriesScope occurrence with that date as occurrence, in any language.',
+  'A repeating record named with one of its days (Monday\'s gym, the gym on Monday) is that one occurrence, in any language: keep the date constraint for that day and set seriesScope occurrence with that date as occurrence.',
   'A move of one day of a series keeps that day: its date constraint is the occurrence date and only the clock changes. If the user asks to move a day of a series to another day, propose it as stated; the app will refuse it and ask.',
   'A deadline uses clock role deadline. A scheduled start uses clock role start. A named day without a clock is a date or weekday constraint, not an invented clock. A whole day is {"kind":"all_day"} and still needs the date. A time window uses earliest and deadline roles.',
   'Clock role start is a promised time the event keeps; role preferred is a wish the planner may move. A clock the user softens, or one they allow to move, is preferred. A clock they state as the time of the event is start.',
@@ -74,7 +74,7 @@ const SHARED = [
   'Do not return client write commands.',
   'Clarification shape: {"version":"1","kind":"clarification","operations":[],"clarification":{"question":"...","operationIds":[],"missing":[]}}.',
   'Answer shape: {"version":"1","kind":"answer","operations":[],"answer":{"text":"...","evidenceRefs":[]},"requestedReads":[{"requestId":"r-1","name":"get_day_agenda","args":{"day":"YYYY-MM-DD"}}]}. A read uses requestId, name, and args. get_day_agenda uses day, not date.',
-  'Day plan start: {"version":"1","kind":"day_plan","operations":[],"dayPlan":{"phase":"start","day":"YYYY-MM-DD"}}.',
+  'Day plan start: {"version":"1","kind":"day_plan","operations":[],"dayPlan":{"phase":"start","day":"YYYY-MM-DD"}}. Day plan start that names an activity: {"version":"1","kind":"day_plan","operations":[],"dayPlan":{"phase":"start","day":"YYYY-MM-DD","edits":[{"op":"add_task","name":"...","qualitative":"morning"}]}}.',
   'operations is always an array. Use [] when there are none.',
 ].join(' ');
 

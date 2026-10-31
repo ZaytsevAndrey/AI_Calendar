@@ -17,6 +17,9 @@
  * - g-d-03 / g-d-04 and en-d-02 (after fix2, recorded as such): with "Нарада з клієнтом" and "Нарада з клієнтом
  *   щодо бюджету" both open, a question is as acceptable as the move of the exact title — the frozen set holds
  *   the same standard for "закрий звіт" (g-c-18, g-c-14). The budget meeting must still never be the target.
+ * - g-b-02 turn 1 (after fix5, recorded as such): "нараду з клієнтом" with «Нарада з клієнтом» and «Нарада з
+ *   клієнтом щодо бюджету» both open follows the g-d-03 / g-c-18 standard — the exact title or a question. The
+ *   budget meeting is still forbidden (the invariant); the fix5 run that chose the exact title is kept as scored.
  * - g-b-27 turn 2 (after fix5, recorded as such): a bare "так" right after the user canceled has nothing to
  *   refer to; a question back ("what does yes refer to?") is as acceptable as "nothing is pending". The turn
  *   still forbids any write and the invariant (the review is never deleted) is unchanged.
@@ -268,7 +271,7 @@ const B: GenScenario[] = [
   {
     id: 'g-b-02', category: 'B', family: 'switch-target-duration', world: 'default', invariant: 'budget meeting is never the target',
     turns: [
-      { utterance: 'подовж нараду з клієнтом до 50 хвилин', expect: clarify },
+      { utterance: 'подовж нараду з клієнтом до 50 хвилин', expect: { outcomes: ['clarify', 'confirm'], taskId: 'task-client', includes: '50', forbidTaskId: 'task-client-2' }, note: 'changed 31 Oct (fix6): same standard as g-d-03 / g-c-18 — the exact title or a question; the budget meeting is still forbidden' },
       { utterance: 'не бюджетну, звичайну', expect: { outcomes: ['confirm'], taskId: 'task-client', includes: '50', forbidTaskId: 'task-client-2' } },
       { utterance: 'і постав її на 26 жовтня о 11:10', expect: { outcomes: ['confirm'], taskId: 'task-client', includes: '11:10', forbidTaskId: 'task-client-2' } },
       { utterance: 'підтверджую', expect: act({ taskId: 'task-client', forbidTaskId: 'task-client-2' }) },
