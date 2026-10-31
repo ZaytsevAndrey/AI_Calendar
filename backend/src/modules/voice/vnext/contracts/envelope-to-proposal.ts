@@ -199,6 +199,13 @@ function mapConstraint(constraint: SemanticConstraintV1): TemporalProposal {
   ) {
     return { kind: 'relative', direction: 'after', amount: constraint.amount, unit: constraint.unit };
   }
+  // "An hour later / earlier" for the task the operation addresses: a delay from its own start (V7, h-05).
+  if (
+    constraint.kind === 'relative_time' && constraint.anchor === 'referenced_task' && (constraint.direction === 'after' || constraint.direction === 'before')
+    && typeof constraint.amount === 'number' && Number.isInteger(constraint.amount) && constraint.amount > 0 && constraint.unit
+  ) {
+    return { kind: 'relative', direction: constraint.direction, amount: constraint.amount, unit: constraint.unit, anchor: 'target' };
+  }
   if (constraint.kind === 'duration') return { kind: 'duration', minutes: constraint.minutes };
   if (constraint.kind === 'ordering' && constraint.target.kind === 'existing' && constraint.target.proposedId) {
     return { kind: 'ordering', relation: constraint.relation, entityId: constraint.target.proposedId };

@@ -117,6 +117,7 @@ function applyFolds(create: PendingOperation, dependents: PendingOperation[]): {
       scheduling = dependent.scheduling;
     }
     if (dependent.constraints.some((constraint) => constraint.kind === 'date' || constraint.kind === 'weekday' || constraint.kind === 'clock' || constraint.kind === 'interval')) delete changes.unschedule;
+    if (dependent.changes.unschedule) constraints = constraints.filter((item) => !['date', 'weekday', 'clock', 'interval', 'all_day', 'day_bound', 'unresolved', 'relative'].includes(item.kind));
     for (const constraint of dependent.constraints) {
       const key = constraintKey(constraint);
       const body = JSON.stringify(withoutConstraintId(constraint));

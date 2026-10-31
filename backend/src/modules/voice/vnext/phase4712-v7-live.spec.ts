@@ -377,3 +377,64 @@ describe('V7 round 3 — "wait, not yet" keeps the preview (g-a-46)', () => {
     expect(yes.response.outcome).toBe('act');
   });
 });
+
+// ---- Round 6: the hard set's first live run (63%). ------------------------------------------------------
+
+describe('V7 hard set — an addition to the open preview keeps what is pending (h-04, h-10)', () => {
+  it('a new operation on another target extends the preview instead of replacing it', async () => {
+    const dentist = task('task-dentist', 'Стоматолог', { fixed: true, scheduledStart: '2026-10-22T12:00:00.000Z', scheduledEnd: '2026-10-22T12:45:00.000Z', slotId: 's-d', googleEventId: 'g-d' });
+    const session = createSession(USER, 'v7-26');
+    await runVNextTurn(base(session, [dentist]), interpreter(ops([op({ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'прибрати гараж' }, constraints: [{ kind: 'date', value: '2026-10-24', precision: 'day' }, { kind: 'clock', value: '11:00', role: 'start' }] })])));
+    const added = await runVNextTurn(base(session, [dentist]), interpreter(ops([
+      op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-dentist' }, constraints: [{ kind: 'date', value: '2026-10-23', precision: 'day' }, { kind: 'clock', value: '16:00', role: 'start' }] }),
+    ])));
+    expect(outcome(added)).toMatch(/^confirm/);
+    expect(added.response.intents).toHaveLength(2);
+    const dropped = await runVNextTurn(base(session, [dentist]), interpreter(ops([op({ opId: 'op-1', action: 'cancel', target: { kind: 'operation_result', opId: 'pop_1' } })])));
+    expect(outcome(dropped)).toMatch(/^confirm/);
+    expect(dropped.response.intents).toHaveLength(1);
+    expect(command(dropped)).toMatchObject({ kind: 'move', taskId: 'task-dentist' });
+  });
+
+  it('a restatement of the same target still replaces the preview', async () => {
+    const session = createSession(USER, 'v7-27');
+    await runVNextTurn(base(session, [report]), interpreter(ops([op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-report' }, constraints: [{ kind: 'date', value: '2026-10-19', precision: 'day' }] })])));
+    const restated = await runVNextTurn(base(session, [report]), interpreter(ops([op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-report' }, constraints: [{ kind: 'date', value: '2026-10-20', precision: 'day' }] })])));
+    expect(restated.response.intents).toHaveLength(1);
+    expect(JSON.stringify(restated.response.intents)).toContain('2026-10-20');
+    expect(JSON.stringify(restated.response.intents)).not.toContain('2026-10-19');
+  });
+});
+
+describe('V7 hard set — "an hour later" on a placed task (h-05)', () => {
+  it('a relative time anchored on the task moves it from its own start', async () => {
+    const dentist = task('task-dentist', 'Стоматолог', { fixed: true, scheduledStart: '2026-10-22T12:00:00.000Z', scheduledEnd: '2026-10-22T12:45:00.000Z', slotId: 's-d', googleEventId: 'g-d' });
+    const result = await runVNextTurn(base(createSession(USER, 'v7-28'), [dentist]), interpreter(ops([
+      op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-dentist', description: 'його' }, constraints: [{ kind: 'relative_time', anchor: 'referenced_task', direction: 'after', amount: 1, unit: 'hour' } as never] }),
+    ])));
+    expect(outcome(result)).toMatch(/^confirm/);
+    expect(command(result)).toMatchObject({ kind: 'move', taskId: 'task-dentist', start: '2026-10-22T13:00:00.000Z', end: '2026-10-22T13:45:00.000Z' });
+  });
+});
+
+describe('V7 hard set — "take the time off" as a correction of a pending schedule (h-08, he-10)', () => {
+  it('unschedule drops the pending day and clock instead of contradicting them', async () => {
+    const later = task('task-report', 'Звіт', { unscheduled: true });
+    const session = createSession(USER, 'v7-29');
+    await runVNextTurn(base(session, [later]), interpreter(ops([op({ opId: 'op-1', action: 'update', target: { kind: 'existing', proposedId: 'task-report' }, constraints: [{ kind: 'date', value: '2026-10-22', precision: 'day' }, { kind: 'clock', value: '09:00', role: 'start' }] })])));
+    const back = await runVNextTurn(base(session, [later]), interpreter(ops([op({ opId: 'op-1', action: 'update', target: { kind: 'operation_result', opId: 'pop_1' }, changes: { unschedule: true } })])));
+    expect(outcome(back)).toMatch(/^confirm/);
+    expect(command(back)).toMatchObject({ kind: 'update', taskId: 'task-report', patch: { isUnscheduled: true } });
+  });
+});
+
+describe('V7 hard set — a fixed event given only a day (h-18)', () => {
+  it('a move of a fixed event to a day keeps its clock and length, like an update does', async () => {
+    const dentist = task('task-dentist', 'Стоматолог', { fixed: true, scheduledStart: '2026-10-22T12:00:00.000Z', scheduledEnd: '2026-10-22T12:45:00.000Z', slotId: 's-d', googleEventId: 'g-d' });
+    const result = await runVNextTurn(base(createSession(USER, 'v7-30'), [dentist]), interpreter(ops([
+      op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-dentist' }, constraints: [{ kind: 'date', value: '2026-10-19', precision: 'day' }] }),
+    ])));
+    expect(outcome(result)).toMatch(/^confirm/);
+    expect(command(result)).toMatchObject({ kind: 'update', taskId: 'task-dentist', patch: { scheduledStartTime: '2026-10-19T12:00:00.000Z', scheduledEndTime: '2026-10-19T12:45:00.000Z' } });
+  });
+});

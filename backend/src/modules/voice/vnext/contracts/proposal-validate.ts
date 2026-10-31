@@ -69,11 +69,12 @@ function parseTemporal(value: unknown, path: string, errors: ValidationIssue[]):
   }
   if (
     value.kind === 'relative'
-    && value.direction === 'after'
+    && (value.direction === 'after' || (value.direction === 'before' && value.anchor === 'target'))
     && (value.unit === 'minute' || value.unit === 'hour' || value.unit === 'day')
     && typeof value.amount === 'number' && Number.isInteger(value.amount) && value.amount > 0 && value.amount <= 366 * 24 * 60
+    && (value.anchor === undefined || value.anchor === 'now' || value.anchor === 'target')
   ) {
-    return { kind: 'relative', direction: 'after', amount: value.amount, unit: value.unit };
+    return { kind: 'relative', direction: value.direction, amount: value.amount, unit: value.unit, ...(value.anchor === 'target' ? { anchor: 'target' as const } : {}) };
   }
   if (value.kind === 'interval' && typeof value.startHm === 'string' && typeof value.endHm === 'string' && hm(value.startHm) != null && hm(value.endHm) != null && hm(value.startHm)! <= hm(value.endHm)!) {
     return { kind: 'interval', startHm: value.startHm, endHm: value.endHm };

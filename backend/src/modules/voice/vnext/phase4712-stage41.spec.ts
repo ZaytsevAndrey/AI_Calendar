@@ -765,7 +765,8 @@ describe('stage 4.1 V1 bridge isolation', () => {
       { kind: 'clock', value: '15:00', role: 'preferred' },
       { kind: 'all_day' },
       { kind: 'relative', direction: 'after', amount: 2, unit: 'hour' },
-      { kind: 'unresolved' },
+      // V7: a delay from the referenced task's own start is carried ("an hour later"); before V7 it was unresolved.
+      { kind: 'relative', direction: 'after', amount: 1, unit: 'hour', anchor: 'target' },
       { kind: 'unresolved', label: 'evening' },
       { kind: 'unresolved' },
     ]);

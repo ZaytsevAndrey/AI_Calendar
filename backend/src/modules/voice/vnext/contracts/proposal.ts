@@ -45,7 +45,8 @@ export type TemporalProposal =
   /** A bound at the user's own wake or sleep time on the date constraint. */
   | { kind: 'day_bound'; edge: 'wake' | 'sleep'; role: 'earliest' | 'deadline' }
   /** Start an amount of time from now. The model supplies the numbers; the backend only adds them. */
-  | { kind: 'relative'; direction: 'after'; amount: number; unit: 'minute' | 'hour' | 'day' }
+  /** A delay from now, or from the target's own start when `anchor` is target ("an hour later"). */
+  | { kind: 'relative'; direction: 'after' | 'before'; amount: number; unit: 'minute' | 'hour' | 'day'; anchor?: 'now' | 'target' }
   | { kind: 'interval'; startHm: string; endHm: string }
   | { kind: 'duration'; minutes: number }
   | { kind: 'weekday'; weekday: number; which?: 'this' | 'next' }

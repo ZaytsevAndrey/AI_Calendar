@@ -360,9 +360,27 @@ function resolveRelative(operation: PendingOperation, clock: Clock): { ok: true;
   const placed = operation.constraints.some((constraint) =>
     constraint.kind === 'date' || constraint.kind === 'all_day' || constraint.kind === 'interval' || (constraint.kind === 'clock' && constraint.role === 'start'));
   if (relative.length > 1 || placed) return { ok: false, code: 'contradictory_constraints', detail: `${operation.pendingId}:relative` };
-  if (!clock.nowIso) return { ok: false, code: 'unrepresentable_schedule', detail: 'relative_needs_clock' };
   const delay = relative[0];
   const rest = operation.constraints.filter((constraint) => constraint !== delay);
+  // Anchored on the target: the task's own start, in either direction (V7, h-05). Only a placed row has one.
+  if (delay.anchor === 'target') {
+    const own = operation.target.kind === 'entity' ? operation.target.scheduledStart : undefined;
+    if (!own) return { ok: false, code: 'unrepresentable_schedule', detail: `${operation.pendingId}:relative_target` };
+    const sign = delay.direction === 'before' ? -1 : 1;
+    const shifted = new Date(Date.parse(own) + sign * delay.amount * (delay.unit === 'day' ? 86_400_000 : delay.unit === 'hour' ? 3_600_000 : 60_000)).toISOString();
+    return {
+      ok: true,
+      operation: {
+        ...operation,
+        constraints: [
+          ...rest,
+          { constraintId: delay.constraintId, kind: 'date', value: localYmd(shifted, clock.timeZone) },
+          { constraintId: `${delay.constraintId}-start`, kind: 'clock', value: localHm(shifted, clock.timeZone), role: 'start' },
+        ],
+      },
+    };
+  }
+  if (!clock.nowIso) return { ok: false, code: 'unrepresentable_schedule', detail: 'relative_needs_clock' };
   if (delay.unit === 'day') {
     const ymd = addDaysToYmd(localYmd(clock.nowIso, clock.timeZone), delay.amount);
     return { ok: true, operation: { ...operation, constraints: [...rest, { constraintId: delay.constraintId, kind: 'date', value: ymd }] } };
@@ -802,7 +820,10 @@ function projectCommand(operation: PendingOperation, clock: Clock, language: VNe
     constraint.kind === 'date' || constraint.kind === 'ordering' || constraint.kind === 'day_bound' || constraint.kind === 'interval'
     || (constraint.kind === 'clock' && (constraint.role === 'earliest' || constraint.role === 'deadline')));
   if (operation.action === 'move' && operation.target.entityType === 'task' && placedWithoutClock && !findClock(operation, 'start') && !findClock(operation, 'end')) {
-    if (operation.target.fixed) return { ok: false, code: 'missing_clock', detail: taskId };
+    // A fixed event given only a day keeps its clock and length on that day (VC-10); a window or an
+    // ordering gives it no clock to keep, so that still asks for one.
+    const dayOnly = operation.target.fixed && find(operation, 'date') && operation.constraints.every((constraint) => constraint.kind === 'date');
+    if (operation.target.fixed && !dayOnly) return { ok: false, code: 'missing_clock', detail: taskId };
     const rejected = onlyChanges(operation, []);
     if (rejected) return rejected;
     const patch = updatePatch(operation, clock);

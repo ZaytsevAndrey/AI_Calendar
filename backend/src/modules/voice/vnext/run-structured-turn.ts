@@ -276,6 +276,19 @@ function resolveGroup(interpreted: InterpretOutput, input: TurnInput): ProposalG
   return null;
 }
 
+/** Every proposal of the group addresses something the open preview does not: another row, or a new title. */
+function additiveToPreview(group: ProposalGroup, state: StructuredState): boolean {
+  const fold = (text: string | undefined) => (text ?? '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+  const pendingRows = new Set(state.operations.flatMap((operation) => (operation.target.kind === 'entity' ? [operation.target.entityId] : [])));
+  const pendingTitles = new Set(state.operations.filter((operation) => operation.target.kind === 'new').map((operation) => fold(operation.changes.title)));
+  return group.proposals.every((proposal) => {
+    if (proposal.target.kind === 'pending') return true;
+    if (proposal.target.kind === 'entity') return !pendingRows.has(proposal.target.entityId);
+    if (proposal.target.kind === 'new') return !pendingTitles.has(fold(proposal.changes.title));
+    return false;
+  });
+}
+
 /** "Cancel it" with no id while exactly one operation is pending names that operation (V7, g-c-20). */
 function withSolePendingId(envelope: SemanticEnvelopeV1, input: TurnInput): SemanticEnvelopeV1 {
   const pending = input.session.structured?.preview?.executionState === 'open' ? input.session.structured.operations : [];
@@ -399,6 +412,11 @@ async function handleGroup(input: TurnInput, group: ProposalGroup, interpreted: 
     group: {
       ...working,
       ...(previous.operations.length && working.proposals.length && !working.previewBoundary
+        ? { previewBoundary: 'extend' as const }
+        : {}),
+      // "And also …": operations on rows and titles the open preview does not touch add to it; a
+      // restatement (same row, or a create with a pending create's title) replaces it (V7, h-04 / h-10).
+      ...(previous.preview?.executionState === 'open' && previous.operations.length && working.proposals.length && working.previewBoundary === 'replace' && additiveToPreview(working, previous)
         ? { previewBoundary: 'extend' as const }
         : {}),
     },

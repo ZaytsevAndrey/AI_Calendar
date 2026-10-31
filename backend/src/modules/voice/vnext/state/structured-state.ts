@@ -453,6 +453,8 @@ function foldEntityCorrections(
     // move it replaces is not the day of the completion.
     const reschedule = proposal.action === 'move' || proposal.action === 'update';
     let constraints = reschedule ? found.constraints.map((constraint) => ({ ...constraint })) : [];
+    // "Take the time off" after a day or clock was pending: the schedule goes, not into a contradiction.
+    if (proposal.changes.unschedule) constraints = constraints.filter((item) => !['date', 'weekday', 'clock', 'interval', 'all_day', 'day_bound', 'unresolved', 'relative'].includes(item.temporal.kind));
     for (const constraint of proposal.constraints) {
       const temporal = withoutLocalRef(constraint);
       const key = correctionKey(temporal);
