@@ -3,7 +3,7 @@
 // and a video per scenario. Look at what the calendar cards do while a task is
 // saved, moved, created, deleted, scheduled from «На потім» or parked.
 // Usage:
-//   npm run build:frontend && node e2e/design/motion-demo.cjs [--only=drag,delete] [--size=d|m] [--theme=dark|light] [--server=1800]
+//   npm run build:frontend && node e2e/design/motion-demo.cjs [--only=drag,delete] [--size=d|m] [--theme=dark|light] [--server=1800] [--google=2500]
 // Output: e2e/design/.out/motion/<theme>-<size>/<scenario>.webm
 const fs = require('fs');
 const path = require('path');
@@ -28,7 +28,7 @@ function b64(o) {
 const JWT = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: 'u-1', email: 'andrii@gmail.com', exp: 4102444800, iat: 1790000000 })}.sig`;
 
 /** Server state for one scenario: tasks, their events, and replan jobs whose stages advance with time. */
-function makeServer(lang, serverMs, { parkOnMove = false } = {}) {
+function makeServer(lang, serverMs, { parkOnMove = false, cascade = false, googleMs = 0 } = {}) {
   const parkedJobs = new Set();
   const tasks = makeTasks(lang);
   const events = makeEvents(lang);
@@ -58,6 +58,41 @@ function makeServer(lang, serverMs, { parkOnMove = false } = {}) {
     }
     if (i >= 0) events[i] = { ...events[i], ...eventFor(task) };
     else events.push(eventFor(task));
+  };
+
+  // Like the real server, a new Google event can show up a while after the job is done;
+  // until then the task does not know its event id either.
+  const publishLater = (task) => {
+    const eventId = task.googleEventId || `ge-${task.id}`;
+    task.googleEventId = null;
+    setTimeout(() => {
+      task.googleEventId = eventId;
+      upsertEvent(task);
+    }, serverMs + googleMs);
+  };
+
+  /** A replan after a drag: peers shift, one leaves the week, one is parked, one comes back under a new id. */
+  const replanAfterMove = () => {
+    const byId = (id) => tasks.find((t) => t.id === id);
+    const shift = (task, minutes) => {
+      task.scheduledStartTime = new Date(Date.parse(task.scheduledStartTime) + minutes * 60000).toISOString();
+      task.scheduledEndTime = new Date(Date.parse(task.scheduledEndTime) + minutes * 60000).toISOString();
+    };
+    const tax = byId('t-tax');
+    shift(tax, 90);
+    upsertEvent(tax);
+    const read = byId('t-read');
+    shift(read, 4 * 24 * 60);
+    upsertEvent(read);
+    const groc = byId('t-groceries');
+    const old = events.findIndex((e) => e.id === groc.googleEventId);
+    if (old >= 0) events.splice(old, 1);
+    groc.googleEventId = 'ge-groc-v2';
+    shift(groc, -45);
+    upsertEvent(groc);
+    const design = byId('t-design');
+    Object.assign(design, { scheduleState: 'problematic', problematicDay: '2026-10-29', problematicReason: 'phase_full' });
+    upsertEvent(design);
   };
 
   return {
@@ -92,6 +127,7 @@ function makeServer(lang, serverMs, { parkOnMove = false } = {}) {
         }
         const task = tasks.find((t) => t.googleEventId === body.googleEventId);
         if (task) Object.assign(task, { scheduledStartTime: body.start, scheduledEndTime: body.end });
+        if (cascade && body.googleEventId === 'ge-api') setTimeout(replanAfterMove, serverMs * 0.8);
         if (task && parkOnMove) {
           // No room in the phase there: the scheduler parks it.
           Object.assign(task, { scheduleState: 'problematic', problematicDay: '2026-10-30', problematicReason: 'phase_full' });
@@ -115,6 +151,7 @@ function makeServer(lang, serverMs, { parkOnMove = false } = {}) {
           task.scheduledStartTime = body.scheduledStartTime;
           task.scheduledEndTime = new Date(start.getTime() + (task.estimatedTimeInMinutes || 30) * 60000).toISOString();
         }
+        const fresh = !task.googleEventId;
         if (body.scheduledStartTime) Object.assign(task, { isUnscheduled: false, scheduleState: 'none' });
         if (!task.googleEventId) task.googleEventId = `ge-${task.id}`;
         if (body.park) {
@@ -122,7 +159,8 @@ function makeServer(lang, serverMs, { parkOnMove = false } = {}) {
           task.problematicDay = '2026-10-30';
           task.problematicReason = 'phase_full';
         }
-        upsertEvent(task);
+        if (fresh && googleMs) publishLater(task);
+        else upsertEvent(task);
         return { ...task, jobId: job() };
       }
       if (taskMatch && method === 'DELETE') {
@@ -150,7 +188,8 @@ function makeServer(lang, serverMs, { parkOnMove = false } = {}) {
         };
         tasks.push(task);
         // The Google event shows up only after the replan job.
-        setTimeout(() => upsertEvent(task), serverMs * 0.65);
+        if (googleMs) publishLater(task);
+        else setTimeout(() => upsertEvent(task), serverMs * 0.65);
         return { ...task, jobId: job() };
       }
       const place = p.match(/^\/schedule\/problematic\/([^/]+)\/place$/);
@@ -164,7 +203,8 @@ function makeServer(lang, serverMs, { parkOnMove = false } = {}) {
             scheduledEndTime: body.end,
             googleEventId: task.googleEventId || `ge-${task.id}`,
           });
-          upsertEvent(task);
+          if (googleMs) publishLater(task);
+          else upsertEvent(task);
         }
         return { placed: true, jobId: job() };
       }
@@ -271,7 +311,7 @@ const scenarios = {
     await page.getByRole('button', { name: /^(Переглянути|Review)/ }).first().click();
     await page.waitForTimeout(800);
     await page.getByRole('dialog').getByRole('button', { name: /^(Поставити на|Place at)/ }).first().click();
-    await page.waitForTimeout(3500);
+    await page.waitForTimeout(8000);
   },
   /** «Запланувати» on a day next week: the row flies into the «next» arrow, which names the day. */
   offscreen: async (page) => {
@@ -291,13 +331,21 @@ const scenarios = {
     await dragCard(page, 'ge-api', 140, 60);
     await page.waitForTimeout(4500);
   },
-  /** Drag on empty time → form → save: a dashed placeholder fills up, then the card unfolds. */
-  create: async (page) => {
+  /**
+   * Two drags in a row while the server replans around the first: peers slide,
+   * one leaves for next week, one is parked, one comes back under a new id.
+   */
+  cascade: async (page) => {
+    await dragCard(page, 'ge-api', 140, 0);
+    await page.waitForTimeout(500);
+    await dragCard(page, 'ge-report', 280, 120);
+    await page.waitForTimeout(6000);
+  },
+  /** Not a scenario on its own: shared by `create`. */
+  createStart: async (page) => {
     const col = page.getByTestId('calendar-day-column-4');
-    await col.scrollIntoViewIfNeeded();
     const box = await col.boundingBox();
-    const scroll = page.getByTestId('calendar-hour-scroll');
-    const sbox = await scroll.boundingBox();
+    const sbox = await page.getByTestId('calendar-hour-scroll').boundingBox();
     const x = box.x + box.width / 2;
     const y = sbox.y + 40;
     await page.mouse.move(x, y);
@@ -308,7 +356,11 @@ const scenarios = {
     await page.waitForTimeout(800);
     await page.getByRole('dialog').getByRole('textbox').first().fill('Нова задача');
     await page.getByRole('dialog').getByRole('button', { name: /^(Створити|Create|Зберегти|Save)/ }).last().click();
-    await page.waitForTimeout(4000);
+  },
+  /** Drag on empty time → form → save: a dashed placeholder unfolds and fills, then the real card takes its place. */
+  create: async (page) => {
+    await scenarios.createStart(page);
+    await page.waitForTimeout(7000);
   },
 };
 
@@ -317,14 +369,17 @@ const scenarios = {
   const size = arg('size', 'd');
   const lang = 'uk';
   const serverMs = Number(arg('server', '1800'));
+  // Extra delay before a new Google event shows up (0: with the job).
+  const googleMs = Number(arg('google', '2500'));
   const only = arg('only', '').split(',').filter(Boolean);
   const out = path.resolve(__dirname, '.out/motion', `${theme}-${size}`);
   fs.mkdirSync(out, { recursive: true });
   const srv = await startServer();
   const browser = await chromium.launch();
   for (const [name, run] of Object.entries(scenarios)) {
+    if (name === 'createStart') continue;
     if (only.length && !only.includes(name)) continue;
-    const server = makeServer(lang, serverMs, { parkOnMove: name === 'park' });
+    const server = makeServer(lang, serverMs, { parkOnMove: name === 'park', cascade: name === 'cascade', googleMs });
     const tmp = fs.mkdtempSync(path.join(out, '.rec-'));
     const { ctx, page } = await newPage(browser, { theme, size, lang, server, video: tmp });
     try {

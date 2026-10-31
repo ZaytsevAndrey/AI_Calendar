@@ -329,6 +329,11 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
       e.stopPropagation();
       return;
     }
+    // A card still sliding from a replan is picked up where it is laid out.
+    (e.currentTarget as HTMLElement)
+      .closest<HTMLElement>('[data-motion-id]')
+      ?.getAnimations()
+      .forEach((animation) => animation.cancel());
     e.stopPropagation();
     const col = colRefs.current[place.dayIndex];
     if (!col) return;
@@ -566,6 +571,8 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                 data-motion-id={event.id}
                 data-motion-keys={joinKeys(keysFor(event))}
                 data-motion={cardMotionState(keysFor(event)) ?? undefined}
+                data-motion-start={eventStartDate(event)?.getTime()}
+                data-motion-title={event.summary || undefined}
                 title={tooltipText(event)}
                 className={cx(
                   'calendar-chip calendar-chip--line mx-0.5 min-w-0 text-left font-medium',
@@ -714,6 +721,8 @@ const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                   data-motion-keys={joinKeys(keys)}
                   data-motion={motionState ?? undefined}
                   data-motion-stage={motionStage ?? undefined}
+                  data-motion-start={eventStartDate(event)?.getTime()}
+                  data-motion-title={event.summary || undefined}
                   aria-busy={motionState ? true : undefined}
                   className={cx(
                     'calendar-chip group absolute z-[2] flex flex-col',

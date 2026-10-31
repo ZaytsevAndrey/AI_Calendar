@@ -61,7 +61,17 @@ function isoMs(iso: string | null | undefined): number | undefined {
   return Number.isFinite(ms) ? ms : undefined;
 }
 
-/** A task leaving «На потім» or the problem list lands on the grid from that panel section. */
+function spanMs(start: string | null | undefined, end: string | null | undefined): number | undefined {
+  const a = isoMs(start);
+  const b = isoMs(end);
+  return a != null && b != null && b > a ? b - a : undefined;
+}
+
+/**
+ * A task leaving «На потім» or the problem list is placed: a placeholder
+ * stands at the picked slot (the window start when the scheduler seats it)
+ * and the row flies into it.
+ */
 function updateMotion(
   existing: TaskDTO | undefined,
   body: UpdateTaskDTO,
@@ -72,10 +82,15 @@ function updateMotion(
       : existing?.isUnscheduled && body.isUnscheduled !== true
         ? 'later'
         : undefined;
+  const targetMs = isoMs(body.scheduledStartTime) ?? (from ? isoMs(body.earliestStartTime) : undefined);
   return {
-    kind: from && body.scheduledStartTime ? 'place' : 'edit',
+    kind: from ? 'place' : 'edit',
     from,
-    targetMs: isoMs(body.scheduledStartTime),
+    title: body.name ?? existing?.name,
+    targetMs,
+    durationMs:
+      spanMs(body.scheduledStartTime, body.scheduledEndTime) ??
+      (body.estimatedTimeInMinutes ?? existing?.estimatedTimeInMinutes ?? 30) * 60_000,
   };
 }
 
@@ -141,7 +156,12 @@ export const eventTasksApi = createApi({
           await runTaskMutationProgress({
             taskKey: tempId,
             title: arg.name,
-            motion: { kind: 'create', targetMs: isoMs(arg.scheduledStartTime) },
+            motion: {
+              kind: 'create',
+              title: arg.name,
+              targetMs: isoMs(arg.scheduledStartTime),
+              durationMs: spanMs(arg.scheduledStartTime, arg.scheduledEndTime) ?? (arg.estimatedTimeInMinutes ?? 30) * 60_000,
+            },
             run: async (progress) => {
               const { data } = await queryFulfilled;
               accepted = true;
@@ -351,7 +371,7 @@ export const eventTasksApi = createApi({
         { type: 'EventTask', id: 'LIST' },
         { type: 'EventTask', id },
       ],
-      async onQueryStarted({ id }, { dispatch, queryFulfilled, getState }) {
+      async onQueryStarted({ id, body }, { dispatch, queryFulfilled, getState }) {
         const existing = eventTasksApi.endpoints.getEvents
           .select()(getState() as never)
           ?.data?.find((row) => row.id === id);
@@ -360,7 +380,13 @@ export const eventTasksApi = createApi({
           await runTaskMutationProgress({
             taskKey: id,
             title,
-            motion: { kind: 'place', from: 'problems' },
+            motion: {
+              kind: 'place',
+              from: 'problems',
+              title,
+              targetMs: isoMs(body.start),
+              durationMs: spanMs(body.start, body.end),
+            },
             run: async (progress) => {
               await queryFulfilled;
               progress.setStage('syncing');

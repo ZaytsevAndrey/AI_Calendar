@@ -645,6 +645,27 @@
     pointer-events: none;
 }
 
+/* Delete: the eraser band that sweeps the card away, and the crumbs it leaves. */
+.motion-eraser {
+    position: absolute;
+    width: 16px;
+    border-radius: 6px;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgb(var(--ide-text) / 0.18) 40%,
+        rgb(var(--ide-panel) / 0.95) 60%,
+        transparent
+    );
+    pointer-events: none;
+}
+
+.motion-crumb {
+    position: absolute;
+    border-radius: 2px;
+    pointer-events: none;
+}
+
 .motion-pulse {
     animation: motion-pulse 640ms cubic-bezier(0.3, 0.7, 0.4, 1);
 }

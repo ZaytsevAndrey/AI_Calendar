@@ -1,4 +1,6 @@
 import {
+  arcControl,
+  arcTransforms,
   boxMoved,
   joinKeys,
   offscreenDirection,
@@ -88,5 +90,34 @@ describe('keys', () => {
     expect(joined).toBe('ev-1 task-1');
     expect(splitKeys(joined)).toEqual(['ev-1', 'task-1']);
     expect(splitKeys(undefined)).toEqual([]);
+  });
+});
+
+describe('arcs', () => {
+  it('bulges a sideways flight upward', () => {
+    const control = arcControl({ x: 0, y: 100 }, { x: 400, y: 100 });
+    expect(control.x).toBe(200);
+    expect(control.y).toBeLessThan(100);
+  });
+
+  it('bulges a vertical flight toward the middle of the screen', () => {
+    const left = arcControl({ x: 100, y: 0 }, { x: 100, y: 400 }, 0.28, 1440);
+    const right = arcControl({ x: 1300, y: 0 }, { x: 1300, y: 400 }, 0.28, 1440);
+    expect(left.x).toBeGreaterThan(100);
+    expect(right.x).toBeLessThan(1300);
+  });
+
+  it('starts at the start box and ends exactly at the base', () => {
+    const start = { left: 0, top: 0, width: 100, height: 40 };
+    const end = { left: 300, top: 200, width: 100, height: 40 };
+    const frames = arcTransforms({ start, end, base: end, lift: 0 });
+    expect(frames[0]).toBe('translate(-300px, -200px) scale(1)');
+    expect(frames[frames.length - 1]).toBe('translate(0px, 0px) scale(1)');
+    // Off the straight line in the middle.
+    const mid = frames[Math.floor(frames.length / 2)].match(/translate\((-?[\d.]+)px, (-?[\d.]+)px\)/);
+    const [x, y] = [Number(mid?.[1]), Number(mid?.[2])];
+    // The straight line passes (-150, -100) halfway; the arc bulges up off it.
+    expect(x).toBeGreaterThan(-150);
+    expect(y).toBeLessThan(-100);
   });
 });
