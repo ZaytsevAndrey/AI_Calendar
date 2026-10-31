@@ -95,6 +95,8 @@ const CHANGE_KEYS = new Set([
   'spanRole',
   'location',
   'reminder',
+  'unschedule',
+  'explicitNew',
 ]);
 const PRIORITIES = new Set(['low', 'medium', 'high', 'urgent']);
 const REMINDER_OPS = new Set(['create', 'update', 'resolve', 'delete']);
@@ -152,6 +154,15 @@ function parseTarget(value: unknown, path: string, errors: ValidationIssue[]): T
     if (!proposedId && !description) issue(errors, 'empty_target', path, 'existing');
     return { kind, ...(proposedId ? { proposedId } : {}), ...(description ? { description } : {}), ...(calendarId ? { calendarId } : {}) };
   }
+  // The model sometimes names the pending operation as proposedId / id (the fields of an existing target).
+  // The pending id is the same thing: read it (V7, live baseline g-b-29 / g-c-12).
+  if (kind === 'operation_result' && typeof value.opId !== 'string') {
+    const alias = typeof value.proposedId === 'string' ? value.proposedId : typeof value.id === 'string' ? value.id : undefined;
+    if (alias) value.opId = alias;
+    delete value.proposedId;
+    delete value.id;
+    delete value.description;
+  }
   if (kind === 'operation_result' && typeof value.opId === 'string' && value.opId.trim()) {
     rejectUnknown(errors, value, ['kind', 'opId'], path);
     return { kind, opId: value.opId.trim() };
@@ -176,6 +187,8 @@ function parseConstraint(value: unknown, path: string, errors: ValidationIssue[]
   switch (value.kind) {
     case 'date': {
       rejectUnknown(errors, value, ['kind', 'value', 'precision'], path);
+      // A YYYY-MM-DD with no precision is a day (V7: the model omitted precision in 7 live corrections).
+      if (value.precision === undefined && typeof value.value === 'string' && isYmd(value.value)) value.precision = 'day';
       if (value.precision !== 'day' && value.precision !== 'week' && value.precision !== 'month') {
         issue(errors, 'invalid_precision', path, String(value.precision));
         return null;
@@ -349,6 +362,14 @@ function parseChanges(value: unknown, path: string, errors: ValidationIssue[]): 
     if (value.location !== null && typeof value.location !== 'string') issue(errors, 'invalid_type', `${path}.location`, 'location');
     else changes.location = value.location as string | null;
   }
+  if ('unschedule' in value) {
+    if (value.unschedule !== true) issue(errors, 'invalid_type', `${path}.unschedule`, 'unschedule');
+    else changes.unschedule = true;
+  }
+  if ('explicitNew' in value) {
+    if (value.explicitNew !== true && value.explicitNew !== false) issue(errors, 'invalid_type', `${path}.explicitNew`, 'explicitNew');
+    else if (value.explicitNew) changes.explicitNew = true;
+  }
   if ('reminder' in value) {
     if (!isRecord(value.reminder)) issue(errors, 'invalid_type', `${path}.reminder`, 'reminder');
     else {
@@ -405,7 +426,7 @@ function parseOperation(value: unknown, path: string, errors: ValidationIssue[],
     return null;
   }
   liftAllDay(value);
-  rejectUnknown(errors, value, ['opId', 'action', 'target', 'changes', 'constraints', 'dependsOn', 'source', 'scope', 'seriesScope', 'occurrence'], path);
+  rejectUnknown(errors, value, ['opId', 'action', 'target', 'changes', 'constraints', 'dependsOn', 'source', 'scope', 'seriesScope', 'occurrence', 'replaces'], path);
   const opId = typeof value.opId === 'string' ? value.opId.trim() : '';
   if (!/^op-[A-Za-z0-9-]{1,40}$/.test(opId)) issue(errors, 'invalid_op_id', path, opId || '(missing)');
   if (!(SEMANTIC_ACTIONS as readonly string[]).includes(String(value.action))) {
@@ -459,6 +480,11 @@ function parseOperation(value: unknown, path: string, errors: ValidationIssue[],
     if (typeof value.occurrence !== 'string' || !isYmd(value.occurrence)) issue(errors, 'invalid_occurrence', path, String(value.occurrence));
     else occurrence = value.occurrence;
   }
+  let replaces: string | undefined;
+  if (value.replaces !== undefined && value.replaces !== null) {
+    if (typeof value.replaces !== 'string' || !value.replaces.trim()) issue(errors, 'invalid_type', `${path}.replaces`, 'replaces');
+    else replaces = value.replaces.trim();
+  }
   if (!opId || !(SEMANTIC_ACTIONS as readonly string[]).includes(String(value.action)) || !target || !isRecord(value.source)) {
     return null;
   }
@@ -472,6 +498,7 @@ function parseOperation(value: unknown, path: string, errors: ValidationIssue[],
     ...(scope ? { scope } : {}),
     ...(seriesScope ? { seriesScope } : {}),
     ...(occurrence ? { occurrence } : {}),
+    ...(replaces ? { replaces } : {}),
     source: {
       text: String(value.source.text),
       ...(Array.isArray(value.source.span) ? { span: [value.source.span[0] as number, value.source.span[1] as number] } : {}),

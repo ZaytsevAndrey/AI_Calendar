@@ -2,6 +2,7 @@ import {
   buildWhisperPrompt,
   cleanupVoiceTranscript,
   isNoiseOrEmptyTranscript,
+  spokenControl,
 } from './voice-stt.util';
 
 describe('buildWhisperPrompt', () => {
@@ -53,5 +54,30 @@ describe('isNoiseOrEmptyTranscript', () => {
       false,
     );
     expect(isNoiseOrEmptyTranscript('так')).toBe(false);
+  });
+});
+
+describe('spokenControl', () => {
+  // D-10: the spoken Apply / Cancel button — exact words only, nothing longer.
+  it('recognises a bare confirmation or refusal in Ukrainian and English', () => {
+    expect(spokenControl('Так.')).toBe('confirm');
+    expect(spokenControl('так так')).toBe('confirm');
+    expect(spokenControl('yes')).toBe('confirm');
+    expect(spokenControl('Ні')).toBe('cancel');
+    expect(spokenControl('no')).toBe('cancel');
+  });
+
+  it('accepts only the four words: fillers and synonyms go to the model and apply nothing', () => {
+    for (const word of ['ok', 'okay', 'окей', 'добре', 'sure', 'yeah', 'скасуй', 'cancel', 'nope', 'да', 'нет']) {
+      expect(spokenControl(word)).toBeNull();
+    }
+  });
+
+  it('leaves anything that says more to the model', () => {
+    expect(spokenControl('так, але о 18')).toBeNull();
+    expect(spokenControl('yes please move it')).toBeNull();
+    expect(spokenControl('так ні')).toBeNull();
+    expect(spokenControl('')).toBeNull();
+    expect(spokenControl('дякую')).toBeNull();
   });
 });

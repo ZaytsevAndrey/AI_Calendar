@@ -1,0 +1,487 @@
+/**
+ * V7 (31 Oct 2026): defects reproduced from the first live DeepSeek baseline, each with the envelope the
+ * model actually produced. Mocked interpreter, no model call. Every test here was red before its fix.
+ */
+import { createSession } from './session/session';
+import { runVNextTurn, type InterpretOutput, type TurnInput, type VNextInterpreter } from './pipeline';
+import type { SemanticEnvelopeV1, SemanticOperationV1 } from './contracts/types';
+import type { EntityRecord } from './reference/reference-resolver';
+
+const USER = 'user-1';
+const NOW = '2026-10-18T06:00:00.000Z'; // Sunday 09:00 Kyiv
+const TZ = 'Europe/Kyiv';
+
+type Session = ReturnType<typeof createSession>;
+
+function interpreter(output: SemanticEnvelopeV1): VNextInterpreter {
+  return {
+    arm: 'A',
+    async interpret(): Promise<InterpretOutput> {
+      return { ok: true, specialist: 'test', promptHash: 'v7', usage: { calls: 0, inputTokens: 0, outputTokens: 0, latencyMs: 0 }, reads: [], envelope: output };
+    },
+  };
+}
+
+function base(session: Session, entities: EntityRecord[], extra: Partial<TurnInput> = {}): TurnInput {
+  return {
+    transcript: 'turn', userId: USER, session, nowIso: NOW, timeZone: TZ, wakeHm: '08:00', sleepHm: '23:00',
+    defaultDurationMinutes: 30, defaultReminderTime: '09:00', language: 'uk', entities, arm: 'A', ...extra,
+  };
+}
+
+function op(partial: Partial<SemanticOperationV1> & Pick<SemanticOperationV1, 'opId' | 'action' | 'target'>): SemanticOperationV1 {
+  return { changes: {}, constraints: [], dependsOn: [], source: { text: partial.opId }, ...partial };
+}
+const ops = (list: SemanticOperationV1[]): SemanticEnvelopeV1 => ({ version: '1', kind: 'operations', operations: list });
+const task = (id: string, name: string, extra: Partial<EntityRecord> = {}): EntityRecord => ({ id, userId: USER, type: 'task', name, status: 'open', revision: 1, writable: true, ...extra });
+const report = task('task-report', 'Звіт', { unscheduled: true });
+const gym = task('task-gym', 'Спортзал', {
+  recurring: true, seriesEventId: null,
+  occurrences: [
+    { start: '2026-10-19T07:00:00.000Z', end: '2026-10-19T08:00:00.000Z', googleEventId: null, slotId: 's-19' },
+    { start: '2026-10-21T07:00:00.000Z', end: '2026-10-21T08:00:00.000Z', googleEventId: null, slotId: 's-21' },
+  ],
+});
+
+type Result = Awaited<ReturnType<typeof runVNextTurn>>;
+const outcome = (result: Result) => `${result.response.outcome} blocked=${result.blocked.join(',')} msg=${result.response.assistantMessage}`;
+const command = (result: Result, index = 0) => {
+  const intent = result.response.intents[index];
+  if (!intent || intent.type !== 'command') throw new Error(`no command at ${index}: ${JSON.stringify(result.response)} blocked=${result.blocked}`);
+  return intent.command as Record<string, unknown>;
+};
+const create = (result: Result, index = 0) => {
+  const intent = result.response.intents[index];
+  if (!intent || intent.type !== 'create') throw new Error(`no create at ${index}: ${JSON.stringify(result.response)} blocked=${result.blocked}`);
+  return intent.task as Record<string, unknown>;
+};
+
+describe('V7 live defects — corrections of a pending command on a stored task (g-a-37, g-b-10, g-b-15, g-b-30, g-c-20)', () => {
+  it('a correction addressed to the pending move by its id replaces that move, on the same task', async () => {
+    const session = createSession(USER, 'v7-1');
+    await runVNextTurn(base(session, [report], { transcript: 'перенеси звіт на понеділок' }), interpreter(ops([
+      op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-report' }, constraints: [{ kind: 'weekday', weekday: 1, which: 'next' }] }),
+    ])));
+    const corrected = await runVNextTurn(base(session, [report], { transcript: 'а, не понеділок, на вівторок о 13:05' }), interpreter(ops([
+      op({ opId: 'op-1', action: 'move', target: { kind: 'operation_result', opId: 'pop_1' }, constraints: [{ kind: 'weekday', weekday: 2, which: 'next' }, { kind: 'clock', value: '13:05', role: 'start' }] }),
+    ])));
+    expect(outcome(corrected)).toMatch(/^confirm/);
+    expect(corrected.response.intents).toHaveLength(1);
+    expect(command(corrected)).toMatchObject({ kind: 'update', taskId: 'task-report', patch: { isUnscheduled: false, scheduledStartTime: '2026-10-20T10:05:00.000Z' } });
+    expect(JSON.stringify(corrected.response.intents)).not.toContain('2026-10-19');
+  });
+
+  it('a different verb addressed to the pending operation replaces it: the Saturday move becomes a completion', async () => {
+    const session = createSession(USER, 'v7-2');
+    await runVNextTurn(base(session, [report]), interpreter(ops([
+      op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-report' }, constraints: [{ kind: 'weekday', weekday: 6, which: 'next' }] }),
+    ])));
+    const completed = await runVNextTurn(base(session, [report]), interpreter(ops([
+      op({ opId: 'op-1', action: 'complete', target: { kind: 'operation_result', opId: 'pop_1' } }),
+    ])));
+    expect(outcome(completed)).toMatch(/^confirm/);
+    expect(completed.response.intents).toHaveLength(1);
+    expect(command(completed)).toMatchObject({ kind: 'complete', taskId: 'task-report' });
+  });
+
+  it('a rename and a length addressed to the pending update of a Later task fold into it', async () => {
+    const idea = task('task-idea', 'Ідея для блогу');
+    const session = createSession(USER, 'v7-3');
+    await runVNextTurn(base(session, [idea]), interpreter(ops([
+      op({ opId: 'op-1', action: 'update', target: { kind: 'existing', proposedId: 'task-idea' }, constraints: [{ kind: 'weekday', weekday: 6, which: 'next' }, { kind: 'clock', value: '11:00', role: 'start' }] }),
+    ])));
+    const renamed = await runVNextTurn(base(session, [idea]), interpreter(ops([
+      op({ opId: 'op-1', action: 'update', target: { kind: 'operation_result', opId: 'pop_1' }, changes: { title: 'Чернетка посту' } }),
+    ])));
+    expect(outcome(renamed)).toMatch(/^confirm/);
+    expect(command(renamed)).toMatchObject({ kind: 'update', taskId: 'task-idea', patch: { name: 'Чернетка посту', scheduledStartTime: '2026-10-24T08:00:00.000Z' } });
+    const longer = await runVNextTurn(base(session, [idea]), interpreter(ops([
+      op({ opId: 'op-1', action: 'update', target: { kind: 'operation_result', opId: 'pop_1' }, constraints: [{ kind: 'duration', minutes: 50 }] }),
+    ])));
+    expect(longer.response.intents).toHaveLength(1);
+    expect(command(longer)).toMatchObject({ kind: 'update', taskId: 'task-idea', patch: { name: 'Чернетка посту', estimatedTimeInMinutes: 50 } });
+  });
+});
+
+describe('V7 live defects — cancelling the only pending operation (g-a-38, g-b-16, g-c-20)', () => {
+  it('a cancel addressed to the only pending create withdraws the preview instead of showing an empty one', async () => {
+    const session = createSession(USER, 'v7-4');
+    await runVNextTurn(base(session, []), interpreter(ops([op({ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'Перевірити пошту' } })])));
+    const canceled = await runVNextTurn(base(session, []), interpreter(ops([op({ opId: 'op-1', action: 'cancel', target: { kind: 'operation_result', opId: 'pop_1' } })])));
+    expect(canceled.response.outcome).toBe('answer');
+    expect(canceled.response.assistantMessage).toBe('Скасував незастосовану дію.');
+    expect(canceled.response.intents).toEqual([]);
+    expect(session.structured?.preview?.executionState).not.toBe('open');
+    expect(session.pendingIntents ?? []).toEqual([]);
+  });
+
+  it('a cancel addressed to the only pending command on a stored task withdraws it the same way', async () => {
+    const session = createSession(USER, 'v7-5');
+    await runVNextTurn(base(session, [report]), interpreter(ops([
+      op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-report' }, constraints: [{ kind: 'weekday', weekday: 6, which: 'next' }] }),
+    ])));
+    const canceled = await runVNextTurn(base(session, [report]), interpreter(ops([op({ opId: 'op-1', action: 'cancel', target: { kind: 'operation_result', opId: 'pop_1' } })])));
+    expect(canceled.response.outcome).toBe('answer');
+    expect(canceled.response.intents).toEqual([]);
+    expect(session.structured?.preview?.executionState).not.toBe('open');
+  });
+});
+
+describe('V7 live defects — a correction replaces the day or the part of day it corrects (g-b-18, g-b-19)', () => {
+  it('a new date replaces a pending weekday instead of standing beside it', async () => {
+    const session = createSession(USER, 'v7-6');
+    await runVNextTurn(base(session, []), interpreter(ops([
+      op({ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'здати ключі' }, constraints: [{ kind: 'weekday', weekday: 5, which: 'next' }] }),
+    ])));
+    const corrected = await runVNextTurn(base(session, []), interpreter(ops([
+      op({ opId: 'op-1', action: 'update', target: { kind: 'operation_result', opId: 'pop_1' }, constraints: [{ kind: 'date', value: '2026-10-30', precision: 'day' }] }),
+    ])));
+    expect(outcome(corrected)).toMatch(/^confirm/);
+    expect(create(corrected)).toMatchObject({ earliestStartTime: '2026-10-30T08:00:00+02:00' });
+    expect(JSON.stringify(corrected.response.intents)).not.toContain('2026-10-23');
+  });
+
+  it('an exact clock replaces a pending part of day', async () => {
+    const session = createSession(USER, 'v7-7');
+    await runVNextTurn(base(session, []), interpreter(ops([
+      op({ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'купити газету' }, constraints: [{ kind: 'weekday', weekday: 1, which: 'next' }, { kind: 'time_of_day', label: 'morning', bound: 'at' }] }),
+    ])));
+    const corrected = await runVNextTurn(base(session, []), interpreter(ops([
+      op({ opId: 'op-1', action: 'update', target: { kind: 'operation_result', opId: 'pop_1' }, constraints: [{ kind: 'clock', value: '08:10', role: 'start' }] }),
+    ])));
+    expect(outcome(corrected)).toMatch(/^confirm/);
+    expect(create(corrected)).toMatchObject({ scheduledStartTime: '2026-10-19T05:10:00.000Z' });
+    expect(corrected.response.assistantMessage).not.toContain('Час доби');
+  });
+});
+
+describe('V7 live defects — one day of a series named by its day (g-d-05, g-d-06, g-d-08, en-d-03, en-d-04)', () => {
+  it('a day the user named is that occurrence: rename, done, move and delete need no separate scope', async () => {
+    const run = (operation: SemanticOperationV1) => runVNextTurn(base(createSession(USER, `v7-${operation.opId}`), [gym, report]), interpreter(ops([operation])));
+    const renamed = await run(op({ opId: 'r1', action: 'update', target: { kind: 'existing', proposedId: 'task-gym' }, changes: { title: 'йога' }, constraints: [{ kind: 'weekday', weekday: 1, which: 'next' }] }));
+    expect(outcome(renamed)).toMatch(/^confirm/);
+    expect(command(renamed)).toMatchObject({ kind: 'edit_occurrence', scope: 'occurrence', occurrenceStart: '2026-10-19T07:00:00.000Z', name: 'йога' });
+    const done = await run(op({ opId: 'r2', action: 'complete', target: { kind: 'existing', proposedId: 'task-gym' }, constraints: [{ kind: 'weekday', weekday: 1, which: 'next' }] }));
+    expect(command(done)).toMatchObject({ kind: 'edit_occurrence', scope: 'occurrence', status: 'completed', occurrenceStart: '2026-10-19T07:00:00.000Z' });
+    const moved = await run(op({ opId: 'r3', action: 'move', target: { kind: 'existing', proposedId: 'task-gym' }, constraints: [{ kind: 'weekday', weekday: 1, which: 'next' }, { kind: 'clock', value: '19:00', role: 'start' }] }));
+    expect(command(moved)).toMatchObject({ kind: 'move', slotId: 's-19', seriesScope: 'occurrence', start: '2026-10-19T16:00:00.000Z' });
+    const dropped = await run(op({ opId: 'r4', action: 'delete', target: { kind: 'existing', proposedId: 'task-gym' }, constraints: [{ kind: 'date', value: '2026-10-21', precision: 'day' }] }));
+    expect(command(dropped)).toMatchObject({ kind: 'skip', occurrenceStart: '2026-10-21T07:00:00.000Z' });
+    const whole = await run(op({ opId: 'r5', action: 'delete', target: { kind: 'existing', proposedId: 'task-gym' } }));
+    expect(whole.response.outcome).toBe('clarify');
+    expect(whole.blocked).toContain('missing_series_scope');
+  });
+});
+
+describe('V7 live defects — model output the validator refused but the contract can read (7 scenarios)', () => {
+  it('a date constraint without precision is a day; operation_result with proposedId names the pending id', async () => {
+    const session = createSession(USER, 'v7-8');
+    await runVNextTurn(base(session, []), interpreter(ops([
+      op({ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'call with Sam' }, constraints: [{ kind: 'date', value: '2026-10-19', precision: 'day' }, { kind: 'clock', value: '15:00', role: 'start' }] }),
+    ])));
+    const corrected = await runVNextTurn(base(session, []), interpreter(ops([
+      op({ opId: 'op-1', action: 'update', target: { kind: 'operation_result', proposedId: 'pop_1' } as never, constraints: [{ kind: 'date', value: '2026-10-19' } as never, { kind: 'clock', value: '16:00', role: 'start' }] }),
+    ])));
+    expect(corrected.blocked).not.toContain('invalid_model_output');
+    expect(outcome(corrected)).toMatch(/^confirm/);
+    expect(create(corrected)).toMatchObject({ scheduledStartTime: '2026-10-19T13:00:00.000Z' });
+  });
+});
+
+describe('V7 live defects — reminders (g-a-15, g-d-11, en-d-06)', () => {
+  it('a reminder create whose day and clock are repeated as constraints is previewed once, at that clock', async () => {
+    const result = await runVNextTurn(base(createSession(USER, 'v7-9'), []), interpreter(ops([
+      op({
+        opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'rem-1' },
+        changes: { title: 'перевірити страховку', reminder: { op: 'create', name: 'перевірити страховку', dueYmd: '2026-10-27', notificationTime: '08:20' } },
+        constraints: [{ kind: 'date', value: '2026-10-27', precision: 'day' }, { kind: 'clock', value: '08:20', role: 'start' }],
+      }),
+    ])));
+    expect(outcome(result)).toMatch(/^confirm/);
+    expect(result.response.intents).toHaveLength(1);
+    expect(command(result)).toMatchObject({ kind: 'remind_create', dueYmd: '2026-10-27', notificationTime: '08:20' });
+  });
+
+  it('an update of a stored reminder through changes.reminder is a reminder update, not a refused task write', async () => {
+    const rent: EntityRecord = {
+      id: 'rem-rent', userId: USER, type: 'reminder', name: 'Оплата оренди', status: 'open', revision: 1, writable: true,
+      reminder: { dueYmd: '2026-10-20', notificationTime: '18:00', description: null, recurrencePattern: null, recurrenceWeekDays: null },
+    };
+    const result = await runVNextTurn(base(createSession(USER, 'v7-10'), [rent]), interpreter(ops([
+      op({ opId: 'op-1', action: 'update', target: { kind: 'existing', proposedId: 'rem-rent', description: 'оренду' }, changes: { reminder: { op: 'update', notificationTime: '20:00' } } }),
+    ])));
+    expect(outcome(result)).toMatch(/^confirm/);
+    expect(command(result)).toMatchObject({ kind: 'remind_update', reminderId: 'rem-rent', dueYmd: '2026-10-20', notificationTime: '20:00', name: 'Оплата оренди' });
+  });
+});
+
+describe('V7 live defects — a part of day on a dated create (g-a-02, g-a-13, g-a-33, g-b-08, g-b-19)', () => {
+  it('a day with a part of day is a task on that day with the label kept and no clock invented', async () => {
+    const result = await runVNextTurn(base(createSession(USER, 'v7-11'), []), interpreter(ops([
+      op({ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'віднести пакунок на пошту' }, constraints: [{ kind: 'weekday', weekday: 6, which: 'next' }, { kind: 'time_of_day', label: 'morning', bound: 'at' }] }),
+    ])));
+    expect(outcome(result)).toMatch(/^confirm/);
+    expect(create(result)).toMatchObject({ earliestStartTime: '2026-10-24T08:00:00+03:00', deadline: '2026-10-24T23:00:00+03:00', isUnscheduled: false });
+    expect(create(result)).not.toHaveProperty('scheduledStartTime');
+    expect(result.response.assistantMessage).toContain('Час доби');
+  });
+});
+
+describe('V7 live defects — a clock with no day (en-c-01)', () => {
+  it('a clock still ahead today is today; a clock already past is a question', async () => {
+    const ahead = await runVNextTurn(base(createSession(USER, 'v7-12'), []), interpreter(ops([
+      op({ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'a' }, changes: { title: 'call mom' }, constraints: [{ kind: 'clock', value: '10:00', role: 'start' }] }),
+      op({ opId: 'op-2', action: 'create', target: { kind: 'new', localId: 'b' }, changes: { title: 'call mom' }, constraints: [{ kind: 'clock', value: '15:00', role: 'start' }] }),
+    ])));
+    expect(ahead.response.outcome).toBe('confirm');
+    expect(ahead.response.intents.map((intent) => (intent.type === 'create' ? intent.task.scheduledStartTime : null))).toEqual(['2026-10-18T07:00:00.000Z', '2026-10-18T12:00:00.000Z']);
+    const past = await runVNextTurn(base(createSession(USER, 'v7-13'), []), interpreter(ops([
+      op({ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'a' }, changes: { title: 'call mom' }, constraints: [{ kind: 'clock', value: '08:00', role: 'start' }] }),
+    ])));
+    expect(past.response.outcome).toBe('clarify');
+    expect(past.response.assistantMessage).toBe('Ця година вже минула. Назвіть день.');
+  });
+});
+
+describe('V7 live defects — taking the time off a task (g-b-07)', () => {
+  it('"зніми час зі звіту" is an update that sends the task to Later and clears its schedule', async () => {
+    const placed = task('task-report', 'Звіт', { scheduledStart: '2026-10-19T08:00:00.000Z', scheduledEnd: '2026-10-19T09:00:00.000Z', slotId: 's-1' });
+    const result = await runVNextTurn(base(createSession(USER, 'v7-14'), [placed]), interpreter(ops([
+      op({ opId: 'op-1', action: 'update', target: { kind: 'existing', proposedId: 'task-report', description: 'звіт' }, changes: { unschedule: true } }),
+    ])));
+    expect(outcome(result)).toMatch(/^confirm/);
+    expect(command(result)).toMatchObject({ kind: 'update', taskId: 'task-report', patch: { isUnscheduled: true, scheduledStartTime: null, scheduledEndTime: null, earliestStartTime: null, deadline: null } });
+    const fixed = await runVNextTurn(base(createSession(USER, 'v7-15'), [task('task-dentist', 'Стоматолог', { fixed: true, scheduledStart: '2026-10-19T08:00:00.000Z', scheduledEnd: '2026-10-19T09:00:00.000Z' })]), interpreter(ops([
+      op({ opId: 'op-1', action: 'update', target: { kind: 'existing', proposedId: 'task-dentist' }, changes: { unschedule: true } }),
+    ])));
+    expect(fixed.response.outcome).toBe('clarify');
+    expect(fixed.response.intents).toEqual([]);
+  });
+});
+
+// ---- Round 2: what the first rerun (fix1, 86%) still showed. ------------------------------------------------
+
+describe('V7 round 2 — a question after a failed correction outranks a later yes (g-b-22)', () => {
+  it('when the correction cannot be prepared, a bare yes does not apply the preview it tried to change', async () => {
+    const finance = task('task-finance', 'Фінансовий звіт');
+    const review = task('task-review-2', 'Design review follow-up');
+    const session = createSession(USER, 'v7-16');
+    await runVNextTurn(base(session, [finance, review]), interpreter(ops([op({ opId: 'op-1', action: 'complete', target: { kind: 'existing', proposedId: 'task-finance' } })])));
+    const claim = { executionId: session.structured!.preview!.executionId, previewRevision: session.structured!.preview!.previewRevision };
+    // The model cancels the pending completion and completes the other task, depending on the cancel.
+    const switched = await runVNextTurn(base(session, [finance, review]), interpreter(ops([
+      op({ opId: 'op-1', action: 'cancel', target: { kind: 'operation_result', opId: 'pop_1' } }),
+      op({ opId: 'op-2', action: 'complete', target: { kind: 'existing', proposedId: 'task-review-2' }, dependsOn: ['op-1'] }),
+    ])));
+    expect(outcome(switched)).toMatch(/^confirm/);
+    expect(switched.response.intents).toHaveLength(1);
+    expect(command(switched)).toMatchObject({ kind: 'complete', taskId: 'task-review-2' });
+    // Had the preparation failed, the old claim must not apply the finance completion on a bare yes.
+    const yes = await runVNextTurn(base(session, [finance, review], { confirmation: claim }), interpreter({ version: '1', kind: 'control', operations: [], control: 'confirm_pending' }));
+    expect(yes.response.outcome).not.toBe('act');
+  });
+
+  it('a prepare failure while a preview is open locks the spoken yes until the user restates', async () => {
+    const finance = task('task-finance', 'Фінансовий звіт');
+    const session = createSession(USER, 'v7-17');
+    await runVNextTurn(base(session, [finance]), interpreter(ops([op({ opId: 'op-1', action: 'complete', target: { kind: 'existing', proposedId: 'task-finance' } })])));
+    const claim = { executionId: session.structured!.preview!.executionId, previewRevision: session.structured!.preview!.previewRevision };
+    const failed = await runVNextTurn(base(session, [finance]), interpreter(ops([
+      op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-finance' }, constraints: [{ kind: 'clock', value: '10:00', role: 'start' }, { kind: 'clock', value: '11:00', role: 'start' }] }),
+    ])));
+    expect(failed.response.outcome).toBe('clarify');
+    const yes = await runVNextTurn(base(session, [finance], { confirmation: claim }), interpreter({ version: '1', kind: 'control', operations: [], control: 'confirm_pending' }));
+    expect(yes.response.outcome).toBe('clarify');
+    expect(yes.response.intents).toEqual([]);
+  });
+});
+
+describe('V7 round 2 — a create that duplicates an open task by title (g-b-10, g-b-24, g-c-08, en-m-08)', () => {
+  it('an update of a task and a create with the same title in one group is a question, not two writes', async () => {
+    const result = await runVNextTurn(base(createSession(USER, 'v7-18'), [report]), interpreter(ops([
+      op({ opId: 'op-1', action: 'update', target: { kind: 'existing', proposedId: 'task-report' }, constraints: [{ kind: 'weekday', weekday: 1, which: 'next' }, { kind: 'clock', value: '10:00', role: 'start' }] }),
+      op({ opId: 'op-2', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'звіт' }, constraints: [{ kind: 'weekday', weekday: 2, which: 'next' }, { kind: 'clock', value: '11:00', role: 'start' }] }),
+    ])));
+    expect(result.response.outcome).toBe('clarify');
+    expect(result.response.intents).toEqual([]);
+    expect(result.blocked).toContain('same_title_existing');
+  });
+
+  it('a create titled like an open task asks whether it is new or the existing one, unless the model marks it as explicitly new', async () => {
+    const asked = await runVNextTurn(base(createSession(USER, 'v7-19'), [report]), interpreter(ops([
+      op({ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'Звіт' }, constraints: [{ kind: 'date', value: '2026-10-26', precision: 'day' }, { kind: 'clock', value: '14:35', role: 'start' }] }),
+    ])));
+    expect(asked.response.outcome).toBe('clarify');
+    expect(asked.response.intents).toEqual([]);
+    expect(asked.response.assistantMessage).toBe('Задача з такою назвою вже є. Це про неї, чи додати ще одну?');
+    const explicit = await runVNextTurn(base(createSession(USER, 'v7-20'), [report]), interpreter(ops([
+      op({ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'Звіт', explicitNew: true } as never, constraints: [] }),
+    ])));
+    expect(outcome(explicit)).toMatch(/^confirm/);
+    expect(create(explicit)).toMatchObject({ name: 'Звіт', isUnscheduled: true });
+  });
+});
+
+describe('V7 round 2 — smaller losses', () => {
+  it('a cancel of the only pending operation that names no id is that operation (g-c-20)', async () => {
+    const finance = task('task-finance', 'Фінансовий звіт');
+    const session = createSession(USER, 'v7-21');
+    await runVNextTurn(base(session, [finance]), interpreter(ops([op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-finance' }, constraints: [{ kind: 'weekday', weekday: 6, which: 'next' }] })])));
+    const canceled = await runVNextTurn(base(session, [finance]), interpreter(ops([op({ opId: 'op-1', action: 'cancel', target: { kind: 'operation_result' } as never })])));
+    expect(canceled.response.outcome).toBe('answer');
+    expect(session.structured?.preview?.executionState).not.toBe('open');
+  });
+
+  it('a "leave it" update with nothing to change beside a real command is dropped, not a failure (g-a-25)', async () => {
+    const finance = task('task-finance', 'Фінансовий звіт');
+    const result = await runVNextTurn(base(createSession(USER, 'v7-22'), [report, finance]), interpreter(ops([
+      op({ opId: 'op-1', action: 'update', target: { kind: 'existing', proposedId: 'task-finance' } }),
+      op({ opId: 'op-2', action: 'complete', target: { kind: 'existing', proposedId: 'task-report' } }),
+    ])));
+    expect(outcome(result)).toMatch(/^confirm/);
+    expect(result.response.intents).toHaveLength(1);
+    expect(command(result)).toMatchObject({ kind: 'complete', taskId: 'task-report' });
+  });
+
+  it('a clock beside a part of day is the clock (g-a-50)', async () => {
+    const result = await runVNextTurn(base(createSession(USER, 'v7-23'), [report]), interpreter(ops([
+      op({ opId: 'op-1', action: 'update', target: { kind: 'existing', proposedId: 'task-report' }, constraints: [{ kind: 'weekday', weekday: 4, which: 'next' }, { kind: 'time_of_day', label: 'evening' }, { kind: 'clock', value: '18:55', role: 'start' }] }),
+    ])));
+    expect(outcome(result)).toMatch(/^confirm/);
+    expect(command(result)).toMatchObject({ kind: 'update', patch: { scheduledStartTime: '2026-10-22T15:55:00.000Z' } });
+  });
+
+  it('a day and clock given after "take the time off" reschedule the task (g-b-07)', async () => {
+    const placed = task('task-report', 'Звіт', { scheduledStart: '2026-10-19T08:00:00.000Z', scheduledEnd: '2026-10-19T09:00:00.000Z', slotId: 's-1' });
+    const session = createSession(USER, 'v7-24');
+    await runVNextTurn(base(session, [placed]), interpreter(ops([op({ opId: 'op-1', action: 'update', target: { kind: 'existing', proposedId: 'task-report' }, changes: { unschedule: true } })])));
+    const back = await runVNextTurn(base(session, [placed]), interpreter(ops([
+      op({ opId: 'op-1', action: 'update', target: { kind: 'operation_result', opId: 'pop_1' }, constraints: [{ kind: 'date', value: '2026-10-26', precision: 'day' }, { kind: 'clock', value: '14:45', role: 'start' }] }),
+    ])));
+    expect(outcome(back)).toMatch(/^confirm/);
+    expect(command(back)).toMatchObject({ kind: 'update', patch: { scheduledStartTime: '2026-10-26T12:45:00.000Z' } });
+    expect(JSON.stringify(back.response.intents)).not.toContain('"isUnscheduled":true');
+  });
+});
+
+describe('V7 round 3 — "wait, not yet" keeps the preview (g-a-46)', () => {
+  it('answer_pending holds the preview; a later bare yes still applies it', async () => {
+    const session = createSession(USER, 'v7-25');
+    await runVNextTurn(base(session, []), interpreter(ops([op({ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'Чай' } })])));
+    const claim = { executionId: session.structured!.preview!.executionId, previewRevision: session.structured!.preview!.previewRevision };
+    const held = await runVNextTurn(base(session, [], { confirmation: claim }), interpreter({ version: '1', kind: 'control', operations: [], control: 'answer_pending' }));
+    expect(held.response.outcome).toBe('answer');
+    expect(held.response.assistantMessage).toBe('Добре, прев’ю лишається. Скажіть «так», коли будете готові, або змініть його.');
+    expect(session.structured?.preview?.executionState).toBe('open');
+    const yes = await runVNextTurn(base(session, [], { confirmation: claim }), interpreter({ version: '1', kind: 'control', operations: [], control: 'confirm_pending' }));
+    expect(yes.response.outcome).toBe('act');
+  });
+});
+
+// ---- Round 6: the hard set's first live run (63%). ------------------------------------------------------
+
+describe('V7 hard set — an addition to the open preview keeps what is pending (h-04, h-10)', () => {
+  it('a new operation on another target extends the preview instead of replacing it', async () => {
+    const dentist = task('task-dentist', 'Стоматолог', { fixed: true, scheduledStart: '2026-10-22T12:00:00.000Z', scheduledEnd: '2026-10-22T12:45:00.000Z', slotId: 's-d', googleEventId: 'g-d' });
+    const session = createSession(USER, 'v7-26');
+    await runVNextTurn(base(session, [dentist]), interpreter(ops([op({ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'прибрати гараж' }, constraints: [{ kind: 'date', value: '2026-10-24', precision: 'day' }, { kind: 'clock', value: '11:00', role: 'start' }] })])));
+    const added = await runVNextTurn(base(session, [dentist]), interpreter(ops([
+      op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-dentist' }, constraints: [{ kind: 'date', value: '2026-10-23', precision: 'day' }, { kind: 'clock', value: '16:00', role: 'start' }] }),
+    ])));
+    expect(outcome(added)).toMatch(/^confirm/);
+    expect(added.response.intents).toHaveLength(2);
+    const dropped = await runVNextTurn(base(session, [dentist]), interpreter(ops([op({ opId: 'op-1', action: 'cancel', target: { kind: 'operation_result', opId: 'pop_1' } })])));
+    expect(outcome(dropped)).toMatch(/^confirm/);
+    expect(dropped.response.intents).toHaveLength(1);
+    expect(command(dropped)).toMatchObject({ kind: 'move', taskId: 'task-dentist' });
+  });
+
+  it('a restatement of the same target still replaces the preview', async () => {
+    const session = createSession(USER, 'v7-27');
+    await runVNextTurn(base(session, [report]), interpreter(ops([op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-report' }, constraints: [{ kind: 'date', value: '2026-10-19', precision: 'day' }] })])));
+    const restated = await runVNextTurn(base(session, [report]), interpreter(ops([op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-report' }, constraints: [{ kind: 'date', value: '2026-10-20', precision: 'day' }] })])));
+    expect(restated.response.intents).toHaveLength(1);
+    expect(JSON.stringify(restated.response.intents)).toContain('2026-10-20');
+    expect(JSON.stringify(restated.response.intents)).not.toContain('2026-10-19');
+  });
+});
+
+describe('V7 hard set — "an hour later" on a placed task (h-05)', () => {
+  it('a relative time anchored on the task moves it from its own start', async () => {
+    const dentist = task('task-dentist', 'Стоматолог', { fixed: true, scheduledStart: '2026-10-22T12:00:00.000Z', scheduledEnd: '2026-10-22T12:45:00.000Z', slotId: 's-d', googleEventId: 'g-d' });
+    const result = await runVNextTurn(base(createSession(USER, 'v7-28'), [dentist]), interpreter(ops([
+      op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-dentist', description: 'його' }, constraints: [{ kind: 'relative_time', anchor: 'referenced_task', direction: 'after', amount: 1, unit: 'hour' } as never] }),
+    ])));
+    expect(outcome(result)).toMatch(/^confirm/);
+    expect(command(result)).toMatchObject({ kind: 'move', taskId: 'task-dentist', start: '2026-10-22T13:00:00.000Z', end: '2026-10-22T13:45:00.000Z' });
+  });
+});
+
+describe('V7 hard set — "take the time off" as a correction of a pending schedule (h-08, he-10)', () => {
+  it('unschedule drops the pending day and clock instead of contradicting them', async () => {
+    const later = task('task-report', 'Звіт', { unscheduled: true });
+    const session = createSession(USER, 'v7-29');
+    await runVNextTurn(base(session, [later]), interpreter(ops([op({ opId: 'op-1', action: 'update', target: { kind: 'existing', proposedId: 'task-report' }, constraints: [{ kind: 'date', value: '2026-10-22', precision: 'day' }, { kind: 'clock', value: '09:00', role: 'start' }] })])));
+    const back = await runVNextTurn(base(session, [later]), interpreter(ops([op({ opId: 'op-1', action: 'update', target: { kind: 'operation_result', opId: 'pop_1' }, changes: { unschedule: true } })])));
+    expect(outcome(back)).toMatch(/^confirm/);
+    expect(command(back)).toMatchObject({ kind: 'update', taskId: 'task-report', patch: { isUnscheduled: true } });
+  });
+});
+
+describe('V7 hard set — a fixed event given only a day (h-18)', () => {
+  it('a move of a fixed event to a day keeps its clock and length, like an update does', async () => {
+    const dentist = task('task-dentist', 'Стоматолог', { fixed: true, scheduledStart: '2026-10-22T12:00:00.000Z', scheduledEnd: '2026-10-22T12:45:00.000Z', slotId: 's-d', googleEventId: 'g-d' });
+    const result = await runVNextTurn(base(createSession(USER, 'v7-30'), [dentist]), interpreter(ops([
+      op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-dentist' }, constraints: [{ kind: 'date', value: '2026-10-19', precision: 'day' }] }),
+    ])));
+    expect(outcome(result)).toMatch(/^confirm/);
+    expect(command(result)).toMatchObject({ kind: 'update', taskId: 'task-dentist', patch: { scheduledStartTime: '2026-10-19T12:00:00.000Z', scheduledEndTime: '2026-10-19T12:45:00.000Z' } });
+  });
+});
+
+// ---- Round 7: the fix5 full rerun (g-b-22, g-c-11). -----------------------------------------------------
+
+describe('V7 live defects — a correction that names another record replaces the pending operation (g-b-22, g-c-11)', () => {
+  const work = task('task-zvit-work', 'Звіт', { unscheduled: true });
+  const home = task('task-zvit-home', 'Звіт домашній', { unscheduled: true });
+
+  it('"not the work one, the home one" moves the home report alone; the work report is withdrawn', async () => {
+    const session = createSession(USER, 'v7-28');
+    await runVNextTurn(base(session, [work, home], { transcript: 'перенеси робочий звіт на понеділок' }), interpreter(ops([
+      op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-zvit-work' }, constraints: [{ kind: 'date', value: '2026-10-19', precision: 'day' }] }),
+    ])));
+    const corrected = await runVNextTurn(base(session, [work, home], { transcript: 'ні, не робочий, домашній, і на 18:30 26 жовтня' }), interpreter(ops([
+      op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-zvit-home' }, replaces: 'pop_1', constraints: [{ kind: 'date', value: '2026-10-26', precision: 'day' }, { kind: 'clock', value: '18:30', role: 'start' }] }),
+    ])));
+    expect(outcome(corrected)).toMatch(/^confirm/);
+    expect(corrected.response.intents).toHaveLength(1);
+    expect(command(corrected)).toMatchObject({ kind: 'update', taskId: 'task-zvit-home' });
+    expect(JSON.stringify(corrected.response.intents)).not.toContain('task-zvit-work');
+  });
+
+  it('a replacement keeps the other pending operations and only swaps the one it names', async () => {
+    const finance = task('task-finance', 'Фінансовий звіт', { unscheduled: true });
+    const review = task('task-review-2', 'Design review follow-up', { unscheduled: true });
+    const session = createSession(USER, 'v7-29');
+    await runVNextTurn(base(session, [finance, review]), interpreter(ops([
+      op({ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'Чай' } }),
+      op({ opId: 'op-2', action: 'complete', target: { kind: 'existing', proposedId: 'task-finance' } }),
+    ])));
+    const corrected = await runVNextTurn(base(session, [finance, review]), interpreter(ops([
+      op({ opId: 'op-1', action: 'complete', target: { kind: 'existing', proposedId: 'task-review-2' }, replaces: 'pop_2' }),
+    ])));
+    expect(outcome(corrected)).toMatch(/^confirm/);
+    expect(corrected.response.intents).toHaveLength(2);
+    expect(JSON.stringify(corrected.response.intents)).toContain('task-review-2');
+    expect(JSON.stringify(corrected.response.intents)).not.toContain('task-finance');
+    expect(create(corrected, 0)).toMatchObject({ name: 'Чай' });
+  });
+
+  it('replaces naming an unknown pending id is rejected, not applied', async () => {
+    const session = createSession(USER, 'v7-30');
+    await runVNextTurn(base(session, [work, home]), interpreter(ops([op({ opId: 'op-1', action: 'move', target: { kind: 'existing', proposedId: 'task-zvit-work' }, constraints: [{ kind: 'date', value: '2026-10-19', precision: 'day' }] })])));
+    const bad = await runVNextTurn(base(session, [work, home]), interpreter(ops([op({ opId: 'op-1', action: 'complete', target: { kind: 'existing', proposedId: 'task-zvit-home' }, replaces: 'pop_9' })])));
+    expect(bad.response.outcome).not.toBe('act');
+    expect(JSON.stringify(bad.response.intents)).not.toContain('task-zvit-home');
+  });
+});

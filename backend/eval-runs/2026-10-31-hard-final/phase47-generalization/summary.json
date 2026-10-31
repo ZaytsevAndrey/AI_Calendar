@@ -1,0 +1,196 @@
+{
+  "status": "complete",
+  "stopped": null,
+  "runId": "137b28ba-3ee5-4cb4-b886-5b76a2fbd45d",
+  "suite": "phase47-hard-1",
+  "scorer": "phase4711-1",
+  "promptHash": "a50e7cd70baa8514042ca717fa129a98e382d52fe396fd9547d0db8cc6ea69df",
+  "promptBHash": "8a7d9c07ac52e2135bd416905f5827eb701a458a2fd800edf5a3071acc8e3f0d",
+  "executionMode": "live-service-preview-only",
+  "plannerMode": "fixture-echo",
+  "model": "deepseek-flash",
+  "provider": "deepseek",
+  "temperature": 0.1,
+  "thinking": false,
+  "nowIso": "2026-10-18T06:00:00.000Z",
+  "timeZone": "Europe/Kyiv",
+  "scenarios": 30,
+  "passed": 29,
+  "failed": 1,
+  "byCategory": {
+    "H": {
+      "scenarios": 30,
+      "passed": 29,
+      "failed": 1,
+      "rate": 0.967
+    }
+  },
+  "byLanguage": {
+    "uk": {
+      "scenarios": 20,
+      "passed": 19,
+      "failed": 1,
+      "rate": 0.95
+    },
+    "en": {
+      "scenarios": 10,
+      "passed": 10,
+      "failed": 0,
+      "rate": 1
+    }
+  },
+  "byTurns": {
+    "multi": {
+      "scenarios": 26,
+      "passed": 25,
+      "failed": 1,
+      "rate": 0.962
+    },
+    "single": {
+      "scenarios": 4,
+      "passed": 4,
+      "failed": 0,
+      "rate": 1
+    }
+  },
+  "byFamily": {
+    "three-operations-one-breath": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "sequential-corrections": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "correct-one-keep-other": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "create-move-drop-apply": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "context-reference-after-read": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "ambiguous-then-settled": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "occurrence-then-following": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "later-schedule-then-unschedule": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "reminder-day-and-clock": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "drop-then-change-mind": {
+      "scenarios": 2,
+      "passed": 1,
+      "failed": 1,
+      "rate": 0.5
+    },
+    "contradiction-in-one-sentence": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "long-dialogue-read-write": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "colloquial-two-series-days": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "refuse-not-guess": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "double-confirm": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "own-calendar-event-move": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "later-window": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "fixed-date-only": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "two-corrections-two-targets": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "cancel-mid-dialogue-then-new": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    }
+  },
+  "turns": 84,
+  "perTurnSuccess": 82,
+  "unsafeTurns": 0,
+  "unnecessaryClarification": 0,
+  "serverWrites": 0,
+  "errorClasses": {
+    "model_missing_constraint:invalid_model_output": 1,
+    "model_missing_constraint": 1
+  },
+  "modelCalls": 65,
+  "tokens": 265912,
+  "promptTokens": 258929,
+  "completionTokens": 6983,
+  "usd": 0.043032,
+  "usdNote": "deepseek-flash list price, input priced as uncached (cache hits not reported through GroqClient)",
+  "latencyP50": 1299,
+  "latencyP95": 2535,
+  "incomplete": []
+}

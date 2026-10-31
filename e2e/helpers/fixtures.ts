@@ -1,4 +1,4 @@
-import { test as base, expect, type APIRequestContext, type Page } from '@playwright/test';
+import { test as base, expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { API_BASE } from '../constants';
 import { readAuthFile, seedBrowserAuth, type TokenPair } from './auth';
 
@@ -149,4 +149,33 @@ export async function problematicRegion(page: Page, timeout = 15_000) {
   }
   await expect(region).toBeVisible({ timeout });
   return region;
+}
+
+/**
+ * Fixed slot through the shared DateTimeRangeField: open «When», go one month
+ * ahead, pick the 15th, then the start hour. The end follows at the default
+ * duration. Returns the picked civil day.
+ */
+export async function pickFixedSlot(page: Page, dialog: Locator, startHour: string) {
+  await dialog.locator('#task-form-slot').click();
+  await page.getByRole('button', { name: 'Next month' }).click();
+  const day = page.locator('[data-ymd$="-15"]').first();
+  const ymd = (await day.getAttribute('data-ymd')) ?? '';
+  await day.click();
+  await page.getByRole('option', { name: startHour, exact: true }).first().click();
+  await page.keyboard.press('Escape');
+  await expect(dialog.locator('#task-form-slot')).toContainText(`${startHour}:`);
+  return ymd;
+}
+
+/** One civil day in a DateRangeField (`fieldId`): open it, find the month, click the day twice. */
+export async function pickDayRange(page: Page, dialog: Locator, fieldId: string, ymd: string) {
+  await dialog.locator(`#${fieldId}`).click();
+  const day = page.locator(`[data-ymd="${ymd}"]`).first();
+  for (let i = 0; i < 3 && !(await day.isVisible()); i += 1) {
+    await page.getByRole('button', { name: 'Next month' }).click();
+  }
+  await day.click();
+  if (await day.isVisible()) await day.click();
+  if (await page.locator(`[data-ymd="${ymd}"]`).first().isVisible()) await page.keyboard.press('Escape');
 }

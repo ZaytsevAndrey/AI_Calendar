@@ -22,7 +22,7 @@ import { DEEPSEEK_FLASH_PRICE, GPT6_LUNA_PRICE, deepseekFlashUsd, gpt6LunaUsd } 
 import { runVNextTurn, type PipelineResult } from '../pipeline';
 import type { EntityRecord } from '../reference/reference-resolver';
 import { appendTurn, createSession, type VNextSession } from '../session/session';
-import { addDaysToYmd, localHm, localYmd, nextWeekdayYmd, scheduleTodayYmd } from '../../voice-local-date.util';
+import { addDaysToYmd, localHm, localYmd, scheduleTodayYmd, upcomingWeekdayYmd } from '../../voice-local-date.util';
 import { EDGE_CASES, type EdgeCase } from './edge-cases';
 import { HELD_OUT_CASES } from './held-out';
 import { scoreSemanticOutcome, type SemanticExpectation, type SemanticScore } from './semantic-outcome';
@@ -164,7 +164,7 @@ function userPrompt(input: {
     sleepHm: input.sleepHm,
     scheduleToday: today,
     tomorrow: addDaysToYmd(today, 1),
-    weekdays: WEEKDAYS.map((name, dow) => `${name} ${nextWeekdayYmd(today, dow)}`).join(', '),
+    weekdays: WEEKDAYS.map((name, dow) => `${name} ${upcomingWeekdayYmd(today, dow)}`).join(', '),
     defaultDurationMinutes: input.defaultDurationMinutes,
     language: input.language,
     owned: input.entities.filter((entity) => entity.userId === USER && entity.status === 'open').map((entity) => ({

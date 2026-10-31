@@ -1,0 +1,626 @@
+[
+  {
+    "id": "en-a-05",
+    "category": "A",
+    "family": "recurring-preferred",
+    "language": "en",
+    "invariant": "the series keeps its clock and no day window (VC-01)",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "walk the dog every day around 7 in the evening",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "dog",
+          "includes": "19:00",
+          "action": "create"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "walk the dog. Time of day: evening. No clock invented.",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "walk the dog. Time of day: evening. No clock invented.",
+            "task": {
+              "name": "walk the dog",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "admin",
+              "isRecurring": true,
+              "recurrencePattern": "DAILY",
+              "recurrenceWeekDays": null
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_missing_constraint",
+          "detail": "model_missing_constraint: outcome confirm, blocked -"
+        },
+        "errorClass": "model_missing_constraint",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-a-10",
+    "category": "A",
+    "family": "readonly-event",
+    "language": "en",
+    "invariant": "a read-only provider event is never written",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "move my flight to 6pm",
+        "expect": {
+          "outcomes": [
+            "answer",
+            "refuse"
+          ],
+          "intents": 0
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "I don't see a flight on your calendar. Which event should I move to 6pm?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome clarify, blocked -"
+        },
+        "errorClass": "model_intent_error",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-a-11",
+    "category": "A",
+    "family": "done-task",
+    "language": "en",
+    "invariant": "a completed task is not a write target",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "move pay the invoice to tomorrow",
+        "expect": {
+          "outcomes": [
+            "answer",
+            "refuse"
+          ],
+          "intents": 0
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "I don't see a task called \"pay the invoice\" in your open records. Which task do you mean?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome clarify, blocked -"
+        },
+        "errorClass": "model_intent_error",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-a-12",
+    "category": "A",
+    "family": "reminder",
+    "language": "en",
+    "invariant": "a remind phrase is a reminder, not a task",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "remind me to call mom on Sunday",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "mom",
+          "includes": "2026-10-25"
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "Which Sunday do you mean — today, Sunday 2026-10-18, or next Sunday, 2026-10-25?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked -"
+        },
+        "errorClass": "model_unnecessary_clarification",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-b-01",
+    "category": "B",
+    "family": "correction-pending",
+    "language": "en",
+    "invariant": "the correction changes the pending create, no second task",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "add a call with Sam tomorrow at 3",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "Sam",
+          "includes": "15:00",
+          "action": "create"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "call with Sam",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "call with Sam",
+            "task": {
+              "name": "call with Sam",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T12:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T12:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "actually make it 4",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "Sam",
+          "includes": "16:00",
+          "action": "create",
+          "pendingCount": 1
+        },
+        "outcome": "confirm",
+        "blocked": [
+          "invalid_model_output"
+        ],
+        "assistantMessage": "I did not catch that. The preview is unchanged: say it differently, or Apply.",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "call with Sam",
+            "task": {
+              "name": "call with Sam",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T12:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T12:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_missing_constraint",
+          "detail": "model_missing_constraint: outcome confirm, blocked invalid_model_output"
+        },
+        "errorClass": "model_missing_constraint:invalid_model_output",
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "yes",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "nameIncludes": "Sam"
+        },
+        "outcome": "act",
+        "blocked": [],
+        "assistantMessage": "Applying: call with Sam",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "call with Sam",
+            "task": {
+              "name": "call with Sam",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T12:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T12:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-c-01",
+    "category": "C",
+    "family": "two-writes-one-confirm",
+    "language": "en",
+    "invariant": "two creates in one breath are two tasks (VC-14)",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "call mom at 10 and again at 3",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "mom",
+          "intents": 2,
+          "action": "create"
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "unrepresentable_schedule"
+        ],
+        "assistantMessage": "Which day?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked unrepresentable_schedule"
+        },
+        "errorClass": "model_unnecessary_clarification:unrepresentable_schedule",
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "yes",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "intents": 2
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "Which day should the calls to mom at 10:00 and 15:00 be on?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome clarify, blocked -"
+        },
+        "errorClass": "model_intent_error",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-m-08",
+    "category": "B",
+    "family": "conflicting-days",
+    "language": "en",
+    "invariant": "the engine does not silently pick one of the two days",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "the report both Monday at 10:00 and Tuesday at 11:00",
+        "expect": {
+          "outcomes": [
+            "clarify",
+            "refuse"
+          ],
+          "clarificationRequired": true,
+          "intents": 0
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "Do you want two separate tasks for the Quarterly report — one on Monday at 10:00 and one on Tuesday at 11:00 — or one task that repeats?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "only Tuesday at 11:00",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-report",
+          "includes": "11:00"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "Quarterly report",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "Quarterly report",
+            "task": {
+              "name": "Quarterly report",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-20T08:00:00.000Z",
+              "scheduledEndTime": "2026-10-20T08:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": false,
+          "completion": false,
+          "category": "model_target_reference_error",
+          "detail": "model_target_reference_error: outcome confirm, blocked -"
+        },
+        "errorClass": "model_target_reference_error",
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "yes",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "taskId": "task-report"
+        },
+        "outcome": "act",
+        "blocked": [],
+        "assistantMessage": "Applying: Quarterly report",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "Quarterly report",
+            "task": {
+              "name": "Quarterly report",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-20T08:00:00.000Z",
+              "scheduledEndTime": "2026-10-20T08:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": false,
+          "completion": false,
+          "category": "model_target_reference_error",
+          "detail": "model_target_reference_error: outcome act, blocked -"
+        },
+        "errorClass": "model_target_reference_error",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-d-02",
+    "category": "D",
+    "family": "slot-move-other-day",
+    "language": "en",
+    "invariant": "a one-off without a calendar event moves to another day (VC-03)",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "move the client meeting to Tuesday at 9",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-client",
+          "includes": "09:00",
+          "action": "move",
+          "forbidTaskId": "task-client-2"
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "There are two client meetings: \"Client meeting\" on Monday at 12:00 and \"Client meeting about the budget\" on Tuesday at 12:00. Which one should I move to Tuesday at 9:00?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked -"
+        },
+        "errorClass": "model_unnecessary_clarification",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-d-03",
+    "category": "D",
+    "family": "occurrence-rename",
+    "language": "en",
+    "invariant": "one day of the series is renamed (WP-B)",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "rename Monday's gym to yoga",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-gym",
+          "nameIncludes": "yoga",
+          "action": "update"
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "missing_series_scope"
+        ],
+        "assistantMessage": "This repeats. Do you mean this day, this day and following, or the whole series?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked missing_series_scope"
+        },
+        "errorClass": "model_unnecessary_clarification:missing_series_scope",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-d-04",
+    "category": "D",
+    "family": "occurrence-complete",
+    "language": "en",
+    "invariant": "one day of the series is completed in place (WP-B)",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "I already did the gym on Monday",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-gym",
+          "action": "complete"
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "missing_series_scope"
+        ],
+        "assistantMessage": "This repeats. Do you mean this day, this day and following, or the whole series?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked missing_series_scope"
+        },
+        "errorClass": "model_unnecessary_clarification:missing_series_scope",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-d-06",
+    "category": "D",
+    "family": "reminder-update",
+    "language": "en",
+    "invariant": "the stored reminder is updated (VC-05)",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "move the rent reminder to 8pm",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "rem-rent",
+          "includes": "20:00",
+          "action": "remind_update"
+        },
+        "outcome": "refuse",
+        "blocked": [
+          "unauthorized_entity"
+        ],
+        "assistantMessage": "I cannot change that object.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome refuse, blocked unauthorized_entity"
+        },
+        "errorClass": "model_intent_error:unauthorized_entity",
+        "note": null
+      }
+    ]
+  }
+]

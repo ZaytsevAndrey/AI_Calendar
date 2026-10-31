@@ -82,6 +82,64 @@ describe('buildChangePreviewCards', () => {
     expect(cards[0].name).toBe('Report');
   });
 
+  // VC-13: a repeat with no clock is a series the engine seats, not a Later task.
+  it('shows a recurring create with no clock as a flexible series, not Later', () => {
+    const cards = buildChangePreviewCards({
+      intents: [{
+        type: 'create',
+        summary: 'Exercise',
+        task: {
+          name: 'Exercise',
+          eventType: 'admin',
+          estimatedTimeInMinutes: 60,
+          isRecurring: true,
+          recurrencePattern: 'WEEKLY',
+          recurrenceWeekDays: [1],
+          isUnscheduled: false,
+          allowSplit: false,
+          priority: 'medium',
+        },
+      }],
+    });
+    expect(cards[0]).toMatchObject({ kind: 'create', taskType: 'flexible', repeats: true, startIso: null });
+  });
+
+  // VC-06: a card on a repeating task says which part of the series it touches.
+  it('carries the series scope of a command onto its card', () => {
+    const command = (c: Extract<VoiceWriteIntent, { type: 'command' }>['command']): VoiceWriteIntent => ({ type: 'command', summary: c.summary, command: c });
+    const cards = buildChangePreviewCards({
+      intents: [
+        command({ kind: 'skip', taskId: 'g', taskName: 'Gym', summary: 'Skip', occurrenceStart: '2026-10-21T07:00:00.000Z', googleEventId: null, googleEventCalendarId: null }),
+        command({ kind: 'end_series', taskId: 'g', taskName: 'Gym', summary: 'End', occurrenceStart: '2026-10-21T07:00:00.000Z', googleEventId: null, googleEventCalendarId: null }),
+        command({ kind: 'delete', taskId: 'g', taskName: 'Gym', summary: 'Delete', seriesScope: 'all' }),
+        command({ kind: 'complete', taskId: 'g', taskName: 'Gym', summary: 'Done', seriesScope: 'all' }),
+        command({ kind: 'update', taskId: 'g', taskName: 'Gym', summary: 'Rename', patch: { name: 'Yoga' }, seriesScope: 'all' }),
+        command({ kind: 'move', taskId: 'g', taskName: 'Gym', summary: 'Move', googleEventId: 'e', calendarId: null, recurringEventId: 'm', originalStart: '2026-10-21T07:00:00.000Z', originalEnd: '2026-10-21T08:00:00.000Z', start: '2026-10-21T12:00:00.000Z', end: '2026-10-21T13:00:00.000Z', seriesScope: 'series' }),
+        command({ kind: 'delete', taskId: 'r', taskName: 'Report', summary: 'Delete one-off' }),
+      ],
+    });
+    expect(cards.map((card) => card.scope ?? null)).toEqual(['occurrence', 'series', 'all', 'all', 'all', 'series', null]);
+    expect(cards.slice(0, 6).every((card) => card.repeats)).toBe(true);
+    expect(cards[6].repeats).toBeFalsy();
+  });
+
+  // WP-B: a per-day edit shows the day it touches and its scope; a per-day completion is a done card.
+  it('shows an occurrence edit as an edit of that day, and a per-day completion as done', () => {
+    const cards = buildChangePreviewCards({
+      intents: [
+        { type: 'command', summary: 'Rename', command: { kind: 'edit_occurrence', taskId: 'g', taskName: 'Gym', summary: 'Rename', occurrenceStart: '2026-10-21T15:00:00.000Z', scope: 'occurrence', name: 'Yoga', start: '2026-10-21T16:00:00.000Z', durationMinutes: 45, googleEventId: null, googleEventCalendarId: null, seriesScope: 'occurrence' } },
+        { type: 'command', summary: 'Done', command: { kind: 'edit_occurrence', taskId: 'g', taskName: 'Gym', summary: 'Done', occurrenceStart: '2026-10-22T15:00:00.000Z', scope: 'occurrence', status: 'completed', googleEventId: null, googleEventCalendarId: null, seriesScope: 'occurrence' } },
+        { type: 'command', summary: 'From', command: { kind: 'edit_occurrence', taskId: 'g', taskName: 'Gym', summary: 'From', occurrenceStart: '2026-10-22T15:00:00.000Z', scope: 'following', start: '2026-10-22T06:00:00.000Z', googleEventId: null, googleEventCalendarId: null, seriesScope: 'series' } },
+      ],
+    });
+    expect(cards.map((card) => [card.kind, card.scope, card.startIso, card.durationMinutes, card.name])).toEqual([
+      ['edit', 'occurrence', '2026-10-21T16:00:00.000Z', 45, 'Yoga'],
+      ['complete', 'occurrence', '2026-10-22T15:00:00.000Z', null, 'Gym'],
+      ['edit', 'series', '2026-10-22T06:00:00.000Z', null, 'Gym'],
+    ]);
+    expect(cards.every((card) => card.repeats)).toBe(true);
+  });
+
   it('maps a reminder create to a reminder card without a duration', () => {
     const intents: VoiceWriteIntent[] = [
       {

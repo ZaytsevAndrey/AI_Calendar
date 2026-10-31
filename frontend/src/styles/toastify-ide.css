@@ -444,6 +444,23 @@
     pointer-events: none;
 }
 
+/* Behaviour (pin / move) and repeat are two marks: a fixed series reads as fixed + repeats. */
+.calendar-chip__repeat {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    flex: none;
+    pointer-events: none;
+    color: rgb(var(--ide-muted));
+}
+
+.calendar-chip__repeat svg {
+    width: 10px;
+    height: 10px;
+}
+
 .calendar-chip__cal {
     display: inline-flex;
     align-items: center;

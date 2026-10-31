@@ -1,7 +1,11 @@
 import i18n from 'i18n';
 import type { TaskFormValues } from './schema';
 
-export type TaskPresetId = 'flexible' | 'fixed' | 'recurring' | 'unscheduled';
+/**
+ * Scheduling mode of the form. Repeat is not a mode: a flexible or fixed
+ * task may repeat, and switching modes keeps the repeat rule.
+ */
+export type TaskPresetId = 'flexible' | 'fixed' | 'unscheduled';
 
 export type TaskPreset = {
   id: TaskPresetId;
@@ -10,15 +14,6 @@ export type TaskPreset = {
 };
 
 export const TASK_PRESETS: TaskPreset[] = [
-  {
-    id: 'fixed',
-    get label() {
-      return i18n.t('tasks.preset.fixed');
-    },
-    get hint() {
-      return i18n.t('tasks.preset.fixedHint');
-    },
-  },
   {
     id: 'flexible',
     get label() {
@@ -29,12 +24,12 @@ export const TASK_PRESETS: TaskPreset[] = [
     },
   },
   {
-    id: 'recurring',
+    id: 'fixed',
     get label() {
-      return i18n.t('tasks.preset.recurring');
+      return i18n.t('tasks.preset.fixed');
     },
     get hint() {
-      return i18n.t('tasks.preset.recurringHint');
+      return i18n.t('tasks.preset.fixedHint');
     },
   },
   {
@@ -101,25 +96,6 @@ export const PRIORITY_OPTIONS = [
     },
   },
 ];
-
-const FLEXIBLE_DEFAULTS: Pick<
-  TaskFormValues,
-  | 'isFixed'
-  | 'isUnscheduled'
-  | 'isRecurring'
-  | 'allowSplit'
-  | 'estimatedTimeInMinutes'
-  | 'recurrencePattern'
-  | 'recurrenceWeekDays'
-> = {
-  isFixed: false,
-  isUnscheduled: false,
-  isRecurring: false,
-  allowSplit: true,
-  estimatedTimeInMinutes: 30,
-  recurrencePattern: undefined,
-  recurrenceWeekDays: [],
-};
 
 type RecurrenceOption = { value: 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'; label: string };
 
@@ -188,6 +164,11 @@ export const WEEKDAY_OPTIONS = [
   },
 ];
 
+/**
+ * Mode switch. Only the mode's own fields change; the repeat rule
+ * (`isRecurring`, pattern, days) is left as it is — except for Later, which
+ * cannot hold a series.
+ */
 export function presetPatch(
   id: TaskPresetId,
   defaultMinutes = 30,
@@ -198,6 +179,8 @@ export function presetPatch(
       isUnscheduled: true,
       isFixed: false,
       isRecurring: false,
+      recurrencePattern: undefined,
+      recurrenceWeekDays: [],
       allowSplit: true,
       preferredStartTime: '',
       scheduledStartTime: '',
@@ -211,31 +194,17 @@ export function presetPatch(
     return {
       isUnscheduled: false,
       isFixed: true,
-      isRecurring: false,
       allowSplit: false,
       preferredStartTime: '',
       earliestStartTime: '',
       deadline: '',
       phaseId: '',
-      recurrencePattern: undefined,
-      recurrenceWeekDays: [],
-    };
-  }
-  if (id === 'recurring') {
-    return {
-      isUnscheduled: false,
-      isFixed: false,
-      isRecurring: true,
-      allowSplit: true,
-      estimatedTimeInMinutes: minutes,
-      recurrencePattern: 'DAILY',
-      recurrenceWeekDays: [...WORKDAYS],
-      scheduledStartTime: '',
-      scheduledEndTime: '',
     };
   }
   return {
-    ...FLEXIBLE_DEFAULTS,
+    isUnscheduled: false,
+    isFixed: false,
+    allowSplit: true,
     estimatedTimeInMinutes: minutes,
     scheduledStartTime: '',
     scheduledEndTime: '',
@@ -244,13 +213,8 @@ export function presetPatch(
 
 /** Highlight a preset only while current flags still match it. */
 export function matchPreset(
-  values: Pick<
-    TaskFormValues,
-    'isFixed' | 'isUnscheduled' | 'isRecurring' | 'allowSplit' | 'recurrencePattern'
-  >,
-): TaskPresetId | null {
+  values: Pick<TaskFormValues, 'isFixed' | 'isUnscheduled'>,
+): TaskPresetId {
   if (values.isUnscheduled) return 'unscheduled';
-  // A repeating fixed slot is still the Fixed tab with Repeat on.
-  if (values.isFixed) return 'fixed';
-  return values.isRecurring ? 'recurring' : 'flexible';
+  return values.isFixed ? 'fixed' : 'flexible';
 }

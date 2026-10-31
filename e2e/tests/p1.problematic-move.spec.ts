@@ -537,7 +537,9 @@ test.describe('P1 Problematic Move slot pick (U-CAL-025+)', () => {
   }) => {
     const token = auth.onboarded.access_token;
     await completeOpenTasks(request, token);
-    const { name, placeYmd, taskId } = await seedProblematic(request, token, { ymd: Y.d15 });
+    // A day inside the planning horizon (14 days for the e2e user): beyond it the
+    // engine refuses to seat, whatever the suggestion says (see known-issues).
+    const { name, placeYmd, taskId } = await seedProblematic(request, token, { ymd: Y.d1 });
     const inbox = await openInbox(page, auth, name);
     const suggestion = inbox
       .getByRole('listitem')

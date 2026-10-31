@@ -7,23 +7,26 @@ import {
   uniqueName,
   openCreateTaskDialog,
   expectMutationProgressToast,
+  pickFixedSlot,
 } from '../helpers/fixtures';
 
 test.describe('P0 tasks UI', () => {
   test('U-TSK-001 /tasks create defaults to Flexible', async ({ page, auth }) => {
     await openAs(page, auth.onboarded, '/tasks');
     const dialog = await openCreateTaskDialog(page);
-    await expect(dialog.getByRole('button', { name: 'Flexible' })).toBeVisible();
-    await expect(dialog.getByLabel(/Duration/)).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Flexible', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(dialog.getByRole('spinbutton', { name: /Duration/ })).toBeVisible();
     await expect(dialog.getByLabel(/^Start/)).toHaveCount(0);
+    // Repeat is a property of the task, not a third type.
+    await expect(dialog.getByRole('button', { name: 'Recurring' })).toHaveCount(0);
+    await expect(dialog.locator('#task-form-recurrence')).toHaveValue('NONE');
   });
 
-  test('U-TSK-003 fixed missing end is blocked with no POST', async ({ page, auth }) => {
+  test('U-TSK-003 fixed without a time is blocked with no POST', async ({ page, auth }) => {
     await openAs(page, auth.onboarded, '/tasks');
     const dialog = await openCreateTaskDialog(page);
-    await dialog.getByRole('button', { name: 'Fixed' }).click();
-    await dialog.getByRole('textbox', { name: /Name/ }).fill(uniqueName('E2E fixed missing end'));
-    await dialog.locator('#task-form-start').fill('2030-06-15T10:00');
+    await dialog.getByRole('button', { name: 'Fixed', exact: true }).click();
+    await dialog.getByRole('textbox', { name: /Name/ }).fill(uniqueName('E2E fixed no time'));
 
     let posted = false;
     page.on('request', (request) => {
@@ -33,7 +36,7 @@ test.describe('P0 tasks UI', () => {
     });
 
     await dialog.getByRole('button', { name: 'Create task' }).click();
-    await expect(dialog.getByText('End time is required for fixed tasks')).toBeVisible();
+    await expect(dialog.getByText('Start time is required for fixed tasks')).toBeVisible();
     await expect(dialog).toBeVisible();
     expect(posted).toBe(false);
   });
@@ -42,10 +45,9 @@ test.describe('P0 tasks UI', () => {
     await openAs(page, auth.onboarded, '/tasks');
     const dialog = await openCreateTaskDialog(page);
     const name = uniqueName('E2E fixed slot');
-    await dialog.getByRole('button', { name: 'Fixed' }).click();
+    await dialog.getByRole('button', { name: 'Fixed', exact: true }).click();
     await dialog.getByRole('textbox', { name: /Name/ }).fill(name);
-    await dialog.locator('#task-form-start').fill('2030-06-15T10:00');
-    await dialog.locator('#task-form-end').fill('2030-06-15T11:00');
+    await pickFixedSlot(page, dialog, '10');
     await dialog.getByRole('button', { name: 'Create task' }).click();
     await expectMutationProgressToast(page, name);
     await expect(page.getByRole('heading', { name })).toBeVisible();
@@ -61,7 +63,8 @@ test.describe('P0 tasks UI', () => {
   }) => {
     await openAs(page, auth.onboarded, '/tasks');
     const dialog = await openCreateTaskDialog(page);
-    await dialog.getByRole('button', { name: 'Recurring' }).click();
+    // Repeat is a property, not a task type: the flexible default plus the Repeat select.
+    await dialog.locator('#task-form-recurrence').selectOption('DAILY');
     await expect(dialog.locator('#task-form-recurrence')).toHaveValue('DAILY');
     await expect(dialog.getByRole('button', { name: 'Mon' })).toHaveAttribute('aria-pressed', 'true');
     await expect(dialog.getByRole('button', { name: 'Fri' })).toHaveAttribute('aria-pressed', 'true');
@@ -172,7 +175,8 @@ test.describe('P0 tasks UI', () => {
     await row.getByRole('button', { name: 'Schedule', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Schedule' });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByText(name)).toBeVisible();
+    // The name shows in the sheet header (and again in the slot preview once it loads).
+    await expect(dialog.getByText(name, { exact: true }).first()).toBeVisible();
     await expect(dialog.getByRole('button', { name: /^Place( |$)/ })).toBeVisible();
   });
 

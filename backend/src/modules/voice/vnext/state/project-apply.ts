@@ -7,7 +7,7 @@
  * A constraint or change that the target command cannot carry is rejected, never dropped.
  */
 import type { VoiceWriteIntent } from '../../voice-agent.types';
-import { addDaysToYmd, localDateTimeIso, localHm, localYmd, nextWeekdayYmd, scheduleTodayYmd } from '../../voice-local-date.util';
+import { addDaysToYmd, civilDayStartIso, localDateTimeIso, localHm, localYmd, nextWeekdayYmd, scheduleTodayYmd } from '../../voice-local-date.util';
 import { intentKey } from '../session/session';
 import { resolveZonedClock } from '../temporal/resolve-clock';
 import type { ApplyItem } from '../apply/apply-preview';
@@ -135,9 +135,22 @@ export function projectApply(input: {
     const relative = resolveRelative(resolved.operation, clock);
     if (!relative.ok) return relative;
     resolved.operation = relative.operation;
+    const dated = resolveBareClock(resolved.operation, { nowIso: input.nowIso, timeZone: input.timeZone, wakeHm: clock.wakeHm, sleepHm: clock.sleepHm });
+    if (!dated.ok) return dated;
+    resolved.operation = dated.operation;
     // A reminder asks for its own missing fields first; projectRemind then rejects what it cannot carry.
-    const labels = operation.action === 'remind' ? { ok: true as const, labels: [] } : keptLabels(resolved.operation);
+    const reminder = operation.action === 'remind' || operation.entityType === 'reminder';
+    const labels = reminder ? { ok: true as const, labels: [] } : keptLabels(resolved.operation);
     if (!labels.ok) return labels;
+    if (!labels.labels.length && resolved.operation.constraints.some((constraint) => constraint.kind === 'unresolved' && constraint.label)) {
+      resolved.operation = { ...resolved.operation, constraints: resolved.operation.constraints.filter((constraint) => constraint.kind !== 'unresolved') };
+    }
+    // R7: an update that changes nothing beside other operations is "leave it as is" (V7, g-a-25).
+    if (operation.action === 'update' && operation.target.kind === 'entity' && ordered.operations.length > 1
+      && !Object.keys(operation.changes).some((key) => operation.changes[key as keyof typeof operation.changes] !== undefined)
+      && !resolved.operation.constraints.length && !operation.seriesScope) {
+      continue;
+    }
     // A preferred clock only means something on a create; elsewhere it would be dropped silently.
     if (
       operation.action !== 'create'
@@ -145,10 +158,10 @@ export function projectApply(input: {
     ) {
       return { ok: false, code: 'unrepresented_constraint', detail: `${operation.pendingId}:clock_preferred` };
     }
-    const projected = operation.action === 'create'
-      ? projectCreate(resolved.operation, clock, labels.labels, input.language ?? 'uk')
-      : operation.action === 'remind'
-        ? projectRemind(resolved.operation, clock)
+    const projected = reminder
+      ? projectRemind(resolved.operation, clock)
+      : operation.action === 'create'
+        ? projectCreate(resolved.operation, clock, labels.labels, input.language ?? 'uk')
         : projectCommand(resolved.operation, clock, input.language ?? 'uk');
     if (!projected.ok) return projected;
     if (exposesDraftId(projected.intent, draftIds)) return { ok: false, code: 'draft_identifier', detail: operation.pendingId };
@@ -173,10 +186,16 @@ function keptLabels(operation: PendingOperation): { ok: true; labels: TimeOfDayL
   const unresolved = operation.constraints.filter((constraint): constraint is Extract<Constraint, { kind: 'unresolved' }> =>
     constraint.kind === 'unresolved');
   if (!unresolved.length) return { ok: true, labels: [] };
+  // "In the evening, at 18:55": the clock is the time and the label only describes it (V7, g-a-50).
+  if (unresolved.every((constraint) => constraint.label) && operation.constraints.some((constraint) => constraint.kind === 'clock' && (constraint.role === 'start' || constraint.role === 'preferred'))) {
+    return { ok: true, labels: [] };
+  }
   if (unresolved.some((constraint) => !constraint.label)) {
     return { ok: false, code: 'unrepresented_constraint', detail: operation.pendingId };
   }
-  const placed = operation.constraints.some((constraint) => constraint.kind === 'date' || constraint.kind === 'clock' || constraint.kind === 'interval');
+  // A day alone does not place the task at a clock: a label on "Saturday morning" is kept and the task
+  // takes that day (V7). A clock or a window beside the label is a contradiction the user must settle.
+  const placed = operation.constraints.some((constraint) => constraint.kind === 'clock' || constraint.kind === 'interval');
   // The detail carries the labels so the reply can name what was not placed.
   if (operation.action !== 'create' || placed) {
     return { ok: false, code: 'unmapped_time', detail: unresolved.map((constraint) => constraint.label).join(',') };
@@ -194,7 +213,10 @@ function eligibleTarget(operation: PendingOperation): { ok: true } | ProjectErro
   }
   if (!target.writable) return { ok: false, code: 'unauthorized_entity', detail: target.entityId };
   if (target.status && target.status !== 'open') return { ok: false, code: 'ineligible', detail: target.entityId };
-  if (target.recurring && target.entityType !== 'reminder' && !operation.seriesScope) {
+  // One day the user named (a date or a weekday) is that occurrence; the scope is inferred later, once the
+  // weekday is a date (spec: "One day they already named, including today, is that occurrence").
+  const namesDay = operation.constraints.some((constraint) => constraint.kind === 'date' || constraint.kind === 'weekday');
+  if (target.recurring && target.entityType !== 'reminder' && !operation.seriesScope && !namesDay) {
     return { ok: false, code: 'missing_series_scope', detail: target.entityId };
   }
   // A series scope on a one-off row is a misreading, not something to ignore.
@@ -338,9 +360,27 @@ function resolveRelative(operation: PendingOperation, clock: Clock): { ok: true;
   const placed = operation.constraints.some((constraint) =>
     constraint.kind === 'date' || constraint.kind === 'all_day' || constraint.kind === 'interval' || (constraint.kind === 'clock' && constraint.role === 'start'));
   if (relative.length > 1 || placed) return { ok: false, code: 'contradictory_constraints', detail: `${operation.pendingId}:relative` };
-  if (!clock.nowIso) return { ok: false, code: 'unrepresentable_schedule', detail: 'relative_needs_clock' };
   const delay = relative[0];
   const rest = operation.constraints.filter((constraint) => constraint !== delay);
+  // Anchored on the target: the task's own start, in either direction (V7, h-05). Only a placed row has one.
+  if (delay.anchor === 'target') {
+    const own = operation.target.kind === 'entity' ? operation.target.scheduledStart : undefined;
+    if (!own) return { ok: false, code: 'unrepresentable_schedule', detail: `${operation.pendingId}:relative_target` };
+    const sign = delay.direction === 'before' ? -1 : 1;
+    const shifted = new Date(Date.parse(own) + sign * delay.amount * (delay.unit === 'day' ? 86_400_000 : delay.unit === 'hour' ? 3_600_000 : 60_000)).toISOString();
+    return {
+      ok: true,
+      operation: {
+        ...operation,
+        constraints: [
+          ...rest,
+          { constraintId: delay.constraintId, kind: 'date', value: localYmd(shifted, clock.timeZone) },
+          { constraintId: `${delay.constraintId}-start`, kind: 'clock', value: localHm(shifted, clock.timeZone), role: 'start' },
+        ],
+      },
+    };
+  }
+  if (!clock.nowIso) return { ok: false, code: 'unrepresentable_schedule', detail: 'relative_needs_clock' };
   if (delay.unit === 'day') {
     const ymd = addDaysToYmd(localYmd(clock.nowIso, clock.timeZone), delay.amount);
     return { ok: true, operation: { ...operation, constraints: [...rest, { constraintId: delay.constraintId, kind: 'date', value: ymd }] } };
@@ -377,7 +417,7 @@ function projectCreate(
   if (operation.target.kind !== 'new') return { ok: false, code: 'invalid_target', detail: operation.action };
   // keptLabels already limited `unresolved` to labels on an unplaced create.
   const rejected = onlyKinds(operation, ['date', 'clock', 'interval', 'duration', 'unresolved', 'recurrence', 'all_day', 'day_bound', 'ordering'])
-    ?? onlyChanges(operation, ['notes', 'priority', 'location', 'status', 'spanRole', ...(emptyReminder(operation.changes) ? ['reminder' as const] : [])]);
+    ?? onlyChanges(operation, ['notes', 'priority', 'location', 'status', 'spanRole', 'unschedule', 'explicitNew', ...(emptyReminder(operation.changes) ? ['reminder' as const] : [])]);
   if (rejected) return rejected;
   const title = operation.changes.title;
   if (!title) return { ok: false, code: 'missing_title', detail: operation.pendingId };
@@ -414,6 +454,15 @@ function projectCreate(
   const bounded = hasBounds(operation);
   const order = orderingBounds(operation, clock);
   if (!order.ok) return order;
+  if (recurrence) {
+    // On a series, deadline is the series end and earliestStartTime its first day
+    // (seriesAnchorYmd / untilMs in placement-step.service.ts). A daily window, an end
+    // clock, a bound, or an ordering would be stored as a one-day series: not representable.
+    const windowed = interval || operation.changes.spanRole === 'window' || bounded || (end && !start) || order.earliest || order.deadline;
+    if (windowed) return { ok: false, code: 'unrepresented_constraint', detail: `${operation.pendingId}:series_window` };
+    // A series is never the Later inbox; the engine seats each day (the server also coerces this).
+    task.isUnscheduled = false;
+  }
   if ((start || end || preferred || interval || allDay || bounded) && !date) return { ok: false, code: 'unrepresentable_schedule', detail: operation.pendingId };
   if (preferred && start) return { ok: false, code: 'contradictory_constraints', detail: operation.pendingId };
   if (!date) {
@@ -473,6 +522,9 @@ function projectCreate(
   } else if (interval) {
     task.earliestStartTime = localDateTimeIso(date.value, interval.startHm, clock.timeZone);
     task.deadline = localDateTimeIso(date.value, interval.endHm, clock.timeZone);
+  } else if (recurrence) {
+    // A repeat from a named day with no clock starts on that day (its anchor); it has no end.
+    if (!preferred) task.earliestStartTime = civilDayStartIso(date.value, clock.timeZone);
   } else if (!bounded) {
     Object.assign(task, dayWindow(date.value, clock));
   }
@@ -505,30 +557,55 @@ function firstSeriesDay(
 /** Reminder commands use the production remind_* shapes. A missing clock stays null for the user setting. */
 function projectRemind(operation: PendingOperation, clock: Clock): { ok: true; intent: VoiceWriteIntent } | ProjectError {
   const reminder = operation.changes.reminder;
-  const op = reminder?.op ?? (operation.target.kind === 'new' ? 'create' : null);
+  // The model may address a stored reminder with the task verbs; the verb is the reminder op (V7, g-d-11).
+  const impliedOp = operation.target.kind === 'new'
+    ? 'create'
+    : operation.action === 'delete' || operation.action === 'cancel'
+      ? 'delete'
+      : operation.action === 'complete'
+        ? 'resolve'
+        : operation.action === 'update' || operation.action === 'move'
+          ? 'update'
+          : null;
+  const op = reminder?.op ?? impliedOp;
   if (!op) return { ok: false, code: 'unrepresented_constraint', detail: `${operation.pendingId}:reminder_op` };
   if (operation.target.kind === 'new' && op !== 'create') return { ok: false, code: 'draft_command', detail: op };
   if (operation.target.kind === 'entity' && (op === 'create' || operation.target.entityType !== 'reminder')) {
     return { ok: false, code: 'unsupported_combination', detail: `remind:${op}` };
   }
-  const name = reminder?.name || operation.changes.title || '';
+  // An update replaces the whole reminder on the server (PUT semantics), so the fields the
+  // user did not restate are filled from the stored row the catalog carried in (VC-05).
+  const stored = operation.target.kind === 'entity' ? operation.target.reminder : undefined;
+  const storedName = operation.target.kind === 'entity' ? operation.target.name : undefined;
+  const name = reminder?.name || operation.changes.title || (op === 'update' ? storedName : undefined) || '';
   const terminal = op === 'delete' || op === 'resolve';
   if (!name && !terminal) return { ok: false, code: 'missing_title', detail: operation.pendingId };
   const date = find(operation, 'date');
   if (reminder?.dueYmd && date && reminder.dueYmd !== date.value) {
     return { ok: false, code: 'contradictory_constraints', detail: operation.pendingId };
   }
-  const due = reminder?.dueYmd || date?.value;
+  const due = reminder?.dueYmd || date?.value || (op === 'update' ? stored?.dueYmd : undefined);
   if (!due && !terminal) return { ok: false, code: 'missing_day', detail: operation.pendingId };
-  const rejected = onlyKinds(operation, ['date']) ?? onlyChanges(operation, ['notes', 'reminder']);
+  // A start clock beside the reminder fields is the reminder clock; the model often repeats it as a constraint (V7, g-a-15).
+  const rejected = onlyKinds(operation, ['date', 'clock']) ?? onlyChanges(operation, ['notes', 'reminder', ...(op === 'update' ? ['title' as const] : [])]);
   if (rejected) return rejected;
-  const explicitClock = reminder?.notificationTime ?? null;
+  const spokenClock = findClock(operation, 'start');
+  if (operation.constraints.some((constraint) => constraint.kind === 'clock' && constraint.role !== 'start')) {
+    return { ok: false, code: 'unrepresented_constraint', detail: `${operation.pendingId}:clock_role` };
+  }
+  if (spokenClock && reminder?.notificationTime && reminder.notificationTime !== spokenClock.value) {
+    return { ok: false, code: 'contradictory_constraints', detail: operation.pendingId };
+  }
+  const explicitClock = reminder?.notificationTime ?? spokenClock?.value ?? (op === 'update' ? stored?.notificationTime ?? null : null);
   if (due && !terminal) {
     const resolved = resolveZonedClock(due, explicitClock || clock.defaultReminderTime, clock.timeZone);
     if (resolved.status === 'gap' || resolved.status === 'fold') return { ok: false, code: resolved.status, detail: operation.pendingId };
   }
   const kind = op === 'delete' ? 'remind_delete' : op === 'resolve' ? 'remind_resolve' : op === 'update' ? 'remind_update' : 'remind_create';
   const summary = name || operation.sourceText || kind;
+  const description = operation.changes.notes !== undefined ? operation.changes.notes : (op === 'update' ? stored?.description ?? null : null);
+  const recurrencePattern = reminder?.recurrencePattern ?? (op === 'update' ? stored?.recurrencePattern ?? null : null);
+  const recurrenceWeekDays = op === 'update' && reminder?.recurrencePattern == null ? stored?.recurrenceWeekDays ?? null : null;
   return {
     ok: true,
     intent: {
@@ -541,9 +618,9 @@ function projectRemind(operation: PendingOperation, clock: Clock): { ok: true; i
         ...(operation.target.kind === 'entity' ? { reminderId: operation.target.entityId } : {}),
         ...(due ? { dueYmd: due } : {}),
         notificationTime: explicitClock,
-        description: operation.changes.notes ?? null,
-        recurrencePattern: reminder?.recurrencePattern ?? null,
-        recurrenceWeekDays: null,
+        description,
+        recurrencePattern,
+        recurrenceWeekDays,
       },
     },
   };
@@ -558,7 +635,8 @@ const COMMAND_VERBS: Record<VNextLanguage, Record<string, string>> = {
     move: 'Перенести',
     update: 'Змінити',
     end_series: 'Завершити серію',
-    complete_occurrence: 'Позначити виконаним і прибрати з календаря',
+    complete_occurrence: 'Позначити виконаним',
+    edit_occurrence: 'Змінити',
   },
   en: {
     delete: 'Delete',
@@ -568,15 +646,41 @@ const COMMAND_VERBS: Record<VNextLanguage, Record<string, string>> = {
     move: 'Move',
     update: 'Change',
     end_series: 'End the series',
-    complete_occurrence: 'Mark done and clear from the calendar',
+    complete_occurrence: 'Mark done',
+    edit_occurrence: 'Change',
   },
 };
+
+/** Which part of a repeating task a command touches (VC-06). `all` on a move is every open day; elsewhere it is the whole series. */
+const SCOPE_LABELS: Record<VNextLanguage, Record<SeriesScope | 'all_move', string>> = {
+  uk: { occurrence: 'лише цей день', from_day: 'цей день і наступні', all: 'усю серію', all_move: 'усі відкриті дні' },
+  en: { occurrence: 'this day only', from_day: 'this day and following', all: 'the whole series', all_move: 'every open day' },
+};
+
+/** The scope phrase for a command on a repeating Luefy task; a one-off or a provider instance has none. */
+function scopeSuffix(language: VNextLanguage, kind: string, operation: PendingOperation): string {
+  const target = operation.target;
+  if (target.kind !== 'entity' || !target.recurring || target.entityType !== 'task' || !operation.seriesScope) return '';
+  const key = operation.seriesScope === 'all' && kind === 'move' ? 'all_move' : operation.seriesScope;
+  return ` — ${SCOPE_LABELS[language][key]}`;
+}
 
 /**
  * Preview copy for a command on a stored row: the verb and the stored title, never the transcript.
  * A rename names both titles. `at` is the occurrence or the new start, when the command has one.
+ * On a repeating task the text ends with the scope: whole series, this day and following, this day only.
  */
 export function commandSummary(
+  language: VNextLanguage,
+  kind: string,
+  operation: PendingOperation,
+  clock: Pick<Clock, 'timeZone'>,
+  at?: { occurrence?: string; start?: string; day?: string },
+): string {
+  return `${commandText(language, kind, operation, clock, at)}${scopeSuffix(language, kind, operation)}`;
+}
+
+function commandText(
   language: VNextLanguage,
   kind: string,
   operation: PendingOperation,
@@ -586,22 +690,21 @@ export function commandSummary(
   const stored = operation.target.kind === 'entity' ? operation.target.name : undefined;
   const title = stored || operation.changes.title || operation.sourceText || kind;
   const verb = COMMAND_VERBS[language][kind] ?? COMMAND_VERBS[language].update;
-  const renamed = kind === 'update' && stored && operation.changes.title && operation.changes.title !== stored;
-  if (renamed) {
-    return language === 'uk' ? `Перейменувати «${stored}» на «${operation.changes.title}»` : `Rename “${stored}” to “${operation.changes.title}”`;
-  }
-  const quoted = language === 'uk' ? `«${title}»` : `“${title}”`;
+  const renamed = (kind === 'update' || kind === 'edit_occurrence') && stored && operation.changes.title && operation.changes.title !== stored;
   const when = (iso: string, withClock: boolean) => {
     const ymd = localYmd(iso, clock.timeZone);
     return withClock ? `${ymd} ${localHm(iso, clock.timeZone)}` : ymd;
   };
+  // An edit from a day on reads "from <day>", like ending a series there; one day reads "on <day>".
+  const fromDay = kind === 'end_series' || (kind === 'edit_occurrence' && operation.seriesScope === 'from_day');
+  const onDay = at?.occurrence ? ` ${language === 'uk' ? (fromDay ? 'з' : 'за') : (fromDay ? 'from' : 'on')} ${when(at.occurrence, false)}` : '';
+  if (renamed) {
+    return (language === 'uk' ? `Перейменувати «${stored}» на «${operation.changes.title}»` : `Rename “${stored}” to “${operation.changes.title}”`) + onDay;
+  }
+  const quoted = language === 'uk' ? `«${title}»` : `“${title}”`;
   if (at?.start) return `${verb} ${quoted} ${language === 'uk' ? 'на' : 'to'} ${when(at.start, true)}`;
   if (at?.day) return `${verb} ${quoted} ${language === 'uk' ? 'на' : 'to'} ${at.day}`;
-  if (at?.occurrence) {
-    const day = when(at.occurrence, false);
-    if (kind === 'end_series') return `${verb} ${quoted} ${language === 'uk' ? 'з' : 'from'} ${day}`;
-    return `${verb} ${quoted} ${language === 'uk' ? 'за' : 'on'} ${day}`;
-  }
+  if (at?.occurrence) return `${verb} ${quoted}${onDay}`;
   return `${verb} ${quoted}`;
 }
 
@@ -668,8 +771,35 @@ function projectCommand(operation: PendingOperation, clock: Clock, language: VNe
       },
     };
   }
-  // The client skip command needs an occurrence start and event id. The contract cannot carry them yet.
-  if (operation.action === 'skip') return { ok: false, code: 'unsupported_action', detail: operation.action };
+  // Skip of a one-off clears its one slot, as Skip does in the app (VC-09). A fixed one-off has no day to
+  // skip and a Later task has no slot; the server refuses both, so the preview says so first.
+  if (operation.action === 'skip') {
+    const target = operation.target;
+    if (target.entityType !== 'task') return { ok: false, code: 'unsupported_action', detail: `${operation.action}:${target.entityType}` };
+    if (target.fixed) return { ok: false, code: 'fixed_skip', detail: taskId };
+    if (!target.scheduledStart) return { ok: false, code: 'nothing_to_skip', detail: taskId };
+    const rejected = onlyKinds(operation, ['date']) ?? onlyChanges(operation, []);
+    if (rejected) return rejected;
+    const day = find(operation, 'date')?.value;
+    if (day && localYmd(target.scheduledStart, clock.timeZone) !== day) return { ok: false, code: 'occurrence_not_found', detail: day };
+    const text = commandSummary(language, 'skip', operation, clock, { occurrence: target.scheduledStart });
+    return {
+      ok: true,
+      intent: {
+        type: 'command',
+        summary: text,
+        command: {
+          kind: 'skip',
+          taskId,
+          taskName,
+          summary: text,
+          occurrenceStart: target.scheduledStart,
+          googleEventId: target.googleEventId ?? null,
+          googleEventCalendarId: target.calendarId,
+        },
+      },
+    };
+  }
   if (operation.action === 'complete' || operation.action === 'delete' || operation.action === 'cancel') {
     const status: string | undefined = operation.changes.status;
     const implied = (operation.action === 'complete' && status === 'completed') || (operation.action === 'cancel' && status === 'canceled');
@@ -690,7 +820,10 @@ function projectCommand(operation: PendingOperation, clock: Clock, language: VNe
     constraint.kind === 'date' || constraint.kind === 'ordering' || constraint.kind === 'day_bound' || constraint.kind === 'interval'
     || (constraint.kind === 'clock' && (constraint.role === 'earliest' || constraint.role === 'deadline')));
   if (operation.action === 'move' && operation.target.entityType === 'task' && placedWithoutClock && !findClock(operation, 'start') && !findClock(operation, 'end')) {
-    if (operation.target.fixed) return { ok: false, code: 'missing_clock', detail: taskId };
+    // A fixed event given only a day keeps its clock and length on that day (VC-10); a window or an
+    // ordering gives it no clock to keep, so that still asks for one.
+    const dayOnly = operation.target.fixed && find(operation, 'date') && operation.constraints.every((constraint) => constraint.kind === 'date');
+    if (operation.target.fixed && !dayOnly) return { ok: false, code: 'missing_clock', detail: taskId };
     const rejected = onlyChanges(operation, []);
     if (rejected) return rejected;
     const patch = updatePatch(operation, clock);
@@ -703,7 +836,18 @@ function projectCommand(operation: PendingOperation, clock: Clock, language: VNe
     const rejected = onlyKinds(operation, ['date', 'clock', 'duration']) ?? placementOnly(operation) ?? onlyChanges(operation, []);
     if (rejected) return rejected;
     const target = operation.target;
-    if (!target.googleEventId || !target.scheduledStart || !target.scheduledEnd) {
+    // A Later task has no slot to move: the clock becomes its schedule and the engine seats it there
+    // (VC-02). Any other row without a slot is refused below, never patched on a guess.
+    if (target.entityType === 'task' && target.unscheduled && !target.fixed && !target.scheduledStart) {
+      const patch = updatePatch(operation, clock);
+      if (!patch.ok) return patch;
+      const start = resolveStart(operation, clock.timeZone);
+      if (!start.ok) return start;
+      const text = commandSummary(language, 'move', operation, clock, { start: start.iso });
+      return { ok: true, intent: { type: 'command', summary: text, command: { kind: 'update', taskId, taskName, summary: text, patch: patch.patch } } };
+    }
+    // The client move names the app slot when there is one, else the calendar event (VC-03).
+    if ((!target.slotId && !target.googleEventId) || !target.scheduledStart || !target.scheduledEnd) {
       return { ok: false, code: 'unrepresentable_move', detail: taskId };
     }
     const start = resolveStart(operation, clock.timeZone);
@@ -721,7 +865,8 @@ function projectCommand(operation: PendingOperation, clock: Clock, language: VNe
           taskId,
           taskName,
           summary: moved,
-          googleEventId: target.googleEventId,
+          ...(target.slotId ? { slotId: target.slotId } : {}),
+          googleEventId: target.googleEventId ?? null,
           calendarId: target.calendarId,
           ...(target.provider ? { provider: target.provider } : {}),
           recurringEventId: null,
@@ -754,19 +899,26 @@ const CLIENT_SERIES_SCOPE: Record<SeriesScope, 'occurrence' | 'series' | 'all'> 
  * skip: occurrence only. move: any scope, anchored on a named occurrence.
  * complete: one occurrence (cleared like a skip) or the whole series. cancel, update: the whole series only.
  */
-function projectSeriesCommand(operation: PendingOperation, clock: Clock, language: VNextLanguage): { ok: true; intent: VoiceWriteIntent } | ProjectError {
+function projectSeriesCommand(given: PendingOperation, clock: Clock, language: VNextLanguage): { ok: true; intent: VoiceWriteIntent } | ProjectError {
+  let operation = given;
   if (operation.target.kind !== 'entity') return { ok: false, code: 'draft_command', detail: operation.action };
   const target = operation.target;
+  // One day the user named is that occurrence (spec: "One day they already named, including today, is
+  // that occurrence"); the model need not restate the scope (V7, g-d-05/06/08).
+  const namedDay = operation.seriesScope ? undefined : find(operation, 'date')?.value;
+  if (namedDay) operation = { ...operation, seriesScope: 'occurrence', occurrenceDate: operation.occurrenceDate ?? namedDay };
   const scope = operation.seriesScope;
   if (!scope) return { ok: false, code: 'missing_series_scope', detail: target.entityId };
   const taskId = target.entityId;
   const summary = commandSummary(language, operation.action, operation, clock);
   const taskName = target.name || operation.changes.title || operation.sourceText || operation.action;
   const occurrenceCommand = (kind: 'skip' | 'end_series', copy: string = kind, allowedChanges: Array<keyof OperationChangesV1> = []): { ok: true; intent: VoiceWriteIntent } | ProjectError => {
-    const rejected = onlyKinds(operation, []) ?? onlyChanges(operation, allowedChanges);
+    const rejected = onlyKinds(operation, ['date']) ?? onlyChanges(operation, allowedChanges);
     if (rejected) return rejected;
     const picked = pickOccurrence(operation, clock.timeZone);
     if (!picked.ok) return picked;
+    const day = find(operation, 'date')?.value;
+    if (day && localYmd(picked.occurrence.start, clock.timeZone) !== day) return { ok: false, code: 'occurrence_not_found', detail: day };
     const text = commandSummary(language, copy, operation, clock, { occurrence: picked.occurrence.start });
     return {
       ok: true,
@@ -785,6 +937,12 @@ function projectSeriesCommand(operation: PendingOperation, clock: Clock, languag
       },
     };
   };
+  // D-03 / VB-02: a series whose group holds detached copies or parked days is not one row. A rename of the
+  // whole series, a delete of it, or an end from a day would miss those days, so they are refused with the
+  // reason; one day at a time still works, and so do skip, per-day moves and series-wide status changes.
+  const wholeSeriesWrite = (operation.action === 'update' && scope === 'all')
+    || (operation.action === 'delete' && (scope === 'all' || scope === 'from_day'));
+  if (wholeSeriesWrite && target.seriesCopies) return { ok: false, code: 'series_has_copies', detail: taskId };
   if (operation.action === 'skip') {
     return scope === 'occurrence' ? occurrenceCommand('skip') : { ok: false, code: 'unsupported_series_scope', detail: `skip:${scope}` };
   }
@@ -792,16 +950,24 @@ function projectSeriesCommand(operation: PendingOperation, clock: Clock, languag
     if (scope === 'occurrence') return occurrenceCommand('skip');
     if (scope === 'from_day') return occurrenceCommand('end_series');
   }
-  // Done on one day of a series clears that day, as Done on a repeating task does in the app.
+  // Done on one day marks that day complete in place (PATCH /tasks/:id/occurrence); the series keeps its rule.
   if (operation.action === 'complete' && scope === 'occurrence') {
-    return occurrenceCommand('skip', 'complete_occurrence', operation.changes.status === 'completed' ? ['status'] : []);
+    return occurrenceEdit(operation, clock, language, 'complete_occurrence');
+  }
+  // A change to one day, or to this day and the following ones, is an occurrence edit (WP-B).
+  if (operation.action === 'update' && (scope === 'occurrence' || scope === 'from_day')) {
+    return occurrenceEdit(operation, clock, language, 'edit_occurrence');
   }
   if (operation.action === 'move') {
     const rejected = onlyKinds(operation, ['date', 'clock', 'duration']) ?? placementOnly(operation) ?? onlyChanges(operation, []);
     if (rejected) return rejected;
     const picked = pickOccurrence(operation, clock.timeZone);
     if (!picked.ok) return picked;
-    if (!picked.occurrence.googleEventId || !target.seriesEventId) return { ok: false, code: 'unrepresentable_move', detail: taskId };
+    if (!picked.occurrence.slotId && !(picked.occurrence.googleEventId && target.seriesEventId)) return { ok: false, code: 'unrepresentable_move', detail: taskId };
+    // The Scheduling Domain moves an occurrence only within its day; another day is refused here, before
+    // a preview could promise it (VC-04).
+    const day = find(operation, 'date')?.value;
+    if (day && localYmd(picked.occurrence.start, clock.timeZone) !== day) return { ok: false, code: 'cross_day_series_move', detail: `${taskId}:${day}` };
     const start = resolveStart(operation, clock.timeZone);
     if (!start.ok) return start;
     const end = resolveEnd(operation, start.iso, picked.occurrence.start, picked.occurrence.end, clock.defaultDuration, clock.timeZone);
@@ -817,9 +983,10 @@ function projectSeriesCommand(operation: PendingOperation, clock: Clock, languag
           taskId,
           taskName,
           summary: moved,
+          ...(picked.occurrence.slotId ? { slotId: picked.occurrence.slotId } : {}),
           googleEventId: picked.occurrence.googleEventId,
           calendarId: target.calendarId,
-          recurringEventId: target.seriesEventId,
+          recurringEventId: target.seriesEventId ?? null,
           originalStart: picked.occurrence.start,
           originalEnd: picked.occurrence.end,
           start: start.iso,
@@ -835,7 +1002,8 @@ function projectSeriesCommand(operation: PendingOperation, clock: Clock, languag
     const implied = (operation.action === 'complete' && status === 'completed') || (operation.action === 'cancel' && status === 'canceled');
     const rejected = onlyKinds(operation, []) ?? onlyChanges(operation, implied ? ['status'] : []);
     if (rejected) return rejected;
-    return { ok: true, intent: { type: 'command', summary, command: { kind: operation.action, taskId, taskName, summary } } };
+    // seriesScope tells the card this row is the whole series, not a one-off (VC-06).
+    return { ok: true, intent: { type: 'command', summary, command: { kind: operation.action, taskId, taskName, summary, seriesScope: 'all' } } };
   }
   if (operation.action === 'update') {
     // A series patch keeps its own schedule; a new time for every occurrence is a series move.
@@ -843,16 +1011,114 @@ function projectSeriesCommand(operation: PendingOperation, clock: Clock, languag
     if (rejected) return rejected;
     const patch = updatePatch(operation, clock);
     if (!patch.ok) return patch;
-    return { ok: true, intent: { type: 'command', summary, command: { kind: 'update', taskId, taskName, summary, patch: patch.patch } } };
+    return { ok: true, intent: { type: 'command', summary, command: { kind: 'update', taskId, taskName, summary, patch: patch.patch, seriesScope: 'all' } } };
   }
   return { ok: false, code: 'unsupported_action', detail: `${operation.action}:series` };
+}
+
+const OCCURRENCE_SCOPE: Record<'occurrence' | 'from_day', 'occurrence' | 'following'> = { occurrence: 'occurrence', from_day: 'following' };
+
+/**
+ * One day of a series, or this day and the following ones, through the occurrence endpoint (WP-B).
+ * It carries a title, notes, a start on the same day, a length and, for one day only, completion. Anything
+ * else the endpoint cannot hold (priority, location, a window, another day) is refused, never dropped.
+ */
+function occurrenceEdit(
+  operation: PendingOperation,
+  clock: Clock,
+  language: VNextLanguage,
+  copy: 'edit_occurrence' | 'complete_occurrence',
+): { ok: true; intent: VoiceWriteIntent } | ProjectError {
+  if (operation.target.kind !== 'entity') return { ok: false, code: 'draft_command', detail: operation.action };
+  const target = operation.target;
+  const scope = operation.seriesScope === 'occurrence' || operation.seriesScope === 'from_day' ? operation.seriesScope : null;
+  if (!scope) return { ok: false, code: 'unsupported_series_scope', detail: `${operation.action}:${operation.seriesScope}` };
+  const completion = copy === 'complete_occurrence';
+  const rejected = onlyKinds(operation, completion ? ['date'] : ['date', 'clock', 'duration'])
+    ?? onlyChanges(operation, completion ? ['status'] : scope === 'occurrence' ? ['notes', 'status'] : ['notes']);
+  if (rejected) return rejected;
+  if (operation.changes.status && operation.changes.status !== 'completed') return { ok: false, code: 'unrepresented_constraint', detail: `${operation.pendingId}:status` };
+  const picked = pickOccurrence(operation, clock.timeZone);
+  if (!picked.ok) return picked;
+  const day = find(operation, 'date')?.value;
+  if (day && localYmd(picked.occurrence.start, clock.timeZone) !== day) return { ok: false, code: 'cross_day_series_move', detail: `${target.entityId}:${day}` };
+  const startClock = findClock(operation, 'start');
+  const endClock = findClock(operation, 'end');
+  const duration = find(operation, 'duration');
+  const occurrenceYmd = localYmd(picked.occurrence.start, clock.timeZone);
+  let start: string | undefined;
+  if (startClock) {
+    const zonedStart = zoned(occurrenceYmd, startClock.value, clock.timeZone);
+    if (!zonedStart.ok) return zonedStart;
+    start = zonedStart.iso;
+  }
+  let durationMinutes: number | undefined = duration?.minutes;
+  if (endClock) {
+    const zonedEnd = zoned(occurrenceYmd, endClock.value, clock.timeZone);
+    if (!zonedEnd.ok) return zonedEnd;
+    const minutes = Math.round((Date.parse(zonedEnd.iso) - Date.parse(start ?? picked.occurrence.start)) / 60_000);
+    if (minutes <= 0) return { ok: false, code: 'contradictory_constraints', detail: operation.pendingId };
+    if (durationMinutes != null && durationMinutes !== minutes) return { ok: false, code: 'contradictory_constraints', detail: operation.pendingId };
+    durationMinutes = minutes;
+  }
+  const title = operation.changes.title && operation.changes.title !== target.name ? operation.changes.title : undefined;
+  const fields = {
+    ...(title ? { name: title } : {}),
+    ...(operation.changes.notes !== undefined ? { description: operation.changes.notes } : {}),
+    ...(start ? { start } : {}),
+    ...(durationMinutes != null ? { durationMinutes } : {}),
+    ...(completion ? { status: 'completed' as const } : {}),
+  };
+  if (!Object.keys(fields).length) return { ok: false, code: 'empty_patch', detail: operation.pendingId };
+  const taskId = target.entityId;
+  const taskName = target.name || operation.changes.title || operation.sourceText || operation.action;
+  const text = commandSummary(language, copy, operation, clock, { occurrence: picked.occurrence.start });
+  return {
+    ok: true,
+    intent: {
+      type: 'command',
+      summary: text,
+      command: {
+        kind: 'edit_occurrence',
+        taskId,
+        taskName,
+        summary: text,
+        occurrenceStart: picked.occurrence.start,
+        scope: OCCURRENCE_SCOPE[scope],
+        ...fields,
+        googleEventId: picked.occurrence.googleEventId,
+        googleEventCalendarId: target.calendarId,
+        seriesScope: CLIENT_SERIES_SCOPE[scope],
+      },
+    },
+  };
 }
 
 /** The production update command carries fields and a schedule. An update that changes nothing is not a preview. */
 function updatePatch(operation: PendingOperation, clock: Clock): { ok: true; patch: Record<string, unknown> } | ProjectError {
   const rejected = onlyKinds(operation, ['date', 'clock', 'interval', 'duration', 'all_day', 'day_bound', 'ordering'])
-    ?? onlyChanges(operation, ['notes', 'priority', 'location', 'status']);
+    ?? onlyChanges(operation, ['notes', 'priority', 'location', 'status', 'unschedule']);
   if (rejected) return rejected;
+  // Take the time off: the task goes to Later with no start, end, window or deadline (spec: "Clearing the
+  // time clears start, end, earliest, and deadline"). A fixed event or a series cannot be Later.
+  if (operation.changes.unschedule) {
+    const entity = operation.target.kind === 'entity' ? operation.target : null;
+    if (entity?.fixed || entity?.recurring) return { ok: false, code: 'unrepresented_constraint', detail: `${operation.pendingId}:unschedule` };
+    if (operation.constraints.length) return { ok: false, code: 'contradictory_constraints', detail: operation.pendingId };
+    return {
+      ok: true,
+      patch: {
+        ...(operation.changes.title ? { name: operation.changes.title } : {}),
+        ...(operation.changes.priority ? { priority: operation.changes.priority } : {}),
+        ...(operation.changes.notes !== undefined ? { description: operation.changes.notes } : {}),
+        isUnscheduled: true,
+        scheduledStartTime: null,
+        scheduledEndTime: null,
+        earliestStartTime: null,
+        deadline: null,
+      },
+    };
+  }
   const patch: Record<string, unknown> = {
     ...(operation.changes.title ? { name: operation.changes.title } : {}),
     ...(operation.changes.priority ? { priority: operation.changes.priority } : {}),
@@ -870,6 +1136,12 @@ function updatePatch(operation: PendingOperation, clock: Clock): { ok: true; pat
   if ((start || end || interval || allDay || bounded) && !date) return { ok: false, code: 'unrepresentable_schedule', detail: operation.pendingId };
   if (interval && (start || end)) return { ok: false, code: 'contradictory_constraints', detail: operation.pendingId };
   if (allDay && (start || end || interval || bounded || duration)) return { ok: false, code: 'contradictory_constraints', detail: operation.pendingId };
+  const target = operation.target.kind === 'entity' ? operation.target : null;
+  // A fixed task keeps its clock: a day alone moves it to the same clock on that day, and a start alone
+  // keeps its stored length (VC-10). Its window never changes, so no day window is written for it.
+  const storedFixed = target?.fixed && target.scheduledStart && target.scheduledEnd
+    ? { start: target.scheduledStart, end: target.scheduledEnd, minutes: Math.round((Date.parse(target.scheduledEnd) - Date.parse(target.scheduledStart)) / 60_000) }
+    : null;
   if (date && allDay) {
     Object.assign(patch, wholeDay(date.value, clock));
   } else if (date) {
@@ -877,16 +1149,23 @@ function updatePatch(operation: PendingOperation, clock: Clock): { ok: true; pat
       const startIso = zoned(date.value, start.value, clock.timeZone);
       if (!startIso.ok) return startIso;
       patch.scheduledStartTime = startIso.iso;
+    } else if (storedFixed && !end && !interval && !bounded) {
+      const startIso = zoned(date.value, localHm(storedFixed.start, clock.timeZone), clock.timeZone);
+      if (!startIso.ok) return startIso;
+      patch.scheduledStartTime = startIso.iso;
     }
     if (end) {
       const endIso = zoned(date.value, end.value, clock.timeZone);
       if (!endIso.ok) return endIso;
       patch.scheduledEndTime = endIso.iso;
+    } else if (storedFixed && typeof patch.scheduledStartTime === 'string' && !duration) {
+      const length = storedFixed.minutes > 0 ? storedFixed.minutes : clock.defaultDuration;
+      patch.scheduledEndTime = new Date(Date.parse(patch.scheduledStartTime) + length * 60_000).toISOString();
     }
     if (interval) {
       patch.earliestStartTime = localDateTimeIso(date.value, interval.startHm, clock.timeZone);
       patch.deadline = localDateTimeIso(date.value, interval.endHm, clock.timeZone);
-    } else if (!start && !end && !bounded) {
+    } else if (!start && !end && !bounded && !storedFixed) {
       Object.assign(patch, dayWindow(date.value, clock));
     }
     const bounds = boundsOn(operation, date.value, clock);
@@ -900,6 +1179,9 @@ function updatePatch(operation: PendingOperation, clock: Clock): { ok: true; pat
   if (ordered) return ordered;
   if (duration) patch.estimatedTimeInMinutes = duration.minutes;
   if (!Object.keys(patch).length) return { ok: false, code: 'empty_patch', detail: operation.pendingId };
+  // A Later task given a day, a clock, or a window leaves the inbox; the engine seats it there (VC-02).
+  const schedules = ['scheduledStartTime', 'scheduledEndTime', 'earliestStartTime', 'deadline'].some((key) => key in patch);
+  if (target?.unscheduled && schedules) return { ok: true, patch: { isUnscheduled: false, ...patch } };
   return { ok: true, patch };
 }
 
@@ -928,6 +1210,32 @@ function resolveWeekdayConstraints(
   return { ok: true, operation: { ...operation, constraints } };
 }
 
+/**
+ * A clock with no day: today when that clock is still ahead, otherwise a question (spec: "A clock that is
+ * already past, with no day, is a question when"). A command on a placed task keeps the task's own day.
+ * A repeat, a window, an all-day item or a relative time keep their own day rules (V7, en-c-01).
+ */
+function resolveBareClock(
+  operation: PendingOperation,
+  clock: { nowIso?: string; timeZone: string; wakeHm: string; sleepHm: string },
+): { ok: true; operation: PendingOperation } | ProjectError {
+  const spoken = operation.constraints.find((constraint): constraint is Extract<TemporalProposal, { kind: 'clock' }> & { constraintId: string } =>
+    constraint.kind === 'clock' && (constraint.role === 'start' || constraint.role === 'preferred'));
+  if (!spoken || !clock.nowIso) return { ok: true, operation };
+  if (operation.constraints.some((constraint) => constraint.kind === 'date' || constraint.kind === 'weekday' || constraint.kind === 'recurrence' || constraint.kind === 'interval' || constraint.kind === 'all_day' || constraint.kind === 'ordering' || constraint.kind === 'relative')) {
+    return { ok: true, operation };
+  }
+  if (operation.action === 'remind' || operation.entityType === 'reminder' || operation.occurrenceDate) return { ok: true, operation };
+  const own = operation.target.kind === 'entity' ? operation.target.scheduledStart : undefined;
+  const ymd = own ? localYmd(own, clock.timeZone) : scheduleTodayYmd(clock.nowIso, clock.timeZone, clock.wakeHm, clock.sleepHm);
+  if (!own) {
+    const at = resolveZonedClock(ymd, spoken.value, clock.timeZone);
+    if (at.status === 'ok' && Date.parse(at.iso) <= Date.parse(clock.nowIso)) return { ok: false, code: 'past', detail: operation.pendingId };
+  }
+  const date = { constraintId: `${spoken.constraintId}:day`, kind: 'date' as const, value: ymd };
+  return { ok: true, operation: { ...operation, constraints: [...operation.constraints, date] } };
+}
+
 function resolveStart(operation: PendingOperation, timeZone: string): { ok: true; iso: string } | ProjectError {
   const clock = findClock(operation, 'start');
   const date = find(operation, 'date');
@@ -947,9 +1255,9 @@ function resolveEnd(
   const date = find(operation, 'date');
   if (endClock && date) return zoned(date.value, endClock.value, timeZone);
   const duration = find(operation, 'duration');
-  const minutes = duration
-    ? duration.minutes
-    : Math.max(defaultDuration, Math.round((Date.parse(originalEnd) - Date.parse(originalStart)) / 60_000) || defaultDuration);
+  // The stored length is kept; the default applies only when the row has no length (VC-10).
+  const stored = Math.round((Date.parse(originalEnd) - Date.parse(originalStart)) / 60_000);
+  const minutes = duration ? duration.minutes : stored > 0 ? stored : defaultDuration;
   return { ok: true, iso: new Date(Date.parse(startIso) + minutes * 60_000).toISOString() };
 }
 

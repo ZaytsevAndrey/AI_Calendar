@@ -1,0 +1,268 @@
+{
+  "scenarios": {
+    "scenarios": 30,
+    "passed": 29,
+    "failed": 1,
+    "rate": 96.7
+  },
+  "byLanguage": {
+    "uk": {
+      "scenarios": 20,
+      "passed": 20,
+      "failed": 0,
+      "rate": 100
+    },
+    "en": {
+      "scenarios": 10,
+      "passed": 9,
+      "failed": 1,
+      "rate": 90
+    }
+  },
+  "byTurns": {
+    "multi": {
+      "scenarios": 26,
+      "passed": 25,
+      "failed": 1,
+      "rate": 96.2
+    },
+    "single": {
+      "scenarios": 4,
+      "passed": 4,
+      "failed": 0,
+      "rate": 100
+    }
+  },
+  "byDatasetCategory": {
+    "H": {
+      "scenarios": 30,
+      "passed": 29,
+      "failed": 1,
+      "rate": 96.7
+    }
+  },
+  "byOperation": {
+    "other": {
+      "scenarios": 12,
+      "passed": 12,
+      "failed": 0,
+      "rate": 100
+    },
+    "move / reschedule": {
+      "scenarios": 5,
+      "passed": 5,
+      "failed": 0,
+      "rate": 100
+    },
+    "occurrence / series": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 100
+    },
+    "later scheduling": {
+      "scenarios": 3,
+      "passed": 3,
+      "failed": 0,
+      "rate": 100
+    },
+    "reminder": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 100
+    },
+    "create": {
+      "scenarios": 4,
+      "passed": 3,
+      "failed": 1,
+      "rate": 75
+    },
+    "read / question": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 100
+    },
+    "confirmation / cancellation": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 100
+    },
+    "update": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 100
+    }
+  },
+  "dimensions": {
+    "semanticUnderstanding": 100,
+    "targetIdentification": 100,
+    "previewCorrectness": 98.5,
+    "confirmationExecution": 100,
+    "safety": 100,
+    "counts": {
+      "semantic": {
+        "total": 84,
+        "ok": 84
+      },
+      "target": {
+        "total": 42,
+        "ok": 42
+      },
+      "preview": {
+        "total": 67,
+        "ok": 66
+      },
+      "confirm": {
+        "total": 23,
+        "ok": 23
+      },
+      "safety": {
+        "total": 84,
+        "ok": 84
+      }
+    }
+  },
+  "dimensionsByLanguage": {
+    "uk": {
+      "semanticUnderstanding": 100,
+      "targetIdentification": 100,
+      "previewCorrectness": 100,
+      "confirmationExecution": 100,
+      "safety": 100,
+      "counts": {
+        "semantic": {
+          "total": 57,
+          "ok": 57
+        },
+        "target": {
+          "total": 28,
+          "ok": 28
+        },
+        "preview": {
+          "total": 44,
+          "ok": 44
+        },
+        "confirm": {
+          "total": 15,
+          "ok": 15
+        },
+        "safety": {
+          "total": 57,
+          "ok": 57
+        }
+      }
+    },
+    "en": {
+      "semanticUnderstanding": 100,
+      "targetIdentification": 100,
+      "previewCorrectness": 95.7,
+      "confirmationExecution": 100,
+      "safety": 100,
+      "counts": {
+        "semantic": {
+          "total": 27,
+          "ok": 27
+        },
+        "target": {
+          "total": 14,
+          "ok": 14
+        },
+        "preview": {
+          "total": 23,
+          "ok": 22
+        },
+        "confirm": {
+          "total": 8,
+          "ok": 8
+        },
+        "safety": {
+          "total": 27,
+          "ok": 27
+        }
+      }
+    }
+  },
+  "turns": {
+    "total": 84,
+    "passed": 83,
+    "unsafe": 0
+  },
+  "rootCauses": {
+    "model interpretation (constraint) or projection drop — review": [
+      "he-09"
+    ]
+  },
+  "errorClasses": {
+    "model_missing_constraint": 1
+  },
+  "usage": {
+    "calls": 63,
+    "tokens": 249356,
+    "promptTokens": 242899,
+    "completionTokens": 6457,
+    "usd": 0.040308
+  },
+  "latencyMsP50": 1259,
+  "latencyMsP95": 1823,
+  "failures": [
+    {
+      "id": "he-09",
+      "language": "en",
+      "category": "H",
+      "family": "drop-then-change-mind",
+      "operation": "create",
+      "invariant": "tea is never lost; coffee comes back",
+      "rootCause": "model interpretation (constraint) or projection drop — review",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "add tea and coffee tomorrow at 10",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "nameIncludes": "tea",
+            "intents": 2,
+            "includes": "10:00"
+          },
+          "outcome": "confirm",
+          "blocked": [],
+          "assistantMessage": "tea and coffee",
+          "intents": [
+            {
+              "type": "create",
+              "summary": "tea and coffee",
+              "task": {
+                "name": "tea and coffee",
+                "priority": "medium",
+                "timeZone": "Europe/Kyiv",
+                "allowSplit": false,
+                "isUnscheduled": false,
+                "estimatedTimeInMinutes": 30,
+                "eventType": "fixed",
+                "scheduledStartTime": "2026-10-19T07:00:00.000Z",
+                "scheduledEndTime": "2026-10-19T07:30:00.000Z"
+              }
+            }
+          ],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"operations\",\"operations\":[{\"opId\":\"op-1\",\"action\":\"create\",\"target\":{\"kind\":\"new\",\"localId\":\"new-tea-coffee\"},\"changes\":{\"title\":\"tea and coffee\"},\"constraints\":[{\"kind\":\"date\",\"value\":\"2026-10-19\",\"precision\":\"day\"},{\"kind\":\"clock\",\"value\":\"10:00\",\"role\":\"start\"}],\"dependsOn\":[],\"source\":{\"text\":\"add tea and coffee tomorrow at 10\"}}]}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_missing_constraint",
+            "detail": "model_missing_constraint: outcome confirm, blocked -"
+          },
+          "errorClass": "model_missing_constraint",
+          "rootCause": "model interpretation (constraint) or projection drop — review"
+        }
+      ]
+    }
+  ]
+}

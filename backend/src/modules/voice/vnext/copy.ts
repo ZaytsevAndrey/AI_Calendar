@@ -2,6 +2,7 @@ export type VNextLanguage = 'uk' | 'en';
 
 const UK: Record<string, string> = {
   invalid: 'Не зрозумів команду. Скажіть інакше.',
+  preview_kept: 'Не розчув. Прев’ю без змін: скажіть інакше або натисніть Застосувати.',
   transport: 'Не вдалося звʼязатися з моделлю. Нічого не змінюю. Спробуйте ще раз.',
   timeout: 'Час очікування моделі вичерпано. Нічого не змінюю. Спробуйте ще раз.',
   provider_unavailable: 'Модель тимчасово недоступна. Нічого не змінюю. Спробуйте ще раз.',
@@ -46,10 +47,17 @@ const UK: Record<string, string> = {
   unrepresented: 'Частину цієї команди я не можу виконати. Нічого не змінюю. Скажіть простіше.',
   dependency: 'Задачу, яку ви щойно створюєте, ще не можна змінити тією ж командою. Спершу створю її, а зміну скажіть окремо.',
   event_no_done: 'Це подія календаря, а не задача. Її не можна позначити виконаною. Можу перенести, перейменувати або видалити.',
+  same_day_series: 'День повторюваної задачі можна пересунути лише в межах того ж дня. Назвіть нову годину на той день або скажіть пропустити цей день.',
+  fixed_skip: 'Це фіксована подія, її день не можна пропустити. Можу перенести або видалити.',
+  nothing_to_skip: 'У цієї задачі немає запланованого дня, який можна пропустити.',
+  series_copies: 'У цієї серії є окремо змінені або відкладені дні, тому зміну всієї серії я не роблю. Скажіть про конкретний день або змініть серію в застосунку.',
+  same_title: 'Задача з такою назвою вже є. Це про неї, чи додати ще одну?',
+  on_hold: 'Добре, прев’ю лишається. Скажіть «так», коли будете готові, або змініть його.',
 };
 
 const EN: Record<string, string> = {
   invalid: 'I did not understand that. Please say it again.',
+  preview_kept: 'I did not catch that. The preview is unchanged: say it differently, or Apply.',
   transport: 'I could not reach the model. Nothing was changed. Please try again.',
   timeout: 'The model timed out. Nothing was changed. Please try again.',
   provider_unavailable: 'The model is temporarily unavailable. Nothing was changed. Please try again.',
@@ -94,6 +102,12 @@ const EN: Record<string, string> = {
   unrepresented: 'I cannot do part of that command. Nothing was changed. Please say it more simply.',
   dependency: 'I cannot change a task in the same command that creates it. Let me create it first, then say the change separately.',
   event_no_done: 'That is a calendar event, not a task, so it cannot be marked done. I can move, rename, or delete it.',
+  same_day_series: 'A day of a repeating task can only move within that same day. Give a new time on that day, or say to skip it.',
+  fixed_skip: 'That is a fixed event; its day cannot be skipped. I can move or delete it.',
+  nothing_to_skip: 'That task has no scheduled day to skip.',
+  series_copies: 'Some days of that series were changed or parked separately, so I will not change the whole series. Name one day, or change the series in the app.',
+  same_title: 'A task with that name already exists. Do you mean it, or should I add another one?',
+  on_hold: 'All right, the preview stays. Say yes when you are ready, or change it.',
 };
 
 export function voiceCopy(language: VNextLanguage, code: string): string {

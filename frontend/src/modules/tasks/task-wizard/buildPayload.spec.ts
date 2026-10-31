@@ -150,9 +150,8 @@ describe('default task duration', () => {
     expect(values.estimatedTimeInMinutes).toBe(45);
   });
 
-  it('applies the settings duration when switching to flexible or recurring', () => {
+  it('applies the settings duration when switching to flexible', () => {
     expect(presetPatch('flexible', 45).estimatedTimeInMinutes).toBe(45);
-    expect(presetPatch('recurring', 45).estimatedTimeInMinutes).toBe(45);
   });
 });
 
@@ -263,11 +262,12 @@ describe('initialFormValues', () => {
     expect(values.status).toBe('in_progress');
   });
 
-  it('opens a blank create on the fixed tab', () => {
+  it('opens a blank create in Flexible: a name is enough to capture a task', () => {
     const values = initialFormValues(undefined, undefined, NICOSIA);
-    expect(values.isFixed).toBe(true);
+    expect(values.isFixed).toBe(false);
     expect(values.isUnscheduled).toBe(false);
-    expect(values.allowSplit).toBe(false);
+    expect(values.isRecurring).toBe(false);
+    expect(values.allowSplit).toBe(true);
   });
 
   it('opens a civil-day window on the flexible tab', () => {

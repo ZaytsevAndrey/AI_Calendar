@@ -14,7 +14,8 @@ import type {
   VoiceWriteIntent,
 } from './voice-agent.types';
 import {
-  endOfLocalDayIso,
+  addDaysToYmd,
+  civilDayStartIso,
   localHm,
   localYmd,
   normalizeClockHm,
@@ -488,7 +489,7 @@ export function planToIntents(
           allowSplit: false,
           priority: 'medium',
           earliestStartTime: null,
-          deadline: endOfLocalDayIso(proposal.day, ctx.timeZone),
+          deadline: civilDayStartIso(addDaysToYmd(proposal.day, 1), ctx.timeZone),
           scheduledStartTime: item.start,
           scheduledEndTime: item.end,
           timeZone: ctx.timeZone,

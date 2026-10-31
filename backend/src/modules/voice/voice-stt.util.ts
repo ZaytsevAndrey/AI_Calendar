@@ -157,3 +157,28 @@ export function cleanupVoiceTranscript(raw: string, language?: string | null): s
 
   return text.replace(/\s+/g, ' ').trim();
 }
+
+/**
+ * A bare confirmation or refusal, as the whole utterance, in the two product languages.
+ * This is a control for an open preview (the spoken Apply / Cancel button, D-10), not an
+ * interpretation of speech: it fires only on these exact words with nothing else said, so the
+ * no-lexical-crutches rule is respected — anything longer still goes to the model.
+ */
+// Product decision (31 Oct 2026): exactly these four. "ok", "добре" and the like are what speech
+// recognition also hears as filler, and they must never apply a write on their own.
+const SPOKEN_CONFIRM = new Set(['так', 'yes']);
+const SPOKEN_CANCEL = new Set(['ні', 'no']);
+
+export function spokenControl(raw: string): 'confirm' | 'cancel' | null {
+  const words = raw
+    .toLocaleLowerCase()
+    .replace(/[.!?,;:…·•\-–—'"«»()[\]]+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length === 0 || words.length > 2) return null;
+  // "так так" or "ні ні" is still one answer; two different words are speech.
+  if (new Set(words).size !== 1) return null;
+  if (SPOKEN_CONFIRM.has(words[0])) return 'confirm';
+  if (SPOKEN_CANCEL.has(words[0])) return 'cancel';
+  return null;
+}

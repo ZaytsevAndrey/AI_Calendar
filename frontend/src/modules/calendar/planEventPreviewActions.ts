@@ -3,14 +3,26 @@ import type { SeriesDragScope } from 'modules/schedule/seriesDragChoice';
 
 export type EventPreviewEditPlan = 'direct' | 'series_menu';
 
-/** Done on calendar preview: one-off app tasks only (same gate as Now strip). */
+/**
+ * Done on the calendar preview: an app task that is not done yet. For a
+ * series this completes the opened day only (its own completion state).
+ */
 export function canCompleteFromPreview(
   task: Pick<TaskDTO, 'isRecurring' | 'isFixedExternal' | 'status'> | null,
 ): boolean {
   if (!task) return false;
-  if (task.isRecurring || task.isFixedExternal) return false;
+  if (task.isFixedExternal) return false;
   if (task.status === 'completed' || task.status === 'canceled') return false;
   return true;
+}
+
+/** «Не виконано»: a completed app task (a one-off or a completed day copy). */
+export function canUndoDoneFromPreview(
+  task: Pick<TaskDTO, 'isRecurring' | 'isFixedExternal' | 'status'> | null,
+): boolean {
+  if (!task) return false;
+  if (task.isFixedExternal || task.isRecurring) return false;
+  return task.status === 'completed';
 }
 
 export type EventPreviewDeletePlan =
@@ -60,4 +72,28 @@ export function planEventPreviewDeleteMutation(
   if (scope === 'occurrence') return { kind: 'skip_occurrence' };
   if (scope === 'series') return { kind: 'end_series_from' };
   return { kind: 'delete_task' };
+}
+
+export type EventPreviewEditTarget =
+  | { kind: 'task' }
+  | { kind: 'series' }
+  | { kind: 'occurrence'; scope: 'occurrence' | 'following' }
+  /** A one-day scope without a known day: refuse rather than edit the series. */
+  | { kind: 'unsupported' };
+
+/**
+ * What «Редагувати» opens for the chosen scope. A one-off (or no scope) is
+ * the ordinary editor; «усю серію» is the full editor with the series notice;
+ * «лише цей день» / «цей і наступні» open the occurrence editor, which sends
+ * only that scope. A chosen scope is never downgraded to the whole series.
+ */
+export function planEventPreviewEditTarget(opts: {
+  taskIsRecurring?: boolean;
+  scope?: SeriesDragScope;
+  hasOccurrence: boolean;
+}): EventPreviewEditTarget {
+  if (!opts.taskIsRecurring || !opts.scope) return { kind: 'task' };
+  if (opts.scope === 'all') return { kind: 'series' };
+  if (!opts.hasOccurrence) return { kind: 'unsupported' };
+  return { kind: 'occurrence', scope: opts.scope === 'series' ? 'following' : 'occurrence' };
 }

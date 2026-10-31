@@ -1,0 +1,752 @@
+{
+  "scenarios": {
+    "scenarios": 147,
+    "passed": 137,
+    "failed": 10,
+    "rate": 93.2
+  },
+  "byLanguage": {
+    "uk": {
+      "scenarios": 115,
+      "passed": 110,
+      "failed": 5,
+      "rate": 95.7
+    },
+    "en": {
+      "scenarios": 32,
+      "passed": 27,
+      "failed": 5,
+      "rate": 84.4
+    }
+  },
+  "byTurns": {
+    "single": {
+      "scenarios": 82,
+      "passed": 76,
+      "failed": 6,
+      "rate": 92.7
+    },
+    "multi": {
+      "scenarios": 65,
+      "passed": 61,
+      "failed": 4,
+      "rate": 93.8
+    }
+  },
+  "byDatasetCategory": {
+    "A": {
+      "scenarios": 69,
+      "passed": 64,
+      "failed": 5,
+      "rate": 92.8
+    },
+    "B": {
+      "scenarios": 35,
+      "passed": 34,
+      "failed": 1,
+      "rate": 97.1
+    },
+    "C": {
+      "scenarios": 21,
+      "passed": 19,
+      "failed": 2,
+      "rate": 90.5
+    },
+    "D": {
+      "scenarios": 22,
+      "passed": 20,
+      "failed": 2,
+      "rate": 90.9
+    }
+  },
+  "byOperation": {
+    "move / reschedule": {
+      "scenarios": 19,
+      "passed": 18,
+      "failed": 1,
+      "rate": 94.7
+    },
+    "create": {
+      "scenarios": 31,
+      "passed": 29,
+      "failed": 2,
+      "rate": 93.5
+    },
+    "reminder": {
+      "scenarios": 5,
+      "passed": 4,
+      "failed": 1,
+      "rate": 80
+    },
+    "read / question": {
+      "scenarios": 13,
+      "passed": 12,
+      "failed": 1,
+      "rate": 92.3
+    },
+    "edit": {
+      "scenarios": 14,
+      "passed": 14,
+      "failed": 0,
+      "rate": 100
+    },
+    "day plan": {
+      "scenarios": 5,
+      "passed": 5,
+      "failed": 0,
+      "rate": 100
+    },
+    "complete / delete / target choice": {
+      "scenarios": 13,
+      "passed": 12,
+      "failed": 1,
+      "rate": 92.3
+    },
+    "provider event": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 100
+    },
+    "confirmation / cancellation": {
+      "scenarios": 22,
+      "passed": 21,
+      "failed": 1,
+      "rate": 95.5
+    },
+    "other": {
+      "scenarios": 6,
+      "passed": 5,
+      "failed": 1,
+      "rate": 83.3
+    },
+    "later scheduling": {
+      "scenarios": 4,
+      "passed": 4,
+      "failed": 0,
+      "rate": 100
+    },
+    "occurrence / series": {
+      "scenarios": 9,
+      "passed": 9,
+      "failed": 0,
+      "rate": 100
+    },
+    "recurring create": {
+      "scenarios": 3,
+      "passed": 1,
+      "failed": 2,
+      "rate": 33.3
+    },
+    "unsupported / refusal": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 100
+    }
+  },
+  "dimensions": {
+    "semanticUnderstanding": 95.8,
+    "targetIdentification": 100,
+    "previewCorrectness": 97.9,
+    "confirmationExecution": 97.6,
+    "safety": 99.6,
+    "counts": {
+      "semantic": {
+        "total": 259,
+        "ok": 248
+      },
+      "target": {
+        "total": 124,
+        "ok": 124
+      },
+      "preview": {
+        "total": 189,
+        "ok": 185
+      },
+      "confirm": {
+        "total": 42,
+        "ok": 41
+      },
+      "safety": {
+        "total": 259,
+        "ok": 258
+      }
+    }
+  },
+  "dimensionsByLanguage": {
+    "uk": {
+      "semanticUnderstanding": 97.7,
+      "targetIdentification": 100,
+      "previewCorrectness": 98.7,
+      "confirmationExecution": 100,
+      "safety": 99.5,
+      "counts": {
+        "semantic": {
+          "total": 215,
+          "ok": 210
+        },
+        "target": {
+          "total": 102,
+          "ok": 102
+        },
+        "preview": {
+          "total": 155,
+          "ok": 153
+        },
+        "confirm": {
+          "total": 35,
+          "ok": 35
+        },
+        "safety": {
+          "total": 215,
+          "ok": 214
+        }
+      }
+    },
+    "en": {
+      "semanticUnderstanding": 86.4,
+      "targetIdentification": 100,
+      "previewCorrectness": 94.1,
+      "confirmationExecution": 85.7,
+      "safety": 100,
+      "counts": {
+        "semantic": {
+          "total": 44,
+          "ok": 38
+        },
+        "target": {
+          "total": 22,
+          "ok": 22
+        },
+        "preview": {
+          "total": 34,
+          "ok": 32
+        },
+        "confirm": {
+          "total": 7,
+          "ok": 6
+        },
+        "safety": {
+          "total": 44,
+          "ok": 44
+        }
+      }
+    }
+  },
+  "turns": {
+    "total": 259,
+    "passed": 248,
+    "unsafe": 1
+  },
+  "rootCauses": {
+    "model interpretation (constraint) or projection drop — review": [
+      "g-a-33",
+      "en-a-05",
+      "en-a-12"
+    ],
+    "model interpretation (intent) / prompt": [
+      "g-a-44",
+      "g-b-26",
+      "g-d-14",
+      "en-a-11",
+      "en-c-01",
+      "en-d-02"
+    ],
+    "model interpretation (target)": [
+      "g-c-18"
+    ]
+  },
+  "errorClasses": {
+    "model_missing_constraint": 3,
+    "model_intent_error": 4,
+    "model_target_reference_error": 1,
+    "model_unnecessary_clarification": 3
+  },
+  "usage": {
+    "calls": 238,
+    "tokens": 885977,
+    "promptTokens": 864070,
+    "completionTokens": 21907,
+    "usd": 0.142754
+  },
+  "latencyMsP50": 1221,
+  "latencyMsP95": 1727,
+  "failures": [
+    {
+      "id": "g-a-33",
+      "language": "uk",
+      "category": "A",
+      "family": "next-sunday",
+      "operation": "create",
+      "invariant": "the coming Sunday is 2026-10-25",
+      "rootCause": "model interpretation (constraint) or projection drop — review",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "у неділю ввечері полити кактус",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "nameIncludes": "кактус",
+            "includes": "2026-10-25"
+          },
+          "outcome": "confirm",
+          "blocked": [],
+          "assistantMessage": "полити кактус. Час доби: evening. Годину не ставлю.",
+          "intents": [
+            {
+              "type": "create",
+              "summary": "полити кактус. Час доби: evening. Годину не ставлю.",
+              "task": {
+                "name": "полити кактус",
+                "priority": "medium",
+                "timeZone": "Europe/Kyiv",
+                "allowSplit": false,
+                "isUnscheduled": false,
+                "estimatedTimeInMinutes": 30,
+                "eventType": "admin",
+                "earliestStartTime": "2026-10-18T08:00:00+03:00",
+                "deadline": "2026-10-18T23:00:00+03:00"
+              }
+            }
+          ],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"operations\",\"operations\":[{\"opId\":\"op-1\",\"action\":\"create\",\"target\":{\"kind\":\"new\",\"localId\":\"l-1\"},\"changes\":{\"title\":\"полити кактус\"},\"constraints\":[{\"kind\":\"date\",\"value\":\"2026-10-18\",\"precision\":\"day\"},{\"kind\":\"time_of_day\",\"label\":\"evening\"}],\"dependsOn\":[],\"source\":{\"text\":\"у неділю ввечері полити кактус\"}}]}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_missing_constraint",
+            "detail": "model_missing_constraint: outcome confirm, blocked -"
+          },
+          "errorClass": "model_missing_constraint",
+          "rootCause": "model interpretation (constraint) or projection drop — review"
+        }
+      ]
+    },
+    {
+      "id": "g-a-44",
+      "language": "uk",
+      "category": "A",
+      "family": "which-report",
+      "operation": "read / question",
+      "invariant": "neither report is written",
+      "rootCause": "model interpretation (intent) / prompt",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "коли в мене звіт?",
+          "expect": {
+            "outcomes": [
+              "clarify",
+              "refuse"
+            ],
+            "clarificationRequired": true,
+            "intents": 0
+          },
+          "outcome": "answer",
+          "blocked": [],
+          "assistantMessage": "У вас є два звіти, і обидва зараз без часу (у списку «Пізніше»): «Звіт» і «Фінансовий звіт». Жоден із них не має запланованої дати чи часу.",
+          "intents": [],
+          "reads": [
+            "find_tasks"
+          ],
+          "validationErrors": [],
+          "modelOutput": "user=Write any user-facing question in Ukrainian. Now: 2026-10-18 09:00 Time zone: Europe/Kyiv Wake: 08:00 Sleep: 23:00 Schedule today: 2026-10-18 Tomorrow: 2026-10-19 Next named weekday, today counts: Sunday 2026-10-18, Monday 2026-10-19, Tuesday 2026-10-20, Wednesday 2026-10-21, Thursday 2026-10-22, Friday 2026-10-23, Saturday 2026-10-24 Default new-task length when the user names none: 30 minutes. Omit duration unless the user stated one. Open question: (none) Pending confirmation: no Pending preview: (none) Recent dialogue, oldest first. The current utterance is not repeated here. Use it to modify a pending preview, answer the open question, cancel, or start a new request. Do not repeat a canceled or already applied operation. (none) Referents from this session: (none) Day plan in progress: (none) Canceled operation ids: (none) Applied previews this session: 0 Pending operations. To change one, target kind operation_result and its opId. Do not create a second object for a correction. To cancel one, use action cancel with that opId. (none) Owned open records for this user. Other users are omitted. A start time is the record's real clock, so afternoon and morning copies can be told apart. proposedId must be one of these ids or omitted, and description must still be the user's words. task task-report open Звіт task task-finance open Фінансовий звіт task design-am open Ранкова зустріч із дизайнером start 2026-10-19 10:00 task design-pm open Зустріч із дизайнером після обіду s",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_intent_error",
+            "detail": "model_intent_error: outcome answer, blocked -"
+          },
+          "errorClass": "model_intent_error",
+          "rootCause": "model interpretation (intent) / prompt"
+        }
+      ]
+    },
+    {
+      "id": "g-b-26",
+      "language": "uk",
+      "category": "B",
+      "family": "third-same-title",
+      "operation": "create",
+      "invariant": "neither existing report is updated",
+      "rootCause": "model interpretation (intent) / prompt",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "коли звіт?",
+          "expect": {
+            "outcomes": [
+              "clarify",
+              "refuse"
+            ],
+            "clarificationRequired": true,
+            "intents": 0
+          },
+          "outcome": "answer",
+          "blocked": [],
+          "assistantMessage": "У вас є два відкриті записи зі словом «звіт»: «Звіт» і «Фінансовий звіт». Жоден із них не має запланованого часу. Уточніть, який саме вас цікавить.",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"answer\",\"operations\":[],\"answer\":{\"text\":\"У вас є два відкриті записи зі словом «звіт»: «Звіт» і «Фінансовий звіт». Жоден із них не має запланованого часу. Уточніть, який саме вас цікавить.\",\"evidenceRefs\":[]}}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_intent_error",
+            "detail": "model_intent_error: outcome answer, blocked -"
+          },
+          "errorClass": "model_intent_error",
+          "rootCause": "model interpretation (intent) / prompt"
+        }
+      ]
+    },
+    {
+      "id": "g-c-18",
+      "language": "uk",
+      "category": "C",
+      "family": "c5-after-clarification",
+      "operation": "other",
+      "invariant": "the follow-up is the only completion target",
+      "rootCause": "model interpretation (target)",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "закрий звіт",
+          "expect": {
+            "outcomes": [
+              "clarify",
+              "refuse"
+            ],
+            "clarificationRequired": true,
+            "intents": 0
+          },
+          "outcome": "confirm",
+          "blocked": [],
+          "assistantMessage": "Позначити виконаною «Звіт»",
+          "intents": [
+            {
+              "type": "command",
+              "summary": "Позначити виконаною «Звіт»",
+              "command": {
+                "kind": "complete",
+                "taskId": "task-report",
+                "taskName": "Звіт",
+                "summary": "Позначити виконаною «Звіт»"
+              }
+            }
+          ],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"operations\",\"operations\":[{\"opId\":\"op-1\",\"action\":\"complete\",\"target\":{\"kind\":\"existing\",\"proposedId\":\"task-report\",\"description\":\"звіт\"},\"changes\":{},\"constraints\":[],\"dependsOn\":[],\"source\":{\"text\":\"закрий звіт\"}}]}",
+          "verdict": {
+            "semantic": false,
+            "safety": false,
+            "completion": false,
+            "category": "model_target_reference_error",
+            "detail": "model_target_reference_error: outcome confirm, blocked -"
+          },
+          "errorClass": "model_target_reference_error",
+          "rootCause": "model interpretation (target)"
+        }
+      ]
+    },
+    {
+      "id": "g-d-14",
+      "language": "uk",
+      "category": "D",
+      "family": "recurring-clock",
+      "operation": "recurring create",
+      "invariant": "a weekly repeat with a clock is a series with that clock, no day window (VC-01)",
+      "rootCause": "model interpretation (intent) / prompt",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "щопонеділка о 18:00 спортзал",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "nameIncludes": "спортзал",
+            "includes": "18:00",
+            "action": "create"
+          },
+          "outcome": "clarify",
+          "blocked": [],
+          "assistantMessage": "З якої дати почати повторюване нагадування про спортзал щопонеділка о 18:00?",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"clarification\",\"operations\":[],\"clarification\":{\"question\":\"З якої дати почати повторюване нагадування про спортзал щопонеділка о 18:00?\",\"operationIds\":[],\"missing\":[\"start_date\"]}}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_unnecessary_clarification",
+            "detail": "model_unnecessary_clarification: outcome clarify, blocked -"
+          },
+          "errorClass": "model_unnecessary_clarification",
+          "rootCause": "model interpretation (intent) / prompt"
+        }
+      ]
+    },
+    {
+      "id": "en-a-05",
+      "language": "en",
+      "category": "A",
+      "family": "recurring-preferred",
+      "operation": "recurring create",
+      "invariant": "the series keeps its clock and no day window (VC-01)",
+      "rootCause": "model interpretation (constraint) or projection drop — review",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "walk the dog every day around 7 in the evening",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "nameIncludes": "dog",
+            "includes": "19:00",
+            "action": "create"
+          },
+          "outcome": "confirm",
+          "blocked": [],
+          "assistantMessage": "walk the dog. Time of day: evening. No clock invented.",
+          "intents": [
+            {
+              "type": "create",
+              "summary": "walk the dog. Time of day: evening. No clock invented.",
+              "task": {
+                "name": "walk the dog",
+                "priority": "medium",
+                "timeZone": "Europe/Kyiv",
+                "allowSplit": false,
+                "isUnscheduled": false,
+                "estimatedTimeInMinutes": 30,
+                "eventType": "admin",
+                "isRecurring": true,
+                "recurrencePattern": "DAILY",
+                "recurrenceWeekDays": null
+              }
+            }
+          ],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"operations\",\"operations\":[{\"opId\":\"op-1\",\"action\":\"create\",\"target\":{\"kind\":\"new\",\"localId\":\"l-1\"},\"changes\":{\"title\":\"walk the dog\"},\"constraints\":[{\"kind\":\"recurrence\",\"expression\":\"every day\",\"pattern\":\"DAILY\"},{\"kind\":\"time_of_day\",\"label\":\"evening\",\"bound\":\"at\"}],\"dependsOn\":[],\"source\":{\"text\":\"walk the dog every day around 7 in the evening\"}}]}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_missing_constraint",
+            "detail": "model_missing_constraint: outcome confirm, blocked -"
+          },
+          "errorClass": "model_missing_constraint",
+          "rootCause": "model interpretation (constraint) or projection drop — review"
+        }
+      ]
+    },
+    {
+      "id": "en-a-11",
+      "language": "en",
+      "category": "A",
+      "family": "done-task",
+      "operation": "complete / delete / target choice",
+      "invariant": "a completed task is not a write target",
+      "rootCause": "model interpretation (intent) / prompt",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "move pay the invoice to tomorrow",
+          "expect": {
+            "outcomes": [
+              "answer",
+              "refuse"
+            ],
+            "intents": 0
+          },
+          "outcome": "clarify",
+          "blocked": [],
+          "assistantMessage": "I don't see a task called \"pay the invoice\" in your open tasks. Should I create it for tomorrow, or is it a calendar event?",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"clarification\",\"operations\":[],\"clarification\":{\"question\":\"I don't see a task called \\\"pay the invoice\\\" in your open tasks. Should I create it for tomorrow, or is it a calendar event?\",\"operationIds\":[],\"missing\":[\"target\"]}}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_intent_error",
+            "detail": "model_intent_error: outcome clarify, blocked -"
+          },
+          "errorClass": "model_intent_error",
+          "rootCause": "model interpretation (intent) / prompt"
+        }
+      ]
+    },
+    {
+      "id": "en-a-12",
+      "language": "en",
+      "category": "A",
+      "family": "reminder",
+      "operation": "reminder",
+      "invariant": "a remind phrase is a reminder, not a task",
+      "rootCause": "model interpretation (constraint) or projection drop — review",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "remind me to call mom on Sunday",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "nameIncludes": "mom",
+            "includes": "2026-10-25"
+          },
+          "outcome": "confirm",
+          "blocked": [],
+          "assistantMessage": "call mom",
+          "intents": [
+            {
+              "type": "command",
+              "summary": "call mom",
+              "command": {
+                "kind": "remind_create",
+                "name": "call mom",
+                "summary": "call mom",
+                "dueYmd": "2026-10-18",
+                "notificationTime": null,
+                "description": null,
+                "recurrencePattern": null,
+                "recurrenceWeekDays": null
+              }
+            }
+          ],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"operations\",\"operations\":[{\"opId\":\"op-1\",\"action\":\"create\",\"target\":{\"kind\":\"new\",\"localId\":\"l-1\"},\"changes\":{\"title\":\"call mom\",\"reminder\":{\"op\":\"create\",\"name\":\"call mom\",\"dueYmd\":\"2026-10-18\"}},\"constraints\":[],\"dependsOn\":[],\"source\":{\"text\":\"remind me to call mom on Sunday\"}}]}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_missing_constraint",
+            "detail": "model_missing_constraint: outcome confirm, blocked -"
+          },
+          "errorClass": "model_missing_constraint",
+          "rootCause": "model interpretation (constraint) or projection drop — review"
+        }
+      ]
+    },
+    {
+      "id": "en-c-01",
+      "language": "en",
+      "category": "C",
+      "family": "two-writes-one-confirm",
+      "operation": "confirmation / cancellation",
+      "invariant": "two creates in one breath are two tasks (VC-14)",
+      "rootCause": "model interpretation (intent) / prompt",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "call mom at 10 and again at 3",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "nameIncludes": "mom",
+            "intents": 2,
+            "action": "create"
+          },
+          "outcome": "clarify",
+          "blocked": [],
+          "assistantMessage": "You gave two different times for calling mom (10:00 and 15:00). Which time should I use?",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"clarification\",\"operations\":[],\"clarification\":{\"question\":\"You gave two different times for calling mom (10:00 and 15:00). Which time should I use?\",\"operationIds\":[],\"missing\":[\"single time\"]}}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_unnecessary_clarification",
+            "detail": "model_unnecessary_clarification: outcome clarify, blocked -"
+          },
+          "errorClass": "model_unnecessary_clarification",
+          "rootCause": "model interpretation (intent) / prompt"
+        },
+        {
+          "turn": 1,
+          "utterance": "yes",
+          "expect": {
+            "outcomes": [
+              "act"
+            ],
+            "intents": 2
+          },
+          "outcome": "answer",
+          "blocked": [],
+          "assistantMessage": "There is nothing waiting to apply.",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"control\",\"operations\":[],\"control\":\"answer_pending\"}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_intent_error",
+            "detail": "model_intent_error: outcome answer, blocked -"
+          },
+          "errorClass": "model_intent_error",
+          "rootCause": "model interpretation (intent) / prompt"
+        }
+      ]
+    },
+    {
+      "id": "en-d-02",
+      "language": "en",
+      "category": "D",
+      "family": "slot-move-other-day",
+      "operation": "move / reschedule",
+      "invariant": "a one-off without a calendar event moves to another day (VC-03)",
+      "rootCause": "model interpretation (intent) / prompt",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "move the client meeting to Tuesday at 9",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "taskId": "task-client",
+            "includes": "09:00",
+            "action": "move",
+            "forbidTaskId": "task-client-2"
+          },
+          "outcome": "clarify",
+          "blocked": [],
+          "assistantMessage": "Which client meeting do you mean: \"Client meeting\" or \"Client meeting about the budget\"?",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"clarification\",\"operations\":[],\"clarification\":{\"question\":\"Which client meeting do you mean: \\\"Client meeting\\\" or \\\"Client meeting about the budget\\\"?\",\"operationIds\":[],\"missing\":[\"target\"]}}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_unnecessary_clarification",
+            "detail": "model_unnecessary_clarification: outcome clarify, blocked -"
+          },
+          "errorClass": "model_unnecessary_clarification",
+          "rootCause": "model interpretation (intent) / prompt"
+        }
+      ]
+    }
+  ]
+}

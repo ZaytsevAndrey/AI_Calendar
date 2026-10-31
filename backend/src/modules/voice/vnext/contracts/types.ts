@@ -85,6 +85,10 @@ export type OperationChangesV1 = {
   spanRole?: 'event' | 'window';
   location?: string | null;
   reminder?: ReminderChangeV1;
+  /** Take the time off a task: it goes to Later with no start, end, window or deadline (V7). */
+  unschedule?: true;
+  /** The user asked for another task even though one with this title exists (add / create / another). */
+  explicitNew?: true;
 };
 
 export type SemanticOperationV1 = {
@@ -103,6 +107,12 @@ export type SemanticOperationV1 = {
   seriesScope?: 'occurrence' | 'from_day' | 'all';
   /** Current date (YYYY-MM-DD) of the occurrence the user means, for a recurring series. */
   occurrence?: string;
+  /**
+   * The pending operation this one takes the place of (V7): the user corrected which record a pending
+   * operation applies to, or restated it for another record. The named operation is withdrawn; other
+   * pending operations stay. Without it a new operation is added beside what is pending.
+   */
+  replaces?: string;
   /**
    * Runtime-only marker set by trusted bulk expansion.
    * The envelope parser does not copy this from model JSON.

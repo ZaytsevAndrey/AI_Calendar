@@ -81,3 +81,26 @@ describe('previewEventFromTask', () => {
     expect(resolveTaskForCalendarEvent([inbox], event)).toEqual(inbox);
   });
 });
+
+describe('previewEventFromTask for a series block', () => {
+  it('uses the block interval, not the series master clock', () => {
+    const event = previewEventFromTask(
+      {
+        id: 's1',
+        name: 'Gym',
+        isRecurring: true,
+        scheduledStartTime: '2026-10-01T07:00:00.000Z',
+        scheduledEndTime: '2026-10-01T08:00:00.000Z',
+        estimatedTimeInMinutes: 60,
+        allowSplit: false,
+        priority: 'medium',
+        status: 'todo',
+        createdAt: '',
+        updatedAt: '',
+      },
+      { startMs: Date.parse('2026-10-30T07:00:00.000Z'), endMs: Date.parse('2026-10-30T08:00:00.000Z') },
+    );
+    expect(event.start.dateTime).toBe('2026-10-30T07:00:00.000Z');
+    expect(event.end.dateTime).toBe('2026-10-30T08:00:00.000Z');
+  });
+});

@@ -116,6 +116,15 @@ export function weekdayIndex(ymd: string): number {
   return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
 }
 
+/**
+ * The coming occurrence of a weekday, never today: "on Sunday" said on a Sunday is next Sunday. Used for
+ * the prompt's weekday line; the weekday contract (`this` includes today) stays in nextWeekdayYmd (V7).
+ */
+export function upcomingWeekdayYmd(todayYmd: string, weekday: number): string {
+  const same = nextWeekdayYmd(todayYmd, weekday);
+  return same === todayYmd ? addDaysToYmd(todayYmd, 7) : same;
+}
+
 export function nextWeekdayYmd(todayYmd: string, targetDow: number): string {
   const current = weekdayIndex(todayYmd);
   let delta = targetDow - current;

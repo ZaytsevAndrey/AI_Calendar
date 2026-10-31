@@ -445,10 +445,18 @@ describe('stage 4.1 projection carries a change or rejects it', () => {
     expect(claimOf(session)).toEqual(before);
   });
 
-  it('does not preview a skip the client cannot execute without an occurrence', async () => {
+  // V2 / VC-09: a one-off's one slot is its occurrence, so the client can execute the skip. Before V2 this
+  // asserted `unsupported_action`; the contract now carries the slot start, and a row without one is refused.
+  it('previews a skip of a one-off through its one slot and refuses it without a slot', async () => {
     const result = await preview([proposal({ action: 'skip', changes: {} })]);
-    expect(result.blocked).toContain('unsupported_action');
-    expect(result.response.intents).toEqual([]);
+    expect(result.blocked).toEqual([]);
+    expect(result.response.intents).toEqual([expect.objectContaining({
+      type: 'command',
+      command: expect.objectContaining({ kind: 'skip', taskId: 'task-report', occurrenceStart: '2026-10-21T08:00:00.000Z', googleEventId: 'g-report' }),
+    })]);
+    const slotless = await preview([proposal({ action: 'skip', changes: {} })], [entity({ scheduledStart: null, scheduledEnd: null, googleEventId: null })]);
+    expect(slotless.blocked).toContain('nothing_to_skip');
+    expect(slotless.response.intents).toEqual([]);
   });
 
   it('applies the documented weekday contract and refuses a weekday without the model choosing which', async () => {
@@ -757,7 +765,8 @@ describe('stage 4.1 V1 bridge isolation', () => {
       { kind: 'clock', value: '15:00', role: 'preferred' },
       { kind: 'all_day' },
       { kind: 'relative', direction: 'after', amount: 2, unit: 'hour' },
-      { kind: 'unresolved' },
+      // V7: a delay from the referenced task's own start is carried ("an hour later"); before V7 it was unresolved.
+      { kind: 'relative', direction: 'after', amount: 1, unit: 'hour', anchor: 'target' },
       { kind: 'unresolved', label: 'evening' },
       { kind: 'unresolved' },
     ]);

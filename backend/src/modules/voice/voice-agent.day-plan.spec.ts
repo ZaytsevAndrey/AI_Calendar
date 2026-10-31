@@ -86,6 +86,14 @@ describe('VoiceDayPlanner.propose', () => {
     expect(proposal.changedItemIds).toEqual([]);
   });
 
+  // VC-11: a draft item with no deadline of its own ends at the civil end of the plan day.
+  it('bounds an item with no deadline by the civil end of a DST day', async () => {
+    const { planner, previewSequence } = build([seated('2027-03-14T19:00:00.000Z')]);
+    await planner.propose('u1', draft([item('new:1', { name: 'Gym' })], { day: '2027-03-14' }), 'America/New_York');
+    const call = (previewSequence.mock.calls[0] as unknown[])[1] as { entries: Array<{ task: Task }> };
+    expect(new Date(call.entries[0].task.deadline as Date).toISOString()).toBe('2027-03-15T04:00:00.000Z');
+  });
+
   it('reports unplaced reasons and drops items whose task vanished', async () => {
     const { planner } = build(
       [

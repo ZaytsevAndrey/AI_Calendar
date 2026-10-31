@@ -6,11 +6,11 @@ import type { VoiceTurnResponse, VoiceWriteIntent } from '../voice-agent.types';
 import { expandStructuredScope } from './adapter/structured-scope';
 import { envelopeToProposalGroup } from './contracts/envelope-to-proposal';
 import type { ProposalGroup } from './contracts/proposal';
-import type { SemanticEnvelopeV1 } from './contracts/types';
+import type { DayPlanEditV1, SemanticEnvelopeV1 } from './contracts/types';
 import { voiceCopy } from './copy';
 import { handleStructuredDayPlan } from './day-plan/structured-day-plan';
 import { evidenceCovers } from './evidence/evidence';
-import { ask as askDialogue, clearDialogue } from './session/dialogue';
+import { ask as askDialogue, canConfirm, clearDialogue } from './session/dialogue';
 import { appendTurn, clearPending, intentKey, invalidateLegacyPreview, pinArm, type VNextSession } from './session/session';
 import { prepareStructuredPreview } from './state/prepare-preview';
 import { readPreviewEntities, revalidateFingerprints } from './state/revalidate-preview';
@@ -74,13 +74,17 @@ export function entitiesToKnown(entities: EntityRecord[], userId: string): Known
       ...(entity.googleEventId != null ? { googleEventId: entity.googleEventId } : {}),
       ...(entity.scheduledStart != null ? { scheduledStart: entity.scheduledStart } : {}),
       ...(entity.scheduledEnd != null ? { scheduledEnd: entity.scheduledEnd } : {}),
+      ...(entity.slotId != null ? { slotId: entity.slotId } : {}),
+      ...(entity.unscheduled ? { unscheduled: true } : {}),
       ...(entity.status ? { status: entity.status } : {}),
       ...(entity.recurring ? { recurring: true } : {}),
       ...(entity.provider ? { provider: entity.provider } : {}),
       ...(entity.occurrences ? { occurrences: entity.occurrences } : {}),
       ...(entity.seriesEventId != null ? { seriesEventId: entity.seriesEventId } : {}),
+      ...(entity.seriesCopies ? { seriesCopies: true } : {}),
       ...(entity.name ? { name: entity.name } : {}),
       ...(entity.fixed ? { fixed: true } : {}),
+      ...(entity.reminder ? { reminder: entity.reminder } : {}),
     }));
 }
 
@@ -103,10 +107,24 @@ function blockedCopy(code: string): Parameters<typeof voiceCopy>[1] {
   if (code === 'unmapped_time') return 'need_clock';
   if (code === 'missing_occurrence' || code === 'occurrence_not_found' || code === 'ambiguous_occurrence') return 'which_occurrence';
   if (code === 'empty_patch') return 'what_change';
+  if (code === 'past') return 'past_clock';
+  if (code === 'same_title_existing') return 'same_title';
+  if (code === 'cross_day_series_move') return 'same_day_series';
+  if (code === 'fixed_skip') return 'fixed_skip';
+  if (code === 'nothing_to_skip') return 'nothing_to_skip';
+  if (code === 'series_has_copies') return 'series_copies';
   if (code === 'unrepresented_constraint' || code === 'unsupported_series_scope' || code === 'unrepresentable_move' || code === 'unrepresentable_delete' || code === 'unrepresentable_update') {
     return 'unrepresented';
   }
   return 'which_task';
+}
+
+/** While a preview is open, a failed attempt to change it makes a later spoken yes a question, not a write. */
+function lockOpenPreview(session: VNextSession): void {
+  const state = session.structured;
+  if (!state || state.preview?.executionState !== 'open' || state.blocksConfirmation) return;
+  // Not through setConfirmationBlock: that bumps the session version the shown claim was cut from.
+  session.structured = { ...state, blocksConfirmation: true };
 }
 
 function ensureStructured(session: VNextSession): StructuredState {
@@ -116,13 +134,25 @@ function ensureStructured(session: VNextSession): StructuredState {
 
 function publishPreview(session: VNextSession, state: StructuredState, intents: VoiceWriteIntent[], summary: string): void {
   session.protocol = 'structured';
-  session.structured = state;
+  // A preview answers whatever question was open: the block a clarification set must not outlive
+  // it, or the new preview could never be applied, by tap or by voice (VR-13 / g-b-10).
+  // Not through setConfirmationBlock: that bumps the session version the fresh claim was cut from.
+  session.structured = state.blocksConfirmation ? { ...state, blocksConfirmation: false } : state;
+  clearDialogue(session);
   session.structuredIntents = intents;
   session.pendingIntents = intents;
   session.pendingSummary = summary;
   session.previewSuspended = false;
   session.openQuestion = null;
   session.pendingClarification = null;
+}
+
+/** The intents of an open structured preview that can still be confirmed, else null. */
+function keptPreview(input: TurnInput): VoiceWriteIntent[] | null {
+  const session = input.session;
+  if (session.protocol !== 'structured' || !canConfirm(session)) return null;
+  if (session.structured?.preview?.executionState !== 'open') return null;
+  return session.pendingIntents?.length ? session.pendingIntents : null;
 }
 
 function summarize(intents: VoiceWriteIntent[]): string {
@@ -154,11 +184,29 @@ export async function runStructuredTurn(input: TurnInput, interpreter: VNextInte
     });
   }
   if (!interpreted.ok) {
+    // VR-38: an unreadable reply while a preview is open re-presents that preview instead of
+    // refusing. The client drops its cards on any outcome but confirm, so the target would be lost.
+    const kept = keptPreview(input);
+    if (kept) {
+      return done(input, reply(input.session.sessionId, { outcome: 'confirm', assistantMessage: voiceCopy(input.language, 'preview_kept'), intents: kept, actions: ['confirm', 'cancel', 'skip_speak'] }), {
+        traces,
+        usage: interpreted.usage,
+        blocked: [interpreted.code ?? 'invalid_model_output'],
+      });
+    }
     return done(input, reply(input.session.sessionId, { outcome: 'refuse', assistantMessage: voiceCopy(input.language, 'invalid'), actions: ['retry'] }), {
       traces,
       usage: interpreted.usage,
       blocked: [interpreted.code ?? 'invalid_model_output'],
     });
+  }
+
+  // VR-06 (spec §9): while a plan is open, an activity with no date of its own is a plan edit,
+  // even when the model answered with plain creates. A create that names its own date stays a task.
+  const asDraftEdit = input.session.planDraft && interpreted.envelope ? draftEditFromCreates(interpreted.envelope) : null;
+  if (asDraftEdit) {
+    traces.push({ name: 'draft_route', fields: { creates: asDraftEdit.dayPlan?.edits?.length ?? 0 } });
+    return handleStructuredDayPlan(input, asDraftEdit, interpreted, traces);
   }
 
   const group = resolveGroup(interpreted, input);
@@ -184,10 +232,89 @@ export async function runStructuredTurn(input: TurnInput, interpreter: VNextInte
   });
 }
 
+/**
+ * An operations envelope made only of new creates that name no day of their own, as the day-plan
+ * edit the open draft needs. Anything else (a date, a weekday, a repeat, a delay, a stored target)
+ * returns null and is handled as ordinary operations.
+ */
+function draftEditFromCreates(envelope: SemanticEnvelopeV1): SemanticEnvelopeV1 | null {
+  if (envelope.kind !== 'operations' || !envelope.operations.length) return null;
+  const edits: DayPlanEditV1[] = [];
+  for (const operation of envelope.operations) {
+    if (operation.action !== 'create' || operation.target.kind !== 'new' || !operation.changes.title) return null;
+    // A draft item holds a name, a length and clocks only. Notes, a place, a priority, a status or a
+    // reminder would be dropped by the draft, so such a create stays an ordinary task (Stage 3).
+    const extra = Object.keys(operation.changes).filter((key) => key !== 'title');
+    if (extra.length) return null;
+    const own = operation.constraints.some((constraint) =>
+      constraint.kind === 'date' || constraint.kind === 'weekday' || constraint.kind === 'recurrence' || constraint.kind === 'relative_time' || constraint.kind === 'ordering' || constraint.kind === 'all_day');
+    if (own) return null;
+    const clock = (role: string) => {
+      const found = operation.constraints.find((constraint) => constraint.kind === 'clock' && constraint.role === role);
+      return found && found.kind === 'clock' ? found.value : null;
+    };
+    const duration = operation.constraints.find((constraint) => constraint.kind === 'duration');
+    const label = operation.constraints.find((constraint) => constraint.kind === 'time_of_day');
+    edits.push({
+      op: 'add_task',
+      name: operation.changes.title,
+      durationMinutes: duration && duration.kind === 'duration' ? duration.minutes : null,
+      preferredHm: clock('start') ?? clock('preferred'),
+      earliestHm: clock('earliest'),
+      deadlineHm: clock('deadline') ?? clock('end'),
+      ...(label && label.kind === 'time_of_day' ? { qualitative: label.label } : {}),
+    });
+  }
+  return { version: '1', kind: 'day_plan', operations: [], dayPlan: { phase: 'edit', edits } };
+}
+
 function resolveGroup(interpreted: InterpretOutput, input: TurnInput): ProposalGroup | null {
   if (interpreted.group) return interpreted.group;
   if (interpreted.envelope) {
-    return envelopeToProposalGroup(interpreted.envelope, { nowIso: input.nowIso, timeZone: input.timeZone });
+    return envelopeToProposalGroup(withSolePendingId(interpreted.envelope, input), { nowIso: input.nowIso, timeZone: input.timeZone });
+  }
+  return null;
+}
+
+/** Every proposal of the group addresses something the open preview does not: another row, or a new title. */
+function additiveToPreview(group: ProposalGroup, state: StructuredState): boolean {
+  const fold = (text: string | undefined) => (text ?? '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+  const pendingRows = new Set(state.operations.flatMap((operation) => (operation.target.kind === 'entity' ? [operation.target.entityId] : [])));
+  const pendingTitles = new Set(state.operations.filter((operation) => operation.target.kind === 'new').map((operation) => fold(operation.changes.title)));
+  return group.proposals.every((proposal) => {
+    if (proposal.replaces) return true;
+    if (proposal.target.kind === 'pending') return true;
+    if (proposal.target.kind === 'entity') return !pendingRows.has(proposal.target.entityId);
+    if (proposal.target.kind === 'new') return !pendingTitles.has(fold(proposal.changes.title));
+    return false;
+  });
+}
+
+/** "Cancel it" with no id while exactly one operation is pending names that operation (V7, g-c-20). */
+function withSolePendingId(envelope: SemanticEnvelopeV1, input: TurnInput): SemanticEnvelopeV1 {
+  const pending = input.session.structured?.preview?.executionState === 'open' ? input.session.structured.operations : [];
+  if (pending.length !== 1) return envelope;
+  const operations = envelope.operations.map((operation) => {
+    const target = operation.target as { kind: string; opId?: string };
+    if (target.kind !== 'operation_result' || target.opId) return operation;
+    return { ...operation, target: { kind: 'operation_result' as const, opId: pending[0].pendingId } };
+  });
+  return { ...envelope, operations };
+}
+
+/**
+ * A create titled like an open task of the user is the existing task unless the model marked it as
+ * explicitly new; a group that also writes to that task is a split of one sentence (V7, g-b-10 / g-c-08).
+ * Titles compare whole and case-folded; this is not a fuzzy match.
+ */
+function sameTitleAsOpen(group: ProposalGroup, known: readonly KnownEntity[]): string | null {
+  const fold = (text: string) => text.trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+  for (const proposal of group.proposals) {
+    if (proposal.action !== 'create' || proposal.entityType !== 'task' || proposal.changes.explicitNew) continue;
+    const title = proposal.changes.title ? fold(proposal.changes.title) : '';
+    if (!title) continue;
+    const twin = known.find((entity) => entity.entityType === 'task' && (entity.status ?? 'open') === 'open' && entity.writable && fold(entity.name ?? '') === title);
+    if (twin) return twin.entityId;
   }
   return null;
 }
@@ -195,14 +322,12 @@ function resolveGroup(interpreted: InterpretOutput, input: TurnInput): ProposalG
 async function handleGroup(input: TurnInput, group: ProposalGroup, interpreted: InterpretOutput, traces: TraceEvent[]): Promise<PipelineResult> {
   if (group.control === 'confirm') return handleConfirm(input, group, interpreted, traces);
   if (group.control === 'cancel') return handleCancel(input, interpreted, traces);
+  // Hold: the user is not confirming yet and not withdrawing. The preview stays, a later yes still applies it.
   if (group.control === 'pause') {
-    const state = ensureStructured(input.session);
-    const blocked = setConfirmationBlock({ state, expectedSessionVersion: state.sessionVersion, blocked: true });
-    if (blocked.ok) input.session.structured = blocked.state;
-    return done(input, reply(input.session.sessionId, { outcome: 'clarify', assistantMessage: voiceCopy(input.language, 'which_task'), clarifyCount: 1 }), {
+    const open = input.session.structured?.preview?.executionState === 'open';
+    return done(input, reply(input.session.sessionId, { outcome: 'answer', assistantMessage: voiceCopy(input.language, open ? 'on_hold' : 'no_pending') }), {
       traces,
       usage: interpreted.usage,
-      blocked: ['clarification_open'],
     });
   }
 
@@ -272,12 +397,27 @@ async function handleGroup(input: TurnInput, group: ProposalGroup, interpreted: 
       blocked: ['wrong_calendar'],
     });
   }
+  const twin = sameTitleAsOpen(working, known);
+  if (twin) {
+    askDialogue(input.session, { id: 'same_title', question: voiceCopy(input.language, 'same_title'), missing: twin, operationId: null });
+    lockOpenPreview(input.session);
+    return done(input, reply(input.session.sessionId, { outcome: 'clarify', assistantMessage: voiceCopy(input.language, 'same_title'), clarifyCount: 1 }), {
+      traces,
+      usage: interpreted.usage,
+      blocked: ['same_title_existing'],
+    });
+  }
   const previous = ensureStructured(input.session);
   const prepared = prepareStructuredPreview({
     state: previous,
     group: {
       ...working,
       ...(previous.operations.length && working.proposals.length && !working.previewBoundary
+        ? { previewBoundary: 'extend' as const }
+        : {}),
+      // "And also …": operations on rows and titles the open preview does not touch add to it; a
+      // restatement (same row, or a create with a pending create's title) replaces it (V7, h-04 / h-10).
+      ...(previous.preview?.executionState === 'open' && previous.operations.length && working.proposals.length && working.previewBoundary === 'replace' && additiveToPreview(working, previous)
         ? { previewBoundary: 'extend' as const }
         : {}),
     },
@@ -309,12 +449,21 @@ async function handleGroup(input: TurnInput, group: ProposalGroup, interpreted: 
           : [prepared.code],
       });
     }
+    // The user tried to change the open preview and the change could not be prepared: the question now
+    // outranks a bare yes, so the old preview is not applied by mistake (V7, g-b-22). A tap still can.
+    lockOpenPreview(input.session);
     return done(input, reply(input.session.sessionId, { outcome: 'clarify', assistantMessage: voiceCopy(input.language, blockedCopy(prepared.code)), clarifyCount: 1 }), {
       traces,
       usage: interpreted.usage,
       blocked: [prepared.code],
       preservedLabels: prepared.code === 'unmapped_time' ? prepared.detail.split(',').filter(Boolean) : [],
     });
+  }
+  // Every pending operation was withdrawn by this group (a cancel of the only one): that is a cancel of
+  // the preview, not an empty preview to confirm (V7, g-a-38 / g-b-16).
+  if (!prepared.intents.length && !prepared.state.operations.length && input.session.structured?.preview?.executionState === 'open') {
+    traces.push({ name: 'preview', fields: { ok: true, withdrawn: true } });
+    return handleCancel(input, interpreted, traces);
   }
   const summary = summarize(prepared.intents);
   publishPreview(input.session, prepared.state, prepared.intents, summary);

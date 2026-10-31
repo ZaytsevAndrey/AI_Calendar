@@ -25,6 +25,28 @@ export type ChangePreviewKind =
 
 export type PreviewTaskType = 'fixed' | 'flexible' | 'unscheduled' | 'recurring';
 
+export type PreviewSeriesScope = 'occurrence' | 'series' | 'all';
+
+const SCOPE_LABEL_KEY: Record<PreviewSeriesScope, string> = {
+  occurrence: 'voice.previewScopeOccurrence',
+  series: 'voice.previewScopeSeries',
+  all: 'voice.previewScopeAll',
+};
+
+export function changePreviewScopeLabelKey(scope: PreviewSeriesScope): string {
+  return SCOPE_LABEL_KEY[scope];
+}
+
+/**
+ * The series scope a command states. skip and end_series name one day by their kind; the other
+ * commands carry seriesScope when they act on a repeating task. A one-off has none.
+ */
+function scopeOfCommand(command: { kind: string; seriesScope?: PreviewSeriesScope }): PreviewSeriesScope | undefined {
+  if (command.kind === 'skip') return 'occurrence';
+  if (command.kind === 'end_series') return 'series';
+  return command.seriesScope;
+}
+
 export type ChangePreviewCard = {
   id: string;
   name: string;
@@ -33,6 +55,8 @@ export type ChangePreviewCard = {
   taskType: PreviewTaskType | null;
   /** The task repeats. Independent of `taskType`: a fixed series is fixed + repeats. */
   repeats?: boolean;
+  /** Which part of a repeating task a command touches: one day, this day and following, or the whole series. */
+  scope?: PreviewSeriesScope;
   startIso: string | null;
   endIso: string | null;
   durationMinutes: number | null;
@@ -223,6 +247,24 @@ function cardFromIntent(intent: VoiceWriteIntent, index: number): ChangePreviewC
       color: colorForKind(command.kind === 'remind_delete' ? 'delete' : 'remind'),
     };
   }
+  if (command.kind === 'edit_occurrence') {
+    // WP-B: one day of a series (or this day and following). Completion of the day is a done card; any
+    // other change is an edit of that day. The card shows the new start when there is one, else the day.
+    const kind: ChangePreviewKind = command.status === 'completed' ? 'complete' : 'edit';
+    const scope: PreviewSeriesScope = command.scope === 'following' ? 'series' : 'occurrence';
+    return {
+      id: `command-${index}-${command.taskId}-${kind}-${command.occurrenceStart}`,
+      name: command.name || command.taskName || intent.summary,
+      kind,
+      taskType: null,
+      repeats: true,
+      scope,
+      startIso: command.start ?? command.occurrenceStart,
+      endIso: null,
+      durationMinutes: typeof command.durationMinutes === 'number' && command.durationMinutes > 0 ? command.durationMinutes : null,
+      color: colorForKind(kind),
+    };
+  }
   const kind = kindFromCommand(String(command.kind || ''));
   if (command.kind === 'update') {
     const patch = command.patch;
@@ -234,12 +276,14 @@ function cardFromIntent(intent: VoiceWriteIntent, index: number): ChangePreviewC
       typeof patch.estimatedTimeInMinutes === 'number' && patch.estimatedTimeInMinutes > 0
         ? patch.estimatedTimeInMinutes
         : minutesBetween(startIso, endIso);
+    const scope = scopeOfCommand(command);
     return {
       id: `command-${index}-${command.taskId}-${kind}`,
       name: command.taskName || intent.summary,
       kind,
       taskType: typeFromPatch(patch),
-      ...(patch.isRecurring ? { repeats: true } : {}),
+      ...(patch.isRecurring || scope ? { repeats: true } : {}),
+      ...(scope ? { scope } : {}),
       startIso,
       endIso,
       durationMinutes: duration,
@@ -273,11 +317,13 @@ function cardFromIntent(intent: VoiceWriteIntent, index: number): ChangePreviewC
     intent.summary ||
     kind;
 
+  const scope = scopeOfCommand(command);
   return {
     id: `command-${index}-${String(('taskId' in command && command.taskId) || name)}-${kind}`,
     name,
     kind,
     taskType: null,
+    ...(scope ? { repeats: true, scope } : {}),
     startIso,
     endIso,
     durationMinutes: minutesBetween(startIso, endIso),

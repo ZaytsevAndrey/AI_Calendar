@@ -23,14 +23,14 @@ import { VoiceAgentTools, type VoiceToolContext } from '../../voice-agent.tools'
 import type { PlanItem, VoiceExecutionClaim, VoiceTurnResponse } from '../../voice-agent.types';
 import {
   addDaysToYmd,
-  endOfLocalDayIso,
+  civilDayStartIso,
   localHm,
   localYmd,
-  nextWeekdayYmd,
+  upcomingWeekdayYmd,
   scheduleTodayYmd,
-  startOfLocalDayIso,
 } from '../../voice-local-date.util';
-import { isNoiseOrEmptyTranscript } from '../../voice-stt.util';
+import { isNoiseOrEmptyTranscript, spokenControl } from '../../voice-stt.util';
+import { canConfirm } from '../session/dialogue';
 import { ReadBroker } from '../broker/read-broker';
 import type { ProposalGroup } from '../contracts/proposal';
 import type { SemanticEnvelopeV1 } from '../contracts/types';
@@ -45,7 +45,9 @@ import { appendTurn, intentKey } from '../session/session';
 import { buildCatalog, fingerprint, readResult, reminderRecord, taskRecord } from './catalog';
 import { applyReport, expireUnreported, recordDispatch } from './outcomes';
 import { StructuredVoiceSessions, type SessionEntry } from './session-registry';
+import type { VNextSession } from '../session/session';
 import { TurnLog } from './turn-log';
+import { completionUsd } from '../llm/pricing';
 import { FIND_TASKS_TOOL, findTasks } from '../search/find-tasks';
 import { externalRecord, FIND_EVENTS_TOOL, parseFindEventsArgs } from '../search/find-events';
 import type { ProviderEvent } from '../../../calendar-providers/calendar-provider.types';
@@ -103,6 +105,10 @@ function fixed(output: { group?: ProposalGroup; envelope?: SemanticEnvelopeV1 })
 }
 
 const CONTROL = (control: 'confirm' | 'cancel'): ProposalGroup => ({ version: '1', control, proposals: [], patches: [] });
+
+/** Provider events the model sees without a read: today and the next 13 civil days, refreshed each minute. */
+const EXTERNAL_PRELOAD_DAYS = 14;
+const EXTERNAL_PRELOAD_TTL_MS = 60_000;
 
 @Injectable()
 export class StructuredVoiceService {
@@ -166,14 +172,20 @@ export class StructuredVoiceService {
     }
     const expired = expireUnreported(entry);
     if (expired.length) log.warn('apply.unreported_marked_unknown', { executionIds: expired });
-    const interpreter = this.interpreterFor(actionId, transcript);
-    if (!interpreter) {
+    const chosen = this.interpreterFor(actionId, transcript, entry.session);
+    if (!chosen) {
       log.step('turn.ignored', { reason: actionId ? `client_action:${actionId}` : 'noise_or_empty' });
       return this.finish(log, entry, this.response(entry, { outcome: 'answer', assistantMessage: '' }));
     }
-    if (interpreter !== 'model') log.step('interpreter.ui_action', { actionId, model: false });
+    const interpreter: VNextInterpreter | 'model' = typeof chosen === 'object' && 'control' in chosen ? fixed({ group: CONTROL(chosen.control) }) : chosen;
+    if (typeof chosen === 'object' && 'control' in chosen) log.step('interpreter.spoken_control', { control: chosen.control, model: false });
+    else if (interpreter !== 'model') log.step('interpreter.ui_action', { actionId, model: false });
 
     const ctx = await this.loadContext(userId, dto, log);
+    // Provider events of the coming days are part of what the model can address, like owned tasks:
+    // without them the model created tasks named like an event, or asked which item (V7). They enter
+    // the same `external` map a find_events read fills, so confirm re-reads them the same way.
+    if (interpreter === 'model') await this.preloadExternal(ctx, entry, log);
     log.step('context.ready', {
       timeZone: ctx.timeZone,
       nowIso: ctx.nowIso,
@@ -256,6 +268,8 @@ export class StructuredVoiceService {
       preview: state?.preview ? { executionId: state.preview.executionId, revision: state.preview.previewRevision, state: state.preview.executionState, items: state.preview.items.length } : null,
       operations: state?.operations.map((operation) => `${operation.pendingId}:${operation.action}:${operation.target.kind === 'entity' ? operation.target.entityId : 'new'}`) ?? [],
       fingerprints: Object.keys(state?.entityFingerprints ?? {}),
+      // The open day-plan draft by item name, so a log reader sees what the next turn builds on.
+      draft: entry.session.planDraft ? { day: entry.session.planDraft.day, items: entry.session.planDraft.items.map((item) => item.name) } : null,
     }, state ? { operations: state.operations, dependencies: state.dependencies, fingerprints: state.entityFingerprints } : undefined);
     return this.finish(log, entry, response);
   }
@@ -271,17 +285,25 @@ export class StructuredVoiceService {
       execution: response.execution ?? null,
       openQuestion: Boolean(entry.session.openQuestion),
       ledger: entry.session.applyLedger.map((row) => row.status),
+      usage: log.usage,
     }, { assistantMessage: response.assistantMessage, intents: response.intents });
     return response;
   }
 
-  /** `model` for an utterance, a fixed control for a UI action, or null when there is nothing to do. */
-  private interpreterFor(actionId: string | undefined, transcript: string): VNextInterpreter | 'model' | null {
+  /**
+   * `model` for an utterance, a fixed control for a UI action, or null when there is nothing to do.
+   * While a preview is open and no question is pending, a bare yes or no is the same control as the
+   * Apply or Cancel button (D-10): no model call, nothing interpreted. Anything longer is speech.
+   */
+  private interpreterFor(actionId: string | undefined, transcript: string, session: VNextSession): VNextInterpreter | 'model' | null | { control: 'confirm' | 'cancel' } {
     if (actionId === 'confirm') return fixed({ group: CONTROL('confirm') });
     if (actionId === 'cancel') return fixed({ group: CONTROL('cancel') });
     if (actionId === 'build_plan') {
       return fixed({ envelope: { version: '1', kind: 'day_plan', operations: [], dayPlan: { phase: 'apply' } } });
     }
+    // Before the noise filter: a two-letter "no" is an answer when a preview is waiting for one.
+    const spoken = canConfirm(session) ? spokenControl(transcript) : null;
+    if (spoken) return { control: spoken };
     if (isNoiseOrEmptyTranscript(transcript)) return null;
     return 'model';
   }
@@ -303,6 +325,10 @@ export class StructuredVoiceService {
         const started = Date.now();
         try {
           const text = await this.groq.completeJson(system, user, { role: 'planner', label: `vnext.${kind}` });
+          // What the provider reported for this call: tokens, the model that answered, and its price (VR-24).
+          const measured = this.groq.takeLastCompletion();
+          const usd = measured ? completionUsd(measured.model, measured) : null;
+          log.noteModelCall(measured ? { ...measured, usd } : null);
           log.step('model.call', {
             call: index,
             kind,
@@ -310,8 +336,18 @@ export class StructuredVoiceService {
             systemChars: system.length,
             userChars: user.length,
             outputChars: text.length,
+            model: measured?.model ?? null,
+            tokens: measured?.totalTokens ?? null,
+            promptTokens: measured?.promptTokens ?? null,
+            completionTokens: measured?.completionTokens ?? null,
+            usd,
           }, index === 1 ? `output=${text}` : `user=${user} || output=${text}`);
-          return { text, inputTokens: 0, outputTokens: 0, latencyMs: Date.now() - started };
+          return {
+            text,
+            inputTokens: measured?.promptTokens ?? 0,
+            outputTokens: measured?.completionTokens ?? 0,
+            latencyMs: Date.now() - started,
+          };
         } catch (err) {
           log.warn('model.call', {
             call: index,
@@ -415,7 +451,7 @@ export class StructuredVoiceService {
       sleepHm: ctx.sleepHm,
       scheduleToday: today,
       tomorrow: addDaysToYmd(today, 1),
-      weekdays: WEEKDAYS.map((name, dow) => `${name} ${nextWeekdayYmd(today, dow)}`).join(', '),
+      weekdays: WEEKDAYS.map((name, dow) => `${name} ${upcomingWeekdayYmd(today, dow)}`).join(', '),
       defaultDurationMinutes: ctx.defaultDurationMinutes,
       language: ctx.language,
       owned: [...ctx.catalog, ...entry.external.values()]
@@ -426,11 +462,24 @@ export class StructuredVoiceService {
           name: row.name,
           status: row.status,
           start: row.scheduledStart ? `${localYmd(row.scheduledStart, ctx.timeZone)} ${localHm(row.scheduledStart, ctx.timeZone)}` : null,
+          // A series shows its coming days, so "Monday's gym" is a day the model can name (V7, en-d-03).
+          ...(row.recurring && row.occurrences?.length
+            ? { days: row.occurrences.slice(0, 6).map((occurrence) => `${localYmd(occurrence.start, ctx.timeZone)} ${localHm(occurrence.start, ctx.timeZone)}`) }
+            : {}),
+          ...(row.type === 'task' && row.unscheduled ? { later: true } : {}),
           ...(row.type === 'external_event' && !row.writable ? { access: 'read-only' } : {}),
         })),
       openQuestion: session.openQuestion,
       pending: open,
       pendingSummary: open ? session.pendingSummary : null,
+      // The open preview's operations, by the id a correction must target (operation_result + opId).
+      pendingOperations: open
+        ? (session.structured?.operations ?? []).map((operation) => ({
+          opId: operation.pendingId,
+          action: operation.action,
+          constraints: operation.constraints.map(({ constraintId: _id, ...rest }) => rest),
+        }))
+        : [],
       // Built before the turn appends this utterance, so every stored turn is history.
       history: session.turns,
       draft: session.planDraft
@@ -463,7 +512,8 @@ export class StructuredVoiceService {
   private async findEvents(ctx: Context, entry: SessionEntry, raw: Record<string, unknown>, onExternal: (records: EntityRecord[]) => void): Promise<unknown> {
     const parsed = parseFindEventsArgs(raw);
     if (!parsed.ok) return { error: parsed.error };
-    const events = await this.externalBusy.listVisibleEvents(ctx.userId, startOfLocalDayIso(parsed.args.from, ctx.timeZone), endOfLocalDayIso(parsed.args.to, ctx.timeZone));
+    // Civil days, half-open: [from 00:00, the day after `to` 00:00), each with its own midnight offset (VC-11 / AUD-014).
+    const events = await this.externalBusy.listVisibleEvents(ctx.userId, civilDayStartIso(parsed.args.from, ctx.timeZone), civilDayStartIso(addDaysToYmd(parsed.args.to, 1), ctx.timeZone));
     const needle = parsed.args.nameContains?.toLocaleLowerCase();
     const records = this.externalRecords(ctx, events).filter((record) => !needle || record.name.toLocaleLowerCase().includes(needle));
     for (const record of records) entry.external.set(record.id, record);
@@ -482,6 +532,26 @@ export class StructuredVoiceService {
     };
   }
 
+  /** Upcoming provider events (today and the next 13 days), once per session per minute. */
+  private async preloadExternal(ctx: Context, entry: SessionEntry, log: TurnLog): Promise<void> {
+    const today = localYmd(ctx.nowIso, ctx.timeZone);
+    const key = `${today}:${ctx.timeZone}`;
+    const now = Date.now();
+    if (entry.externalLoaded && entry.externalLoaded.key === key && now - entry.externalLoaded.at < EXTERNAL_PRELOAD_TTL_MS) return;
+    try {
+      const events = await log.timed(
+        'provider.preload',
+        () => this.externalBusy.listVisibleEvents(ctx.userId, civilDayStartIso(today, ctx.timeZone), civilDayStartIso(addDaysToYmd(today, EXTERNAL_PRELOAD_DAYS), ctx.timeZone)),
+        (rows) => ({ fields: { events: rows.length, days: EXTERNAL_PRELOAD_DAYS } }),
+      );
+      for (const record of this.externalRecords(ctx, events)) entry.external.set(record.id, record);
+      entry.externalLoaded = { key, at: now };
+    } catch (err) {
+      // A provider that cannot be reached leaves the list as it was; the turn goes on without it.
+      log.warn('provider.preload', { ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
   private externalRecords(ctx: Context, events: ProviderEvent[]): EntityRecord[] {
     // A Luefy task's own calendar event is reached through the task, not as a second object.
     const synced = new Set<string>();
@@ -495,7 +565,7 @@ export class StructuredVoiceService {
   /** Re-read one provider event on the day it was seen. Moved off that day reads as gone, which fails closed. */
   private async rereadEvent(ctx: Context, entry: SessionEntry, seen: EntityRecord) {
     const day = seen.scheduledStart ? localYmd(seen.scheduledStart, ctx.timeZone) : localYmd(ctx.nowIso, ctx.timeZone);
-    const events = await this.externalBusy.listVisibleEvents(ctx.userId, startOfLocalDayIso(day, ctx.timeZone), endOfLocalDayIso(day, ctx.timeZone));
+    const events = await this.externalBusy.listVisibleEvents(ctx.userId, civilDayStartIso(day, ctx.timeZone), civilDayStartIso(addDaysToYmd(day, 1), ctx.timeZone));
     const fresh = this.externalRecords(ctx, events).find((record) => record.id === seen.id);
     if (!fresh) return { exists: false };
     entry.external.set(fresh.id, fresh);

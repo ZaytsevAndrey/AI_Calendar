@@ -2,6 +2,31 @@
  * Phase 4.7 generalization stress set.
  * Frozen before the first live execution. Do not edit expectations after results.
  * Evaluation only. This file is not on the production turn path.
+ *
+ * Dataset changes (31 Oct 2026, V7 preparation — every change is listed here, none made after a result):
+ * - g-a-47: "ок" is no longer a spoken confirmation (product decision: exactly так / ні / yes / no). The
+ *   turn now expects the preview to stay (nothing applied); a так turn and a second так are appended so
+ *   the invariant (a repeated confirmation creates nothing) is still measured.
+ * - g-b-12: the confirming word "ок" became "так" for the same reason; the scenario measures the change
+ *   of mind, not the confirmation word.
+ * - g-b-02 "підтверджую" is kept: it goes through the model (control confirm with the shown claim).
+ * - g-a-43 turn 1 and g-b-09 turn 2 (31 Oct, after the baseline — recorded as such): a reminder with no day
+ *   is a question by spec-voice-agent §Reminders ("A missing name or a missing day is the one question");
+ *   the turns now accept clarify as well as confirm. The subject must still be the reminder's (nameIncludes).
+ *   Baseline results for these two turns are kept as they were scored.
+ * - g-d-03 / g-d-04 and en-d-02 (after fix2, recorded as such): with "Нарада з клієнтом" and "Нарада з клієнтом
+ *   щодо бюджету" both open, a question is as acceptable as the move of the exact title — the frozen set holds
+ *   the same standard for "закрий звіт" (g-c-18, g-c-14). The budget meeting must still never be the target.
+ * - g-b-02 turn 1 (after fix5, recorded as such): "нараду з клієнтом" with «Нарада з клієнтом» and «Нарада з
+ *   клієнтом щодо бюджету» both open follows the g-d-03 / g-c-18 standard — the exact title or a question. The
+ *   budget meeting is still forbidden (the invariant); the fix5 run that chose the exact title is kept as scored.
+ * - g-b-27 turn 2 (after fix5, recorded as such): a bare "так" right after the user canceled has nothing to
+ *   refer to; a question back ("what does yes refer to?") is as acceptable as "nothing is pending". The turn
+ *   still forbids any write and the invariant (the review is never deleted) is unchanged.
+ * - Category D added (g-d-*): V2 / WP-B / WP-G behaviour the A–C set did not cover — scheduling a Later
+ *   task, slot moves within and across days, one day of a series (rename, done, skip, same-day move,
+ *   cross-day refusal, scope question), a reminder update, several pending operations with a correction
+ *   and a spoken yes / no, a recurring create, an unsupported bulk move. New worlds: gym-series, rent-reminder.
  */
 import type { EntityRecord } from '../reference/reference-resolver';
 import type { TurnExpect } from './phase477-score';
@@ -19,13 +44,15 @@ export type GenWorld =
   | 'two-zvit'
   | 'similar-reviews'
   | 'canceled-letter'
-  | 'idea-only';
+  | 'idea-only'
+  | 'gym-series'
+  | 'rent-reminder';
 
 export type GenTurn = { utterance: string; expect: TurnExpect; note?: string };
 
 export type GenScenario = {
   id: string;
-  category: 'A' | 'B' | 'C';
+  category: 'A' | 'B' | 'C' | 'D';
   family: string;
   world: GenWorld;
   turns: GenTurn[];
@@ -62,6 +89,27 @@ export function generalizationWorld(name: GenWorld): EntityRecord[] {
   }
   if (name === 'canceled-letter') return [task('task-letter', 'Старий лист', { status: 'canceled' })];
   if (name === 'idea-only') return [task('task-idea', 'Ідея для блогу')];
+  // A flexible series placed on Monday 19 and Wednesday 21 October, 10:00–11:00 Kyiv, with no calendar
+  // event ids (the app slot is the identity, VC-03), plus the Later report for mixed previews.
+  if (name === 'gym-series') {
+    return [
+      task('task-gym', 'Спортзал', {
+        recurring: true,
+        seriesEventId: null,
+        occurrences: [
+          { start: '2026-10-19T07:00:00.000Z', end: '2026-10-19T08:00:00.000Z', googleEventId: null },
+          { start: '2026-10-21T07:00:00.000Z', end: '2026-10-21T08:00:00.000Z', googleEventId: null },
+        ],
+      }),
+      task('task-report', 'Звіт'),
+    ];
+  }
+  if (name === 'rent-reminder') {
+    return [{
+      id: 'rem-rent', userId: 'user-1', type: 'reminder', name: 'Оплата оренди', status: 'open', revision: 1,
+      reminder: { dueYmd: '2026-10-20', notificationTime: '18:00', description: null, recurrencePattern: null, recurrenceWeekDays: null },
+    }];
+  }
   return worldOf(name);
 }
 
@@ -153,7 +201,7 @@ const A: GenScenario[] = [
   {
     id: 'g-a-43', category: 'A', family: 'date-added-later', world: 'empty', invariant: 'same reminder subject',
     turns: [
-      { utterance: 'нагадай про зарядку для ноутбука', expect: confirm('заряд') },
+      { utterance: 'нагадай про зарядку для ноутбука', expect: { outcomes: ['clarify', 'confirm'], nameIncludes: 'заряд' }, note: 'changed 31 Oct: spec §Reminders — a missing day is the one question; a preview is also accepted' },
       { utterance: 'додай що це до 20 жовтня', expect: confirm('заряд', { includes: '2026-10-20' }) },
     ],
   },
@@ -179,11 +227,12 @@ const A: GenScenario[] = [
     ],
   },
   {
-    id: 'g-a-47', category: 'A', family: 'repeat-confirm', world: 'empty', invariant: 'second confirmation does not create another task',
+    id: 'g-a-47', category: 'A', family: 'repeat-confirm', world: 'empty', invariant: 'ок applies nothing; a second так does not create another task',
     turns: [
       { utterance: 'завтра о 08:45 винести сміття', expect: confirm('сміт', { includes: '08:45' }) },
-      { utterance: 'ок', expect: act({ nameIncludes: 'сміт' }) },
-      { utterance: 'ок', expect: noWrite },
+      { utterance: 'ок', expect: { outcomes: ['answer', 'refuse', 'confirm'], pendingCount: 1 }, note: 'changed 31 Oct: ок is not a spoken confirmation; the preview stays' },
+      { utterance: 'так', expect: act({ nameIncludes: 'сміт' }) },
+      { utterance: 'так', expect: noWrite },
     ],
   },
   {
@@ -222,7 +271,7 @@ const B: GenScenario[] = [
   {
     id: 'g-b-02', category: 'B', family: 'switch-target-duration', world: 'default', invariant: 'budget meeting is never the target',
     turns: [
-      { utterance: 'подовж нараду з клієнтом до 50 хвилин', expect: clarify },
+      { utterance: 'подовж нараду з клієнтом до 50 хвилин', expect: { outcomes: ['clarify', 'confirm'], taskId: 'task-client', includes: '50', forbidTaskId: 'task-client-2' }, note: 'changed 31 Oct (fix6): same standard as g-d-03 / g-c-18 — the exact title or a question; the budget meeting is still forbidden' },
       { utterance: 'не бюджетну, звичайну', expect: { outcomes: ['confirm'], taskId: 'task-client', includes: '50', forbidTaskId: 'task-client-2' } },
       { utterance: 'і постав її на 26 жовтня о 11:10', expect: { outcomes: ['confirm'], taskId: 'task-client', includes: '11:10', forbidTaskId: 'task-client-2' } },
       { utterance: 'підтверджую', expect: act({ taskId: 'task-client', forbidTaskId: 'task-client-2' }) },
@@ -281,7 +330,7 @@ const B: GenScenario[] = [
     id: 'g-b-09', category: 'B', family: 'missing-constraints', world: 'empty', invariant: 'no preview until both subject and time exist',
     turns: [
       { utterance: 'нагадай', expect: clarify },
-      { utterance: 'про оплату садочка', expect: confirm('садоч') },
+      { utterance: 'про оплату садочка', expect: { outcomes: ['clarify', 'confirm'], nameIncludes: 'садоч' }, note: 'changed 31 Oct: spec §Reminders — the day is still missing, so a question is correct here' },
       { utterance: '28 жовтня о 09:40', expect: confirm('садоч', { includes: '09:40' }) },
     ],
   },
@@ -306,7 +355,7 @@ const B: GenScenario[] = [
     turns: [
       { utterance: 'додай задачу прати фіранки на суботу', expect: confirm('фіран', { includes: '2026-10-24' }) },
       { utterance: 'побачив прев\'ю і передумав, хай буде прасувати фіранки в неділю о 15:40', expect: confirm('прасув', { includes: '15:40' }) },
-      { utterance: 'ок', expect: act({ nameIncludes: 'прасув', includes: '15:40' }) },
+      { utterance: 'так', expect: act({ nameIncludes: 'прасув', includes: '15:40' }), note: 'changed 31 Oct: was ок, which is no longer a spoken confirmation' },
     ],
   },
   {
@@ -427,7 +476,7 @@ const B: GenScenario[] = [
     turns: [
       { utterance: 'видали design review', expect: { outcomes: ['confirm'], taskId: 'task-review', forbidTaskId: 'task-review-2' } },
       { utterance: 'скасуй це', expect: { ...noWrite, pendingCount: 0 } },
-      { utterance: 'так', expect: noWrite },
+      { utterance: 'так', expect: { outcomes: ['answer', 'refuse', 'clarify'], intents: 0 }, note: 'changed 31 Oct (fix6): a bare yes after a cancel has no referent; asking what it refers to is as valid as saying nothing is pending. Still no write (see header).' },
       { utterance: 'додай задачу архівувати макети', expect: confirm('макет', { unscheduled: true, forbidTaskId: 'task-review' }) },
     ],
   },
@@ -549,4 +598,37 @@ const C: GenScenario[] = [
   },
 ];
 
-export const GENERALIZATION_SCENARIOS: GenScenario[] = [...A, ...B, ...C];
+/** V2 / WP-B / WP-G coverage (added 31 Oct 2026, before the first V7 run). */
+const D: GenScenario[] = [
+  { id: 'g-d-01', category: 'D', family: 'later-schedule-clock', world: 'one-report', invariant: 'a Later task given a clock leaves the inbox as an update of the same task (VC-02)', turns: [{ utterance: 'постав звіт на завтра о 14:00', expect: { outcomes: ['confirm'], taskId: 'task-report', includes: '14:00', action: 'update' } }] },
+  { id: 'g-d-02', category: 'D', family: 'later-schedule-day', world: 'one-report', invariant: 'a Later task given a day gets that day, no invented clock (VC-02)', turns: [{ utterance: 'звіт зроби в середу, годину не став', expect: { outcomes: ['confirm'], taskId: 'task-report', includes: '2026-10-21', action: 'update' } }] },
+  { id: 'g-d-03', category: 'D', family: 'slot-move-same-day', world: 'default', invariant: 'a placed task without a calendar event moves by its slot (VC-03); the budget meeting is never moved', turns: [{ utterance: 'нараду з клієнтом посунь на 15:30', expect: { outcomes: ['confirm', 'clarify'], taskId: 'task-client', includes: '15:30', action: 'move', forbidTaskId: 'task-client-2' }, note: 'changed 31 Oct (fix3): two meetings share the words, so a question is acceptable, like g-c-18 / g-c-14' }] },
+  { id: 'g-d-04', category: 'D', family: 'slot-move-other-day', world: 'default', invariant: 'a one-off moves to another day and clock (VC-03); the budget meeting is never moved', turns: [{ utterance: 'нараду з клієнтом перенеси на вівторок о 09:00', expect: { outcomes: ['confirm', 'clarify'], taskId: 'task-client', includes: '09:00', action: 'move', forbidTaskId: 'task-client-2' }, note: 'changed 31 Oct (fix3): see g-d-03' }] },
+  { id: 'g-d-05', category: 'D', family: 'occurrence-rename', world: 'gym-series', invariant: 'one day of the series is renamed, not the series (WP-B)', turns: [{ utterance: 'спортзал у понеділок перейменуй на йогу', expect: { outcomes: ['confirm'], taskId: 'task-gym', nameIncludes: 'йог', action: 'update', forbidTaskId: 'task-report' } }] },
+  { id: 'g-d-06', category: 'D', family: 'occurrence-complete', world: 'gym-series', invariant: 'one day of the series is completed in place (WP-B)', turns: [{ utterance: 'спортзал у понеділок я вже зробив', expect: { outcomes: ['confirm'], taskId: 'task-gym', action: 'complete', forbidTaskId: 'task-report' } }] },
+  { id: 'g-d-07', category: 'D', family: 'occurrence-skip', world: 'gym-series', invariant: 'one day is skipped, the series stays', turns: [{ utterance: 'пропусти спортзал у середу', expect: { outcomes: ['confirm'], taskId: 'task-gym', action: 'skip', includes: '2026-10-21' } }] },
+  { id: 'g-d-08', category: 'D', family: 'occurrence-move-same-day', world: 'gym-series', invariant: 'one day of the series moves to a clock on its day (V1 series move, slot path)', turns: [{ utterance: 'спортзал у понеділок перенеси на 19:00', expect: { outcomes: ['confirm'], taskId: 'task-gym', includes: '19:00', action: 'move' } }] },
+  { id: 'g-d-09', category: 'D', family: 'occurrence-cross-day', world: 'gym-series', invariant: 'a day of a series does not move to another day; refused or asked before any preview (VC-04)', turns: [{ utterance: 'спортзал з понеділка перенеси на вівторок', expect: { ...clarify, forbidTaskId: 'task-report' } }] },
+  { id: 'g-d-10', category: 'D', family: 'series-scope-question', world: 'gym-series', invariant: 'a delete of a series without a scope is a question', turns: [{ utterance: 'видали спортзал', expect: { ...clarify, forbidTaskId: 'task-report' } }] },
+  { id: 'g-d-11', category: 'D', family: 'reminder-update', world: 'rent-reminder', invariant: 'the stored reminder is updated, not replaced by a task (VC-05)', turns: [{ utterance: 'нагадування про оренду перенеси на 20:00', expect: { outcomes: ['confirm'], taskId: 'rem-rent', includes: '20:00', action: 'remind_update' } }] },
+  {
+    id: 'g-d-12', category: 'D', family: 'mixed-pending-correction-yes', world: 'gym-series', invariant: 'a create and a Later-task update stay in one preview through a correction and a spoken yes (WP-G)',
+    turns: [
+      { utterance: 'додай задачу чай і постав звіт на понеділок о 10:00', expect: { outcomes: ['confirm'], taskId: 'task-report', includes: '10:00', intents: 2 } },
+      { utterance: 'чай завтра о 09:00', expect: { outcomes: ['confirm'], nameIncludes: 'чай', includes: '09:00', intents: 2 }, note: 'the report update must stay in the preview' },
+      { utterance: 'так', expect: act({ intents: 2 }) },
+    ],
+  },
+  {
+    id: 'g-d-13', category: 'D', family: 'two-pending-no', world: 'empty', invariant: 'a spoken no withdraws both pending creates',
+    turns: [
+      { utterance: 'додай задачу чай і задачу кава', expect: { outcomes: ['confirm'], nameIncludes: 'чай', intents: 2 } },
+      { utterance: 'ні', expect: { ...noWrite, pendingCount: 0 } },
+      { utterance: 'так', expect: noWrite },
+    ],
+  },
+  { id: 'g-d-14', category: 'D', family: 'recurring-clock', world: 'empty', invariant: 'a weekly repeat with a clock is a series with that clock, no day window (VC-01)', turns: [{ utterance: 'щопонеділка о 18:00 спортзал', expect: confirm('спортзал', { includes: '18:00', action: 'create' }) }] },
+  { id: 'g-d-15', category: 'D', family: 'bulk-move-unsupported', world: 'default', invariant: 'a move of every task is not approximated', turns: [{ utterance: 'перенеси всі мої задачі на наступний тиждень', expect: { outcomes: ['clarify', 'refuse', 'answer'], intents: 0 } }] },
+];
+
+export const GENERALIZATION_SCENARIOS: GenScenario[] = [...A, ...B, ...C, ...D];

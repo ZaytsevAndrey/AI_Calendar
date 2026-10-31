@@ -1,0 +1,207 @@
+[
+  {
+    "id": "he-09",
+    "category": "H",
+    "family": "drop-then-change-mind",
+    "language": "en",
+    "invariant": "tea is never lost; coffee comes back",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "add tea and coffee tomorrow at 10",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "tea",
+          "intents": 2,
+          "includes": "10:00"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "tea and coffee",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "tea and coffee",
+            "task": {
+              "name": "tea and coffee",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T07:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T07:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_missing_constraint",
+          "detail": "model_missing_constraint: outcome confirm, blocked -"
+        },
+        "errorClass": "model_missing_constraint",
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "drop the coffee",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "tea",
+          "intents": 1
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "tea",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "tea",
+            "task": {
+              "name": "tea",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T07:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T07:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "actually keep the coffee too, at 11",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "coffee",
+          "intents": 2,
+          "includes": "11:00"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "tea coffee",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "tea",
+            "task": {
+              "name": "tea",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T07:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T07:30:00.000Z"
+            }
+          },
+          {
+            "type": "create",
+            "summary": "coffee",
+            "task": {
+              "name": "coffee",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T08:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T08:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 3,
+        "utterance": "yes",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "intents": 2
+        },
+        "outcome": "act",
+        "blocked": [],
+        "assistantMessage": "Applying: tea coffee",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "tea",
+            "task": {
+              "name": "tea",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T07:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T07:30:00.000Z"
+            }
+          },
+          {
+            "type": "create",
+            "summary": "coffee",
+            "task": {
+              "name": "coffee",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T08:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T08:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      }
+    ]
+  }
+]

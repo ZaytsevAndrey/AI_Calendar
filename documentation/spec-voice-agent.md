@@ -2,7 +2,7 @@
 
 **Status:** the only product contract for Companion.  
 **Language:** English  
-**Last updated:** 29 October 2026
+**Last updated:** 31 October 2026
 
 Companion (Ukrainian: Помічник) talks with the user and returns write intents. The server does not change the calendar. The client applies intents through the existing task, habit, and placement APIs. Placement and conflict stay in [spec-conflict-rules.md](spec-conflict-rules.md) and [spec-incremental-placement.md](spec-incremental-placement.md). The screen is [features/companion-panel.md](features/companion-panel.md). HTTP fields are in [api-reference.md](api-reference.md).
 
@@ -24,7 +24,7 @@ Other voice files do not add product rules. [spec-voice-commander.md](spec-voice
 | `act` | The client runs `intents[]`. |
 | `refuse` | The agent cannot do this. |
 
-Every write waits for Apply or a spoken yes. Spoken yes and `confirm` are the same. Spoken no and `cancel` are the same. After a successful write the panel stays open.
+Every write waits for Apply or a spoken yes. Spoken yes and `confirm` are the same. Spoken no and `cancel` are the same. While a preview is open and no question is pending, a bare yes or no — exactly `так`, `ні`, `yes` or `no`, with nothing else said — is that button; `ok`, `добре` and other fillers are speech for the model and never apply a write on their own: the server resolves it without a model call (D-10). Anything longer is speech for the model. A correction of the open preview keeps it open; a reply the server cannot read keeps the preview on screen unchanged. After a successful write the panel stays open.
 
 The preview names a stored task or event by its stored title, not by the words of the transcript: `Delete «Report»`, `Rename «A» to «B»`, `Move «Report» to 2026-10-30 18:00`. After a spoken yes the reply starts with `Applying:` and repeats those lines.
 
@@ -60,7 +60,10 @@ An open clarification batch is not that queue. A new command does not answer the
 
 ---
 
-## 3. How a turn is split
+## 3. How a turn is split (legacy engine only)
+
+> **Legacy.** This section describes the planner / router / specialist split of the legacy engine, which runs only with `VOICE_TURN_ENGINE=legacy` (frozen rollback, decision D-01). The structured engine on `/voice/turn` has no segments, router or specialists: the model returns one structured proposal, the server resolves it against the user's records and builds the preview ([voice-agent-roadmap.md](voice-agent-roadmap.md) §A). The product rules in §1, §2 and §4–§10 apply to both engines.
+
 
 One planner call, then each write goes through the router and one specialist. That call is `buildPlannerSystemPrompt`. Experimental Planner C2 is a separate prompt and `/voice/turn` does not call it. The planner does not choose the action. The router chooses `create`, `update`, `delete`, `skip`, or `needs_clarification`. Time, other fields, and done on one existing task are one `update`. The specialist fills only that intent's fields.
 
@@ -119,7 +122,7 @@ The spoken title is the same as an Open task title: that task. A bare pronoun wi
 
 A new errand they asked to add is created as they said, even when an open task is similar.
 
-A repeating Open task needs a scope. One day they already named, including today, is that occurrence. This day and following is the series from that day. The whole series is all. They did not say which: ask, and do not delete or edit yet. A name, priority, phase, or description change is the whole series. One day of those fields does not exist.
+A repeating Open task needs a scope. One day they already named, including today, is that occurrence. This day and following is the series from that day. The whole series is all. They did not say which: ask, and do not delete or edit yet. A name, notes, clock or length change on one day, or from a day on, changes only that part of the series (the app's occurrence editor; WP-B); a priority, phase or window change is the whole series. One day of a series stays on its day: a move to another day is refused, not approximated. Done on one day marks that day done in place; done from a day on is refused. A series some of whose days were changed or parked separately refuses a series-wide rename, delete or end and says why; one day at a time still works (D-03).
 
 A bound is a time field on that same update. "By" or "until" a day or a part of day is the deadline. "Not before" or "after" a clock is the earliest start. The word "deadline" is not required. A day and no clock is that day's Sleep.
 
@@ -129,7 +132,7 @@ One existing task. Fields, where it sits in time, and whether it is done are one
 
 Rename keeps the old title as the target and stores the new title beside it. A length is the duration only when they said how long the task takes. A window is not a length. Priority is set only when they said it. Clearing the time clears start, end, earliest, and deadline.
 
-Do now is the start at the current clock. A start and an end are that window. A day and no clock is Wake to Sleep that day. A clock that is already past, with no day, is a question when. A clock and no end keeps the current duration. Morning is wake plus three hours. No day and no clock, when they asked to place the task: ask when. A move to a day, a window, or after another task, with no clock, sets that window on a flexible task, and placement re-seats it. A fixed task needs a clock: ask which.
+Do now is the start at the current clock. A start and an end are that window. A day and no clock is Wake to Sleep that day. A clock that is already past, with no day, is a question when. A clock and no end keeps the current duration. Morning is wake plus three hours. No day and no clock, when they asked to place the task: ask when. A move to a day, a window, or after another task, with no clock, sets that window on a flexible task, and placement re-seats it. A fixed task needs a clock: ask which. A Later task given a day, a window or a clock leaves the Later list and is seated there. A fixed task given only a day keeps its clock and length on that day; given only a start keeps its length.
 
 Done on a one-off sets status completed. Done on a series uses the scope above: one occurrence, from this day on, or the whole series. A name that is not an open task, said as close or finish, is a new errand. A time change with no other field still seats the task. A time change together with another field is the same update.
 
@@ -139,7 +142,7 @@ Removes the task. It does not ask "are you sure". The app asks before it writes.
 
 ### Skip
 
-Drops the next open occurrence, or the one happening now. Another day is a question: skip only drops the next open time. The whole series is a question: skip is this occurrence only. An Unscheduled task is cancelled, not deleted. A fixed event cannot be skipped: the app refuses.
+Drops the next open occurrence, or the one happening now. Another day is a question: skip only drops the next open time. The whole series is a question: skip is this occurrence only. A one-off flexible task with a slot is skipped like one day of a series. An Unscheduled task has nothing to skip: the app refuses. A fixed event cannot be skipped: the app refuses.
 
 ### Calendar events
 
@@ -177,6 +180,9 @@ In the structured engine, one request may depend on a task it creates:
 ---
 
 ## 8. Fast create
+
+> **Hidden since 30 Oct 2026 (D-05).** The structured engine accepts `mode` and does not act on it yet (VR-30), so the switch is behind `FAST_CREATE_AVAILABLE` (false) in `frontend/src/modules/voice/companionMode.ts` and every turn runs as the assistant. The rules below describe the mode as it will behave when the flag returns.
+
 
 `mode` is `assistant` or `fast_create`. The panel switch stores it in `localStorage`.
 
@@ -224,6 +230,9 @@ Phone is a bottom sheet. Desktop is a floating panel. The thread shows the user 
 ---
 
 ## 11. API
+
+> The read tools listed below (`get_now_next`, `get_day_agenda`, `match_task`, …) are the legacy engine's. The structured engine reads through `find_tasks` (open tasks by day, range, title substring, calendar, or Later state; every row reports `state`: `later`, `parked`, `scheduled`, `unplaced`) and `find_events` (provider events over whole civil days). `POST /voice/parse-task` has no caller in the app; it serves the legacy engine and the Playwright voice specs until §49 removes it.
+
 
 `POST /voice/turn`
 

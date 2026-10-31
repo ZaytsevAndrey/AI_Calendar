@@ -264,6 +264,7 @@ function taskFacts(task: TaskDTO, event: GoogleCalendarEvent): PreviewFact[] {
   if (!phases.length && task.phase?.name) phases.push(task.phase.name);
   push('phase', 'phase', phases.join(', '));
   push('taskStatus', 'taskStatus', task.status);
+  if (task.status === 'completed') push('completedAt', 'completedAt', task.completedAt);
   push('priority', 'priority', task.priority);
   if (task.estimatedTimeInMinutes > 0) {
     push('duration', 'duration', String(task.estimatedTimeInMinutes));
@@ -285,6 +286,10 @@ function taskFacts(task: TaskDTO, event: GoogleCalendarEvent): PreviewFact[] {
   }
   if (task.skippedOccurrenceYmds?.length) {
     push('skippedDays', 'skippedDays', task.skippedOccurrenceYmds.join(', '));
+  }
+  // A changed day of a series: still that day's occurrence, edited on its own.
+  if (!task.isRecurring && task.originalOccurrenceYmd && (task.seriesGroupId || task.parentSeriesId)) {
+    push('occurrenceOf', 'occurrenceOf', task.originalOccurrenceYmd);
   }
   if (task.allowSplit) push('allowSplit', 'allowSplit', 'yes');
   if (task.isFixedExternal) push('fixedExternal', 'fixedExternal', 'yes');

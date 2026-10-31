@@ -20,13 +20,19 @@ test.describe('P1 tasks UI', () => {
       timeZone: 'Europe/Kyiv',
     });
   });
-  test('U-TSK-011 uncheck Fixed restores Allow split', async ({ page, auth }) => {
+  test('U-TSK-011 switching Flexible ↔ Fixed keeps the repeat rule; Later drops it', async ({ page, auth }) => {
     await openAs(page, auth.onboarded, '/tasks');
     const dialog = await openCreateTaskDialog(page);
-    await dialog.getByRole('button', { name: 'Fixed' }).click();
-    await expect(dialog.getByLabel('Allow split')).toHaveCount(0);
-    await dialog.getByLabel('Fixed time').uncheck();
-    await expect(dialog.getByLabel('Allow split')).toBeChecked();
+    const repeat = dialog.locator('#task-form-recurrence');
+    await repeat.selectOption('MONTHLY');
+    await dialog.getByRole('button', { name: 'Fixed', exact: true }).click();
+    await expect(repeat).toHaveValue('MONTHLY');
+    await dialog.getByRole('button', { name: 'Flexible', exact: true }).click();
+    await expect(repeat).toHaveValue('MONTHLY');
+    await dialog.getByRole('button', { name: 'Later', exact: true }).click();
+    await expect(repeat).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Flexible', exact: true }).click();
+    await expect(repeat).toHaveValue('NONE');
   });
 
   test('U-TSK-014 status filter matches scheduled list', async ({ page, auth, request }) => {
@@ -243,8 +249,10 @@ test.describe('P1 tasks UI', () => {
     await expect(
       dialog.locator('#task-form-phase').getByRole('option', { name: 'Any time' }),
     ).toHaveAttribute('aria-selected', 'true');
-    await dialog.locator('#task-form-deadline').fill('');
-    await expect(dialog.locator('#task-form-deadline')).toHaveValue('');
+    // A task with dates opens «Refine» by itself; clearing the range clears Until.
+    await expect(dialog.locator('#task-form-dates')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Clear dates' }).click();
+    await expect(dialog.locator('#task-form-dates')).toContainText('Any dates');
     await dialog.getByRole('button', { name: 'Save changes' }).click();
     await expectMutationProgressToast(page, name);
     expect(patches[0]?.phaseIds).toEqual([]);

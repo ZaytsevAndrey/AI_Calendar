@@ -5,6 +5,7 @@
  * This module does not serialize requests across a process or a network.
  */
 import type { OperationChangesV1, SemanticActionV1 } from '../contracts/types';
+import type { StoredReminderFields } from '../reference/reference-resolver';
 import type {
   EntityOccurrence,
   ExecutionRecord,
@@ -15,6 +16,7 @@ import type {
   PreviewSnapshot,
   ProposalGroup,
   SchedulingState,
+  SemanticOperationProposal,
   SeriesScope,
   TemporalProposal,
 } from '../contracts/proposal';
@@ -29,13 +31,17 @@ export type KnownEntity = {
   googleEventId?: string | null;
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
+  slotId?: string | null;
+  unscheduled?: boolean;
   status?: 'open' | 'completed' | 'canceled';
   recurring?: boolean;
   provider?: 'google' | 'microsoft' | 'apple';
   occurrences?: EntityOccurrence[];
   seriesEventId?: string | null;
+  seriesCopies?: boolean;
   name?: string;
   fixed?: boolean;
+  reminder?: StoredReminderFields;
 };
 
 export type EntityFingerprint = {
@@ -148,12 +154,20 @@ export function applyProposalGroup(input: {
   if (typeof boundary !== 'string') return fail(state, boundary.code, boundary.detail);
 
   const removed = removalSet(current, group, boundary);
+  // A proposal that takes the place of a pending operation withdraws it whatever the boundary (V7): the
+  // user corrected which record the operation applies to, so the old record's operation must not stay.
+  for (const proposal of group.proposals) if (proposal.replaces) removed.add(proposal.replaces.pendingId);
   const surviving = current.operations.filter((operation) => !removed.has(operation.pendingId));
   const patched = planPatches(surviving, group.patches, input.entities);
   if (!patched.ok) return fail(state, patched.code, patched.detail);
-  const drafted = planProposals(group, input.entities, patched.operations);
+  // A correction addressed to a pending command on a stored row folds into that command (V7): the new
+  // day, clock, length or title replaces what it corrects; a different verb replaces the command; a
+  // cancel withdraws it. A correction addressed to a pending create stays a proposal (normalizeDrafts).
+  const folded = foldEntityCorrections(group, patched.operations);
+  if (!folded.ok) return fail(state, folded.code, folded.detail);
+  const drafted = planProposals(folded.group, input.entities, folded.operations);
   if (!drafted.ok) return fail(state, drafted.code, drafted.detail);
-  const linked = linkDependencies(current, group, patched.operations, drafted.proposals, removed);
+  const linked = linkDependencies(current, folded.group, folded.operations, drafted.proposals, removed);
   if (!linked.ok) return fail(state, linked.code, linked.detail);
 
   const forbidden = new Set<string>([
@@ -163,7 +177,7 @@ export function applyProposalGroup(input: {
   const pendingIds = new Map<string, string>();
   for (const proposal of drafted.proposals) pendingIds.set(proposal.localRef, takeId(ids.pendingId, forbidden));
   const operations: PendingOperation[] = [
-    ...patched.operations.map((operation) => sealOperation(operation, ids, forbidden)),
+    ...folded.operations.map((operation) => sealOperation(operation, ids, forbidden)),
     ...drafted.proposals.map((proposal) => sealProposal(proposal, pendingIds.get(proposal.localRef)!, ids, forbidden, pendingIds)),
   ];
   const dependencies = sealDependencies(linked.edges, pendingIds);
@@ -397,6 +411,89 @@ function planPatches(
     });
   }
   return { ok: true, operations: planned };
+}
+
+const CORRECTION_FIELDS = ['title', 'notes', 'priority', 'location', 'status', 'unschedule'] as const;
+
+/** `date` and `weekday` are one day; a part of day stands where a start clock would. */
+function correctionKey(constraint: TemporalProposal): string {
+  if (constraint.kind === 'clock') return `clock:${constraint.role}`;
+  if (constraint.kind === 'date' || constraint.kind === 'weekday') return 'day';
+  if (constraint.kind === 'unresolved') return 'clock:start';
+  return constraint.kind;
+}
+
+function foldEntityCorrections(
+  group: ProposalGroup,
+  operations: PlannedOperation[],
+): { ok: true; group: ProposalGroup; operations: PlannedOperation[] } | { ok: false; code: string; detail: string } {
+  const byId = new Map(operations.map((planned) => [planned.operation.pendingId, planned]));
+  const remaining: SemanticOperationProposal[] = [];
+  const withdrawn = new Set<string>();
+  let next = operations;
+  for (const proposal of group.proposals) {
+    const found = proposal.target.kind === 'pending' ? byId.get(proposal.target.pendingId) : undefined;
+    if (!found || found.operation.target.kind !== 'entity') {
+      remaining.push(proposal);
+      continue;
+    }
+    if (proposal.action === 'cancel' || proposal.action === 'delete') {
+      withdrawn.add(found.operation.pendingId);
+      next = next.filter((planned) => planned.operation.pendingId !== found.operation.pendingId);
+      continue;
+    }
+    if (proposal.action === 'create' || proposal.action === 'remind') return { ok: false, code: 'unsupported_combination', detail: `${proposal.action}:pending_entity` };
+    if (withdrawn.has(found.operation.pendingId)) return { ok: false, code: 'contradictory_draft', detail: found.operation.pendingId };
+    const previous = found.operation;
+    const changes = { ...previous.changes };
+    for (const field of CORRECTION_FIELDS) {
+      if (proposal.changes[field] !== undefined) changes[field] = proposal.changes[field] as never;
+    }
+    if (proposal.changes.reminder) changes.reminder = { ...(previous.changes.reminder ?? { op: 'update' }), ...proposal.changes.reminder } as never;
+    // A day or a clock given after "take the time off" puts the task back on the calendar.
+    if (proposal.constraints.some((constraint) => constraint.kind === 'date' || constraint.kind === 'weekday' || constraint.kind === 'clock' || constraint.kind === 'interval')) delete changes.unschedule;
+    // A new verb that is not a reschedule (done, skip) carries only its own constraints: the day of the
+    // move it replaces is not the day of the completion.
+    const reschedule = proposal.action === 'move' || proposal.action === 'update';
+    let constraints = reschedule ? found.constraints.map((constraint) => ({ ...constraint })) : [];
+    // "Take the time off" after a day or clock was pending: the schedule goes, not into a contradiction.
+    if (proposal.changes.unschedule) constraints = constraints.filter((item) => !['date', 'weekday', 'clock', 'interval', 'all_day', 'day_bound', 'unresolved', 'relative'].includes(item.temporal.kind));
+    for (const constraint of proposal.constraints) {
+      const temporal = withoutLocalRef(constraint);
+      const key = correctionKey(temporal);
+      constraints = constraints.filter((item) => correctionKey(item.temporal) !== key);
+      constraints.push({ constraintId: null, temporal });
+    }
+    const incompatible = incompatibleConstraints(constraints.map((item) => item.temporal));
+    if (incompatible) return { ok: false, code: 'contradictory_constraints', detail: incompatible };
+    // The latest verb wins among update / move; complete replaces either; a scope the correction states wins.
+    const action = proposal.action === 'complete' || proposal.action === 'skip'
+      ? proposal.action
+      : (proposal.action === 'move' || proposal.action === 'update') && (previous.action === 'move' || previous.action === 'update')
+        ? proposal.action
+        : previous.action;
+    const scheduling = proposal.constraints.length ? proposal.scheduling : previous.scheduling;
+    const merged: PlannedOperation = {
+      operation: {
+        ...previous,
+        action,
+        changes,
+        scheduling,
+        ...(proposal.seriesScope ? { seriesScope: proposal.seriesScope } : {}),
+        ...(proposal.occurrenceDate ? { occurrenceDate: proposal.occurrenceDate } : {}),
+        revision: previous.revision + 1,
+      },
+      constraints,
+      changed: true,
+    };
+    next = next.map((planned) => (planned.operation.pendingId === previous.pendingId ? merged : planned));
+    byId.set(previous.pendingId, merged);
+  }
+  if (remaining.length === group.proposals.length) return { ok: true, group, operations };
+  // A proposal that waited on a withdrawn correction has nothing left to wait for.
+  const withdrawnRefs = new Set(group.proposals.filter((proposal) => !remaining.includes(proposal)).map((proposal) => proposal.localRef));
+  const proposals = remaining.map((proposal) => ({ ...proposal, dependsOn: proposal.dependsOn.filter((dependency) => !('localRef' in dependency) || !withdrawnRefs.has(dependency.localRef)) }));
+  return { ok: true, group: { ...group, proposals }, operations: next };
 }
 
 function planProposals(
@@ -656,13 +753,17 @@ function entityReference(entity: KnownEntity): Extract<PendingOperation['target'
     ...(entity.googleEventId != null ? { googleEventId: entity.googleEventId } : {}),
     ...(entity.scheduledStart != null ? { scheduledStart: entity.scheduledStart } : {}),
     ...(entity.scheduledEnd != null ? { scheduledEnd: entity.scheduledEnd } : {}),
+    ...(entity.slotId != null ? { slotId: entity.slotId } : {}),
+    ...(entity.unscheduled ? { unscheduled: true } : {}),
     ...(entity.status ? { status: entity.status } : {}),
     ...(entity.recurring ? { recurring: true } : {}),
     ...(entity.provider ? { provider: entity.provider } : {}),
     ...(entity.occurrences ? { occurrences: entity.occurrences } : {}),
     ...(entity.seriesEventId != null ? { seriesEventId: entity.seriesEventId } : {}),
+    ...(entity.seriesCopies ? { seriesCopies: true } : {}),
     ...(entity.name ? { name: entity.name } : {}),
     ...(entity.fixed ? { fixed: true } : {}),
+    ...(entity.reminder ? { reminder: entity.reminder } : {}),
   };
 }
 

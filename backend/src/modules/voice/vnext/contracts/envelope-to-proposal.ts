@@ -21,6 +21,10 @@ export function envelopeToProposalGroup(envelope: SemanticEnvelopeV1, _clock?: E
     if (envelope.control === 'cancel_pending') {
       return { version: '1', control: 'cancel', proposals: [], patches: [] };
     }
+    // "Wait, not yet": the preview stays as it is, nothing is applied or withdrawn (V7, g-a-46).
+    if (envelope.control === 'answer_pending') {
+      return { version: '1', control: 'pause', proposals: [], patches: [] };
+    }
     return null;
   }
   if (envelope.kind !== 'operations') return null;
@@ -36,11 +40,21 @@ export function envelopeToProposalGroup(envelope: SemanticEnvelopeV1, _clock?: E
   for (const operation of envelope.operations) {
     if (operation.action === 'create' && operation.target.kind === 'new') creates.set(operation.opId, operation);
   }
+  // An operation_result whose opId is not a create of this envelope points at a pending operation
+  // of the open preview (the prompt lists them by that id). It becomes a pending-target proposal
+  // below; the state machine validates the id and folds it into that draft (VR-03 / VR-38).
+  const crossTurn = new Set<string>();
   for (const operation of envelope.operations) {
     if (operation.target.kind !== 'operation_result') continue;
     const baseId = operation.target.opId;
     const base = creates.get(baseId);
-    if (!base || dropped.has(baseId)) return null;
+    if (!base) {
+      if (dropped.has(baseId)) return null;
+      if (!CORRECTION_ACTIONS.has(operation.action)) return null;
+      crossTurn.add(operation.opId);
+      continue;
+    }
+    if (dropped.has(baseId)) return null;
     if (operation.action === 'delete' || operation.action === 'cancel') {
       dropped.add(baseId);
       continue;
@@ -70,26 +84,44 @@ export function envelopeToProposalGroup(envelope: SemanticEnvelopeV1, _clock?: E
   }
   // A reminder about a create the same utterance withdrew has nothing to be about.
   if ([...reminderBase.values()].some((baseId) => dropped.has(baseId))) return null;
+  // Waiting on a cancel or a delete orders nothing: the model writes it to say "after dropping that" (V7, g-b-22).
+  const withdrawals = new Set(envelope.operations.filter((operation) => operation.action === 'cancel' || operation.action === 'delete').map((operation) => operation.opId));
   const proposals: SemanticOperationProposal[] = [];
   for (const operation of envelope.operations) {
     const standalone = reminders.get(operation.opId);
-    if ((operation.target.kind === 'operation_result' && !standalone) || dropped.has(operation.opId)) continue;
-    const mapped = mapOperation(standalone ?? creates.get(operation.opId) ?? operation);
+    if ((operation.target.kind === 'operation_result' && !standalone && !crossTurn.has(operation.opId)) || dropped.has(operation.opId)) continue;
+    const source = standalone ?? creates.get(operation.opId) ?? operation;
+    const mapped = mapOperation(withdrawals.size ? { ...source, dependsOn: source.dependsOn.filter((opId) => !withdrawals.has(opId)) } : source);
     if (!mapped) return null;
     proposals.push(mapped);
   }
+  // A restatement replaces the open preview (extending would keep a corrected item next to its
+  // correction). An envelope made only of corrections that address pending operations by id
+  // extends it instead: the unmentioned operations of the preview are what the user did not
+  // change and must stay (Stage 3: two creates, correct one, the other was lost).
+  const correctionsOnly = crossTurn.size > 0 && proposals.every((proposal) => proposal.target.kind === 'pending');
   return {
     version: '1',
     control: 'none',
-    // A V1 envelope cannot address a pending operation or say "also". A new utterance therefore
-    // replaces the open preview; extending it would keep a corrected item next to its correction.
-    previewBoundary: 'replace',
+    previewBoundary: correctionsOnly ? 'extend' : 'replace',
     proposals,
     patches: [],
   };
 }
 
-function mapOperation(operation: SemanticOperationV1): SemanticOperationProposal | null {
+/**
+ * A stored reminder addressed with a task verb and `changes.reminder` is a reminder operation: the verb
+ * becomes the reminder op (V7, live g-d-11 / en-d-06), so the established `remind` path handles it.
+ */
+function asReminderOperation(operation: SemanticOperationV1): SemanticOperationV1 {
+  const reminder = operation.changes.reminder;
+  if (!reminder || operation.action === 'remind' || operation.action === 'create' || operation.target.kind === 'new') return operation;
+  const op = reminder.op ?? (operation.action === 'delete' || operation.action === 'cancel' ? 'delete' : operation.action === 'complete' ? 'resolve' : 'update');
+  return { ...operation, action: 'remind', changes: { ...operation.changes, reminder: { ...reminder, op } } };
+}
+
+function mapOperation(given: SemanticOperationV1): SemanticOperationProposal | null {
+  const operation = asReminderOperation(given);
   const target = mapTarget(operation);
   if (!target) return null;
   const constraints: ProposalConstraint[] = operation.constraints.map((constraint, index) => ({
@@ -107,7 +139,8 @@ function mapOperation(operation: SemanticOperationV1): SemanticOperationProposal
   return {
     localRef: operation.opId,
     action: operation.action,
-    entityType: operation.action === 'remind' ? 'reminder' : 'task',
+    // A reminder is named by `remind`, or by `changes.reminder` on an update / complete / delete of a stored one (V7).
+    entityType: operation.action === 'remind' || operation.changes.reminder ? 'reminder' : 'task',
     target,
     scheduling: hasSchedule ? 'scheduled' : 'unscheduled',
     changes: { ...operation.changes },
@@ -121,6 +154,7 @@ function mapOperation(operation: SemanticOperationV1): SemanticOperationProposal
     ...(calendarId ? { calendarId } : {}),
     ...(operation.seriesScope ? { seriesScope: operation.seriesScope } : {}),
     ...(operation.occurrence ? { occurrenceDate: operation.occurrence } : {}),
+    ...(operation.replaces ? { replaces: { pendingId: operation.replaces } } : {}),
   };
 }
 
@@ -137,8 +171,17 @@ function mapTarget(operation: SemanticOperationV1): ProposalTarget | null {
     return { kind: 'unresolved', reason: 'ambiguous' };
   }
   if (target.kind === 'unresolved') return { kind: 'unresolved', reason: 'not_found' };
+  if (target.kind === 'operation_result') {
+    // The validator normalises proposedId / id to opId; an envelope that skipped it is read the same way.
+    const loose = target as { opId?: string; proposedId?: string; id?: string };
+    const pendingId = loose.opId ?? loose.proposedId ?? loose.id;
+    return pendingId ? { kind: 'pending', pendingId } : null;
+  }
   return null;
 }
+
+/** Actions that may address a pending operation of the open preview across turns. */
+const CORRECTION_ACTIONS = new Set(['update', 'move', 'complete', 'delete', 'cancel']);
 
 /** Field-for-field. Anything without a proposal equivalent is `unresolved`, which projection refuses to preview. */
 function mapConstraint(constraint: SemanticConstraintV1): TemporalProposal {
@@ -156,6 +199,13 @@ function mapConstraint(constraint: SemanticConstraintV1): TemporalProposal {
     && typeof constraint.amount === 'number' && Number.isInteger(constraint.amount) && constraint.amount > 0 && constraint.unit
   ) {
     return { kind: 'relative', direction: 'after', amount: constraint.amount, unit: constraint.unit };
+  }
+  // "An hour later / earlier" for the task the operation addresses: a delay from its own start (V7, h-05).
+  if (
+    constraint.kind === 'relative_time' && constraint.anchor === 'referenced_task' && (constraint.direction === 'after' || constraint.direction === 'before')
+    && typeof constraint.amount === 'number' && Number.isInteger(constraint.amount) && constraint.amount > 0 && constraint.unit
+  ) {
+    return { kind: 'relative', direction: constraint.direction, amount: constraint.amount, unit: constraint.unit, anchor: 'target' };
   }
   if (constraint.kind === 'duration') return { kind: 'duration', minutes: constraint.minutes };
   if (constraint.kind === 'ordering' && constraint.target.kind === 'existing' && constraint.target.proposedId) {

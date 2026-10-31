@@ -3,13 +3,14 @@ import { useTranslation } from 'react-i18next';
 import {
   useCreateEventMutation,
   useDeleteEventMutation,
+  useEditOccurrenceMutation,
   useEndSeriesFromMutation,
   useSkipOccurrenceMutation,
   useUpdateEventMutation,
 } from 'api/eventTasksApi';
 import { useGetAllPhasesQuery } from 'api/phasesApi';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
-import { CreateTaskDTO, TaskDTO, UpdateTaskDTO } from 'api/tasks.api';
+import { CreateTaskDTO, EditOccurrenceDTO, TaskDTO, UpdateTaskDTO } from 'api/tasks.api';
 import {
   type DayReminderDTO,
   type WriteDayReminderDTO,
@@ -20,6 +21,7 @@ import {
 import { ReminderForm } from 'modules/day-reminders/ReminderForm';
 import { localYmd } from 'utils/ianaDateTime';
 import { formValuesFromCreatePayload } from 'modules/tasks/task-wizard/buildPayload';
+import { taskPatchDiff } from 'modules/tasks/task-wizard/patchDiff';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
 import { SeriesDeleteHost } from 'modules/schedule/components/SeriesDeleteHost';
 import { askSeriesDeleteScope } from 'modules/schedule/seriesDragChoice';
@@ -41,6 +43,9 @@ import { planEditorDelete } from '../planEditorDelete';
 const TaskForm = lazy(
   () => import(/* webpackChunkName: "task-form" */ 'modules/tasks/components/TaskForm'),
 );
+const OccurrenceEditForm = lazy(
+  () => import(/* webpackChunkName: "task-form" */ 'modules/tasks/components/OccurrenceEditForm'),
+);
 
 export type TaskOccurrenceContext = {
   startIso: string;
@@ -58,6 +63,9 @@ export type CreateTaskDefaults = {
 
 export type EditorActionsMode = 'full' | 'editOnly';
 
+/** What an edit of a series instance applies to. Absent = the task as a whole. */
+export type EditScope = 'occurrence' | 'following' | 'series';
+
 export function useEventEditor() {
   const { t } = useTranslation();
   const phone = useIsPhone();
@@ -67,6 +75,7 @@ export function useEventEditor() {
   const [creatingReminder, setCreatingReminder] = useState(false);
   const [occurrence, setOccurrence] = useState<TaskOccurrenceContext | null>(null);
   const [actionsMode, setActionsMode] = useState<EditorActionsMode>('full');
+  const [editScope, setEditScope] = useState<EditScope | null>(null);
   const [createDefaults, setCreateDefaults] = useState<CreateTaskDefaults | undefined>();
   const [formPrefill, setFormPrefill] = useState<ReturnType<typeof formValuesFromCreatePayload> | undefined>();
   const [afterCreate, setAfterCreate] = useState<(() => Promise<void>) | null>(null);
@@ -80,6 +89,7 @@ export function useEventEditor() {
   const timeZone = resolveIanaTimeZone(userSettings?.timeZone);
   const [createEvent, createState] = useCreateEventMutation();
   const [updateEvent, updateState] = useUpdateEventMutation();
+  const [editOccurrence, editOccurrenceState] = useEditOccurrenceMutation();
   const [skipOccurrence] = useSkipOccurrenceMutation();
   const [endSeriesFrom] = useEndSeriesFromMutation();
   const [deleteEvent] = useDeleteEventMutation();
@@ -91,6 +101,7 @@ export function useEventEditor() {
     localSubmitting ||
     createState.isLoading ||
     updateState.isLoading ||
+    editOccurrenceState.isLoading ||
     createReminderState.isLoading ||
     updateReminderState.isLoading;
   const isReminderDeleting = deleteReminderState.isLoading;
@@ -116,6 +127,7 @@ export function useEventEditor() {
     setCreatingReminder(false);
     setOccurrence(null);
     setActionsMode('full');
+    setEditScope(null);
     setCreateDefaults(undefined);
     setFormPrefill(undefined);
     setAfterCreate(null);
@@ -129,6 +141,7 @@ export function useEventEditor() {
     setCreatingReminder(false);
     setOccurrence(null);
     setActionsMode('full');
+    setEditScope(null);
     setCreateDefaults(defaults);
     setFormPrefill(undefined);
     setAfterCreate(null);
@@ -141,6 +154,7 @@ export function useEventEditor() {
     setEditingReminder(reminder);
     setOccurrence(null);
     setActionsMode('full');
+    setEditScope(null);
     setCreateDefaults(undefined);
     setFormPrefill(undefined);
     setAfterCreate(null);
@@ -157,6 +171,7 @@ export function useEventEditor() {
     setCreatingReminder(false);
     setOccurrence(null);
     setActionsMode('full');
+    setEditScope(null);
     setCreateDefaults(undefined);
     setFormPrefill(formValuesFromCreatePayload(payload, timeZone));
     setAfterCreate(() => options?.afterCreate ?? null);
@@ -166,11 +181,17 @@ export function useEventEditor() {
   const openEdit = (
     event: TaskDTO,
     nextOccurrence?: TaskOccurrenceContext,
-    options?: { actionsMode?: EditorActionsMode },
+    options?: { actionsMode?: EditorActionsMode; scope?: EditScope },
   ) => {
+    // A one-day scope needs the day; never fall back to the whole series silently.
+    if (options?.scope && options.scope !== 'series' && !nextOccurrence?.startIso) {
+      showErrorToast({ title: t('tasks.occurrence.noDay') });
+      return;
+    }
     setEditingEvent(event);
     setOccurrence(nextOccurrence ?? null);
     setActionsMode(options?.actionsMode ?? 'full');
+    setEditScope(options?.scope ?? null);
     setCreateDefaults(undefined);
     setFormPrefill(undefined);
     setAfterCreate(null);
@@ -181,6 +202,7 @@ export function useEventEditor() {
     setEditingEvent(event);
     setOccurrence(null);
     setActionsMode('full');
+    setEditScope(null);
     setCreateDefaults({ scheduleIntent: true });
     setFormPrefill(undefined);
     setAfterCreate(null);
@@ -205,7 +227,11 @@ export function useEventEditor() {
     const onCreated = afterCreate;
     setLocalSubmitting(true);
     const request = editing
-      ? updateEvent({ id: editing.id, body: cleanData as UpdateTaskDTO }).unwrap()
+      ? updateEvent({
+          id: editing.id,
+          // Only what changed: unchanged fields must not count as edits.
+          body: taskPatchDiff(editing, cleanData as UpdateTaskDTO),
+        }).unwrap()
       : createEvent({
           ...(cleanData as CreateTaskDTO),
           idempotencyKey: (createKeyRef.current = keyForSubmission(createKeyRef.current, cleanData)).key,
@@ -221,6 +247,7 @@ export function useEventEditor() {
         setEditingEvent(null);
         setOccurrence(null);
         setActionsMode('full');
+        setEditScope(null);
         setCreateDefaults(undefined);
         setFormPrefill(undefined);
         setAfterCreate(null);
@@ -230,6 +257,26 @@ export function useEventEditor() {
         if (!editing) createKeyRef.current = keyAfterFailure(createKeyRef.current, err);
         showErrorToast({
           title: editing ? t('tasks.toast.updateFailed') : t('tasks.toast.createFailed'),
+          detail: extractApiErrorMessage(err),
+        });
+      });
+  };
+
+  /** «Лише цей день» / «Цей і наступні»: one request, the rest of the series untouched. */
+  const submitOccurrence = (body: EditOccurrenceDTO) => {
+    if (isSubmitting || isDeleting || !editingEvent) return;
+    const id = editingEvent.id;
+    setLocalSubmitting(true);
+    void editOccurrence({ id, body })
+      .unwrap()
+      .then(() => {
+        setLocalSubmitting(false);
+        close();
+      })
+      .catch((err) => {
+        setLocalSubmitting(false);
+        showErrorToast({
+          title: t('tasks.toast.updateFailed'),
           detail: extractApiErrorMessage(err),
         });
       });
@@ -293,6 +340,7 @@ export function useEventEditor() {
       setEditingEvent(null);
       setOccurrence(null);
       setActionsMode('full');
+      setEditScope(null);
       setCreateDefaults(undefined);
       setFormPrefill(undefined);
       setAfterCreate(null);
@@ -347,6 +395,7 @@ export function useEventEditor() {
           setEditingEvent(null);
           setOccurrence(null);
           setActionsMode('full');
+          setEditScope(null);
           setCreateDefaults(undefined);
           setFormPrefill(undefined);
           setAfterCreate(null);
@@ -422,6 +471,11 @@ export function useEventEditor() {
     ? localYmd(createDefaults.earliestStartTime, timeZone)
     : undefined;
   const showingReminder = creatingReminder || !!editingReminder;
+  const showingOccurrence =
+    !showingReminder &&
+    !!editingEvent &&
+    !!occurrence?.startIso &&
+    (editScope === 'occurrence' || editScope === 'following');
 
   /** Backdrop and Cancel ask first when the task form holds unsaved input. */
   const requestClose = () => {
@@ -440,7 +494,11 @@ export function useEventEditor() {
     : editingEvent
     ? createDefaults?.scheduleIntent
       ? t('tasks.editor.schedule')
-      : t('tasks.editor.edit')
+      : editScope === 'occurrence'
+        ? t('tasks.occurrence.thisDayTitle')
+        : editScope === 'following'
+          ? t('tasks.occurrence.followingTitle')
+          : t('tasks.editor.edit')
     : createDefaults?.unscheduled
       ? t('tasks.editor.createUnscheduled')
       : t('tasks.editor.create');
@@ -470,7 +528,13 @@ export function useEventEditor() {
           phone ? (
             <button
               type="submit"
-              form={showingReminder ? 'reminder-form' : 'task-form'}
+              form={
+                showingReminder
+                  ? 'reminder-form'
+                  : showingOccurrence
+                    ? 'occurrence-form'
+                    : 'task-form'
+              }
               disabled={isSubmitting}
               className="-mr-2 min-h-11 shrink-0 rounded-control px-2 text-body font-semibold text-ide-link active:bg-ide-surface disabled:opacity-50"
             >
@@ -496,6 +560,19 @@ export function useEventEditor() {
               }
               isSubmitting={isSubmitting}
               isDeleting={isReminderDeleting}
+            />
+          ) : showingOccurrence && editingEvent && occurrence ? (
+            <OccurrenceEditForm
+              key={`${editingEvent.id}-${occurrence.startIso}-${editScope}`}
+              series={editingEvent}
+              occurrenceStart={occurrence.startIso}
+              occurrenceEnd={occurrence.endIso}
+              scope={editScope === 'following' ? 'following' : 'occurrence'}
+              phases={phases}
+              timeZone={timeZone}
+              isSubmitting={isSubmitting}
+              onSubmit={submitOccurrence}
+              onCancel={requestClose}
             />
           ) : (
           <TaskForm

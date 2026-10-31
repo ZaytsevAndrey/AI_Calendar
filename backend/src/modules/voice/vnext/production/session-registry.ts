@@ -21,6 +21,8 @@ export type SessionEntry = {
   dispatched: Map<string, Dispatched>;
   /** Provider events read this session, by catalog id. Re-read from the provider before any write. */
   external: Map<string, EntityRecord>;
+  /** When the upcoming provider events were last preloaded into `external`, and for which day / zone. */
+  externalLoaded?: { key: string; at: number };
   expiresAt: number;
 };
 

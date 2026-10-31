@@ -43,6 +43,8 @@ export type VoiceCommandSlot = {
 export type VoiceTaskPatch = {
   name?: string;
   description?: string | null;
+  /** false schedules a Later task: the engine seats it in the window or at the clock given (VC-02). */
+  isUnscheduled?: boolean;
   phaseId?: string | null;
   eventType?: string;
   estimatedTimeInMinutes?: number;
@@ -77,8 +79,9 @@ export type VoiceHabitFields = {
 
 export type VoiceCommand =
   | { kind: 'refuse'; message: string }
-  | { kind: 'complete'; taskId: string; taskName: string; summary: string }
-  | { kind: 'cancel'; taskId: string; taskName: string; summary: string }
+  /** seriesScope 'all' marks a write on a whole repeating task, so the preview can say so (VC-06). */
+  | { kind: 'complete'; taskId: string; taskName: string; summary: string; seriesScope?: VoiceSeriesScope }
+  | { kind: 'cancel'; taskId: string; taskName: string; summary: string; seriesScope?: VoiceSeriesScope }
   | {
       kind: 'skip';
       taskId: string;
@@ -93,7 +96,10 @@ export type VoiceCommand =
       taskId: string;
       taskName: string;
       summary: string;
-      googleEventId: string;
+      /** The app slot to move. When set, the server derives the original times from it (VC-03). */
+      slotId?: string | null;
+      /** Calendar event id; null when the slot has none and `slotId` names the block. */
+      googleEventId: string | null;
       calendarId: string | null;
       recurringEventId: string | null;
       originalStart: string;
@@ -110,6 +116,28 @@ export type VoiceCommand =
       occurrenceStart: string;
       googleEventId: string | null;
       googleEventCalendarId: string | null;
+    }
+  | {
+      /**
+       * Change one day of a series (`scope: occurrence`) or this day and the following ones
+       * (`scope: following`) through PATCH /tasks/:id/occurrence. Only the fields present change (WP-B).
+       */
+      kind: 'edit_occurrence';
+      taskId: string;
+      taskName: string;
+      summary: string;
+      occurrenceStart: string;
+      scope: 'occurrence' | 'following';
+      name?: string;
+      description?: string | null;
+      /** New start instant on the same day. */
+      start?: string;
+      durationMinutes?: number;
+      /** Completion of this one day; `occurrence` scope only. */
+      status?: 'todo' | 'completed';
+      googleEventId: string | null;
+      googleEventCalendarId: string | null;
+      seriesScope?: VoiceSeriesScope;
     }
   | {
       kind: 'shift';
@@ -137,12 +165,14 @@ export type VoiceCommand =
       taskName: string;
       summary: string;
       patch: VoiceTaskPatch;
+      seriesScope?: VoiceSeriesScope;
     }
   | {
       kind: 'delete';
       taskId: string;
       taskName: string;
       summary: string;
+      seriesScope?: VoiceSeriesScope;
     }
   | {
       kind: 'habit_check_in';

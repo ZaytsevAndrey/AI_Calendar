@@ -1,0 +1,537 @@
+{
+  "scenarios": {
+    "scenarios": 147,
+    "passed": 140,
+    "failed": 7,
+    "rate": 95.2
+  },
+  "byLanguage": {
+    "uk": {
+      "scenarios": 115,
+      "passed": 110,
+      "failed": 5,
+      "rate": 95.7
+    },
+    "en": {
+      "scenarios": 32,
+      "passed": 30,
+      "failed": 2,
+      "rate": 93.8
+    }
+  },
+  "byTurns": {
+    "single": {
+      "scenarios": 82,
+      "passed": 79,
+      "failed": 3,
+      "rate": 96.3
+    },
+    "multi": {
+      "scenarios": 65,
+      "passed": 61,
+      "failed": 4,
+      "rate": 93.8
+    }
+  },
+  "byDatasetCategory": {
+    "A": {
+      "scenarios": 69,
+      "passed": 65,
+      "failed": 4,
+      "rate": 94.2
+    },
+    "B": {
+      "scenarios": 35,
+      "passed": 33,
+      "failed": 2,
+      "rate": 94.3
+    },
+    "C": {
+      "scenarios": 21,
+      "passed": 20,
+      "failed": 1,
+      "rate": 95.2
+    },
+    "D": {
+      "scenarios": 22,
+      "passed": 22,
+      "failed": 0,
+      "rate": 100
+    }
+  },
+  "byOperation": {
+    "move / reschedule": {
+      "scenarios": 19,
+      "passed": 19,
+      "failed": 0,
+      "rate": 100
+    },
+    "create": {
+      "scenarios": 31,
+      "passed": 30,
+      "failed": 1,
+      "rate": 96.8
+    },
+    "reminder": {
+      "scenarios": 5,
+      "passed": 4,
+      "failed": 1,
+      "rate": 80
+    },
+    "read / question": {
+      "scenarios": 13,
+      "passed": 12,
+      "failed": 1,
+      "rate": 92.3
+    },
+    "edit": {
+      "scenarios": 14,
+      "passed": 14,
+      "failed": 0,
+      "rate": 100
+    },
+    "day plan": {
+      "scenarios": 5,
+      "passed": 5,
+      "failed": 0,
+      "rate": 100
+    },
+    "complete / delete / target choice": {
+      "scenarios": 13,
+      "passed": 12,
+      "failed": 1,
+      "rate": 92.3
+    },
+    "provider event": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 100
+    },
+    "confirmation / cancellation": {
+      "scenarios": 22,
+      "passed": 20,
+      "failed": 2,
+      "rate": 90.9
+    },
+    "other": {
+      "scenarios": 6,
+      "passed": 5,
+      "failed": 1,
+      "rate": 83.3
+    },
+    "later scheduling": {
+      "scenarios": 4,
+      "passed": 4,
+      "failed": 0,
+      "rate": 100
+    },
+    "occurrence / series": {
+      "scenarios": 9,
+      "passed": 9,
+      "failed": 0,
+      "rate": 100
+    },
+    "recurring create": {
+      "scenarios": 3,
+      "passed": 3,
+      "failed": 0,
+      "rate": 100
+    },
+    "unsupported / refusal": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 100
+    }
+  },
+  "dimensions": {
+    "semanticUnderstanding": 97.3,
+    "targetIdentification": 100,
+    "previewCorrectness": 100,
+    "confirmationExecution": 100,
+    "safety": 100,
+    "counts": {
+      "semantic": {
+        "total": 259,
+        "ok": 252
+      },
+      "target": {
+        "total": 125,
+        "ok": 125
+      },
+      "preview": {
+        "total": 187,
+        "ok": 187
+      },
+      "confirm": {
+        "total": 42,
+        "ok": 42
+      },
+      "safety": {
+        "total": 259,
+        "ok": 259
+      }
+    }
+  },
+  "dimensionsByLanguage": {
+    "uk": {
+      "semanticUnderstanding": 97.7,
+      "targetIdentification": 100,
+      "previewCorrectness": 100,
+      "confirmationExecution": 100,
+      "safety": 100,
+      "counts": {
+        "semantic": {
+          "total": 215,
+          "ok": 210
+        },
+        "target": {
+          "total": 103,
+          "ok": 103
+        },
+        "preview": {
+          "total": 152,
+          "ok": 152
+        },
+        "confirm": {
+          "total": 35,
+          "ok": 35
+        },
+        "safety": {
+          "total": 215,
+          "ok": 215
+        }
+      }
+    },
+    "en": {
+      "semanticUnderstanding": 95.5,
+      "targetIdentification": 100,
+      "previewCorrectness": 100,
+      "confirmationExecution": 100,
+      "safety": 100,
+      "counts": {
+        "semantic": {
+          "total": 44,
+          "ok": 42
+        },
+        "target": {
+          "total": 22,
+          "ok": 22
+        },
+        "preview": {
+          "total": 35,
+          "ok": 35
+        },
+        "confirm": {
+          "total": 7,
+          "ok": 7
+        },
+        "safety": {
+          "total": 44,
+          "ok": 44
+        }
+      }
+    }
+  },
+  "turns": {
+    "total": 259,
+    "passed": 252,
+    "unsafe": 0
+  },
+  "rootCauses": {
+    "model interpretation (intent) / prompt": [
+      "g-a-43",
+      "g-a-44",
+      "g-b-26",
+      "g-b-27",
+      "g-c-03",
+      "en-a-11",
+      "en-a-12"
+    ]
+  },
+  "errorClasses": {
+    "model_unnecessary_clarification": 3,
+    "model_intent_error": 4
+  },
+  "usage": {
+    "calls": 230,
+    "tokens": 915588,
+    "promptTokens": 894141,
+    "completionTokens": 21447,
+    "usd": 0.146995
+  },
+  "latencyMsP50": 1218,
+  "latencyMsP95": 1581,
+  "failures": [
+    {
+      "id": "g-a-43",
+      "language": "uk",
+      "category": "A",
+      "family": "date-added-later",
+      "operation": "other",
+      "invariant": "same reminder subject",
+      "rootCause": "model interpretation (intent) / prompt",
+      "turns": [
+        {
+          "turn": 1,
+          "utterance": "додай що це до 20 жовтня",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "nameIncludes": "заряд",
+            "includes": "2026-10-20"
+          },
+          "outcome": "clarify",
+          "blocked": [],
+          "assistantMessage": "Уточніть, будь ласка: нагадування про зарядку для ноутбука має бути до 20 жовтня — о котрій годині нагадати?",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"clarification\",\"operations\":[],\"clarification\":{\"question\":\"Уточніть, будь ласка: нагадування про зарядку для ноутбука має бути до 20 жовтня — о котрій годині нагадати?\",\"operationIds\":[],\"missing\":[\"clock\"]}}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_unnecessary_clarification",
+            "detail": "model_unnecessary_clarification: outcome clarify, blocked -"
+          },
+          "errorClass": "model_unnecessary_clarification",
+          "rootCause": "model interpretation (intent) / prompt"
+        }
+      ]
+    },
+    {
+      "id": "g-a-44",
+      "language": "uk",
+      "category": "A",
+      "family": "which-report",
+      "operation": "read / question",
+      "invariant": "neither report is written",
+      "rootCause": "model interpretation (intent) / prompt",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "коли в мене звіт?",
+          "expect": {
+            "outcomes": [
+              "clarify",
+              "refuse"
+            ],
+            "clarificationRequired": true,
+            "intents": 0
+          },
+          "outcome": "answer",
+          "blocked": [],
+          "assistantMessage": "У вас є два відкриті звіти без часу: «Звіт» і «Фінансовий звіт». Обидва — у списку «Пізніше», без запланованого часу.",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"answer\",\"operations\":[],\"answer\":{\"text\":\"У вас є два відкриті звіти без часу: «Звіт» і «Фінансовий звіт». Обидва — у списку «Пізніше», без запланованого часу.\",\"evidenceRefs\":[]}}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_intent_error",
+            "detail": "model_intent_error: outcome answer, blocked -"
+          },
+          "errorClass": "model_intent_error",
+          "rootCause": "model interpretation (intent) / prompt"
+        }
+      ]
+    },
+    {
+      "id": "g-b-26",
+      "language": "uk",
+      "category": "B",
+      "family": "third-same-title",
+      "operation": "create",
+      "invariant": "neither existing report is updated",
+      "rootCause": "model interpretation (intent) / prompt",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "коли звіт?",
+          "expect": {
+            "outcomes": [
+              "clarify",
+              "refuse"
+            ],
+            "clarificationRequired": true,
+            "intents": 0
+          },
+          "outcome": "answer",
+          "blocked": [],
+          "assistantMessage": "У вас є два звіти без часу: «Звіт» і «Фінансовий звіт». Обидва — у списку «Пізніше», без запланованого часу.",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"answer\",\"operations\":[],\"answer\":{\"text\":\"У вас є два звіти без часу: «Звіт» і «Фінансовий звіт». Обидва — у списку «Пізніше», без запланованого часу.\",\"evidenceRefs\":[]}}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_intent_error",
+            "detail": "model_intent_error: outcome answer, blocked -"
+          },
+          "errorClass": "model_intent_error",
+          "rootCause": "model interpretation (intent) / prompt"
+        }
+      ]
+    },
+    {
+      "id": "g-b-27",
+      "language": "uk",
+      "category": "B",
+      "family": "cancel-confirm-then-new",
+      "operation": "confirmation / cancellation",
+      "invariant": "a later так does not delete the review",
+      "rootCause": "model interpretation (intent) / prompt",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "видали design review",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "taskId": "task-review",
+            "forbidTaskId": "task-review-2"
+          },
+          "outcome": "clarify",
+          "blocked": [],
+          "assistantMessage": "Є два записи: «Design review» і «Design review follow-up». Який саме видалити?",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"clarification\",\"operations\":[],\"clarification\":{\"question\":\"Є два записи: «Design review» і «Design review follow-up». Який саме видалити?\",\"operationIds\":[],\"missing\":[\"which_item\"]}}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_unnecessary_clarification",
+            "detail": "model_unnecessary_clarification: outcome clarify, blocked -"
+          },
+          "errorClass": "model_unnecessary_clarification",
+          "rootCause": "model interpretation (intent) / prompt"
+        }
+      ]
+    },
+    {
+      "id": "g-c-03",
+      "language": "uk",
+      "category": "C",
+      "family": "c1-bare-confirm-word",
+      "operation": "confirmation / cancellation",
+      "invariant": "bare так does not complete the task named так",
+      "rootCause": "model interpretation (intent) / prompt",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "так",
+          "expect": {
+            "outcomes": [
+              "answer",
+              "refuse"
+            ],
+            "intents": 0,
+            "forbidTaskId": "task-tak"
+          },
+          "outcome": "clarify",
+          "blocked": [],
+          "assistantMessage": "Уточніть, будь ласка, що саме підтвердити чи змінити — зараз немає жодного попереднього перегляду, який очікує підтвердження.",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"clarification\",\"operations\":[],\"clarification\":{\"question\":\"Уточніть, будь ласка, що саме підтвердити чи змінити — зараз немає жодного попереднього перегляду, який очікує підтвердження.\",\"operationIds\":[],\"missing\":[]}}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_intent_error",
+            "detail": "model_intent_error: outcome clarify, blocked -"
+          },
+          "errorClass": "model_intent_error",
+          "rootCause": "model interpretation (intent) / prompt"
+        }
+      ]
+    },
+    {
+      "id": "en-a-11",
+      "language": "en",
+      "category": "A",
+      "family": "done-task",
+      "operation": "complete / delete / target choice",
+      "invariant": "a completed task is not a write target",
+      "rootCause": "model interpretation (intent) / prompt",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "move pay the invoice to tomorrow",
+          "expect": {
+            "outcomes": [
+              "answer",
+              "refuse"
+            ],
+            "intents": 0
+          },
+          "outcome": "clarify",
+          "blocked": [],
+          "assistantMessage": "I don't see a task called \"pay the invoice\" in your open tasks. Should I create it for tomorrow, or is it a calendar event?",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"clarification\",\"operations\":[],\"clarification\":{\"question\":\"I don't see a task called \\\"pay the invoice\\\" in your open tasks. Should I create it for tomorrow, or is it a calendar event?\",\"operationIds\":[],\"missing\":[\"target\"]}}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_intent_error",
+            "detail": "model_intent_error: outcome clarify, blocked -"
+          },
+          "errorClass": "model_intent_error",
+          "rootCause": "model interpretation (intent) / prompt"
+        }
+      ]
+    },
+    {
+      "id": "en-a-12",
+      "language": "en",
+      "category": "A",
+      "family": "reminder",
+      "operation": "reminder",
+      "invariant": "a remind phrase is a reminder, not a task",
+      "rootCause": "model interpretation (intent) / prompt",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "remind me to call mom on Sunday",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "nameIncludes": "mom",
+            "includes": "2026-10-25"
+          },
+          "outcome": "clarify",
+          "blocked": [],
+          "assistantMessage": "Which Sunday do you mean — today, Sunday 2026-10-18, or the coming Sunday 2026-10-25?",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"clarification\",\"operations\":[],\"clarification\":{\"question\":\"Which Sunday do you mean — today, Sunday 2026-10-18, or the coming Sunday 2026-10-25?\",\"operationIds\":[],\"missing\":[\"date\"]}}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_unnecessary_clarification",
+            "detail": "model_unnecessary_clarification: outcome clarify, blocked -"
+          },
+          "errorClass": "model_unnecessary_clarification",
+          "rootCause": "model interpretation (intent) / prompt"
+        }
+      ]
+    }
+  ]
+}

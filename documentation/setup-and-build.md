@@ -116,6 +116,22 @@ Tests run **one after another**. Jest uses `--runInBand` (one process; the next 
 
 Playwright does not use your local `db.sqlite` or ports 3000/3001. The API boots with `E2E_BOOTSTRAP=1` and `E2E_STUB_EXTERNAL=1` (no Google/Groq). First run downloads the Chromium browser. The default window is Desktop Chrome **1280×720**. `U-CAL-017` and `U-CAL-024` use the phone window **390×844**; `U-CAL-017` also checks **320×568**. Week columns are checked at **768×1024**. `U-CAL-023` uses **1024×700**, **1100×800**, and **1279×768**.
 
+## Voice tests and live evaluation
+
+**Structured gate** (`npm run test:vnext:structured --workspace=backend`): the active regression gate for the voice agent, about 256 tests, single process. It takes **11–12 minutes** and needs about 1.5 GB of heap: run it with `NODE_OPTIONS=--max-old-space-size=3000`, never beside a production build. Run it on the OS that installed `node_modules`: the repo's `bcrypt` is a native module, so a Linux shell over a Windows checkout cannot load two of the suites (`invalid ELF header`); CI (`.github/workflows/ci.yml`) is the reference run. The 13 historical suites are separate (`npm run test:vnext:historical`, KI-10) and are not part of the gate.
+
+**Live evaluation** (costs money, needs `DEEPSEEK_API_KEY`; never run it from an automated session without an explicit go-ahead):
+
+```
+npx ts-node --transpile-only src/modules/voice/vnext/eval/phase47-generalization-cli.ts --dry-run
+npx ts-node --transpile-only src/modules/voice/vnext/eval/phase47-generalization-cli.ts --allow-paid-calls --budget-usd 2 --max-calls 1000 --output <run dir>
+npx ts-node --transpile-only src/modules/voice/vnext/eval/phase47-generalization-cli.ts --suite english --allow-paid-calls --budget-usd 2 --max-calls 1000 --output <run dir>
+```
+
+`--suite english` runs the native English set (`vnext/eval/english-set.ts`, KI-19); the default is the 100-scenario Ukrainian generalization set. `--category A|B|C` and `--ids a,b` narrow a run; a run resumes from its own `.jsonl` unless `--no-resume`.
+
+**Keep every run.** Earlier results were lost with the deleted `docs/voice-vnext/` folder; only numbers in transcripts survive. Point `--output` at `backend/eval-runs/<date>-<suite>/` and commit the `summary.json` (suite, scorer, prompt hash, model, per-scenario verdicts) with the change it measured. Raw `.jsonl` transcripts hold user-like utterances only (fixtures, no real users) and may be committed too, or archived outside the repo if they grow large. The scorer was corrected on 30 Oct 2026 (a create intent is now scored as `action: create`), so numbers before that date are not comparable with numbers after it.
+
 ## Database
 
 The SQLite file is created when the backend runs **without** a Postgres `DATABASE_URL` (path: `SQLITE_PATH` or `db.sqlite`). `*.sqlite` files are in `.gitignore`.

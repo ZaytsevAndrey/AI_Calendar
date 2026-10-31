@@ -1,0 +1,112 @@
+[
+  {
+    "id": "en-a-11",
+    "category": "A",
+    "family": "done-task",
+    "language": "en",
+    "invariant": "a completed task is not a write target",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "move pay the invoice to tomorrow",
+        "expect": {
+          "outcomes": [
+            "answer",
+            "refuse"
+          ],
+          "intents": 0
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "I don't see a task called \"pay the invoice\" in your open records. Should I create it for tomorrow, or is it a calendar event I should look up?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome clarify, blocked -"
+        },
+        "errorClass": "model_intent_error",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-d-03",
+    "category": "D",
+    "family": "occurrence-rename",
+    "language": "en",
+    "invariant": "one day of the series is renamed (WP-B)",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "rename Monday's gym to yoga",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-gym",
+          "nameIncludes": "yoga",
+          "action": "update"
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "missing_series_scope"
+        ],
+        "assistantMessage": "This repeats. Do you mean this day, this day and following, or the whole series?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked missing_series_scope"
+        },
+        "errorClass": "model_unnecessary_clarification:missing_series_scope",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-d-04",
+    "category": "D",
+    "family": "occurrence-complete",
+    "language": "en",
+    "invariant": "one day of the series is completed in place (WP-B)",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "I already did the gym on Monday",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-gym",
+          "action": "complete"
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "missing_series_scope"
+        ],
+        "assistantMessage": "This repeats. Do you mean this day, this day and following, or the whole series?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked missing_series_scope"
+        },
+        "errorClass": "model_unnecessary_clarification:missing_series_scope",
+        "note": null
+      }
+    ]
+  }
+]

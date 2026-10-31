@@ -35,10 +35,11 @@ Last full review: 2026-10-30, branch `stabilize/scheduling`, after the audit rem
 | [KI-23](#ki-23) | Google update reads then writes (extra call; small race) | Low | limitation | neither |
 | [KI-24](#ki-24) | Request bodies outside scheduling and settings are not validated | Medium | defect | neither |
 | [KI-25](#ki-25) | A request waiting behind a stuck user lock fails after 60 s | Low | limitation | neither |
-| [KI-26](#ki-26) | A seated re-merged day loses `parentSeriesId` | Low | limitation | neither |
+| [KI-26](#ki-26) | ~~A seated re-merged day loses `parentSeriesId`~~ — fixed (lineage survives seating) | — | closed | neither |
 | [KI-27](#ki-27) | `PATCH /tasks/:id/status` accepts any status string | Low | defect | neither |
 | [KI-28](#ki-28) | OAuth and app refresh tokens stored in plaintext | Medium | defect (security) | release gate G-5 (recommended) |
 | [KI-29](#ki-29) | Account deletion without a Google grant leaves the app events in Google | Low | limitation | neither |
+| [KI-30](#ki-30) | Problematic one-tap suggestion can offer a day beyond the planning horizon | Low | defect | neither |
 
 ---
 
@@ -302,10 +303,10 @@ Last full review: 2026-10-30, branch `stabilize/scheduling`, after the audit rem
 
 ### KI-26
 
-**A seated re-merged day loses `parentSeriesId`** — Low, limitation (AUD-021 residual).
-- **Behavior:** the re-merge owner is chosen correctly (`8d7a0f4`), but a seated copy still clears `parentSeriesId`; deleting the series then does not delete that copy (unchanged series-delete scope).
-- **Source:** `schedule/placement-step.service.ts`.
-- **Blocks:** neither.
+**A seated re-merged day loses `parentSeriesId`** — closed.
+- **Was:** a seated copy cleared `parentSeriesId` with the park metadata, so a copy forgot its series after seating.
+- **Now:** lineage (`parentSeriesId`, `seriesGroupId`, `originalOccurrenceYmd`) is not park metadata and survives seating (`clearedParkColumns`). `DELETE /tasks/:id` keeps its previous scope on purpose: only parked (Problematic) copies go with the series; seated and completed day copies stay as tasks of their own.
+- **Source:** `tasks/entities/task.entity.ts`, `tasks/tasks.service.ts`.
 
 ### KI-27
 
@@ -332,6 +333,14 @@ Last full review: 2026-10-30, branch `stabilize/scheduling`, after the audit rem
 - **Behavior:** `AccountDeletionService.purgeGoogleArtifacts` returns when the user has no stored grant (disconnected); local data is deleted, events and the app calendar stay in the user's Google account.
 - **Resolution:** say so in the delete dialog, or ask to reconnect first.
 - **Source:** `auth/account-deletion.service.ts`.
+- **Blocks:** neither.
+
+### KI-30
+
+**Problematic one-tap suggestion can offer a day beyond the planning horizon** — Low, defect (found by e2e U-CAL-025p, 30 Oct 2026).
+- **Behavior:** a task parked on a day past `recurringScheduleHorizonDays` gets a «Place at …» suggestion on that day (free-slots does not clip to the horizon), but `POST /schedule/problematic/:id/place` refuses it («That time is no longer free») because placement windows end at the horizon.
+- **Fix direction:** clip the suggestion (and the Move sheet days) to the horizon, or let an explicit Move seat past it.
+- **Source:** `schedule/components/ProblematicItemCard.tsx`, `schedule/free-slots.util.ts`, `schedule/problematic-place.service.ts`.
 - **Blocks:** neither.
 
 ## Audit findings (2026-10-30)

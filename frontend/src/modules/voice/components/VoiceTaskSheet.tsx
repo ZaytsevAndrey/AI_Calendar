@@ -14,6 +14,7 @@ import { CompanionPanel } from './CompanionPanel';
 import { ChangePreviewCards } from './ChangePreviewCards';
 import { useGetUserSettingsQuery } from 'api/userSettingsApi';
 import { resolveIanaTimeZone } from 'modules/user-settings/ianaTimeZones';
+import { FAST_CREATE_AVAILABLE } from '../companionMode';
 
 type VoiceController = ReturnType<typeof useVoiceTask>;
 
@@ -302,7 +303,7 @@ export function VoiceTaskSheet({ voice }: { voice: VoiceController }) {
     <div
       className="flex h-full min-h-0 flex-col gap-3 text-body-sm"
     >
-      <CompanionModeSwitch voice={voice} />
+      {FAST_CREATE_AVAILABLE ? <CompanionModeSwitch voice={voice} /> : null}
 
       <VoiceAudioVisual
         mode={visualMode}

@@ -4,7 +4,7 @@ import { QUESTION_PROPOSAL_MODULE } from './question-proposal';
 /** Kind, when, and duration. First matching branch wins. Dates come from the user message. */
 export const CREATE_KIND_WHEN_MODULE = `Decide kind in this order. First match wins. Then fill only that branch's fields. Interpret the speaker's language yourself — do not rely on English/Ukrainian word lists.
 
-deadline is only the end of a flexible or recurring placement window. It is not a due date. Fixed and unscheduled leave deadline null.
+deadline is the end of a flexible one-off's placement window, or the last day of a recurring series. It is not a due date and never a daily window on a series. Fixed and unscheduled leave deadline null.
 
 1. Recurring — repeats: daily, every morning, every evening, every weekday, every weekend, every Tuesday, every Mon+Fri, every N days, the last day of the month, etc. (any language). Every morning or every evening is a daily series, not one clock today. Every N days is still a repeat: set recurrencePattern DAILY. There is no every-N-days field. Never leave the pattern null. The last day of the month, with no "this month" and no single civil date, is MONTHLY, not one window on the 31st.
    A weekday named once is a single day, not a repeat.

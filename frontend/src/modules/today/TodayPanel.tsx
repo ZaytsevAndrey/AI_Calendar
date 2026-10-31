@@ -247,7 +247,7 @@ function NowCard({
               icon={Check}
               disabled={busy}
               className="flex-1"
-              onClick={() => void today.complete(block.task!)}
+              onClick={() => void today.completeBlock(block)}
             >
               {t('now.markDone')}
             </Button>

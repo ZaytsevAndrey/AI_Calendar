@@ -1,3 +1,4 @@
+import type { StoredReminderFields } from '../reference/reference-resolver';
 /**
  * Stage 2 proposal contract.
  * These types are not read by runVNextTurn. A localRef is not a stored id.
@@ -12,7 +13,8 @@ export type ClockRole = (typeof CLOCK_ROLES)[number];
 export type SeriesScope = 'occurrence' | 'from_day' | 'all';
 
 /** One placed occurrence of a recurring row, from the authorized catalog. */
-export type EntityOccurrence = { start: string; end: string; googleEventId: string | null };
+/** A placed occurrence. `slotId` is the app slot, so a move needs no calendar event id (VC-03). */
+export type EntityOccurrence = { start: string; end: string; googleEventId: string | null; slotId?: string | null };
 
 export const PROPOSAL_ENTITY_TYPES = ['task', 'reminder', 'external_event', 'day_plan_item'] as const;
 export type ProposalEntityType = (typeof PROPOSAL_ENTITY_TYPES)[number];
@@ -43,7 +45,8 @@ export type TemporalProposal =
   /** A bound at the user's own wake or sleep time on the date constraint. */
   | { kind: 'day_bound'; edge: 'wake' | 'sleep'; role: 'earliest' | 'deadline' }
   /** Start an amount of time from now. The model supplies the numbers; the backend only adds them. */
-  | { kind: 'relative'; direction: 'after'; amount: number; unit: 'minute' | 'hour' | 'day' }
+  /** A delay from now, or from the target's own start when `anchor` is target ("an hour later"). */
+  | { kind: 'relative'; direction: 'after' | 'before'; amount: number; unit: 'minute' | 'hour' | 'day'; anchor?: 'now' | 'target' }
   | { kind: 'interval'; startHm: string; endHm: string }
   | { kind: 'duration'; minutes: number }
   | { kind: 'weekday'; weekday: number; which?: 'this' | 'next' }
@@ -86,6 +89,8 @@ export type SemanticOperationProposal = {
   /** Recurring targets only: the part of the series, and the date of the occurrence meant. */
   seriesScope?: SeriesScope;
   occurrenceDate?: string;
+  /** The pending operation this proposal takes the place of; it is withdrawn when the group applies (V7). */
+  replaces?: { pendingId: string };
 };
 
 export type FieldPatch =
@@ -126,6 +131,10 @@ export type ResolvedEntityReference = {
   googleEventId?: string | null;
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
+  /** The one app slot of a one-off task; a move names it instead of a calendar event (VC-03). */
+  slotId?: string | null;
+  /** A Later (inbox) task: a day or clock given by voice schedules it (VC-02). */
+  unscheduled?: boolean;
   /** Catalog status at preview. Only open rows are eligible for a write. */
   status?: 'open' | 'completed' | 'canceled';
   /** A recurring row needs a series scope the structured contract cannot carry yet. */
@@ -135,9 +144,13 @@ export type ResolvedEntityReference = {
   /** Recurring rows: placed occurrences and the series event id. */
   occurrences?: EntityOccurrence[];
   seriesEventId?: string | null;
+  /** The series group holds detached copies or parked days: a series-wide rename / end / delete is refused (D-03). */
+  seriesCopies?: boolean;
   /** Stored title of the row, for preview copy. Never a match key. */
   name?: string;
   fixed?: boolean;
+  /** Stored fields of a day reminder; an update keeps what the user did not restate (VC-05). */
+  reminder?: StoredReminderFields;
 };
 
 export type PendingOperation = {
