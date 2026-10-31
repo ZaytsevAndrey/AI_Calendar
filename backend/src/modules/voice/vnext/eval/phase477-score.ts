@@ -129,6 +129,56 @@ function operationMatches(view: IntentView, expect: TurnExpect): boolean {
   return true;
 }
 
+/** Every check behind a verdict, for per-dimension reporting (V7). `judgeTurn` is derived from it. */
+export type TurnChecks = {
+  outcomeOk: boolean;
+  nameOk: boolean;
+  includesOk: boolean;
+  idOk: boolean;
+  countOk: boolean;
+  unscheduledOk: boolean;
+  draftOk: boolean;
+  pendingOk: boolean;
+  matched: boolean;
+  wrongId: boolean;
+  extraTarget: boolean;
+  forbidden: boolean;
+  splitFields: boolean;
+  unexpectedWrite: boolean;
+  falseCompletion: boolean;
+  serverWrites: number;
+};
+
+export function judgeTurnChecks(observed: ObservedTurn, expect: TurnExpect): TurnChecks {
+  const views = operationViews(observed.intents, observed.timeZone);
+  const view = inspectIntents(observed.intents, observed.timeZone);
+  const preview = observed.outcome === 'confirm' || observed.outcome === 'act';
+  const unexpectedWrite = preview && !expect.outcomes.includes(observed.outcome as TurnExpect['outcomes'][number]);
+  const selected = new Set(views.flatMap((item) => item.ids));
+  const structured = Boolean(expect.taskId || expect.nameIncludes || expect.includes || expect.unscheduled || expect.action);
+  const matched = !structured || !preview || views.some((item) => operationMatches(item, expect));
+  const splitFields = Boolean(
+    preview && expect.taskId && expect.includes && hasClock(expect.includes)
+    && views.some((item) => item.ids.includes(expect.taskId!))
+    && views.some((item) => item.clocks.includes(expect.includes!))
+    && !views.some((item) => item.ids.includes(expect.taskId!) && item.clocks.includes(expect.includes!)),
+  );
+  const wrongId = Boolean(expect.taskId) && preview && !selected.has(expect.taskId!);
+  const extraTarget = Boolean(expect.taskId) && preview && views.some((item) => item.ids.some((id) => id !== expect.taskId));
+  const forbidden = Boolean(expect.forbidTaskId) && preview && selected.has(expect.forbidTaskId!);
+  const falseCompletion = observed.outcome === 'act' && /записано в календар|written to the calendar|saved to the calendar/i.test(observed.assistantMessage) && !/не записав|has not written|ще не записано/i.test(observed.assistantMessage);
+  const outcomeOk = expect.outcomes.includes(observed.outcome as TurnExpect['outcomes'][number]);
+  const nameFromDraft = Boolean(expect.nameIncludes) && observed.draftNames.some((name) => name.toLocaleLowerCase().includes(expect.nameIncludes!.toLocaleLowerCase()));
+  const nameOk = !expect.nameIncludes || nameFromDraft || views.some((item) => item.names.join('\n').toLocaleLowerCase().includes(expect.nameIncludes!.toLocaleLowerCase())) || (!preview && view.names.join('\n').toLocaleLowerCase().includes(expect.nameIncludes.toLocaleLowerCase()));
+  const includesOk = !expect.includes || !preview || views.some((item) => (hasClock(expect.includes!) ? item.clocks.includes(expect.includes!) : viewHas(item, expect.includes!)));
+  const idOk = !expect.taskId || !preview || views.some((item) => operationMatches(item, { ...expect, nameIncludes: undefined, unscheduled: undefined }));
+  const countOk = expect.intents == null || view.count === expect.intents;
+  const unscheduledOk = !expect.unscheduled || views.some((item) => item.unscheduled);
+  const draftOk = !expect.draftIncludes || observed.draftNames.some((name) => name.toLocaleLowerCase().includes(expect.draftIncludes!.toLocaleLowerCase()));
+  const pendingOk = expect.pendingCount == null || observed.pendingCount === expect.pendingCount;
+  return { outcomeOk, nameOk, includesOk, idOk, countOk, unscheduledOk, draftOk, pendingOk, matched, wrongId, extraTarget, forbidden, splitFields, unexpectedWrite, falseCompletion, serverWrites: observed.serverWrites };
+}
+
 export function judgeTurn(observed: ObservedTurn, expect: TurnExpect): TurnVerdict {
   const views = operationViews(observed.intents, observed.timeZone);
   const view = inspectIntents(observed.intents, observed.timeZone);

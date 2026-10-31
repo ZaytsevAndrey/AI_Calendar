@@ -21,7 +21,7 @@ import { randomUUID } from 'crypto';
 import { config as loadEnv } from 'dotenv';
 import { PROMPT_A_HASH, PROMPT_B_HASH } from '../interpreters/prompts';
 import type { EntityRecord } from '../reference/reference-resolver';
-import { conversationSucceeded, judgeTurn, PHASE4711_SCORER, type TurnVerdict } from './phase477-score';
+import { conversationSucceeded, judgeTurn, judgeTurnChecks, PHASE4711_SCORER, type TurnVerdict } from './phase477-score';
 import { GENERALIZATION_SCENARIOS, GENERALIZATION_SUITE, generalizationWorld, type GenScenario } from './phase47-generalization';
 import { ENGLISH_SCENARIOS, ENGLISH_SUITE, englishWorld, type EnglishScenario, type EnglishWorld } from './english-set';
 import {
@@ -191,6 +191,7 @@ async function run(outputDir: string, budget: number, maxCalls: number): Promise
           reads: live.reads,
           validationErrors: live.validationErrors,
           verdict,
+          checks: judgeTurnChecks(live.observed, turn.expect),
           errorClass,
           usage: live.usage,
           latencyMs: live.latencyMs,
