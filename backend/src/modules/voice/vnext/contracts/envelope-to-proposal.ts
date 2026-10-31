@@ -21,6 +21,10 @@ export function envelopeToProposalGroup(envelope: SemanticEnvelopeV1, _clock?: E
     if (envelope.control === 'cancel_pending') {
       return { version: '1', control: 'cancel', proposals: [], patches: [] };
     }
+    // "Wait, not yet": the preview stays as it is, nothing is applied or withdrawn (V7, g-a-46).
+    if (envelope.control === 'answer_pending') {
+      return { version: '1', control: 'pause', proposals: [], patches: [] };
+    }
     return null;
   }
   if (envelope.kind !== 'operations') return null;

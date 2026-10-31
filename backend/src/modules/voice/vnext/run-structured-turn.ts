@@ -308,14 +308,12 @@ function sameTitleAsOpen(group: ProposalGroup, known: readonly KnownEntity[]): s
 async function handleGroup(input: TurnInput, group: ProposalGroup, interpreted: InterpretOutput, traces: TraceEvent[]): Promise<PipelineResult> {
   if (group.control === 'confirm') return handleConfirm(input, group, interpreted, traces);
   if (group.control === 'cancel') return handleCancel(input, interpreted, traces);
+  // Hold: the user is not confirming yet and not withdrawing. The preview stays, a later yes still applies it.
   if (group.control === 'pause') {
-    const state = ensureStructured(input.session);
-    const blocked = setConfirmationBlock({ state, expectedSessionVersion: state.sessionVersion, blocked: true });
-    if (blocked.ok) input.session.structured = blocked.state;
-    return done(input, reply(input.session.sessionId, { outcome: 'clarify', assistantMessage: voiceCopy(input.language, 'which_task'), clarifyCount: 1 }), {
+    const open = input.session.structured?.preview?.executionState === 'open';
+    return done(input, reply(input.session.sessionId, { outcome: 'answer', assistantMessage: voiceCopy(input.language, open ? 'on_hold' : 'no_pending') }), {
       traces,
       usage: interpreted.usage,
-      blocked: ['clarification_open'],
     });
   }
 

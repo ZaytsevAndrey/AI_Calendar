@@ -363,3 +363,17 @@ describe('V7 round 2 — smaller losses', () => {
     expect(JSON.stringify(back.response.intents)).not.toContain('"isUnscheduled":true');
   });
 });
+
+describe('V7 round 3 — "wait, not yet" keeps the preview (g-a-46)', () => {
+  it('answer_pending holds the preview; a later bare yes still applies it', async () => {
+    const session = createSession(USER, 'v7-25');
+    await runVNextTurn(base(session, []), interpreter(ops([op({ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'Чай' } })])));
+    const claim = { executionId: session.structured!.preview!.executionId, previewRevision: session.structured!.preview!.previewRevision };
+    const held = await runVNextTurn(base(session, [], { confirmation: claim }), interpreter({ version: '1', kind: 'control', operations: [], control: 'answer_pending' }));
+    expect(held.response.outcome).toBe('answer');
+    expect(held.response.assistantMessage).toBe('Добре, прев’ю лишається. Скажіть «так», коли будете готові, або змініть його.');
+    expect(session.structured?.preview?.executionState).toBe('open');
+    const yes = await runVNextTurn(base(session, [], { confirmation: claim }), interpreter({ version: '1', kind: 'control', operations: [], control: 'confirm_pending' }));
+    expect(yes.response.outcome).toBe('act');
+  });
+});
