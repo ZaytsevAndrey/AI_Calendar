@@ -7,7 +7,7 @@
  *   npx ts-node --transpile-only src/modules/voice/vnext/eval/v7-report.ts --runs backend/eval-runs/<a>/phase47-generalization,backend/eval-runs/<b>/phase47-generalization [--out <file.json>]
  */
 import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { isAbsolute, join } from 'path';
 import type { TurnChecks, TurnExpect, TurnVerdict } from './phase477-score';
 
 type StoredTurn = {
@@ -193,10 +193,10 @@ function main(): void {
   const dirs = (arg('--runs') ?? '').split(',').map((dir) => dir.trim()).filter(Boolean);
   if (!dirs.length) throw new Error('--runs <dir,dir> required');
   const root = join(__dirname, '../../../../../..');
-  const rows = dirs.flatMap((dir) => load(join(root, dir)));
+  const rows = dirs.flatMap((dir) => load(isAbsolute(dir) ? dir : join(root, dir)));
   const out = report(rows);
   const target = arg('--out');
-  if (target) writeFileSync(join(root, target), JSON.stringify(out, null, 2));
+  if (target) writeFileSync(isAbsolute(target) ? target : join(root, target), JSON.stringify(out, null, 2));
   const { failures, ...summary } = out;
   console.log(JSON.stringify({ ...summary, failures: failures.length }, null, 2));
 }

@@ -16,7 +16,7 @@
  *   flags: --ids a,b --category A|B|C|D --no-resume --env <path to .env> --max-calls N
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { isAbsolute, join } from 'path';
 import { randomUUID } from 'crypto';
 import { config as loadEnv } from 'dotenv';
 import { PROMPT_A_HASH, PROMPT_B_HASH } from '../interpreters/prompts';
@@ -197,6 +197,7 @@ async function run(outputDir: string, budget: number, maxCalls: number): Promise
           latencyMs: live.latencyMs,
           simulatedReport: live.simulatedReport,
           stepNames: live.steps.map((step) => `${step.warn ? '!' : ''}${step.name}`),
+          warnings: live.steps.filter((step) => step.warn).map((step) => ({ step: step.name, ...step.fields })),
         });
       }
       const complete = verdicts.length === row.turns.length;
@@ -365,7 +366,8 @@ async function main(): Promise<void> {
     console.error(JSON.stringify({ status: 'blocked', reason: 'output must be a phase47-generalization directory', modelCalls: 0 }));
     process.exit(2);
   }
-  await run(join(__dirname, '../../../../../..', output), Number(arg('--budget-usd') ?? '2'), Number(arg('--max-calls') ?? '1000'));
+  // Relative to the repository root when run from src/; absolute paths are used as given (compiled runs).
+  await run(isAbsolute(output) ? output : join(__dirname, '../../../../../..', output), Number(arg('--budget-usd') ?? '2'), Number(arg('--max-calls') ?? '1000'));
 }
 
 main().catch((err: unknown) => {

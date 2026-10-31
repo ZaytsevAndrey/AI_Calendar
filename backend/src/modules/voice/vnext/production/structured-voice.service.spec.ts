@@ -1267,8 +1267,14 @@ describe('structured all-day, bounds, and relative time', () => {
     const backwards = await create('report tomorrow from 10 to 9', [tomorrow, { kind: 'clock', value: '10:00', role: 'start' }, { kind: 'clock', value: '09:00', role: 'end' }]);
     expect(backwards.intents).toEqual([]);
     expect(backwards.assistantMessage).toBe('The times in that command contradict each other. Say how it should be.');
+    // V7 (31 Oct): a clock with no day is today while that clock is still ahead (spec: only a clock that
+    // has already passed is a question). Before V7 this asked "Which day?" for both.
     const noDay = await create('report at 10', [{ kind: 'clock', value: '10:00', role: 'start' }]);
-    expect(noDay.assistantMessage).toBe('Which day?');
+    expect(noDay.outcome).toBe('confirm');
+    expect(noDay.intents[0]).toMatchObject({ type: 'create', task: { scheduledStartTime: '2026-10-18T07:00:00.000Z' } });
+    const past = await create('report at 8', [{ kind: 'clock', value: '08:00', role: 'start' }]);
+    expect(past.intents).toEqual([]);
+    expect(past.assistantMessage).toBe('That time has already passed. Which day do you mean?');
   });
 
   it('a wish clock is a flexible preferred start on that day (scheduling refactor, spec rule 3)', async () => {

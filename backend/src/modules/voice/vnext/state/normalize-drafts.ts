@@ -197,8 +197,14 @@ function publish(state: StructuredState, operations: PendingOperation[], depende
   return next;
 }
 
+/**
+ * Constraints that correct each other share a key: a date and a weekday are one day, and a part of day
+ * stands where a start clock would ("не зранку, о 08:10" replaces the label) (V7, g-b-18 / g-b-19).
+ */
 function constraintKey(constraint: TemporalProposal): string {
   if (constraint.kind === 'clock') return `clock:${constraint.role}`;
+  if (constraint.kind === 'date' || constraint.kind === 'weekday') return 'day';
+  if (constraint.kind === 'unresolved') return 'clock:start';
   return constraint.kind;
 }
 

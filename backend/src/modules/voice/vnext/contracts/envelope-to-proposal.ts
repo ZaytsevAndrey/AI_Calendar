@@ -102,7 +102,19 @@ export function envelopeToProposalGroup(envelope: SemanticEnvelopeV1, _clock?: E
   };
 }
 
-function mapOperation(operation: SemanticOperationV1): SemanticOperationProposal | null {
+/**
+ * A stored reminder addressed with a task verb and `changes.reminder` is a reminder operation: the verb
+ * becomes the reminder op (V7, live g-d-11 / en-d-06), so the established `remind` path handles it.
+ */
+function asReminderOperation(operation: SemanticOperationV1): SemanticOperationV1 {
+  const reminder = operation.changes.reminder;
+  if (!reminder || operation.action === 'remind' || operation.action === 'create' || operation.target.kind === 'new') return operation;
+  const op = reminder.op ?? (operation.action === 'delete' || operation.action === 'cancel' ? 'delete' : operation.action === 'complete' ? 'resolve' : 'update');
+  return { ...operation, action: 'remind', changes: { ...operation.changes, reminder: { ...reminder, op } } };
+}
+
+function mapOperation(given: SemanticOperationV1): SemanticOperationProposal | null {
+  const operation = asReminderOperation(given);
   const target = mapTarget(operation);
   if (!target) return null;
   const constraints: ProposalConstraint[] = operation.constraints.map((constraint, index) => ({
@@ -120,7 +132,8 @@ function mapOperation(operation: SemanticOperationV1): SemanticOperationProposal
   return {
     localRef: operation.opId,
     action: operation.action,
-    entityType: operation.action === 'remind' ? 'reminder' : 'task',
+    // A reminder is named by `remind`, or by `changes.reminder` on an update / complete / delete of a stored one (V7).
+    entityType: operation.action === 'remind' || operation.changes.reminder ? 'reminder' : 'task',
     target,
     scheduling: hasSchedule ? 'scheduled' : 'unscheduled',
     changes: { ...operation.changes },
@@ -150,7 +163,12 @@ function mapTarget(operation: SemanticOperationV1): ProposalTarget | null {
     return { kind: 'unresolved', reason: 'ambiguous' };
   }
   if (target.kind === 'unresolved') return { kind: 'unresolved', reason: 'not_found' };
-  if (target.kind === 'operation_result') return { kind: 'pending', pendingId: target.opId };
+  if (target.kind === 'operation_result') {
+    // The validator normalises proposedId / id to opId; an envelope that skipped it is read the same way.
+    const loose = target as { opId?: string; proposedId?: string; id?: string };
+    const pendingId = loose.opId ?? loose.proposedId ?? loose.id;
+    return pendingId ? { kind: 'pending', pendingId } : null;
+  }
   return null;
 }
 

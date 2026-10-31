@@ -107,6 +107,7 @@ function blockedCopy(code: string): Parameters<typeof voiceCopy>[1] {
   if (code === 'unmapped_time') return 'need_clock';
   if (code === 'missing_occurrence' || code === 'occurrence_not_found' || code === 'ambiguous_occurrence') return 'which_occurrence';
   if (code === 'empty_patch') return 'what_change';
+  if (code === 'past') return 'past_clock';
   if (code === 'cross_day_series_move') return 'same_day_series';
   if (code === 'fixed_skip') return 'fixed_skip';
   if (code === 'nothing_to_skip') return 'nothing_to_skip';
@@ -389,6 +390,12 @@ async function handleGroup(input: TurnInput, group: ProposalGroup, interpreted: 
       blocked: [prepared.code],
       preservedLabels: prepared.code === 'unmapped_time' ? prepared.detail.split(',').filter(Boolean) : [],
     });
+  }
+  // Every pending operation was withdrawn by this group (a cancel of the only one): that is a cancel of
+  // the preview, not an empty preview to confirm (V7, g-a-38 / g-b-16).
+  if (!prepared.intents.length && !prepared.state.operations.length && input.session.structured?.preview?.executionState === 'open') {
+    traces.push({ name: 'preview', fields: { ok: true, withdrawn: true } });
+    return handleCancel(input, interpreted, traces);
   }
   const summary = summarize(prepared.intents);
   publishPreview(input.session, prepared.state, prepared.intents, summary);

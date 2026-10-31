@@ -135,8 +135,12 @@ export function projectApply(input: {
     const relative = resolveRelative(resolved.operation, clock);
     if (!relative.ok) return relative;
     resolved.operation = relative.operation;
+    const dated = resolveBareClock(resolved.operation, { nowIso: input.nowIso, timeZone: input.timeZone, wakeHm: clock.wakeHm, sleepHm: clock.sleepHm });
+    if (!dated.ok) return dated;
+    resolved.operation = dated.operation;
     // A reminder asks for its own missing fields first; projectRemind then rejects what it cannot carry.
-    const labels = operation.action === 'remind' ? { ok: true as const, labels: [] } : keptLabels(resolved.operation);
+    const reminder = operation.action === 'remind' || operation.entityType === 'reminder';
+    const labels = reminder ? { ok: true as const, labels: [] } : keptLabels(resolved.operation);
     if (!labels.ok) return labels;
     // A preferred clock only means something on a create; elsewhere it would be dropped silently.
     if (
@@ -145,10 +149,10 @@ export function projectApply(input: {
     ) {
       return { ok: false, code: 'unrepresented_constraint', detail: `${operation.pendingId}:clock_preferred` };
     }
-    const projected = operation.action === 'create'
-      ? projectCreate(resolved.operation, clock, labels.labels, input.language ?? 'uk')
-      : operation.action === 'remind'
-        ? projectRemind(resolved.operation, clock)
+    const projected = reminder
+      ? projectRemind(resolved.operation, clock)
+      : operation.action === 'create'
+        ? projectCreate(resolved.operation, clock, labels.labels, input.language ?? 'uk')
         : projectCommand(resolved.operation, clock, input.language ?? 'uk');
     if (!projected.ok) return projected;
     if (exposesDraftId(projected.intent, draftIds)) return { ok: false, code: 'draft_identifier', detail: operation.pendingId };
@@ -176,7 +180,9 @@ function keptLabels(operation: PendingOperation): { ok: true; labels: TimeOfDayL
   if (unresolved.some((constraint) => !constraint.label)) {
     return { ok: false, code: 'unrepresented_constraint', detail: operation.pendingId };
   }
-  const placed = operation.constraints.some((constraint) => constraint.kind === 'date' || constraint.kind === 'clock' || constraint.kind === 'interval');
+  // A day alone does not place the task at a clock: a label on "Saturday morning" is kept and the task
+  // takes that day (V7). A clock or a window beside the label is a contradiction the user must settle.
+  const placed = operation.constraints.some((constraint) => constraint.kind === 'clock' || constraint.kind === 'interval');
   // The detail carries the labels so the reply can name what was not placed.
   if (operation.action !== 'create' || placed) {
     return { ok: false, code: 'unmapped_time', detail: unresolved.map((constraint) => constraint.label).join(',') };
@@ -194,7 +200,10 @@ function eligibleTarget(operation: PendingOperation): { ok: true } | ProjectErro
   }
   if (!target.writable) return { ok: false, code: 'unauthorized_entity', detail: target.entityId };
   if (target.status && target.status !== 'open') return { ok: false, code: 'ineligible', detail: target.entityId };
-  if (target.recurring && target.entityType !== 'reminder' && !operation.seriesScope) {
+  // One day the user named (a date or a weekday) is that occurrence; the scope is inferred later, once the
+  // weekday is a date (spec: "One day they already named, including today, is that occurrence").
+  const namesDay = operation.constraints.some((constraint) => constraint.kind === 'date' || constraint.kind === 'weekday');
+  if (target.recurring && target.entityType !== 'reminder' && !operation.seriesScope && !namesDay) {
     return { ok: false, code: 'missing_series_scope', detail: target.entityId };
   }
   // A series scope on a one-off row is a misreading, not something to ignore.
@@ -517,7 +526,17 @@ function firstSeriesDay(
 /** Reminder commands use the production remind_* shapes. A missing clock stays null for the user setting. */
 function projectRemind(operation: PendingOperation, clock: Clock): { ok: true; intent: VoiceWriteIntent } | ProjectError {
   const reminder = operation.changes.reminder;
-  const op = reminder?.op ?? (operation.target.kind === 'new' ? 'create' : null);
+  // The model may address a stored reminder with the task verbs; the verb is the reminder op (V7, g-d-11).
+  const impliedOp = operation.target.kind === 'new'
+    ? 'create'
+    : operation.action === 'delete' || operation.action === 'cancel'
+      ? 'delete'
+      : operation.action === 'complete'
+        ? 'resolve'
+        : operation.action === 'update' || operation.action === 'move'
+          ? 'update'
+          : null;
+  const op = reminder?.op ?? impliedOp;
   if (!op) return { ok: false, code: 'unrepresented_constraint', detail: `${operation.pendingId}:reminder_op` };
   if (operation.target.kind === 'new' && op !== 'create') return { ok: false, code: 'draft_command', detail: op };
   if (operation.target.kind === 'entity' && (op === 'create' || operation.target.entityType !== 'reminder')) {
@@ -536,9 +555,17 @@ function projectRemind(operation: PendingOperation, clock: Clock): { ok: true; i
   }
   const due = reminder?.dueYmd || date?.value || (op === 'update' ? stored?.dueYmd : undefined);
   if (!due && !terminal) return { ok: false, code: 'missing_day', detail: operation.pendingId };
-  const rejected = onlyKinds(operation, ['date']) ?? onlyChanges(operation, ['notes', 'reminder', ...(op === 'update' ? ['title' as const] : [])]);
+  // A start clock beside the reminder fields is the reminder clock; the model often repeats it as a constraint (V7, g-a-15).
+  const rejected = onlyKinds(operation, ['date', 'clock']) ?? onlyChanges(operation, ['notes', 'reminder', ...(op === 'update' ? ['title' as const] : [])]);
   if (rejected) return rejected;
-  const explicitClock = reminder?.notificationTime ?? (op === 'update' ? stored?.notificationTime ?? null : null);
+  const spokenClock = findClock(operation, 'start');
+  if (operation.constraints.some((constraint) => constraint.kind === 'clock' && constraint.role !== 'start')) {
+    return { ok: false, code: 'unrepresented_constraint', detail: `${operation.pendingId}:clock_role` };
+  }
+  if (spokenClock && reminder?.notificationTime && reminder.notificationTime !== spokenClock.value) {
+    return { ok: false, code: 'contradictory_constraints', detail: operation.pendingId };
+  }
+  const explicitClock = reminder?.notificationTime ?? spokenClock?.value ?? (op === 'update' ? stored?.notificationTime ?? null : null);
   if (due && !terminal) {
     const resolved = resolveZonedClock(due, explicitClock || clock.defaultReminderTime, clock.timeZone);
     if (resolved.status === 'gap' || resolved.status === 'fold') return { ok: false, code: resolved.status, detail: operation.pendingId };
@@ -838,19 +865,26 @@ const CLIENT_SERIES_SCOPE: Record<SeriesScope, 'occurrence' | 'series' | 'all'> 
  * skip: occurrence only. move: any scope, anchored on a named occurrence.
  * complete: one occurrence (cleared like a skip) or the whole series. cancel, update: the whole series only.
  */
-function projectSeriesCommand(operation: PendingOperation, clock: Clock, language: VNextLanguage): { ok: true; intent: VoiceWriteIntent } | ProjectError {
+function projectSeriesCommand(given: PendingOperation, clock: Clock, language: VNextLanguage): { ok: true; intent: VoiceWriteIntent } | ProjectError {
+  let operation = given;
   if (operation.target.kind !== 'entity') return { ok: false, code: 'draft_command', detail: operation.action };
   const target = operation.target;
+  // One day the user named is that occurrence (spec: "One day they already named, including today, is
+  // that occurrence"); the model need not restate the scope (V7, g-d-05/06/08).
+  const namedDay = operation.seriesScope ? undefined : find(operation, 'date')?.value;
+  if (namedDay) operation = { ...operation, seriesScope: 'occurrence', occurrenceDate: operation.occurrenceDate ?? namedDay };
   const scope = operation.seriesScope;
   if (!scope) return { ok: false, code: 'missing_series_scope', detail: target.entityId };
   const taskId = target.entityId;
   const summary = commandSummary(language, operation.action, operation, clock);
   const taskName = target.name || operation.changes.title || operation.sourceText || operation.action;
   const occurrenceCommand = (kind: 'skip' | 'end_series', copy: string = kind, allowedChanges: Array<keyof OperationChangesV1> = []): { ok: true; intent: VoiceWriteIntent } | ProjectError => {
-    const rejected = onlyKinds(operation, []) ?? onlyChanges(operation, allowedChanges);
+    const rejected = onlyKinds(operation, ['date']) ?? onlyChanges(operation, allowedChanges);
     if (rejected) return rejected;
     const picked = pickOccurrence(operation, clock.timeZone);
     if (!picked.ok) return picked;
+    const day = find(operation, 'date')?.value;
+    if (day && localYmd(picked.occurrence.start, clock.timeZone) !== day) return { ok: false, code: 'occurrence_not_found', detail: day };
     const text = commandSummary(language, copy, operation, clock, { occurrence: picked.occurrence.start });
     return {
       ok: true,
@@ -966,7 +1000,7 @@ function occurrenceEdit(
   const scope = operation.seriesScope === 'occurrence' || operation.seriesScope === 'from_day' ? operation.seriesScope : null;
   if (!scope) return { ok: false, code: 'unsupported_series_scope', detail: `${operation.action}:${operation.seriesScope}` };
   const completion = copy === 'complete_occurrence';
-  const rejected = onlyKinds(operation, completion ? [] : ['date', 'clock', 'duration'])
+  const rejected = onlyKinds(operation, completion ? ['date'] : ['date', 'clock', 'duration'])
     ?? onlyChanges(operation, completion ? ['status'] : scope === 'occurrence' ? ['notes', 'status'] : ['notes']);
   if (rejected) return rejected;
   if (operation.changes.status && operation.changes.status !== 'completed') return { ok: false, code: 'unrepresented_constraint', detail: `${operation.pendingId}:status` };
@@ -1120,6 +1154,32 @@ function resolveWeekdayConstraints(
     return { constraintId: constraint.constraintId, kind: 'date' as const, value: ymd };
   });
   return { ok: true, operation: { ...operation, constraints } };
+}
+
+/**
+ * A clock with no day: today when that clock is still ahead, otherwise a question (spec: "A clock that is
+ * already past, with no day, is a question when"). A command on a placed task keeps the task's own day.
+ * A repeat, a window, an all-day item or a relative time keep their own day rules (V7, en-c-01).
+ */
+function resolveBareClock(
+  operation: PendingOperation,
+  clock: { nowIso?: string; timeZone: string; wakeHm: string; sleepHm: string },
+): { ok: true; operation: PendingOperation } | ProjectError {
+  const spoken = operation.constraints.find((constraint): constraint is Extract<TemporalProposal, { kind: 'clock' }> & { constraintId: string } =>
+    constraint.kind === 'clock' && (constraint.role === 'start' || constraint.role === 'preferred'));
+  if (!spoken || !clock.nowIso) return { ok: true, operation };
+  if (operation.constraints.some((constraint) => constraint.kind === 'date' || constraint.kind === 'weekday' || constraint.kind === 'recurrence' || constraint.kind === 'interval' || constraint.kind === 'all_day' || constraint.kind === 'ordering' || constraint.kind === 'relative')) {
+    return { ok: true, operation };
+  }
+  if (operation.action === 'remind' || operation.entityType === 'reminder' || operation.occurrenceDate) return { ok: true, operation };
+  const own = operation.target.kind === 'entity' ? operation.target.scheduledStart : undefined;
+  const ymd = own ? localYmd(own, clock.timeZone) : scheduleTodayYmd(clock.nowIso, clock.timeZone, clock.wakeHm, clock.sleepHm);
+  if (!own) {
+    const at = resolveZonedClock(ymd, spoken.value, clock.timeZone);
+    if (at.status === 'ok' && Date.parse(at.iso) <= Date.parse(clock.nowIso)) return { ok: false, code: 'past', detail: operation.pendingId };
+  }
+  const date = { constraintId: `${spoken.constraintId}:day`, kind: 'date' as const, value: ymd };
+  return { ok: true, operation: { ...operation, constraints: [...operation.constraints, date] } };
 }
 
 function resolveStart(operation: PendingOperation, timeZone: string): { ok: true; iso: string } | ProjectError {

@@ -152,6 +152,15 @@ function parseTarget(value: unknown, path: string, errors: ValidationIssue[]): T
     if (!proposedId && !description) issue(errors, 'empty_target', path, 'existing');
     return { kind, ...(proposedId ? { proposedId } : {}), ...(description ? { description } : {}), ...(calendarId ? { calendarId } : {}) };
   }
+  // The model sometimes names the pending operation as proposedId / id (the fields of an existing target).
+  // The pending id is the same thing: read it (V7, live baseline g-b-29 / g-c-12).
+  if (kind === 'operation_result' && typeof value.opId !== 'string') {
+    const alias = typeof value.proposedId === 'string' ? value.proposedId : typeof value.id === 'string' ? value.id : undefined;
+    if (alias) value.opId = alias;
+    delete value.proposedId;
+    delete value.id;
+    delete value.description;
+  }
   if (kind === 'operation_result' && typeof value.opId === 'string' && value.opId.trim()) {
     rejectUnknown(errors, value, ['kind', 'opId'], path);
     return { kind, opId: value.opId.trim() };
@@ -176,6 +185,8 @@ function parseConstraint(value: unknown, path: string, errors: ValidationIssue[]
   switch (value.kind) {
     case 'date': {
       rejectUnknown(errors, value, ['kind', 'value', 'precision'], path);
+      // A YYYY-MM-DD with no precision is a day (V7: the model omitted precision in 7 live corrections).
+      if (value.precision === undefined && typeof value.value === 'string' && isYmd(value.value)) value.precision = 'day';
       if (value.precision !== 'day' && value.precision !== 'week' && value.precision !== 'month') {
         issue(errors, 'invalid_precision', path, String(value.precision));
         return null;
