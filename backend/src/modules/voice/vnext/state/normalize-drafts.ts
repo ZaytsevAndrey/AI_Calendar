@@ -10,7 +10,7 @@ export type DraftNormalization =
   | { ok: true; state: StructuredState; folded: boolean }
   | { ok: false; code: string; detail: string; state: StructuredState };
 
-const CHANGE_FIELDS = ['title', 'notes', 'priority', 'location', 'status', 'unschedule'] as const;
+const CHANGE_FIELDS = ['title', 'notes', 'priority', 'location', 'status', 'unschedule', 'explicitNew'] as const;
 
 export function normalizeDrafts(state: StructuredState, ids: IdAllocator): DraftNormalization {
   const creates = state.operations.filter((operation): operation is PendingOperation & { target: { kind: 'new'; localId: string } } =>
@@ -116,6 +116,7 @@ function applyFolds(create: PendingOperation, dependents: PendingOperation[]): {
       if (conflict) return { ok: false, code: 'conflicting_patch', detail: 'scheduling' };
       scheduling = dependent.scheduling;
     }
+    if (dependent.constraints.some((constraint) => constraint.kind === 'date' || constraint.kind === 'weekday' || constraint.kind === 'clock' || constraint.kind === 'interval')) delete changes.unschedule;
     for (const constraint of dependent.constraints) {
       const key = constraintKey(constraint);
       const body = JSON.stringify(withoutConstraintId(constraint));

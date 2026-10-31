@@ -93,7 +93,14 @@ function build(world: World) {
     // What the client measured for the call that just returned; null when the provider gave nothing.
     takeLastCompletion: jest.fn(() => ({ model: 'deepseek-flash', totalTokens: 120, promptTokens: 100, completionTokens: 20 })),
   };
-  const externalBusy = { listVisibleEvents: jest.fn(async () => world.events ?? []) };
+  // Like the provider: only the events that start inside the asked range.
+  const externalBusy = {
+    listVisibleEvents: jest.fn(async (_userId: string, fromIso?: string, toIso?: string) => (world.events ?? []).filter((row) => {
+      const start = row.start?.dateTime ? Date.parse(row.start.dateTime) : null;
+      if (start == null || !fromIso || !toIso) return true;
+      return start >= Date.parse(fromIso) && start < Date.parse(toIso);
+    })),
+  };
   const service = new StructuredVoiceService(
     groq as never,
     {
@@ -351,7 +358,8 @@ describe('structured /voice/turn integration', () => {
       const w = world({
         tasks: [task('task-report', 'Звіт')],
         model: [
-          envelope('хочу ще одну задачу з такою самою назвою як звіт', [{ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'Звіт' } }]),
+          // V7: a create titled like an open task carries explicitNew when the user asked for another one.
+          envelope('хочу ще одну задачу з такою самою назвою як звіт', [{ opId: 'op-1', action: 'create', target: { kind: 'new', localId: 'n' }, changes: { title: 'Звіт', explicitNew: true } }]),
           // The prompt lists the open preview's operations by their pending id; the correction targets that id.
           envelope('постав новій 25 жовтня о 16:05', [{ opId: 'op-2', action: 'update', target: { kind: 'operation_result', opId: 'pop_1' }, constraints: [{ kind: 'date', value: '2026-10-25', precision: 'day' }, { kind: 'clock', value: '16:05', role: 'start' }] }]),
         ],
@@ -864,6 +872,30 @@ describe('structured operations on provider calendar events', () => {
     constraints: [{ kind: 'date', value: '2026-10-19', precision: 'day' }, { kind: 'clock', value: '15:00', role: 'start' }],
   }]);
 
+  // V7 (live g-a-21 / g-a-46 / en-a-10): the model created a task named like a calendar event, or asked
+  // which item, because events were invisible until it chose to read them. Upcoming provider events are
+  // now in the prompt's record list, and addressable without a read.
+  it('lists upcoming provider events in the prompt and lets the model address one without a read', async () => {
+    const w = world({ events: [event('ev-flight', 'Політ', { organizer: { self: true } })], model: [moveDentist.replace('ev-dentist', 'ev-flight')] });
+    const { service } = build(w);
+    const preview = await service.turn(USER, dto({ transcript: said }));
+    expect(w.prompts[0]).toContain('ext:google:ev-flight');
+    expect(w.prompts[0]).toContain('Політ');
+    expect(preview.outcome).toBe('confirm');
+    expect(preview.intents[0]).toMatchObject({ type: 'command', command: { kind: 'move', googleEventId: 'ev-flight', provider: 'google', start: '2026-10-19T12:00:00.000Z' } });
+    const acted = await service.turn(USER, dto({ actionId: 'confirm', ...claimOf(preview) }));
+    expect(acted.outcome).toBe('act');
+  });
+
+  it('a read-only provider event is listed as read-only and a write to it is refused, not created anew', async () => {
+    const w = world({ events: [event('ev-flight', 'Політ', { organizer: { self: false } })], model: [moveDentist.replace('ev-dentist', 'ev-flight')] });
+    const { service } = build(w);
+    const result = await service.turn(USER, dto({ transcript: said }));
+    expect(w.prompts[0]).toMatch(/ev-flight.*read-only/);
+    expect(result.outcome).toBe('refuse');
+    expect(result.intents).toEqual([]);
+  });
+
   it('moves a provider event found through find_events, on its own provider, after a fresh re-read', async () => {
     const w = world({ events: [event('ev-dentist', 'Dentist')], model: [reads('find_events', { day: '2026-10-19' }), moveDentist] });
     const { service } = build(w);
@@ -904,8 +936,12 @@ describe('structured operations on provider calendar events', () => {
     });
     expect((await build(invite).service.turn(USER, dto({ transcript: said }))).intents).toEqual([]);
 
+    // V7: upcoming provider events are preloaded into the addressable list, so a move needs no prior read.
+    // Before V7 an event the model had not read was refused here. An event outside the preload window still is.
     const unread = world({ events: [event('ev-dentist', 'Dentist')], model: [moveDentist] });
-    expect((await build(unread).service.turn(USER, dto({ transcript: said }))).outcome).toBe('refuse');
+    expect((await build(unread).service.turn(USER, dto({ transcript: said }))).outcome).toBe('confirm');
+    const far = world({ events: [event('ev-dentist', 'Dentist', { start: { dateTime: '2026-12-19T10:00:00+02:00' }, end: { dateTime: '2026-12-19T11:00:00+02:00' } })], model: [moveDentist] });
+    expect((await build(far).service.turn(USER, dto({ transcript: said }))).outcome).toBe('refuse');
 
     const transcript = 'mark the dentist done';
     const complete = world({

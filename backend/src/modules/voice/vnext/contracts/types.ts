@@ -87,6 +87,8 @@ export type OperationChangesV1 = {
   reminder?: ReminderChangeV1;
   /** Take the time off a task: it goes to Later with no start, end, window or deadline (V7). */
   unschedule?: true;
+  /** The user asked for another task even though one with this title exists (add / create / another). */
+  explicitNew?: true;
 };
 
 export type SemanticOperationV1 = {

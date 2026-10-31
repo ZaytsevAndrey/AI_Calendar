@@ -51,6 +51,7 @@ const UK: Record<string, string> = {
   fixed_skip: 'Це фіксована подія, її день не можна пропустити. Можу перенести або видалити.',
   nothing_to_skip: 'У цієї задачі немає запланованого дня, який можна пропустити.',
   series_copies: 'У цієї серії є окремо змінені або відкладені дні, тому зміну всієї серії я не роблю. Скажіть про конкретний день або змініть серію в застосунку.',
+  same_title: 'Задача з такою назвою вже є. Це про неї, чи додати ще одну?',
 };
 
 const EN: Record<string, string> = {
@@ -104,6 +105,7 @@ const EN: Record<string, string> = {
   fixed_skip: 'That is a fixed event; its day cannot be skipped. I can move or delete it.',
   nothing_to_skip: 'That task has no scheduled day to skip.',
   series_copies: 'Some days of that series were changed or parked separately, so I will not change the whole series. Name one day, or change the series in the app.',
+  same_title: 'A task with that name already exists. Do you mean it, or should I add another one?',
 };
 
 export function voiceCopy(language: VNextLanguage, code: string): string {

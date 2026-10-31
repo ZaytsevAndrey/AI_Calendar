@@ -142,6 +142,15 @@ export function projectApply(input: {
     const reminder = operation.action === 'remind' || operation.entityType === 'reminder';
     const labels = reminder ? { ok: true as const, labels: [] } : keptLabels(resolved.operation);
     if (!labels.ok) return labels;
+    if (!labels.labels.length && resolved.operation.constraints.some((constraint) => constraint.kind === 'unresolved' && constraint.label)) {
+      resolved.operation = { ...resolved.operation, constraints: resolved.operation.constraints.filter((constraint) => constraint.kind !== 'unresolved') };
+    }
+    // R7: an update that changes nothing beside other operations is "leave it as is" (V7, g-a-25).
+    if (operation.action === 'update' && operation.target.kind === 'entity' && ordered.operations.length > 1
+      && !Object.keys(operation.changes).some((key) => operation.changes[key as keyof typeof operation.changes] !== undefined)
+      && !resolved.operation.constraints.length && !operation.seriesScope) {
+      continue;
+    }
     // A preferred clock only means something on a create; elsewhere it would be dropped silently.
     if (
       operation.action !== 'create'
@@ -177,6 +186,10 @@ function keptLabels(operation: PendingOperation): { ok: true; labels: TimeOfDayL
   const unresolved = operation.constraints.filter((constraint): constraint is Extract<Constraint, { kind: 'unresolved' }> =>
     constraint.kind === 'unresolved');
   if (!unresolved.length) return { ok: true, labels: [] };
+  // "In the evening, at 18:55": the clock is the time and the label only describes it (V7, g-a-50).
+  if (unresolved.every((constraint) => constraint.label) && operation.constraints.some((constraint) => constraint.kind === 'clock' && constraint.role === 'start')) {
+    return { ok: true, labels: [] };
+  }
   if (unresolved.some((constraint) => !constraint.label)) {
     return { ok: false, code: 'unrepresented_constraint', detail: operation.pendingId };
   }
@@ -386,7 +399,7 @@ function projectCreate(
   if (operation.target.kind !== 'new') return { ok: false, code: 'invalid_target', detail: operation.action };
   // keptLabels already limited `unresolved` to labels on an unplaced create.
   const rejected = onlyKinds(operation, ['date', 'clock', 'interval', 'duration', 'unresolved', 'recurrence', 'all_day', 'day_bound', 'ordering'])
-    ?? onlyChanges(operation, ['notes', 'priority', 'location', 'status', 'spanRole', 'unschedule', ...(emptyReminder(operation.changes) ? ['reminder' as const] : [])]);
+    ?? onlyChanges(operation, ['notes', 'priority', 'location', 'status', 'spanRole', 'unschedule', 'explicitNew', ...(emptyReminder(operation.changes) ? ['reminder' as const] : [])]);
   if (rejected) return rejected;
   const title = operation.changes.title;
   if (!title) return { ok: false, code: 'missing_title', detail: operation.pendingId };

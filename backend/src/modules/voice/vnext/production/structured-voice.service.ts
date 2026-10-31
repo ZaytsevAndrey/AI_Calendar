@@ -106,6 +106,10 @@ function fixed(output: { group?: ProposalGroup; envelope?: SemanticEnvelopeV1 })
 
 const CONTROL = (control: 'confirm' | 'cancel'): ProposalGroup => ({ version: '1', control, proposals: [], patches: [] });
 
+/** Provider events the model sees without a read: today and the next 13 civil days, refreshed each minute. */
+const EXTERNAL_PRELOAD_DAYS = 14;
+const EXTERNAL_PRELOAD_TTL_MS = 60_000;
+
 @Injectable()
 export class StructuredVoiceService {
   private readonly logger = new Logger(StructuredVoiceService.name);
@@ -178,6 +182,10 @@ export class StructuredVoiceService {
     else if (interpreter !== 'model') log.step('interpreter.ui_action', { actionId, model: false });
 
     const ctx = await this.loadContext(userId, dto, log);
+    // Provider events of the coming days are part of what the model can address, like owned tasks:
+    // without them the model created tasks named like an event, or asked which item (V7). They enter
+    // the same `external` map a find_events read fills, so confirm re-reads them the same way.
+    if (interpreter === 'model') await this.preloadExternal(ctx, entry, log);
     log.step('context.ready', {
       timeZone: ctx.timeZone,
       nowIso: ctx.nowIso,
@@ -517,6 +525,26 @@ export class StructuredVoiceService {
         access: record.writable ? 'editable' : 'read-only',
       })),
     };
+  }
+
+  /** Upcoming provider events (today and the next 13 days), once per session per minute. */
+  private async preloadExternal(ctx: Context, entry: SessionEntry, log: TurnLog): Promise<void> {
+    const today = localYmd(ctx.nowIso, ctx.timeZone);
+    const key = `${today}:${ctx.timeZone}`;
+    const now = Date.now();
+    if (entry.externalLoaded && entry.externalLoaded.key === key && now - entry.externalLoaded.at < EXTERNAL_PRELOAD_TTL_MS) return;
+    try {
+      const events = await log.timed(
+        'provider.preload',
+        () => this.externalBusy.listVisibleEvents(ctx.userId, civilDayStartIso(today, ctx.timeZone), civilDayStartIso(addDaysToYmd(today, EXTERNAL_PRELOAD_DAYS), ctx.timeZone)),
+        (rows) => ({ fields: { events: rows.length, days: EXTERNAL_PRELOAD_DAYS } }),
+      );
+      for (const record of this.externalRecords(ctx, events)) entry.external.set(record.id, record);
+      entry.externalLoaded = { key, at: now };
+    } catch (err) {
+      // A provider that cannot be reached leaves the list as it was; the turn goes on without it.
+      log.warn('provider.preload', { ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
   }
 
   private externalRecords(ctx: Context, events: ProviderEvent[]): EntityRecord[] {

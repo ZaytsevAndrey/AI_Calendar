@@ -108,6 +108,7 @@ function blockedCopy(code: string): Parameters<typeof voiceCopy>[1] {
   if (code === 'missing_occurrence' || code === 'occurrence_not_found' || code === 'ambiguous_occurrence') return 'which_occurrence';
   if (code === 'empty_patch') return 'what_change';
   if (code === 'past') return 'past_clock';
+  if (code === 'same_title_existing') return 'same_title';
   if (code === 'cross_day_series_move') return 'same_day_series';
   if (code === 'fixed_skip') return 'fixed_skip';
   if (code === 'nothing_to_skip') return 'nothing_to_skip';
@@ -116,6 +117,14 @@ function blockedCopy(code: string): Parameters<typeof voiceCopy>[1] {
     return 'unrepresented';
   }
   return 'which_task';
+}
+
+/** While a preview is open, a failed attempt to change it makes a later spoken yes a question, not a write. */
+function lockOpenPreview(session: VNextSession): void {
+  const state = session.structured;
+  if (!state || state.preview?.executionState !== 'open' || state.blocksConfirmation) return;
+  // Not through setConfirmationBlock: that bumps the session version the shown claim was cut from.
+  session.structured = { ...state, blocksConfirmation: true };
 }
 
 function ensureStructured(session: VNextSession): StructuredState {
@@ -262,7 +271,36 @@ function draftEditFromCreates(envelope: SemanticEnvelopeV1): SemanticEnvelopeV1 
 function resolveGroup(interpreted: InterpretOutput, input: TurnInput): ProposalGroup | null {
   if (interpreted.group) return interpreted.group;
   if (interpreted.envelope) {
-    return envelopeToProposalGroup(interpreted.envelope, { nowIso: input.nowIso, timeZone: input.timeZone });
+    return envelopeToProposalGroup(withSolePendingId(interpreted.envelope, input), { nowIso: input.nowIso, timeZone: input.timeZone });
+  }
+  return null;
+}
+
+/** "Cancel it" with no id while exactly one operation is pending names that operation (V7, g-c-20). */
+function withSolePendingId(envelope: SemanticEnvelopeV1, input: TurnInput): SemanticEnvelopeV1 {
+  const pending = input.session.structured?.preview?.executionState === 'open' ? input.session.structured.operations : [];
+  if (pending.length !== 1) return envelope;
+  const operations = envelope.operations.map((operation) => {
+    const target = operation.target as { kind: string; opId?: string };
+    if (target.kind !== 'operation_result' || target.opId) return operation;
+    return { ...operation, target: { kind: 'operation_result' as const, opId: pending[0].pendingId } };
+  });
+  return { ...envelope, operations };
+}
+
+/**
+ * A create titled like an open task of the user is the existing task unless the model marked it as
+ * explicitly new; a group that also writes to that task is a split of one sentence (V7, g-b-10 / g-c-08).
+ * Titles compare whole and case-folded; this is not a fuzzy match.
+ */
+function sameTitleAsOpen(group: ProposalGroup, known: readonly KnownEntity[]): string | null {
+  const fold = (text: string) => text.trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+  for (const proposal of group.proposals) {
+    if (proposal.action !== 'create' || proposal.entityType !== 'task' || proposal.changes.explicitNew) continue;
+    const title = proposal.changes.title ? fold(proposal.changes.title) : '';
+    if (!title) continue;
+    const twin = known.find((entity) => entity.entityType === 'task' && (entity.status ?? 'open') === 'open' && entity.writable && fold(entity.name ?? '') === title);
+    if (twin) return twin.entityId;
   }
   return null;
 }
@@ -347,6 +385,16 @@ async function handleGroup(input: TurnInput, group: ProposalGroup, interpreted: 
       blocked: ['wrong_calendar'],
     });
   }
+  const twin = sameTitleAsOpen(working, known);
+  if (twin) {
+    askDialogue(input.session, { id: 'same_title', question: voiceCopy(input.language, 'same_title'), missing: twin, operationId: null });
+    lockOpenPreview(input.session);
+    return done(input, reply(input.session.sessionId, { outcome: 'clarify', assistantMessage: voiceCopy(input.language, 'same_title'), clarifyCount: 1 }), {
+      traces,
+      usage: interpreted.usage,
+      blocked: ['same_title_existing'],
+    });
+  }
   const previous = ensureStructured(input.session);
   const prepared = prepareStructuredPreview({
     state: previous,
@@ -384,6 +432,9 @@ async function handleGroup(input: TurnInput, group: ProposalGroup, interpreted: 
           : [prepared.code],
       });
     }
+    // The user tried to change the open preview and the change could not be prepared: the question now
+    // outranks a bare yes, so the old preview is not applied by mistake (V7, g-b-22). A tap still can.
+    lockOpenPreview(input.session);
     return done(input, reply(input.session.sessionId, { outcome: 'clarify', assistantMessage: voiceCopy(input.language, blockedCopy(prepared.code)), clarifyCount: 1 }), {
       traces,
       usage: interpreted.usage,

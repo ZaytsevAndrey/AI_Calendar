@@ -80,11 +80,14 @@ export function envelopeToProposalGroup(envelope: SemanticEnvelopeV1, _clock?: E
   }
   // A reminder about a create the same utterance withdrew has nothing to be about.
   if ([...reminderBase.values()].some((baseId) => dropped.has(baseId))) return null;
+  // Waiting on a cancel or a delete orders nothing: the model writes it to say "after dropping that" (V7, g-b-22).
+  const withdrawals = new Set(envelope.operations.filter((operation) => operation.action === 'cancel' || operation.action === 'delete').map((operation) => operation.opId));
   const proposals: SemanticOperationProposal[] = [];
   for (const operation of envelope.operations) {
     const standalone = reminders.get(operation.opId);
     if ((operation.target.kind === 'operation_result' && !standalone && !crossTurn.has(operation.opId)) || dropped.has(operation.opId)) continue;
-    const mapped = mapOperation(standalone ?? creates.get(operation.opId) ?? operation);
+    const source = standalone ?? creates.get(operation.opId) ?? operation;
+    const mapped = mapOperation(withdrawals.size ? { ...source, dependsOn: source.dependsOn.filter((opId) => !withdrawals.has(opId)) } : source);
     if (!mapped) return null;
     proposals.push(mapped);
   }

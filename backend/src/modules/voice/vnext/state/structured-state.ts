@@ -447,6 +447,8 @@ function foldEntityCorrections(
       if (proposal.changes[field] !== undefined) changes[field] = proposal.changes[field] as never;
     }
     if (proposal.changes.reminder) changes.reminder = { ...(previous.changes.reminder ?? { op: 'update' }), ...proposal.changes.reminder } as never;
+    // A day or a clock given after "take the time off" puts the task back on the calendar.
+    if (proposal.constraints.some((constraint) => constraint.kind === 'date' || constraint.kind === 'weekday' || constraint.kind === 'clock' || constraint.kind === 'interval')) delete changes.unschedule;
     // A new verb that is not a reschedule (done, skip) carries only its own constraints: the day of the
     // move it replaces is not the day of the completion.
     const reschedule = proposal.action === 'move' || proposal.action === 'update';
@@ -483,7 +485,10 @@ function foldEntityCorrections(
     byId.set(previous.pendingId, merged);
   }
   if (remaining.length === group.proposals.length) return { ok: true, group, operations };
-  return { ok: true, group: { ...group, proposals: remaining }, operations: next };
+  // A proposal that waited on a withdrawn correction has nothing left to wait for.
+  const withdrawnRefs = new Set(group.proposals.filter((proposal) => !remaining.includes(proposal)).map((proposal) => proposal.localRef));
+  const proposals = remaining.map((proposal) => ({ ...proposal, dependsOn: proposal.dependsOn.filter((dependency) => !('localRef' in dependency) || !withdrawnRefs.has(dependency.localRef)) }));
+  return { ok: true, group: { ...group, proposals }, operations: next };
 }
 
 function planProposals(

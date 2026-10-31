@@ -96,6 +96,7 @@ const CHANGE_KEYS = new Set([
   'location',
   'reminder',
   'unschedule',
+  'explicitNew',
 ]);
 const PRIORITIES = new Set(['low', 'medium', 'high', 'urgent']);
 const REMINDER_OPS = new Set(['create', 'update', 'resolve', 'delete']);
@@ -364,6 +365,10 @@ function parseChanges(value: unknown, path: string, errors: ValidationIssue[]): 
   if ('unschedule' in value) {
     if (value.unschedule !== true) issue(errors, 'invalid_type', `${path}.unschedule`, 'unschedule');
     else changes.unschedule = true;
+  }
+  if ('explicitNew' in value) {
+    if (value.explicitNew !== true && value.explicitNew !== false) issue(errors, 'invalid_type', `${path}.explicitNew`, 'explicitNew');
+    else if (value.explicitNew) changes.explicitNew = true;
   }
   if ('reminder' in value) {
     if (!isRecord(value.reminder)) issue(errors, 'invalid_type', `${path}.reminder`, 'reminder');
