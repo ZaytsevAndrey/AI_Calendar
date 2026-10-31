@@ -122,7 +122,7 @@ The spoken title is the same as an Open task title: that task. A bare pronoun wi
 
 A new errand they asked to add is created as they said, even when an open task is similar.
 
-A repeating Open task needs a scope. One day they already named, including today, is that occurrence. This day and following is the series from that day. The whole series is all. They did not say which: ask, and do not delete or edit yet. A name, priority, phase, or description change is the whole series. One day of those fields does not exist.
+A repeating Open task needs a scope. One day they already named, including today, is that occurrence. This day and following is the series from that day. The whole series is all. They did not say which: ask, and do not delete or edit yet. A name, notes, clock or length change on one day, or from a day on, changes only that part of the series (the app's occurrence editor; WP-B); a priority, phase or window change is the whole series. One day of a series stays on its day: a move to another day is refused, not approximated. Done on one day marks that day done in place; done from a day on is refused. A series some of whose days were changed or parked separately refuses a series-wide rename, delete or end and says why; one day at a time still works (D-03).
 
 A bound is a time field on that same update. "By" or "until" a day or a part of day is the deadline. "Not before" or "after" a clock is the earliest start. The word "deadline" is not required. A day and no clock is that day's Sleep.
 
@@ -132,7 +132,7 @@ One existing task. Fields, where it sits in time, and whether it is done are one
 
 Rename keeps the old title as the target and stores the new title beside it. A length is the duration only when they said how long the task takes. A window is not a length. Priority is set only when they said it. Clearing the time clears start, end, earliest, and deadline.
 
-Do now is the start at the current clock. A start and an end are that window. A day and no clock is Wake to Sleep that day. A clock that is already past, with no day, is a question when. A clock and no end keeps the current duration. Morning is wake plus three hours. No day and no clock, when they asked to place the task: ask when. A move to a day, a window, or after another task, with no clock, sets that window on a flexible task, and placement re-seats it. A fixed task needs a clock: ask which.
+Do now is the start at the current clock. A start and an end are that window. A day and no clock is Wake to Sleep that day. A clock that is already past, with no day, is a question when. A clock and no end keeps the current duration. Morning is wake plus three hours. No day and no clock, when they asked to place the task: ask when. A move to a day, a window, or after another task, with no clock, sets that window on a flexible task, and placement re-seats it. A fixed task needs a clock: ask which. A Later task given a day, a window or a clock leaves the Later list and is seated there. A fixed task given only a day keeps its clock and length on that day; given only a start keeps its length.
 
 Done on a one-off sets status completed. Done on a series uses the scope above: one occurrence, from this day on, or the whole series. A name that is not an open task, said as close or finish, is a new errand. A time change with no other field still seats the task. A time change together with another field is the same update.
 
@@ -142,7 +142,7 @@ Removes the task. It does not ask "are you sure". The app asks before it writes.
 
 ### Skip
 
-Drops the next open occurrence, or the one happening now. Another day is a question: skip only drops the next open time. The whole series is a question: skip is this occurrence only. An Unscheduled task is cancelled, not deleted. A fixed event cannot be skipped: the app refuses.
+Drops the next open occurrence, or the one happening now. Another day is a question: skip only drops the next open time. The whole series is a question: skip is this occurrence only. A one-off flexible task with a slot is skipped like one day of a series. An Unscheduled task has nothing to skip: the app refuses. A fixed event cannot be skipped: the app refuses.
 
 ### Calendar events
 

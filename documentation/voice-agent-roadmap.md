@@ -2,7 +2,7 @@
 
 Authoritative Voice Agent backlog after the scheduling stabilization (30 October 2026). It replaces the lost `docs/voice-vnext/LUEFY-VOICE-AGENT-ROADMAP.md` (phases 4.7.6–5.0; never in git, deleted 29 Oct) and details roadmap items §39–§43 and §48–§49 of the [product roadmap](roadmap.md). Product contract: [spec-voice-agent.md](spec-voice-agent.md). Scheduling contract the agent must follow: [placement-engine.md](placement-engine.md) (§7.6, §13). Open risks: [security-and-residual-risks.md](security-and-residual-risks.md) (R-20, G-6), [known-issues.md](known-issues.md) KI-04, KI-10, KI-19.
 
-**Status (31 Oct 2026):** V1 (VC-01, VC-13, VC-14, VC-06) and the Stage 2 packages WP-H1, WP-J1, WP-C, WP-D, WP-F, WP-A, WP-G of the [handoff](voice-agent-handoff.md) are implemented and tested on `voice/v1-create-contract` — structured gate 256/256. Not merged into `master`. V2 (moves) is a separate stage; WP-B waits for the Scheduling merge.
+**Status (31 Oct 2026):** V1, the Stage 2 packages (WP-H1, WP-J1, WP-C, WP-D, WP-F, WP-A, WP-G), **V2** and **WP-B** are implemented and tested on the local integration branch `integrate/scheduling-voice` (Scheduling Domain merged, voice merged, V2 `d798323`, WP-B `0824ab3`, regression set `2623227`) — structured gate 299 green, frontend 107/107. Not merged into `master`, nothing pushed. Next: V7 live baseline (see [handoff §0b](voice-agent-handoff.md)).
 
 **Implementing V3–V9?** Start from [voice-agent-handoff.md](voice-agent-handoff.md) — the verified baseline, the work packages, what is ready versus blocked, and the corrections this file still carries (dead code in §A, the VC-11 call sites, the VR-24 privacy wording).
 
@@ -167,7 +167,7 @@ Order: contract correctness → security and trusted resolution → multi-turn �
 - **Result:** structured gate 242/242 (232 before, 10 new); frontend voice suites 26/26; i18n and api suites 15/15; backend `tsc --noEmit` clean on `src/` and `nest build` green; frontend `tsc --noEmit` clean. The frontend production bundle (`npm run build`) was not run in that session (tooling time limit) and is left to CI. Live behavior is unchanged in this phase: no live model run (V7).
 - **Risk taken:** one prompt rule changed (a softened clock on a repeat is the series clock; a repeat emits no window or bound). Re-measure in V7.
 
-### V2 — Move and schedule paths (P1) — **next**
+### V2 — Move and schedule paths (P1) — **shipped 31 Oct 2026 on `integrate/scheduling-voice` (`d798323`)**
 - **Scope:** VC-02 (schedule a Later task), VC-03 (`slotId` moves without Google), VC-04 (cross-day series move refused at preview), VC-09 (skip a one-off), VC-10 (fixed edge cases).
 - **Files:** `project-apply.ts` (`projectMove`, `projectSeriesCommand`, `updatePatch`, `resolveEnd`), `production/catalog.ts` (slot ids for moves), `frontend/src/modules/voice/executeVoiceCommand.ts` (forward `isUnscheduled`, `description: null`).
 - **Depends on:** V1.
@@ -232,7 +232,7 @@ Order: contract correctness → security and trusted resolution → multi-turn �
 
 ---
 
-## F. V1 as shipped, and the next execution task — V2 (do not start without the go-ahead)
+## F. V1, V2 and WP-B as shipped, and the next execution task — V7 (do not start without the go-ahead)
 
 ### V1 — shipped 30 October 2026
 
@@ -252,7 +252,26 @@ Order: contract correctness → security and trusted resolution → multi-turn �
 
 **Two expectation updates, not weakened tests:** "completes one occurrence …" now expects the scope suffix (the behavior VC-06 adds), and the Ukrainian verb for a series-wide done is the stored `Позначити виконаною`.
 
-### V2 — next
+### V2 — shipped 31 October 2026 (`d798323`, integration branch)
+
+| ID | Change | Where |
+|----|--------|-------|
+| VC-02 | A Later task given a day, a window or a clock leaves the inbox: `isUnscheduled: false` in the patch, forwarded by the client; a clock move of a Later task is a scheduled patch, never a slot move | `project-apply.ts` (`updatePatch`, move path), `executeVoiceCommand.ts` |
+| VC-03 | Moves name the app slot (`slotId`) from the catalog; no calendar event id needed; revalidation demands the event identity only when the preview captured one | `catalog.ts`, `proposal.ts`, `structured-state.ts`, `revalidate-preview.ts`, `project-apply.ts`, `voice-command.types.ts`, `voice.api.ts`, `executeVoiceCommand.ts` |
+| VC-04 | A move of one occurrence to another day is refused at preview (`same_day_series` copy); one prompt rule | `project-apply.ts`, `copy.ts`, `run-structured-turn.ts`, `prompts.ts` |
+| VC-09 | Skip of a one-off flexible task → skip-occurrence with its one slot; fixed one-off and slotless task refused with their own copy | `project-apply.ts`, `copy.ts` |
+| VC-10 | Fixed task: date-only keeps the stored clock and length; start-without-end derives the end; `resolveEnd` never grows a task; `description: null` reaches the server | `project-apply.ts`, `executeVoiceCommand.ts`, `frontend/src/api/tasks.api.ts` |
+| VB-01 | Executor tests: update, move (event id / `slotId`), skip, end-series, reminders, stop-on-first-error | `frontend/src/modules/voice/executeVoiceCommand.spec.ts` |
+
+### WP-B — shipped 31 October 2026 (`0824ab3`, integration branch)
+
+New command `edit_occurrence` → `PATCH /tasks/:id/occurrence` (scope `occurrence` / `following`): per-day rename, notes, same-day clock, length; per-day completion in place. D-03 stopgap (VB-02): a series whose group holds detached or parked days refuses a series-wide rename / delete / end with the reason. Open: VC-08, VB-03, `complete` from a day on. Details: [handoff §0b](voice-agent-handoff.md).
+
+### V7 — next: live baseline
+
+Do not compare against the old broken-scorer numbers; establish a new baseline with the UA 100-scenario set and `--suite english` (25) through `phase47-generalization-cli.ts` and `phase477-score.ts`. F2 is not a blocker. Preconditions and what remains are listed in [handoff §0b](voice-agent-handoff.md).
+
+### V2 — as planned (kept for reference)
 
 - **Scope:** VC-02 (schedule a Later task), VC-03 (`slotId` moves without Google), VC-04 (cross-day series move refused at preview), VC-09 (skip a one-off), VC-10 (fixed edge cases), VB-01 (frontend executor coverage, written red first).
 - **Files:** `project-apply.ts` (`projectMove`, `projectSeriesCommand`, `updatePatch`, `resolveEnd`), `production/catalog.ts` (slot ids for moves), `frontend/src/modules/voice/executeVoiceCommand.ts` (forward `isUnscheduled`, `description: null`).
