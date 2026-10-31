@@ -13,7 +13,7 @@ import type { GenScenario } from './phase47-generalization';
 
 export const ENGLISH_SUITE = 'english-set-1';
 
-export type EnglishWorld = 'en-empty' | 'en-default' | 'en-one-report' | 'en-two-reports' | 'en-similar' | 'en-done' | 'en-readonly-flight';
+export type EnglishWorld = 'en-empty' | 'en-default' | 'en-one-report' | 'en-two-reports' | 'en-similar' | 'en-done' | 'en-readonly-flight' | 'en-gym-series' | 'en-rent-reminder';
 
 function entity(id: string, name: string, extra: Partial<EntityRecord> = {}): EntityRecord {
   return { id, userId: 'user-1', type: 'task', name, status: 'open', revision: 1, ...extra };
@@ -32,6 +32,25 @@ export function englishWorld(name: EnglishWorld): EntityRecord[] {
   if (name === 'en-similar') return [entity('task-qreview', 'Quarterly review'), entity('task-board', 'Review for the board')];
   if (name === 'en-done') return [entity('task-done', 'Pay the invoice', { status: 'completed' })];
   if (name === 'en-readonly-flight') return [entity('ext-flight', 'Flight to Lisbon', { type: 'external_event', calendarId: 'google' })];
+  if (name === 'en-gym-series') {
+    return [
+      entity('task-gym', 'Gym', {
+        recurring: true,
+        seriesEventId: null,
+        occurrences: [
+          { start: '2026-10-19T07:00:00.000Z', end: '2026-10-19T08:00:00.000Z', googleEventId: null },
+          { start: '2026-10-21T07:00:00.000Z', end: '2026-10-21T08:00:00.000Z', googleEventId: null },
+        ],
+      }),
+      report,
+    ];
+  }
+  if (name === 'en-rent-reminder') {
+    return [{
+      id: 'rem-rent', userId: 'user-1', type: 'reminder', name: 'Rent payment', status: 'open', revision: 1,
+      reminder: { dueYmd: '2026-10-20', notificationTime: '18:00', description: null, recurrencePattern: null, recurrenceWeekDays: null },
+    }];
+  }
   return [report, finance, morning, afternoon, client, budget];
 }
 
@@ -99,4 +118,19 @@ const MIRRORED: EnglishScenario[] = [
   ] }),
 ];
 
-export const ENGLISH_SCENARIOS: EnglishScenario[] = [...NATIVE, ...MIRRORED];
+/** V2 / WP-B / WP-G coverage (added 31 Oct 2026, before the first V7 run; see the Ukrainian D set). */
+const COVERAGE: EnglishScenario[] = [
+  en({ id: 'en-d-01', category: 'D', family: 'later-schedule-clock', world: 'en-one-report', invariant: 'a Later task given a clock leaves the inbox as an update (VC-02)', turns: [{ utterance: 'put the quarterly report tomorrow at 2pm', expect: { outcomes: ['confirm'], taskId: 'task-report', includes: '14:00', action: 'update' } }] }),
+  en({ id: 'en-d-02', category: 'D', family: 'slot-move-other-day', world: 'en-default', invariant: 'a one-off without a calendar event moves to another day (VC-03)', turns: [{ utterance: 'move the client meeting to Tuesday at 9', expect: { outcomes: ['confirm'], taskId: 'task-client', includes: '09:00', action: 'move', forbidTaskId: 'task-client-2' } }] }),
+  en({ id: 'en-d-03', category: 'D', family: 'occurrence-rename', world: 'en-gym-series', invariant: 'one day of the series is renamed (WP-B)', turns: [{ utterance: "rename Monday's gym to yoga", expect: { outcomes: ['confirm'], taskId: 'task-gym', nameIncludes: 'yoga', action: 'update' } }] }),
+  en({ id: 'en-d-04', category: 'D', family: 'occurrence-complete', world: 'en-gym-series', invariant: 'one day of the series is completed in place (WP-B)', turns: [{ utterance: 'I already did the gym on Monday', expect: { outcomes: ['confirm'], taskId: 'task-gym', action: 'complete' } }] }),
+  en({ id: 'en-d-05', category: 'D', family: 'occurrence-cross-day', world: 'en-gym-series', invariant: 'a day of a series does not move to another day (VC-04)', turns: [{ utterance: "move Monday's gym to Tuesday", expect: clarify }] }),
+  en({ id: 'en-d-06', category: 'D', family: 'reminder-update', world: 'en-rent-reminder', invariant: 'the stored reminder is updated (VC-05)', turns: [{ utterance: 'move the rent reminder to 8pm', expect: { outcomes: ['confirm'], taskId: 'rem-rent', includes: '20:00', action: 'remind_update' } }] }),
+  en({ id: 'en-d-07', category: 'D', family: 'mixed-pending-correction-yes', world: 'en-gym-series', invariant: 'a create and a Later-task update stay in one preview through a correction and yes (WP-G)', turns: [
+    { utterance: 'add a task tea and put the report on Monday at 10', expect: { outcomes: ['confirm'], taskId: 'task-report', includes: '10:00', intents: 2 } },
+    { utterance: 'tea tomorrow at 9', expect: { outcomes: ['confirm'], nameIncludes: 'tea', includes: '09:00', intents: 2 } },
+    { utterance: 'yes', expect: act({ intents: 2 }) },
+  ] }),
+];
+
+export const ENGLISH_SCENARIOS: EnglishScenario[] = [...NATIVE, ...MIRRORED, ...COVERAGE];

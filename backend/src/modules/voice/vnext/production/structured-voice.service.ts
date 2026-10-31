@@ -260,6 +260,8 @@ export class StructuredVoiceService {
       preview: state?.preview ? { executionId: state.preview.executionId, revision: state.preview.previewRevision, state: state.preview.executionState, items: state.preview.items.length } : null,
       operations: state?.operations.map((operation) => `${operation.pendingId}:${operation.action}:${operation.target.kind === 'entity' ? operation.target.entityId : 'new'}`) ?? [],
       fingerprints: Object.keys(state?.entityFingerprints ?? {}),
+      // The open day-plan draft by item name, so a log reader sees what the next turn builds on.
+      draft: entry.session.planDraft ? { day: entry.session.planDraft.day, items: entry.session.planDraft.items.map((item) => item.name) } : null,
     }, state ? { operations: state.operations, dependencies: state.dependencies, fingerprints: state.entityFingerprints } : undefined);
     return this.finish(log, entry, response);
   }

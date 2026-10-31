@@ -64,6 +64,8 @@ function walk(value: unknown, zone: string | undefined, view: IntentView, depth:
   }
   const row = value as Record<string, unknown>;
   if (typeof row.taskId === 'string') view.ids.push(row.taskId);
+  // A reminder command names its row by reminderId; an expectation names it like any other target.
+  if (typeof row.reminderId === 'string') view.ids.push(row.reminderId);
   for (const key of ['name', 'taskName', 'summary']) {
     if (typeof row[key] === 'string') view.names.push(row[key] as string);
   }
@@ -73,12 +75,20 @@ function walk(value: unknown, zone: string | undefined, view: IntentView, depth:
   if (row.kind === 'duration' && typeof row.minutes === 'number') view.dates.push(String(row.minutes));
   if (typeof row.dueYmd === 'string') view.dates.push(row.dueYmd);
   if (row.isUnscheduled === true) view.unscheduled = true;
-  if (typeof row.kind === 'string' && ['create', 'update', 'move', 'complete', 'delete', 'skip', 'cancel', 'window'].includes(row.kind)) {
+  if (typeof row.kind === 'string' && ['create', 'update', 'move', 'complete', 'delete', 'skip', 'cancel', 'window', 'shift', 'end_series', 'edit_occurrence', 'delete_event', 'rename_event', 'remind_create', 'remind_update', 'remind_resolve', 'remind_delete'].includes(row.kind)) {
     view.actions.push(row.kind);
   }
+  // Semantic aliases of the newer command kinds (V2 / WP-B), so an expectation written as the user's
+  // action still matches: a per-day completion is a complete, a per-day edit is an update, a rename of
+  // a provider event is an update, a delete of one is a delete.
+  if (row.kind === 'edit_occurrence') view.actions.push(row.status === 'completed' ? 'complete' : 'update');
+  if (row.kind === 'rename_event') view.actions.push('update');
+  if (row.kind === 'delete_event') view.actions.push('delete');
   // A create intent is { type: 'create', task } with no `kind`; its action is its type.
   if (row.type === 'create' && row.task && typeof row.task === 'object') view.actions.push('create');
-  for (const key of ['scheduledStartTime', 'scheduledEndTime', 'earliestStartTime', 'deadline']) {
+  // Clocks and dates: a task's schedule fields, and the new time of a move / shift / occurrence edit.
+  // The original time of a move is not the selected clock and stays out.
+  for (const key of ['scheduledStartTime', 'scheduledEndTime', 'earliestStartTime', 'deadline', 'start', 'end', 'occurrenceStart']) {
     if (typeof row[key] === 'string') {
       view.dates.push(row[key] as string);
       if (zone) view.clocks.push(localHm(row[key] as string, zone));

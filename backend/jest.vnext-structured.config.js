@@ -28,5 +28,8 @@ module.exports = {
     `${VNEXT}/phase473.spec.ts`,
     `${VNEXT}/phase477.spec.ts`,
     `${VNEXT}/eval/arm-a-live.spec.ts`,
+    // V7: the live sets' shape and the production-faithful live harness (no model is called).
+    `${VNEXT}/eval/english-set.spec.ts`,
+    `${VNEXT}/eval/live-service-harness.spec.ts`,
   ],
 };
