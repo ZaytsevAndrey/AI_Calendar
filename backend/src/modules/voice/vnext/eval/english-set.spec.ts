@@ -1,5 +1,6 @@
 import { ENGLISH_SCENARIOS, englishWorld } from './english-set';
 import { GENERALIZATION_SCENARIOS } from './phase47-generalization';
+import { HARD_SCENARIOS, hardWorld } from './hard-set';
 
 // Offline shape check of the English live set (KI-19). No model is called here.
 describe('english live set', () => {
@@ -33,6 +34,23 @@ describe('english live set', () => {
       expect(source).toBeDefined();
       expect(row.family).toBe(source!.family);
       expect(row.turns.length).toBe(source!.turns.length);
+    }
+  });
+});
+
+describe('V7 hard set', () => {
+  it('has unique ids, a language, and names only ids that exist in its world', () => {
+    const ids = HARD_SCENARIOS.map((row) => row.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const row of HARD_SCENARIOS) {
+      expect(['uk', 'en']).toContain(row.language);
+      expect(row.turns.length).toBeGreaterThan(0);
+      const known = new Set(hardWorld(row.world).map((entity) => entity.id));
+      for (const turn of row.turns) {
+        for (const id of [turn.expect.taskId, turn.expect.forbidTaskId]) {
+          if (id) expect(known.has(id)).toBe(true);
+        }
+      }
     }
   });
 });

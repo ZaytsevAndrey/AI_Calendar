@@ -12,7 +12,7 @@
  *
  *   npx ts-node --transpile-only src/modules/voice/vnext/eval/phase47-generalization-cli.ts --dry-run
  *   npx ts-node --transpile-only src/modules/voice/vnext/eval/phase47-generalization-cli.ts --allow-paid-calls --budget-usd 2 --output backend/eval-runs/<folder>/phase47-generalization
- *   npx ts-node --transpile-only src/modules/voice/vnext/eval/phase47-generalization-cli.ts --suite english --dry-run
+ *   npx ts-node --transpile-only src/modules/voice/vnext/eval/phase47-generalization-cli.ts --suite english --dry-run   (--suite hard: the V7 hard set)
  *   flags: --ids a,b --category A|B|C|D --no-resume --env <path to .env> --max-calls N
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
@@ -24,6 +24,7 @@ import type { EntityRecord } from '../reference/reference-resolver';
 import { conversationSucceeded, judgeTurn, judgeTurnChecks, PHASE4711_SCORER, type TurnVerdict } from './phase477-score';
 import { GENERALIZATION_SCENARIOS, GENERALIZATION_SUITE, generalizationWorld, type GenScenario } from './phase47-generalization';
 import { ENGLISH_SCENARIOS, ENGLISH_SUITE, englishWorld, type EnglishScenario, type EnglishWorld } from './english-set';
+import { HARD_SCENARIOS, HARD_SUITE, hardWorld, type HardScenario, type HardWorld } from './hard-set';
 import {
   buildLiveService,
   DEFAULT_SETTINGS,
@@ -44,13 +45,14 @@ function arg(name: string): string | undefined {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
-type RunScenario = GenScenario | EnglishScenario;
+type RunScenario = GenScenario | EnglishScenario | HardScenario;
 
 function suiteName(): string {
-  return arg('--suite') === 'english' ? ENGLISH_SUITE : GENERALIZATION_SUITE;
+  return arg('--suite') === 'english' ? ENGLISH_SUITE : arg('--suite') === 'hard' ? HARD_SUITE : GENERALIZATION_SUITE;
 }
 
 function worldFor(row: RunScenario): EntityRecord[] {
+  if (row.category === 'H') return hardWorld(row.world as HardWorld);
   return 'language' in row && row.language === 'en' ? englishWorld(row.world as EnglishWorld) : generalizationWorld(row.world as GenScenario['world']);
 }
 
@@ -61,7 +63,7 @@ function languageOf(row: RunScenario): 'uk' | 'en' {
 function selected(): RunScenario[] {
   const ids = arg('--ids');
   const category = arg('--category');
-  let rows: RunScenario[] = arg('--suite') === 'english' ? ENGLISH_SCENARIOS : GENERALIZATION_SCENARIOS;
+  let rows: RunScenario[] = arg('--suite') === 'english' ? ENGLISH_SCENARIOS : arg('--suite') === 'hard' ? HARD_SCENARIOS : GENERALIZATION_SCENARIOS;
   if (category) rows = rows.filter((row) => row.category === category);
   if (ids) {
     const wanted = new Set(ids.split(',').map((id) => id.trim()).filter(Boolean));
