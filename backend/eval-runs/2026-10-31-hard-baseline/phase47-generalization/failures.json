@@ -1,0 +1,1535 @@
+[
+  {
+    "id": "h-01",
+    "category": "H",
+    "family": "three-operations-one-breath",
+    "language": "uk",
+    "invariant": "a create, a Later-task update and a reminder update stay in one preview and apply together",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "додай задачу чай, перенеси звіт на вівторок о 10:00 і нагадування про оренду постав на 20:00",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-report",
+          "includes": "10:00",
+          "intents": 3,
+          "forbidTaskId": "task-finance"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "чай Перенести «Звіт» на 2026-10-20 10:00 Оплата оренди",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "чай",
+            "task": {
+              "name": "чай",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": true,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "admin"
+            }
+          },
+          {
+            "type": "command",
+            "summary": "Перенести «Звіт» на 2026-10-20 10:00",
+            "command": {
+              "kind": "update",
+              "taskId": "task-report",
+              "taskName": "Звіт",
+              "summary": "Перенести «Звіт» на 2026-10-20 10:00",
+              "patch": {
+                "isUnscheduled": false,
+                "scheduledStartTime": "2026-10-20T07:00:00.000Z"
+              }
+            }
+          },
+          {
+            "type": "command",
+            "summary": "Оплата оренди",
+            "command": {
+              "kind": "remind_update",
+              "name": "Оплата оренди",
+              "summary": "Оплата оренди",
+              "reminderId": "rem-rent",
+              "dueYmd": "2026-10-20",
+              "notificationTime": "20:00",
+              "description": null,
+              "recurrencePattern": null,
+              "recurrenceWeekDays": null
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": false,
+          "completion": false,
+          "category": "model_target_reference_error",
+          "detail": "model_target_reference_error: outcome confirm, blocked -"
+        },
+        "errorClass": "model_target_reference_error",
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "так",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "intents": 3
+        },
+        "outcome": "act",
+        "blocked": [],
+        "assistantMessage": "Виконую: чай Перенести «Звіт» на 2026-10-20 10:00 Оплата оренди",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "чай",
+            "task": {
+              "name": "чай",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": true,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "admin"
+            }
+          },
+          {
+            "type": "command",
+            "summary": "Перенести «Звіт» на 2026-10-20 10:00",
+            "command": {
+              "kind": "update",
+              "taskId": "task-report",
+              "taskName": "Звіт",
+              "summary": "Перенести «Звіт» на 2026-10-20 10:00",
+              "patch": {
+                "isUnscheduled": false,
+                "scheduledStartTime": "2026-10-20T07:00:00.000Z"
+              }
+            }
+          },
+          {
+            "type": "command",
+            "summary": "Оплата оренди",
+            "command": {
+              "kind": "remind_update",
+              "name": "Оплата оренди",
+              "summary": "Оплата оренди",
+              "reminderId": "rem-rent",
+              "dueYmd": "2026-10-20",
+              "notificationTime": "20:00",
+              "description": null,
+              "recurrencePattern": null,
+              "recurrenceWeekDays": null
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "h-04",
+    "category": "H",
+    "family": "create-move-drop-apply",
+    "language": "uk",
+    "invariant": "dropping the create leaves only the dentist move, which applies",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "додай задачу прибрати гараж на суботу о 11:00",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "гараж",
+          "includes": "11:00"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "прибрати гараж",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "прибрати гараж",
+            "task": {
+              "name": "прибрати гараж",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-24T08:00:00.000Z",
+              "scheduledEndTime": "2026-10-24T08:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "і стоматолога перенеси на п'ятницю о 16:00",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-dentist",
+          "includes": "16:00",
+          "intents": 2
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "Перенести «Стоматолог» на 2026-10-23 16:00",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "Перенести «Стоматолог» на 2026-10-23 16:00",
+            "command": {
+              "kind": "move",
+              "taskId": "task-dentist",
+              "taskName": "Стоматолог",
+              "summary": "Перенести «Стоматолог» на 2026-10-23 16:00",
+              "slotId": "task-dentist-slot-1",
+              "googleEventId": null,
+              "calendarId": null,
+              "recurringEventId": null,
+              "originalStart": "2026-10-22T12:00:00.000Z",
+              "originalEnd": "2026-10-22T12:45:00.000Z",
+              "start": "2026-10-23T13:00:00.000Z",
+              "end": "2026-10-23T13:45:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_missing_constraint",
+          "detail": "model_missing_constraint: outcome confirm, blocked -"
+        },
+        "errorClass": "model_missing_constraint",
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "гараж не треба",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-dentist",
+          "includes": "16:00",
+          "intents": 1
+        },
+        "outcome": "answer",
+        "blocked": [],
+        "assistantMessage": "Скасував незастосовану дію.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome answer, blocked -"
+        },
+        "errorClass": "model_intent_error",
+        "note": null
+      },
+      {
+        "turn": 3,
+        "utterance": "так",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "taskId": "task-dentist",
+          "intents": 1
+        },
+        "outcome": "answer",
+        "blocked": [],
+        "assistantMessage": "Гаразд, нічого не змінено.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome answer, blocked -"
+        },
+        "errorClass": "model_intent_error",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "h-05",
+    "category": "H",
+    "family": "context-reference-after-read",
+    "language": "uk",
+    "invariant": "the pronoun after a question is the dentist, moved by one hour on its own day",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "о котрій у мене стоматолог?",
+        "expect": {
+          "outcomes": [
+            "answer",
+            "clarify",
+            "refuse"
+          ],
+          "intents": 0
+        },
+        "outcome": "answer",
+        "blocked": [],
+        "assistantMessage": "Ваш прийом у стоматолога — 22 жовтня 2026 року о 15:00.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": "Thursday 15:00"
+      },
+      {
+        "turn": 1,
+        "utterance": "перенеси його на годину пізніше",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-dentist",
+          "includes": "16:00"
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "unrepresented_constraint"
+        ],
+        "assistantMessage": "Частину цієї команди я не можу виконати. Нічого не змінюю. Скажіть простіше.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked unrepresented_constraint"
+        },
+        "errorClass": "model_unnecessary_clarification:unrepresented_constraint",
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "так",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "taskId": "task-dentist"
+        },
+        "outcome": "answer",
+        "blocked": [],
+        "assistantMessage": "Гаразд. Нічого не змінюю.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome answer, blocked -"
+        },
+        "errorClass": "model_intent_error",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "h-08",
+    "category": "H",
+    "family": "later-schedule-then-unschedule",
+    "language": "uk",
+    "invariant": "the report ends in Later, not on Thursday",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "звіт постав на четвер о 09:00",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-report",
+          "includes": "09:00",
+          "action": "update",
+          "forbidTaskId": "task-finance"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "Перенести «Звіт» на 2026-10-22 09:00",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "Перенести «Звіт» на 2026-10-22 09:00",
+            "command": {
+              "kind": "update",
+              "taskId": "task-report",
+              "taskName": "Звіт",
+              "summary": "Перенести «Звіт» на 2026-10-22 09:00",
+              "patch": {
+                "isUnscheduled": false,
+                "scheduledStartTime": "2026-10-22T06:00:00.000Z"
+              }
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "ні, зніми з нього час, хай висить без години",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-report",
+          "unscheduled": true,
+          "forbidTaskId": "task-finance"
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "contradictory_constraints"
+        ],
+        "assistantMessage": "Час у команді суперечить сам собі. Скажіть, як має бути.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked contradictory_constraints"
+        },
+        "errorClass": "model_unnecessary_clarification:contradictory_constraints",
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "так",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "taskId": "task-report",
+          "unscheduled": true
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "clarification_open"
+        ],
+        "assistantMessage": "Яку саме задачу маєте на увазі?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome clarify, blocked clarification_open"
+        },
+        "errorClass": "model_intent_error:clarification_open",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "h-10",
+    "category": "H",
+    "family": "drop-then-change-mind",
+    "language": "uk",
+    "invariant": "the dropped coffee comes back as a task and tea is never lost",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "додай чай і каву на завтра о 10:00",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "чай",
+          "intents": 2,
+          "includes": "10:00"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "чай кава",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "чай",
+            "task": {
+              "name": "чай",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T07:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T07:30:00.000Z"
+            }
+          },
+          {
+            "type": "create",
+            "summary": "кава",
+            "task": {
+              "name": "кава",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T07:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T07:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "каву прибери",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "чай",
+          "intents": 1
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "чай",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "чай",
+            "task": {
+              "name": "чай",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T07:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T07:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "а ні, каву теж додай, на 11:00",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "кав",
+          "intents": 2,
+          "includes": "11:00"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "кава",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "кава",
+            "task": {
+              "name": "кава",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T08:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T08:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_missing_constraint",
+          "detail": "model_missing_constraint: outcome confirm, blocked -"
+        },
+        "errorClass": "model_missing_constraint",
+        "note": null
+      },
+      {
+        "turn": 3,
+        "utterance": "так",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "intents": 2
+        },
+        "outcome": "act",
+        "blocked": [],
+        "assistantMessage": "Виконую: кава",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "кава",
+            "task": {
+              "name": "кава",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T08:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T08:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_missing_constraint",
+          "detail": "model_missing_constraint: outcome act, blocked -"
+        },
+        "errorClass": "model_missing_constraint",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "h-12",
+    "category": "H",
+    "family": "long-dialogue-read-write",
+    "language": "uk",
+    "invariant": "two reads, a move with a reminder about it, one apply, a thanks that writes nothing",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "що в мене в понеділок?",
+        "expect": {
+          "outcomes": [
+            "answer",
+            "clarify",
+            "refuse"
+          ],
+          "intents": 0
+        },
+        "outcome": "refuse",
+        "blocked": [
+          "tool_error"
+        ],
+        "assistantMessage": "Не вдалося перевірити календар. Не вигадую вільний час.",
+        "intents": [],
+        "reads": [
+          "get_day_agenda"
+        ],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "а у вівторок?",
+        "expect": {
+          "outcomes": [
+            "answer",
+            "clarify",
+            "refuse"
+          ],
+          "intents": 0
+        },
+        "outcome": "refuse",
+        "blocked": [
+          "tool_limit"
+        ],
+        "assistantMessage": "Не зрозумів команду. Скажіть інакше.",
+        "intents": [],
+        "reads": [
+          "get_day_agenda",
+          "get_day_agenda",
+          "get_day_agenda"
+        ],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "нараду щодо бюджету посунь на 15:00",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-client-2",
+          "includes": "15:00",
+          "forbidTaskId": "task-client"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "Перенести «Нарада з клієнтом щодо бюджету» на 2026-10-20 15:00",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "Перенести «Нарада з клієнтом щодо бюджету» на 2026-10-20 15:00",
+            "command": {
+              "kind": "move",
+              "taskId": "task-client-2",
+              "taskName": "Нарада з клієнтом щодо бюджету",
+              "summary": "Перенести «Нарада з клієнтом щодо бюджету» на 2026-10-20 15:00",
+              "slotId": "task-client-2-slot-1",
+              "googleEventId": null,
+              "calendarId": null,
+              "recurringEventId": null,
+              "originalStart": "2026-10-20T09:00:00.000Z",
+              "originalEnd": "2026-10-20T10:00:00.000Z",
+              "start": "2026-10-20T12:00:00.000Z",
+              "end": "2026-10-20T13:00:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 3,
+        "utterance": "і нагадай мені про неї о 14:30",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "includes": "14:30",
+          "intents": 2
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "На який день поставити нагадування про нараду щодо бюджету о 14:30?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked -"
+        },
+        "errorClass": "model_unnecessary_clarification",
+        "note": null
+      },
+      {
+        "turn": 4,
+        "utterance": "так",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "intents": 2
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "clarification_open"
+        ],
+        "assistantMessage": "На який день поставити нагадування про нараду щодо бюджету о 14:30?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome clarify, blocked clarification_open"
+        },
+        "errorClass": "model_intent_error:clarification_open",
+        "note": null
+      },
+      {
+        "turn": 5,
+        "utterance": "дякую",
+        "expect": {
+          "outcomes": [
+            "answer",
+            "refuse"
+          ],
+          "intents": 0
+        },
+        "outcome": "answer",
+        "blocked": [],
+        "assistantMessage": "",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "h-18",
+    "category": "H",
+    "family": "fixed-date-only",
+    "language": "uk",
+    "invariant": "a fixed event given only a day keeps its clock",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "стоматолога перестав на понеділок",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-dentist",
+          "includes": "15:00",
+          "action": "update"
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "missing_clock"
+        ],
+        "assistantMessage": "Це фіксована подія. На котру годину її перенести?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked missing_clock"
+        },
+        "errorClass": "model_unnecessary_clarification:missing_clock",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "h-19",
+    "category": "H",
+    "family": "two-corrections-two-targets",
+    "language": "uk",
+    "invariant": "each correction lands on its own pending operation",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "нараду з клієнтом посунь на 14:00, а нараду щодо бюджету на 16:00",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "intents": 2,
+          "includes": "14:00"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "Перенести «Нарада з клієнтом» на 2026-10-19 14:00 Перенести «Нарада з клієнтом щодо бюджету» на 2026-10-20 16:00",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "Перенести «Нарада з клієнтом» на 2026-10-19 14:00",
+            "command": {
+              "kind": "move",
+              "taskId": "task-client",
+              "taskName": "Нарада з клієнтом",
+              "summary": "Перенести «Нарада з клієнтом» на 2026-10-19 14:00",
+              "slotId": "task-client-slot-1",
+              "googleEventId": null,
+              "calendarId": null,
+              "recurringEventId": null,
+              "originalStart": "2026-10-19T09:00:00.000Z",
+              "originalEnd": "2026-10-19T10:00:00.000Z",
+              "start": "2026-10-19T11:00:00.000Z",
+              "end": "2026-10-19T12:00:00.000Z"
+            }
+          },
+          {
+            "type": "command",
+            "summary": "Перенести «Нарада з клієнтом щодо бюджету» на 2026-10-20 16:00",
+            "command": {
+              "kind": "move",
+              "taskId": "task-client-2",
+              "taskName": "Нарада з клієнтом щодо бюджету",
+              "summary": "Перенести «Нарада з клієнтом щодо бюджету» на 2026-10-20 16:00",
+              "slotId": "task-client-2-slot-1",
+              "googleEventId": null,
+              "calendarId": null,
+              "recurringEventId": null,
+              "originalStart": "2026-10-20T09:00:00.000Z",
+              "originalEnd": "2026-10-20T10:00:00.000Z",
+              "start": "2026-10-20T13:00:00.000Z",
+              "end": "2026-10-20T14:00:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "бюджетну краще на 17:00",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-client-2",
+          "includes": "17:00",
+          "intents": 2
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "Перенести «Нарада з клієнтом» на 2026-10-19 14:00 Перенести «Нарада з клієнтом щодо бюджету» на 2026-10-20 17:00",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "Перенести «Нарада з клієнтом» на 2026-10-19 14:00",
+            "command": {
+              "kind": "move",
+              "taskId": "task-client",
+              "taskName": "Нарада з клієнтом",
+              "summary": "Перенести «Нарада з клієнтом» на 2026-10-19 14:00",
+              "slotId": "task-client-slot-1",
+              "googleEventId": null,
+              "calendarId": null,
+              "recurringEventId": null,
+              "originalStart": "2026-10-19T09:00:00.000Z",
+              "originalEnd": "2026-10-19T10:00:00.000Z",
+              "start": "2026-10-19T11:00:00.000Z",
+              "end": "2026-10-19T12:00:00.000Z"
+            }
+          },
+          {
+            "type": "command",
+            "summary": "Перенести «Нарада з клієнтом щодо бюджету» на 2026-10-20 17:00",
+            "command": {
+              "kind": "move",
+              "taskId": "task-client-2",
+              "taskName": "Нарада з клієнтом щодо бюджету",
+              "summary": "Перенести «Нарада з клієнтом щодо бюджету» на 2026-10-20 17:00",
+              "slotId": "task-client-2-slot-1",
+              "googleEventId": null,
+              "calendarId": null,
+              "recurringEventId": null,
+              "originalStart": "2026-10-20T09:00:00.000Z",
+              "originalEnd": "2026-10-20T10:00:00.000Z",
+              "start": "2026-10-20T14:00:00.000Z",
+              "end": "2026-10-20T15:00:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": false,
+          "completion": false,
+          "category": "model_target_reference_error",
+          "detail": "model_target_reference_error: outcome confirm, blocked -"
+        },
+        "errorClass": "model_target_reference_error",
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "так",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "intents": 2
+        },
+        "outcome": "act",
+        "blocked": [],
+        "assistantMessage": "Виконую: Перенести «Нарада з клієнтом» на 2026-10-19 14:00 Перенести «Нарада з клієнтом щодо бюджету» на 2026-10-20 17:00",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "Перенести «Нарада з клієнтом» на 2026-10-19 14:00",
+            "command": {
+              "kind": "move",
+              "taskId": "task-client",
+              "taskName": "Нарада з клієнтом",
+              "summary": "Перенести «Нарада з клієнтом» на 2026-10-19 14:00",
+              "slotId": "task-client-slot-1",
+              "googleEventId": null,
+              "calendarId": null,
+              "recurringEventId": null,
+              "originalStart": "2026-10-19T09:00:00.000Z",
+              "originalEnd": "2026-10-19T10:00:00.000Z",
+              "start": "2026-10-19T11:00:00.000Z",
+              "end": "2026-10-19T12:00:00.000Z"
+            }
+          },
+          {
+            "type": "command",
+            "summary": "Перенести «Нарада з клієнтом щодо бюджету» на 2026-10-20 17:00",
+            "command": {
+              "kind": "move",
+              "taskId": "task-client-2",
+              "taskName": "Нарада з клієнтом щодо бюджету",
+              "summary": "Перенести «Нарада з клієнтом щодо бюджету» на 2026-10-20 17:00",
+              "slotId": "task-client-2-slot-1",
+              "googleEventId": null,
+              "calendarId": null,
+              "recurringEventId": null,
+              "originalStart": "2026-10-20T09:00:00.000Z",
+              "originalEnd": "2026-10-20T10:00:00.000Z",
+              "start": "2026-10-20T14:00:00.000Z",
+              "end": "2026-10-20T15:00:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "he-01",
+    "category": "H",
+    "family": "three-operations-one-breath",
+    "language": "en",
+    "invariant": "a create, a Later-task update and a reminder update in one preview",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "add a task tea, put the quarterly report on Tuesday at 10 and set the rent reminder to 8pm",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-report",
+          "includes": "10:00",
+          "intents": 3,
+          "forbidTaskId": "task-finance"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "tea Move “Quarterly report” to 2026-10-20 10:00 Rent payment",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "tea",
+            "task": {
+              "name": "tea",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": true,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "admin"
+            }
+          },
+          {
+            "type": "command",
+            "summary": "Move “Quarterly report” to 2026-10-20 10:00",
+            "command": {
+              "kind": "update",
+              "taskId": "task-report",
+              "taskName": "Quarterly report",
+              "summary": "Move “Quarterly report” to 2026-10-20 10:00",
+              "patch": {
+                "isUnscheduled": false,
+                "scheduledStartTime": "2026-10-20T07:00:00.000Z"
+              }
+            }
+          },
+          {
+            "type": "command",
+            "summary": "Rent payment",
+            "command": {
+              "kind": "remind_update",
+              "name": "Rent payment",
+              "summary": "Rent payment",
+              "reminderId": "rem-rent",
+              "dueYmd": "2026-10-20",
+              "notificationTime": "20:00",
+              "description": null,
+              "recurrencePattern": null,
+              "recurrenceWeekDays": null
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": false,
+          "completion": false,
+          "category": "model_target_reference_error",
+          "detail": "model_target_reference_error: outcome confirm, blocked -"
+        },
+        "errorClass": "model_target_reference_error",
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "yes",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "intents": 3
+        },
+        "outcome": "act",
+        "blocked": [],
+        "assistantMessage": "Applying: tea Move “Quarterly report” to 2026-10-20 10:00 Rent payment",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "tea",
+            "task": {
+              "name": "tea",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": true,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "admin"
+            }
+          },
+          {
+            "type": "command",
+            "summary": "Move “Quarterly report” to 2026-10-20 10:00",
+            "command": {
+              "kind": "update",
+              "taskId": "task-report",
+              "taskName": "Quarterly report",
+              "summary": "Move “Quarterly report” to 2026-10-20 10:00",
+              "patch": {
+                "isUnscheduled": false,
+                "scheduledStartTime": "2026-10-20T07:00:00.000Z"
+              }
+            }
+          },
+          {
+            "type": "command",
+            "summary": "Rent payment",
+            "command": {
+              "kind": "remind_update",
+              "name": "Rent payment",
+              "summary": "Rent payment",
+              "reminderId": "rem-rent",
+              "dueYmd": "2026-10-20",
+              "notificationTime": "20:00",
+              "description": null,
+              "recurrencePattern": null,
+              "recurrenceWeekDays": null
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "he-09",
+    "category": "H",
+    "family": "drop-then-change-mind",
+    "language": "en",
+    "invariant": "tea is never lost; coffee comes back",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "add tea and coffee tomorrow at 10",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "tea",
+          "intents": 2,
+          "includes": "10:00"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "tea and coffee",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "tea and coffee",
+            "task": {
+              "name": "tea and coffee",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T07:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T07:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_missing_constraint",
+          "detail": "model_missing_constraint: outcome confirm, blocked -"
+        },
+        "errorClass": "model_missing_constraint",
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "drop the coffee",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "tea",
+          "intents": 1
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "tea",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "tea",
+            "task": {
+              "name": "tea",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T07:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T07:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "actually keep the coffee too, at 11",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "coffee",
+          "intents": 2,
+          "includes": "11:00"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "tea",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "tea",
+            "task": {
+              "name": "tea",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T08:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T08:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_missing_constraint",
+          "detail": "model_missing_constraint: outcome confirm, blocked -"
+        },
+        "errorClass": "model_missing_constraint",
+        "note": null
+      },
+      {
+        "turn": 3,
+        "utterance": "yes",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "intents": 2
+        },
+        "outcome": "act",
+        "blocked": [],
+        "assistantMessage": "Applying: tea",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "tea",
+            "task": {
+              "name": "tea",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T08:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T08:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_missing_constraint",
+          "detail": "model_missing_constraint: outcome act, blocked -"
+        },
+        "errorClass": "model_missing_constraint",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "he-10",
+    "category": "H",
+    "family": "later-schedule-then-unschedule",
+    "language": "en",
+    "invariant": "the report ends in Later",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "put the quarterly report on Thursday at 9",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-report",
+          "includes": "09:00",
+          "action": "update",
+          "forbidTaskId": "task-finance"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "Move “Quarterly report” to 2026-10-22 09:00",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "Move “Quarterly report” to 2026-10-22 09:00",
+            "command": {
+              "kind": "update",
+              "taskId": "task-report",
+              "taskName": "Quarterly report",
+              "summary": "Move “Quarterly report” to 2026-10-22 09:00",
+              "patch": {
+                "isUnscheduled": false,
+                "scheduledStartTime": "2026-10-22T06:00:00.000Z"
+              }
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "no, take the time off it, leave it without a time",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-report",
+          "unscheduled": true
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "contradictory_constraints"
+        ],
+        "assistantMessage": "The times in that command contradict each other. Say how it should be.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked contradictory_constraints"
+        },
+        "errorClass": "model_unnecessary_clarification:contradictory_constraints",
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "yes",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "taskId": "task-report",
+          "unscheduled": true
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "clarification_open"
+        ],
+        "assistantMessage": "Which task do you mean?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome clarify, blocked clarification_open"
+        },
+        "errorClass": "model_intent_error:clarification_open",
+        "note": null
+      }
+    ]
+  }
+]

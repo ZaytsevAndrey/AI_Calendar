@@ -1,0 +1,673 @@
+[
+  {
+    "id": "g-a-40",
+    "category": "A",
+    "family": "draft-interruption",
+    "language": "uk",
+    "invariant": "draft survives the question",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "у план на середу додай прогулянку",
+        "expect": {
+          "outcomes": [
+            "confirm",
+            "clarify"
+          ],
+          "draftIncludes": "прогул"
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "План поки порожній. Додати ще щось чи складати план?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "dayplan_routing_error",
+          "detail": "dayplan_routing_error: outcome clarify, blocked -"
+        },
+        "errorClass": "dayplan_routing_error",
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "а які вільні години в середу?",
+        "expect": {
+          "outcomes": [
+            "answer",
+            "clarify",
+            "refuse"
+          ],
+          "intents": 0,
+          "draftIncludes": "прогул"
+        },
+        "outcome": "refuse",
+        "blocked": [
+          "tool_error"
+        ],
+        "assistantMessage": "Не вдалося перевірити календар. Не вигадую вільний час.",
+        "intents": [],
+        "reads": [
+          "find_free_gaps"
+        ],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "dayplan_routing_error",
+          "detail": "dayplan_routing_error: outcome refuse, blocked tool_error"
+        },
+        "errorClass": "dayplan_routing_error:tool_error",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-a-43",
+    "category": "A",
+    "family": "date-added-later",
+    "language": "uk",
+    "invariant": "same reminder subject",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "нагадай про зарядку для ноутбука",
+        "expect": {
+          "outcomes": [
+            "clarify",
+            "confirm"
+          ],
+          "nameIncludes": "заряд"
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "На який день і о котрій годині нагадати про зарядку для ноутбука?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": "changed 31 Oct: spec §Reminders — a missing day is the one question; a preview is also accepted"
+      },
+      {
+        "turn": 1,
+        "utterance": "додай що це до 20 жовтня",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "заряд",
+          "includes": "2026-10-20"
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "Нагадування про зарядку для ноутбука — на яку годину 20 жовтня?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked -"
+        },
+        "errorClass": "model_unnecessary_clarification",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-a-44",
+    "category": "A",
+    "family": "which-report",
+    "language": "uk",
+    "invariant": "neither report is written",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "коли в мене звіт?",
+        "expect": {
+          "outcomes": [
+            "clarify",
+            "refuse"
+          ],
+          "clarificationRequired": true,
+          "intents": 0
+        },
+        "outcome": "answer",
+        "blocked": [],
+        "assistantMessage": "У вас два звіти, обидва без часу (у списку «Пізніше»): «Звіт» і «Фінансовий звіт». Жоден із них не має запланованого часу.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome answer, blocked -"
+        },
+        "errorClass": "model_intent_error",
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "я про фінансовий",
+        "expect": {
+          "outcomes": [
+            "answer",
+            "clarify",
+            "refuse"
+          ],
+          "intents": 0,
+          "forbidTaskId": "task-finance"
+        },
+        "outcome": "answer",
+        "blocked": [],
+        "assistantMessage": "«Фінансовий звіт» зараз у списку «Пізніше» — без запланованого часу й дати.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-b-02",
+    "category": "B",
+    "family": "switch-target-duration",
+    "language": "uk",
+    "invariant": "budget meeting is never the target",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "подовж нараду з клієнтом до 50 хвилин",
+        "expect": {
+          "outcomes": [
+            "clarify",
+            "refuse"
+          ],
+          "clarificationRequired": true,
+          "intents": 0
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "Змінити «Нарада з клієнтом»",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "Змінити «Нарада з клієнтом»",
+            "command": {
+              "kind": "update",
+              "taskId": "task-client",
+              "taskName": "Нарада з клієнтом",
+              "summary": "Змінити «Нарада з клієнтом»",
+              "patch": {
+                "estimatedTimeInMinutes": 50
+              }
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": false,
+          "completion": false,
+          "category": "model_target_reference_error",
+          "detail": "model_target_reference_error: outcome confirm, blocked -"
+        },
+        "errorClass": "model_target_reference_error",
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "не бюджетну, звичайну",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-client",
+          "includes": "50",
+          "forbidTaskId": "task-client-2"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "Змінити «Нарада з клієнтом»",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "Змінити «Нарада з клієнтом»",
+            "command": {
+              "kind": "update",
+              "taskId": "task-client",
+              "taskName": "Нарада з клієнтом",
+              "summary": "Змінити «Нарада з клієнтом»",
+              "patch": {
+                "estimatedTimeInMinutes": 50
+              }
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "і постав її на 26 жовтня о 11:10",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-client",
+          "includes": "11:10",
+          "forbidTaskId": "task-client-2"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "Змінити «Нарада з клієнтом»",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "Змінити «Нарада з клієнтом»",
+            "command": {
+              "kind": "update",
+              "taskId": "task-client",
+              "taskName": "Нарада з клієнтом",
+              "summary": "Змінити «Нарада з клієнтом»",
+              "patch": {
+                "scheduledStartTime": "2026-10-26T09:10:00.000Z",
+                "estimatedTimeInMinutes": 50
+              }
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 3,
+        "utterance": "підтверджую",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "taskId": "task-client",
+          "forbidTaskId": "task-client-2"
+        },
+        "outcome": "act",
+        "blocked": [],
+        "assistantMessage": "Виконую: Змінити «Нарада з клієнтом»",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "Змінити «Нарада з клієнтом»",
+            "command": {
+              "kind": "update",
+              "taskId": "task-client",
+              "taskName": "Нарада з клієнтом",
+              "summary": "Змінити «Нарада з клієнтом»",
+              "patch": {
+                "scheduledStartTime": "2026-10-26T09:10:00.000Z",
+                "estimatedTimeInMinutes": 50
+              }
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-b-20",
+    "category": "B",
+    "family": "draft-then-standalone",
+    "language": "uk",
+    "invariant": "breakfast stays in the draft and milk is a separate task",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "у план на вівторок додай сніданок",
+        "expect": {
+          "outcomes": [
+            "confirm",
+            "clarify"
+          ],
+          "draftIncludes": "снідан"
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "План поки порожній. Додати ще щось чи складати план?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "dayplan_routing_error",
+          "detail": "dayplan_routing_error: outcome clarify, blocked -"
+        },
+        "errorClass": "dayplan_routing_error",
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "окремо, не в план: завтра купити молоко о 18:05",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "молок",
+          "includes": "18:05",
+          "draftIncludes": "снідан"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "купити молоко",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "купити молоко",
+            "task": {
+              "name": "купити молоко",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T15:05:00.000Z",
+              "scheduledEndTime": "2026-10-19T15:35:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "dayplan_routing_error",
+          "detail": "dayplan_routing_error: outcome confirm, blocked -"
+        },
+        "errorClass": "dayplan_routing_error",
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "так",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "nameIncludes": "молок",
+          "includes": "18:05"
+        },
+        "outcome": "act",
+        "blocked": [],
+        "assistantMessage": "Виконую: купити молоко",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "купити молоко",
+            "task": {
+              "name": "купити молоко",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T15:05:00.000Z",
+              "scheduledEndTime": "2026-10-19T15:35:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-b-26",
+    "category": "B",
+    "family": "third-same-title",
+    "language": "uk",
+    "invariant": "neither existing report is updated",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "коли звіт?",
+        "expect": {
+          "outcomes": [
+            "clarify",
+            "refuse"
+          ],
+          "clarificationRequired": true,
+          "intents": 0
+        },
+        "outcome": "answer",
+        "blocked": [],
+        "assistantMessage": "Завдання «Звіт» наразі без часу — воно в списку «Пізніше». Є також «Фінансовий звіт», теж без часу.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome answer, blocked -"
+        },
+        "errorClass": "model_intent_error",
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "не чіпай їх, додай третій звіт без дати",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "звіт",
+          "unscheduled": true,
+          "action": "create",
+          "forbidTaskId": "task-report"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "третій звіт",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "третій звіт",
+            "task": {
+              "name": "третій звіт",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": true,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "admin"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": "task-finance must also stay untouched"
+      },
+      {
+        "turn": 2,
+        "utterance": "так",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "nameIncludes": "звіт",
+          "forbidTaskId": "task-report"
+        },
+        "outcome": "act",
+        "blocked": [],
+        "assistantMessage": "Виконую: третій звіт",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "третій звіт",
+            "task": {
+              "name": "третій звіт",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": true,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "admin"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-d-05",
+    "category": "D",
+    "family": "occurrence-rename",
+    "language": "uk",
+    "invariant": "one day of the series is renamed, not the series (WP-B)",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "спортзал у понеділок перейменуй на йогу",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-gym",
+          "nameIncludes": "йог",
+          "action": "update",
+          "forbidTaskId": "task-report"
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "missing_series_scope"
+        ],
+        "assistantMessage": "Це повторювана задача. Сказати про цей день, про цей день і далі, чи про всю серію?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked missing_series_scope"
+        },
+        "errorClass": "model_unnecessary_clarification:missing_series_scope",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-d-06",
+    "category": "D",
+    "family": "occurrence-complete",
+    "language": "uk",
+    "invariant": "one day of the series is completed in place (WP-B)",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "спортзал у понеділок я вже зробив",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-gym",
+          "action": "complete",
+          "forbidTaskId": "task-report"
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "missing_series_scope"
+        ],
+        "assistantMessage": "Це повторювана задача. Сказати про цей день, про цей день і далі, чи про всю серію?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked missing_series_scope"
+        },
+        "errorClass": "model_unnecessary_clarification:missing_series_scope",
+        "note": null
+      }
+    ]
+  }
+]

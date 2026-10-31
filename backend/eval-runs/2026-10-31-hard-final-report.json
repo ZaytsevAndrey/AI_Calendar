@@ -1,0 +1,319 @@
+{
+  "scenarios": {
+    "scenarios": 30,
+    "passed": 29,
+    "failed": 1,
+    "rate": 96.7
+  },
+  "byLanguage": {
+    "uk": {
+      "scenarios": 20,
+      "passed": 19,
+      "failed": 1,
+      "rate": 95
+    },
+    "en": {
+      "scenarios": 10,
+      "passed": 10,
+      "failed": 0,
+      "rate": 100
+    }
+  },
+  "byTurns": {
+    "multi": {
+      "scenarios": 26,
+      "passed": 25,
+      "failed": 1,
+      "rate": 96.2
+    },
+    "single": {
+      "scenarios": 4,
+      "passed": 4,
+      "failed": 0,
+      "rate": 100
+    }
+  },
+  "byDatasetCategory": {
+    "H": {
+      "scenarios": 30,
+      "passed": 29,
+      "failed": 1,
+      "rate": 96.7
+    }
+  },
+  "byOperation": {
+    "other": {
+      "scenarios": 12,
+      "passed": 12,
+      "failed": 0,
+      "rate": 100
+    },
+    "move / reschedule": {
+      "scenarios": 5,
+      "passed": 5,
+      "failed": 0,
+      "rate": 100
+    },
+    "occurrence / series": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 100
+    },
+    "later scheduling": {
+      "scenarios": 3,
+      "passed": 3,
+      "failed": 0,
+      "rate": 100
+    },
+    "reminder": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 100
+    },
+    "create": {
+      "scenarios": 4,
+      "passed": 3,
+      "failed": 1,
+      "rate": 75
+    },
+    "read / question": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 100
+    },
+    "confirmation / cancellation": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 100
+    },
+    "update": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 100
+    }
+  },
+  "dimensions": {
+    "semanticUnderstanding": 98.8,
+    "targetIdentification": 100,
+    "previewCorrectness": 97.1,
+    "confirmationExecution": 100,
+    "safety": 100,
+    "counts": {
+      "semantic": {
+        "total": 84,
+        "ok": 83
+      },
+      "target": {
+        "total": 42,
+        "ok": 42
+      },
+      "preview": {
+        "total": 68,
+        "ok": 66
+      },
+      "confirm": {
+        "total": 23,
+        "ok": 23
+      },
+      "safety": {
+        "total": 84,
+        "ok": 84
+      }
+    }
+  },
+  "dimensionsByLanguage": {
+    "uk": {
+      "semanticUnderstanding": 98.2,
+      "targetIdentification": 100,
+      "previewCorrectness": 95.6,
+      "confirmationExecution": 100,
+      "safety": 100,
+      "counts": {
+        "semantic": {
+          "total": 57,
+          "ok": 56
+        },
+        "target": {
+          "total": 28,
+          "ok": 28
+        },
+        "preview": {
+          "total": 45,
+          "ok": 43
+        },
+        "confirm": {
+          "total": 15,
+          "ok": 15
+        },
+        "safety": {
+          "total": 57,
+          "ok": 57
+        }
+      }
+    },
+    "en": {
+      "semanticUnderstanding": 100,
+      "targetIdentification": 100,
+      "previewCorrectness": 100,
+      "confirmationExecution": 100,
+      "safety": 100,
+      "counts": {
+        "semantic": {
+          "total": 27,
+          "ok": 27
+        },
+        "target": {
+          "total": 14,
+          "ok": 14
+        },
+        "preview": {
+          "total": 23,
+          "ok": 23
+        },
+        "confirm": {
+          "total": 8,
+          "ok": 8
+        },
+        "safety": {
+          "total": 27,
+          "ok": 27
+        }
+      }
+    }
+  },
+  "turns": {
+    "total": 84,
+    "passed": 82,
+    "unsafe": 0
+  },
+  "rootCauses": {
+    "model interpretation (constraint) or projection drop — review": [
+      "h-10"
+    ]
+  },
+  "errorClasses": {
+    "model_missing_constraint:invalid_model_output": 1,
+    "model_missing_constraint": 1
+  },
+  "usage": {
+    "calls": 65,
+    "tokens": 265912,
+    "promptTokens": 258929,
+    "completionTokens": 6983,
+    "usd": 0.043032
+  },
+  "latencyMsP50": 1299,
+  "latencyMsP95": 2535,
+  "failures": [
+    {
+      "id": "h-10",
+      "language": "uk",
+      "category": "H",
+      "family": "drop-then-change-mind",
+      "operation": "create",
+      "invariant": "the dropped coffee comes back as a task and tea is never lost",
+      "rootCause": "model interpretation (constraint) or projection drop — review",
+      "turns": [
+        {
+          "turn": 2,
+          "utterance": "а ні, каву теж додай, на 11:00",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "nameIncludes": "кав",
+            "intents": 2,
+            "includes": "11:00"
+          },
+          "outcome": "confirm",
+          "blocked": [
+            "invalid_model_output"
+          ],
+          "assistantMessage": "Не розчув. Прев’ю без змін: скажіть інакше або натисніть Застосувати.",
+          "intents": [
+            {
+              "type": "create",
+              "summary": "чай",
+              "task": {
+                "name": "чай",
+                "priority": "medium",
+                "timeZone": "Europe/Kyiv",
+                "allowSplit": false,
+                "isUnscheduled": false,
+                "estimatedTimeInMinutes": 30,
+                "eventType": "fixed",
+                "scheduledStartTime": "2026-10-19T07:00:00.000Z",
+                "scheduledEndTime": "2026-10-19T07:30:00.000Z"
+              }
+            }
+          ],
+          "reads": [],
+          "validationErrors": [
+            "source_not_in_transcript@$.operations[0]",
+            "unknown_field@$.type",
+            "unknown_version@$.version",
+            "missing_source@$.operations[0]",
+            "missing_source@$.operations[1]",
+            "empty_operations@$.operations"
+          ],
+          "modelOutput": "user={\"errors\":[{\"code\":\"source_not_in_transcript\",\"path\":\"$.operations[0]\",\"detail\":\"source.text\"}],\"invalid\":\"{\\\"version\\\":\\\"1\\\",\\\"kind\\\":\\\"operations\\\",\\\"operations\\\":[{\\\"opId\\\":\\\"op-1\\\",\\\"action\\\":\\\"create\\\",\\\"target\\\":{\\\"kind\\\":\\\"new\\\",\\\"localId\\\":\\\"tea\\\"},\\\"changes\\\":{\\\"title\\\":\\\"чай\\\"},\\\"constraints\\\":[{\\\"kind\\\":\\\"date\\\",\\\"value\\\":\\\"2026-10-19\\\"},{\\\"kind\\\":\\\"clock\\\",\\\"value\\\":\\\"10:00\\\",\\\"role\\\":\\\"start\\\"}],\\\"dependsOn\\\":[],\\\"source\\\":{\\\"text\\\":\\\"чай\\\"}},{\\\"opId\\\":\\\"op-2\\\",\\\"action\\\":\\\"create\\\",\\\"target\\\":{\\\"kind\\\":\\\"new\\\",\\\"localId\\\":\\\"coffee\\\"},\\\"changes\\\":{\\\"title\\\":\\\"кава\\\"},\\\"constraints\\\":[{\\\"kind\\\":\\\"date\\\",\\\"value\\\":\\\"2026-10-19\\\"},{\\\"kind\\\":\\\"clock\\\",\\\"value\\\":\\\"11:00\\\",\\\"role\\\":\\\"start\\\"}],\\\"dependsOn\\\":[],\\\"source\\\":{\\\"text\\\":\\\"каву теж додай, на 11:00\\\"}}]}\",\"language\":\"uk\"} || output={\"type\":\"json_object\",\"kind\":\"operations\",\"operations\":[{\"opId\":\"op-1\",\"action\":\"create\",\"target\":{\"kind\":\"new\",\"localId\":\"tea\"},\"changes\":{\"title\":\"чай\"},\"constraints\":[{\"kind\":\"date\",\"value\":\"2026-10-19\"},{\"kind\":\"clock\",\"value\":\"10:00\",\"role\":\"start\"}],\"dependsOn\":[]},{\"opId\":\"op-2\",\"action\":\"create\",\"target\":{\"kind\":\"new\",\"localId\":\"coffee\"},\"changes\":{\"title\":\"кава\"},\"constraints\":[{\"kind\":\"date\",\"value\":\"2026-10-19\"},{\"kind\":\"clock\",\"value\":\"11:00\",\"role\":\"start\"}],\"dependsOn\":[]}]}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_missing_constraint",
+            "detail": "model_missing_constraint: outcome confirm, blocked invalid_model_output"
+          },
+          "errorClass": "model_missing_constraint:invalid_model_output",
+          "rootCause": "model interpretation (constraint) or projection drop — review"
+        },
+        {
+          "turn": 3,
+          "utterance": "так",
+          "expect": {
+            "outcomes": [
+              "act"
+            ],
+            "intents": 2
+          },
+          "outcome": "act",
+          "blocked": [],
+          "assistantMessage": "Виконую: чай",
+          "intents": [
+            {
+              "type": "create",
+              "summary": "чай",
+              "task": {
+                "name": "чай",
+                "priority": "medium",
+                "timeZone": "Europe/Kyiv",
+                "allowSplit": false,
+                "isUnscheduled": false,
+                "estimatedTimeInMinutes": 30,
+                "eventType": "fixed",
+                "scheduledStartTime": "2026-10-19T07:00:00.000Z",
+                "scheduledEndTime": "2026-10-19T07:30:00.000Z"
+              }
+            }
+          ],
+          "reads": [],
+          "validationErrors": [],
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_missing_constraint",
+            "detail": "model_missing_constraint: outcome act, blocked -"
+          },
+          "errorClass": "model_missing_constraint",
+          "rootCause": "model interpretation (constraint) or projection drop — review"
+        }
+      ]
+    }
+  ]
+}

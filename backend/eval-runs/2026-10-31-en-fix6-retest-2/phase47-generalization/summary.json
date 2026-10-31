@@ -1,0 +1,94 @@
+{
+  "status": "complete",
+  "stopped": null,
+  "runId": "0d69a5c9-2d18-499a-a0a3-a7a471b701c6",
+  "suite": "english-set-1",
+  "scorer": "phase4711-1",
+  "promptHash": "a50e7cd70baa8514042ca717fa129a98e382d52fe396fd9547d0db8cc6ea69df",
+  "promptBHash": "8a7d9c07ac52e2135bd416905f5827eb701a458a2fd800edf5a3071acc8e3f0d",
+  "executionMode": "live-service-preview-only",
+  "plannerMode": "fixture-echo",
+  "model": "deepseek-flash",
+  "provider": "deepseek",
+  "temperature": 0.1,
+  "thinking": false,
+  "nowIso": "2026-10-18T06:00:00.000Z",
+  "timeZone": "Europe/Kyiv",
+  "scenarios": 4,
+  "passed": 2,
+  "failed": 2,
+  "byCategory": {
+    "A": {
+      "scenarios": 2,
+      "passed": 0,
+      "failed": 2,
+      "rate": 0
+    },
+    "D": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    }
+  },
+  "byLanguage": {
+    "en": {
+      "scenarios": 4,
+      "passed": 2,
+      "failed": 2,
+      "rate": 0.5
+    }
+  },
+  "byTurns": {
+    "single": {
+      "scenarios": 4,
+      "passed": 2,
+      "failed": 2,
+      "rate": 0.5
+    }
+  },
+  "byFamily": {
+    "done-task": {
+      "scenarios": 1,
+      "passed": 0,
+      "failed": 1,
+      "rate": 0
+    },
+    "reminder": {
+      "scenarios": 1,
+      "passed": 0,
+      "failed": 1,
+      "rate": 0
+    },
+    "occurrence-rename": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "occurrence-complete": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    }
+  },
+  "turns": 4,
+  "perTurnSuccess": 2,
+  "unsafeTurns": 0,
+  "unnecessaryClarification": 1,
+  "serverWrites": 0,
+  "errorClasses": {
+    "model_intent_error": 1,
+    "model_unnecessary_clarification": 1
+  },
+  "modelCalls": 4,
+  "tokens": 15608,
+  "promptTokens": 15281,
+  "completionTokens": 327,
+  "usd": 0.002488,
+  "usdNote": "deepseek-flash list price, input priced as uncached (cache hits not reported through GroqClient)",
+  "latencyP50": 1356,
+  "latencyP95": 1813,
+  "incomplete": []
+}

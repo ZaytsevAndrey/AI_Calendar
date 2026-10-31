@@ -1,0 +1,202 @@
+{
+  "status": "complete",
+  "stopped": null,
+  "runId": "d5d34821-fddd-4d4e-9c54-e6f7502d91fa",
+  "suite": "phase47-hard-1",
+  "scorer": "phase4711-1",
+  "promptHash": "3db77a14be34de4863ec06645e800aa9b9d9407a7b7c34b1d25c8e29a6097397",
+  "promptBHash": "d28c1bd168f7f9ee284957485f21db3c25b01d84d1275ec91e318a583b5a9238",
+  "executionMode": "live-service-preview-only",
+  "plannerMode": "fixture-echo",
+  "model": "deepseek-flash",
+  "provider": "deepseek",
+  "temperature": 0.1,
+  "thinking": false,
+  "nowIso": "2026-10-18T06:00:00.000Z",
+  "timeZone": "Europe/Kyiv",
+  "scenarios": 30,
+  "passed": 19,
+  "failed": 11,
+  "byCategory": {
+    "H": {
+      "scenarios": 30,
+      "passed": 19,
+      "failed": 11,
+      "rate": 0.633
+    }
+  },
+  "byLanguage": {
+    "uk": {
+      "scenarios": 20,
+      "passed": 12,
+      "failed": 8,
+      "rate": 0.6
+    },
+    "en": {
+      "scenarios": 10,
+      "passed": 7,
+      "failed": 3,
+      "rate": 0.7
+    }
+  },
+  "byTurns": {
+    "multi": {
+      "scenarios": 26,
+      "passed": 16,
+      "failed": 10,
+      "rate": 0.615
+    },
+    "single": {
+      "scenarios": 4,
+      "passed": 3,
+      "failed": 1,
+      "rate": 0.75
+    }
+  },
+  "byFamily": {
+    "three-operations-one-breath": {
+      "scenarios": 2,
+      "passed": 0,
+      "failed": 2,
+      "rate": 0
+    },
+    "sequential-corrections": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "correct-one-keep-other": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "create-move-drop-apply": {
+      "scenarios": 1,
+      "passed": 0,
+      "failed": 1,
+      "rate": 0
+    },
+    "context-reference-after-read": {
+      "scenarios": 2,
+      "passed": 1,
+      "failed": 1,
+      "rate": 0.5
+    },
+    "ambiguous-then-settled": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "occurrence-then-following": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "later-schedule-then-unschedule": {
+      "scenarios": 2,
+      "passed": 0,
+      "failed": 2,
+      "rate": 0
+    },
+    "reminder-day-and-clock": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "drop-then-change-mind": {
+      "scenarios": 2,
+      "passed": 0,
+      "failed": 2,
+      "rate": 0
+    },
+    "contradiction-in-one-sentence": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "long-dialogue-read-write": {
+      "scenarios": 1,
+      "passed": 0,
+      "failed": 1,
+      "rate": 0
+    },
+    "colloquial-two-series-days": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "refuse-not-guess": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "double-confirm": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "own-calendar-event-move": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "later-window": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "fixed-date-only": {
+      "scenarios": 1,
+      "passed": 0,
+      "failed": 1,
+      "rate": 0
+    },
+    "two-corrections-two-targets": {
+      "scenarios": 1,
+      "passed": 0,
+      "failed": 1,
+      "rate": 0
+    },
+    "cancel-mid-dialogue-then-new": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    }
+  },
+  "turns": 84,
+  "perTurnSuccess": 64,
+  "unsafeTurns": 3,
+  "unnecessaryClarification": 5,
+  "serverWrites": 0,
+  "errorClasses": {
+    "model_target_reference_error": 3,
+    "model_missing_constraint": 6,
+    "model_intent_error": 3,
+    "model_unnecessary_clarification:unrepresented_constraint": 1,
+    "model_unnecessary_clarification:contradictory_constraints": 2,
+    "model_intent_error:clarification_open": 3,
+    "model_unnecessary_clarification": 1,
+    "model_unnecessary_clarification:missing_clock": 1
+  },
+  "modelCalls": 66,
+  "tokens": 261134,
+  "promptTokens": 254671,
+  "completionTokens": 6463,
+  "usd": 0.042078,
+  "usdNote": "deepseek-flash list price, input priced as uncached (cache hits not reported through GroqClient)",
+  "latencyP50": 1192,
+  "latencyP95": 1739,
+  "incomplete": []
+}

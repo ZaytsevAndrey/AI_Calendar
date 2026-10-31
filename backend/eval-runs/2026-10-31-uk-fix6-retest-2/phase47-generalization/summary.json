@@ -1,0 +1,109 @@
+{
+  "status": "complete",
+  "stopped": null,
+  "runId": "7b639fd1-6688-48e5-aec4-def3ab4a3457",
+  "suite": "phase47-generalization-1",
+  "scorer": "phase4711-1",
+  "promptHash": "a50e7cd70baa8514042ca717fa129a98e382d52fe396fd9547d0db8cc6ea69df",
+  "promptBHash": "8a7d9c07ac52e2135bd416905f5827eb701a458a2fd800edf5a3071acc8e3f0d",
+  "executionMode": "live-service-preview-only",
+  "plannerMode": "fixture-echo",
+  "model": "deepseek-flash",
+  "provider": "deepseek",
+  "temperature": 0.1,
+  "thinking": false,
+  "nowIso": "2026-10-18T06:00:00.000Z",
+  "timeZone": "Europe/Kyiv",
+  "scenarios": 5,
+  "passed": 5,
+  "failed": 0,
+  "byCategory": {
+    "A": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "B": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "D": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    }
+  },
+  "byLanguage": {
+    "uk": {
+      "scenarios": 5,
+      "passed": 5,
+      "failed": 0,
+      "rate": 1
+    }
+  },
+  "byTurns": {
+    "multi": {
+      "scenarios": 3,
+      "passed": 3,
+      "failed": 0,
+      "rate": 1
+    },
+    "single": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    }
+  },
+  "byFamily": {
+    "draft-interruption": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "switch-target-duration": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "draft-then-standalone": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "occurrence-rename": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "occurrence-complete": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    }
+  },
+  "turns": 11,
+  "perTurnSuccess": 11,
+  "unsafeTurns": 0,
+  "unnecessaryClarification": 0,
+  "serverWrites": 0,
+  "errorClasses": {},
+  "modelCalls": 8,
+  "tokens": 32787,
+  "promptTokens": 32038,
+  "completionTokens": 749,
+  "usd": 0.005254,
+  "usdNote": "deepseek-flash list price, input priced as uncached (cache hits not reported through GroqClient)",
+  "latencyP50": 1269,
+  "latencyP95": 2301,
+  "incomplete": []
+}

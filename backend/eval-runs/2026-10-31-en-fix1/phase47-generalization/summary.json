@@ -1,0 +1,258 @@
+{
+  "status": "complete",
+  "stopped": null,
+  "runId": "52b2b61a-9b9e-41ce-a69a-0f716ed1ef87",
+  "suite": "english-set-1",
+  "scorer": "phase4711-1",
+  "promptHash": "bedff54300896dfc8c415186f4c9c89765452ccbd657979dabf5d39108f6dc0e",
+  "promptBHash": "b47ddfe429a9885e620f22ef4b46a386a66b3fe0a00d43c492d0300626f874f5",
+  "executionMode": "live-service-preview-only",
+  "plannerMode": "fixture-echo",
+  "model": "deepseek-flash",
+  "provider": "deepseek",
+  "temperature": 0.1,
+  "thinking": false,
+  "nowIso": "2026-10-18T06:00:00.000Z",
+  "timeZone": "Europe/Kyiv",
+  "scenarios": 32,
+  "passed": 26,
+  "failed": 6,
+  "byCategory": {
+    "A": {
+      "scenarios": 19,
+      "passed": 15,
+      "failed": 4,
+      "rate": 0.789
+    },
+    "B": {
+      "scenarios": 5,
+      "passed": 4,
+      "failed": 1,
+      "rate": 0.8
+    },
+    "C": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "D": {
+      "scenarios": 7,
+      "passed": 6,
+      "failed": 1,
+      "rate": 0.857
+    }
+  },
+  "byLanguage": {
+    "en": {
+      "scenarios": 32,
+      "passed": 26,
+      "failed": 6,
+      "rate": 0.813
+    }
+  },
+  "byTurns": {
+    "single": {
+      "scenarios": 25,
+      "passed": 20,
+      "failed": 5,
+      "rate": 0.8
+    },
+    "multi": {
+      "scenarios": 7,
+      "passed": 6,
+      "failed": 1,
+      "rate": 0.857
+    }
+  },
+  "byFamily": {
+    "unscheduled-informal": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "fixed-single": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "preferred-single": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "recurring-no-clock": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "recurring-preferred": {
+      "scenarios": 1,
+      "passed": 0,
+      "failed": 1,
+      "rate": 0
+    },
+    "complete-existing": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "rename": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "similar-titles": {
+      "scenarios": 3,
+      "passed": 3,
+      "failed": 0,
+      "rate": 1
+    },
+    "ambiguous-title": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "readonly-event": {
+      "scenarios": 1,
+      "passed": 0,
+      "failed": 1,
+      "rate": 0
+    },
+    "done-task": {
+      "scenarios": 1,
+      "passed": 0,
+      "failed": 1,
+      "rate": 0
+    },
+    "reminder": {
+      "scenarios": 1,
+      "passed": 0,
+      "failed": 1,
+      "rate": 0
+    },
+    "correction-pending": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "question-then-answer": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "cancel-preview": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "two-writes-one-confirm": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "duration-update": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "prompt-injection-title": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "update-existing": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "conflicting-days": {
+      "scenarios": 1,
+      "passed": 0,
+      "failed": 1,
+      "rate": 0
+    },
+    "same-title-create": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "later-schedule-clock": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "slot-move-other-day": {
+      "scenarios": 1,
+      "passed": 0,
+      "failed": 1,
+      "rate": 0
+    },
+    "occurrence-rename": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "occurrence-complete": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "occurrence-cross-day": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "reminder-update": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "mixed-pending-correction-yes": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    }
+  },
+  "turns": 44,
+  "perTurnSuccess": 37,
+  "unsafeTurns": 2,
+  "unnecessaryClarification": 1,
+  "serverWrites": 0,
+  "errorClasses": {
+    "model_missing_constraint": 2,
+    "model_intent_error": 2,
+    "model_target_reference_error": 2,
+    "model_unnecessary_clarification": 1
+  },
+  "modelCalls": 37,
+  "tokens": 127108,
+  "promptTokens": 123775,
+  "completionTokens": 3333,
+  "usd": 0.020567,
+  "usdNote": "deepseek-flash list price, input priced as uncached (cache hits not reported through GroqClient)",
+  "latencyP50": 1190,
+  "latencyP95": 1479,
+  "incomplete": []
+}

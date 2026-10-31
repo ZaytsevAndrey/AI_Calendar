@@ -43,4 +43,18 @@ Runs resume: a scenario already complete in `turns.jsonl` under the same prompt 
   target id. None of these relax an expectation; before them a move or a reminder update could not pass
   an `includes` clock or a `taskId` at all.
 
-No run has been recorded here yet.
+## Runs (31 Oct 2026, V7)
+
+All full runs unless named `-retest*` (subset reruns of failed scenarios, not suite results).
+
+| Directory | Tree | Result |
+|---|---|---|
+| `uk-baseline`, `en-baseline` | `ccbe6ee` (frozen baseline) | UA 75/115, EN 21/32, 11 unsafe turns |
+| `uk-fix1` … `uk-fix4`, `en-fix1` … `en-fix4` | rounds 1–4 | see `*-fixN-report.json` |
+| `hard-baseline` | `58b6bd4` (first run of the hard set) | 19/30 |
+| `hard-fix1`, `uk-fix5`, `en-fix5` | `1ba455d` | hard 29/30; UA 108/115; EN 29/32; 3 unsafe |
+| `hard-fix2`, `uk-fix6`, `en-fix6` | `f18e764` | hard 29/30; UA 107/115; EN 30/32; 1 unsafe |
+| **`uk-final`, `en-final`, `hard-final`** | **`41cb443`** | **UA 110/115, EN 30/32, hard 29/30, 0 unsafe** |
+
+Reports: `2026-10-31-<name>-report.json` (`eval/v7-report.ts`). Details and root causes:
+documentation/voice-agent-handoff.md §0c.

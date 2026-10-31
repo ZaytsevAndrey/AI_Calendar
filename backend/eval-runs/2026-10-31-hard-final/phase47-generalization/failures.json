@@ -1,0 +1,194 @@
+[
+  {
+    "id": "h-10",
+    "category": "H",
+    "family": "drop-then-change-mind",
+    "language": "uk",
+    "invariant": "the dropped coffee comes back as a task and tea is never lost",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "додай чай і каву на завтра о 10:00",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "чай",
+          "intents": 2,
+          "includes": "10:00"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "чай каву",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "чай",
+            "task": {
+              "name": "чай",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T07:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T07:30:00.000Z"
+            }
+          },
+          {
+            "type": "create",
+            "summary": "каву",
+            "task": {
+              "name": "каву",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T07:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T07:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "каву прибери",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "чай",
+          "intents": 1
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "чай",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "чай",
+            "task": {
+              "name": "чай",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T07:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T07:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "а ні, каву теж додай, на 11:00",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "кав",
+          "intents": 2,
+          "includes": "11:00"
+        },
+        "outcome": "confirm",
+        "blocked": [
+          "invalid_model_output"
+        ],
+        "assistantMessage": "Не розчув. Прев’ю без змін: скажіть інакше або натисніть Застосувати.",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "чай",
+            "task": {
+              "name": "чай",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T07:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T07:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_missing_constraint",
+          "detail": "model_missing_constraint: outcome confirm, blocked invalid_model_output"
+        },
+        "errorClass": "model_missing_constraint:invalid_model_output",
+        "note": null
+      },
+      {
+        "turn": 3,
+        "utterance": "так",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "intents": 2
+        },
+        "outcome": "act",
+        "blocked": [],
+        "assistantMessage": "Виконую: чай",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "чай",
+            "task": {
+              "name": "чай",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-19T07:00:00.000Z",
+              "scheduledEndTime": "2026-10-19T07:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_missing_constraint",
+          "detail": "model_missing_constraint: outcome act, blocked -"
+        },
+        "errorClass": "model_missing_constraint",
+        "note": null
+      }
+    ]
+  }
+]

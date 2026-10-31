@@ -1,0 +1,72 @@
+[
+  {
+    "id": "en-a-11",
+    "category": "A",
+    "family": "done-task",
+    "language": "en",
+    "invariant": "a completed task is not a write target",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "move pay the invoice to tomorrow",
+        "expect": {
+          "outcomes": [
+            "answer",
+            "refuse"
+          ],
+          "intents": 0
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "I don't see a task called \"pay the invoice\" in your open tasks. Should I create it for tomorrow, or is it a calendar event?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome clarify, blocked -"
+        },
+        "errorClass": "model_intent_error",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-a-12",
+    "category": "A",
+    "family": "reminder",
+    "language": "en",
+    "invariant": "a remind phrase is a reminder, not a task",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "remind me to call mom on Sunday",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "mom",
+          "includes": "2026-10-25"
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "Which Sunday do you mean — today, October 18, or the coming Sunday, October 25?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked -"
+        },
+        "errorClass": "model_unnecessary_clarification",
+        "note": null
+      }
+    ]
+  }
+]

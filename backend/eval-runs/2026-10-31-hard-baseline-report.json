@@ -1,0 +1,1137 @@
+{
+  "scenarios": {
+    "scenarios": 30,
+    "passed": 19,
+    "failed": 11,
+    "rate": 63.3
+  },
+  "byLanguage": {
+    "uk": {
+      "scenarios": 20,
+      "passed": 12,
+      "failed": 8,
+      "rate": 60
+    },
+    "en": {
+      "scenarios": 10,
+      "passed": 7,
+      "failed": 3,
+      "rate": 70
+    }
+  },
+  "byTurns": {
+    "multi": {
+      "scenarios": 26,
+      "passed": 16,
+      "failed": 10,
+      "rate": 61.5
+    },
+    "single": {
+      "scenarios": 4,
+      "passed": 3,
+      "failed": 1,
+      "rate": 75
+    }
+  },
+  "byDatasetCategory": {
+    "H": {
+      "scenarios": 30,
+      "passed": 19,
+      "failed": 11,
+      "rate": 63.3
+    }
+  },
+  "byOperation": {
+    "other": {
+      "scenarios": 12,
+      "passed": 8,
+      "failed": 4,
+      "rate": 66.7
+    },
+    "move / reschedule": {
+      "scenarios": 5,
+      "passed": 4,
+      "failed": 1,
+      "rate": 80
+    },
+    "occurrence / series": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 100
+    },
+    "later scheduling": {
+      "scenarios": 3,
+      "passed": 1,
+      "failed": 2,
+      "rate": 33.3
+    },
+    "reminder": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 100
+    },
+    "create": {
+      "scenarios": 4,
+      "passed": 2,
+      "failed": 2,
+      "rate": 50
+    },
+    "read / question": {
+      "scenarios": 1,
+      "passed": 0,
+      "failed": 1,
+      "rate": 0
+    },
+    "confirmation / cancellation": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 100
+    },
+    "update": {
+      "scenarios": 1,
+      "passed": 0,
+      "failed": 1,
+      "rate": 0
+    }
+  },
+  "dimensions": {
+    "semanticUnderstanding": 85.7,
+    "targetIdentification": 92.9,
+    "previewCorrectness": 89.5,
+    "confirmationExecution": 78.3,
+    "safety": 96.4,
+    "counts": {
+      "semantic": {
+        "total": 84,
+        "ok": 72
+      },
+      "target": {
+        "total": 42,
+        "ok": 39
+      },
+      "preview": {
+        "total": 57,
+        "ok": 51
+      },
+      "confirm": {
+        "total": 23,
+        "ok": 18
+      },
+      "safety": {
+        "total": 84,
+        "ok": 81
+      }
+    }
+  },
+  "dimensionsByLanguage": {
+    "uk": {
+      "semanticUnderstanding": 84.2,
+      "targetIdentification": 92.9,
+      "previewCorrectness": 91.7,
+      "confirmationExecution": 73.3,
+      "safety": 96.5,
+      "counts": {
+        "semantic": {
+          "total": 57,
+          "ok": 48
+        },
+        "target": {
+          "total": 28,
+          "ok": 26
+        },
+        "preview": {
+          "total": 36,
+          "ok": 33
+        },
+        "confirm": {
+          "total": 15,
+          "ok": 11
+        },
+        "safety": {
+          "total": 57,
+          "ok": 55
+        }
+      }
+    },
+    "en": {
+      "semanticUnderstanding": 88.9,
+      "targetIdentification": 92.9,
+      "previewCorrectness": 85.7,
+      "confirmationExecution": 87.5,
+      "safety": 96.3,
+      "counts": {
+        "semantic": {
+          "total": 27,
+          "ok": 24
+        },
+        "target": {
+          "total": 14,
+          "ok": 13
+        },
+        "preview": {
+          "total": 21,
+          "ok": 18
+        },
+        "confirm": {
+          "total": 8,
+          "ok": 7
+        },
+        "safety": {
+          "total": 27,
+          "ok": 26
+        }
+      }
+    }
+  },
+  "turns": {
+    "total": 84,
+    "passed": 64,
+    "unsafe": 3
+  },
+  "rootCauses": {
+    "model interpretation (target)": [
+      "h-01",
+      "h-19",
+      "he-01"
+    ],
+    "model interpretation (constraint) or projection drop — review": [
+      "h-04",
+      "h-10",
+      "he-09"
+    ],
+    "projection / validator refusal (review: model proposal vs product rule)": [
+      "h-05",
+      "h-08",
+      "h-18",
+      "he-10"
+    ],
+    "model interpretation (intent) / prompt": [
+      "h-12"
+    ]
+  },
+  "errorClasses": {
+    "model_target_reference_error": 3,
+    "model_missing_constraint": 6,
+    "model_intent_error": 3,
+    "model_unnecessary_clarification:unrepresented_constraint": 1,
+    "model_unnecessary_clarification:contradictory_constraints": 2,
+    "model_intent_error:clarification_open": 3,
+    "model_unnecessary_clarification": 1,
+    "model_unnecessary_clarification:missing_clock": 1
+  },
+  "usage": {
+    "calls": 66,
+    "tokens": 261134,
+    "promptTokens": 254671,
+    "completionTokens": 6463,
+    "usd": 0.042078
+  },
+  "latencyMsP50": 1192,
+  "latencyMsP95": 1739,
+  "failures": [
+    {
+      "id": "h-01",
+      "language": "uk",
+      "category": "H",
+      "family": "three-operations-one-breath",
+      "operation": "other",
+      "invariant": "a create, a Later-task update and a reminder update stay in one preview and apply together",
+      "rootCause": "model interpretation (target)",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "додай задачу чай, перенеси звіт на вівторок о 10:00 і нагадування про оренду постав на 20:00",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "taskId": "task-report",
+            "includes": "10:00",
+            "intents": 3,
+            "forbidTaskId": "task-finance"
+          },
+          "outcome": "confirm",
+          "blocked": [],
+          "assistantMessage": "чай Перенести «Звіт» на 2026-10-20 10:00 Оплата оренди",
+          "intents": [
+            {
+              "type": "create",
+              "summary": "чай",
+              "task": {
+                "name": "чай",
+                "priority": "medium",
+                "timeZone": "Europe/Kyiv",
+                "allowSplit": false,
+                "isUnscheduled": true,
+                "estimatedTimeInMinutes": 30,
+                "eventType": "admin"
+              }
+            },
+            {
+              "type": "command",
+              "summary": "Перенести «Звіт» на 2026-10-20 10:00",
+              "command": {
+                "kind": "update",
+                "taskId": "task-report",
+                "taskName": "Звіт",
+                "summary": "Перенести «Звіт» на 2026-10-20 10:00",
+                "patch": {
+                  "isUnscheduled": false,
+                  "scheduledStartTime": "2026-10-20T07:00:00.000Z"
+                }
+              }
+            },
+            {
+              "type": "command",
+              "summary": "Оплата оренди",
+              "command": {
+                "kind": "remind_update",
+                "name": "Оплата оренди",
+                "summary": "Оплата оренди",
+                "reminderId": "rem-rent",
+                "dueYmd": "2026-10-20",
+                "notificationTime": "20:00",
+                "description": null,
+                "recurrencePattern": null,
+                "recurrenceWeekDays": null
+              }
+            }
+          ],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"operations\",\"operations\":[{\"opId\":\"op-1\",\"action\":\"create\",\"target\":{\"kind\":\"new\",\"localId\":\"new-tea\"},\"changes\":{\"title\":\"чай\"},\"constraints\":[],\"dependsOn\":[],\"source\":{\"text\":\"додай задачу чай\"}},{\"opId\":\"op-2\",\"action\":\"move\",\"target\":{\"kind\":\"existing\",\"proposedId\":\"task-report\",\"description\":\"звіт\"},\"changes\":{},\"constraints\":[{\"kind\":\"date\",\"value\":\"2026-10-20\",\"precision\":\"day\"},{\"kind\":\"clock\",\"value\":\"10:00\",\"role\":\"start\"}],\"dependsOn\":[],\"source\":{\"text\":\"перенеси звіт на вівторок о 10:00\"}},{\"opId\":\"op-3\",\"action\":\"update\",\"target\":{\"kind\":\"existing\",\"proposedId\":\"rem-rent\",\"description\":\"нагадування про оренду\"},\"changes\":{\"reminder\":{\"op\":\"update\",\"notificationTime\":\"20:00\"}},\"constraints\":[],\"dependsOn\":[],\"source\":{\"text\":\"нагадування про оренду постав на 20:00\"}}]}",
+          "verdict": {
+            "semantic": false,
+            "safety": false,
+            "completion": false,
+            "category": "model_target_reference_error",
+            "detail": "model_target_reference_error: outcome confirm, blocked -"
+          },
+          "errorClass": "model_target_reference_error",
+          "rootCause": "model interpretation (target)"
+        }
+      ]
+    },
+    {
+      "id": "h-04",
+      "language": "uk",
+      "category": "H",
+      "family": "create-move-drop-apply",
+      "operation": "move / reschedule",
+      "invariant": "dropping the create leaves only the dentist move, which applies",
+      "rootCause": "model interpretation (constraint) or projection drop — review",
+      "turns": [
+        {
+          "turn": 1,
+          "utterance": "і стоматолога перенеси на п'ятницю о 16:00",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "taskId": "task-dentist",
+            "includes": "16:00",
+            "intents": 2
+          },
+          "outcome": "confirm",
+          "blocked": [],
+          "assistantMessage": "Перенести «Стоматолог» на 2026-10-23 16:00",
+          "intents": [
+            {
+              "type": "command",
+              "summary": "Перенести «Стоматолог» на 2026-10-23 16:00",
+              "command": {
+                "kind": "move",
+                "taskId": "task-dentist",
+                "taskName": "Стоматолог",
+                "summary": "Перенести «Стоматолог» на 2026-10-23 16:00",
+                "slotId": "task-dentist-slot-1",
+                "googleEventId": null,
+                "calendarId": null,
+                "recurringEventId": null,
+                "originalStart": "2026-10-22T12:00:00.000Z",
+                "originalEnd": "2026-10-22T12:45:00.000Z",
+                "start": "2026-10-23T13:00:00.000Z",
+                "end": "2026-10-23T13:45:00.000Z"
+              }
+            }
+          ],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"operations\",\"operations\":[{\"opId\":\"op-1\",\"action\":\"move\",\"target\":{\"kind\":\"existing\",\"proposedId\":\"task-dentist\",\"description\":\"стоматолога\"},\"changes\":{},\"constraints\":[{\"kind\":\"date\",\"value\":\"2026-10-23\"},{\"kind\":\"clock\",\"value\":\"16:00\",\"role\":\"start\"}],\"dependsOn\":[],\"source\":{\"text\":\"стоматолога перенеси на п'ятницю о 16:00\"}}]}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_missing_constraint",
+            "detail": "model_missing_constraint: outcome confirm, blocked -"
+          },
+          "errorClass": "model_missing_constraint",
+          "rootCause": "model interpretation (constraint) or projection drop — review"
+        },
+        {
+          "turn": 2,
+          "utterance": "гараж не треба",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "taskId": "task-dentist",
+            "includes": "16:00",
+            "intents": 1
+          },
+          "outcome": "answer",
+          "blocked": [],
+          "assistantMessage": "Скасував незастосовану дію.",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"operations\",\"operations\":[{\"opId\":\"op-1\",\"action\":\"cancel\",\"target\":{\"kind\":\"operation_result\",\"proposedId\":\"pop_101\"},\"changes\":{},\"constraints\":[],\"dependsOn\":[],\"source\":{\"text\":\"гараж не треба\"}}]}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_intent_error",
+            "detail": "model_intent_error: outcome answer, blocked -"
+          },
+          "errorClass": "model_intent_error",
+          "rootCause": "model interpretation (intent) / prompt"
+        },
+        {
+          "turn": 3,
+          "utterance": "так",
+          "expect": {
+            "outcomes": [
+              "act"
+            ],
+            "taskId": "task-dentist",
+            "intents": 1
+          },
+          "outcome": "answer",
+          "blocked": [],
+          "assistantMessage": "Гаразд, нічого не змінено.",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"answer\",\"operations\":[],\"answer\":{\"text\":\"Гаразд, нічого не змінено.\",\"evidenceRefs\":[]}}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_intent_error",
+            "detail": "model_intent_error: outcome answer, blocked -"
+          },
+          "errorClass": "model_intent_error",
+          "rootCause": "model interpretation (intent) / prompt"
+        }
+      ]
+    },
+    {
+      "id": "h-05",
+      "language": "uk",
+      "category": "H",
+      "family": "context-reference-after-read",
+      "operation": "other",
+      "invariant": "the pronoun after a question is the dentist, moved by one hour on its own day",
+      "rootCause": "projection / validator refusal (review: model proposal vs product rule)",
+      "turns": [
+        {
+          "turn": 1,
+          "utterance": "перенеси його на годину пізніше",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "taskId": "task-dentist",
+            "includes": "16:00"
+          },
+          "outcome": "clarify",
+          "blocked": [
+            "unrepresented_constraint"
+          ],
+          "assistantMessage": "Частину цієї команди я не можу виконати. Нічого не змінюю. Скажіть простіше.",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"operations\",\"operations\":[{\"opId\":\"op-1\",\"action\":\"move\",\"target\":{\"kind\":\"existing\",\"proposedId\":\"task-dentist\",\"description\":\"його\"},\"changes\":{},\"constraints\":[{\"kind\":\"relative_time\",\"anchor\":\"referenced_task\",\"direction\":\"after\",\"amount\":1,\"unit\":\"hour\"}],\"dependsOn\":[],\"source\":{\"text\":\"перенеси його на годину пізніше\"}}]}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_unnecessary_clarification",
+            "detail": "model_unnecessary_clarification: outcome clarify, blocked unrepresented_constraint"
+          },
+          "errorClass": "model_unnecessary_clarification:unrepresented_constraint",
+          "rootCause": "projection / validator refusal (review: model proposal vs product rule)"
+        },
+        {
+          "turn": 2,
+          "utterance": "так",
+          "expect": {
+            "outcomes": [
+              "act"
+            ],
+            "taskId": "task-dentist"
+          },
+          "outcome": "answer",
+          "blocked": [],
+          "assistantMessage": "Гаразд. Нічого не змінюю.",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"answer\",\"operations\":[],\"answer\":{\"text\":\"Гаразд. Нічого не змінюю.\",\"evidenceRefs\":[]}}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_intent_error",
+            "detail": "model_intent_error: outcome answer, blocked -"
+          },
+          "errorClass": "model_intent_error",
+          "rootCause": "model interpretation (intent) / prompt"
+        }
+      ]
+    },
+    {
+      "id": "h-08",
+      "language": "uk",
+      "category": "H",
+      "family": "later-schedule-then-unschedule",
+      "operation": "later scheduling",
+      "invariant": "the report ends in Later, not on Thursday",
+      "rootCause": "projection / validator refusal (review: model proposal vs product rule)",
+      "turns": [
+        {
+          "turn": 1,
+          "utterance": "ні, зніми з нього час, хай висить без години",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "taskId": "task-report",
+            "unscheduled": true,
+            "forbidTaskId": "task-finance"
+          },
+          "outcome": "clarify",
+          "blocked": [
+            "contradictory_constraints"
+          ],
+          "assistantMessage": "Час у команді суперечить сам собі. Скажіть, як має бути.",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"operations\",\"operations\":[{\"opId\":\"op-1\",\"action\":\"update\",\"target\":{\"kind\":\"operation_result\",\"opId\":\"pop_1\"},\"changes\":{\"unschedule\":true},\"constraints\":[],\"dependsOn\":[],\"source\":{\"text\":\"ні, зніми з нього час, хай висить без години\"}}]}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_unnecessary_clarification",
+            "detail": "model_unnecessary_clarification: outcome clarify, blocked contradictory_constraints"
+          },
+          "errorClass": "model_unnecessary_clarification:contradictory_constraints",
+          "rootCause": "projection / validator refusal (review: model proposal vs product rule)"
+        },
+        {
+          "turn": 2,
+          "utterance": "так",
+          "expect": {
+            "outcomes": [
+              "act"
+            ],
+            "taskId": "task-report",
+            "unscheduled": true
+          },
+          "outcome": "clarify",
+          "blocked": [
+            "clarification_open"
+          ],
+          "assistantMessage": "Яку саме задачу маєте на увазі?",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_intent_error",
+            "detail": "model_intent_error: outcome clarify, blocked clarification_open"
+          },
+          "errorClass": "model_intent_error:clarification_open",
+          "rootCause": "claims / dialogue state"
+        }
+      ]
+    },
+    {
+      "id": "h-10",
+      "language": "uk",
+      "category": "H",
+      "family": "drop-then-change-mind",
+      "operation": "create",
+      "invariant": "the dropped coffee comes back as a task and tea is never lost",
+      "rootCause": "model interpretation (constraint) or projection drop — review",
+      "turns": [
+        {
+          "turn": 2,
+          "utterance": "а ні, каву теж додай, на 11:00",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "nameIncludes": "кав",
+            "intents": 2,
+            "includes": "11:00"
+          },
+          "outcome": "confirm",
+          "blocked": [],
+          "assistantMessage": "кава",
+          "intents": [
+            {
+              "type": "create",
+              "summary": "кава",
+              "task": {
+                "name": "кава",
+                "priority": "medium",
+                "timeZone": "Europe/Kyiv",
+                "allowSplit": false,
+                "isUnscheduled": false,
+                "estimatedTimeInMinutes": 30,
+                "eventType": "fixed",
+                "scheduledStartTime": "2026-10-19T08:00:00.000Z",
+                "scheduledEndTime": "2026-10-19T08:30:00.000Z"
+              }
+            }
+          ],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"operations\",\"operations\":[{\"opId\":\"op-1\",\"action\":\"create\",\"target\":{\"kind\":\"new\",\"localId\":\"local-coffee\"},\"changes\":{\"title\":\"кава\"},\"constraints\":[{\"kind\":\"date\",\"value\":\"2026-10-19\"},{\"kind\":\"clock\",\"value\":\"11:00\",\"role\":\"start\"}],\"dependsOn\":[],\"source\":{\"text\":\"каву теж додай, на 11:00\"}}]}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_missing_constraint",
+            "detail": "model_missing_constraint: outcome confirm, blocked -"
+          },
+          "errorClass": "model_missing_constraint",
+          "rootCause": "model interpretation (constraint) or projection drop — review"
+        },
+        {
+          "turn": 3,
+          "utterance": "так",
+          "expect": {
+            "outcomes": [
+              "act"
+            ],
+            "intents": 2
+          },
+          "outcome": "act",
+          "blocked": [],
+          "assistantMessage": "Виконую: кава",
+          "intents": [
+            {
+              "type": "create",
+              "summary": "кава",
+              "task": {
+                "name": "кава",
+                "priority": "medium",
+                "timeZone": "Europe/Kyiv",
+                "allowSplit": false,
+                "isUnscheduled": false,
+                "estimatedTimeInMinutes": 30,
+                "eventType": "fixed",
+                "scheduledStartTime": "2026-10-19T08:00:00.000Z",
+                "scheduledEndTime": "2026-10-19T08:30:00.000Z"
+              }
+            }
+          ],
+          "reads": [],
+          "validationErrors": [],
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_missing_constraint",
+            "detail": "model_missing_constraint: outcome act, blocked -"
+          },
+          "errorClass": "model_missing_constraint",
+          "rootCause": "model interpretation (constraint) or projection drop — review"
+        }
+      ]
+    },
+    {
+      "id": "h-12",
+      "language": "uk",
+      "category": "H",
+      "family": "long-dialogue-read-write",
+      "operation": "read / question",
+      "invariant": "two reads, a move with a reminder about it, one apply, a thanks that writes nothing",
+      "rootCause": "model interpretation (intent) / prompt",
+      "turns": [
+        {
+          "turn": 3,
+          "utterance": "і нагадай мені про неї о 14:30",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "includes": "14:30",
+            "intents": 2
+          },
+          "outcome": "clarify",
+          "blocked": [],
+          "assistantMessage": "На який день поставити нагадування про нараду щодо бюджету о 14:30?",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"clarification\",\"operations\":[],\"clarification\":{\"question\":\"На який день поставити нагадування про нараду щодо бюджету о 14:30?\",\"operationIds\":[],\"missing\":[\"reminder date\"]}}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_unnecessary_clarification",
+            "detail": "model_unnecessary_clarification: outcome clarify, blocked -"
+          },
+          "errorClass": "model_unnecessary_clarification",
+          "rootCause": "model interpretation (intent) / prompt"
+        },
+        {
+          "turn": 4,
+          "utterance": "так",
+          "expect": {
+            "outcomes": [
+              "act"
+            ],
+            "intents": 2
+          },
+          "outcome": "clarify",
+          "blocked": [
+            "clarification_open"
+          ],
+          "assistantMessage": "На який день поставити нагадування про нараду щодо бюджету о 14:30?",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"control\",\"operations\":[],\"control\":\"confirm_pending\"}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_intent_error",
+            "detail": "model_intent_error: outcome clarify, blocked clarification_open"
+          },
+          "errorClass": "model_intent_error:clarification_open",
+          "rootCause": "claims / dialogue state"
+        }
+      ]
+    },
+    {
+      "id": "h-18",
+      "language": "uk",
+      "category": "H",
+      "family": "fixed-date-only",
+      "operation": "update",
+      "invariant": "a fixed event given only a day keeps its clock",
+      "rootCause": "projection / validator refusal (review: model proposal vs product rule)",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "стоматолога перестав на понеділок",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "taskId": "task-dentist",
+            "includes": "15:00",
+            "action": "update"
+          },
+          "outcome": "clarify",
+          "blocked": [
+            "missing_clock"
+          ],
+          "assistantMessage": "Це фіксована подія. На котру годину її перенести?",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"operations\",\"operations\":[{\"opId\":\"op-1\",\"action\":\"move\",\"target\":{\"kind\":\"existing\",\"proposedId\":\"task-dentist\",\"description\":\"стоматолога\"},\"changes\":{},\"constraints\":[{\"kind\":\"date\",\"value\":\"2026-10-19\",\"precision\":\"day\"}],\"dependsOn\":[],\"source\":{\"text\":\"стоматолога перестав на понеділок\"}}]}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_unnecessary_clarification",
+            "detail": "model_unnecessary_clarification: outcome clarify, blocked missing_clock"
+          },
+          "errorClass": "model_unnecessary_clarification:missing_clock",
+          "rootCause": "projection / validator refusal (review: model proposal vs product rule)"
+        }
+      ]
+    },
+    {
+      "id": "h-19",
+      "language": "uk",
+      "category": "H",
+      "family": "two-corrections-two-targets",
+      "operation": "other",
+      "invariant": "each correction lands on its own pending operation",
+      "rootCause": "model interpretation (target)",
+      "turns": [
+        {
+          "turn": 1,
+          "utterance": "бюджетну краще на 17:00",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "taskId": "task-client-2",
+            "includes": "17:00",
+            "intents": 2
+          },
+          "outcome": "confirm",
+          "blocked": [],
+          "assistantMessage": "Перенести «Нарада з клієнтом» на 2026-10-19 14:00 Перенести «Нарада з клієнтом щодо бюджету» на 2026-10-20 17:00",
+          "intents": [
+            {
+              "type": "command",
+              "summary": "Перенести «Нарада з клієнтом» на 2026-10-19 14:00",
+              "command": {
+                "kind": "move",
+                "taskId": "task-client",
+                "taskName": "Нарада з клієнтом",
+                "summary": "Перенести «Нарада з клієнтом» на 2026-10-19 14:00",
+                "slotId": "task-client-slot-1",
+                "googleEventId": null,
+                "calendarId": null,
+                "recurringEventId": null,
+                "originalStart": "2026-10-19T09:00:00.000Z",
+                "originalEnd": "2026-10-19T10:00:00.000Z",
+                "start": "2026-10-19T11:00:00.000Z",
+                "end": "2026-10-19T12:00:00.000Z"
+              }
+            },
+            {
+              "type": "command",
+              "summary": "Перенести «Нарада з клієнтом щодо бюджету» на 2026-10-20 17:00",
+              "command": {
+                "kind": "move",
+                "taskId": "task-client-2",
+                "taskName": "Нарада з клієнтом щодо бюджету",
+                "summary": "Перенести «Нарада з клієнтом щодо бюджету» на 2026-10-20 17:00",
+                "slotId": "task-client-2-slot-1",
+                "googleEventId": null,
+                "calendarId": null,
+                "recurringEventId": null,
+                "originalStart": "2026-10-20T09:00:00.000Z",
+                "originalEnd": "2026-10-20T10:00:00.000Z",
+                "start": "2026-10-20T14:00:00.000Z",
+                "end": "2026-10-20T15:00:00.000Z"
+              }
+            }
+          ],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"operations\",\"operations\":[{\"opId\":\"op-1\",\"action\":\"move\",\"target\":{\"kind\":\"operation_result\",\"opId\":\"pop_2\"},\"changes\":{},\"constraints\":[{\"kind\":\"clock\",\"value\":\"17:00\",\"role\":\"start\"}],\"dependsOn\":[],\"source\":{\"text\":\"бюджетну краще на 17:00\"}}]}",
+          "verdict": {
+            "semantic": false,
+            "safety": false,
+            "completion": false,
+            "category": "model_target_reference_error",
+            "detail": "model_target_reference_error: outcome confirm, blocked -"
+          },
+          "errorClass": "model_target_reference_error",
+          "rootCause": "model interpretation (target)"
+        }
+      ]
+    },
+    {
+      "id": "he-01",
+      "language": "en",
+      "category": "H",
+      "family": "three-operations-one-breath",
+      "operation": "other",
+      "invariant": "a create, a Later-task update and a reminder update in one preview",
+      "rootCause": "model interpretation (target)",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "add a task tea, put the quarterly report on Tuesday at 10 and set the rent reminder to 8pm",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "taskId": "task-report",
+            "includes": "10:00",
+            "intents": 3,
+            "forbidTaskId": "task-finance"
+          },
+          "outcome": "confirm",
+          "blocked": [],
+          "assistantMessage": "tea Move “Quarterly report” to 2026-10-20 10:00 Rent payment",
+          "intents": [
+            {
+              "type": "create",
+              "summary": "tea",
+              "task": {
+                "name": "tea",
+                "priority": "medium",
+                "timeZone": "Europe/Kyiv",
+                "allowSplit": false,
+                "isUnscheduled": true,
+                "estimatedTimeInMinutes": 30,
+                "eventType": "admin"
+              }
+            },
+            {
+              "type": "command",
+              "summary": "Move “Quarterly report” to 2026-10-20 10:00",
+              "command": {
+                "kind": "update",
+                "taskId": "task-report",
+                "taskName": "Quarterly report",
+                "summary": "Move “Quarterly report” to 2026-10-20 10:00",
+                "patch": {
+                  "isUnscheduled": false,
+                  "scheduledStartTime": "2026-10-20T07:00:00.000Z"
+                }
+              }
+            },
+            {
+              "type": "command",
+              "summary": "Rent payment",
+              "command": {
+                "kind": "remind_update",
+                "name": "Rent payment",
+                "summary": "Rent payment",
+                "reminderId": "rem-rent",
+                "dueYmd": "2026-10-20",
+                "notificationTime": "20:00",
+                "description": null,
+                "recurrencePattern": null,
+                "recurrenceWeekDays": null
+              }
+            }
+          ],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"operations\",\"operations\":[{\"opId\":\"op-1\",\"action\":\"create\",\"target\":{\"kind\":\"new\",\"localId\":\"new-tea\"},\"changes\":{\"title\":\"tea\"},\"constraints\":[],\"dependsOn\":[],\"source\":{\"text\":\"add a task tea\"}},{\"opId\":\"op-2\",\"action\":\"move\",\"target\":{\"kind\":\"existing\",\"proposedId\":\"task-report\",\"description\":\"the quarterly report\"},\"changes\":{},\"constraints\":[{\"kind\":\"date\",\"value\":\"2026-10-20\",\"precision\":\"day\"},{\"kind\":\"clock\",\"value\":\"10:00\",\"role\":\"start\"}],\"dependsOn\":[],\"source\":{\"text\":\"put the quarterly report on Tuesday at 10\"}},{\"opId\":\"op-3\",\"action\":\"update\",\"target\":{\"kind\":\"existing\",\"proposedId\":\"rem-rent\",\"description\":\"the rent reminder\"},\"changes\":{\"reminder\":{\"op\":\"update\",\"notificationTime\":\"20:00\"}},\"constraints\":[],\"dependsOn\":[],\"source\":{\"text\":\"set the rent reminder to 8pm\"}}]}",
+          "verdict": {
+            "semantic": false,
+            "safety": false,
+            "completion": false,
+            "category": "model_target_reference_error",
+            "detail": "model_target_reference_error: outcome confirm, blocked -"
+          },
+          "errorClass": "model_target_reference_error",
+          "rootCause": "model interpretation (target)"
+        }
+      ]
+    },
+    {
+      "id": "he-09",
+      "language": "en",
+      "category": "H",
+      "family": "drop-then-change-mind",
+      "operation": "create",
+      "invariant": "tea is never lost; coffee comes back",
+      "rootCause": "model interpretation (constraint) or projection drop — review",
+      "turns": [
+        {
+          "turn": 0,
+          "utterance": "add tea and coffee tomorrow at 10",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "nameIncludes": "tea",
+            "intents": 2,
+            "includes": "10:00"
+          },
+          "outcome": "confirm",
+          "blocked": [],
+          "assistantMessage": "tea and coffee",
+          "intents": [
+            {
+              "type": "create",
+              "summary": "tea and coffee",
+              "task": {
+                "name": "tea and coffee",
+                "priority": "medium",
+                "timeZone": "Europe/Kyiv",
+                "allowSplit": false,
+                "isUnscheduled": false,
+                "estimatedTimeInMinutes": 30,
+                "eventType": "fixed",
+                "scheduledStartTime": "2026-10-19T07:00:00.000Z",
+                "scheduledEndTime": "2026-10-19T07:30:00.000Z"
+              }
+            }
+          ],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"operations\",\"operations\":[{\"opId\":\"op-1\",\"action\":\"create\",\"target\":{\"kind\":\"new\",\"localId\":\"new-tea-coffee\"},\"changes\":{\"title\":\"tea and coffee\"},\"constraints\":[{\"kind\":\"date\",\"value\":\"2026-10-19\",\"precision\":\"day\"},{\"kind\":\"clock\",\"value\":\"10:00\",\"role\":\"start\"}],\"dependsOn\":[],\"source\":{\"text\":\"add tea and coffee tomorrow at 10\"}}]}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_missing_constraint",
+            "detail": "model_missing_constraint: outcome confirm, blocked -"
+          },
+          "errorClass": "model_missing_constraint",
+          "rootCause": "model interpretation (constraint) or projection drop — review"
+        },
+        {
+          "turn": 2,
+          "utterance": "actually keep the coffee too, at 11",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "nameIncludes": "coffee",
+            "intents": 2,
+            "includes": "11:00"
+          },
+          "outcome": "confirm",
+          "blocked": [],
+          "assistantMessage": "tea",
+          "intents": [
+            {
+              "type": "create",
+              "summary": "tea",
+              "task": {
+                "name": "tea",
+                "priority": "medium",
+                "timeZone": "Europe/Kyiv",
+                "allowSplit": false,
+                "isUnscheduled": false,
+                "estimatedTimeInMinutes": 30,
+                "eventType": "fixed",
+                "scheduledStartTime": "2026-10-19T08:00:00.000Z",
+                "scheduledEndTime": "2026-10-19T08:30:00.000Z"
+              }
+            }
+          ],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"operations\",\"operations\":[{\"opId\":\"op-1\",\"action\":\"update\",\"target\":{\"kind\":\"operation_result\",\"opId\":\"pop_1\"},\"changes\":{},\"constraints\":[{\"kind\":\"clock\",\"value\":\"11:00\",\"role\":\"start\"}],\"dependsOn\":[],\"source\":{\"text\":\"actually keep the coffee too, at 11\"}}]}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_missing_constraint",
+            "detail": "model_missing_constraint: outcome confirm, blocked -"
+          },
+          "errorClass": "model_missing_constraint",
+          "rootCause": "model interpretation (constraint) or projection drop — review"
+        },
+        {
+          "turn": 3,
+          "utterance": "yes",
+          "expect": {
+            "outcomes": [
+              "act"
+            ],
+            "intents": 2
+          },
+          "outcome": "act",
+          "blocked": [],
+          "assistantMessage": "Applying: tea",
+          "intents": [
+            {
+              "type": "create",
+              "summary": "tea",
+              "task": {
+                "name": "tea",
+                "priority": "medium",
+                "timeZone": "Europe/Kyiv",
+                "allowSplit": false,
+                "isUnscheduled": false,
+                "estimatedTimeInMinutes": 30,
+                "eventType": "fixed",
+                "scheduledStartTime": "2026-10-19T08:00:00.000Z",
+                "scheduledEndTime": "2026-10-19T08:30:00.000Z"
+              }
+            }
+          ],
+          "reads": [],
+          "validationErrors": [],
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_missing_constraint",
+            "detail": "model_missing_constraint: outcome act, blocked -"
+          },
+          "errorClass": "model_missing_constraint",
+          "rootCause": "model interpretation (constraint) or projection drop — review"
+        }
+      ]
+    },
+    {
+      "id": "he-10",
+      "language": "en",
+      "category": "H",
+      "family": "later-schedule-then-unschedule",
+      "operation": "later scheduling",
+      "invariant": "the report ends in Later",
+      "rootCause": "projection / validator refusal (review: model proposal vs product rule)",
+      "turns": [
+        {
+          "turn": 1,
+          "utterance": "no, take the time off it, leave it without a time",
+          "expect": {
+            "outcomes": [
+              "confirm"
+            ],
+            "taskId": "task-report",
+            "unscheduled": true
+          },
+          "outcome": "clarify",
+          "blocked": [
+            "contradictory_constraints"
+          ],
+          "assistantMessage": "The times in that command contradict each other. Say how it should be.",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "modelOutput": "output={\"version\":\"1\",\"kind\":\"operations\",\"operations\":[{\"opId\":\"op-1\",\"action\":\"update\",\"target\":{\"kind\":\"operation_result\",\"opId\":\"pop_1\"},\"changes\":{\"unschedule\":true},\"constraints\":[],\"dependsOn\":[],\"source\":{\"text\":\"no, take the time off it, leave it without a time\"}}]}",
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_unnecessary_clarification",
+            "detail": "model_unnecessary_clarification: outcome clarify, blocked contradictory_constraints"
+          },
+          "errorClass": "model_unnecessary_clarification:contradictory_constraints",
+          "rootCause": "projection / validator refusal (review: model proposal vs product rule)"
+        },
+        {
+          "turn": 2,
+          "utterance": "yes",
+          "expect": {
+            "outcomes": [
+              "act"
+            ],
+            "taskId": "task-report",
+            "unscheduled": true
+          },
+          "outcome": "clarify",
+          "blocked": [
+            "clarification_open"
+          ],
+          "assistantMessage": "Which task do you mean?",
+          "intents": [],
+          "reads": [],
+          "validationErrors": [],
+          "verdict": {
+            "semantic": false,
+            "safety": true,
+            "completion": false,
+            "category": "model_intent_error",
+            "detail": "model_intent_error: outcome clarify, blocked clarification_open"
+          },
+          "errorClass": "model_intent_error:clarification_open",
+          "rootCause": "claims / dialogue state"
+        }
+      ]
+    }
+  ]
+}

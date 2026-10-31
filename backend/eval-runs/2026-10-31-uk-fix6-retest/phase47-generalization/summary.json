@@ -1,0 +1,85 @@
+{
+  "status": "complete",
+  "stopped": null,
+  "runId": "fce71d54-3140-4be6-90be-bcbccf3f6d65",
+  "suite": "phase47-generalization-1",
+  "scorer": "phase4711-1",
+  "promptHash": "e203a462d2992600ba6dfad18dd8eba2c086f6c451ad1145924aec45ecbea4af",
+  "promptBHash": "a3ce9220466faabcd8bd83814d2571c90c9709ef19bda2fa71ae71a1d342db0f",
+  "executionMode": "live-service-preview-only",
+  "plannerMode": "fixture-echo",
+  "model": "deepseek-flash",
+  "provider": "deepseek",
+  "temperature": 0.1,
+  "thinking": false,
+  "nowIso": "2026-10-18T06:00:00.000Z",
+  "timeZone": "Europe/Kyiv",
+  "scenarios": 3,
+  "passed": 3,
+  "failed": 0,
+  "byCategory": {
+    "B": {
+      "scenarios": 2,
+      "passed": 2,
+      "failed": 0,
+      "rate": 1
+    },
+    "C": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    }
+  },
+  "byLanguage": {
+    "uk": {
+      "scenarios": 3,
+      "passed": 3,
+      "failed": 0,
+      "rate": 1
+    }
+  },
+  "byTurns": {
+    "multi": {
+      "scenarios": 3,
+      "passed": 3,
+      "failed": 0,
+      "rate": 1
+    }
+  },
+  "byFamily": {
+    "switch-after-preview": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "cancel-confirm-then-new": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    },
+    "c3-calendar-switch": {
+      "scenarios": 1,
+      "passed": 1,
+      "failed": 0,
+      "rate": 1
+    }
+  },
+  "turns": 9,
+  "perTurnSuccess": 9,
+  "unsafeTurns": 0,
+  "unnecessaryClarification": 0,
+  "serverWrites": 0,
+  "errorClasses": {},
+  "modelCalls": 8,
+  "tokens": 31994,
+  "promptTokens": 31353,
+  "completionTokens": 641,
+  "usd": 0.005088,
+  "usdNote": "deepseek-flash list price, input priced as uncached (cache hits not reported through GroqClient)",
+  "latencyP50": 1229,
+  "latencyP95": 1605,
+  "incomplete": []
+}

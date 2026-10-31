@@ -1,0 +1,148 @@
+[
+  {
+    "id": "en-a-05",
+    "category": "A",
+    "family": "recurring-preferred",
+    "language": "en",
+    "invariant": "the series keeps its clock and no day window (VC-01)",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "walk the dog every day around 7 in the evening",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "dog",
+          "includes": "19:00",
+          "action": "create"
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "unmapped_time"
+        ],
+        "assistantMessage": "Give me an exact time.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked unmapped_time"
+        },
+        "errorClass": "model_unnecessary_clarification:unmapped_time",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-a-11",
+    "category": "A",
+    "family": "done-task",
+    "language": "en",
+    "invariant": "a completed task is not a write target",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "move pay the invoice to tomorrow",
+        "expect": {
+          "outcomes": [
+            "answer",
+            "refuse"
+          ],
+          "intents": 0
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "I don't see a task called \"pay the invoice\" in your open tasks. Should I create it for tomorrow, or is it a calendar event I should look for?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome clarify, blocked -"
+        },
+        "errorClass": "model_intent_error",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-d-03",
+    "category": "D",
+    "family": "occurrence-rename",
+    "language": "en",
+    "invariant": "one day of the series is renamed (WP-B)",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "rename Monday's gym to yoga",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-gym",
+          "nameIncludes": "yoga",
+          "action": "update"
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "Do you mean the open task \"Gym\"? There is no gym scheduled on Monday in your open tasks.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked -"
+        },
+        "errorClass": "model_unnecessary_clarification",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-d-04",
+    "category": "D",
+    "family": "occurrence-complete",
+    "language": "en",
+    "invariant": "one day of the series is completed in place (WP-B)",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "I already did the gym on Monday",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-gym",
+          "action": "complete"
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "missing_series_scope"
+        ],
+        "assistantMessage": "This repeats. Do you mean this day, this day and following, or the whole series?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked missing_series_scope"
+        },
+        "errorClass": "model_unnecessary_clarification:missing_series_scope",
+        "note": null
+      }
+    ]
+  }
+]

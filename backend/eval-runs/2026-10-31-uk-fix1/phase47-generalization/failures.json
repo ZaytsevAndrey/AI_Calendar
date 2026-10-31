@@ -1,0 +1,1242 @@
+[
+  {
+    "id": "g-a-21",
+    "category": "A",
+    "family": "writable-move",
+    "language": "uk",
+    "invariant": "only the writable flight",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "політ зсунь на 26 жовтня о 12:40",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "ext-flight-w",
+          "includes": "12:40"
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "Який саме «політ» ви маєте на увазі? У списку ваших записів немає жодного з такою назвою.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked -"
+        },
+        "errorClass": "model_unnecessary_clarification",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-a-25",
+    "category": "A",
+    "family": "similar-titles",
+    "language": "uk",
+    "invariant": "finance report stays open",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "фінансовий звіт залиш, звичайний звіт познач виконаним",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-report",
+          "action": "complete",
+          "forbidTaskId": "task-finance"
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "empty_patch"
+        ],
+        "assistantMessage": "Не зрозумів, що саме змінити.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked empty_patch"
+        },
+        "errorClass": "model_unnecessary_clarification:empty_patch",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-a-34",
+    "category": "A",
+    "family": "not-day-plan",
+    "language": "uk",
+    "invariant": "tomorrow afternoon stays a task",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "завтра вдень, але не в план дня, купити квіти мамі",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "квіт"
+        },
+        "outcome": "refuse",
+        "blocked": [
+          "invalid_model_output"
+        ],
+        "assistantMessage": "Не зрозумів команду. Скажіть інакше.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome refuse, blocked invalid_model_output"
+        },
+        "errorClass": "model_output_invalid:unknown_label@$.operations[0].constraints[1]|unknown_field@$.operations[0].constraints[1].value|unknown_label@$.operations[0].constraints[1]",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-a-44",
+    "category": "A",
+    "family": "which-report",
+    "language": "uk",
+    "invariant": "neither report is written",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "коли в мене звіт?",
+        "expect": {
+          "outcomes": [
+            "clarify",
+            "refuse"
+          ],
+          "clarificationRequired": true,
+          "intents": 0
+        },
+        "outcome": "answer",
+        "blocked": [],
+        "assistantMessage": "У вас є два відкриті записи зі словом «звіт»: «Звіт» і «Фінансовий звіт». Жоден із них не має запланованого часу. Уточніть, який саме вас цікавить.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome answer, blocked -"
+        },
+        "errorClass": "model_intent_error",
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "я про фінансовий",
+        "expect": {
+          "outcomes": [
+            "answer",
+            "clarify",
+            "refuse"
+          ],
+          "intents": 0,
+          "forbidTaskId": "task-finance"
+        },
+        "outcome": "answer",
+        "blocked": [],
+        "assistantMessage": "«Фінансовий звіт» — це відкритий запис без запланованого часу. Тобто конкретної години чи дня в нього немає.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-a-46",
+    "category": "A",
+    "family": "withhold-confirm",
+    "language": "uk",
+    "invariant": "saying not yet does not apply the move",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "політ на 27 жовтня о 15:25",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "ext-flight-w",
+          "includes": "15:25"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "політ",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "політ",
+            "task": {
+              "name": "політ",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-27T13:25:00.000Z",
+              "scheduledEndTime": "2026-10-27T13:55:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": false,
+          "completion": false,
+          "category": "model_target_reference_error",
+          "detail": "model_target_reference_error: outcome confirm, blocked -"
+        },
+        "errorClass": "model_target_reference_error",
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "зачекай, не підтверджую",
+        "expect": {
+          "outcomes": [
+            "answer",
+            "refuse",
+            "clarify",
+            "confirm"
+          ],
+          "pendingCount": 1
+        },
+        "outcome": "answer",
+        "blocked": [],
+        "assistantMessage": "Скасував незастосовану дію.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_missing_constraint",
+          "detail": "model_missing_constraint: outcome answer, blocked -"
+        },
+        "errorClass": "model_missing_constraint",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-a-50",
+    "category": "A",
+    "family": "evening-then-clock",
+    "language": "uk",
+    "invariant": "no invented evening hour before the user names one",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "звіт на вечір четверга, годину сам не став",
+        "expect": {
+          "outcomes": [
+            "clarify",
+            "refuse"
+          ],
+          "clarificationRequired": true
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "unmapped_time"
+        ],
+        "assistantMessage": "Назвіть точну годину.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "тоді о 18:55",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-report",
+          "includes": "18:55"
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "unmapped_time"
+        ],
+        "assistantMessage": "Назвіть точну годину.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked unmapped_time"
+        },
+        "errorClass": "model_unnecessary_clarification:unmapped_time",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-b-07",
+    "category": "B",
+    "family": "unschedule-reschedule-cancel",
+    "language": "uk",
+    "invariant": "cancel drops the preview and does not write",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "зніми час зі звіту, хай висить без години",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-report",
+          "unscheduled": true
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "Змінити «Звіт»",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "Змінити «Звіт»",
+            "command": {
+              "kind": "update",
+              "taskId": "task-report",
+              "taskName": "Звіт",
+              "summary": "Змінити «Звіт»",
+              "patch": {
+                "isUnscheduled": true,
+                "scheduledStartTime": null,
+                "scheduledEndTime": null,
+                "earliestStartTime": null,
+                "deadline": null
+              }
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "постав назад на 26 жовтня о 14:45",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-report",
+          "includes": "14:45"
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "contradictory_constraints"
+        ],
+        "assistantMessage": "Час у команді суперечить сам собі. Скажіть, як має бути.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked contradictory_constraints"
+        },
+        "errorClass": "model_unnecessary_clarification:contradictory_constraints",
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "забудь",
+        "expect": {
+          "outcomes": [
+            "answer",
+            "refuse"
+          ],
+          "intents": 0,
+          "pendingCount": 0
+        },
+        "outcome": "answer",
+        "blocked": [],
+        "assistantMessage": "Скасував незастосовану дію.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-b-10",
+    "category": "B",
+    "family": "conflicting-days",
+    "language": "uk",
+    "invariant": "the engine does not silently pick one of the two days",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "звіт і в понеділок о 10:00 і в вівторок о 11:00",
+        "expect": {
+          "outcomes": [
+            "clarify",
+            "refuse"
+          ],
+          "clarificationRequired": true
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "Змінити «Звіт» звіт",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "Змінити «Звіт»",
+            "command": {
+              "kind": "update",
+              "taskId": "task-report",
+              "taskName": "Звіт",
+              "summary": "Змінити «Звіт»",
+              "patch": {
+                "isUnscheduled": false,
+                "scheduledStartTime": "2026-10-19T07:00:00.000Z"
+              }
+            }
+          },
+          {
+            "type": "create",
+            "summary": "звіт",
+            "task": {
+              "name": "звіт",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-20T08:00:00.000Z",
+              "scheduledEndTime": "2026-10-20T08:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": false,
+          "completion": false,
+          "category": "model_target_reference_error",
+          "detail": "model_target_reference_error: outcome confirm, blocked -"
+        },
+        "errorClass": "model_target_reference_error",
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "лише вівторок о 11:00",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-report",
+          "includes": "11:00"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "звіт",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "звіт",
+            "task": {
+              "name": "звіт",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-20T08:00:00.000Z",
+              "scheduledEndTime": "2026-10-20T08:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": false,
+          "completion": false,
+          "category": "model_target_reference_error",
+          "detail": "model_target_reference_error: outcome confirm, blocked -"
+        },
+        "errorClass": "model_target_reference_error",
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "так",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "taskId": "task-report"
+        },
+        "outcome": "act",
+        "blocked": [],
+        "assistantMessage": "Виконую: звіт",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "звіт",
+            "task": {
+              "name": "звіт",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-20T08:00:00.000Z",
+              "scheduledEndTime": "2026-10-20T08:30:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": false,
+          "completion": false,
+          "category": "model_target_reference_error",
+          "detail": "model_target_reference_error: outcome act, blocked -"
+        },
+        "errorClass": "model_target_reference_error",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-b-22",
+    "category": "B",
+    "family": "switch-after-preview",
+    "language": "uk",
+    "invariant": "finance report is not completed",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "закрий фінансовий звіт",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-finance",
+          "action": "complete",
+          "forbidTaskId": "task-report"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "Позначити виконаною «Фінансовий звіт»",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "Позначити виконаною «Фінансовий звіт»",
+            "command": {
+              "kind": "complete",
+              "taskId": "task-finance",
+              "taskName": "Фінансовий звіт",
+              "summary": "Позначити виконаною «Фінансовий звіт»"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "стопе, я мав на увазі design review follow-up",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-review-2",
+          "action": "complete",
+          "forbidTaskId": "task-finance"
+        },
+        "outcome": "clarify",
+        "blocked": [
+          "unsupported_dependency"
+        ],
+        "assistantMessage": "Яку саме задачу маєте на увазі?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked unsupported_dependency"
+        },
+        "errorClass": "model_unnecessary_clarification:unsupported_dependency",
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "так",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "taskId": "task-review-2",
+          "forbidTaskId": "task-finance"
+        },
+        "outcome": "act",
+        "blocked": [],
+        "assistantMessage": "Виконую: Позначити виконаною «Фінансовий звіт»",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "Позначити виконаною «Фінансовий звіт»",
+            "command": {
+              "kind": "complete",
+              "taskId": "task-finance",
+              "taskName": "Фінансовий звіт",
+              "summary": "Позначити виконаною «Фінансовий звіт»"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": false,
+          "completion": false,
+          "category": "model_target_reference_error",
+          "detail": "model_target_reference_error: outcome act, blocked -"
+        },
+        "errorClass": "model_target_reference_error",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-b-24",
+    "category": "B",
+    "family": "conflicting-duration",
+    "language": "uk",
+    "invariant": "the engine does not pick 20 and 120 together",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "звіт на 20 хвилин і на дві години 26 жовтня",
+        "expect": {
+          "outcomes": [
+            "clarify",
+            "refuse"
+          ],
+          "clarificationRequired": true
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "Звіт",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "Звіт",
+            "task": {
+              "name": "Звіт",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 20,
+              "eventType": "admin",
+              "earliestStartTime": "2026-10-26T08:00:00+02:00",
+              "deadline": "2026-10-26T23:00:00+02:00"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": false,
+          "completion": false,
+          "category": "model_target_reference_error",
+          "detail": "model_target_reference_error: outcome confirm, blocked -"
+        },
+        "errorClass": "model_target_reference_error",
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "лише 20 хвилин о 10:40",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-report",
+          "includes": "10:40"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "Звіт",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "Звіт",
+            "task": {
+              "name": "Звіт",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 20,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-26T08:40:00.000Z",
+              "scheduledEndTime": "2026-10-26T09:00:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": false,
+          "completion": false,
+          "category": "model_target_reference_error",
+          "detail": "model_target_reference_error: outcome confirm, blocked -"
+        },
+        "errorClass": "model_target_reference_error",
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "так",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "taskId": "task-report"
+        },
+        "outcome": "act",
+        "blocked": [],
+        "assistantMessage": "Виконую: Звіт",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "Звіт",
+            "task": {
+              "name": "Звіт",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 20,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-26T08:40:00.000Z",
+              "scheduledEndTime": "2026-10-26T09:00:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": false,
+          "completion": false,
+          "category": "model_target_reference_error",
+          "detail": "model_target_reference_error: outcome act, blocked -"
+        },
+        "errorClass": "model_target_reference_error",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-b-26",
+    "category": "B",
+    "family": "third-same-title",
+    "language": "uk",
+    "invariant": "neither existing report is updated",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "коли звіт?",
+        "expect": {
+          "outcomes": [
+            "clarify",
+            "refuse"
+          ],
+          "clarificationRequired": true,
+          "intents": 0
+        },
+        "outcome": "answer",
+        "blocked": [],
+        "assistantMessage": "У вас є два відкриті записи зі словом «звіт»: «Звіт» і «Фінансовий звіт». Жоден із них не має запланованого часу. Уточніть, який саме вас цікавить.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome answer, blocked -"
+        },
+        "errorClass": "model_intent_error",
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "не чіпай їх, додай третій звіт без дати",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "звіт",
+          "unscheduled": true,
+          "action": "create",
+          "forbidTaskId": "task-report"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "звіт",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "звіт",
+            "task": {
+              "name": "звіт",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": true,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "admin"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": "task-finance must also stay untouched"
+      },
+      {
+        "turn": 2,
+        "utterance": "так",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "nameIncludes": "звіт",
+          "forbidTaskId": "task-report"
+        },
+        "outcome": "act",
+        "blocked": [],
+        "assistantMessage": "Виконую: звіт",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "звіт",
+            "task": {
+              "name": "звіт",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": true,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "admin"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-b-27",
+    "category": "B",
+    "family": "cancel-confirm-then-new",
+    "language": "uk",
+    "invariant": "a later так does not delete the review",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "видали design review",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-review",
+          "forbidTaskId": "task-review-2"
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "У вас є два записи: «Design review» і «Design review follow-up». Який саме видалити?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked -"
+        },
+        "errorClass": "model_unnecessary_clarification",
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "скасуй це",
+        "expect": {
+          "outcomes": [
+            "answer",
+            "refuse"
+          ],
+          "intents": 0,
+          "pendingCount": 0
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "Уточніть, будь ласка: скасувати видалення обох записів «Design review» і «Design review follow-up», чи лише одного з них? Якщо одного — якого саме?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome clarify, blocked -"
+        },
+        "errorClass": "model_intent_error",
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "так",
+        "expect": {
+          "outcomes": [
+            "answer",
+            "refuse"
+          ],
+          "intents": 0
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "Уточніть, будь ласка: скасувати видалення обох записів «Design review» і «Design review follow-up», чи лише одного з них? Якщо одного — якого саме?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome clarify, blocked -"
+        },
+        "errorClass": "model_intent_error",
+        "note": null
+      },
+      {
+        "turn": 3,
+        "utterance": "додай задачу архівувати макети",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "макет",
+          "unscheduled": true,
+          "forbidTaskId": "task-review"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "архівувати макети",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "архівувати макети",
+            "task": {
+              "name": "архівувати макети",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": true,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "admin"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-c-08",
+    "category": "C",
+    "family": "c2-modify-verb",
+    "language": "uk",
+    "invariant": "зроби with one existing report updates that report",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "зроби звіт на 26 жовтня о 14:35",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-report",
+          "includes": "14:35",
+          "action": "update"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "Звіт",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "Звіт",
+            "task": {
+              "name": "Звіт",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "fixed",
+              "scheduledStartTime": "2026-10-26T12:35:00.000Z",
+              "scheduledEndTime": "2026-10-26T13:05:00.000Z"
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": false,
+          "completion": false,
+          "category": "model_target_reference_error",
+          "detail": "model_target_reference_error: outcome confirm, blocked -"
+        },
+        "errorClass": "model_target_reference_error",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "g-c-20",
+    "category": "C",
+    "family": "c5-after-cancel",
+    "language": "uk",
+    "invariant": "finance report is not moved after cancellation",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "перенеси фінансовий звіт на суботу",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-finance",
+          "includes": "2026-10-24",
+          "forbidTaskId": "task-report"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "Перенести «Фінансовий звіт» на 2026-10-24",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "Перенести «Фінансовий звіт» на 2026-10-24",
+            "command": {
+              "kind": "update",
+              "taskId": "task-finance",
+              "taskName": "Фінансовий звіт",
+              "summary": "Перенести «Фінансовий звіт» на 2026-10-24",
+              "patch": {
+                "isUnscheduled": false,
+                "earliestStartTime": "2026-10-24T08:00:00+03:00",
+                "deadline": "2026-10-24T23:00:00+03:00"
+              }
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "скасуй це",
+        "expect": {
+          "outcomes": [
+            "answer",
+            "refuse"
+          ],
+          "intents": 0,
+          "pendingCount": 0
+        },
+        "outcome": "confirm",
+        "blocked": [
+          "invalid_model_output"
+        ],
+        "assistantMessage": "Не розчув. Прев’ю без змін: скажіть інакше або натисніть Застосувати.",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "Перенести «Фінансовий звіт» на 2026-10-24",
+            "command": {
+              "kind": "update",
+              "taskId": "task-finance",
+              "taskName": "Фінансовий звіт",
+              "summary": "Перенести «Фінансовий звіт» на 2026-10-24",
+              "patch": {
+                "isUnscheduled": false,
+                "earliestStartTime": "2026-10-24T08:00:00+03:00",
+                "deadline": "2026-10-24T23:00:00+03:00"
+              }
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": false,
+          "completion": false,
+          "category": "model_target_reference_error",
+          "detail": "model_target_reference_error: outcome confirm, blocked invalid_model_output"
+        },
+        "errorClass": "model_target_reference_error:invalid_model_output",
+        "note": null
+      },
+      {
+        "turn": 2,
+        "utterance": "тепер перенеси звичайний звіт на суботу о 12:55",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-report",
+          "includes": "12:55",
+          "forbidTaskId": "task-finance"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "Перенести «Звіт» на 2026-10-24 12:55",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "Перенести «Звіт» на 2026-10-24 12:55",
+            "command": {
+              "kind": "update",
+              "taskId": "task-report",
+              "taskName": "Звіт",
+              "summary": "Перенести «Звіт» на 2026-10-24 12:55",
+              "patch": {
+                "isUnscheduled": false,
+                "scheduledStartTime": "2026-10-24T09:55:00.000Z"
+              }
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": true,
+          "safety": true,
+          "completion": true,
+          "category": null,
+          "detail": "ok"
+        },
+        "errorClass": null,
+        "note": null
+      }
+    ]
+  }
+]

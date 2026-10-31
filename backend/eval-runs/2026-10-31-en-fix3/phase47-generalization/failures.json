@@ -1,0 +1,237 @@
+[
+  {
+    "id": "en-a-05",
+    "category": "A",
+    "family": "recurring-preferred",
+    "language": "en",
+    "invariant": "the series keeps its clock and no day window (VC-01)",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "walk the dog every day around 7 in the evening",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "dog",
+          "includes": "19:00",
+          "action": "create"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "walk the dog. Time of day: evening. No clock invented.",
+        "intents": [
+          {
+            "type": "create",
+            "summary": "walk the dog. Time of day: evening. No clock invented.",
+            "task": {
+              "name": "walk the dog",
+              "priority": "medium",
+              "timeZone": "Europe/Kyiv",
+              "allowSplit": false,
+              "isUnscheduled": false,
+              "estimatedTimeInMinutes": 30,
+              "eventType": "admin",
+              "isRecurring": true,
+              "recurrencePattern": "DAILY",
+              "recurrenceWeekDays": null
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_missing_constraint",
+          "detail": "model_missing_constraint: outcome confirm, blocked -"
+        },
+        "errorClass": "model_missing_constraint",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-a-11",
+    "category": "A",
+    "family": "done-task",
+    "language": "en",
+    "invariant": "a completed task is not a write target",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "move pay the invoice to tomorrow",
+        "expect": {
+          "outcomes": [
+            "answer",
+            "refuse"
+          ],
+          "intents": 0
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "I don't see a task called \"pay the invoice\" in your open tasks. Should I create it for tomorrow, or is it a calendar event?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome clarify, blocked -"
+        },
+        "errorClass": "model_intent_error",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-a-12",
+    "category": "A",
+    "family": "reminder",
+    "language": "en",
+    "invariant": "a remind phrase is a reminder, not a task",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "remind me to call mom on Sunday",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "mom",
+          "includes": "2026-10-25"
+        },
+        "outcome": "confirm",
+        "blocked": [],
+        "assistantMessage": "call mom",
+        "intents": [
+          {
+            "type": "command",
+            "summary": "call mom",
+            "command": {
+              "kind": "remind_create",
+              "name": "call mom",
+              "summary": "call mom",
+              "dueYmd": "2026-10-18",
+              "notificationTime": null,
+              "description": null,
+              "recurrencePattern": null,
+              "recurrenceWeekDays": null
+            }
+          }
+        ],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_missing_constraint",
+          "detail": "model_missing_constraint: outcome confirm, blocked -"
+        },
+        "errorClass": "model_missing_constraint",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-c-01",
+    "category": "C",
+    "family": "two-writes-one-confirm",
+    "language": "en",
+    "invariant": "two creates in one breath are two tasks (VC-14)",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "call mom at 10 and again at 3",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "nameIncludes": "mom",
+          "intents": 2,
+          "action": "create"
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "You gave two different times for calling mom (10:00 and 15:00). Which time should I use?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked -"
+        },
+        "errorClass": "model_unnecessary_clarification",
+        "note": null
+      },
+      {
+        "turn": 1,
+        "utterance": "yes",
+        "expect": {
+          "outcomes": [
+            "act"
+          ],
+          "intents": 2
+        },
+        "outcome": "answer",
+        "blocked": [],
+        "assistantMessage": "There is nothing waiting to apply.",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_intent_error",
+          "detail": "model_intent_error: outcome answer, blocked -"
+        },
+        "errorClass": "model_intent_error",
+        "note": null
+      }
+    ]
+  },
+  {
+    "id": "en-d-02",
+    "category": "D",
+    "family": "slot-move-other-day",
+    "language": "en",
+    "invariant": "a one-off without a calendar event moves to another day (VC-03)",
+    "complete": true,
+    "turns": [
+      {
+        "turn": 0,
+        "utterance": "move the client meeting to Tuesday at 9",
+        "expect": {
+          "outcomes": [
+            "confirm"
+          ],
+          "taskId": "task-client",
+          "includes": "09:00",
+          "action": "move",
+          "forbidTaskId": "task-client-2"
+        },
+        "outcome": "clarify",
+        "blocked": [],
+        "assistantMessage": "Which client meeting do you mean: \"Client meeting\" or \"Client meeting about the budget\"?",
+        "intents": [],
+        "reads": [],
+        "verdict": {
+          "semantic": false,
+          "safety": true,
+          "completion": false,
+          "category": "model_unnecessary_clarification",
+          "detail": "model_unnecessary_clarification: outcome clarify, blocked -"
+        },
+        "errorClass": "model_unnecessary_clarification",
+        "note": null
+      }
+    ]
+  }
+]
