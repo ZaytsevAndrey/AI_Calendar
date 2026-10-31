@@ -12,6 +12,10 @@ export type EntityRecord = {
   recurring?: boolean;
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
+  /** The one app slot of a one-off task. A move names it; no calendar event id is needed (VC-03). */
+  slotId?: string | null;
+  /** A Later (inbox) task with no placement (VC-02). */
+  unscheduled?: boolean;
   /** Trusted calendar event id from the catalog. Never invented by the model. */
   googleEventId?: string | null;
   /** External events are writable only when this is explicitly true. */
@@ -19,7 +23,7 @@ export type EntityRecord = {
   /** Calendar provider that owns an external event. Kept so a write goes to the same provider. */
   provider?: 'google' | 'microsoft' | 'apple';
   /** Recurring rows: each placed occurrence with its calendar event id, and the series event id. */
-  occurrences?: Array<{ start: string; end: string; googleEventId: string | null }>;
+  occurrences?: Array<{ start: string; end: string; googleEventId: string | null; slotId?: string | null }>;
   seriesEventId?: string | null;
   /** A fixed Luefy task keeps its slot until a clock moves it; a window does not reseat it. */
   fixed?: boolean;

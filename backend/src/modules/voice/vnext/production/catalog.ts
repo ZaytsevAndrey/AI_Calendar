@@ -54,10 +54,10 @@ function occurrenceEventId(task: Task, slot: ScheduledTask): string | null {
   return own || null;
 }
 
-function occurrencesOf(task: Task, slots: readonly ScheduledTask[]): Array<{ start: string; end: string; googleEventId: string | null }> {
+function occurrencesOf(task: Task, slots: readonly ScheduledTask[]): Array<{ start: string; end: string; googleEventId: string | null; slotId: string }> {
   return slots
-    .map((slot) => ({ start: iso(slot.scheduledStartTime), end: iso(slot.scheduledEndTime), googleEventId: occurrenceEventId(task, slot) }))
-    .filter((row): row is { start: string; end: string; googleEventId: string | null } => row.start != null && row.end != null)
+    .map((slot) => ({ start: iso(slot.scheduledStartTime), end: iso(slot.scheduledEndTime), googleEventId: occurrenceEventId(task, slot), slotId: slot.id }))
+    .filter((row): row is { start: string; end: string; googleEventId: string | null; slotId: string } => row.start != null && row.end != null)
     .sort((left, right) => left.start.localeCompare(right.start));
 }
 
@@ -87,6 +87,9 @@ export function taskRecord(task: Task, allSlots: readonly ScheduledTask[]): Enti
     ...(task.isRecurring ? { recurring: true, occurrences: occurrencesOf(task, slots), seriesEventId: task.googleEventId ?? null } : {}),
     scheduledStart: single ? iso(single.scheduledStartTime) : null,
     scheduledEnd: single ? iso(single.scheduledEndTime) : null,
+    // The app slot moves through the same path as a drag of that block; no calendar id needed (VC-03).
+    ...(single && !task.isRecurring ? { slotId: single.id } : {}),
+    ...(task.isUnscheduled && !task.isRecurring ? { unscheduled: true } : {}),
     googleEventId,
     ...(task.eventType === TaskEventType.FIXED ? { fixed: true } : {}),
     writable: true,

@@ -13,7 +13,8 @@ export type ClockRole = (typeof CLOCK_ROLES)[number];
 export type SeriesScope = 'occurrence' | 'from_day' | 'all';
 
 /** One placed occurrence of a recurring row, from the authorized catalog. */
-export type EntityOccurrence = { start: string; end: string; googleEventId: string | null };
+/** A placed occurrence. `slotId` is the app slot, so a move needs no calendar event id (VC-03). */
+export type EntityOccurrence = { start: string; end: string; googleEventId: string | null; slotId?: string | null };
 
 export const PROPOSAL_ENTITY_TYPES = ['task', 'reminder', 'external_event', 'day_plan_item'] as const;
 export type ProposalEntityType = (typeof PROPOSAL_ENTITY_TYPES)[number];
@@ -127,6 +128,10 @@ export type ResolvedEntityReference = {
   googleEventId?: string | null;
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
+  /** The one app slot of a one-off task; a move names it instead of a calendar event (VC-03). */
+  slotId?: string | null;
+  /** A Later (inbox) task: a day or clock given by voice schedules it (VC-02). */
+  unscheduled?: boolean;
   /** Catalog status at preview. Only open rows are eligible for a write. */
   status?: 'open' | 'completed' | 'canceled';
   /** A recurring row needs a series scope the structured contract cannot carry yet. */

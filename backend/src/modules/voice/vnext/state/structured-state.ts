@@ -30,6 +30,8 @@ export type KnownEntity = {
   googleEventId?: string | null;
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
+  slotId?: string | null;
+  unscheduled?: boolean;
   status?: 'open' | 'completed' | 'canceled';
   recurring?: boolean;
   provider?: 'google' | 'microsoft' | 'apple';
@@ -658,6 +660,8 @@ function entityReference(entity: KnownEntity): Extract<PendingOperation['target'
     ...(entity.googleEventId != null ? { googleEventId: entity.googleEventId } : {}),
     ...(entity.scheduledStart != null ? { scheduledStart: entity.scheduledStart } : {}),
     ...(entity.scheduledEnd != null ? { scheduledEnd: entity.scheduledEnd } : {}),
+    ...(entity.slotId != null ? { slotId: entity.slotId } : {}),
+    ...(entity.unscheduled ? { unscheduled: true } : {}),
     ...(entity.status ? { status: entity.status } : {}),
     ...(entity.recurring ? { recurring: true } : {}),
     ...(entity.provider ? { provider: entity.provider } : {}),

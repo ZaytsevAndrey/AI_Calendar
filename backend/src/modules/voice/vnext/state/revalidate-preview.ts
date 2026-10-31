@@ -50,7 +50,8 @@ export function fingerprintsForOperations(
       // An empty owner never verifies: compareEntityFingerprint fails closed on it.
       userId: row?.userId ?? '',
       // A series move is anchored on an occurrence; the row revision already covers every slot.
-      requiresMoveIdentity: (previous?.requiresMoveIdentity ?? false) || (operation.action === 'move' && !target.recurring),
+      // A slot move without a calendar event id is covered by the revision too (slot id and times are in it).
+      requiresMoveIdentity: (previous?.requiresMoveIdentity ?? false) || (operation.action === 'move' && !target.recurring && target.googleEventId != null),
     };
   }
   return fingerprints;

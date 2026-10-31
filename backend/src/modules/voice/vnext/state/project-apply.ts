@@ -712,8 +712,35 @@ function projectCommand(operation: PendingOperation, clock: Clock, language: VNe
       },
     };
   }
-  // The client skip command needs an occurrence start and event id. The contract cannot carry them yet.
-  if (operation.action === 'skip') return { ok: false, code: 'unsupported_action', detail: operation.action };
+  // Skip of a one-off clears its one slot, as Skip does in the app (VC-09). A fixed one-off has no day to
+  // skip and a Later task has no slot; the server refuses both, so the preview says so first.
+  if (operation.action === 'skip') {
+    const target = operation.target;
+    if (target.entityType !== 'task') return { ok: false, code: 'unsupported_action', detail: `${operation.action}:${target.entityType}` };
+    if (target.fixed) return { ok: false, code: 'fixed_skip', detail: taskId };
+    if (!target.scheduledStart) return { ok: false, code: 'nothing_to_skip', detail: taskId };
+    const rejected = onlyKinds(operation, ['date']) ?? onlyChanges(operation, []);
+    if (rejected) return rejected;
+    const day = find(operation, 'date')?.value;
+    if (day && localYmd(target.scheduledStart, clock.timeZone) !== day) return { ok: false, code: 'occurrence_not_found', detail: day };
+    const text = commandSummary(language, 'skip', operation, clock, { occurrence: target.scheduledStart });
+    return {
+      ok: true,
+      intent: {
+        type: 'command',
+        summary: text,
+        command: {
+          kind: 'skip',
+          taskId,
+          taskName,
+          summary: text,
+          occurrenceStart: target.scheduledStart,
+          googleEventId: target.googleEventId ?? null,
+          googleEventCalendarId: target.calendarId,
+        },
+      },
+    };
+  }
   if (operation.action === 'complete' || operation.action === 'delete' || operation.action === 'cancel') {
     const status: string | undefined = operation.changes.status;
     const implied = (operation.action === 'complete' && status === 'completed') || (operation.action === 'cancel' && status === 'canceled');
@@ -747,7 +774,18 @@ function projectCommand(operation: PendingOperation, clock: Clock, language: VNe
     const rejected = onlyKinds(operation, ['date', 'clock', 'duration']) ?? placementOnly(operation) ?? onlyChanges(operation, []);
     if (rejected) return rejected;
     const target = operation.target;
-    if (!target.googleEventId || !target.scheduledStart || !target.scheduledEnd) {
+    // A Later task has no slot to move: the clock becomes its schedule and the engine seats it there
+    // (VC-02). Any other row without a slot is refused below, never patched on a guess.
+    if (target.entityType === 'task' && target.unscheduled && !target.fixed && !target.scheduledStart) {
+      const patch = updatePatch(operation, clock);
+      if (!patch.ok) return patch;
+      const start = resolveStart(operation, clock.timeZone);
+      if (!start.ok) return start;
+      const text = commandSummary(language, 'move', operation, clock, { start: start.iso });
+      return { ok: true, intent: { type: 'command', summary: text, command: { kind: 'update', taskId, taskName, summary: text, patch: patch.patch } } };
+    }
+    // The client move names the app slot when there is one, else the calendar event (VC-03).
+    if ((!target.slotId && !target.googleEventId) || !target.scheduledStart || !target.scheduledEnd) {
       return { ok: false, code: 'unrepresentable_move', detail: taskId };
     }
     const start = resolveStart(operation, clock.timeZone);
@@ -765,7 +803,8 @@ function projectCommand(operation: PendingOperation, clock: Clock, language: VNe
           taskId,
           taskName,
           summary: moved,
-          googleEventId: target.googleEventId,
+          ...(target.slotId ? { slotId: target.slotId } : {}),
+          googleEventId: target.googleEventId ?? null,
           calendarId: target.calendarId,
           ...(target.provider ? { provider: target.provider } : {}),
           recurringEventId: null,
@@ -845,7 +884,11 @@ function projectSeriesCommand(operation: PendingOperation, clock: Clock, languag
     if (rejected) return rejected;
     const picked = pickOccurrence(operation, clock.timeZone);
     if (!picked.ok) return picked;
-    if (!picked.occurrence.googleEventId || !target.seriesEventId) return { ok: false, code: 'unrepresentable_move', detail: taskId };
+    if (!picked.occurrence.slotId && !(picked.occurrence.googleEventId && target.seriesEventId)) return { ok: false, code: 'unrepresentable_move', detail: taskId };
+    // The Scheduling Domain moves an occurrence only within its day; another day is refused here, before
+    // a preview could promise it (VC-04).
+    const day = find(operation, 'date')?.value;
+    if (day && localYmd(picked.occurrence.start, clock.timeZone) !== day) return { ok: false, code: 'cross_day_series_move', detail: `${taskId}:${day}` };
     const start = resolveStart(operation, clock.timeZone);
     if (!start.ok) return start;
     const end = resolveEnd(operation, start.iso, picked.occurrence.start, picked.occurrence.end, clock.defaultDuration, clock.timeZone);
@@ -861,9 +904,10 @@ function projectSeriesCommand(operation: PendingOperation, clock: Clock, languag
           taskId,
           taskName,
           summary: moved,
+          ...(picked.occurrence.slotId ? { slotId: picked.occurrence.slotId } : {}),
           googleEventId: picked.occurrence.googleEventId,
           calendarId: target.calendarId,
-          recurringEventId: target.seriesEventId,
+          recurringEventId: target.seriesEventId ?? null,
           originalStart: picked.occurrence.start,
           originalEnd: picked.occurrence.end,
           start: start.iso,
@@ -915,6 +959,12 @@ function updatePatch(operation: PendingOperation, clock: Clock): { ok: true; pat
   if ((start || end || interval || allDay || bounded) && !date) return { ok: false, code: 'unrepresentable_schedule', detail: operation.pendingId };
   if (interval && (start || end)) return { ok: false, code: 'contradictory_constraints', detail: operation.pendingId };
   if (allDay && (start || end || interval || bounded || duration)) return { ok: false, code: 'contradictory_constraints', detail: operation.pendingId };
+  const target = operation.target.kind === 'entity' ? operation.target : null;
+  // A fixed task keeps its clock: a day alone moves it to the same clock on that day, and a start alone
+  // keeps its stored length (VC-10). Its window never changes, so no day window is written for it.
+  const storedFixed = target?.fixed && target.scheduledStart && target.scheduledEnd
+    ? { start: target.scheduledStart, end: target.scheduledEnd, minutes: Math.round((Date.parse(target.scheduledEnd) - Date.parse(target.scheduledStart)) / 60_000) }
+    : null;
   if (date && allDay) {
     Object.assign(patch, wholeDay(date.value, clock));
   } else if (date) {
@@ -922,16 +972,23 @@ function updatePatch(operation: PendingOperation, clock: Clock): { ok: true; pat
       const startIso = zoned(date.value, start.value, clock.timeZone);
       if (!startIso.ok) return startIso;
       patch.scheduledStartTime = startIso.iso;
+    } else if (storedFixed && !end && !interval && !bounded) {
+      const startIso = zoned(date.value, localHm(storedFixed.start, clock.timeZone), clock.timeZone);
+      if (!startIso.ok) return startIso;
+      patch.scheduledStartTime = startIso.iso;
     }
     if (end) {
       const endIso = zoned(date.value, end.value, clock.timeZone);
       if (!endIso.ok) return endIso;
       patch.scheduledEndTime = endIso.iso;
+    } else if (storedFixed && typeof patch.scheduledStartTime === 'string' && !duration) {
+      const length = storedFixed.minutes > 0 ? storedFixed.minutes : clock.defaultDuration;
+      patch.scheduledEndTime = new Date(Date.parse(patch.scheduledStartTime) + length * 60_000).toISOString();
     }
     if (interval) {
       patch.earliestStartTime = localDateTimeIso(date.value, interval.startHm, clock.timeZone);
       patch.deadline = localDateTimeIso(date.value, interval.endHm, clock.timeZone);
-    } else if (!start && !end && !bounded) {
+    } else if (!start && !end && !bounded && !storedFixed) {
       Object.assign(patch, dayWindow(date.value, clock));
     }
     const bounds = boundsOn(operation, date.value, clock);
@@ -945,6 +1002,9 @@ function updatePatch(operation: PendingOperation, clock: Clock): { ok: true; pat
   if (ordered) return ordered;
   if (duration) patch.estimatedTimeInMinutes = duration.minutes;
   if (!Object.keys(patch).length) return { ok: false, code: 'empty_patch', detail: operation.pendingId };
+  // A Later task given a day, a clock, or a window leaves the inbox; the engine seats it there (VC-02).
+  const schedules = ['scheduledStartTime', 'scheduledEndTime', 'earliestStartTime', 'deadline'].some((key) => key in patch);
+  if (target?.unscheduled && schedules) return { ok: true, patch: { isUnscheduled: false, ...patch } };
   return { ok: true, patch };
 }
 
@@ -992,9 +1052,9 @@ function resolveEnd(
   const date = find(operation, 'date');
   if (endClock && date) return zoned(date.value, endClock.value, timeZone);
   const duration = find(operation, 'duration');
-  const minutes = duration
-    ? duration.minutes
-    : Math.max(defaultDuration, Math.round((Date.parse(originalEnd) - Date.parse(originalStart)) / 60_000) || defaultDuration);
+  // The stored length is kept; the default applies only when the row has no length (VC-10).
+  const stored = Math.round((Date.parse(originalEnd) - Date.parse(originalStart)) / 60_000);
+  const minutes = duration ? duration.minutes : stored > 0 ? stored : defaultDuration;
   return { ok: true, iso: new Date(Date.parse(startIso) + minutes * 60_000).toISOString() };
 }
 

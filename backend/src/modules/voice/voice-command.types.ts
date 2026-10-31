@@ -43,6 +43,8 @@ export type VoiceCommandSlot = {
 export type VoiceTaskPatch = {
   name?: string;
   description?: string | null;
+  /** false schedules a Later task: the engine seats it in the window or at the clock given (VC-02). */
+  isUnscheduled?: boolean;
   phaseId?: string | null;
   eventType?: string;
   estimatedTimeInMinutes?: number;
@@ -94,7 +96,10 @@ export type VoiceCommand =
       taskId: string;
       taskName: string;
       summary: string;
-      googleEventId: string;
+      /** The app slot to move. When set, the server derives the original times from it (VC-03). */
+      slotId?: string | null;
+      /** Calendar event id; null when the slot has none and `slotId` names the block. */
+      googleEventId: string | null;
       calendarId: string | null;
       recurringEventId: string | null;
       originalStart: string;

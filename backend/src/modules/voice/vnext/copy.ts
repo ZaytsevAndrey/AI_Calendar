@@ -47,6 +47,9 @@ const UK: Record<string, string> = {
   unrepresented: 'Частину цієї команди я не можу виконати. Нічого не змінюю. Скажіть простіше.',
   dependency: 'Задачу, яку ви щойно створюєте, ще не можна змінити тією ж командою. Спершу створю її, а зміну скажіть окремо.',
   event_no_done: 'Це подія календаря, а не задача. Її не можна позначити виконаною. Можу перенести, перейменувати або видалити.',
+  same_day_series: 'День повторюваної задачі можна пересунути лише в межах того ж дня. Назвіть нову годину на той день або скажіть пропустити цей день.',
+  fixed_skip: 'Це фіксована подія, її день не можна пропустити. Можу перенести або видалити.',
+  nothing_to_skip: 'У цієї задачі немає запланованого дня, який можна пропустити.',
 };
 
 const EN: Record<string, string> = {
@@ -96,6 +99,9 @@ const EN: Record<string, string> = {
   unrepresented: 'I cannot do part of that command. Nothing was changed. Please say it more simply.',
   dependency: 'I cannot change a task in the same command that creates it. Let me create it first, then say the change separately.',
   event_no_done: 'That is a calendar event, not a task, so it cannot be marked done. I can move, rename, or delete it.',
+  same_day_series: 'A day of a repeating task can only move within that same day. Give a new time on that day, or say to skip it.',
+  fixed_skip: 'That is a fixed event; its day cannot be skipped. I can move or delete it.',
+  nothing_to_skip: 'That task has no scheduled day to skip.',
 };
 
 export function voiceCopy(language: VNextLanguage, code: string): string {

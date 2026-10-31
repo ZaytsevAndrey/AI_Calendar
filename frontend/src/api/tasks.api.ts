@@ -124,7 +124,9 @@ export interface CreateTaskDTO {
   } | null;
 }
 
-export interface UpdateTaskDTO extends Partial<CreateTaskDTO> {
+export interface UpdateTaskDTO extends Partial<Omit<CreateTaskDTO, 'description'>> {
+  /** null clears the notes; the server accepts it (`@IsOptional()`). */
+  description?: string | null;
   status?: 'todo' | 'in_progress' | 'completed' | 'canceled';
   phaseIds?: string[];
 }

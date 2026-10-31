@@ -108,7 +108,10 @@ export async function executeVoiceCommand(
     const patch = command.patch;
     const body: UpdateTaskDTO = {};
     if (patch.name !== undefined) body.name = patch.name;
-    if (patch.description !== undefined) body.description = patch.description ?? undefined;
+    // null clears the notes on the server; undefined would silently keep them (VC-10).
+    if (patch.description !== undefined) body.description = patch.description;
+    // false schedules a Later task: the engine seats it in the window or at the clock sent (VC-02).
+    if (patch.isUnscheduled !== undefined) body.isUnscheduled = patch.isUnscheduled;
     if (patch.eventType !== undefined) body.eventType = patch.eventType;
     if (patch.estimatedTimeInMinutes !== undefined) {
       body.estimatedTimeInMinutes = patch.estimatedTimeInMinutes;
@@ -164,7 +167,10 @@ export async function executeVoiceCommand(
     try {
       const moved = await ScheduleApi.moveDisplayedEvent(
         {
-          googleEventId: command.googleEventId,
+          // The app slot is the identity when the preview named it; the server derives the original
+          // times from it, and the calendar event id may be absent (VC-03).
+          ...(command.slotId ? { slotId: command.slotId } : {}),
+          googleEventId: command.googleEventId ?? '',
           calendarId: command.calendarId ?? undefined,
           ...(command.provider ? { provider: command.provider } : {}),
           recurringEventId: command.recurringEventId ?? undefined,

@@ -74,6 +74,8 @@ export function entitiesToKnown(entities: EntityRecord[], userId: string): Known
       ...(entity.googleEventId != null ? { googleEventId: entity.googleEventId } : {}),
       ...(entity.scheduledStart != null ? { scheduledStart: entity.scheduledStart } : {}),
       ...(entity.scheduledEnd != null ? { scheduledEnd: entity.scheduledEnd } : {}),
+      ...(entity.slotId != null ? { slotId: entity.slotId } : {}),
+      ...(entity.unscheduled ? { unscheduled: true } : {}),
       ...(entity.status ? { status: entity.status } : {}),
       ...(entity.recurring ? { recurring: true } : {}),
       ...(entity.provider ? { provider: entity.provider } : {}),
@@ -104,6 +106,9 @@ function blockedCopy(code: string): Parameters<typeof voiceCopy>[1] {
   if (code === 'unmapped_time') return 'need_clock';
   if (code === 'missing_occurrence' || code === 'occurrence_not_found' || code === 'ambiguous_occurrence') return 'which_occurrence';
   if (code === 'empty_patch') return 'what_change';
+  if (code === 'cross_day_series_move') return 'same_day_series';
+  if (code === 'fixed_skip') return 'fixed_skip';
+  if (code === 'nothing_to_skip') return 'nothing_to_skip';
   if (code === 'unrepresented_constraint' || code === 'unsupported_series_scope' || code === 'unrepresentable_move' || code === 'unrepresentable_delete' || code === 'unrepresentable_update') {
     return 'unrepresented';
   }
