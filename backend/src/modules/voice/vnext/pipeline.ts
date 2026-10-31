@@ -4,7 +4,7 @@ import {
   addDaysToYmd,
   localHm,
   localYmd,
-  nextWeekdayYmd,
+  upcomingWeekdayYmd,
   scheduleTodayYmd,
 } from '../voice-local-date.util';
 import { adaptOperation, withinWriteCap } from './adapter/adapter';
@@ -224,7 +224,7 @@ function turnUser(input: TurnInput): string {
     sleepHm: input.sleepHm,
     scheduleToday: today,
     tomorrow: addDaysToYmd(today, 1),
-    weekdays: WEEKDAYS.map((name, dow) => `${name} ${nextWeekdayYmd(today, dow)}`).join(', '),
+    weekdays: WEEKDAYS.map((name, dow) => `${name} ${upcomingWeekdayYmd(today, dow)}`).join(', '),
     defaultDurationMinutes: input.defaultDurationMinutes,
     language: input.language,
     owned: input.entities

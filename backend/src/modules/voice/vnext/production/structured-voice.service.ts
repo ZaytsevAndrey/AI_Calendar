@@ -26,7 +26,7 @@ import {
   civilDayStartIso,
   localHm,
   localYmd,
-  nextWeekdayYmd,
+  upcomingWeekdayYmd,
   scheduleTodayYmd,
 } from '../../voice-local-date.util';
 import { isNoiseOrEmptyTranscript, spokenControl } from '../../voice-stt.util';
@@ -451,7 +451,7 @@ export class StructuredVoiceService {
       sleepHm: ctx.sleepHm,
       scheduleToday: today,
       tomorrow: addDaysToYmd(today, 1),
-      weekdays: WEEKDAYS.map((name, dow) => `${name} ${nextWeekdayYmd(today, dow)}`).join(', '),
+      weekdays: WEEKDAYS.map((name, dow) => `${name} ${upcomingWeekdayYmd(today, dow)}`).join(', '),
       defaultDurationMinutes: ctx.defaultDurationMinutes,
       language: ctx.language,
       owned: [...ctx.catalog, ...entry.external.values()]
