@@ -290,6 +290,10 @@ export function liveClient(input: {
       const state = steps.find((step) => step.name === 'turn.state');
       const result = steps.find((step) => step.name === 'turn.result');
       const preview = state?.fields.preview as { state?: string; items?: number } | null | undefined;
+      // A turn the service ignored (noise, a client action) logs no turn.state; the open preview it
+      // reports is the one shown before, with the same number of items.
+      const previousPending = history.length ? history[history.length - 1].observed.pendingCount : 0;
+      const pendingCount = state ? (preview?.state === 'open' ? preview.items ?? 0 : 0) : response.execution?.state === 'open' ? previousPending : 0;
       const intents = normalizeIntents(response.intents ?? [], input.store.externalIds);
       const observed: ObservedTurn = {
         outcome: response.outcome,
@@ -298,7 +302,7 @@ export function liveClient(input: {
         serverWrites: typeof state?.fields.serverWrites === 'number' ? (state!.fields.serverWrites as number) : 0,
         assistantMessage: response.assistantMessage ?? '',
         draftNames: response.plan?.items?.map((item) => item.name) ?? draftNamesFrom(steps),
-        pendingCount: preview?.state === 'open' ? preview.items ?? 0 : 0,
+        pendingCount,
         timeZone: input.timeZone ?? LIVE_ZONE,
       };
       const usage = result?.fields.usage as LiveTurn['usage'] | undefined;

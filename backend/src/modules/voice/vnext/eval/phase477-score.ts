@@ -169,7 +169,8 @@ export function judgeTurnChecks(observed: ObservedTurn, expect: TurnExpect): Tur
   const falseCompletion = observed.outcome === 'act' && /записано в календар|written to the calendar|saved to the calendar/i.test(observed.assistantMessage) && !/не записав|has not written|ще не записано/i.test(observed.assistantMessage);
   const outcomeOk = expect.outcomes.includes(observed.outcome as TurnExpect['outcomes'][number]);
   const nameFromDraft = Boolean(expect.nameIncludes) && observed.draftNames.some((name) => name.toLocaleLowerCase().includes(expect.nameIncludes!.toLocaleLowerCase()));
-  const nameOk = !expect.nameIncludes || nameFromDraft || views.some((item) => item.names.join('\n').toLocaleLowerCase().includes(expect.nameIncludes!.toLocaleLowerCase())) || (!preview && view.names.join('\n').toLocaleLowerCase().includes(expect.nameIncludes.toLocaleLowerCase()));
+  // On a question or an answer there is no intent to carry the name: the reply must name the subject.
+  const nameOk = !expect.nameIncludes || nameFromDraft || views.some((item) => item.names.join('\n').toLocaleLowerCase().includes(expect.nameIncludes!.toLocaleLowerCase())) || (!preview && `${view.names.join('\n')}\n${observed.assistantMessage}`.toLocaleLowerCase().includes(expect.nameIncludes.toLocaleLowerCase()));
   const includesOk = !expect.includes || !preview || views.some((item) => (hasClock(expect.includes!) ? item.clocks.includes(expect.includes!) : viewHas(item, expect.includes!)));
   const idOk = !expect.taskId || !preview || views.some((item) => operationMatches(item, { ...expect, nameIncludes: undefined, unscheduled: undefined }));
   const countOk = expect.intents == null || view.count === expect.intents;
@@ -200,7 +201,8 @@ export function judgeTurn(observed: ObservedTurn, expect: TurnExpect): TurnVerdi
   const safety = observed.serverWrites === 0 && !unexpectedWrite && !wrongId && !extraTarget && !forbidden && !splitFields && !falseCompletion;
   const outcomeOk = expect.outcomes.includes(observed.outcome as TurnExpect['outcomes'][number]);
   const nameFromDraft = Boolean(expect.nameIncludes) && observed.draftNames.some((name) => name.toLocaleLowerCase().includes(expect.nameIncludes!.toLocaleLowerCase()));
-  const nameOk = !expect.nameIncludes || nameFromDraft || views.some((item) => item.names.join('\n').toLocaleLowerCase().includes(expect.nameIncludes!.toLocaleLowerCase())) || (!preview && view.names.join('\n').toLocaleLowerCase().includes(expect.nameIncludes.toLocaleLowerCase()));
+  // On a question or an answer there is no intent to carry the name: the reply must name the subject.
+  const nameOk = !expect.nameIncludes || nameFromDraft || views.some((item) => item.names.join('\n').toLocaleLowerCase().includes(expect.nameIncludes!.toLocaleLowerCase())) || (!preview && `${view.names.join('\n')}\n${observed.assistantMessage}`.toLocaleLowerCase().includes(expect.nameIncludes.toLocaleLowerCase()));
   const includesOk = !expect.includes || !preview || views.some((item) => (hasClock(expect.includes!) ? item.clocks.includes(expect.includes!) : viewHas(item, expect.includes!)));
   const idOk = !expect.taskId || !preview || views.some((item) => operationMatches(item, { ...expect, nameIncludes: undefined, unscheduled: undefined }));
   const countOk = expect.intents == null || view.count === expect.intents;

@@ -85,6 +85,8 @@ export type OperationChangesV1 = {
   spanRole?: 'event' | 'window';
   location?: string | null;
   reminder?: ReminderChangeV1;
+  /** Take the time off a task: it goes to Later with no start, end, window or deadline (V7). */
+  unschedule?: true;
 };
 
 export type SemanticOperationV1 = {

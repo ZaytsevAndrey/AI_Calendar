@@ -410,7 +410,7 @@ function planPatches(
   return { ok: true, operations: planned };
 }
 
-const CORRECTION_FIELDS = ['title', 'notes', 'priority', 'location', 'status'] as const;
+const CORRECTION_FIELDS = ['title', 'notes', 'priority', 'location', 'status', 'unschedule'] as const;
 
 /** `date` and `weekday` are one day; a part of day stands where a start clock would. */
 function correctionKey(constraint: TemporalProposal): string {

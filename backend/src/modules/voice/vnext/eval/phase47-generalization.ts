@@ -10,6 +10,10 @@
  * - g-b-12: the confirming word "ок" became "так" for the same reason; the scenario measures the change
  *   of mind, not the confirmation word.
  * - g-b-02 "підтверджую" is kept: it goes through the model (control confirm with the shown claim).
+ * - g-a-43 turn 1 and g-b-09 turn 2 (31 Oct, after the baseline — recorded as such): a reminder with no day
+ *   is a question by spec-voice-agent §Reminders ("A missing name or a missing day is the one question");
+ *   the turns now accept clarify as well as confirm. The subject must still be the reminder's (nameIncludes).
+ *   Baseline results for these two turns are kept as they were scored.
  * - Category D added (g-d-*): V2 / WP-B / WP-G behaviour the A–C set did not cover — scheduling a Later
  *   task, slot moves within and across days, one day of a series (rename, done, skip, same-day move,
  *   cross-day refusal, scope question), a reminder update, several pending operations with a correction
@@ -188,7 +192,7 @@ const A: GenScenario[] = [
   {
     id: 'g-a-43', category: 'A', family: 'date-added-later', world: 'empty', invariant: 'same reminder subject',
     turns: [
-      { utterance: 'нагадай про зарядку для ноутбука', expect: confirm('заряд') },
+      { utterance: 'нагадай про зарядку для ноутбука', expect: { outcomes: ['clarify', 'confirm'], nameIncludes: 'заряд' }, note: 'changed 31 Oct: spec §Reminders — a missing day is the one question; a preview is also accepted' },
       { utterance: 'додай що це до 20 жовтня', expect: confirm('заряд', { includes: '2026-10-20' }) },
     ],
   },
@@ -317,7 +321,7 @@ const B: GenScenario[] = [
     id: 'g-b-09', category: 'B', family: 'missing-constraints', world: 'empty', invariant: 'no preview until both subject and time exist',
     turns: [
       { utterance: 'нагадай', expect: clarify },
-      { utterance: 'про оплату садочка', expect: confirm('садоч') },
+      { utterance: 'про оплату садочка', expect: { outcomes: ['clarify', 'confirm'], nameIncludes: 'садоч' }, note: 'changed 31 Oct: spec §Reminders — the day is still missing, so a question is correct here' },
       { utterance: '28 жовтня о 09:40', expect: confirm('садоч', { includes: '09:40' }) },
     ],
   },

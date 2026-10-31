@@ -386,7 +386,7 @@ function projectCreate(
   if (operation.target.kind !== 'new') return { ok: false, code: 'invalid_target', detail: operation.action };
   // keptLabels already limited `unresolved` to labels on an unplaced create.
   const rejected = onlyKinds(operation, ['date', 'clock', 'interval', 'duration', 'unresolved', 'recurrence', 'all_day', 'day_bound', 'ordering'])
-    ?? onlyChanges(operation, ['notes', 'priority', 'location', 'status', 'spanRole', ...(emptyReminder(operation.changes) ? ['reminder' as const] : [])]);
+    ?? onlyChanges(operation, ['notes', 'priority', 'location', 'status', 'spanRole', 'unschedule', ...(emptyReminder(operation.changes) ? ['reminder' as const] : [])]);
   if (rejected) return rejected;
   const title = operation.changes.title;
   if (!title) return { ok: false, code: 'missing_title', detail: operation.pendingId };
@@ -1063,8 +1063,28 @@ function occurrenceEdit(
 /** The production update command carries fields and a schedule. An update that changes nothing is not a preview. */
 function updatePatch(operation: PendingOperation, clock: Clock): { ok: true; patch: Record<string, unknown> } | ProjectError {
   const rejected = onlyKinds(operation, ['date', 'clock', 'interval', 'duration', 'all_day', 'day_bound', 'ordering'])
-    ?? onlyChanges(operation, ['notes', 'priority', 'location', 'status']);
+    ?? onlyChanges(operation, ['notes', 'priority', 'location', 'status', 'unschedule']);
   if (rejected) return rejected;
+  // Take the time off: the task goes to Later with no start, end, window or deadline (spec: "Clearing the
+  // time clears start, end, earliest, and deadline"). A fixed event or a series cannot be Later.
+  if (operation.changes.unschedule) {
+    const entity = operation.target.kind === 'entity' ? operation.target : null;
+    if (entity?.fixed || entity?.recurring) return { ok: false, code: 'unrepresented_constraint', detail: `${operation.pendingId}:unschedule` };
+    if (operation.constraints.length) return { ok: false, code: 'contradictory_constraints', detail: operation.pendingId };
+    return {
+      ok: true,
+      patch: {
+        ...(operation.changes.title ? { name: operation.changes.title } : {}),
+        ...(operation.changes.priority ? { priority: operation.changes.priority } : {}),
+        ...(operation.changes.notes !== undefined ? { description: operation.changes.notes } : {}),
+        isUnscheduled: true,
+        scheduledStartTime: null,
+        scheduledEndTime: null,
+        earliestStartTime: null,
+        deadline: null,
+      },
+    };
+  }
   const patch: Record<string, unknown> = {
     ...(operation.changes.title ? { name: operation.changes.title } : {}),
     ...(operation.changes.priority ? { priority: operation.changes.priority } : {}),

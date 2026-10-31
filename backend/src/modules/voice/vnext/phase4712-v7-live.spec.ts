@@ -242,3 +242,19 @@ describe('V7 live defects — a clock with no day (en-c-01)', () => {
     expect(past.response.assistantMessage).toBe('Ця година вже минула. Назвіть день.');
   });
 });
+
+describe('V7 live defects — taking the time off a task (g-b-07)', () => {
+  it('"зніми час зі звіту" is an update that sends the task to Later and clears its schedule', async () => {
+    const placed = task('task-report', 'Звіт', { scheduledStart: '2026-10-19T08:00:00.000Z', scheduledEnd: '2026-10-19T09:00:00.000Z', slotId: 's-1' });
+    const result = await runVNextTurn(base(createSession(USER, 'v7-14'), [placed]), interpreter(ops([
+      op({ opId: 'op-1', action: 'update', target: { kind: 'existing', proposedId: 'task-report', description: 'звіт' }, changes: { unschedule: true } }),
+    ])));
+    expect(outcome(result)).toMatch(/^confirm/);
+    expect(command(result)).toMatchObject({ kind: 'update', taskId: 'task-report', patch: { isUnscheduled: true, scheduledStartTime: null, scheduledEndTime: null, earliestStartTime: null, deadline: null } });
+    const fixed = await runVNextTurn(base(createSession(USER, 'v7-15'), [task('task-dentist', 'Стоматолог', { fixed: true, scheduledStart: '2026-10-19T08:00:00.000Z', scheduledEnd: '2026-10-19T09:00:00.000Z' })]), interpreter(ops([
+      op({ opId: 'op-1', action: 'update', target: { kind: 'existing', proposedId: 'task-dentist' }, changes: { unschedule: true } }),
+    ])));
+    expect(fixed.response.outcome).toBe('clarify');
+    expect(fixed.response.intents).toEqual([]);
+  });
+});

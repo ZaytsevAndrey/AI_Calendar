@@ -10,7 +10,7 @@ export type DraftNormalization =
   | { ok: true; state: StructuredState; folded: boolean }
   | { ok: false; code: string; detail: string; state: StructuredState };
 
-const CHANGE_FIELDS = ['title', 'notes', 'priority', 'location', 'status'] as const;
+const CHANGE_FIELDS = ['title', 'notes', 'priority', 'location', 'status', 'unschedule'] as const;
 
 export function normalizeDrafts(state: StructuredState, ids: IdAllocator): DraftNormalization {
   const creates = state.operations.filter((operation): operation is PendingOperation & { target: { kind: 'new'; localId: string } } =>
